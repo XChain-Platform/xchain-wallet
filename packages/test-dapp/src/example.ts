@@ -180,6 +180,11 @@ export function handleSignActionResult(
         case 'PANIC_MODE':
             return { kind: 'panic' };
         case 'UNSUPPORTED_ACTION':
+            // Expected against a live wallet: the chain descriptor's
+            // supportedActions advertises what the PROTOCOL accepts (ISSUE,
+            // MINT, ORDER, ...), while the wallet signs a much smaller set.
+            // `err.supportedActions` is that signable set (['SEND','SWEEP']
+            // today); gate your UI on it, never on the descriptor.
             return {
                 kind: 'unsupported',
                 supportedActions: err.supportedActions,

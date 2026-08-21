@@ -68,8 +68,9 @@ export class NotImplementedError extends Error {
  * commit), so refusing it costs an error. `reveal` is the P2SH/P2WSH phase-2
  * spend, dispatched AFTER phase 1 has been broadcast, so a refusal there
  * completes the commit and never the reveal, which is the stranded-funds event
- * §6 forbids. A guard on that path would have to be a pre-dispatch capability
- * check in submitWithSigner, not a refusal at the signer.
+ * §6 forbids. The guard on that path is the pre-dispatch capability check in
+ * submitWithSigner (`flows/signerCapability.js#signerSupportsChunkReveal`,
+ * consulted before phase 1 is signed), never a refusal at the signer.
  *
  * @param {string} signerId
  * @param {{ envelopeReveal?: boolean } | null | undefined} params
@@ -79,6 +80,46 @@ export function assertCannotSignEnvelopeReveal(signerId, params) {
         throw new SignerStatusError(
             signerId, 'error',
             'signPsbt: this signer cannot sign a Taproot envelope reveal (BIP341 script path)',
+        );
+    }
+}
+
+/**
+ * The second backstop the device signers run at the top of `signPsbt`.
+ *
+ * Hardware signing here is all-or-refuse: both vendor converters
+ * (`toLedgerCreatePayment`, `toTrezorSignTransaction`) demand a signingPaths
+ * entry for EVERY decomposed input and both signers hand back a fully
+ * serialized transaction with `signedPsbtHex: ''`, never a partially-signed
+ * PSBT for the next party. `signingPaths` therefore means "the key for each
+ * input" on this lane, not the "sign only these inputs" scope the software
+ * signer implements. Without this check a mixed-input (co-signed) PSBT that
+ * passed the caller's zero-match guard died inside the converter with
+ * `no signingPath for input index N`, which reads as a malformed request
+ * rather than the capability limit it is. The primary gate is the
+ * `auth.signPsbt.hw` host route, which refuses partial coverage before the
+ * device is engaged; this is the backstop for every other caller.
+ *
+ * @param {string} signerId
+ * @param {number} inputCount   decomposed.inputs.length
+ * @param {Array<{ inputIndex?: number }> | null | undefined} signingPaths
+ */
+export function assertFullInputCoverage(signerId, inputCount, signingPaths) {
+    if (!Number.isInteger(inputCount) || inputCount < 0) {
+        throw new SignerStatusError(signerId, 'error', 'signPsbt: could not count the PSBT inputs');
+    }
+    const covered = new Set();
+    for (const sp of Array.isArray(signingPaths) ? signingPaths : []) {
+        if (sp && Number.isInteger(sp.inputIndex)) covered.add(sp.inputIndex);
+    }
+    let missing = 0;
+    for (let i = 0; i < inputCount; i += 1) if (!covered.has(i)) missing += 1;
+    if (missing > 0) {
+        throw new SignerStatusError(
+            signerId, 'error',
+            'signPsbt: this signer signs every input of a transaction or none, so it cannot '
+            + `partially sign (this key owns ${inputCount - missing} of ${inputCount} inputs). `
+            + 'Use a software wallet key for co-signed transactions.',
         );
     }
 }

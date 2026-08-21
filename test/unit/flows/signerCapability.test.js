@@ -21,6 +21,8 @@ import {
     signerSupportsTapscript,
     encoderSignerOptions,
     TAPSCRIPT_CAPABLE_SOURCES,
+    signerSupportsChunkReveal,
+    CHUNK_REVEAL_CAPABLE_SIGNER_KINDS,
 } from '../../../packages/core/src/flows/signerCapability.js';
 
 describe('signerSupportsTapscript', () => {
@@ -70,5 +72,33 @@ describe('encoderSignerOptions', () => {
     it('asserts nothing for an account that cannot sign', () => {
         expect(encoderSignerOptions({ source: 'trezor' })).toEqual({ signerSupportsTapscript: false });
         expect(encoderSignerOptions(null)).toEqual({ signerSupportsTapscript: false });
+    });
+});
+
+// The chunk lane's phase-2 reveal is dispatched AFTER the phase-1 commit is
+// on chain, so this is asked of the injected Signer (by `kind`) before the
+// commit is signed; the wrong answer here is the user's coin, not an error.
+describe('signerSupportsChunkReveal', () => {
+    it('accepts the software signer, the only kind that signs the reveal', () => {
+        expect(signerSupportsChunkReveal({ kind: 'software' })).toBe(true);
+    });
+
+    it('refuses both device kinds (and the RemoteSigner shim that carries them)', () => {
+        expect(signerSupportsChunkReveal({ kind: 'trezor' })).toBe(false);
+        expect(signerSupportsChunkReveal({ kind: 'ledger' })).toBe(false);
+    });
+
+    it('FAILS CLOSED on unknown kinds, a missing kind, and a throwing kind getter', () => {
+        for (const kind of ['multisig', 'airgap', 'SOFTWARE', 'software ', '', 42, null, undefined])
+            expect(signerSupportsChunkReveal({ kind })).toBe(false);
+        for (const bad of [null, undefined, {}, 'software', 42])
+            expect(signerSupportsChunkReveal(bad)).toBe(false);
+        const abstract = { get kind() { throw new Error('abstract'); } };
+        expect(signerSupportsChunkReveal(abstract)).toBe(false);
+    });
+
+    it('the allow-list is frozen', () => {
+        expect(() => CHUNK_REVEAL_CAPABLE_SIGNER_KINDS.push('trezor')).toThrow();
+        expect(signerSupportsChunkReveal({ kind: 'trezor' })).toBe(false);
     });
 });

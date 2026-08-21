@@ -2205,6 +2205,7 @@ function AppInner() {
                 switchWallet: handleOpenWalletPicker,
                 openHelp: () => setShortcutHelpOpen(true),
                 hasBtcAddress,
+                hasVmAddress,
                 hasGovernanceAddress,
                 isSignerMode,
             };

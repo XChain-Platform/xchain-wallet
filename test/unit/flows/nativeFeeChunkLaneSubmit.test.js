@@ -37,6 +37,9 @@ function makeHarness({ encoding = 'P2SH', requiredFeeSats = FEE_SATS } = {}) {
         })),
     };
     const signer = {
+        // The chunk lane refuses any signer kind that cannot sign the reveal
+        // before phase 1 is signed, so the mock declares the one kind that can.
+        kind: 'software',
         signPsbt: vi.fn(async ({ psbtHex }) => ({ txHex: `TX(${psbtHex})`, txid: `txid-${psbtHex}` })),
     };
     return {

@@ -113,7 +113,10 @@ assert.ok(/messaging\.clearVoteDelegationAction/.test(delegSrc), 'DelegateVoteFo
 const gateHook = join(core, 'src', 'shared', 'hooks', 'useGovernanceAddressesPresent.js');
 assert.ok(existsSync(gateHook), 'useGovernanceAddressesPresent hook exists');
 const gateSrc = readFileSync(gateHook, 'utf8');
-assert.ok(/supportedActions.*includes\('VOTE'\)|includes\('VOTE'\)/.test(gateSrc),
+// The gate asks the LIVE registry for every chain whose descriptor advertises
+// VOTE (useChainIdsWithAction), never a module-scope snapshot, so a synced
+// descriptor reaches the nav entry without a restart.
+assert.ok(/useChainIdsWithAction\('VOTE'\)|supportedActions.*includes\('VOTE'\)/.test(gateSrc),
     'governance gate resolves chains by supportedActions.includes(VOTE)');
 
 const actionsList = readFileSync(join(core, 'src', 'registry', 'actions.js'), 'utf8');

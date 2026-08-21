@@ -25,15 +25,54 @@
 // the truthful provenance of the value; surfaces show it next to the
 // number so the user understands what they're looking at.
 
+import { tickerForCoin } from '../registry/coinTicker.js';
+
+// Display unit for a per-vbyte chain. Per-kB chains render as
+// `${ticker}/kB` (DOGE/kB for dogecoin), see resolveFeeUnit.
+const PER_VBYTE_DISPLAY_UNIT = 'sat/vB';
+
 /**
- * Per-chain fee tier table. Each tier has a sat/vB or DOGE/kB rate.
- * `txSize` is the assumed virtual size in vbytes (BTC/LTC) or raw
- * bytes (DOGE uses per-kB of raw size for minrelayfee).
+ * True when a DISPLAY unit is a per-kilobyte coin rate ('DOGE/kB', or any
+ * `${ticker}/kB` a descriptor-declared sats-per-kbyte chain resolves to).
+ * The converters below branch on this rather than on the literal 'DOGE/kB',
+ * so a custom or remote-synced descriptor declaring sats-per-kbyte converts
+ * the same way Dogecoin does.
+ *
+ * @param {string} unit
+ * @returns {boolean}
+ */
+export function isPerKbUnit(unit) {
+    return typeof unit === 'string' && /\/kB$/.test(unit);
+}
+
+/**
+ * Resolve the fee DISPLAY unit from the chain descriptor's declared
+ * `feeStrategy.unit` (registry/validate.js FEE_UNITS), the one home of that
+ * fact. 'sats-per-kbyte' renders as `${ticker}/kB` (dogecoin -> 'DOGE/kB',
+ * byte-identical to the coin-name check's output); anything else
+ * renders as 'sat/vB'. A descriptor with no feeStrategy (custom stub) falls
+ * back to per-vbyte, which is what every non-Dogecoin bundled chain declares.
+ *
+ * @param {{ coin?: string, feeStrategy?: { unit?: string } } | null | undefined} descriptor
+ * @returns {string}
+ */
+export function resolveFeeUnit(descriptor) {
+    if (descriptor?.feeStrategy?.unit === 'sats-per-kbyte') {
+        return `${tickerForCoin(descriptor.coin)}/kB`;
+    }
+    return PER_VBYTE_DISPLAY_UNIT;
+}
+
+/**
+ * Per-chain fee tier table. Each tier has a per-byte rate (sat/vB on
+ * BTC/LTC, koinu/byte on DOGE). `txSize` is the assumed virtual size in
+ * vbytes (BTC/LTC) or raw bytes (DOGE uses per-kB of raw size for
+ * minrelayfee). The DISPLAY unit is not here: it comes from the chain
+ * descriptor's feeStrategy.unit via resolveFeeUnit.
  */
 const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
     bitcoin: {
         txSize: 250,
-        unit: 'sat/vB',
         tiers: {
             low: { rate: 1, label: 'Low', etaMinutes: 60 },
             normal: { rate: 6, label: 'Normal', etaMinutes: 30 },
@@ -42,7 +81,6 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
     },
     litecoin: {
         txSize: 250,
-        unit: 'sat/vB',
         tiers: {
             low: { rate: 1, label: 'Low', etaMinutes: 5 },
             normal: { rate: 1, label: 'Normal', etaMinutes: 3 },
@@ -53,7 +91,6 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
         // DOGE minrelayfee 1 DOGE/kB → 100_000_000 koinu/kB ≈
         // 100_000 koinu/B. Tier rates are koinu per byte.
         txSize: 250,
-        unit: 'DOGE/kB',
         tiers: {
             // Below mainnet's minrelayfee. Many nodes will reject;
             // included only because some Doge nodes still relax it.
@@ -109,18 +146,19 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
         };
     }
     const tier = table.tiers[speed] ?? table.tiers[DEFAULT_SPEED];
+    const unit = resolveFeeUnit(desc);
     const sats = computeSats(table, tier.rate);
     return {
         sats,
         coinAmount: satsToCoinDecimal(sats),
         source: 'static-placeholder',
         confidence: 'low',
-        rate: formatRate(table.unit, tier.rate),
-        unit: table.unit,
+        rate: formatRate(unit, tier.rate),
+        unit,
         // §44.7: rateValue is the user-displayed value in the chain's
         // natural unit (sat/vB for BTC/LTC, DOGE/kB for DOGE). Custom
         // mode echoes this value back through the input verbatim.
-        rateValue: perByteRateToDisplay(table.unit, tier.rate),
+        rateValue: perByteRateToDisplay(unit, tier.rate),
         vsize: table.txSize,
         speed,
         etaMinutes: tier.etaMinutes,
@@ -149,7 +187,7 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
         low: estimateNativeSendFee({ chainId, chainRegistry, speed: 'low' }),
         normal: estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
         fast: estimateNativeSendFee({ chainId, chainRegistry, speed: 'fast' }),
-        unit: table.unit,
+        unit: resolveFeeUnit(desc),
     };
 }
 
@@ -173,15 +211,16 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
-    const ratePerByte = displayRateToPerByte(table.unit, rate);
+    const unit = resolveFeeUnit(desc);
+    const ratePerByte = displayRateToPerByte(unit, rate);
     const sats = computeSats(table, ratePerByte);
     return {
         sats,
         coinAmount: satsToCoinDecimal(sats),
         source: 'user',
         confidence: 'high',
-        rate: formatRate(table.unit, ratePerByte),
-        unit: table.unit,
+        rate: formatRate(unit, ratePerByte),
+        unit,
         rateValue: rate, // keep the user-typed value so the input echoes back unchanged
         vsize: table.txSize,
         speed: undefined,
@@ -202,7 +241,7 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
  */
 export function settingsCustomToDisplayRate(unit, customSatsPerKb) {
     if (!Number.isFinite(customSatsPerKb) || customSatsPerKb < 0) return 0;
-    if (unit === 'DOGE/kB') {
+    if (isPerKbUnit(unit)) {
         // koinu/KB → DOGE/kB
         return Number((customSatsPerKb / 1e8).toFixed(8));
     }
@@ -221,7 +260,7 @@ export function settingsCustomToDisplayRate(unit, customSatsPerKb) {
  */
 export function displayRateToSettingsCustom(unit, displayRate) {
     if (!Number.isFinite(displayRate) || displayRate < 0) return 0;
-    if (unit === 'DOGE/kB') {
+    if (isPerKbUnit(unit)) {
         return Math.round(displayRate * 1e8);
     }
     return Math.round(displayRate * 1000);
@@ -239,7 +278,7 @@ export function displayRateToSettingsCustom(unit, displayRate) {
  */
 export function perByteRateToDisplay(unit, ratePerByte) {
     if (!Number.isFinite(ratePerByte)) return 0;
-    if (unit === 'DOGE/kB') {
+    if (isPerKbUnit(unit)) {
         // koinu/byte × 1000 bytes / 100_000_000 koinu/DOGE
         return Number(((ratePerByte * 1000) / 1e8).toFixed(8));
     }
@@ -255,7 +294,7 @@ export function perByteRateToDisplay(unit, ratePerByte) {
  */
 export function displayRateToPerByte(unit, displayValue) {
     if (!Number.isFinite(displayValue)) return 0;
-    if (unit === 'DOGE/kB') {
+    if (isPerKbUnit(unit)) {
         // DOGE/kB × 100_000_000 koinu/DOGE / 1000 bytes/kB
         return (displayValue * 1e8) / 1000;
     }
@@ -294,7 +333,7 @@ export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistr
         try {
             const sdk = await messaging.estimateFee({ chainId });
             if (sdk && typeof sdk === 'object') {
-                const unit = typeof sdk.unit === 'string' ? sdk.unit : table.unit;
+                const unit = typeof sdk.unit === 'string' ? sdk.unit : resolveFeeUnit(desc);
                 return {
                     low: shapeSdkTier({ table, sdk: sdk.low, unit, fallback: table.tiers.low, speed: 'low' }),
                     normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal' }),
@@ -333,10 +372,10 @@ function computeSats(table, ratePerByte) {
 }
 
 function formatRate(unit, value) {
-    if (unit === 'DOGE/kB') {
-        // value is koinu/byte; convert to DOGE/kB for display.
-        const dogePerKb = (value * 1000) / 1e8;
-        return `${trimNumber(dogePerKb)} DOGE/kB`;
+    if (isPerKbUnit(unit)) {
+        // value is smallest-unit/byte; convert to coin/kB for display.
+        const coinPerKb = (value * 1000) / 1e8;
+        return `${trimNumber(coinPerKb)} ${unit}`;
     }
     return `${trimNumber(value)} ${unit}`;
 }

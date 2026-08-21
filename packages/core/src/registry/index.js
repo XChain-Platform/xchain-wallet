@@ -25,8 +25,41 @@ export class ChainRegistry {
         const bundled = opts.bundled ?? BUNDLED_DESCRIPTORS;
         /** @type {Map<string, import('./validate.js').ChainDescriptor>} */
         this._entries = new Map();
+        // Change channel for UI surfaces (§9.7 hot-swap contract): every
+        // mutation bumps the version and notifies subscribers, so a surface
+        // re-reads supportedChains() instead of freezing the answer at import
+        // time (shared/hooks/useSupportedChains.js is the React consumer).
+        this._version = 0;
+        /** @type {Set<() => void>} */
+        this._listeners = new Set();
         for (const d of bundled) this._install(d, false);
         for (const d of opts.userAdded ?? []) this._install(d, true);
+    }
+
+    /** Monotonic counter, bumped on every descriptor mutation. */
+    getVersion() {
+        return this._version;
+    }
+
+    /**
+     * Subscribe to descriptor changes (addCustom / removeCustom /
+     * applyRemoteDescriptors). Returns the unsubscribe function.
+     *
+     * @param {() => void} fn
+     * @returns {() => void}
+     */
+    subscribe(fn) {
+        this._listeners.add(fn);
+        return () => { this._listeners.delete(fn); };
+    }
+
+    _notify() {
+        this._version += 1;
+        // Copy before iterating so a listener that unsubscribes mid-notify
+        // cannot disturb the walk, and a throwing listener never starves the rest.
+        for (const fn of Array.from(this._listeners)) {
+            try { fn(); } catch { /* listener errors never escape the registry */ }
+        }
     }
 
     /** @param {import('./validate.js').ChainDescriptor} descriptor */
@@ -158,6 +191,7 @@ export class ChainRegistry {
      */
     addCustom(descriptor) {
         this._install(descriptor, true);
+        this._notify();
     }
 
     /** @param {string} chainId */
@@ -169,7 +203,9 @@ export class ChainRegistry {
                 `ChainRegistry: "${chainId}" is bundled and cannot be removed`,
             );
         }
-        return this._entries.delete(chainId);
+        const removed = this._entries.delete(chainId);
+        if (removed) this._notify();
+        return removed;
     }
 
     /**
@@ -199,6 +235,8 @@ export class ChainRegistry {
             this._entries.set(d.id, { ...d, isUserAdded: false });
             (existing ? updated : added).push(d.id);
         }
+        // A fully-skipped batch changed nothing, so it must not wake subscribers.
+        if (added.length || updated.length) this._notify();
         return { added, updated, skipped };
     }
 }
@@ -206,7 +244,11 @@ export class ChainRegistry {
 // Shared default instance (lazy singleton). Consumers across the app hold
 // module-level `defaultRegistry()` references; sharing one instance is what
 // lets a verified remote registry sync (applyRemoteDescriptors) hot-swap
-// descriptors for every surface at once. Tests that mutate build their own
+// descriptors for every surface at once. Holding the INSTANCE is what is
+// shared, never a snapshot of its answer: a surface that needs the chain
+// list reads supportedChains() at render time (useSupportedChains re-renders
+// it on every mutation), because a module-scope copy freezes the list at
+// import and the sync lands after that. Tests that mutate build their own
 // `new ChainRegistry()` instead.
 let _defaultRegistry = null;
 export const defaultRegistry = () => (_defaultRegistry ??= new ChainRegistry());

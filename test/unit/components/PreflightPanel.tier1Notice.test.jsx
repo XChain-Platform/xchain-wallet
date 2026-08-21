@@ -303,11 +303,12 @@ describe('PreflightPanel <-> xchain-sdk contract', () => {
     });
 
     // The panel interprets the report's fields and never reads
-    // report.schemaVersion, and the SDK's constants.js says in as many words that
-    // the additive-only rule "has no enforcement point". This is that point. It
-    // fires on an SDK bump, which is the moment a human has to re-read the panel's
-    // field handling; see SUPPORTED_SCHEMA_VERSION in PreflightPanel.jsx for why
-    // the enforcement is build-time and not a runtime degrade path.
+    // report.schemaVersion; the SDK's src/preflight/constants.js (comment above
+    // REPORT_SCHEMA_VERSION) names this assertion as the additive-only rule's
+    // enforcement point. It fires when the wallet upgrades to an SDK that bumped
+    // the version, which is the moment a human has to re-read the panel's field
+    // handling; see SUPPORTED_SCHEMA_VERSION in PreflightPanel.jsx for why the
+    // enforcement is build-time and not a runtime degrade path.
     it('is written against the SDK report schema version the SDK still emits', () => {
         expect(SUPPORTED_SCHEMA_VERSION).toBe(preflightConstants.REPORT_SCHEMA_VERSION);
     });

@@ -21,7 +21,7 @@
 // of silently WIF-encoding keys the backend decodes differently.
 //
 // WHERE THE SDK COMES FROM, and it changed under this test (DD6).
-// It used to be loaded from a sibling checkout, matching the `link:` target
+// The earlier source was a sibling checkout, matching the `link:` target
 // the shells consumed. DD6 moved all three shells to the published
 // `@dankest-llc/xchain-sdk`, and the sibling half of this guard then failed
 // on every push: the CI step checking out the private sibling repo errored
@@ -35,11 +35,17 @@
 // is what users get, and it is what a release signs.
 //
 // A sibling checkout is still honoured when one is present, so working
-// across both repos locally keeps behaving as before. What is NOT tolerated
-// is finding neither: a `describe.skipIf` here used to let the guard vanish
-// silently whenever the SDK was absent, which is exactly the failure mode
-// the guard exists to catch (uuid 9737f60d) - a routine xchain-sdk wif bump
-// passing CI unnoticed. It fails loud instead.
+// across both repos locally keeps behaving as before. Finding NEITHER is
+// gated on XCHAIN_REQUIRE_SIBLINGS, the house convention: the suite throws
+// when that variable is 1 and calls ctx.skip() otherwise. Only the
+// drift-guards job in .github/workflows/ci.yml and bin/ci-full.sh set it,
+// and both make the SDK available, so the failure mode the guard exists to
+// catch (uuid 9737f60d) - a routine xchain-sdk wif bump passing CI
+// unnoticed - is still caught where it counts, while an ordinary
+// single-repo checkout skips instead of reddening every push. The design
+// this replaced was a bare `describe.skipIf` here, which let the guard
+// vanish silently EVERYWHERE, CI included; the env gate is what took that
+// silence away, not an unconditional failure.
 //
 // Note: xchain-sdk's coin data (src/coins/*.js) carries no SLIP-44 /
 // coin-type field, but src/derivation.js exposes FAMILY_SLIP44 as the
@@ -60,7 +66,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 // Resolve through the `xchain-sdk` alias as packages/core sees it (the
 // published package), falling back to a sibling checkout. Returns null when
-// neither exists, which the gate below turns into a loud failure.
+// neither exists, which the gate below turns into a loud failure under
+// XCHAIN_REQUIRE_SIBLINGS=1 and a skip on any other run.
 const requireFromCore = createRequire(join(here, '..', '..', '..', 'packages', 'core', 'package.json'));
 const sdkFile = (...parts) => {
     const spec = `xchain-sdk/${parts.join('/')}`;

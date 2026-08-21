@@ -2836,6 +2836,10 @@ export function createBackgroundHost(deps) {
     // a RemoteSigner against the renderer-hosted Trezor / Ledger
     // transport, decomposes the PSBT to derive signingPaths, then
     // delegates to signPsbtFlow with the injected signer (no password).
+    // Unlike auth.signPsbt, this lane is all-or-refuse: the device signers
+    // need a path for EVERY input and return a final tx, never a partially
+    // signed PSBT, so a mixed-address PSBT is refused here with the
+    // capability message instead of dying inside the vendor converter.
     host.register('auth.signPsbt.hw', async (req, deps) => {
         const { vault, chainRegistry, sdkRegistry } = deps;
         const walletId = req?.walletId;
@@ -2880,6 +2884,13 @@ export function createBackgroundHost(deps) {
         if (signingPaths.length === 0) {
             throw new Error(
                 `auth.signPsbt.hw: no PSBT inputs match address ${address.address}. The pasted PSBT may belong to a different wallet, or the chosen signer has no inputs to sign.`,
+            );
+        }
+        // All-or-refuse, before the device is engaged (backstop:
+        // Signer.js#assertFullInputCoverage).
+        if (signingPaths.length !== decomposed.inputs.length) {
+            throw new Error(
+                `auth.signPsbt.hw: a hardware signer signs every input or none, so it cannot partially sign this PSBT (${address.address} owns ${signingPaths.length} of ${decomposed.inputs.length} inputs). Use a software wallet key for co-signed PSBTs.`,
             );
         }
         return signPsbtFlow({

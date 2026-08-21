@@ -9,24 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
+import { useChainIdsWithAction } from './useSupportedChains.js';
 
-const chainRegistry = registryLib.defaultRegistry();
-
-// Chains that can carry contracts, resolved once from the registry.
+// Chains that can carry contracts, asked of the LIVE registry (every chain
+// whose descriptor advertises DEPLOY), so a synced or user-added descriptor
+// reaches the nav gate without a restart.
 //
 // This exists as a SEPARATE hook from useBtcAddressesPresent, which the nav
-// used to share between Contracts and Staking, because the two lanes stopped
-// agreeing: contracts opened to LTC/DOGE when the native-fee lane closed, and
+// shares between Contracts and Staking, because the two lanes no longer
+// agree: contracts opened to LTC/DOGE when the native-fee lane closed, and
 // VALIDATOR staking (and multisig, and co-signer accounts) is still Bitcoin-
 // exclusive. Widening the shared hook would have opened all of them.
 //
 // Asked of the descriptors rather than pinned to a coin, so it moves with
 // registry/actions.js the way ContractsList and DeployContractForm do.
-const VM_CHAIN_IDS = chainRegistry.supportedChains()
-    .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('DEPLOY'))
-    .map((d) => d.id);
 
 /**
  * Returns true once the wallet has at least one address on a chain that
@@ -39,6 +36,7 @@ const VM_CHAIN_IDS = chainRegistry.supportedChains()
  */
 export function useVmAddressesPresent(walletId) {
     const { messaging } = useMessaging();
+    const vmChainIds = useChainIdsWithAction('DEPLOY');
     const [present, setPresent] = useState(/** @type {boolean | null} */ (null));
 
     useEffect(() => {
@@ -50,7 +48,7 @@ export function useVmAddressesPresent(walletId) {
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                const has = VM_CHAIN_IDS.some((cid) => {
+                const has = vmChainIds.some((cid) => {
                     const rows = byChain && byChain[cid];
                     return Array.isArray(rows) && rows.length > 0;
                 });
@@ -60,7 +58,7 @@ export function useVmAddressesPresent(walletId) {
                 if (!cancelled) setPresent(false);
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, vmChainIds]);
 
     return present;
 }

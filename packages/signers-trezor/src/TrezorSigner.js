@@ -38,7 +38,9 @@
 // keeps `bitcoinjs-lib` out of @xchain-wallet/core (per SDKRegistry.js's
 // rationale).
 
-import { Signer, SignerStatusError, assertCannotSignEnvelopeReveal } from '../../core/src/signers/Signer.js';
+import {
+    Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
+} from '../../core/src/signers/Signer.js';
 import { chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
 
 // Plain-language error for the hardware MuSig2 gap: this message is what the
@@ -239,6 +241,9 @@ export class TrezorSigner extends Signer {
         const coin = chainIdToTrezorCoin(chainId);
         const sdk = this._sdkRegistry.get(chainId);
         const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        // All-or-refuse: a mixed-input (co-signed) PSBT gets the capability
+        // message here, not the converter's `no signingPath for input index N`.
+        assertFullInputCoverage(this._id, decomposed.inputs.length, signingPaths);
         const payload = toTrezorSignTransaction({ decomposed, coin, signingPaths });
         const res = await this._connect.signTransaction(payload);
         if (!res?.success) {

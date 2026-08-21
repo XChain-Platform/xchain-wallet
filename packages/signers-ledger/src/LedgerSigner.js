@@ -50,7 +50,9 @@
 // (matches the convention in @xchain-wallet/signers-trezor).
 
 import { sha256 } from '@noble/hashes/sha2';
-import { Signer, SignerStatusError, assertCannotSignEnvelopeReveal } from '../../core/src/signers/Signer.js';
+import {
+    Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
+} from '../../core/src/signers/Signer.js';
 import {
     addressTypeFromPath,
     composeBitcoinCompactSignature,
@@ -328,6 +330,9 @@ export class LedgerSigner extends Signer {
         }
         const sdk = this._sdkRegistry.get(chainId);
         const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        // All-or-refuse: a mixed-input (co-signed) PSBT gets the capability
+        // message here, not the converter's `no signingPath for input index N`.
+        assertFullInputCoverage(this._id, decomposed.inputs.length, signingPaths);
         const payload = toLedgerCreatePayment({ decomposed, chainId, signingPaths });
 
         const splitInputs = payload.inputs.map((i) => {

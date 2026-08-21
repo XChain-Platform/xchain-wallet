@@ -103,6 +103,7 @@ import {
     customFeeEstimate,
     settingsCustomToDisplayRate,
     displayRateToSettingsCustom,
+    resolveFeeUnit,
 } from '../../flows/feeEstimate.js';
 import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate, fiatRateForTick } from '../hooks/useFiatRate.js';
@@ -1054,7 +1055,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
         // §35.10: a stored null strategy follows the release default,
         // resolved against the chain descriptor.
         const chainFees = resolveFeeConfig(settings.fees[chainId], desc);
-        const tableUnit = desc?.coin === 'dogecoin' ? 'DOGE/kB' : 'sat/vB';
+        // Display unit comes from the descriptor's declared feeStrategy.unit
+        // (one home), never from a coin-name check here.
+        const tableUnit = resolveFeeUnit(desc);
         if (chainFees.strategy === 'custom' && Number.isFinite(chainFees.customSatsPerKb)) {
             setFeePick({
                 mode: 'custom',

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { GOVERNANCE_CHAIN_IDS } from '../hooks/useGovernanceAddressesPresent.js';
+import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -68,6 +68,7 @@ function extractRows(resp) {
 export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const governanceChainIds = useGovernanceChainIds();
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [noChain, setNoChain] = useState(false);
@@ -83,14 +84,14 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                const avail = GOVERNANCE_CHAIN_IDS.filter((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
+                const avail = governanceChainIds.filter((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
                 setGovernChains(avail);
                 if (avail.length > 0) setChainId(avail[0]);
                 else setNoChain(true);
             })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, governanceChainIds]);
 
     useEffect(() => {
         if (!chainId) return;

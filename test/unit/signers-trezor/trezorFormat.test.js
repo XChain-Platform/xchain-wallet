@@ -15,6 +15,7 @@ import {
     pathToAddressN,
     toTrezorSignTransaction,
     chainIdToTrezorCoin,
+    opReturnPayloadHex,
 } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
 describe('chainIdToTrezorCoin', () => {
@@ -165,11 +166,56 @@ describe('toTrezorSignTransaction', () => {
             .toThrow(/unsupported input scriptType/);
     });
 
-    it('throws when output has no address', () => {
+    it('throws when a non-OP_RETURN output has no address', () => {
         const d = makeDecomposed();
         d.outputs[0].address = undefined;
         expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
             .toThrow(/has no address/);
+    });
+
+    // The default small-action lane and every native-coin send carry the
+    // action as an address-less OP_RETURN output. Ledger serializes the raw
+    // script; Trezor Connect takes it as PAYTOOPRETURN + op_return_data.
+    it('carries an OP_RETURN output as PAYTOOPRETURN with the bare payload', () => {
+        const d = makeDecomposed();
+        d.outputs.push({
+            value: 0,
+            scriptPubKeyHex: '6a' + '04' + 'deadbeef',
+            address: null,
+            scriptType: 'unknown',
+        });
+        const payload = toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths });
+        expect(payload.outputs[1]).toEqual({
+            amount: '0', op_return_data: 'deadbeef', script_type: 'PAYTOOPRETURN',
+        });
+        expect(payload.outputs[0].script_type).toBe('PAYTOADDRESS');
+    });
+
+    it('refuses a funded OP_RETURN output rather than coercing its value to 0', () => {
+        const d = makeDecomposed();
+        d.outputs.push({ value: 546, scriptPubKeyHex: '6a04deadbeef', address: null, scriptType: 'unknown' });
+        expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
+            .toThrow(/OP_RETURN output 1 carries value 546/);
+    });
+
+    describe('opReturnPayloadHex', () => {
+        it('returns null for anything that is not a nulldata script', () => {
+            expect(opReturnPayloadHex('0014' + 'c'.repeat(40))).toBeNull();
+            expect(opReturnPayloadHex(undefined)).toBeNull();
+        });
+        it('handles a bare OP_RETURN, a direct push, PUSHDATA1 and PUSHDATA2', () => {
+            expect(opReturnPayloadHex('6a')).toBe('');
+            expect(opReturnPayloadHex('6A04DEADBEEF')).toBe('deadbeef');
+            const d80 = 'ab'.repeat(80);
+            expect(opReturnPayloadHex('6a4c50' + d80)).toBe(d80);
+            const d300 = 'cd'.repeat(300);
+            expect(opReturnPayloadHex('6a4d2c01' + d300)).toBe(d300);
+        });
+        it('throws rather than emit a truncated or padded payload', () => {
+            expect(() => opReturnPayloadHex('6a04dead')).toThrow(/does not match/);
+            expect(() => opReturnPayloadHex('6a02deadbeef')).toThrow(/does not match/);
+            expect(() => opReturnPayloadHex('6a4e01000000ff')).toThrow(/unsupported OP_RETURN push opcode/);
+        });
     });
 
     it('builds a valid p2wpkh payload', () => {
@@ -192,10 +238,23 @@ describe('toTrezorSignTransaction', () => {
         expect(payload.inputs[0].script_type).toBe('SPENDADDRESS');
     });
 
-    it('sets sighash when sighashType provided', () => {
+    // Mirrors the Ledger seam (ledgerFormat.test.js): a sighash override is
+    // REFUSED, never copied into a `sighash` key Trezor Connect does not
+    // consume, which would sign under SIGHASH_ALL while reporting the
+    // requested sighash.
+    it('refuses a non-default sighashType rather than forwarding an unconsumed key', () => {
+        const paths = [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 0x83 }];
+        expect(() => toTrezorSignTransaction({ decomposed: makeDecomposed(), coin: 'btc', signingPaths: paths }))
+            .toThrow(/cannot sign under sighashType 131/);
+    });
+
+    it('accepts an explicit SIGHASH_ALL and an absent sighashType alike, emitting no sighash key', () => {
         const paths = [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 1 }];
         const payload = toTrezorSignTransaction({ decomposed: makeDecomposed(), coin: 'btc', signingPaths: paths });
-        expect(payload.inputs[0].sighash).toBe(1);
+        expect(payload.inputs[0]).not.toHaveProperty('sighash');
+        expect(payload.inputs[0]).not.toHaveProperty('script_sig');
+        const plain = toTrezorSignTransaction({ decomposed: makeDecomposed(), coin: 'btc', signingPaths });
+        expect(plain.inputs[0]).not.toHaveProperty('sighash');
     });
 
     it('includes refTxs only for p2pkh inputs with prevTxInfo', () => {

@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useId, useMemo, useState } from 'react';
+import { isPerKbUnit } from '../flows/feeEstimate.js';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
 
@@ -154,7 +155,7 @@ export function FeeSelector({
         const ref = tiers.normal || tiers.fast || tiers.low;
         const vsize = activeEstimate?.vsize ?? ref?.vsize;
         if (Number.isFinite(vsize) && vsize > 0) {
-            const raw = tiers.unit === 'DOGE/kB'
+            const raw = isPerKbUnit(tiers.unit)
                 ? (fee * 1000) / vsize
                 : (fee * 1e8) / vsize;
             return Number(raw.toFixed(8));
@@ -293,7 +294,7 @@ export function FeeSelector({
                                         type="number"
                                         inputMode="decimal"
                                         min={0}
-                                        step={tiers.unit === 'DOGE/kB' ? 1 : 0.1}
+                                        step={isPerKbUnit(tiers.unit) ? 1 : 0.1}
                                         className={styles.customInput}
                                         value={Number.isFinite(value?.customRate) ? value.customRate : ''}
                                         onChange={(e) => onCustomRateChange(e.target.value)}

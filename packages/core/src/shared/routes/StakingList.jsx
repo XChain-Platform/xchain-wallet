@@ -18,6 +18,7 @@ import {
 } from '@xchain-wallet/core/flows';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -81,15 +82,18 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     // Chains whose protocol accepts the contract-staking lane, i.e. every
     // chain the registry advertises STAKE on (put STAKE into the
     // shared set), and the Bitcoin subset that also has the validator lane.
+    // Read from the LIVE registry (re-rendered on every descriptor mutation),
+    // not memoised once at mount, so a synced descriptor lands without restart.
+    const supportedChains = useSupportedChains(chainRegistry);
     const stakingChainIds = useMemo(
-        () => chainRegistry.supportedChains()
+        () => supportedChains
             .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('STAKE'))
             .map((d) => d.id),
-        [],
+        [supportedChains],
     );
     const validatorChainIds = useMemo(
-        () => new Set(chainRegistry.byCoin(VALIDATOR_COIN).map((d) => d.id)),
-        [],
+        () => new Set(supportedChains.filter((d) => d.coin === VALIDATOR_COIN).map((d) => d.id)),
+        [supportedChains],
     );
 
     const [addressesByChain, setAddressesByChain] = useState(

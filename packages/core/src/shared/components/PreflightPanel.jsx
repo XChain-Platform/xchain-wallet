@@ -37,10 +37,12 @@ export const TIER1_NOTICE_CODES = Object.freeze({ DRYRUN_VALID, DRYRUN_UNAVAILAB
 
 // The preflight report schema version this panel is WRITTEN AGAINST.
 //
-// The report contract is additive-only by convention, and the SDK's own
-// constants.js says so while noting the rule "has no enforcement point": this
-// panel reads `verdict`, `findings[].severity`, `findings[].code`,
-// `findings[].overridable`, `findings[]._downgradedBy`, `restricted`,
+// The report contract is additive-only by convention (REPORT_SCHEMA_VERSION
+// in the SDK's src/preflight/constants.js, which names this pin as the
+// enforcement point): this panel reads `verdict`, `findings[].severity`,
+// `findings[].code`, `findings[].overridable`, `findings[]._downgradedBy`,
+// `restricted` (defined beside REPORT_SCHEMA_VERSION there: a proper-subset
+// report, never a completeness claim; the "Partial check" chip below),
 // `stateHeight` and `unverified` straight off the report and never looks at
 // `report.schemaVersion`. So a bump that changed what any of those MEAN would
 // be processed silently under v1 assumptions.

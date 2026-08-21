@@ -26,6 +26,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { humanizeDeployDiagnostic, humanizeGasRationale } from '../utils/deployDiagnostic.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -41,19 +42,20 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Which chains this form may deploy on, asked of the registry instead of
-// pinned to a coin here. The gate has ONE home,
-// registry/actions.js BTC_EXCLUSIVE_ACTIONS, which today keeps DEPLOY on
-// Bitcoin; a second hard-coded copy in this form would mean the day the
-// registry opens contracts to LTC/DOGE, the form silently does not. Same
-// descriptor-driven pattern as StakingList and BetFeedsList. Today this
-// resolves to exactly the Bitcoin chains, so nothing about what the form
-// offers changes with the switch.
-const DEPLOY_CHAINS = chainRegistry.supportedChains()
-    .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('DEPLOY'));
-// Coin ids read as 'bitcoin'; users read "Bitcoin".
-const DEPLOY_CHAIN_COINS = [...new Set(DEPLOY_CHAINS.map((d) => d.coin))]
-    .map((c) => String(c).charAt(0).toUpperCase() + String(c).slice(1));
+// Which chains this form may deploy on, asked of the LIVE registry inside the
+// component (useSupportedChains, filtered on supportedActions.includes('DEPLOY'))
+// instead of pinned to a coin here or snapshotted at import. The gate has ONE
+// home, the descriptor's supportedActions as registry/actions.js builds it:
+// DEPLOY sits in COMMON_ACTIONS today, so the registry advertises it on all
+// nine bundled chains (BTC / LTC / DOGE x mainnet / testnet / regtest), and a
+// second hard-coded copy in this form would silently disagree the next time
+// that list moves. Same descriptor-driven pattern as StakingList and
+// BetFeedsList.
+
+/** Coin ids read as 'bitcoin'; users read "Bitcoin". */
+function coinLabel(c) {
+    return String(c).charAt(0).toUpperCase() + String(c).slice(1);
+}
 
 /**
  * DEPLOY authoring form: §42.6.
@@ -91,7 +93,16 @@ export function DeployContractForm({ walletId, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const deployChainIds = useMemo(() => DEPLOY_CHAINS.map((d) => d.id), []);
+    const supportedChains = useSupportedChains(chainRegistry);
+    const deployChains = useMemo(
+        () => supportedChains.filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('DEPLOY')),
+        [supportedChains],
+    );
+    const deployChainIds = useMemo(() => deployChains.map((d) => d.id), [deployChains]);
+    const deployChainCoins = useMemo(
+        () => [...new Set(deployChains.map((d) => d.coin))].map(coinLabel),
+        [deployChains],
+    );
 
     const [activeByChain, setActiveByChain] = useState(
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
@@ -170,7 +181,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 if (!firstDeployable) {
                     // Names the chains the registry actually allows, so the
                     // sentence stays true the day that list grows.
-                    const where = DEPLOY_CHAIN_COINS.join(' or ');
+                    const where = deployChainCoins.join(' or ');
                     setLoadError(
                         `Contracts can only be deployed on ${where}. Use Receive on one of those `
                         + 'networks to generate an address before deploying.',
@@ -183,7 +194,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, deployChainIds]);
+    }, [walletId, messaging, deployChainIds, deployChainCoins]);
 
     useEffect(() => {
         if (!chainId || !addressesByChain) return;

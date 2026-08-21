@@ -290,12 +290,13 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
             );
         }
         // REFUSE a sighash override; never drop one. The shared signing
-        // contract carries an optional per-input `sighashType` that
-        // trezorFormat.js honours (out.sighash). This seam must not read
-        // only inputIndex and path, so the same PSBT + signingPaths signed
-        // under the requested sighash on Trezor and under SIGHASH_ALL on
-        // Ledger, with nothing surfaced. A wrong-sighash signature is worse
-        // than a refused one.
+        // contract carries an optional per-input `sighashType` that no
+        // hardware seam can honour: trezorFormat.js refuses it the same way
+        // (Trezor Connect has no per-input sighash key, so a forwarded value
+        // is silently unconsumed). Neither seam may read only inputIndex and
+        // path, or the same PSBT + signingPaths would sign under SIGHASH_ALL
+        // with nothing surfaced. A wrong-sighash signature is worse than a
+        // refused one.
         //
         // Refusing rather than forwarding, deliberately. hw-app-btc takes a
         // single transaction-level `sigHashType` (see the envelope list

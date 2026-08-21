@@ -430,9 +430,67 @@ describe('the signing methods answer their published success shapes', () => {
         const host = buildHost(makeVault({ site: connectedSite() }));
         const { result } = await host.handle({
             type: 'bridge.signPsbt',
-            request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: [{ inputIndex: 0 }] },
+            request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: [{ inputIndex: 0, address: FROM }] },
         });
         expect(result).toEqual({ ok: true, signedPsbtHex: 'ab', txHex: 'cd', txid: 'tx-2' });
+    });
+
+    // bridge-spec publishes PsbtSigningPath as { inputIndex, address? |
+    // derivationPath? }; the Signer contract wants { inputIndex, path? |
+    // addressId? }. The handler owns the translation, and only against
+    // addresses/paths the vault holds.
+    describe('signPsbt normalizes spec-shaped signingPaths onto the Signer contract', () => {
+        it('maps an owned address to its derivation path', async () => {
+            const host = buildHost(makeVault({ site: connectedSite() }));
+            await host.handle({
+                type: 'bridge.signPsbt',
+                request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: [{ inputIndex: 0, address: FROM }] },
+            });
+            expect(flowMocks.signPsbtFlow.mock.calls[0][0].signingPaths).toEqual([
+                { inputIndex: 0, path: "m/84'/1'/0'/0/0", addressId: undefined },
+            ]);
+        });
+
+        it('maps an owned derivationPath to the same entry, and keeps sighashType', async () => {
+            const host = buildHost(makeVault({ site: connectedSite() }));
+            await host.handle({
+                type: 'bridge.signPsbt',
+                request: {
+                    origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274',
+                    signingPaths: [{ inputIndex: 1, derivationPath: "m/84'/1'/0'/0/0", sighashType: 1 }],
+                },
+            });
+            expect(flowMocks.signPsbtFlow.mock.calls[0][0].signingPaths).toEqual([
+                { inputIndex: 1, path: "m/84'/1'/0'/0/0", addressId: undefined, sighashType: 1 },
+            ]);
+        });
+
+        it('refuses an address or a derivationPath the wallet does not own', async () => {
+            const host = buildHost(makeVault({ site: connectedSite() }));
+            for (const entry of [{ inputIndex: 0, address: 'bcrt1qsomeoneelse' }, { inputIndex: 0, derivationPath: "m/84'/1'/0'/0/7" }]) {
+                const resp = await host.handle({
+                    type: 'bridge.signPsbt',
+                    request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: [entry] },
+                });
+                expect(resp.ok).toBe(false);
+                // The internal ADDRESS_NOT_FOUND rides the wire as the published
+                // ADDRESS_NOT_AUTHORIZED (errorCodes.js), like sign-in's refusal.
+                expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
+            }
+            expect(flowMocks.signPsbtFlow).not.toHaveBeenCalled();
+        });
+
+        it('rejects a malformed entry before prompting the user', async () => {
+            const host = buildHost(makeVault({ site: connectedSite() }));
+            for (const bad of [[], [{ inputIndex: 0 }], [{ inputIndex: 0, address: FROM, derivationPath: 'm/0' }], [{ inputIndex: -1, address: FROM }]]) {
+                const resp = await host.handle({
+                    type: 'bridge.signPsbt',
+                    request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: bad },
+                });
+                expect(resp.ok).toBe(false);
+                expect(resp.error.code).toBe('INVALID_PARAMS');
+            }
+        });
     });
 
     it('signIn returns SignInSuccess', async () => {

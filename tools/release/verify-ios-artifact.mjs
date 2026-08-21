@@ -60,10 +60,28 @@
 // and does not cover. It catches the SIGNATURE disagreeing with what the
 // ceremony asked for, which cloud signing can produce on its own: provisioning
 // updates pick a profile, and the profile's team is the portal's answer rather
-// than the flag's. It does NOT catch a $APPLE_TEAM_ID that is itself wrong
-// against the AASA pin; reconciling the input to that pin is a separate control
-// at a separate place, and the pass line says so rather than reading
-// as a check against the pin.
+// than the flag's. On its own it does NOT catch a $APPLE_TEAM_ID that is itself
+// wrong against the AASA pin: with no external authority reachable a
+// consistently-wrong team is accepted, and the pass line says so rather than
+// reading as a check against the pin.
+//
+// --aasa IS THAT EXTERNAL AUTHORITY, AND IT IS THE ONLY ONE THERE IS. An appID
+// is `<TEAM>.<bundle id>`, the published association carries the whole string,
+// and the artifact's application-identifier entitlement IS that whole string as
+// the signature really issued it. Handing this a published association closes
+// the last leg of the identity seam without any file here holding a second copy
+// of the team: the comparison is a signature against a published claim, not a
+// literal against a literal. A repo-local team constant would be the shape of
+// evidence this file refuses everywhere else - a value agreeing with itself -
+// which is why one was not added.
+//
+// The source is a path or an https URL supplied by the ceremony, and the flag
+// FAILS CLOSED: supplied-and-unreadable is a failure, never a skip, because a
+// verifier that reports "could not check" as "passed" is the exact thing this
+// file exists to refuse. Omitted, the check reports itself SKIPPED and the team
+// lines keep their narrower claim. release.yml's mobile-ios job does not check
+// out xchain-websites, so a single-repo release run skips unless XCHAIN_AASA
+// names a source; in a monorepo working tree the ceremony finds the sibling.
 //
 // The two entitlement values are also held against EACH OTHER whether or not a
 // team id is supplied, because that comparison needs no external authority at
@@ -211,6 +229,11 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * @param {string} [args.teamId] the Apple Developer Team ID the ceremony asked
  *   xcodebuild to sign for ($APPLE_TEAM_ID). Undefined when the caller supplied
  *   none, which is reported as unchecked rather than passed over in silence.
+ * @param {{source: string, appIDs?: string[], error?: string}} [args.aasa] the
+ *   published apple-app-site-association the ceremony pointed at, already read
+ *   and parsed by the CLI (this stays a pure function of plain objects). The
+ *   `error` form is what a supplied-but-unreadable source arrives as, and it is
+ *   a FAILURE here rather than a skip. Undefined means no --aasa was supplied.
  * @param {string} [args.taggedVersion] marketing version the release tag derives
  * @param {string} [args.taggedBuild] build number the release tag derives
  * @param {'xcconfig'|'flags'} [args.versionSource] where the expected version
@@ -221,7 +244,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * @returns {{failures: string[], passes: string[]}}
  */
 export function runChecks({
-    info, entitlements, profile, stage, expected, unsigned = false, teamId, taggedVersion, taggedBuild,
+    info, entitlements, profile, stage, expected, unsigned = false, teamId, aasa, taggedVersion, taggedBuild,
     versionSource = 'xcconfig',
 }) {
     const failures = [];
@@ -332,15 +355,22 @@ export function runChecks({
 
         // Against the build input, when the ceremony passed one. Stated as
         // "what the ceremony asked for" rather than as agreement with the
-        // published AASA, which this repo cannot see: a pass line claiming the
-        // pin would be the same value agreeing with itself, the shape of
-        // evidence this file refuses everywhere else.
+        // published AASA unless one was actually supplied: a pass line claiming
+        // a pin nothing read would be the same value agreeing with itself, the
+        // shape of evidence this file refuses everywhere else.
         if (teamId === undefined) {
             pass('SKIPPED: the signed Team ID was not held against any requested team, because no '
                 + '--team-id was supplied (the release ceremony passes $APPLE_TEAM_ID)');
         } else if (appIdTeam === teamId && signedTeam === teamId) {
+            // The parenthetical is the honest scope of THIS comparison and it
+            // changes with the evidence: without --aasa the requested team is
+            // the only authority in the room, and saying otherwise would let a
+            // green run read as proof of a comparison nothing made. With --aasa
+            // the published appID is checked, and it is checked below.
             pass(`the signed team is ${teamId}, which is the team the ceremony asked xcodebuild for `
-                + '(this does NOT check that team against the published AASA appID)');
+                + (aasa
+                    ? '(the published AASA appID is checked separately below)'
+                    : '(this does NOT check that team against the published AASA appID)'));
         } else {
             fail(`the artifact is signed for team ${JSON.stringify(signedTeam ?? appIdTeam)} and the ceremony asked for ${teamId}`,
                 'The published apple-app-site-association names one <TEAM>.<bundle id> appID, so an app '
@@ -348,6 +378,43 @@ export function runChecks({
                 + 'stops opening https links in it and nothing anywhere reports an error. Cloud signing '
                 + 'chooses the profile, so the team the portal hands back can differ from the one asked '
                 + 'for without any file in this repo changing.');
+        }
+
+        // The whole appID against the published claim, which is the ONE
+        // comparison that makes the Team ID leg non-circular: every other value
+        // in play here descends from $APPLE_TEAM_ID, and the association is the
+        // only party that says what devices were told. Full-string equality, not
+        // a team-prefix comparison: the association publishes `<TEAM>.<bundle>`
+        // and both halves have to be the shipped app's, which is also why a
+        // wildcard appID (`TEAM.*`) does not satisfy this - a distribution
+        // signature carries the explicit id and an association that claims a
+        // wildcard is a scope decision, not agreement.
+        if (aasa === undefined) {
+            pass('SKIPPED: the signed appID was not held against any published apple-app-site-association, '
+                + 'because no --aasa was supplied (the ceremony passes the sibling file or $XCHAIN_AASA)');
+        } else if (aasa.error) {
+            fail(`the published association at ${aasa.source} could not be read: ${aasa.error}`,
+                'It was SUPPLIED, so this is not the unchecked case: the ceremony asked for the one '
+                + 'comparison that is not circular and did not get it. Treating that as a pass is how '
+                + '"nothing was checked" becomes "everything passed" on the run that mattered.');
+        } else if (!Array.isArray(aasa.appIDs) || aasa.appIDs.length === 0) {
+            fail(`the association at ${aasa.source} claims no appIDs at all`,
+                'applinks.details[].appIDs is the entire claim. An association without one hands no '
+                + 'link to any app, so the artifact cannot agree with it and the published file is '
+                + 'itself broken.');
+        } else if (typeof appId !== 'string') {
+            fail(`the artifact carries application-identifier ${JSON.stringify(appId)}, so there is no `
+                + `appID to hold against ${aasa.source}`,
+                'The signature has to name an app before the published claim can be about it.');
+        } else if (aasa.appIDs.includes(appId)) {
+            pass(`the signed appID ${appId} is claimed by the association at ${aasa.source}, so the team `
+                + 'the app is really signed under is the team devices were told about');
+        } else {
+            fail(`the artifact is signed as ${appId} and ${aasa.source} claims [${aasa.appIDs.join(', ')}]`,
+                'This is the drift no per-repo test can see: the wallet repo pins the team as a build '
+                + 'input and the websites repo pins it into the published file, and a migration re-pinned '
+                + 'on one side leaves both suites green. iOS then declines every https link into the app, '
+                + 'silently, on devices only, for as long as the stale copy is cached.');
         }
 
         const domains = entitlements['com.apple.developer.associated-domains'];
@@ -519,6 +586,68 @@ function readEntitlements(appDir, scratch) {
     return readPlist(path);
 }
 
+/**
+ * The appIDs an apple-app-site-association claims, out of its raw bytes.
+ *
+ * Parsing is split from fetching so a malformed published file is testable
+ * without a network or a sibling checkout, the same reason runChecks takes
+ * plain objects.
+ *
+ * @param {string} text raw association bytes
+ * @returns {string[]} every claimed appID, de-duplicated
+ */
+export function associationAppIDs(text) {
+    const doc = JSON.parse(text);
+    const details = doc?.applinks?.details;
+    if (!Array.isArray(details)) {
+        throw new Error('no applinks.details array, so this is not an apple-app-site-association');
+    }
+    // `appID` singular is Apple's pre-iOS-13 spelling and live files still carry
+    // it. A reader that knows only the plural sees an empty claim there, which
+    // this file would then report as an association claiming nothing - a
+    // confident failure about the wrong thing.
+    const ids = details.flatMap((d) => [
+        ...(Array.isArray(d?.appIDs) ? d.appIDs : []),
+        ...(typeof d?.appID === 'string' ? [d.appID] : []),
+    ]);
+    return [...new Set(ids.filter((id) => typeof id === 'string'))];
+}
+
+/**
+ * Read the published association the ceremony pointed at, as a path or an https
+ * URL. NEVER throws: an unreachable or malformed source comes back as an
+ * `error` that runChecks fails on, because a source that was supplied and could
+ * not be read is not the same answer as one that was never supplied.
+ *
+ * @param {string} source path or https URL
+ * @returns {Promise<{source: string, appIDs?: string[], error?: string}>}
+ */
+export async function loadAssociation(source) {
+    try {
+        let text;
+        if (/^http:\/\//i.test(source)) {
+            // Apple fetches this over https and nothing else. A cleartext fetch
+            // is an authority any network on the path can rewrite, which would
+            // make this check worse than absent.
+            throw new Error('http:// is not an authority for an association; use https or a local path');
+        } else if (/^https:\/\//i.test(source)) {
+            // Bounded, because an unanswered socket in a release lane is a hang
+            // rather than a verdict.
+            const res = await fetch(source, {
+                headers: { accept: 'application/json' },
+                signal: AbortSignal.timeout(15000),
+            });
+            if (!res.ok) throw new Error(`the host answered HTTP ${res.status}`);
+            text = await res.text();
+        } else {
+            text = readFileSync(source, 'utf8');
+        }
+        return { source, appIDs: associationAppIDs(text) };
+    } catch (err) {
+        return { source, error: err.message };
+    }
+}
+
 /** One key path out of a plist, or undefined when it is not there. */
 function plistExtract(path, keypath) {
     try {
@@ -567,7 +696,7 @@ function locateApp(target, scratch) {
     return join(payload, apps[0]);
 }
 
-const VALUE_FLAGS = new Set(['stage', 'tag', 'marketing-version', 'build-number', 'team-id']);
+const VALUE_FLAGS = new Set(['stage', 'tag', 'marketing-version', 'build-number', 'team-id', 'aasa']);
 
 // The tag is what the release lane actually holds, and rails §2 owns the
 // formula turning it into the two numbers. Imported rather than reimplemented:
@@ -621,6 +750,13 @@ Options:
                            reported as UNCHECKED rather than passed over. This
                            is the requested team, not the appID the published
                            apple-app-site-association pins
+  --aasa <path|https URL>  the published apple-app-site-association, so the
+                           signed appID (\`<TEAM>.<bundle id>\`) is held against
+                           what devices are actually told. The only non-circular
+                           authority for the Team ID: every other value here
+                           descends from \$APPLE_TEAM_ID. It lives in the sibling
+                           xchain-websites repo. Supplied and unreadable is a
+                           FAILURE, not a skip; omitted is reported as UNCHECKED
   --unsigned               the caller archived without a signing identity, so
                            the entitlement checks are reported as skipped rather
                            than failing. Never accepted at the export stage
@@ -647,8 +783,15 @@ async function main(argv) {
         console.error(
             'usage: verify-ios-artifact.mjs <App.app|*.ipa> --stage archive|export\n'
             + '           [--tag vX.Y.Z] [--marketing-version X.Y.Z] [--build-number N]\n'
-            + '           [--team-id ABCDE12345] [--unsigned]',
+            + '           [--team-id ABCDE12345] [--aasa <path|https URL>] [--unsigned]',
         );
+        return 2;
+    }
+    // A flag whose value went missing parses as absent, and absent is the
+    // SKIPPED path: a ceremony that meant to check the published appID would
+    // then read its own typo as a pass.
+    if (args.includes('--aasa') && !values.aasa) {
+        console.error('verify-ios-artifact: --aasa needs a path or an https URL after it');
         return 2;
     }
     if (!existsSync(artifact)) {
@@ -676,6 +819,7 @@ async function main(argv) {
             versionSource,
             unsigned: values.unsigned === true,
             teamId: values['team-id'],
+            aasa: values.aasa ? await loadAssociation(values.aasa) : undefined,
             taggedVersion: values['marketing-version'] ?? derived.taggedVersion,
             taggedBuild: values['build-number'] ?? derived.taggedBuild,
         });

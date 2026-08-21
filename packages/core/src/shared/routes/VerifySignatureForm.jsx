@@ -32,6 +32,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -45,10 +46,13 @@ export function VerifySignatureForm({ onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const chains = useMemo(() => chainRegistry.supportedChains().map((c) => ({
+    // Live registry read: a synced descriptor batch reaches this picker without
+    // a restart (the boot sync usually lands after first mount).
+    const supportedChains = useSupportedChains(chainRegistry);
+    const chains = useMemo(() => supportedChains.map((c) => ({
         id: c.id,
         label: c.displayName || c.id,
-    })), []);
+    })), [supportedChains]);
     const [chainId, setChainId] = useState(chains[0]?.id || null);
     const [address, setAddress] = useState('');
     const [message, setMessage] = useState('');

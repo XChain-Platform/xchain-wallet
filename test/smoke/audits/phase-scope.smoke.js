@@ -36,8 +36,9 @@ const statusPath = join(platformRoot, 'claude', 'reports', 'xchain-wallet', 'IMP
 // (dev + the old Mac gate) but ABSENT from an isolated single-repo CI
 // checkout. Skip LOUDLY rather than fail: this guards dev docs, not shipped
 // product, so its absence in isolated CI is not a regression (unlike the sdk
-// derivation-parity guard, which fails loud because it guards shipped
-// behavior). Never silently pass.
+// derivation-parity guard, which fails loud in the drift-guards job that runs
+// it with XCHAIN_REQUIRE_SIBLINGS=1, because it guards shipped behavior).
+// Never silently pass.
 if (!existsSync(specPath) || !existsSync(statusPath)) {
     console.log('SKIP: phase-scope smoke - platform spec/status docs not in this checkout '
         + `(the parent repo's claude/ tree is gitignored here and absent in an isolated CI `

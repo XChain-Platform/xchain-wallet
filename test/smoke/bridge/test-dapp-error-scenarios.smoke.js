@@ -169,6 +169,46 @@ assert.ok(/ErrorScenarioReport/.test(example),
 
 // --- 8. index.ts re-exports ------------------------------------------
 
+// --- 9. descriptor protocol set vs wallet signable set ----------------
+//
+// The live bridge keeps two contracts apart: ChainDescriptor.supportedActions
+// is the registry's PROTOCOL set (handlers.js getSupportedChains passes it
+// through verbatim) while signAction refuses anything outside the much
+// smaller SIGNABLE set (SUPPORTED_BRIDGE_ACTIONS). A reference mock that puts
+// the signable pair into the descriptor teaches integrators that
+// descriptor.supportedActions == "actions this wallet signs". Pin the split,
+// and pin the literal protocol list to the core registry so it cannot drift.
+
+function literalList(name) {
+    const m = mock.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([\\s\\S]*?)\\];`));
+    assert.ok(m, `mock-provider.ts declares ${name}`);
+    return Array.from(m[1].matchAll(/'([A-Z_]+)'/g), (x) => x[1]);
+}
+const protocolSet = literalList('DEFAULT_PROTOCOL_ACTIONS');
+const signableSet = literalList('DEFAULT_SIGNABLE_ACTIONS');
+assert.deepEqual(signableSet, ['SEND', 'SWEEP'], 'signable default is the bridge pair');
+for (const a of signableSet) {
+    assert.ok(protocolSet.includes(a), `signable action ${a} is inside the protocol set`);
+}
+assert.ok(protocolSet.length > signableSet.length,
+    'descriptor protocol set is a strict superset of the signable set');
+assert.ok(
+    /supportedActions:\s*\[\.\.\.DEFAULT_PROTOCOL_ACTIONS\]/.test(mock),
+    'DEFAULT_CHAIN advertises the protocol set, not the signable set',
+);
+assert.ok(
+    /supportedActions:\s*opts\.supportedActions\s*\?\?\s*\[\.\.\.DEFAULT_SIGNABLE_ACTIONS\]/.test(mock),
+    'signAction defaults to the signable set',
+);
+const { BITCOIN_ACTIONS } = await import(
+    '../../../packages/core/src/registry/actions.js'
+);
+assert.deepEqual(
+    protocolSet.slice().sort(),
+    BITCOIN_ACTIONS.slice().sort(),
+    'mock protocol set mirrors core registry BITCOIN_ACTIONS (update the literal when actions.js changes)',
+);
+
 for (const symbol of [
     'runErrorScenarios',
     'handleSignActionResult',

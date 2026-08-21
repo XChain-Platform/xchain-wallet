@@ -652,6 +652,7 @@ function AppInner() {
             switchWallet: () => setUnlockedView('wallet-picker'),
             openHelp: () => setShortcutHelpOpen(true),
             hasBtcAddress,
+            hasVmAddress,
             hasGovernanceAddress,
             isSignerMode,
         }),

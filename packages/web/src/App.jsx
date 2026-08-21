@@ -2508,6 +2508,7 @@ function AppInner() {
                 switchWallet: handleOpenWalletPicker,
                 openHelp: () => setShortcutHelpOpen(true),
                 hasBtcAddress,
+                hasVmAddress,
                 hasGovernanceAddress,
                 // Compile-time, not a preference: false only in a build that
                 // dropped the DEX surface entirely, where a palette
