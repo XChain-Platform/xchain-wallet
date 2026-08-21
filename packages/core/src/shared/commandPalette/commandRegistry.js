@@ -238,7 +238,7 @@ export function buildCommands(ctx) {
     list.push(
         { id: 'sign-message', category: 'Sign', title: 'Sign a message', subtitle: 'Prove address ownership', keywords: ['sign', 'message', 'attest'], Icon: Icon.SignIcon, run: go('sign-message') },
         { id: 'sign-verify', category: 'Sign', title: 'Verify a signature', subtitle: 'Check a signed message', keywords: ['verify', 'signature', 'check'], Icon: Icon.VerifyIcon, run: go('verify-signature') },
-        { id: 'sign-psbt', category: 'Sign', title: 'Sign a PSBT', subtitle: 'Sign a partially-signed transaction', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
+        { id: 'sign-psbt', category: 'Sign', title: 'Sign a transaction', subtitle: 'Sign a partially-signed transaction', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
     );
 
     // ---- Contacts -------------------------------------------------------

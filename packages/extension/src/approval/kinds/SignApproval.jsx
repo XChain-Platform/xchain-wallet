@@ -789,7 +789,7 @@ function SignSummary({ kind, payload, decoded, intentLoading }) {
                 <div className={shared.summary}>
                     <p className={shared.summaryLabel}>Sign in to</p>
                     <pre className={shared.summaryValue}>{String(inner.appId || payload?.origin || '')}</pre>
-                    <p className={shared.summaryLabel} style={{ marginTop: 8 }}>Nonce</p>
+                    <p className={shared.summaryLabel} style={{ marginTop: 8 }}>One-time code</p>
                     <pre className={shared.summaryValue}>{String(inner.nonce || '')}</pre>
                 </div>
             );

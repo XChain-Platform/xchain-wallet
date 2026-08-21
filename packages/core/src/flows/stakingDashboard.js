@@ -49,21 +49,48 @@ import { estimateBlockDate } from '../shared/utils/blockDateEstimate.js';
 const SCALE = 8;
 
 /**
+ * Parse a plain decimal into base units, TRUNCATED toward zero at `decimals`,
+ * reporting whether anything was dropped.
+ *
+ * The two facts are kept apart on purpose. A row finer than the scale is not
+ * representable, and every way of forcing it into a total is a rounding choice
+ * the caller has to make: dropping the row is a whole-amount error, truncating
+ * it silently is a sub-satoshi one, and which direction is safe depends on which
+ * side of the subtraction the row sits. Callers pick; this helper only reports.
+ *
+ * @param {string | number | null | undefined} value
+ * @param {number} decimals
+ * @returns {{ units: bigint, exact: boolean } | null}  null when it is not a plain decimal
+ */
+function parseAmount(value, decimals) {
+    if (value == null || value === '') return null;
+    const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(String(value).trim());
+    if (!m) return null;
+    const digits = m[3] || '';
+    const frac = digits.slice(0, decimals).padEnd(decimals, '0');
+    const magnitude = BigInt(m[2]) * (10n ** BigInt(decimals)) + BigInt(frac || '0');
+    return { units: m[1] === '-' ? -magnitude : magnitude, exact: digits.length <= decimals };
+}
+
+/** Truncated-toward-zero units taken DOWN to a true floor. */
+function floorUnits(p) { return p.exact || p.units >= 0n ? p.units : p.units - 1n; }
+
+/** Truncated-toward-zero units taken UP to a true ceiling. */
+function ceilUnits(p) { return p.exact || p.units <= 0n ? p.units : p.units + 1n; }
+
+/**
  * Exact decimal string -> base-unit BigInt. Returns null for anything that
- * isn't a plain decimal, so a malformed row is skipped rather than silently
- * counted as zero.
+ * isn't a plain decimal, and for a decimal carrying MORE fractional digits than
+ * the scale can hold, so a row is refused rather than silently rounded into a
+ * money total.
  *
  * @param {string | number | null | undefined} value
  * @param {number} [decimals]
  * @returns {bigint | null}
  */
 export function toBaseUnits(value, decimals = SCALE) {
-    if (value == null || value === '') return null;
-    const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(String(value).trim());
-    if (!m) return null;
-    const frac = (m[3] || '').slice(0, decimals).padEnd(decimals, '0');
-    const magnitude = BigInt(m[2]) * (10n ** BigInt(decimals)) + BigInt(frac || '0');
-    return m[1] === '-' ? -magnitude : magnitude;
+    const p = parseAmount(value, decimals);
+    return p !== null && p.exact ? p.units : null;
 }
 
 /**
@@ -88,6 +115,9 @@ export function fromBaseUnits(units, decimals = SCALE) {
  * @property {string} claimed    total successfully claimed, exact decimal
  * @property {string} unclaimed  accrued - claimed, floored at 0, exact decimal
  * @property {boolean} hasRejectedClaim  a claim exists that the chain refused
+ * @property {boolean} hasUnrepresentableAmount  a counted row carried finer
+ *   precision than the 8dp scale, so the totals are rounded by up to one base
+ *   unit and are approximate
  */
 
 /**
@@ -99,18 +129,33 @@ export function fromBaseUnits(units, decimals = SCALE) {
  * @returns {UnclaimedRewards}
  */
 export function unclaimedRewards({ rewards, claims } = {}) {
+    // Every reward row the indexer writes lands on the 8dp grid (bcmulfloor at
+    // 8 in actions/price.js and attest.js), so nothing below is reachable from
+    // today's data. It exists so a finer-precision reward type cannot arrive and
+    // be miscounted in silence.
+    //
+    // Rounding direction is the whole point: accrual floors and a claim ceils,
+    // so `unclaimed` can only ever come out at or below what is really owed. The
+    // opposite pairing, or dropping the row outright the way a strict refusal
+    // would, overstates what a validator can claim - a worse error than the
+    // sub-satoshi one it replaces, and by the amount of the whole row.
+    let hasUnrepresentableAmount = false;
     let accrued = 0n;
     for (const r of Array.isArray(rewards) ? rewards : []) {
-        const units = toBaseUnits(r?.amount);
-        if (units !== null) accrued += units;
+        const p = parseAmount(r?.amount, SCALE);
+        if (p === null) continue;
+        if (!p.exact) hasUnrepresentableAmount = true;
+        accrued += floorUnits(p);
     }
     let claimed = 0n;
     let hasRejectedClaim = false;
     for (const c of Array.isArray(claims) ? claims : []) {
         const valid = String(c?.status ?? '') === 'valid';
         if (!valid) { hasRejectedClaim = true; continue; }
-        const units = toBaseUnits(c?.amount);
-        if (units !== null) claimed += units;
+        const p = parseAmount(c?.amount, SCALE);
+        if (p === null) continue;
+        if (!p.exact) hasUnrepresentableAmount = true;
+        claimed += ceilUnits(p);
     }
     const remaining = accrued - claimed;
     return {
@@ -120,6 +165,7 @@ export function unclaimedRewards({ rewards, claims } = {}) {
         // negative claimable would be worse than showing nothing owed.
         unclaimed: fromBaseUnits(remaining > 0n ? remaining : 0n),
         hasRejectedClaim,
+        hasUnrepresentableAmount,
     };
 }
 

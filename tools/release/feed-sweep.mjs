@@ -282,7 +282,17 @@ export function verifyManifestSignature(manifestPath, keyFingerprint, run = spaw
     const signing = fields[0] || '';
     const primary = fields.length > 1 ? fields[fields.length - 1] : '';
     const want = keyFingerprint.replace(/\s+/g, '').toUpperCase();
-    const matches = (fpr) => /^[0-9A-F]+$/.test(fpr) && fpr.toUpperCase().endsWith(want);
+    // FULL-FINGERPRINT EQUALITY, never a suffix. Matching by suffix meant a
+    // configured 8- or 16-hex key id (the value gpg prints most often)
+    // accepted ANY key whose fingerprint happened to end in those
+    // characters, and short-id collisions are cheaply minted. The manifest
+    // this decides on is what enters the union baseline the whole feed is
+    // judged against, so a collision key would have laundered its own
+    // payload clean. cws-upload.mjs's attributeSignature and verify.sh's
+    // --key gate both demand 40 hex with strict equality; this is the same
+    // rule, and the three must not drift apart again.
+    const matches = (fpr) => /^[0-9A-F]{40}$/.test(fpr.toUpperCase())
+        && fpr.toUpperCase() === want;
     return matches(signing) || matches(primary) ? 'ok' : 'bad';
 }
 
@@ -463,14 +473,14 @@ export function sweep(root, options = {}) {
 
 // ------------------------------------------------------------------ CLI
 
-const USAGE = `usage: feed-sweep.mjs --root <feed root> [--gpg-key <fingerprint>] [--json]
+const USAGE = `usage: feed-sweep.mjs --root <feed root> [--gpg-key <40-hex fingerprint>] [--json]
 
 Validates every object under a release feed against the UNION of the
 signed manifests published beside them (§7.2). Runs on the feed
 host, over the local tree, by cron:
 
   30 * * * * /usr/bin/node /opt/xchain/feed-sweep.mjs \\
-    --root /srv/downloads/wallet --gpg-key <K1 fingerprint> \\
+    --root /srv/downloads/wallet --gpg-key <K1 full 40-hex fingerprint> \\
     >> /var/log/xchain-feed-sweep.log 2>&1
 
 Exit 0 clean, 1 on any finding, 2 on a usage or environment error.
@@ -490,8 +500,30 @@ function main(argv) {
     if (!root) { process.stderr.write(`feed-sweep.mjs: --root is required\n\n${USAGE}`); return 2; }
     if (!existsSync(root)) { process.stderr.write(`feed-sweep.mjs: no such root: ${root}\n`); return 2; }
 
+    // --gpg-key is a FULL fingerprint or it is a usage error. The matcher
+    // already refuses anything shorter, but refusing here too is what makes
+    // the refusal readable: a short id would otherwise turn every manifest
+    // into MANIFEST-BAD-SIG and every file into UNCOVERED, which in a cron
+    // log is indistinguishable from a compromised feed, and this file's own
+    // rule is that alarms firing during normal operation get muted. The
+    // flag being present with no value is the same error, not a silent
+    // downgrade to the unanchored mode.
+    let gpgKey;
+    if (argv.includes('--gpg-key')) {
+        gpgKey = String(flag('--gpg-key') ?? '').replace(/\s+/g, '').toUpperCase();
+        if (!/^[0-9A-F]{40}$/.test(gpgKey)) {
+            process.stderr.write(
+                'feed-sweep.mjs: --gpg-key must be a full 40-character fingerprint.\n'
+                + '  A short id or an email selects a key without identifying it, and short\n'
+                + '  ids are cheap to collide, so the baseline this sweep builds could end up\n'
+                + '  anchored to a key that is not K1. Run `gpg --fingerprint <key>` and pass\n'
+                + '  the 40 hex characters with the spaces removed.\n');
+            return 2;
+        }
+    }
+
     const stamp = new Date().toISOString();
-    const result = sweep(root, { gpgKey: flag('--gpg-key') });
+    const result = sweep(root, { gpgKey });
 
     if (argv.includes('--json')) {
         process.stdout.write(`${JSON.stringify({ stamp, root, ...result }, null, 2)}\n`);

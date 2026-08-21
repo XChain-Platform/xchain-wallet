@@ -39,7 +39,8 @@ import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-    existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+    chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync,
+    writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
@@ -810,6 +811,86 @@ for (const [label, seed] of [
         rmSync(staged, { recursive: true, force: true });
     }
 }
+// The optional passfile mode gate, DRIVEN under a stub `stat` that behaves
+// the way GNU coreutils does. This is the second assertion in this file that
+// runs the ceremony rather than reading it, and it has to be: the bug it
+// guards was invisible on a macOS host, where both orderings happen to work.
+// On GNU, `stat -f` is `--file-system`, so a BSD-first read printed a
+// six-line filesystem dump with the real mode appended and the gate then
+// killed the ceremony on a correctly-0600 file. sign.sh carries the same
+// gate and the same recorded measurement; the two must not drift again.
+{
+    const work = mkdtempSync(join(tmpdir(), 'xc-ceremony-passfile-'));
+    try {
+        // A stub GNU stat: `-c` answers with the mode, `-f` dumps the
+        // filesystem block and exits non-zero, exactly as coreutils does.
+        const statBin = join(work, 'bin-stat');
+        mkdirSync(statBin, { recursive: true });
+        writeFileSync(join(statBin, 'stat'),
+            '#!/bin/sh\n'
+            + '# Stub: GNU coreutils stat, for mobile-shell.smoke.js.\n'
+            + 'if [ "$1" = "-c" ]; then\n'
+            + '  case "$3" in *ok600) echo 600 ;; *loose) echo 644 ;; *) echo 600 ;; esac\n'
+            + '  exit 0\n'
+            + 'fi\n'
+            + 'cat <<\'EOF\'\n'
+            + '  File: "/tmp"\n'
+            + '    ID: 0        Namelen: 255     Type: tmpfs\n'
+            + 'Block size: 4096       Fundamental block size: 4096\n'
+            + 'Blocks: Total: 1024000    Free: 1023000    Available: 1023000\n'
+            + 'Inodes: Total: 4096000    Free: 4095000\n'
+            + 'EOF\n'
+            + 'exit 1\n');
+        chmodSync(join(statBin, 'stat'), 0o755);
+
+        const keystore = join(work, 'k.jks');
+        writeFileSync(keystore, 'not-a-real-keystore');
+        const drivePassfile = (name) => {
+            const passfile = join(work, name);
+            writeFileSync(passfile, 'x');
+            chmodSync(passfile, 0o600);
+            const staged = mkdtempSync(join(tmpdir(), 'xc-ceremony-out-'));
+            try {
+                return spawnSync(
+                    'bash',
+                    [join(wsRoot, 'tools', 'release', 'android-ceremony.sh'),
+                        '--tag', 'v0.336.0', '--output', staged],
+                    {
+                        encoding: 'utf8',
+                        env: {
+                            ...process.env,
+                            CI: '',
+                            GITHUB_ACTIONS: '',
+                            PATH: `${statBin}:${process.env.PATH}`,
+                            XCHAIN_K9_KEYSTORE: keystore,
+                            XCHAIN_K9_ALIAS: 'k9',
+                            XCHAIN_K10_KEYSTORE: keystore,
+                            XCHAIN_K10_ALIAS: 'k10',
+                            XCHAIN_K9_PASSFILE: passfile,
+                        },
+                    },
+                );
+            } finally {
+                rmSync(staged, { recursive: true, force: true });
+            }
+        };
+
+        const good = drivePassfile('pass-ok600');
+        assert.doesNotMatch(good.stderr || '', /must be 0600/,
+            'a 0600 passfile passes the mode gate on a GNU host: the BSD-first read this '
+            + 'replaced captured a filesystem dump, so the comparison could never succeed '
+            + 'and the ceremony died on a correct file');
+        assert.doesNotMatch(good.stderr || '', /could not read the mode/,
+            'and the mode it read is a mode, not a garbled block');
+
+        const loose = drivePassfile('pass-loose');
+        assert.match(loose.stderr || '', /XCHAIN_K9_PASSFILE must be 0600, found 644/,
+            'a group-readable passfile is still refused, and the message names the real mode');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
 assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not built again');
 
 // The STORE APK is derived and must stay derived. The second, full-feature

@@ -42,8 +42,8 @@ assert.ok(/SidePanel/.test(src), 'LinkForm uses a SidePanel sub-component');
 // Submit-on selector: defaults to chain A, can switch to chain B.
 assert.ok(/submitOn/.test(src),
     'LinkForm tracks which chain the LINK is submitted on');
-assert.ok(/Submit LINK on/.test(src),
-    'LinkForm exposes a "Submit LINK on" selector');
+assert.ok(/Submit the link on/.test(src),
+    'LinkForm exposes a "Submit the link on" selector');
 
 // Decoded preview: calls getActionByIndex per side.
 for (const call of [

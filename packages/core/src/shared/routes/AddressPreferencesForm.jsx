@@ -388,7 +388,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     checked={requireMemo}
                     onChange={(e) => setRequireMemo(e.target.checked)}
                 />
-                <span>Require a memo on any SEND to this address</span>
+                <span>Require a memo on any send to this address</span>
             </label>
 
             <p className={styles.detailsLabel}>Dispensers on this address</p>

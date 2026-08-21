@@ -21,10 +21,12 @@
 // month, which comes to the same thing.
 
 import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import { PAYLOAD_DIRS, parseManifest, parseUpdateInfo, sweep, verifyManifestSignature }
     from '../../../tools/release/feed-sweep.mjs';
@@ -309,6 +311,50 @@ const V2 = {
     assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
         K1_PRIMARY, otherKey), 'bad',
     'a good signature from someone else is still rejected on both fields');
+
+    // The match is FULL-FINGERPRINT EQUALITY, never a suffix. A suffix
+    // match let a configured short key id anchor the baseline to any key
+    // whose fingerprint ended in those characters, and short-id collisions
+    // are cheap to mint - so the sweep would have counted the collision
+    // key's manifest into the union and swept the payload under it clean.
+    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+        K1_PRIMARY.slice(-16), validsig), 'bad',
+    'the last 16 characters of the real fingerprint are NOT the fingerprint');
+
+    const collision = () => ({
+        status: 0,
+        stdout: '[GNUPG:] VALIDSIG ' + `0${'0'.repeat(23)}${K1_PRIMARY.slice(-16)}`
+            + ' 2026-08-06 1 0 4 0 22 10 00 ' + `1${'1'.repeat(23)}${K1_PRIMARY.slice(-16)}`
+            + '\n',
+    });
+    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+        K1_PRIMARY.slice(-16), collision), 'bad',
+    'and a 40-hex fingerprint that merely ENDS WITH the configured value is refused');
+}
+
+// --------------------------------- the CLI refuses a short --gpg-key
+//
+// Strict equality alone would turn a short id into MANIFEST-BAD-SIG on
+// every manifest plus UNCOVERED on every file, which in a cron log reads
+// as a compromised feed rather than as operator input the tool cannot use.
+// One usage error is the readable failure, and it is verify.sh's stance
+// for --key (verify.sh:372-378).
+
+{
+    const sweepScript = join(dirname(fileURLToPath(import.meta.url)),
+        '..', '..', '..', 'tools', 'release', 'feed-sweep.mjs');
+    const drive = (...args) => spawnSync(process.execPath, [sweepScript, '--root', root, ...args],
+        { encoding: 'utf8' });
+
+    const short = drive('--gpg-key', '99B41573');
+    assert.equal(short.status, 2, 'a short key id is a usage error, not a wall of alarms');
+    assert.match(short.stderr, /full 40-character fingerprint/,
+        'and the refusal says what the flag actually wants');
+
+    const empty = drive('--gpg-key');
+    assert.equal(empty.status, 2,
+        'the flag present with no value is the same error, never a silent downgrade '
+        + 'to the unanchored mode');
 }
 
 // ------------------------------------- the android lane (row 136)

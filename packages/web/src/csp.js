@@ -61,9 +61,12 @@ const TREZOR_CONNECT_ORIGIN = 'https://connect.trezor.io';
 /** @type {Record<string, string[]>} */
 const DIRECTIVES = {
     'default-src': ["'self'"],
-    'script-src': ["'self'", 'https://connect.trezor.io'],
+    // Both Trezor entries name the constant, never a literal: the `store` filter
+    // in directivesFor drops the origin by identity, so a literal edited here
+    // alone would stop matching and keep the origin in the store build.
+    'script-src': ["'self'", TREZOR_CONNECT_ORIGIN],
     'style-src': ["'self'", "'unsafe-inline'"],
-    'frame-src': ["'self'", 'https://connect.trezor.io'],
+    'frame-src': ["'self'", TREZOR_CONNECT_ORIGIN],
     'img-src': ["'self'", 'data:', 'blob:'],
     'font-src': ["'self'", 'data:'],
     'connect-src': [

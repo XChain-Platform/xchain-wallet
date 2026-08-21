@@ -60,6 +60,11 @@ import { readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// The re-sign rule, in its one JS home. `xr_release_tag_of` in lib.sh is the
+// bash half and release-resign-tag.smoke.js drives both spellings over one
+// table, so importing it is what stops a third spelling appearing here.
+import { releaseTagOf } from './feed-sweep.mjs';
+
 // The one value in this repo that only an observed signing run can write
 // (verify-release-key.sh drove the real pipeline to set it). It is not a
 // publication channel for the fingerprint - SECURITY.md and
@@ -85,6 +90,7 @@ Usage:
 Options:
   --item-id <id>        the store-assigned extension ID           (required)
   --zip <path>          the release zip to upload                 (required)
+  --tag <vX.Y.Z>        the release these bytes belong to         (required)
   --publish <target>    also publish: trustedTesters | default    (optional)
   --yes-really-public   required alongside --publish default
   --manifest <path>     RELEASE_HASHES.txt covering the zip
@@ -98,6 +104,12 @@ The manifest's detached signature is verified with gpg and bound to the
 release key's fingerprint (XCHAIN_VERIFY_KEY, else docs/release-key-pin.json).
 A good signature from any OTHER key is refused: this project has three GPG
 keys in its orbit and they are not interchangeable.
+
+--tag is what binds the manifest to a RELEASE, and it is required for the
+same reason deploy-web.sh requires it: a previous release's zip beside that
+release's own signed manifest passes both the signature and the hash checks,
+because the pair agrees with itself. Only an anchor named from outside the
+pair can tell one release from another.
 
 Credentials, read from the environment and never written anywhere:
   CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN
@@ -128,7 +140,7 @@ export class Refusal extends Error {
  */
 export function parseArgs(argv) {
     const out = {
-        itemId: '', zip: '', publish: '', manifest: '',
+        itemId: '', zip: '', publish: '', manifest: '', tag: '',
         dryRun: false, allowUnsigned: false, yesReallyPublic: false, help: false,
     };
     for (let i = 0; i < argv.length; i += 1) {
@@ -146,6 +158,7 @@ export function parseArgs(argv) {
             case '--item-id': out.itemId = next(); break;
             case '--zip': out.zip = next(); break;
             case '--manifest': out.manifest = next(); break;
+            case '--tag': out.tag = next(); break;
             case '--publish': out.publish = next(); break;
             case '--dry-run': out.dryRun = true; break;
             case '--allow-unsigned': out.allowUnsigned = true; break;
@@ -222,6 +235,21 @@ export function hashFromManifest(manifestText, artifactName) {
 }
 
 /**
+ * A signed header field, by name. The header is what the signature actually
+ * covers, so `# tag:` is a signed claim about which release these hashes are
+ * for, not a convenience label. `verify.sh --recompute` writes `(none)` here
+ * deliberately, to announce that its output is not a release manifest.
+ *
+ * @param {string} manifestText
+ * @param {string} field
+ * @returns {string}
+ */
+export function headerField(manifestText, field) {
+    const m = new RegExp(`^#\\s*${field}:\\s*(.+)$`, 'm').exec(manifestText);
+    return m ? m[1].trim() : '';
+}
+
+/**
  * Attribute a manifest's detached signature to one fingerprint.
  *
  * Reads gpg's machine-readable status, never its exit code and never its
@@ -285,15 +313,16 @@ export async function expectedSigner(readFileImpl = readFile, env = process.env)
 /**
  * The provenance gate. This is the check that makes the automation safe to
  * have at all: the bytes about to be uploaded must be the bytes a signed
- * release manifest describes, and the manifest must carry a signature the
- * release key actually made.
+ * release manifest describes, the manifest must carry a signature the release
+ * key actually made, and the manifest must be THIS release's.
  *
  * @param {object} opts
  * @returns {Promise<{ sha256: string, manifestPath: string, signed: boolean,
- *                     signature: string }>}
+ *                     signature: string, release: string, lanes: string }>}
  */
 export async function checkProvenance({
-    zipPath, manifestPath, allowUnsigned, readFileImpl = readFile, runImpl = spawnSync,
+    zipPath, manifestPath, tag = '', allowUnsigned,
+    readFileImpl = readFile, runImpl = spawnSync,
 }) {
     const manifest = manifestPath || join(dirname(zipPath), 'RELEASE_HASHES.txt');
 
@@ -373,6 +402,64 @@ export async function checkProvenance({
         );
     }
 
+    // --- the release anchor ---------------------------------------------
+    //
+    // THE ONE SHAPE THE TWO CHECKS ABOVE CANNOT SEE. A previous release's
+    // zip, beside that release's own genuinely-signed manifest, satisfies
+    // the signature check and the hash-membership check both, because the
+    // pair agrees with itself. The anchor has to come from OUTSIDE the pair
+    // or it is not an anchor: deriving it from the zip's own filename would
+    // read the stale pair's old version out of the stale pair and match it
+    // against itself, which is a check that cannot fail. deploy-web.sh:99
+    // and publish.sh require --tag for exactly this reason, and this tool
+    // was the outlier.
+    const release = headerField(manifestText, 'tag');
+    if (tag) {
+        // `verify.sh --recompute` stamps `(none)` to announce that its
+        // output describes no release at all. That is a value to refuse,
+        // never one to match against.
+        if (!release || release === '(none)') {
+            throw new Refusal(
+                `${basename(manifest)} names no release, so it cannot be the manifest for ${tag}.\n`
+                + '  A manifest with no signed `# tag:` header (or one stamped `(none)`, which is what\n'
+                + '  verify.sh --recompute writes) is a local recomputation, not the document the\n'
+                + '  release signed. Fetch RELEASE_HASHES/<tag>.txt and its .asc together.', 1,
+            );
+        }
+        // ONE WAY ONLY. `v0.336.0-resign1` is v0.336.0's tree with the
+        // release tooling corrected and nothing else, republished under the
+        // release's own name, so a re-signature satisfies a request for the
+        // release it corrects. The superseded original must NOT satisfy a
+        // request for the re-signature, or asking for the correction and
+        // being handed the false one would verify.
+        if (release !== tag && releaseTagOf(release) !== tag) {
+            throw new Refusal(
+                `${basename(manifest)} describes ${release}, but you named ${tag}.\n`
+                + '  A manifest from another release hash-checks and signature-checks perfectly, which\n'
+                + '  is precisely what this check exists for: it is the only way to tell a stale but\n'
+                + '  genuinely signed artifact from the one you meant to publish. Upload the zip and\n'
+                + '  the manifest that belong to the release you named.', 1,
+            );
+        }
+    } else if (signed) {
+        throw new Refusal(
+            `cannot tell which release ${basename(manifest)} is for.\n`
+            + `  It claims tag '${release || '(no tag header)'}' and nothing anchors that to what you\n`
+            + '  meant to upload. Pass --tag <vX.Y.Z>. This mirrors verify.sh, which refuses the same\n'
+            + '  shape rather than verifying a manifest against itself.', 1,
+        );
+    } else {
+        // Unsigned and unanchored is the --allow-unsigned path, which is
+        // already the operator saying they have no provenance evidence.
+        // Say what is missing rather than adding a second wall to the one
+        // escape hatch this tool has.
+        process.stderr.write(
+            `cws-upload.mjs: WARNING - manifest claims '${release || '(no tag header)'}' and nothing`
+            + ' anchors it. Pass --tag to bind this upload to a release.\n');
+    }
+
+    const lanes = headerField(manifestText, 'lanes');
+
     const expected = hashFromManifest(manifestText, zipPath);
     if (!expected) {
         throw new Refusal(
@@ -393,7 +480,7 @@ export async function checkProvenance({
         );
     }
 
-    return { sha256: actual, manifestPath: manifest, signed, signature };
+    return { sha256: actual, manifestPath: manifest, signed, signature, release, lanes };
 }
 
 /**
@@ -460,18 +547,35 @@ async function main(argv, env, log = console.log) {
 
     if (!args.itemId) throw new Refusal('--item-id <id> is required (try --help)', 2);
     if (!args.zip) throw new Refusal('--zip <path> is required (try --help)', 2);
+    if (!args.tag) {
+        throw new Refusal(
+            '--tag <vX.Y.Z> is required (try --help).\n'
+            + '  It is the release these bytes are supposed to be, named from outside the zip and\n'
+            + '  its manifest, so that a previous release\'s genuinely-signed pair cannot pass as\n'
+            + '  this one. deploy-web.sh requires it on the same seam for the same reason.', 2,
+        );
+    }
 
     // Order matters. The publish target and the provenance of the bytes are
     // both checked BEFORE a credential is even looked for, so a mistake in
     // either is reported on a machine that holds no secrets at all.
     checkPublishTarget(args.publish, args.yesReallyPublic);
     const prov = await checkProvenance({
-        zipPath: args.zip, manifestPath: args.manifest, allowUnsigned: args.allowUnsigned,
+        zipPath: args.zip, manifestPath: args.manifest, tag: args.tag,
+        allowUnsigned: args.allowUnsigned,
     });
     log(`artifact: ${basename(args.zip)}`);
     log(`sha256:   ${prov.sha256}`);
+    log(`release:  ${prov.release}${prov.release === args.tag ? '' : ` (re-signature of ${args.tag})`}`);
     log(`manifest: ${prov.manifestPath} (${prov.signature}`
         + `${prov.signed ? ')' : ', allowed by --allow-unsigned)'}`);
+    if (prov.lanes) {
+        // Said out loud, because without it "the artifact is not in the
+        // manifest" reads as tampering when the truth is that this manifest
+        // was never about that lane. verify.sh prints the same line.
+        log(`coverage: PARTIAL - this manifest covers ${prov.lanes} and says nothing about any`
+            + ' other lane of this release.');
+    }
 
     const creds = credentialState(env);
     if (!creds.ok) {

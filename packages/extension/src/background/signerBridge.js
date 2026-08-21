@@ -14,10 +14,20 @@
 // 'signer-bridge' })` port and posts a `signer.register` message
 // naming its live signer id.
 //
-// The physical port wiring is not wired up yet. See
-// `renderer/signer-bridge.js` (stub) + `background/signerBridge.js`
-// port listener (stub) TODO. Until then, the registry stays empty
-// and `action.send.hw` rejects with "signer bridge not connected".
+// The port wiring is live. The service worker attaches the listener
+// at boot: `background.js` calls `attachSignerBridgeListener()` from
+// `background/signerBridgeListener.js`, and the renderer half is
+// `popup/signerBridge.js`, which opens the port and announces its
+// signer ids. Treat that listener as a trust boundary: it disconnects
+// any port failing `isTrustedExtensionSender`, drops an over-cap id
+// batch whole, and lets a port unregister only the ids it registered
+// itself.
+//
+// This registry is one process-wide singleton shared by all three
+// shells: desktop main reaches it through
+// `packages/desktop/main/signerBridgeListener.js` (ipc, with its own
+// sender-trust and signerId-ownership guards) and the web shell
+// through `packages/web/src/signerBridge.js` (in-process transport).
 // Tests inject their own transport via `signerBridge.setTransport`.
 //
 // Design:
@@ -46,9 +56,17 @@
 //   port.postMessage                     →  transport resolves
 //     'signer.sign.response'
 //
-// When a port disconnects (tab closed, wallet locked), the registry
-// drops all transports that were registered by that port; any
+// When a port disconnects (popup or tab closed, renderer destroyed),
+// the registry drops the transports that port registered; any
 // in-flight sign request rejects with "signer bridge disconnected".
+//
+// Locking the wallet does NOT clear this registry: no lock or
+// teardown path calls `clearAll()`, so a transport registered by a
+// still-connected renderer survives a lock and is reachable again on
+// unlock. The capability envelope is held by the host, not by this
+// map: lock detaches the host and closes the vault, so no
+// `action.*.hw` handler can dispatch through a surviving transport
+// while the wallet is locked.
 
 /** @type {Map<string, import('@xchain-wallet/core/signers/RemoteSigner.js').RemoteSignerTransport>} */
 const transports = new Map();
@@ -72,8 +90,8 @@ export function setTransport(signerId, transport) {
 
 /**
  * Look up a registered transport. Returns null when the renderer
- * hasn't registered this signer yet (e.g. the wallet is locked, or
- * the user hasn't opened the popup since pairing).
+ * hasn't registered this signer (e.g. its port closed, or the user
+ * hasn't opened the popup since pairing).
  *
  * @param {string} signerId
  * @returns {import('@xchain-wallet/core/signers/RemoteSigner.js').RemoteSignerTransport | null}
@@ -92,7 +110,11 @@ export function clearTransport(signerId) {
     transports.delete(signerId);
 }
 
-/** Drop all transports. Used on lock + tests. */
+/**
+ * Drop every transport. Test-only today: no production lock or
+ * teardown path calls this, so registrations are dropped per port on
+ * disconnect rather than wholesale on lock.
+ */
 export function clearAll() {
     transports.clear();
 }
