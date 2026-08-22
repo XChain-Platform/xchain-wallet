@@ -29,6 +29,7 @@
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
 import { nativeFeeOutputOf, isChunkEncoding } from '../flows/nativeFeeLane.js';
+import { signerSupportsChunkReveal } from '../flows/signerCapability.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
@@ -69,6 +70,34 @@ export class BroadcastFailedError extends Error {
         this.signedAt = signedAt;
         this.encoding = encoding;
         this.phase = phase;
+    }
+}
+
+/**
+ * Thrown BEFORE anything is signed or broadcast when the encoder chose the
+ * P2SH/P2WSH two-phase lane and the injected signer cannot sign its reveal.
+ *
+ * The reveal is dispatched after the phase-1 commit is on chain, so a signer
+ * that refuses (or fails inside its vendor layer) at that point has already
+ * spent coin into a script nothing can open. This is the pre-dispatch
+ * capability check `Signer.js#assertCannotSignEnvelopeReveal` says must live
+ * here rather than at the signer. Typed and `userFacing` so the forms render
+ * the remedy instead of "Couldn't send."
+ */
+export class HardwareChunkLaneError extends Error {
+    /** @param {{ action: string, encoding: string, signerKind?: string }} fields */
+    constructor({ action, encoding, signerKind }) {
+        super(`This ${action} is too large for one transaction: the network carries it as a `
+            + `${encoding} pair, a commit plus a revealing transaction signed after the first `
+            + `is broadcast. ${signerKind ? `A ${signerKind} signer` : 'This signer'} cannot sign `
+            + 'that revealing transaction, and broadcasting only the first would spend coin into '
+            + 'a script that nothing can open and record no action at all. Use a software wallet '
+            + 'key for this action.');
+        this.name = 'HardwareChunkLaneError';
+        this.userFacing = true;
+        this.action = action;
+        this.encoding = encoding;
+        this.signerKind = signerKind;
     }
 }
 
@@ -297,14 +326,35 @@ export async function submitWithSigner({
         }
     }
 
-    // The signers now sign ONLY the inputs named in signingPaths (so a dApp PSBT
-    // cannot get extra UTXOs signed). But this is the wallet's OWN action tx: every
-    // input is the active key's (the encoder funds greedily from the change address
-    // and can pick more than one UTXO). The flows declare just one signingPaths
-    // entry, so expand it to one entry per actual PSBT input, reusing the active
-    // key's source, or those extra funding inputs would be left unsigned and the
-    // broadcast would fail. (The dApp bridge path keeps its strict user-approved
-    // scope and does not call this helper.)
+    // P2SH/P2WSH two-phase: the encoder paid to a script and phase 2 spends it
+    // with a second transaction the signer must also sign. Decided ONCE here, and
+    // gated HERE, before the phase-1 commit is signed or broadcast: the reveal is
+    // dispatched after the commit is on chain, so a signer that cannot produce it
+    // (hardware and remote signers drop the `reveal` flag and fail inside their
+    // vendor format layer) would leave coin in a script nothing can open. That
+    // is the stranded-funds event §6 forbids, and the pre-dispatch check
+    // Signer.js#assertCannotSignEnvelopeReveal says belongs in this file.
+    const needsPhase2 = encoded.encoding === 'P2SH' || encoded.encoding === 'P2WSH';
+    if (needsPhase2 && !signerSupportsChunkReveal(signer)) {
+        let signerKind;
+        try { signerKind = signer.kind; } catch { signerKind = undefined; }
+        throw new HardwareChunkLaneError({
+            action: actionData.action,
+            encoding: encoded.encoding,
+            signerKind: typeof signerKind === 'string' ? signerKind : undefined,
+        });
+    }
+
+    // The software signer signs ONLY the inputs named in signingPaths (so a dApp
+    // PSBT cannot get extra UTXOs signed); hardware signers are all-or-refuse
+    // and need an entry for EVERY input (Signer.js#assertFullInputCoverage). But
+    // this is the wallet's OWN action tx: every input is the active key's (the
+    // encoder funds greedily from the change address and can pick more than one
+    // UTXO). The flows declare just one signingPaths entry, so expand it to one
+    // entry per actual PSBT input, reusing the active key's source, or those
+    // extra funding inputs would be left unsigned and the broadcast would fail.
+    // (The dApp bridge path keeps its strict user-approved scope and does not
+    // call this helper.)
     const expandSigningPaths = (psbtHex) => {
         try {
             const base = signingPaths[0];
@@ -421,8 +471,8 @@ export async function submitWithSigner({
     }
 
     // Step 4b: P2SH/P2WSH two-phase: encoder paid to a script, we now
-    // spend that output with a second tx. Signer signs phase-2 too.
-    const needsPhase2 = encoded.encoding === 'P2SH' || encoded.encoding === 'P2WSH';
+    // spend that output with a second tx. Signer signs phase-2 too (its
+    // capability to do so was checked above, before phase 1 was signed).
     if (needsPhase2) {
         onProgress('p2sh_spending', { phase1Txid: signed.txid });
         const spendResult = await encoder.spendP2sh({

@@ -15,7 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `verify-ci-controls.mjs` measures the public release-CI page against the repository's live settings, one probe per control the page names.
 - The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
 
+### Changed
+- Donation defaults are per coin (1,000 sats/tx on Bitcoin, 0.001 LTC on Litecoin, 0.05 DOGE on Dogecoin, each sent at 25x accumulated) instead of one flat number that was wrong on two of the three chains.
+- Settings store only what the user changed; everything left at its default follows the defaults of the installed release, so a later release can retune them.
+
 ### Fixed
+- The Send form's fee-bump default now respects each chain's capability, instead of defaulting Dogecoin to an RBF flag it does not support.
+- The CSP meta tag no longer carries `frame-ancestors`, which browsers ignore in meta and warn about on every load; the serving host sends it as a header instead.
 - `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed.
 - The launch probe fails shut when the host cannot run it, so signing over SSH cannot pass a macOS release nothing launched.
 - Queued transactions are reported truthfully instead of promising an automatic rebroadcast.

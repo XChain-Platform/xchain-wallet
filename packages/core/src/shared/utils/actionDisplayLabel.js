@@ -68,6 +68,21 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     XCALL: 'Cross-chain call',
     XEXEC: 'Cross-chain execution',
     CROSS_SETTLE: 'Cross-chain settlement',
+    // Lifecycle verbs the indexer emits when an open position closes out.
+    // The user never authors them, but the vendored action manifest marks
+    // each one indexerHandled + explorerRender, so they land in History
+    // beside the base action. Unmapped they recase into protocol coinage
+    // the map already refuses for the base verb ("Coinpay expire" next to
+    // "Coin payment").
+    BET: 'Bet',
+    BET_EXPIRE: 'Bet expired',
+    COINPAY_EXPIRE: 'Coin payment expired',
+    DISPENSER_CLOSE: 'Dispenser closed',
+    DISPENSER_EXPIRE: 'Dispenser expired',
+    ORDER_EXPIRE: 'Order expired',
+    ORDER_MATCH: 'Order matched',
+    SWAP_EXPIRE: 'Swap expired',
+    SWAP_MATCH: 'Swap matched',
 });
 
 /**

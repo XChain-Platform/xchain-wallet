@@ -29,6 +29,12 @@
 // the right vout. The caller passes the resulting `inputs[i].prevTxHex`
 // to the signer, which runs `app.splitTransaction` on it at call time.
 
+// The sighash every signer here signs under. A `signingPaths` entry may carry
+// a `sighashType` override (Signer.js SigningPathEntry, bridge-spec
+// PsbtSigningPath); this seam REFUSES a non-default one rather than dropping
+// it, see the guard in toLedgerCreatePayment.
+const SIGHASH_ALL = 1;
+
 /**
  * Map an XChain chainId to the Ledger Bitcoin app currency string used
  * for `additionals`. Matches the `format` / `additionals` conventions
@@ -255,7 +261,7 @@ function isSegwitScriptType(scriptType) {
  * @param {Object} opts
  * @param {import('./types.js').DecomposedPsbt} opts.decomposed
  * @param {string} opts.chainId
- * @param {Array<{inputIndex: number, path: string}>} opts.signingPaths
+ * @param {Array<{inputIndex: number, path: string, sighashType?: number}>} opts.signingPaths
  * @param {number} [opts.lockTime]
  * @returns {{
  *   inputs: Array<{ prevTxHex: string, vout: number, redeemScriptHex: (string|null), sequence: number }>,
@@ -281,6 +287,34 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
         if (typeof sp.inputIndex !== 'number' || !sp.path) {
             throw new Error(
                 'toLedgerCreatePayment: every signingPaths entry needs { inputIndex, path }',
+            );
+        }
+        // REFUSE a sighash override; never drop one. The shared signing
+        // contract carries an optional per-input `sighashType` that no
+        // hardware seam can honour: trezorFormat.js refuses it the same way
+        // (Trezor Connect has no per-input sighash key, so a forwarded value
+        // is silently unconsumed). Neither seam may read only inputIndex and
+        // path, or the same PSBT + signingPaths would sign under SIGHASH_ALL
+        // with nothing surfaced. A wrong-sighash signature is worse than a
+        // refused one.
+        //
+        // Refusing rather than forwarding, deliberately. hw-app-btc takes a
+        // single transaction-level `sigHashType` (see the envelope list
+        // above), so the per-input contract is not expressible here anyway;
+        // and this signer returns a fully serialized tx rather than a PSBT
+        // (LedgerSigner.signPsbt), so a SIGHASH_SINGLE or ANYONECANPAY
+        // signature would leave the seam with no PSBT lane to recombine on
+        // and no check that a matching output index exists. Threading the
+        // flag would be new device behaviour no wallet flow exercises. Every
+        // signingPaths builder that reaches Ledger today (the auth.signPsbt.hw
+        // handler and the core flows) sets only inputIndex and path, so this
+        // refuses nothing that is being asked for today.
+        if (sp.sighashType !== undefined && sp.sighashType !== null
+            && sp.sighashType !== SIGHASH_ALL) {
+            throw new Error(
+                `toLedgerCreatePayment: Ledger cannot sign under sighashType ${sp.sighashType} `
+                + `(input ${sp.inputIndex}); this signer supports only the default SIGHASH_ALL `
+                + `(${SIGHASH_ALL}). Re-request the signature without a sighash override.`,
             );
         }
         pathByIndex.set(sp.inputIndex, sp);

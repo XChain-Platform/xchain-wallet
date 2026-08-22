@@ -9,21 +9,32 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
+import { chainIdsWithAction, useChainIdsWithAction } from './useSupportedChains.js';
 
-const chainRegistry = registryLib.defaultRegistry();
+// Chains whose protocol accepts VOTE (token-weighted governance), asked of the
+// LIVE registry's supportedActions (useGovernanceChainIds below) rather than
+// snapshotted at import, so a synced descriptor reaches the gate without a
+// restart. Unlike multisig/staking (BTC-only), VOTE is a common governance
+// primitive: a poll is decided by holders of ANY token (the DEPOSIT /
+// GAS_ESCROW that need the GAS tick are optional), so governance is gated by
+// capability, not a hardcoded coin. Adding VOTE to a chain's supportedActions
+// surfaces the nav entry automatically.
 
-// Chains whose protocol accepts VOTE (token-weighted governance), resolved once
-// from the registry's supportedActions. Unlike multisig/staking (BTC-only), VOTE
-// is a common governance primitive: a poll is decided by holders of ANY token
-// (the DEPOSIT / GAS_ESCROW that need the GAS tick are optional), so governance
-// is gated by capability, not a hardcoded coin. Adding VOTE to a chain's
-// supportedActions surfaces the nav entry automatically.
-const GOVERNANCE_CHAIN_IDS = chainRegistry
-    .supportedChains()
-    .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('VOTE'))
-    .map((d) => d.id);
+/**
+ * Governance-capable chain ids, re-read on every registry mutation. Exported
+ * for the governance surfaces that pick a default chain.
+ *
+ * @returns {string[]}
+ */
+export function useGovernanceChainIds() {
+    return useChainIdsWithAction('VOTE');
+}
+
+/** Non-hook twin of useGovernanceChainIds, read at call time. */
+export function governanceChainIds() {
+    return chainIdsWithAction('VOTE');
+}
 
 /**
  * Returns true once the wallet has at least one address on any chain that
@@ -35,6 +46,7 @@ const GOVERNANCE_CHAIN_IDS = chainRegistry
  */
 export function useGovernanceAddressesPresent(walletId) {
     const { messaging } = useMessaging();
+    const governanceChains = useGovernanceChainIds();
     const [present, setPresent] = useState(/** @type {boolean | null} */ (null));
 
     useEffect(() => {
@@ -43,7 +55,7 @@ export function useGovernanceAddressesPresent(walletId) {
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                const has = GOVERNANCE_CHAIN_IDS.some((cid) => {
+                const has = governanceChains.some((cid) => {
                     const rows = byChain && byChain[cid];
                     return Array.isArray(rows) && rows.length > 0;
                 });
@@ -51,11 +63,7 @@ export function useGovernanceAddressesPresent(walletId) {
             })
             .catch(() => { if (!cancelled) setPresent(false); });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, governanceChains]);
 
     return present;
 }
-
-// The set of governance-capable chain IDs, exported for callers that need to
-// pick a default chain for the governance surfaces.
-export { GOVERNANCE_CHAIN_IDS };

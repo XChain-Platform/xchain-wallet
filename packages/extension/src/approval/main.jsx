@@ -14,7 +14,7 @@
 // signAction / signIn).
 
 import { createRoot } from 'react-dom/client';
-import { flows } from '@xchain-wallet/core';
+import { flows, registry } from '@xchain-wallet/core';
 import '@xchain-wallet/core/ui/tokens.css';
 import { Router } from './Router.jsx';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
@@ -23,6 +23,22 @@ import { initPanicModePersistence } from '../background/panicModeStorage.js';
 // via chrome.storage.local so a freeze set here is visible to the enforcement
 // gate that runs in the service worker.
 void initPanicModePersistence(flows);
+
+// §9.7 / G007: refresh chain descriptors from the hub's signed public
+// registry snapshot, mirroring web/src/main.jsx and popup/main.jsx. The
+// approval window is its own MV3 realm with its own defaultRegistry(), so
+// the service worker's sync never reaches ConnectApproval / SignApproval;
+// without this the approval UI rendered bundled descriptors for chains the
+// bridge had already advertised from the synced set. Fail-closed: the
+// signature must verify against the pinned federation key or nothing
+// changes. Never blocks boot.
+try {
+    registry.syncChainRegistryFromHub({ registry: registry.defaultRegistry() })
+        .then((r) => {
+            if (!r.ok) console.info('[xchain] approval chain-registry sync skipped:', r.reason);
+        })
+        .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
+} catch { /* never block approval boot */ }
 
 const container = document.getElementById('xchain-approval-root');
 if (!container) {

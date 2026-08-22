@@ -33,15 +33,17 @@ assert.match(sendSrc, /const \[rbfEnabled, setRbfEnabled\] = useState\(true\)/, 
 
 // --- settings-derived default ---------------------------------------
 
+// §35.10: stored null follows the descriptor default, so Send resolves
+// the entry through resolveFeeConfig instead of reading the raw field.
 assert.match(
     sendSrc,
-    /chainFees\.rbfByDefault/,
-    'reads settings.fees[chainId].rbfByDefault',
+    /resolveFeeConfig\(settings\.fees\[chainId\]/,
+    'resolves settings.fees[chainId] against the chain descriptor',
 );
 assert.match(
     sendSrc,
-    /setRbfEnabled\(chainFees\.rbfByDefault\)/,
-    'syncs state from settings on chain change',
+    /setRbfEnabled\(rbfByDefault\)/,
+    'syncs state from the resolved preference on chain change',
 );
 
 // --- payload --------------------------------------------------------

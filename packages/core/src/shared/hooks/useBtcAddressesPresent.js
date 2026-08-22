@@ -14,10 +14,12 @@ import { useMessaging } from '../useMessaging.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// BTC chain IDs, resolved once from the registry. The VM (DEPLOY /
-// EXECUTE / DEPOSIT / WITHDRAW) is BTC-only at launch, and so is
-// staking (STAKE / UNSTAKE / …). Surfaces that are BTC-gated use this
-// hook to decide whether to expose their nav entry.
+// BTC chain IDs, resolved once from the registry. This is the gate for the
+// surfaces that are still Bitcoin-exclusive: VALIDATOR staking, multisig and
+// co-signer accounts. Contracts (DEPLOY / EXECUTE / DEPOSIT / WITHDRAW) are
+// NOT gated here any more: registry/actions.js carries DEPLOY in
+// COMMON_ACTIONS, so the contract lane covers BTC, LTC and DOGE and its nav
+// entry asks the sibling hook useVmAddressesPresent instead.
 const BTC_CHAIN_IDS = chainRegistry.byCoin('bitcoin').map((d) => d.id);
 
 /**

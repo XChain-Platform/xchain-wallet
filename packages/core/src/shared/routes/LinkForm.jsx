@@ -117,7 +117,7 @@ export function LinkForm({ walletId, onBack }) {
                     .map(([cid]) => cid);
                 if (chains.length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before creating a LINK.',
+                        'No addresses on any chain yet. Use Receive to generate one before creating a link.',
                     );
                     return;
                 }
@@ -386,7 +386,7 @@ export function LinkForm({ walletId, onBack }) {
         }
         return wrap(
             <>
-                <p className={styles.successTitle}>LINK broadcast</p>
+                <p className={styles.successTitle}>Cross-chain link broadcast</p>
                 {result?.txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction</p>
@@ -515,7 +515,7 @@ export function LinkForm({ walletId, onBack }) {
                             ? 'Create unsigned transaction'
                             : hw
                                 ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign LINK'}
+                                : 'Sign link'}
                     </Button>
                 </div>
             </form>,
@@ -559,8 +559,8 @@ export function LinkForm({ walletId, onBack }) {
                 onChange={(e) => setMemo(e.target.value)}
             />
 
-            <div role="group" aria-label="Submit LINK on" className={styles.checkRow}>
-                <span style={{ marginRight: 'var(--xc-space-2)' }}>Submit LINK on:</span>
+            <div role="group" aria-label="Submit the link on" className={styles.checkRow}>
+                <span style={{ marginRight: 'var(--xc-space-2)' }}>Submit the link on:</span>
                 <label className={styles.checkRow}>
                     <input
                         type="radio"

@@ -91,6 +91,26 @@ assert.strictEqual(
     format(nested, { count: 1 }, 'en'),
     '1 item for {who}',
 );
+// A missing arg of a coercing type (plural, selectordinal, number,
+// date) renders its bare token too. Pre-filling those with the token
+// string once made formatjs coerce it to NaN, shipping "NaN addresses"
+// and "$NaN" to the user instead of the translator-visible placeholder.
+for (const [tpl, expected] of [
+    ['{count, plural, one {# address} other {# addresses}}', '{count} addresses'],
+    ['{n, selectordinal, one {#st} other {#th}}', '{n}'],
+    ['{n, number}', '{n}'],
+    ['{n, number, ::currency/USD}', '{n}'],
+    ['{d, date, medium}', '{d}'],
+]) {
+    const out = format(tpl, {}, 'en');
+    assert.strictEqual(out, expected, `missing coercing arg renders its token: ${tpl}`);
+    assert.ok(!/NaN|Invalid Date/.test(out), `no NaN leaks from ${tpl}`);
+}
+// The outer plural arg missing while an inner arg is supplied.
+assert.strictEqual(format(nested, { who: 'Ada' }, 'en'), '{count} items for Ada');
+// Supplied args in the same template keep formatjs formatting when only
+// a simple arg is missing.
+assert.strictEqual(format('{n, number} for {who}', { n: 1234 }, 'en'), '1,234 for {who}');
 
 // A malformed template never throws at render; it degrades.
 let threw = false;

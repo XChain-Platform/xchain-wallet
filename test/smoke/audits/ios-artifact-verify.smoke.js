@@ -40,7 +40,9 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const VERIFIER = join(root, 'tools/release/verify-ios-artifact.mjs');
 
-const { readExpectations, runChecks, resolveVersionExpectations } = await import(VERIFIER);
+const {
+    readExpectations, runChecks, resolveVersionExpectations, associationAppIDs, loadAssociation,
+} = await import(VERIFIER);
 
 const repoExpectations = readExpectations(root);
 
@@ -220,9 +222,191 @@ mustFail('a signature issued for a different app id than the bundle carries',
         /com\.apple\.developer\.team-identifier undefined/);
     assert.ok(
         run({ teamId: '829JG9YLH3' }).passes.some((p) => /does NOT check that team against the published AASA/.test(p)),
-        'the pass line must refuse to claim the AASA pin it never read, or a green run reads as '
-        + 'evidence of the one comparison this tool cannot make',
+        'with no --aasa the pass line must refuse to claim a pin it never read, or a green run reads '
+        + 'as evidence of a comparison nothing made',
     );
+    assert.ok(
+        run({}).passes.some((p) => /SKIPPED: the signed appID/.test(p)),
+        'a run with no --aasa must SAY the published appID went unchecked, for the same reason the '
+        + 'team line does',
+    );
+}
+
+// The published appID, which is the ONLY authority for the team that is not
+// another copy of $APPLE_TEAM_ID. Everything else in the fixture above descends
+// from the build input, so a consistently-wrong team passes every one of those
+// checks - that is the residual the block above states as a passing test, and
+// this block is what closes it.
+//
+// The association is a plain object here because the CLI does the reading: the
+// fixture is what a supplied source parses to, including the shapes it can fail
+// to parse to.
+{
+    const AASA_SRC = '../xchain-websites/xchain.io/.well-known/apple-app-site-association';
+    const claimed = (...appIDs) => ({ source: AASA_SRC, appIDs });
+    const signedAppID = `829JG9YLH3.${expected.bundleId}`;
+
+    mustPass('an artifact whose signed appID is the one the association publishes',
+        { teamId: '829JG9YLH3', aasa: claimed(signedAppID) });
+    assert.ok(
+        run({ teamId: '829JG9YLH3', aasa: claimed(signedAppID) }).passes
+            .some((p) => new RegExp(`the signed appID ${signedAppID.replace(/\./g, '\\.')} is claimed by`).test(p)),
+        'the pass line must name the appID and the source, because "checked against the association" '
+        + 'is unfalsifiable in a log a year later',
+    );
+    assert.ok(
+        run({ teamId: '829JG9YLH3', aasa: claimed(signedAppID) }).passes
+            .some((p) => /the published AASA appID is checked separately below/.test(p)),
+        'once a source IS supplied, the team line must stop disclaiming a check that now happens; a '
+        + 'stale disclaimer is as misleading as a stale claim',
+    );
+
+    // The failure this whole item exists for: a team migration re-pinned in one
+    // repo. Both values below are internally consistent and every other check
+    // in this file passes on them.
+    mustFail('a team migration that landed in the wallet and not in the published association',
+        {
+            teamId: 'NEWTEAM123',
+            entitlements: buildEntitlements({
+                'application-identifier': `NEWTEAM123.${expected.bundleId}`,
+                'com.apple.developer.team-identifier': 'NEWTEAM123',
+            }),
+            aasa: claimed(signedAppID),
+        },
+        /signed as NEWTEAM123\.io\.xchain\.wallet\.ios and .* claims \[829JG9YLH3\.io\.xchain\.wallet\.ios\]/);
+    mustFail('a team migration that landed in the published association and not in the wallet',
+        { teamId: '829JG9YLH3', aasa: claimed(`NEWTEAM123.${expected.bundleId}`) },
+        /signed as 829JG9YLH3\.io\.xchain\.wallet\.ios and .* claims \[NEWTEAM123\./);
+    // The bundle half travels in the same string, so this check sees a
+    // one-sided rename too even where the team agrees.
+    mustFail('an association that claims a different bundle under the same team',
+        { teamId: '829JG9YLH3', aasa: claimed('829JG9YLH3.io.xchain.other') },
+        /claims \[829JG9YLH3\.io\.xchain\.other\]/);
+    // A wildcard appID is a scope decision, not agreement: the signature names
+    // one app and a wildcard names any of them.
+    mustFail('an association claiming a wildcard appID rather than this app',
+        { teamId: '829JG9YLH3', aasa: claimed('829JG9YLH3.*') },
+        /claims \[829JG9YLH3\.\*\]/);
+
+    // Fail-closed. A supplied source that could not be read is NOT the
+    // unchecked case, and treating it as one is how a release lane reports
+    // "could not check" as "passed" on the run where it mattered.
+    mustFail('a supplied association that could not be read at all',
+        { teamId: '829JG9YLH3', aasa: { source: AASA_SRC, error: 'ENOENT: no such file or directory' } },
+        /could not be read: ENOENT/);
+    mustFail('a supplied association that claims no appIDs at all',
+        { teamId: '829JG9YLH3', aasa: claimed() },
+        /claims no appIDs at all/);
+    mustFail('a supplied association held against a signature that names no app',
+        {
+            teamId: '829JG9YLH3',
+            entitlements: buildEntitlements({ 'application-identifier': undefined }),
+            aasa: claimed(signedAppID),
+        },
+        /no appID to hold against/);
+
+    // The parser, on the shapes a published file really takes.
+    assert.deepEqual(
+        associationAppIDs(JSON.stringify({
+            applinks: { details: [{ appIDs: [signedAppID], components: [{ '/': '/wallet/link/*' }] }] },
+        })),
+        [signedAppID],
+        'the shape aasa.build.js emits must parse to the appID it emits');
+    assert.deepEqual(
+        associationAppIDs(JSON.stringify({
+            applinks: { details: [{ appID: signedAppID, paths: ['/wallet/link/*'] }] },
+        })),
+        [signedAppID],
+        'appID singular is Apple\'s pre-iOS-13 spelling and live files still carry it; reading only '
+        + 'the plural would report a real association as claiming nothing');
+    assert.throws(() => associationAppIDs('{"webcredentials":{}}'), /not an apple-app-site-association/,
+        'a JSON file that is not an association must be refused, not read as an empty claim');
+    assert.throws(() => associationAppIDs('<html>404</html>'), /JSON/,
+        'an error page fetched from a URL is the commonest wrong answer and must not parse');
+
+    // The real published file, when the sibling is beside this repo: the
+    // fixtures above prove the rule and this proves the rule is about the thing
+    // that actually ships. Absent, it says so rather than passing quietly.
+    const publishedPath = join(root, AASA_SRC);
+    if (existsSync(publishedPath)) {
+        const ids = associationAppIDs(readFileSync(publishedPath, 'utf8'));
+        assert.ok(
+            ids.every((id) => id.endsWith(`.${expected.bundleId}`)),
+            `the sibling repo publishes [${ids.join(', ')}], none of which is an appID for the bundle `
+            + `this project builds (${expected.bundleId}). The two repos have already drifted.`,
+        );
+        console.log(`  ok   the sibling's published association claims [${ids.join(', ')}]`);
+    } else {
+        console.log('  SKIP the sibling xchain-websites checkout is not beside this repo, so the '
+            + `published association at ${publishedPath} was NOT read this run`);
+    }
+}
+
+// The READ, which every fixture above skips past. Feeding runChecks a
+// pre-parsed association proves the rule and proves nothing about the code that
+// turns a path or a URL into one - and that code is where the fail-closed
+// promise actually lives, because it is the thing that decides whether an
+// unreachable source arrives as an `error` or as silence.
+{
+    const dir = mkdtempSync(join(tmpdir(), 'xc-aasa-'));
+    const check = (what, ok) => {
+        if (ok) console.log(`  ok   ${what}`);
+        else { failures += 1; console.error(`  FAIL ${what}`); }
+    };
+    try {
+        const good = join(dir, 'apple-app-site-association');
+        writeFileSync(good, `${JSON.stringify({
+            applinks: { details: [{ appIDs: [`829JG9YLH3.${expected.bundleId}`] }] },
+        }, null, 2)}\n`);
+
+        const fromPath = await loadAssociation(good);
+        check('a local association path is read and parsed',
+            fromPath.error === undefined && fromPath.appIDs.length === 1
+            && fromPath.appIDs[0] === `829JG9YLH3.${expected.bundleId}`);
+
+        const absent = await loadAssociation(join(dir, 'not-there'));
+        check('a missing path comes back as an error rather than an exception or an empty claim',
+            absent.error !== undefined && /ENOENT/.test(absent.error) && absent.appIDs === undefined);
+
+        const junk = join(dir, 'junk');
+        writeFileSync(junk, 'not json at all');
+        check('a source that is not JSON comes back as an error',
+            (await loadAssociation(junk)).error !== undefined);
+
+        // Apple fetches this over https and nothing else. A cleartext source is
+        // an authority any network on the path can rewrite, which would make
+        // the check worse than absent.
+        const cleartext = await loadAssociation('http://xchain.io/.well-known/apple-app-site-association');
+        check('an http:// source is refused rather than trusted',
+            cleartext.error !== undefined && /https/.test(cleartext.error));
+
+        // The network boundary is stubbed, not the unit: loadAssociation still
+        // runs its own branch, response handling and parse.
+        const realFetch = globalThis.fetch;
+        try {
+            globalThis.fetch = async () => new Response(
+                JSON.stringify({ applinks: { details: [{ appIDs: ['NEWTEAM123.io.xchain.wallet.ios'] }] } }),
+                { status: 200 },
+            );
+            const fromUrl = await loadAssociation('https://xchain.io/.well-known/apple-app-site-association');
+            check('an https source is fetched and parsed',
+                fromUrl.error === undefined && fromUrl.appIDs[0] === 'NEWTEAM123.io.xchain.wallet.ios');
+
+            globalThis.fetch = async () => new Response('<html>404</html>', { status: 404 });
+            const notFound = await loadAssociation('https://xchain.io/.well-known/apple-app-site-association');
+            check('a host answering 404 is a FAILURE, not an unchecked run',
+                notFound.error !== undefined && /404/.test(notFound.error));
+
+            globalThis.fetch = async () => { throw new Error('getaddrinfo ENOTFOUND xchain.io'); };
+            const offline = await loadAssociation('https://xchain.io/.well-known/apple-app-site-association');
+            check('an unreachable host is a FAILURE, not an unchecked run',
+                offline.error !== undefined && /ENOTFOUND/.test(offline.error));
+        } finally {
+            globalThis.fetch = realFetch;
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 }
 mustFail('a marketing version that is not what Version.xcconfig pins',
     { info: buildInfo({ CFBundleShortVersionString: '0.335.0' }) },
@@ -360,6 +544,17 @@ assert.throws(() => runChecks({ info: buildInfo(), expected, stage: 'both' }), /
             at(exportSh, '--stage export') > at(exportSh, 'mv "$exported" "$target"')],
         ['a rejected ipa is moved out of the declared artifact name',
             /mv "\$target" "\$target\.rejected"/.test(exportSh)],
+        // The flag existing on the tool proves nothing about a release: an
+        // authority nobody passes is an authority nobody consults, and this is
+        // the leg of the identity seam that has no static gate anywhere else.
+        ['both ceremony scripts hand the verifier the published association',
+            /verify_args\+=\(--aasa "\$aasa"\)/.test(archiveSh)
+            && /verify_args\+=\(--aasa "\$aasa"\)/.test(exportSh)],
+        ['both resolve it from $XCHAIN_AASA first and the sibling checkout second',
+            [archiveSh, exportSh].every((src) => /aasa="\$\{XCHAIN_AASA:-\}"/.test(src)
+                && /xchain-websites\/xchain\.io\/\.well-known\/apple-app-site-association/.test(src))],
+        ['ios-archive.sh asks for the association only in the signed lane',
+            at(archiveSh, '--aasa "$aasa"') > at(archiveSh, 'verify_args+=(--team-id')],
         ['neither script announces success before the verdict',
             before(archiveSh, 'verify-ios-artifact.mjs', 'ios-archive: wrote')
             && before(exportSh, '--stage export', 'ios-export: wrote')],

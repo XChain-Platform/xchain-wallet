@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/coverage-unit%20%7C%20smoke%20%7C%20integration%20%7C%20boundary%20%7C%20security%20%7C%20fuzz%20%7C%20chaos%20%7C%20regression%20%7C%20a11y%20%7C%20mutation%20%7C%20bench%20%7C%20e2e-brightgreen" alt="Coverage">
 </p>
 
-Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web app, a Chrome MV3 extension (popup + full-screen), a desktop application (Windows / macOS / Linux), and a native Android app, all from a single React codebase (an iOS app is next). Bitcoin, Dogecoin, and Litecoin at launch; additional chains added as the platform adds them. The wallet consumes [xchain-sdk](https://github.com/XChain-Platform/xchain-sdk) as its only data and signing layer and never duplicates SDK functionality.
+Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web app, a Chrome MV3 extension (popup + full-screen), a desktop application (Windows / macOS / Linux), and a native Android app, all from a single React codebase (an iOS app is next). Bitcoin, Litecoin, and Dogecoin at launch; additional chains added as the platform adds them. The wallet consumes [xchain-sdk](https://github.com/XChain-Platform/xchain-sdk) as its only data and signing layer and never duplicates SDK functionality.
 
 ## Features
 
@@ -253,7 +253,7 @@ The membership rule is "everything under `packages/`" rather than a list of name
 
 ## Parent Platform
 
-XChain Wallet is the reference client for the [XChain Platform](https://github.com/XChain-Platform). The platform is a blockchain-agnostic token protocol running on Bitcoin, Dogecoin, and Litecoin, with a built-in DEX, sandboxed JavaScript smart contracts, encrypted messaging, and cross-chain swaps, all encoded directly into standard blockchain transactions. See the platform [README](https://github.com/XChain-Platform/xchain-documentation/blob/master/README.md) for a list of every component and how they connect.
+XChain Wallet is the reference client for the [XChain Platform](https://github.com/XChain-Platform). The platform is a blockchain-agnostic token protocol, live today on Bitcoin, Litecoin, and Dogecoin, with a built-in DEX, sandboxed JavaScript smart contracts, encrypted messaging, and cross-chain swaps, all encoded directly into standard blockchain transactions. See the platform [README](https://github.com/XChain-Platform/xchain-documentation/blob/master/README.md) for a list of every component and how they connect.
 
 ## Contributing
 

@@ -33,6 +33,7 @@ import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.j
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
 import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
+import { preflightFindingKey } from '../utils/preflightFindingKey.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -533,6 +534,10 @@ export function isCredentialFailure(err) {
  * exactly the drift that would let one surface honour an override rule the
  * other ignores, so both read this one.
  *
+ * The set is keyed by `preflightFindingKey`, not by bare code: a BATCH report
+ * carries one error per rejected sub-command under a single shared code, and a
+ * code-scoped set let one "Sign anyway" clear all of them at once.
+ *
  * @param {import('xchain-sdk').PreflightReport | null} report
  * @param {Set<string>} acknowledged
  * @returns {boolean}
@@ -542,13 +547,16 @@ export function canApproveWithReport(report, acknowledged) {
     for (const f of report.findings) {
         if (f.severity !== 'error') continue;
         if (f.overridable === false) return false;           // hard block
-        if (!acknowledged.has(f.code)) return false;         // needs explicit ack
+        // Needs an explicit ack of THIS finding, per sub-command.
+        if (!acknowledged.has(preflightFindingKey(f))) return false;
     }
     return true;
 }
 
 /**
- * Adds or REMOVES `code` from the acknowledged set (§4.2 override).
+ * Adds or REMOVES `code` from the acknowledged set (§4.2 override). The value
+ * is an opaque `preflightFindingKey`, which is the bare code for every finding
+ * outside a batch and code plus commandIndex inside one.
  *
  * It removes because <PreflightPanel> renders each override as a CHECKBOX, and
  * an add-only handler makes that checkbox a one-way latch: a stray click on

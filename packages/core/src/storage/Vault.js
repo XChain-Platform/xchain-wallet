@@ -62,7 +62,7 @@ import { validatePendingDeploy } from '../schemas/pendingDeploy.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
 import { validateMultisigSigningSession } from '../schemas/multisigSigningSession.js';
 import { validateCoSignerAccount } from '../schemas/coSignerAccount.js';
-import { validateSettings } from '../schemas/settings.js';
+import { deflateSettings, inflateSettings, validateSettings } from '../schemas/settings.js';
 import { validateSignerRecord } from '../schemas/signer.js';
 import { validateWallet } from '../schemas/wallet.js';
 import { validateWatchlistEntry } from '../schemas/watchlistEntry.js';
@@ -194,7 +194,15 @@ export class Vault {
             migrateAutopayLease,
             validateAutopayLease,
         );
-        this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings);
+        // Settings are stored SPARSE (§35.10): only deltas from the current
+        // release's defaults persist, so retuned defaults reach wallets
+        // that never overrode them. Readers always see the full record
+        // (inflate on get); writers hand in a full record which is
+        // validated full, then reduced to deltas (deflate on put).
+        this.settings = makeSingleton(this, 'settings', migrateSettings, validateSettings, {
+            inflate: inflateSettings,
+            deflate: deflateSettings,
+        });
     }
 
     /**
@@ -326,22 +334,27 @@ function makeCollection(vault, collection, migrate, validate) {
  * @param {string} key
  * @param {(r: T) => T} migrate
  * @param {(r: unknown) => { ok: boolean, errors: string[] }} validate
+ * @param {{ inflate?: (r: T) => T, deflate?: (r: T) => T }} [transforms]  storage-form <-> reader-form pair (sparse settings)
  */
-function makeSingleton(vault, key, migrate, validate) {
+function makeSingleton(vault, key, migrate, validate, { inflate, deflate } = {}) {
     return {
         async get() {
             vault._assertOpen();
             const r = vault._doc[key];
-            return r ? migrate(r) : null;
+            if (!r) return null;
+            const migrated = migrate(r);
+            return inflate ? inflate(migrated) : migrated;
         },
 
         async put(record) {
             vault._assertOpen();
+            // Validation runs on the full (reader-form) record; only the
+            // storage form is reduced.
             const result = validate(record);
             if (!result.ok) {
                 throw new VaultValidationError(key, result.errors);
             }
-            vault._doc[key] = record;
+            vault._doc[key] = deflate ? deflate(record) : record;
             await vault._maybeAutoSave();
         },
 

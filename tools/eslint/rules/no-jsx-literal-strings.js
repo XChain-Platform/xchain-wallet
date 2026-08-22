@@ -25,11 +25,16 @@
 //     attributes whose names are user-visible: aria-label,
 //     aria-description, aria-roledescription, aria-valuetext, alt,
 //     title, placeholder, label, hint, caption, tooltip, heading,
-//     emptyText, actionLabel, backLabel
+//     emptyText, actionLabel, backLabel, text, body, ariaLabel,
+//     iconLabel, aria
 //     (the USER_FACING_ATTRS set below is the authority; keep this list
-//     in step with it). The last four are component props rather than
+//     in step with it). The last nine are component props rather than
 //     DOM attributes: shipping components render copy through them, so
 //     a DOM-only set left that copy out of the translator index.
+//   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
+//     when the property KEY is one of those same names and the default
+//     is a non-trivial string or template. Copy shipped as a default
+//     never appears in JSX, so the JSX visitors alone could not see it.
 //   - JSXAttribute template   <img alt={`QR for ${addr}`} />  → flagged
 //     for those same attribute names when any static chunk of the
 //     template is non-trivial. A `Literal`-only test read the static
@@ -94,6 +99,19 @@ const USER_FACING_ATTRS = new Set([
     'emptyText',
     'actionLabel',
     'backLabel',
+    // Settings Status renders `text` verbatim into a styled div;
+    // EmptyStateNudge and the HomeTabs Placeholder render `body` into a
+    // paragraph; CopyButton, Skeleton and the style-guide ToggleBar
+    // forward `ariaLabel`, AddressField / AddressCombobox forward
+    // `iconLabel`, and InfoTip / MultisigBadge forward `aria`, each
+    // straight into a DOM aria-label. None of these names is used for a
+    // technical payload anywhere in packages/ (CopyButton takes its
+    // clipboard payload as `value`).
+    'text',
+    'body',
+    'ariaLabel',
+    'iconLabel',
+    'aria',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -161,6 +179,54 @@ export function shouldSkipFile(filename, extra = []) {
 }
 
 /**
+ * Return the violations carried by an ObjectPattern's defaulted
+ * properties: `{ label = 'Copy' }` where the property KEY is a
+ * USER_FACING_ATTRS name and the default is non-trivial copy.
+ *
+ * Gating on the key, not the local binding, keeps `{ label: lbl = 'Copy' }`
+ * visible under the name `label`; gating on the set keeps `size = 'md'`
+ * and `variant = 'action'` quiet. Shared by findViolations and create()
+ * so the two paths cannot drift on this branch.
+ *
+ * @param {object} pattern   an ObjectPattern node
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {Array<{ node: object, message: string }>}
+ */
+export function propDefaultViolations(pattern, allow = [], minLength = 2) {
+    const out = [];
+    if (pattern?.type !== 'ObjectPattern') return out;
+    for (const prop of pattern.properties ?? []) {
+        // ESTree (espree) names a pattern property `Property`; the Babel
+        // parser names it `ObjectProperty`. Accept both so the judge is
+        // the same whichever parser the ESLint config loads.
+        if (prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') continue;
+        if (prop.value?.type !== 'AssignmentPattern') continue;
+        const key = prop.key;
+        const keyName = key?.type === 'Identifier' ? key.name
+            : key?.type === 'Literal' ? key.value : undefined;
+        if (!USER_FACING_ATTRS.has(keyName)) continue;
+        const right = prop.value.right;
+        if (right?.type === 'Literal' && typeof right.value === 'string'
+            && !isTrivialString(right.value, allow, minLength)) {
+            out.push({
+                node: right,
+                message: `Default ${keyName} = "${truncate(right.value)}" should use t('key').`,
+            });
+        } else if (right?.type === 'TemplateLiteral') {
+            const copy = templateCopy(right, allow, minLength);
+            if (copy !== null) {
+                out.push({
+                    node: right,
+                    message: `Default ${keyName} = \`${truncate(copy)}\` should use t('key') with placeholders.`,
+                });
+            }
+        }
+    }
+    return out;
+}
+
+/**
  * Top-level dispatch: given an AST node + filename, return the list
  * of violations { node, message }. The rule wraps this in an ESLint
  * `create()` and reports each violation through context.report.
@@ -171,6 +237,12 @@ export function findViolations(node, options = {}) {
 
     function visit(n) {
         if (!n || typeof n !== 'object') return;
+        if (n.type === 'ObjectPattern') {
+            // Copy shipped as a destructured prop default never reaches a
+            // JSX node, so judge the pattern here and let the generic
+            // recursion below still walk it for nested patterns.
+            out.push(...propDefaultViolations(n, allow, minLength));
+        }
         if (n.type === 'JSXText') {
             if (!isTrivialString(n.value, allow, minLength)) {
                 out.push({
@@ -319,6 +391,13 @@ function create(context) {
             if (expr?.type === 'Literal' && typeof expr.value === 'string'
                 && !isTrivialString(expr.value, allow, minLength)) {
                 context.report({ node: expr, message: 'Inline JSX expression string should be moved to the i18n dictionary' });
+            }
+        },
+        ObjectPattern(node) {
+            // Prop defaults such as `{ label = 'Copy' }`: same shared
+            // judge as findViolations, so the two paths stay in step.
+            for (const v of propDefaultViolations(node, allow, minLength)) {
+                context.report({ node: v.node, message: v.message });
             }
         },
     };

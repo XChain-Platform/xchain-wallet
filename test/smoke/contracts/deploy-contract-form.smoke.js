@@ -80,11 +80,11 @@ for (const call of [
 }
 
 // Chain gate. a later change moved this off a hard-coded VM_COIN='bitcoin' and onto
-// the descriptor's supportedActions, which is the SAME list
-// (registry/actions.js BTC_EXCLUSIVE_ACTIONS) that decides where DEPLOY is
-// offered everywhere else. Two copies of one policy is how a flip lands in the
-// registry and silently not in this form, so the hard-coded coin must not
-// come back.
+// the descriptor's supportedActions, which is the SAME list (registry/actions.js
+// builds it; DEPLOY sits in COMMON_ACTIONS today, so every bundled chain
+// qualifies) that decides where DEPLOY is offered everywhere else. Two copies
+// of one policy is how a flip lands in the registry and silently not in this
+// form, so the hard-coded coin must not come back.
 assert.ok(/supportedActions\.includes\('DEPLOY'\)/.test(formSrc),
     'DeployContractForm derives its chain list from supportedActions, not a pinned coin');
 assert.ok(!/VM_COIN/.test(formSrc),

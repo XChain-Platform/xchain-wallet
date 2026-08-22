@@ -49,7 +49,9 @@ const popupAppSrc = readFileSync(
 assert.match(formSrc, /export function VerifySignatureForm/, 'exports VerifySignatureForm');
 assert.match(formSrc, /messaging\.verifyMessageRequest/, 'calls verifyMessageRequest');
 assert.match(formSrc, /<ChainPicker/, 'has chain picker');
-assert.match(formSrc, /chainRegistry\.supportedChains\(\)/, 'chains come from registry, not wallet');
+// Live registry read (useSupportedChains) rather than a once-memoised
+// supportedChains() snapshot, so a synced descriptor reaches the picker.
+assert.match(formSrc, /useSupportedChains\(chainRegistry\)/, 'chains come from the live registry, not wallet');
 assert.match(formSrc, /label="Address"/, 'has address input');
 assert.match(formSrc, /id="verify-message"/, 'message textarea present');
 assert.match(formSrc, /id="verify-signature"/, 'signature textarea present');

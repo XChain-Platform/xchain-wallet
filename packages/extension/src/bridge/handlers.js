@@ -508,6 +508,10 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         assertNotThrottled(signThrottle, req);
+        // Shape first (pure, before the user is prompted); ownership after the
+        // approval, like sign-in and signMessage, so USER_REJECTED still
+        // precedes ADDRESS_NOT_FOUND.
+        assertBridgeSigningPathsShape(req.signingPaths);
         const decision = await approvals.signPsbt({
             origin: req.origin,
             kind: 'signPsbt',
@@ -516,6 +520,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
+        const signingPaths = await resolveBridgeSigningPaths(deps, req.chainId, req.signingPaths);
         const signed = await signPsbtFlow({
             vault: deps.vault,
             walletId: decision.walletId,
@@ -525,7 +530,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
             psbtHex: req.psbtHex,
-            signingPaths: req.signingPaths,
+            signingPaths,
         });
         // SignPsbtSuccess: signedPsbtHex always, txHex only when the wallet
         // finalized, txid only when it broadcast. Copied field by field rather
@@ -1391,6 +1396,66 @@ async function findAddressByString(vault, address, chainId, chainRegistry) {
 
 function chainIdForAddr(chainRegistry, addr) {
     return chainRegistry.chainIdFor(addr.chain, addr.network);
+}
+
+// The published bridge-spec `PsbtSigningPath` is `{ inputIndex, address? |
+// derivationPath?, sighashType? }`; the internal Signer contract is
+// `{ inputIndex, path? | addressId?, sighashType? }` (exactly one of the pair,
+// `addressId` for an imported-WIF key). Nothing else translates between them,
+// so without this adapter a spec-shaped dApp call reaches SoftwareSigner and
+// fails on every lane. Shape is checked here before the user is prompted; ownership is
+// resolved against the vault AFTER approval (resolveBridgeSigningPaths).
+function assertBridgeSigningPathsShape(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) {
+        throw bridgeError('INVALID_PARAMS', 'signingPaths must be a non-empty array');
+    }
+    entries.forEach((entry, i) => {
+        if (!entry || typeof entry !== 'object') {
+            throw bridgeError('INVALID_PARAMS', `signingPaths[${i}] must be an object`);
+        }
+        if (!Number.isInteger(entry.inputIndex) || entry.inputIndex < 0) {
+            throw bridgeError('INVALID_PARAMS', `signingPaths[${i}].inputIndex must be a non-negative integer`);
+        }
+        const hasAddress = typeof entry.address === 'string' && entry.address.length > 0;
+        const hasPath = typeof entry.derivationPath === 'string' && entry.derivationPath.length > 0;
+        if (hasAddress === hasPath) {
+            throw bridgeError(
+                'INVALID_PARAMS',
+                `signingPaths[${i}] must carry exactly one of address or derivationPath`,
+            );
+        }
+        if (entry.sighashType !== undefined && !Number.isInteger(entry.sighashType)) {
+            throw bridgeError('INVALID_PARAMS', `signingPaths[${i}].sighashType must be an integer`);
+        }
+    });
+}
+
+// Map spec entries onto the Signer contract, each against a vault-owned Address
+// record for this chain. A `derivationPath` is NOT forwarded verbatim: it must
+// name a path the wallet already holds, or a page could steer the signer at an
+// arbitrary BIP32 path behind the approval modal. Unowned -> ADDRESS_NOT_FOUND,
+// the same verdict sign-in and signMessage give an unknown address.
+async function resolveBridgeSigningPaths(deps, chainId, entries) {
+    const descriptor = deps.chainRegistry.get(chainId);
+    const all = await deps.vault.addresses.list();
+    const onChain = descriptor
+        ? all.filter((a) => a.chain === descriptor.coin && a.network === descriptor.networkKind)
+        : [];
+    return entries.map((entry) => {
+        const addr = typeof entry.address === 'string' && entry.address.length > 0
+            ? onChain.find((a) => a.address === entry.address) ?? null
+            : onChain.find((a) => a.derivationPath === entry.derivationPath) ?? null;
+        if (!addr) {
+            throw bridgeError('ADDRESS_NOT_FOUND', entry.address ?? entry.derivationPath ?? '');
+        }
+        return {
+            inputIndex: entry.inputIndex,
+            // The identical mapping the sign-in and signMessage paths use.
+            path: addr.derivationPath ?? undefined,
+            addressId: addr.derivationPath ? undefined : addr.id,
+            ...(entry.sighashType !== undefined ? { sighashType: entry.sighashType } : {}),
+        };
+    });
 }
 
 async function invokeSignMessage(deps, req) {

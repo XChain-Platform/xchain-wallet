@@ -37,6 +37,9 @@ const COMMON = {
     supportedActions: LITECOIN_ACTIONS,
     uriScheme: 'litecoin',
     adsDonationAddress: ADS_DONATION_ADDRESS_PLACEHOLDER,
+    // §36.1 per-coin ADS defaults: 0.001 LTC per tx (100,000 litoshis),
+    // donation attached once 0.025 LTC has accumulated (~25 txs).
+    adsDefaults: { perTxAmountSats: 100_000, triggerAmountSats: 2_500_000 },
 };
 
 /** @type {import('../validate.js').ChainDescriptor[]} */

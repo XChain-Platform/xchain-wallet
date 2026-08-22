@@ -38,7 +38,9 @@
 // keeps `bitcoinjs-lib` out of @xchain-wallet/core (per SDKRegistry.js's
 // rationale).
 
-import { Signer, SignerStatusError } from '../../core/src/signers/Signer.js';
+import {
+    Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
+} from '../../core/src/signers/Signer.js';
 import { chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
 
 // Plain-language error for the hardware MuSig2 gap: this message is what the
@@ -225,7 +227,13 @@ export class TrezorSigner extends Signer {
      * @param {import('./Signer.js').SignPsbtParams} params
      * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
      */
-    async signPsbt({ psbtHex, chainId, signingPaths }) {
+    async signPsbt({ psbtHex, chainId, signingPaths, envelopeReveal }) {
+        // The renderer registers THIS class as the live signer, so the
+        // RemoteSigner backstop is not in the path on desktop or the popup.
+        // Without this the flag was ignored and the request failed later at
+        // `unsupported input scriptType "p2tr"`, which reads as a malformed
+        // PSBT rather than as the capability limit it is.
+        assertCannotSignEnvelopeReveal(this._id, { envelopeReveal });
         this._assertSdkRegistry('signPsbt');
         if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
             throw new Error('TrezorSigner.signPsbt: psbtHex is required');
@@ -233,6 +241,9 @@ export class TrezorSigner extends Signer {
         const coin = chainIdToTrezorCoin(chainId);
         const sdk = this._sdkRegistry.get(chainId);
         const decomposed = sdk.wallet.decomposePsbt(psbtHex);
+        // All-or-refuse: a mixed-input (co-signed) PSBT gets the capability
+        // message here, not the converter's `no signingPath for input index N`.
+        assertFullInputCoverage(this._id, decomposed.inputs.length, signingPaths);
         const payload = toTrezorSignTransaction({ decomposed, coin, signingPaths });
         const res = await this._connect.signTransaction(payload);
         if (!res?.success) {

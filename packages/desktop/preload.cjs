@@ -28,13 +28,21 @@
 //     "wipe", main decides what that means, so a compromised renderer
 //     cannot aim it at an arbitrary path.
 //
-//   - `xchainWalletSignerBridge.{postMessage,onMessage,onDisconnect}`:
+//   - `xchainWalletSignerBridge.{postMessage,onMessage}`:
 //     duplex port for the hardware-signer RPC. Renderer-hosted
 //     Trezor/Ledger signers expose their status + sign methods back
 //     to the main process over this channel. Shaped as a neutral
 //     {postMessage, onMessage} adapter so the desktop renderer +
 //     main reuse the same `signerPortProtocol` helpers the extension
 //     uses over `chrome.runtime.connect` ports.
+//     TWO methods, not three: the synthetic port in
+//     main/signerBridgeListener.js also carries `onDisconnect`, but that
+//     half stays main-side, where `sender.once('destroyed')` is what
+//     actually observes the renderer going away. Nothing renderer-side
+//     consumes it (renderer/signerBridge.js builds its PortLike from
+//     these two), and exposing it would widen this boundary for a
+//     capability no consumer wants. This list is pinned by
+//     test/integration/shells/desktop-preload-contract.test.js.
 //
 //   - `xchainWalletWindow.openDetached({ initialView, initialContext })`:
 //     §24.6 / Cluster Y FOLLOWUP 4 detach-pending-tx. The renderer

@@ -63,6 +63,24 @@ describe('buildCommands', () => {
         expect(findById(gated, 'nav-governance')).toBeDefined();
     });
 
+    // Contracts and staking stopped sharing a gate when the registry moved
+    // DEPLOY into COMMON_ACTIONS: Home gates Contracts on hasVmAddress (any
+    // chain advertising DEPLOY) while staking stays Bitcoin-only. The palette
+    // must pin the two lanes apart, or an LTC/DOGE-only wallet reaches
+    // Contracts from Home and not from the palette.
+    it('gates Contracts on hasVmAddress and Staking on hasBtcAddress, as separate lanes', () => {
+        const ltcOnly = buildCommands({ navigate() {}, hasVmAddress: true, hasBtcAddress: false });
+        expect(findById(ltcOnly, 'nav-contracts')).toBeDefined();
+        expect(findById(ltcOnly, 'nav-staking')).toBeUndefined();
+
+        // A shell that wired hasVmAddress and found no VM chain hides Contracts
+        // even when BTC is present (the VM set is a superset of BTC today, so
+        // this is the only honest reading of an explicit false).
+        const explicitNoVm = buildCommands({ navigate() {}, hasVmAddress: false, hasBtcAddress: true });
+        expect(findById(explicitNoVm, 'nav-contracts')).toBeUndefined();
+        expect(findById(explicitNoVm, 'nav-staking')).toBeDefined();
+    });
+
     // The betting views shipped with no palette entry at all, so the only route
     // to them was More -> More actions -> Betting: two clicks deep in a
     // catalogue, for a surface whose whole point is coming back to check a

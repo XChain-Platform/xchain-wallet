@@ -37,9 +37,10 @@
 //     that are data, not code, and cannot be enumerated at build time.
 //     The XSS-defining directives (script-src/object-src/base-uri) are the
 //     load-bearing ones; connect-src is best-effort.
-//   - frame-ancestors is set here for defense-in-depth but is IGNORED in a
-//     <meta> CSP. The fronting server (Apache) must also send it as a
-//     header to actually prevent framing.
+//   - frame-ancestors is part of the policy but is header-only by spec:
+//     a <meta> CSP ignores it (with a console warning), so the meta tag
+//     omits it and the fronting server (Apache) sends it as a header to
+//     actually prevent framing.
 //   - img/font allow data: + blob: for QR codes and the favicon.
 
 // PROFILES (; rails §3 owns the names). The policy is not the
@@ -60,9 +61,12 @@ const TREZOR_CONNECT_ORIGIN = 'https://connect.trezor.io';
 /** @type {Record<string, string[]>} */
 const DIRECTIVES = {
     'default-src': ["'self'"],
-    'script-src': ["'self'", 'https://connect.trezor.io'],
+    // Both Trezor entries name the constant, never a literal: the `store` filter
+    // in directivesFor drops the origin by identity, so a literal edited here
+    // alone would stop matching and keep the origin in the store build.
+    'script-src': ["'self'", TREZOR_CONNECT_ORIGIN],
     'style-src': ["'self'", "'unsafe-inline'"],
-    'frame-src': ["'self'", 'https://connect.trezor.io'],
+    'frame-src': ["'self'", TREZOR_CONNECT_ORIGIN],
     'img-src': ["'self'", 'data:', 'blob:'],
     'font-src': ["'self'", 'data:'],
     'connect-src': [
@@ -121,6 +125,26 @@ export function contentSecurityPolicyFor(profile = DEFAULT_BUILD_PROFILE) {
         .join('; ');
 }
 
+// Directives the CSP spec defines as header-only. A <meta> CSP never
+// enforces these; every supporting browser instead prints a console
+// warning per document (and again per extension content-script world),
+// so carrying them in the meta tag buys no protection and costs noise.
+// They stay in the header policy above, which the fronting server must
+// send for them to bite (wallet.xchain.io's Apache vhost does).
+const HEADER_ONLY_DIRECTIVES = ['frame-ancestors'];
+
+/**
+ * The policy string for a <meta http-equiv> tag: the full policy minus
+ * the header-only directives a meta CSP cannot express.
+ * @param {string} [profile]
+ */
+export function metaContentSecurityPolicyFor(profile = DEFAULT_BUILD_PROFILE) {
+    return Object.entries(directivesFor(profile))
+        .filter(([name]) => !HEADER_ONLY_DIRECTIVES.includes(name))
+        .map(([name, values]) => `${name} ${values.join(' ')}`)
+        .join('; ');
+}
+
 /** The default profile's policy. Kept as a constant: most callers are web. */
 export const CONTENT_SECURITY_POLICY = contentSecurityPolicyFor(DEFAULT_BUILD_PROFILE);
 
@@ -129,5 +153,5 @@ export const CONTENT_SECURITY_POLICY = contentSecurityPolicyFor(DEFAULT_BUILD_PR
  * @param {string} [profile]
  */
 export function cspMetaTag(profile = DEFAULT_BUILD_PROFILE) {
-    return `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicyFor(profile)}" />`;
+    return `<meta http-equiv="Content-Security-Policy" content="${metaContentSecurityPolicyFor(profile)}" />`;
 }

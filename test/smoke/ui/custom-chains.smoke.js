@@ -192,7 +192,7 @@ const VALID_DESCRIPTOR = {
 // ─── 3. Settings schema accepts customChains ────────────────────────────
 
 const baseSettings = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     theme: 'system',
     reducedMotion: 'auto',
     autolockMinutes: 15,

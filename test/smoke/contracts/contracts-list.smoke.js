@@ -19,7 +19,7 @@
 //      getDepositsForAddress + getWithdrawalsForAddress for the
 //      interactions union, getContractsBrowseAll for the browse section.
 //      Deduplicates by CONTRACT_ACTION_INDEX; sorts newest-block-first.
-//   4. BTC-only gating: no-BTC-address state surfaces a clear message.
+//   4. Chain gating: the no-address-on-a-DEPLOY-chain state surfaces a clear message.
 //   5. Core flows guard inputs + call the right SDK methods per lane,
 //      re-exported from the flows barrel.
 //   6. Background host registers five explorer passthroughs; three
@@ -101,17 +101,25 @@ assert.ok(
 
 // --- 4. Chain gating + empty states -----------------------------------
 
-// a later change flipped this from a pin to a ban. The gate has ONE home,
-// registry/actions.js BTC_EXCLUSIVE_ACTIONS; a private VM_COIN copy here is
-// what made the browse surface miss the day contracts opened to LTC/DOGE, so
-// the constant must not come back.
+// a later change flipped this from a pin to a ban. The gate has ONE home, the
+// descriptor's supportedActions as registry/actions.js builds it (DEPLOY sits
+// in COMMON_ACTIONS today, so contracts cover BTC, LTC and DOGE); a private
+// VM_COIN copy here is what made the browse surface miss the day contracts
+// opened to LTC/DOGE, so the constant must not come back. The list is asked of
+// the LIVE registry through useChainIdsWithAction('DEPLOY'), never snapshotted
+// at module scope, so a synced descriptor reaches it without a restart.
 assert.ok(
     !/VM_COIN\s*=/.test(listSrc) && !/byCoin\(/.test(listSrc),
     'ContractsList must not re-pin a hard-coded VM_COIN or select chains byCoin; ask the registry',
 );
 assert.ok(
-    /supportedActions\)\s*&&\s*d\.supportedActions\.includes\('DEPLOY'\)/.test(listSrc),
+    /useChainIdsWithAction\('DEPLOY'\)/.test(listSrc)
+        || /supportedActions\)\s*&&\s*d\.supportedActions\.includes\('DEPLOY'\)/.test(listSrc),
     'ContractsList derives its chain list from descriptors advertising DEPLOY',
+);
+assert.ok(
+    !/^const\s+\w+\s*=\s*chainRegistry\s*\.?\s*supportedChains\(\)/m.test(listSrc),
+    'ContractsList must not freeze the chain list at module scope; the registry hot-swaps after import',
 );
 assert.ok(
     /need an\s*\n?\s*address on a chain that supports them/.test(listSrc),

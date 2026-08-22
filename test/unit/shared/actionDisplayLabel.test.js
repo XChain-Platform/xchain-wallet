@@ -48,6 +48,20 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('CROSS_SETTLE')).not.toBe('Cross settle');
     });
 
+    it('maps indexer lifecycle verbs, not the recased opcode', () => {
+        expect(actionDisplayLabel('COINPAY_EXPIRE')).toBe('Coin payment expired');
+        expect(actionDisplayLabel('BET_EXPIRE')).toBe('Bet expired');
+        expect(actionDisplayLabel('DISPENSER_CLOSE')).toBe('Dispenser closed');
+        expect(actionDisplayLabel('DISPENSER_EXPIRE')).toBe('Dispenser expired');
+        expect(actionDisplayLabel('ORDER_EXPIRE')).toBe('Order expired');
+        expect(actionDisplayLabel('ORDER_MATCH')).toBe('Order matched');
+        expect(actionDisplayLabel('SWAP_EXPIRE')).toBe('Swap expired');
+        expect(actionDisplayLabel('SWAP_MATCH')).toBe('Swap matched');
+        expect(actionDisplayLabel('BET')).toBe('Bet');
+        // A History row must not read "Coinpay expire" beside "Coin payment".
+        expect(actionDisplayLabel('COINPAY_EXPIRE')).not.toBe('Coinpay expire');
+    });
+
     it('maps both LINK and CROSSCHAIN to the same cross-chain label', () => {
         expect(actionDisplayLabel('LINK')).toBe('Cross-chain');
         expect(actionDisplayLabel('CROSSCHAIN')).toBe('Cross-chain');

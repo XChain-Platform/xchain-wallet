@@ -79,8 +79,8 @@ async function signPanelFacing(frames) {
     await page.keyboard.press('ControlOrMeta+k');
     const dialog = page.getByRole('dialog', { name: 'Command palette' });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
-    await dialog.getByRole('combobox').first().fill('Sign a PSBT');
-    await page.getByRole('option', { name: /^Sign a PSBT/ }).first().click();
+    await dialog.getByRole('combobox').first().fill('psbt');
+    await page.getByRole('option', { name: /^Sign a transaction/ }).first().click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 
     const box = page.getByLabel('Unsigned transaction (hex or base64)');

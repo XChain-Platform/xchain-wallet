@@ -8,26 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Vite build for the web SPA shell (§9.5 / §51).
-//
-// Single-page React app served out of `packages/web/dist/`. The entry
-// HTML (`index.html`) points at `src/main.jsx`; Vite resolves
-// @xchain-wallet/core (+ its branding tokens via
-// `new URL('./images/…', import.meta.url)`) and the extension package
-// for the shared `createBackgroundHost` factory.
-//
-// Scope note (web vs extension): the web SPA builds its own in-page
-// MessageHost rather than dispatching messages over chrome.runtime;
-// see `src/hostBridge.js`. The createBackgroundHost import is the one
-// piece of intentional cross-shell reuse; a later refactor extracts
-// host wiring to a lower-level package once a third shell appears.
+// Vite build for the web SPA shell (§9.5 / §51), served from
+// `packages/web/dist/`. Web builds its own in-page MessageHost
+// (`src/hostBridge.js`) rather than dispatching over chrome.runtime;
+// createBackgroundHost is the one cross-shell reuse.
 
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import { contentSecurityPolicyFor } from './src/csp.js';
+import { metaContentSecurityPolicyFor } from './src/csp.js';
 // Which feature set this build carries. Resolved once,
 // here, so the CSP and the stamp written into the dist cannot disagree.
 import { PROFILE_STAMP_FILE, profileStampFor, resolveBuildProfile } from './buildProfile.js';
@@ -42,12 +33,11 @@ import { regtestSidecarPlugin } from './regtestSidecar.js';
 const BUILD_PROFILE = resolveBuildProfile();
 const HIDDEN_SURFACES = hiddenSurfacesFor(BUILD_PROFILE);
 
-// Swap each hidden surface's module for its inert twin, so the surface's route
-// Components are never imported and never reach the bundle (the
-// store-hidden surfaces are COMPILED OUT, not switched off - a surface that can
-// be switched back on is a guideline 2.3.1 hidden feature). The regex covers the
-// whole specifier so the replacement is the absolute path, not a suffix graft,
-// and it matches from any importer's relative depth.
+// Swap each hidden surface's module for its inert twin: store-hidden surfaces
+// are COMPILED OUT, never switched off (a surface that can be switched back on
+// is a guideline 2.3.1 hidden feature). The regex spans the whole specifier, so
+// the replacement is an absolute path and matches from any importer's relative
+// depth.
 const surfaceAliases = HIDDEN_SURFACES.map((surface) => ({
     find: new RegExp(`^(?:.*/)?surfaces/${surface}\\.jsx$`),
     replacement: fileURLToPath(
@@ -55,22 +45,17 @@ const surfaceAliases = HIDDEN_SURFACES.map((surface) => ({
     ),
 }));
 
-// FAIL SHUT if a hidden surface's code gets into the graph anyway.
-//
-// The alias only helps as long as the surface module is the ONLY importer of
-// those route components. A second import added anywhere (a shared index, a
-// lazy route, a helper reaching for one component) would put the whole surface
-// back into a `store` bundle while every label still said it was absent - a
-// false claim inside a signed manifest, which the compile-out exists to prevent. So the
-// build refuses rather than shipping it, and says which module and which
-// importer did it.
+// FAIL SHUT if a hidden surface's code reaches the graph anyway: the alias
+// holds only while the surface module is its route components' ONLY importer,
+// and a second importer anywhere re-bundles the surface into a `store` build
+// whose signed manifest still claims its absence. Refuse rather than ship that
+// claim.
 const surfaceGuardPlugin = {
     name: 'xchain-hidden-surface-guard',
     // MUST be 'pre'. A 'post' plugin's resolveId never runs: Vite's own
     // resolver answers first and the first non-null answer wins, so the guard
-    // silently passed everything (measured - it let a deliberate second import
-    // of MarketsList straight through). 'pre' runs first, and `this.resolve`
-    // with skipSelf hands the work to the normal chain and inspects the answer.
+    // would pass everything silently. 'pre' plus `this.resolve` with skipSelf
+    // hands the work to the normal chain and inspects its answer.
     enforce: 'pre',
     async resolveId(source, importer, options) {
         if (HIDDEN_SURFACES.length === 0) return null;
@@ -97,15 +82,11 @@ const surfaceGuardPlugin = {
 // pins WHAT they contain, so a tampered bundle on the asset host cannot execute
 // in a page that holds the user's decrypted seed. Build-only, like the CSP.
 import { sriPlugin } from './sri.js';
-// HTTPS is OPT-IN via the `VITE_HTTPS=1` env var. The wallet's crypto
-// surfaces (`crypto.subtle.*` for KDF + AEAD, `navigator.clipboard.*`,
-// `getUserMedia` for the camera scanner, WebUSB / WebHID for hardware
-// signers) require a secure context; `localhost` qualifies natively,
-// so plain HTTP is fine when someone hits the wallet directly on the
-// machine that's serving it. For LAN / VM-hostname access, set
-// VITE_HTTPS=1 and `@vitejs/plugin-basic-ssl` generates a self-signed
-// cert. The wallet also surfaces an in-app banner when it detects an
-// insecure context, so the page never silently breaks.
+// HTTPS is OPT-IN via `VITE_HTTPS=1`. The wallet's crypto surfaces
+// (`crypto.subtle.*`, `navigator.clipboard.*`, `getUserMedia`, WebUSB / WebHID)
+// require a secure context, which `localhost` has natively; a LAN or VM
+// hostname needs the self-signed cert `@vitejs/plugin-basic-ssl` generates
+// under the flag.
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
 const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1';
@@ -113,11 +94,9 @@ const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1'
 // Vite otherwise rejects any Host it doesn't recognize.
 const devAllowedHost = process.env.VITE_DEV_ALLOWED_HOST || null;
 
-// Dev-only convenience: rewrite a bare `/style-guide` to `/style-guide/`
-// so Vite picks up the multi-page entry at packages/web/style-guide/
-// index.html. Without the trailing slash, Vite's static-asset middleware
-// returns 404. Attached to both dev + preview servers; production builds
-// don't include this rewrite (the style-guide page is dev-time only).
+// Dev-only: rewrite a bare `/style-guide` to `/style-guide/` so Vite picks up
+// the multi-page entry at packages/web/style-guide/index.html; without the
+// trailing slash its static-asset middleware returns 404.
 function styleGuideRewrite() {
     return (req, res, next) => {
         if (req.url === '/style-guide') {
@@ -138,11 +117,9 @@ const styleGuidePlugin = {
 };
 
 // Inject the app-controlled Content-Security-Policy meta tag into the built
-// index.html. Build-only (`apply: 'build'`): the dev server relies on inline
-// scripts + eval + a websocket back to Vite for HMR, which a strict
-// script-src would break; dev is not the deployed threat surface. The
-// production bundle that ships to wallet.xchain.io carries the policy so it
-// no longer depends on a server header someone has to remember to set.
+// index.html. Build-only: dev's HMR needs inline scripts, eval and a websocket
+// that a strict script-src breaks, and the shipped bundle must carry the policy
+// rather than depend on a server header being set.
 const cspPlugin = {
     name: 'xchain-csp',
     apply: 'build',
@@ -152,11 +129,10 @@ const cspPlugin = {
                 tag: 'meta',
                 attrs: {
                     'http-equiv': 'Content-Security-Policy',
-                    // Profile-aware: the mobile store build drops the
-                    // Trezor origins, which no WebView can reach anyway, rather
-                    // than shipping a permanently-allowed remote script origin
-                    // for a feature it does not have.
-                    content: contentSecurityPolicyFor(BUILD_PROFILE),
+                    // Profile-aware: the mobile store build drops the Trezor
+                    // origins no WebView can reach, rather than shipping a
+                    // permanently-allowed remote script origin it cannot use.
+                    content: metaContentSecurityPolicyFor(BUILD_PROFILE),
                 },
                 injectTo: 'head-prepend',
             },
@@ -170,10 +146,10 @@ const cspPlugin = {
             },
         ];
     },
-    // `packages/mobile` copies this dist VERBATIM rather than compiling its
-    // own, so the profile has to travel INSIDE the bundle. Without it there is
-    // nothing to stop a `default` bundle being wrapped in a store artifact and
-    // labelled `store` in a signed manifest.
+    // `packages/mobile` copies this dist VERBATIM, so the profile has to travel
+    // INSIDE the bundle: without the stamp nothing stops a `default` bundle
+    // being wrapped in a store artifact and labelled `store` in a signed
+    // manifest.
     generateBundle() {
         this.emitFile({
             type: 'asset',
@@ -195,43 +171,31 @@ const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
 
-// Vite-plugin-node-polyfills rewrites Buffer/process/global
-// references inside transformed CJS to bare
-// `vite-plugin-node-polyfills/shims/*` specifiers. Those resolve fine for
-// packages under this project's node_modules, but xchain-sdk is a `link:`
-// dep living OUTSIDE the project root, and pnpm's strict node_modules
-// layout cannot resolve the plugin package from the SDK's directory. That
-// unresolvable specifier is what sank the build.commonjsOptions route the
-// first time. Resolve the shims to absolute paths from THIS package's
-// context and hand them to Rollup before its node-resolve runs.
-// (resolve.alias does not help here: the commonjs plugin emits the bare id
-// directly, bypassing the alias step.)
+// vite-plugin-node-polyfills rewrites Buffer/process/global inside transformed
+// CJS to bare `vite-plugin-node-polyfills/shims/*` specifiers, which pnpm's
+// strict layout cannot resolve from xchain-sdk (a `link:` dep outside the
+// project root). resolve.alias cannot fix it: the commonjs plugin emits the
+// bare id directly.
 const shimRequire = createRequire(import.meta.url);
 const polyfillShimResolver = {
     name: 'xchain-polyfill-shim-resolver',
     enforce: 'pre',
     resolveId(source, importer) {
         if (source.startsWith('vite-plugin-node-polyfills/shims/')) {
-            // Resolve under the ESM ("import"/browser) condition, NOT the
-            // CJS one. `require.resolve` picks the exports map's "require"
-            // branch -> dist/index.cjs, which Vite then serves raw over
-            // /@fs/ in dev; it has no `default` export, so the app died at
-            // boot with a blank page ("does not provide an export named
-            // 'default'"). The package ships an ESM build alongside it
-            // (exports.import -> dist/index.js) and that is what a browser
-            // bundle wants. Falls back to require.resolve so an older
-            // layout without the ESM build still resolves.
+            // Resolve under the ESM ("import"/browser) condition, NOT the CJS
+            // one: `require.resolve` picks dist/index.cjs, which has no
+            // `default` export and kills the app at boot. Fall back to
+            // require.resolve for an older layout shipping no ESM build.
             try {
                 return fileURLToPath(import.meta.resolve(source));
             } catch {
                 return shimRequire.resolve(source);
             }
         }
-        // xchain-sdk/src/repl.js carries a top-level `require.main ===
-        // module` CLI-entry check that the commonjs transform leaves as a
-        // bare `require`, which throws on load in a browser. The wallet
-        // never uses the SDK REPL, so route the module to the repl browser
-        // shim (startREPL resolves to undefined, which nothing calls).
+        // xchain-sdk/src/repl.js carries a top-level `require.main === module`
+        // CLI-entry check that the commonjs transform leaves as a bare
+        // `require`, which throws on load in a browser. The wallet never uses
+        // the SDK REPL, so route the module to the repl browser shim.
         if (
             /(^|\/)repl\.js$/.test(source)
             && importer && importer.includes('xchain-sdk')
@@ -242,37 +206,28 @@ const polyfillShimResolver = {
     },
 };
 
-// xchain-sdk's musig2.js does `require('@brandonblack/musig/base_crypto')`.
-// Node resolves that subpath to lib/base_crypto.js, but esbuild's dep
-// scanner rejects the package's exports map and aborts `vite optimize`,
-// which would 504 the SDK in the browser. Resolve the real file from the
-// SDK's own context and alias the bare subpath to it below.
-//
-// RESOLVED THROUGH node_modules, NOT through a sibling directory.
-// This read `../../../xchain-sdk/package.json`, a path three levels above
-// the wallet root, so a build needed the SDK checked out beside the wallet
-// and every CI lane died here: `release.yml` clones only this repo. The
-// dependency is now a registry install, so the SDK is an ordinary package
-// and `require.resolve` finds it wherever the installer put it - including
-// under `pnpm run sdk:link`, which swaps the same node_modules entry for a
-// symlink and therefore keeps resolving the musig subpath from the linked
-// tree exactly as before.
+// xchain-sdk's musig2.js does `require('@brandonblack/musig/base_crypto')`, a
+// subpath esbuild's dep scanner rejects, aborting `vite optimize` and 504-ing
+// the SDK in the browser. Resolve the real file from the SDK's own context and
+// alias the bare subpath to it below.
+
+// Resolve THROUGH node_modules, never a sibling directory: CI lanes clone only
+// this repo, so a relative path above the wallet root has no SDK to find.
+// `pnpm run sdk:link` swaps the same node_modules entry for a symlink, so the
+// linked tree resolves the musig subpath identically.
 const musigBaseCrypto = createRequire(
     createRequire(import.meta.url).resolve('xchain-sdk/package.json'),
 ).resolve('@brandonblack/musig/base_crypto');
 
 export default defineConfig({
-    // xchain-sdk is CJS and pulls in `ws` + Node `crypto` + Buffer at
-    // module load. `ws` is aliased to our browser shim
-    // (packages/core/src/shims/ws-browser.js); `crypto`/Buffer/process/
-    // stream/events are polyfilled by vite-plugin-node-polyfills. The
-    // polyfills add ~20-30 KB to the SPA bundle; acceptable for a
-    // wallet that needs to sign PSBTs + talk to the explorer.
+    // xchain-sdk is CJS and pulls in `ws` + Node `crypto` + Buffer at module
+    // load: `ws` goes to the browser shim, the rest to
+    // vite-plugin-node-polyfills, which costs ~20-30 KB on the SPA bundle.
     resolve: {
-        // Array form (not the object form it used to be): the surface swaps are
-        // regex finds, which the object form cannot express. Rollup checks the
-        // entries in order, so the exact-string shims below keep behaving as
-        // they did; the surface entries are empty in a `default` build.
+        // Array form, not the object form: the surface swaps are regex finds
+        // the object form cannot express. Rollup checks entries in order, so
+        // the exact-string shims below still match; surface entries are empty
+        // in a `default` build.
         alias: [
             ...surfaceAliases,
             { find: 'ws', replacement: wsBrowserShim },
@@ -280,13 +235,10 @@ export default defineConfig({
             // for connection pooling; browser manages its own pool, so
             // our tiny no-op shim avoids pulling in stream-http (~30 KB).
             { find: 'http', replacement: httpBrowserShim },
-            // The same client constructors pick
-            // `require('https').Agent` whenever the endpoint URL is
-            // https (every mainnet default). Without this alias the
-            // externalized `https` module has no Agent, so constructing
-            // the real SDK threw "Agent is not a constructor" and
-            // wallet creation never completed. Same no-op shim: the
-            // browser owns the connection pool either way.
+            // The same client constructors pick `require('https').Agent`
+            // whenever the endpoint URL is https (every mainnet default);
+            // the externalized `https` module has no Agent, so constructing
+            // the real SDK fails without this alias.
             { find: 'https', replacement: httpBrowserShim },
             // repl is loaded transitively via xchain-sdk/index.js →
             // src/repl.js. The wallet never calls startREPL, so the
@@ -296,48 +248,27 @@ export default defineConfig({
             { find: '@brandonblack/musig/base_crypto', replacement: musigBaseCrypto },
         ],
     },
-    // xchain-sdk is a `link:` dependency, so it resolves OUTSIDE this project
-    // root and Vite does not treat it like a normal CJS package under
-    // node_modules. Left alone, `import('xchain-sdk')` yields a module whose
-    // inner `require('./src/XChainSDK.js')` calls survive verbatim; `require`
-    // is undefined in a browser, so evaluating it throws. Forcing it into the
-    // dep optimizer makes esbuild do the CJS -> ESM transform properly
-    // (verified: .vite/deps/xchain-sdk.js is ~5 MB, carries the real decoder +
-    // preflight code, and contains zero literal requires). That is G163 /
-    // that root cause.
-    //
-    // NOTE this covers the DEV SERVER only, which is what Playwright drives.
-    // The production `vite build` path is handled separately:
-    // build.commonjsOptions.include below plus polyfillShimResolver above.
-    //
-    // GATED: opt in with VITE_XCHAIN_REAL_SDK=1. Unconditionally pre-bundling
-    // the real SDK makes the app talk to a live backend at boot, and when none
-    // is reachable (the default for dev + the e2e suite) wallet creation HANGS
-    // - measured: the send spec passes in 12s on the dev-mock and times out
-    // after 7min on the real SDK against a half-configured regtest stack. So
-    // the real SDK is opt-in until the wallet degrades gracefully on an
-    // unreachable backend (that hang is its own defect).
-    //
-    // `exclude` is the other half of that gate. Vite's dep SCANNER
-    // finds the bare `import('xchain-sdk')` in src/sdkFactory.js on its own and
-    // pre-bundles it whether or not it is listed in `include` - which is how
-    // the dev shell silently acquired a working real SDK (pointed at mainnet
-    // explorers a test browser cannot reach) and five e2e specs went red.
-    // Naming it here keeps the flag the ONLY thing that decides. The venue
-    // itself is chosen in src/sdkFactory.js off the same flag, so the two
-    // halves cannot disagree.
-    //
-    // The DEEP entry is listed in both branches and is not part of that gate.
-    // packages/extension/src/signers/ledgerFactory.js imports
-    // `xchain-sdk/src/wallet.js` directly (keeping the SDK index out of
-    // the popup graph), and the web shell pulls that module in through
-    // createBackgroundHost. Vite pre-bundles per ENTRY, and a linked workspace
-    // package is source rather than a dependency, so listing the package alone
-    // leaves the deep file served raw over /@fs - CJS, `require` undefined,
-    // thrown at module eval, blank page before the app ever mounts. It carries
-    // only WalletUtils (pure PSBT helpers), never an explorer or encoder
-    // client, so pre-bundling it hands the dev shell no path to a live SDK and
-    // the flag above still decides that alone.
+    // xchain-sdk is a `link:` dep resolving OUTSIDE this root, so Vite does not
+    // treat it as a normal CJS package: its inner `require()` calls survive and
+    // throw in a browser unless the dep optimizer does the CJS -> ESM
+    // transform. DEV SERVER only; prod is build.commonjsOptions +
+    // polyfillShimResolver (G163).
+
+    // GATED on VITE_XCHAIN_REAL_SDK=1: pre-bundling the real SDK
+    // unconditionally makes the app talk to a live backend at boot, and wallet
+    // creation HANGS when none is reachable (the default for dev and the e2e
+    // suite).
+
+    // `exclude` is the other half of that gate: Vite's dep SCANNER finds the
+    // bare `import('xchain-sdk')` in src/sdkFactory.js and pre-bundles it
+    // whatever `include` says, so naming it here keeps the flag the ONLY
+    // decider. src/sdkFactory.js picks the venue off the same flag, so the
+    // halves agree.
+
+    // The DEEP entry sits in BOTH branches, outside that gate: Vite pre-bundles
+    // per ENTRY and a linked package is source, so listing the package alone
+    // serves `xchain-sdk/src/wallet.js` raw as CJS and it throws at module
+    // eval. It carries only WalletUtils, never an explorer or encoder client.
     optimizeDeps: process.env.VITE_XCHAIN_REAL_SDK === '1'
         ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js'] }
         : { include: ['xchain-sdk/src/wallet.js'], exclude: ['xchain-sdk'] },
@@ -345,29 +276,16 @@ export default defineConfig({
         outDir: 'dist',
         emptyOutDir: true,
         target: 'es2022',
-        // Sourcemaps are for the HOSTED web shell, where they cost a lazy
-        // fetch nobody makes unless DevTools is open. A store build pays for
-        // them differently: `cap sync` copies all of `dist/` into the app
-        // bundle, so they are not fetched-on-demand, they are SHIPPED. Measured
-        // on the iOS store build (2026-08-02): 22 MB of .map in a 27 MB
-        // payload, every one carrying `sourcesContent`, so the ipa was ~5x its
-        // necessary size to deliver a debugging aid no store build can use -
-        // Web Inspector is off in Release (§4).
-        //
-        // The other two shells already answered this, and answered it the same
-        // way: packages/desktop and packages/extension both set sourcemap
-        // false. The web shell is the outlier, and the mobile shells inherited
-        // the outlier by bundling its output rather than by deciding anything.
+        // Sourcemaps cost the HOSTED shell a lazy fetch nobody makes without
+        // DevTools, but a store build SHIPS them: `cap sync` copies all of
+        // `dist/` into the app bundle, ~5x-ing the payload for a debugging aid
+        // no store build can use (Web Inspector is off in Release, §4).
         sourcemap: BUILD_PROFILE !== 'store',
-        // (prod half of G163): Rollup's commonjs pass defaults to
-        // /node_modules/ only, and the `link:`-resolved xchain-sdk lives
-        // outside every node_modules dir, so without this include the
-        // emitted chunk kept literal require() calls, threw in the browser,
-        // and the wallet silently fell back to the dev-mock SDK. Explicitly
-        // include the SDK (keeping the node_modules default) so it gets the
-        // same CJS -> ESM treatment as any registry dependency. The bare
-        // polyfill-shim specifiers this transform surfaces are resolved by
-        // polyfillShimResolver above.
+        // Prod half of G163: Rollup's commonjs pass defaults to /node_modules/
+        // only, and the `link:`-resolved xchain-sdk lives outside every such
+        // dir, so it needs naming here to get the same CJS -> ESM treatment.
+        // polyfillShimResolver above resolves the shim ids this transform
+        // emits.
         commonjsOptions: {
             include: [/node_modules/, /xchain-sdk/],
             transformMixedEsModules: true,
@@ -376,11 +294,9 @@ export default defineConfig({
     server: {
         port: 5173,
         host: '0.0.0.0',
-        // Vite blocks unlisted Host headers, so a LAN dev host has to be
-        // allowed explicitly; set VITE_DEV_ALLOWED_HOST to demo over the LAN
-        // instead of localhost. Reach it over HTTPS (VITE_HTTPS=1) so the
-        // non-localhost origin is still a secure context for crypto.subtle
-        // (see the secure-context note above).
+        // Vite blocks unlisted Host headers, so a LAN dev host needs naming via
+        // VITE_DEV_ALLOWED_HOST. Reach it over HTTPS (VITE_HTTPS=1) so the
+        // non-localhost origin is still a secure context for crypto.subtle.
         allowedHosts: devAllowedHost ? ['localhost', '127.0.0.1', devAllowedHost] : ['localhost', '127.0.0.1'],
     },
     preview: {

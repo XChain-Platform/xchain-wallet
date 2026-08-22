@@ -58,10 +58,20 @@ assert.match(
 
 // --- chain-aware unit lookup ------------------------------------------
 
+// The unit derives from the descriptor's declared feeStrategy.unit through
+// flows/feeEstimate.resolveFeeUnit, the one home of that fact; a coin-name
+// check here (`desc?.coin === 'dogecoin' ? 'DOGE/kB' : 'sat/vB'`) left the
+// registry's validated unit dead and misconverted custom rates on any
+// descriptor that declared sats-per-kbyte under a non-dogecoin coin.
 assert.match(
     sendSrc,
-    /desc\?\.coin === 'dogecoin' \? 'DOGE\/kB' : 'sat\/vB'/,
-    'unit derived from descriptor.coin',
+    /const tableUnit = resolveFeeUnit\(desc\)/,
+    'unit derived from descriptor.feeStrategy.unit via resolveFeeUnit',
+);
+assert.doesNotMatch(
+    sendSrc,
+    /=== 'dogecoin' \? 'DOGE\/kB'/,
+    'Send.jsx keeps no coin-name fee-unit check',
 );
 
 // --- effect deps -------------------------------------------------------

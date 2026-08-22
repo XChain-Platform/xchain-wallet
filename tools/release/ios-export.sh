@@ -42,6 +42,13 @@ Environment (all required):
   APPLE_API_ISSUER    the issuer id
   APPLE_TEAM_ID       the team the export is signed for
 
+Optional:
+  XCHAIN_AASA         the published apple-app-site-association, as a path or an
+                      https URL, so the signed appID is held against what
+                      devices are told. Defaults to the sibling xchain-websites
+                      checkout when one is beside this repo; with neither, the
+                      verifier reports the appID as UNCHECKED
+
 Output:
   packages/mobile/ios/build/xchain-wallet-ios-<tag>.ipa, plus its SHA-256.
   The name is fixed because expected-artifacts.txt matches on it.
@@ -84,9 +91,25 @@ fi
 #
 # Before the key file is written, so an archive that fails is refused without
 # the App Store Connect credential ever materialising on disk.
+#
+# --aasa resolves exactly as it does in ios-archive.sh, and that script states
+# why: the published association is the only authority for the Team ID that is
+# not another copy of $APPLE_TEAM_ID, and it lives in the sibling repo this
+# repo's CI does not check out. It is passed to BOTH verifications below,
+# because the export re-signs and the team can change in the re-signing.
+aasa="${XCHAIN_AASA:-}"
+if [ -z "$aasa" ] && [ -f "$here/../xchain-websites/xchain.io/.well-known/apple-app-site-association" ]; then
+    aasa="$here/../xchain-websites/xchain.io/.well-known/apple-app-site-association"
+fi
+# Seeded non-empty because `set -u` makes an empty array expansion an error on
+# the bash 3.2 that ships with macOS, which is the only platform this runs on.
+verify_args=(--tag "$tag" --team-id "$APPLE_TEAM_ID")
+if [ -n "$aasa" ]; then
+    verify_args+=(--aasa "$aasa")
+fi
+
 if ! node "$here/tools/release/verify-ios-artifact.mjs" \
-        "$archive/Products/Applications/App.app" --stage archive --tag "$tag" \
-        --team-id "$APPLE_TEAM_ID"; then
+        "$archive/Products/Applications/App.app" --stage archive "${verify_args[@]}"; then
     echo "ios-export: the archive does not carry what the project pins; nothing was exported" >&2
     exit 1
 fi
@@ -174,8 +197,7 @@ mv "$exported" "$target"
 # somebody later finds on a disk and trusts, and it is the name that
 # expected-artifacts.txt and sign.sh match on. The suffix takes it out of every
 # glob that would pick it up.
-if ! node "$here/tools/release/verify-ios-artifact.mjs" "$target" --stage export --tag "$tag" \
-        --team-id "$APPLE_TEAM_ID"; then
+if ! node "$here/tools/release/verify-ios-artifact.mjs" "$target" --stage export "${verify_args[@]}"; then
     mv "$target" "$target.rejected"
     echo "ios-export: the exported ipa is not distributable; kept as $(basename "$target").rejected" >&2
     exit 1

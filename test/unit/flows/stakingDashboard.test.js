@@ -37,6 +37,18 @@ describe('base-unit conversion', () => {
         }
     });
 
+    it('rejects a decimal finer than the scale rather than truncating it', () => {
+        // A well-formed decimal the 8dp grid cannot hold. Truncating loses the
+        // excess digits silently, which is the same silent-loss shape the null
+        // contract exists to prevent.
+        for (const v of ['1.123456789', '0.000000001', '0.999999999']) {
+            expect(toBaseUnits(v)).toBeNull();
+        }
+        // The scale is a parameter, so a coarser one refuses more.
+        expect(toBaseUnits('1.005', 2)).toBeNull();
+        expect(toBaseUnits('1.00', 2)).toBe(100n);
+    });
+
     it('stays exact past the float-safe range', () => {
         // 90 million XCHAIN in base units exceeds 2^53.
         const big = '90000000.00000001';
@@ -71,7 +83,8 @@ describe('unclaimedRewards', () => {
 
     it('handles no rewards and no claims', () => {
         expect(unclaimedRewards()).toEqual({
-            accrued: '0', claimed: '0', unclaimed: '0', hasRejectedClaim: false,
+            accrued: '0', claimed: '0', unclaimed: '0',
+            hasRejectedClaim: false, hasUnrepresentableAmount: false,
         });
         expect(unclaimedRewards({ rewards: [], claims: [] }).unclaimed).toBe('0');
     });
@@ -96,6 +109,49 @@ describe('unclaimedRewards', () => {
             claims: [],
         });
         expect(totals.accrued).toBe('10');
+        expect(totals.hasUnrepresentableAmount).toBe(false);
+    });
+
+    // Rows finer than the 8dp grid. No indexer path emits one today, so this is
+    // the guard against a future finer-precision reward type being miscounted.
+    it('rounds an over-precise row so claimable can only be understated', () => {
+        // Accrual floors: 1.999999999 counts as 1.99999999, never 2.
+        const accrual = unclaimedRewards({ rewards: [{ amount: '1.999999999' }], claims: [] });
+        expect(accrual.accrued).toBe('1.99999999');
+        expect(accrual.unclaimed).toBe('1.99999999');
+        expect(accrual.hasUnrepresentableAmount).toBe(true);
+
+        // A claim ceils: understating what was already claimed would overstate
+        // what is still claimable, which is the direction that costs the user.
+        const claim = unclaimedRewards({
+            rewards: [{ amount: '10' }],
+            claims: [{ amount: '4.000000001', status: 'valid' }],
+        });
+        expect(claim.claimed).toBe('4.00000001');
+        expect(claim.unclaimed).toBe('5.99999999');
+        expect(claim.hasUnrepresentableAmount).toBe(true);
+    });
+
+    it('never drops an over-precise claim row, which would overstate claimable', () => {
+        // The strict-refusal shape: skipping the row entirely would report the
+        // whole 10 as still claimable rather than the roughly 6 that is left.
+        const totals = unclaimedRewards({
+            rewards: [{ amount: '10' }],
+            claims: [{ amount: '3.9999999999', status: 'valid' }],
+        });
+        expect(totals.claimed).toBe('4');
+        expect(totals.unclaimed).toBe('6');
+    });
+
+    it('leaves the flag down when a REFUSED claim is the over-precise one', () => {
+        // A refused claim is never counted, so its precision cannot move a total.
+        const totals = unclaimedRewards({
+            rewards: [{ amount: '10' }],
+            claims: [{ amount: '1.123456789', status: 'invalid: insufficient reward pool' }],
+        });
+        expect(totals.unclaimed).toBe('10');
+        expect(totals.hasRejectedClaim).toBe(true);
+        expect(totals.hasUnrepresentableAmount).toBe(false);
     });
 });
 

@@ -137,8 +137,11 @@ try {
     const staged = stagedRelease(join(work, 'staged'));
     writeFileSync(`${staged.manifest}.asc`, '');
 
+    // The staged fixture's manifest declares `# tag: v9.9.9`, so the release
+    // anchor is satisfied and the signature verdict stays the only variable
+    // in this section, which is the point of the fixture.
     const provenance = (runImpl, allowUnsigned = false) => checkProvenance({
-        zipPath: staged.zip, manifestPath: staged.manifest, allowUnsigned, runImpl,
+        zipPath: staged.zip, manifestPath: staged.manifest, tag: 'v9.9.9', allowUnsigned, runImpl,
     });
 
     process.env.XCHAIN_VERIFY_KEY = K1_PRIMARY;
@@ -220,7 +223,8 @@ try {
              * strings and every run is --dry-run, so nothing leaves the box;
              * the point is which exit the provenance gate takes. */
             const run = (extra = []) => spawnSync('node', [TOOL, '--item-id', ITEM,
-                '--zip', real.zip, '--manifest', real.manifest, '--dry-run', ...extra], {
+                '--zip', real.zip, '--manifest', real.manifest, '--tag', 'v9.9.9',
+                '--dry-run', ...extra], {
                 encoding: 'utf8',
                 env: {
                     ...gpgEnv,

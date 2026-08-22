@@ -19,8 +19,9 @@
 // carries a cryptographic hash of every script and stylesheet it loads, and the
 // browser refuses to execute an asset whose bytes don't match.
 //
-// The integrity hashes are computed from the FINAL emitted bundle at
-// generateBundle time, so they cover exactly the bytes that ship.
+// The integrity hashes are computed in `writeBundle`, from the emitted files as
+// they exist ON DISK, so they cover exactly the bytes that ship (the note on
+// `sriPlugin` below says why the in-memory chunk is the wrong source).
 //
 // This is not a substitute for signing index.html itself: whoever can rewrite a
 // bundle can usually also rewrite the HTML that vouches for it. What it buys is

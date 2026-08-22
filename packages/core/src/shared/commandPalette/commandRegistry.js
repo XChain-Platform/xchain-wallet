@@ -14,7 +14,7 @@
 // handlers via `ctx`. This is the single source of truth for what the
 // palette can do, so it mirrors the ActionsMenu handler block in the shell
 // App rather than duplicating a second, drifting list; the same
-// hasBtcAddress / hasGovernanceAddress gates apply.
+// hasVmAddress / hasBtcAddress / hasGovernanceAddress gates apply.
 //
 // Every command's `run` is a closure the shell owns. `navigate(view)` maps
 // straight onto the shell's setUnlockedView, so a navigation command is
@@ -121,7 +121,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {() => void} [refresh]              refresh balances / session
  * @property {() => void} [scan]                 open the QR scanner overlay
  * @property {() => void} [switchWallet]         open the wallet picker
- * @property {boolean} [hasBtcAddress]           gates BTC-only surfaces (VM / multisig)
+ * @property {boolean} [hasBtcAddress]           gates BTC-only surfaces (staking / multisig); also the Contracts fallback when hasVmAddress is absent
+ * @property {boolean} [hasVmAddress]            gates Contracts: an address on any chain whose descriptor advertises DEPLOY (BTC / LTC / DOGE today)
  * @property {boolean} [hasGovernanceAddress]    gates governance polls
  * @property {boolean} [hasDexSurface] false only when the build compiled the DEX surface out; its commands then point at views that do not exist
  * @property {boolean} [isSignerMode] §20 air-gapped signer mode; drops the Send and Receive navigate commands
@@ -174,8 +175,15 @@ export function buildCommands(ctx) {
         { id: 'nav-obligations', category: 'Navigate', title: 'Payments due', subtitle: 'Pending COINPAY obligations', keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'], Icon: Icon.ClockIcon, run: go('obligations') },
         { id: 'nav-actions', category: 'Navigate', title: 'All actions', subtitle: 'Every action form', keywords: ['more', 'menu', 'catalogue'], Icon: Icon.MoreIcon, run: go('actions') },
     );
-    if (ctx.hasBtcAddress) {
+    // Contracts follow the VM gate (every chain whose descriptor advertises
+    // DEPLOY: BTC, LTC and DOGE today), the same gate Home's Contracts entry
+    // uses, so an LTC/DOGE-only wallet reaches Contracts from the palette too.
+    // A shell that has not wired hasVmAddress yet falls back to the older
+    // BTC gate rather than hiding the surface. Staking stays BTC-only.
+    if (ctx.hasVmAddress ?? ctx.hasBtcAddress) {
         list.push({ id: 'nav-contracts', category: 'Navigate', title: 'Contracts', subtitle: 'Smart contracts', keywords: ['vm', 'deploy', 'execute'], Icon: Icon.ContractIcon, run: go('contracts-list') });
+    }
+    if (ctx.hasBtcAddress) {
         list.push({ id: 'nav-staking', category: 'Navigate', title: 'Staking', subtitle: 'Your staking positions', keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
     }
     if (ctx.hasGovernanceAddress) {
@@ -238,7 +246,7 @@ export function buildCommands(ctx) {
     list.push(
         { id: 'sign-message', category: 'Sign', title: 'Sign a message', subtitle: 'Prove address ownership', keywords: ['sign', 'message', 'attest'], Icon: Icon.SignIcon, run: go('sign-message') },
         { id: 'sign-verify', category: 'Sign', title: 'Verify a signature', subtitle: 'Check a signed message', keywords: ['verify', 'signature', 'check'], Icon: Icon.VerifyIcon, run: go('verify-signature') },
-        { id: 'sign-psbt', category: 'Sign', title: 'Sign a PSBT', subtitle: 'Sign a partially-signed transaction', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
+        { id: 'sign-psbt', category: 'Sign', title: 'Sign a transaction', subtitle: 'Sign a partially-signed transaction', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'], Icon: Icon.SignIcon, run: go('sign-psbt') },
     );
 
     // ---- Contacts -------------------------------------------------------

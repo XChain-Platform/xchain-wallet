@@ -50,6 +50,10 @@ export {
     createDefaultSettings,
     createDefaultAdsChainState,
     validateSettings,
+    inflateSettings,
+    deflateSettings,
+    resolveAdsChainConfig,
+    resolveFeeConfig,
     ADS_DEFAULT_ENABLED,
 } from './settings.js';
 export { createPendingTx, validatePendingTx } from './pendingTx.js';

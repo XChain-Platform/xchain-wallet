@@ -147,8 +147,32 @@ for var in XCHAIN_K9_PASSFILE XCHAIN_K10_PASSFILE; do
     eval "value=\${$var:-}"
     [ -z "$value" ] && continue
     [ -f "$value" ] || die "$var points at $value, which does not exist"
-    perms="$(stat -f '%Lp' "$value" 2>/dev/null || stat -c '%a' "$value")"
-    [ "$perms" = "600" ] || die "$var must be 0600, found $perms on $value"
+    # GNU stat FIRST, BSD second, and the order is load-bearing rather than
+    # arbitrary. `stat -f` is `--file-system` on GNU, so the BSD form does
+    # not fail inertly there: it prints a filesystem status block to stdout
+    # and exits non-zero, and the fallback then appends the real mode to
+    # that block, so on any Linux venue the comparison below could never
+    # succeed and this check killed the ceremony on a correctly-0600 file.
+    # The reverse is inert as intended, because macOS `stat -c` exits 1 with
+    # empty stdout. Same ordering as the --passphrase-file gate in sign.sh;
+    # keep the two in step, they guard the same kind of secret.
+    perms="$(stat -c '%a' "$value" 2>/dev/null \
+        || stat -f '%Lp' "$value" 2>/dev/null || true)"
+    # A mode we could not read FAILS CLOSED rather than falling through. A
+    # garbled read must never decide a secret's permissions, and "we could
+    # not tell" resolving to "carry on" is how the old ordering would have
+    # gone unnoticed on a venue.
+    case "$perms" in
+        [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) ;;
+        *) die "could not read the mode of $var at $value; refusing to use it" ;;
+    esac
+    # Compare the MODE, not the literal string 600: a tighter 0400 is a
+    # correct passfile and the old test rejected it. Group or other bits
+    # set is the failure, exactly as sign.sh judges it.
+    case "$perms" in
+        *00) ;;
+        *) die "$var must be 0600, found $perms on $value" ;;
+    esac
 done
 
 # ---------------------------------------------------------------------

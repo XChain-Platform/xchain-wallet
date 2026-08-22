@@ -254,6 +254,52 @@ describe('toLedgerCreatePayment', () => {
         })).toThrow(/different outpoint than this PSBT names/);
     });
 
+    // The shared signing contract (Signer.js SigningPathEntry, bridge-spec
+    // PsbtSigningPath) carries an optional per-input sighash override that
+    // trezorFormat.js honours. Were this seam to read only inputIndex and
+    // path, so the same PSBT + signingPaths signed under the requested
+    // sighash on Trezor and under SIGHASH_ALL on Ledger with nothing
+    // surfaced: a signature over a different sighash than the caller asked
+    // for. hw-app-btc takes only a transaction-level sigHashType and this
+    // signer returns a serialized tx rather than a PSBT, so the refusal is
+    // the honest answer, and forwarding the flag would be new device
+    // behaviour no wallet flow exercises.
+    it('refuses a non-default sighashType rather than silently signing SIGHASH_ALL', () => {
+        expect(() => toLedgerCreatePayment({
+            decomposed: makeDecomposed('p2wpkh'),
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 0x83 }],
+        })).toThrow(/cannot sign under sighashType 131/);
+    });
+
+    it('names the input whose override it refused', () => {
+        expect(() => toLedgerCreatePayment({
+            decomposed: makeDecomposed('p2wpkh'),
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 3 }],
+        })).toThrow(/input 0/);
+    });
+
+    // An explicit SIGHASH_ALL asks for exactly what the seam already does, so
+    // it is honoured rather than refused; so is an absent field, which is
+    // every caller reaching Ledger today.
+    it('accepts an explicit SIGHASH_ALL and an absent sighashType alike', () => {
+        const explicit = toLedgerCreatePayment({
+            decomposed: makeDecomposed('p2wpkh'),
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 1 }],
+        });
+        const absent = toLedgerCreatePayment({
+            decomposed: makeDecomposed('p2wpkh'),
+            chainId: 'bitcoin-mainnet',
+            signingPaths,
+        });
+        expect(explicit).toEqual(absent);
+        // And the payload still carries no sigHashType: the refusal replaces
+        // the silent drop, it does not start threading the flag to the device.
+        expect(explicit.sigHashType).toBeUndefined();
+    });
+
     it('uses the real prev tx, not a synthesized one, when the input carries it', () => {
         const payload = toLedgerCreatePayment({
             decomposed: makeDecomposed('p2wpkh'),

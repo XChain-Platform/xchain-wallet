@@ -54,6 +54,13 @@ Environment, signed mode (all required):
 Environment, unsigned mode:
   XCHAIN_IOS_ARCHIVE_UNSIGNED=1   archive with signing disabled
 
+Optional:
+  XCHAIN_AASA          the published apple-app-site-association, as a path or
+                       an https URL, so the signed appID is held against what
+                       devices are told. Defaults to the sibling xchain-websites
+                       checkout when one is beside this repo; with neither, the
+                       verifier reports the appID as UNCHECKED
+
 Unsigned proves the LANE, not the app: the result cannot be exported for
 App Store distribution, and an unsigned build has no keychain-access-group,
 so every vault call in it returns OSStatus -34018.
@@ -187,6 +194,27 @@ else
     # carries no entitlements to compare, and APPLE_TEAM_ID is not required
     # there.
     verify_args+=(--team-id "$APPLE_TEAM_ID")
+
+    # And the PUBLISHED claim, which is the only authority for the Team ID that
+    # is not another copy of $APPLE_TEAM_ID. The appID in the association is
+    # `<TEAM>.<bundle id>` and so is the signature's application-identifier, so
+    # comparing them catches the case no per-repo suite can: a team migration
+    # re-pinned in one repo, both test suites green, and iOS quietly declining
+    # every https link into the app on devices.
+    #
+    # The association lives in the sibling xchain-websites repo, which this
+    # repo's CI does not check out. So: $XCHAIN_AASA wins (a path or an https
+    # URL, and the release lane is where it belongs), the sibling checkout is
+    # used when it is simply there, and otherwise no flag is passed and the
+    # verifier says SKIPPED in its own voice. Resolved the same way in
+    # ios-export.sh, which verifies the same archive again before exporting.
+    aasa="${XCHAIN_AASA:-}"
+    if [ -z "$aasa" ] && [ -f "$here/../xchain-websites/xchain.io/.well-known/apple-app-site-association" ]; then
+        aasa="$here/../xchain-websites/xchain.io/.well-known/apple-app-site-association"
+    fi
+    if [ -n "$aasa" ]; then
+        verify_args+=(--aasa "$aasa")
+    fi
 fi
 if ! node "$here/tools/release/verify-ios-artifact.mjs" "$app" "${verify_args[@]}"; then
     echo "ios-archive: the archive does not carry what the project pins; it is not exportable" >&2

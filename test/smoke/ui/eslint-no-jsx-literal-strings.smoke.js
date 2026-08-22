@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last four are component props: copy shipped through them escaped
+// The last nine are component props: copy shipped through them escaped
 // the translator index while the set held DOM attribute names only.
 // Every documented name is listed here, and the size assertion below
 // closes the other direction: this loop once pinned 11 of 13 members, so
@@ -64,6 +64,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'aria-label', 'aria-description', 'aria-roledescription', 'aria-valuetext',
     'alt', 'title', 'placeholder', 'label', 'hint', 'caption', 'tooltip',
     'heading', 'emptyText', 'actionLabel', 'backLabel',
+    'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -188,6 +189,60 @@ v = findViolations(jsxElement([
 assert.strictEqual(v.length, 1, 'still descends into JSX inside an attribute expression');
 assert.match(v[0].message, /Nested copy/);
 
+// 18. Component props that render copy verbatim: Status `text`,
+// EmptyStateNudge / Placeholder `body`, and the three camelCase props
+// forwarded straight into aria-label (CopyButton `ariaLabel`,
+// AddressField `iconLabel`, InfoTip `aria`). Each once escaped the set
+// while the surrounding JSXText was caught.
+for (const [attr, copy] of [
+    ['text', 'Settings unavailable.'],
+    ['body', 'Generate a receive address to populate this list.'],
+    ['ariaLabel', 'Copy tx hash'],
+    ['iconLabel', 'Choose source address'],
+    ['aria', 'Fee priority help'],
+]) {
+    v = findViolations(jsxAttr(attr, literal(copy)));
+    assert.strictEqual(v.length, 1, `flags a ${attr} literal`);
+    assert.match(v[0].message, new RegExp(attr));
+}
+v = findViolations(jsxAttr('text', jsxExpr(template('Settings unavailable: ', ''))));
+assert.strictEqual(v.length, 1, 'flags template copy in a text prop');
+v = findViolations(jsxAttr('aria-labelledby', literal('some-id')));
+assert.strictEqual(v.length, 0, 'aria-labelledby stays technical');
+
+// 19. Copy shipped as a destructured prop default never reaches a JSX
+// node, so `function C({ label = 'Copy' })` was invisible to the rule.
+// The key decides, not the local binding, and the set keeps technical
+// defaults quiet.
+const literalKey = (name) => ({ type: 'Identifier', name });
+const defaulted = (name, right, local = name) => ({
+    type: 'Property',
+    key: literalKey(name),
+    value: { type: 'AssignmentPattern', left: literalKey(local), right },
+});
+const plainProp = (name) => ({ type: 'Property', key: literalKey(name), value: literalKey(name) });
+const objectPattern = (...properties) => ({ type: 'ObjectPattern', properties });
+const fn = (params) => ({ type: 'FunctionDeclaration', params, body: { type: 'BlockStatement', body: [] } });
+
+v = findViolations(fn([objectPattern(plainProp('value'), defaulted('label', literal('Copy')))]));
+assert.strictEqual(v.length, 1, 'flags a label = "Copy" prop default');
+assert.match(v[0].message, /label/);
+assert.strictEqual(v[0].node.type, 'Literal', 'reports the default value node');
+v = findViolations(fn([objectPattern(defaulted('label', literal('Copy'), 'lbl'))]));
+assert.strictEqual(v.length, 1, 'judges the property key, not the local binding');
+v = findViolations(fn([objectPattern(defaulted('title', template('Copy ', ' items')))]));
+assert.strictEqual(v.length, 1, 'flags template copy in a prop default');
+v = findViolations(fn([objectPattern(
+    defaulted('size', literal('md')),
+    defaulted('variant', literal('action')),
+    defaulted('fiatCurrency', literal('USD')),
+    defaulted('feedbackMs', { type: 'Literal', value: 1500 }),
+    defaulted('placeholder', literal('0.00')),
+)]));
+assert.strictEqual(v.length, 0, 'technical and trivial defaults are not flagged');
+v = findViolations(fn([objectPattern(defaulted('label', literal('Copy')))]), { allow: ['Copy'] });
+assert.strictEqual(v.length, 0, 'allowlist suppresses a prop default');
+
 // ─── Export surface ───────────────────────────────────────────────
 //
 // The rule once exported isTechnicalAttr plus a TECHNICAL_ATTR_NAMES
@@ -196,7 +251,8 @@ assert.match(v[0].message, /Nested copy/);
 // Pin the surface so a dead export has to be justified here first.
 const EXPECTED_EXPORTS = [
     'USER_FACING_ATTRS', 'create', 'default', 'findViolations',
-    'isTrivialString', 'meta', 'shouldSkipFile', 'templateCopy',
+    'isTrivialString', 'meta', 'propDefaultViolations', 'shouldSkipFile',
+    'templateCopy',
 ];
 assert.deepStrictEqual(Object.keys(rule).sort(), [...EXPECTED_EXPORTS].sort(),
     'rule exports exactly the symbols that have callers');
@@ -253,6 +309,18 @@ visitors.JSXAttribute(jsxAttr('backLabel', literal('Back to history')));
 assert.strictEqual(reports.length, 4, 'create() flags a backLabel literal');
 visitors.JSXAttribute(jsxAttr('aria-labelledby', literal('heading-id')));
 assert.strictEqual(reports.length, 4, 'create() ignores a non-user-facing aria-* attribute');
+visitors.JSXAttribute(jsxAttr('text', literal('Loading settings')));
+visitors.JSXAttribute(jsxAttr('body', literal('Adjust or clear the filters to see more history.')));
+visitors.JSXAttribute(jsxAttr('ariaLabel', literal('Copy tx hash')));
+visitors.JSXAttribute(jsxAttr('iconLabel', literal('Choose source address')));
+visitors.JSXAttribute(jsxAttr('aria', literal('Fee priority help')));
+assert.strictEqual(reports.length, 9, 'create() flags the verbatim-rendered component props');
+// The shipping ObjectPattern visitor carries the prop-default branch too.
+assert.ok(typeof visitors.ObjectPattern === 'function', 'create() returns an ObjectPattern visitor');
+visitors.ObjectPattern(objectPattern(plainProp('value'), defaulted('label', literal('Copy'))));
+assert.strictEqual(reports.length, 10, 'create() flags a label = "Copy" prop default');
+visitors.ObjectPattern(objectPattern(defaulted('size', literal('md'))));
+assert.strictEqual(reports.length, 10, 'create() ignores a technical prop default');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

@@ -147,6 +147,42 @@ export const settingsMigrations = {
         },
         backupReminders: typeof r.backupReminders === 'string' ? r.backupReminders : 'off',
     }),
+    // v2 → v3: sparse defaults (§35.10 / §36.6). v2 seeding COPIED release
+    // defaults into the record, freezing them at wallet-creation time; v3
+    // stores null for "follow the current release default" and resolves at
+    // read time. Rewrite every per-chain preference field that still holds
+    // the value v2 seeding wrote (ads: the flat 1 sat / 1000 trigger; fees:
+    // strategy 'normal' for every coin, rbfByDefault true except Dogecoin)
+    // to null - those are near-certainly untouched seeds, not user choices,
+    // and nulling them re-attaches the wallet to release tuning. A value
+    // that differs from the old seed IS a user choice and is preserved.
+    // Top-level fields need no rewrite: deflateSettings drops the ones
+    // equal to current defaults on the next write.
+    2: (r) => {
+        const perChain = {};
+        for (const [chainId, s] of Object.entries(r.ads?.perChain ?? {})) {
+            perChain[chainId] = {
+                ...s,
+                perTxAmountSats: s?.perTxAmountSats === 1 ? null : s?.perTxAmountSats ?? null,
+                triggerAmountSats: s?.triggerAmountSats === 1000 ? null : s?.triggerAmountSats ?? null,
+            };
+        }
+        const fees = {};
+        for (const [chainId, f] of Object.entries(r.fees ?? {})) {
+            const legacyRbf = !String(chainId).startsWith('dogecoin');
+            fees[chainId] = {
+                ...f,
+                strategy: f?.strategy === 'normal' ? null : f?.strategy ?? null,
+                rbfByDefault: f?.rbfByDefault === legacyRbf ? null : f?.rbfByDefault ?? null,
+            };
+        }
+        return {
+            ...r,
+            schemaVersion: 3,
+            ads: { ...r.ads, perChain },
+            fees,
+        };
+    },
 };
 /** @type {MigrationMap} */
 export const pendingTxMigrations = {

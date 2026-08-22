@@ -121,6 +121,29 @@ assert.match(
     );
 }
 
+// --- 1c. the signIn summary names its fields in plain language ----------
+//
+// The voice guide (packages/web/src/style-guide/sections/VoiceSection.jsx)
+// lists "nonce" among the jargon to name only when the user asks about it,
+// and this dialog opens on every dApp sign-in. The VALUE stays raw in its
+// <pre> so the user can compare it byte-for-byte with the site; only the
+// label is translated.
+assert.match(
+    signSrc,
+    /summaryLabel[^>]*>One-time code</,
+    'signIn summary labels the challenge "One-time code"',
+);
+assert.doesNotMatch(
+    signSrc,
+    /summaryLabel[^>]*>Nonce</,
+    'the bare "Nonce" label has not come back',
+);
+assert.match(
+    signSrc,
+    /<pre className=\{shared\.summaryValue\}>\{String\(inner\.nonce \|\| ''\)\}<\/pre>/,
+    'the challenge value is still rendered raw for byte-for-byte comparison',
+);
+
 // --- 2. dApp Source block (SignApproval) --------------------------------
 
 assert.match(

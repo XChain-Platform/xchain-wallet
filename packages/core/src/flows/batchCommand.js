@@ -39,7 +39,11 @@
 // can secretly name the same token as a plain-name entry, which a client
 // holding only strings cannot always tell apart - see mintTickCounts
 // below for the conservative rule this enforces. A BATCH may also carry
-// at most 250 commands total. This file also exports a pure, synchronous
+// at most 250 commands total, and, separately, a total COST WEIGHT of at
+// most 250: VM actions (DEPLOY, EXECUTE, XEXEC) weigh 30 each and
+// fan-out actions (AIRDROP, DIVIDEND) 25 each, everything else 1, so a
+// batch can be over budget with far fewer than 250 commands (see
+// batchQueueWeight). This file also exports a pure, synchronous
 // pre-check so the form can flag violations live without a host
 // round-trip; the authoritative check still runs in the SDK at compose
 // time.
@@ -57,6 +61,107 @@ export const BATCH_SINGLETON_ACTIONS = ['ISSUE', 'DEPLOY', 'FILE'];
 
 /** Maximum number of commands (queued sub-actions) a BATCH may carry. */
 export const BATCH_MAX_COMMANDS = 250;
+
+/**
+ * Budget the batch's summed cost weight is compared against (the SDK
+ * mirror's BATCH_WEIGHT_BUDGET; canonical in xchain-sdk/src/batchLimits.js).
+ * Equal to the command cap on purpose: with a default weight of 1 an
+ * ordinary all-SEND batch is decided identically by either rule.
+ */
+export const BATCH_WEIGHT_BUDGET = 250;
+
+/**
+ * Per-action COST WEIGHTS (the SDK mirror's BATCH_COMMAND_WEIGHTS). An
+ * action absent here weighs the default 1. AIRDROP and DIVIDEND write a
+ * row per recipient and take a flat 25; DEPLOY, EXECUTE and XEXEC run
+ * contract code and take 30. Every weight is an integer >= 1, which is
+ * what keeps the command-count cap a sound pre-filter for the weighted
+ * check (count over budget implies weight over budget).
+ */
+export const BATCH_COMMAND_WEIGHTS = Object.freeze({
+    AIRDROP:  25,
+    DIVIDEND: 25,
+    DEPLOY:   30,
+    EXECUTE:  30,
+    XEXEC:    30,
+});
+
+/**
+ * Wire aliases the chain expands before weighing (the SDK decoder's
+ * ACTION_ALIASES). Load-bearing for the weights: a DROP is an AIRDROP to
+ * the chain, so it must cost 25 here too, not the default 1.
+ */
+const BATCH_ACTION_ALIASES = Object.freeze({
+    TRANSFER: 'SEND',
+    ADDR:     'ADDRESS',
+    DROP:     'AIRDROP',
+    CAST:     'BROADCAST',
+    MSG:      'MESSAGE',
+});
+
+/**
+ * Read a queued entry's VERSION param under any of the key spellings the
+ * SDK's createAction accepts (VERSION / version / Version), and resolve it
+ * to an integer format number the way the chain does: absent or '' means
+ * format 0, an integer (or integer-valued numeric string) up to 255 is
+ * taken as-is, anything else is unreadable (null).
+ *
+ * @param {{ params?: Record<string, unknown> }} entry
+ * @returns {number | null}
+ */
+function entryFormatVersion(entry) {
+    const params = entry?.params;
+    if (!params || typeof params !== 'object') return 0;
+    let raw;
+    let found = false;
+    for (const key of Object.keys(params)) {
+        if (key.replace(/_/g, '').toLowerCase() === 'version') { raw = params[key]; found = true; break; }
+    }
+    if (!found || raw === undefined || raw === null || raw === '') return 0;
+    if (typeof raw === 'number') return (Number.isInteger(raw) && raw <= 255) ? raw : null;
+    const str = String(raw).replace(/"|'/g, '');
+    if (str === '') return 0;
+    const num = Number(str);
+    if (Number.isFinite(num) && Number.isInteger(num) && num <= 255) return num;
+    return null;
+}
+
+/**
+ * Cost weight of ONE queued sub-action. Uppercases and alias-expands the
+ * action name the same way the rest of this pre-check does, then reads the
+ * weight table, with one carve-out mirrored from the chain: a format-4
+ * DEPLOY is a chunk carrier that runs no constructor, so it takes the
+ * default row-write weight of 1 rather than DEPLOY's VM weight. An entry
+ * whose VERSION cannot be read is charged the full weight, the safe
+ * (over-charging) direction.
+ *
+ * @param {{ action: string, params?: Record<string, unknown> }} entry
+ * @returns {number}
+ */
+export function batchEntryWeight(entry) {
+    const raw = String(entry?.action || '').toUpperCase();
+    const action = Object.prototype.hasOwnProperty.call(BATCH_ACTION_ALIASES, raw)
+        ? BATCH_ACTION_ALIASES[raw]
+        : raw;
+    const weight = BATCH_COMMAND_WEIGHTS[action];
+    if (weight === undefined) return 1;
+    if (action === 'DEPLOY' && entryFormatVersion(entry) === 4) return 1;
+    return (Number.isInteger(weight) && weight >= 1) ? weight : 1;
+}
+
+/**
+ * Total cost weight of a queued sub-action list. Plain integer arithmetic:
+ * these are small counts, not token amounts.
+ *
+ * @param {Array<{ action: string, params?: Record<string, unknown> }>} subActions
+ * @returns {number}
+ */
+export function batchQueueWeight(subActions) {
+    const list = Array.isArray(subActions) ? subActions : [];
+    let total = 0;
+    for (const entry of list) total += batchEntryWeight(entry);
+    return total;
+}
 
 /**
  * Classify a queued ISSUE sub-action by its TICK, mirroring the indexer's
@@ -140,6 +245,17 @@ export function validateBatchConstraints(subActions) {
     }
     if (list.length > BATCH_MAX_COMMANDS) {
         errors.push(`A batch can contain at most ${BATCH_MAX_COMMANDS} actions (found ${list.length}).`);
+    } else {
+        // Weighed only when the count fits, mirroring the chain's ordering: a
+        // batch breaking both caps reports the count cap alone, and every
+        // weight is >= 1, so a fitting count is the only case worth weighing.
+        const weight = batchQueueWeight(list);
+        if (weight > BATCH_WEIGHT_BUDGET) {
+            errors.push(`These ${list.length} actions have a combined cost weight of ${weight}, `
+                + `over the batch budget of ${BATCH_WEIGHT_BUDGET}. Contract actions (DEPLOY, EXECUTE) `
+                + `weigh 30 each and mass-distribution actions (AIRDROP, DIVIDEND) weigh 25 each; `
+                + `every other action weighs 1. Remove some heavy actions or split the batch.`);
+        }
     }
     const counts = { ISSUE: 0, DEPLOY: 0, FILE: 0 };
     const mintEntries = [];

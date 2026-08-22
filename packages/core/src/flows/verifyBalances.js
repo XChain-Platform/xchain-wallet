@@ -85,6 +85,12 @@ const MISMATCH_REASONS = new Set([
     'SMT_PROOF_INVALID',
     'SUBROOT_BIND_INVALID',
     'NONINCLUSION_NONZERO_AMOUNT',
+    // either proof: the served proof answers a different identity than the
+    // one this wallet asked about (`expected` binding), or the proven key
+    // is not the one derived from the request. The server substituted an
+    // answer, which is a wrong answer, not a degraded one.
+    'REQUESTED_IDENTITY_MISMATCH',
+    'BALANCE_QUERY_MISMATCH',
     // action proof (verifyActionProof)
     'LEAF_MISMATCH',
     'MERKLE_PROOF_INVALID',
@@ -252,6 +258,12 @@ export async function verifyAddressBalance({ sdkRegistry, chainId, address, tick
             address,
             tick,
             atHeight,
+            // Bind the proof to the identity THIS caller asked about, not the
+            // server's echo of it: the light client refuses a genuine proof
+            // for a different (address, tick) as REQUESTED_IDENTITY_MISMATCH
+            // instead of verifying it. The wallet never verifies an unbound
+            // proof.
+            expected: { address: String(address), tick: String(tick) },
             ...(resolver ? { pinnedResolver: resolver } : {}),
         });
         return classify(res, tier);
@@ -291,6 +303,10 @@ export async function verifyAddressAction({ sdkRegistry, chainId, actionIndex, p
             explorerUrl: spv.url,
             coin: spv.coin,
             actionIndex,
+            // Bind the proof to the action index THIS caller asked about (the
+            // same requested-identity binding verifyAddressBalance passes):
+            // a genuine proof for a different action must refuse, not verify.
+            expected: { action_index: String(actionIndex) },
             ...(resolver ? { pinnedResolver: resolver } : {}),
         });
         return classify(res, tier);

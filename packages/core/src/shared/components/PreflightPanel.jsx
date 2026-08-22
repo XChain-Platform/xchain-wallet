@@ -19,6 +19,11 @@
 // preview surface can reuse it (§5.5).
 
 import styles from './PreflightPanel.module.css';
+// Zero-dependency helper, deliberately not the useConfirmAction module: the
+// override identity must be ONE definition shared with the Approve gate, and
+// this component is rendered by the extension approval root, so it pulls in
+// nothing but the key function.
+import { preflightFindingKey } from '../utils/preflightFindingKey.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -32,10 +37,12 @@ export const TIER1_NOTICE_CODES = Object.freeze({ DRYRUN_VALID, DRYRUN_UNAVAILAB
 
 // The preflight report schema version this panel is WRITTEN AGAINST.
 //
-// The report contract is additive-only by convention, and the SDK's own
-// constants.js says so while noting the rule "has no enforcement point": this
-// panel reads `verdict`, `findings[].severity`, `findings[].code`,
-// `findings[].overridable`, `findings[]._downgradedBy`, `restricted`,
+// The report contract is additive-only by convention (REPORT_SCHEMA_VERSION
+// in the SDK's src/preflight/constants.js, which names this pin as the
+// enforcement point): this panel reads `verdict`, `findings[].severity`,
+// `findings[].code`, `findings[].overridable`, `findings[]._downgradedBy`,
+// `restricted` (defined beside REPORT_SCHEMA_VERSION there: a proper-subset
+// report, never a completeness claim; the "Partial check" chip below),
 // `stateHeight` and `unverified` straight off the report and never looks at
 // `report.schemaVersion`. So a bump that changed what any of those MEAN would
 // be processed silently under v1 assumptions.
@@ -162,16 +169,25 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
             {errors.length > 0 ? (
                 <ul className={styles.errors}>
-                    {errors.map((f) => (
-                        <li key={f.code} className={`${styles.finding} ${styles.findingError}`}>
+                    {/* Keyed on the finding, never on the code: a BATCH report
+                        carries one error per rejected sub-command under one
+                        shared code, so a code key both collided in React and
+                        made a single "Sign anyway" clear every one of them.
+                        The list key carries the position too, because two
+                        findings CAN share a (code, commandIndex) and a
+                        duplicate React key is a dropped row. The override
+                        identity deliberately does not: see
+                        utils/preflightFindingKey.js. */}
+                    {errors.map((f, i) => (
+                        <li key={`${preflightFindingKey(f)}-${i}`} className={`${styles.finding} ${styles.findingError}`}>
                             <span className={styles.findingMsg}>{f.message}</span>
                             {f.overridable ? (
                                 <label className={styles.ack}>
                                     <input
                                         type="checkbox"
-                                        checked={acknowledged.has(f.code)}
-                                        onChange={() => onAcknowledge(f.code)}
-                                        data-testid={`ack-${f.code}`}
+                                        checked={acknowledged.has(preflightFindingKey(f))}
+                                        onChange={() => onAcknowledge(preflightFindingKey(f))}
+                                        data-testid={`ack-${preflightFindingKey(f)}`}
                                     />
                                     Sign anyway
                                 </label>

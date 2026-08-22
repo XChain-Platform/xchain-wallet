@@ -94,6 +94,32 @@ async function nudgeChain() {
     } catch { /* transient */ }
 }
 
+/**
+ * Waits until the indexer has PARSED the block at the chain's current tip.
+ *
+ * The honest close of an observation window. `status.chain_tip` is the NODE's
+ * height and the indexer runs behind it, so `block/{tip}` is absent until the
+ * parse lands; its arrival is the venue saying it has judged everything up to
+ * that height. Pinned to the height read ONCE at entry, deliberately: a target
+ * that chases a shared venue's tip never arrives while another spec is mining.
+ */
+async function waitForParsedTip(timeoutMs = 180_000) {
+    const status = await explorerJson('status');
+    const tip = Number(status?.chain_tip?.[REGTEST_COIN]);
+    if (!Number.isFinite(tip)) throw new Error(`explorer reports no ${REGTEST_COIN} tip`);
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const block = await explorerJson(`block/${tip}`).catch(() => null);
+        if (Number(block?.timestamp) > 0) return tip;
+        await new Promise((r) => setTimeout(r, 1_000));
+    }
+    throw new Error(
+        `the indexer never parsed ${REGTEST_COIN} block ${tip} within `
+        + `${Math.round(timeoutMs / 1000)}s, so "nothing reached the chain" cannot be read off `
+        + `it. That is a lagging venue, not a wallet defect.`,
+    );
+}
+
 async function xchainBalance(address) {
     const body = await explorerJson(`balances/${address}`);
     const row = (body?.data || []).find((b) => b.tick === 'XCHAIN');
@@ -360,8 +386,16 @@ test.describe('BET unhappy stakes', () => {
         });
 
         await test.step('the chain and the balance are exactly where they started', async () => {
+            // Both reads below are NEGATIVE, so what makes them true statements
+            // rather than merely early ones is the indexer having parsed the
+            // block that closes the window: anything the cases above broadcast
+            // is in the mempool by now, the nudge confirms it, and a parsed tip
+            // means the venue has already judged it. The fixed 4s this replaces
+            // was shorter than one BTC-regtest block parse on a loaded venue
+            // (54ms to 1m 12.8s measured), so it could report "no bet reached
+            // the chain" from an indexer that had not looked yet.
             await nudgeChain();
-            await new Promise((r) => setTimeout(r, 4_000));
+            await waitForParsedTip();
             expect(await xchainBalance(bettor),
                 'a refused stake still moved the balance').toBe(balanceBefore);
             expect(await betsOnFeed(feedIndex),

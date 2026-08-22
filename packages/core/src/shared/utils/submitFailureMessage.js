@@ -91,6 +91,10 @@ export function isWatcherChunkLane(err) {
     if (!err || typeof err !== 'object') return false;
     const e = /** @type {any} */ (err);
     if (e.name === 'WatcherChunkLaneError') return true;
+    // Same shape and the same remedy sentence: the chunk lane refused
+    // pre-dispatch because the injected hardware/remote signer cannot sign
+    // the reveal (submitWithSigner.js#HardwareChunkLaneError).
+    if (e.name === 'HardwareChunkLaneError') return true;
     return /too large for one transaction: the network carries it as a/.test(String(e.message || ''));
 }
 

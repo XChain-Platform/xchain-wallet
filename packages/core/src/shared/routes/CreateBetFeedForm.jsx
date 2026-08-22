@@ -25,7 +25,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { BET_CHAIN_IDS } from './BetFeedsList.jsx';
+import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
@@ -112,6 +112,7 @@ export function CreateBetFeedForm({
 }) {
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const betChainIds = useBetChainIds();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -590,7 +591,7 @@ export function CreateBetFeedForm({
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
                 chainIds={(addressesByChain ? Object.keys(addressesByChain) : [chainId])
-                    .filter((cid) => BET_CHAIN_IDS.length === 0 || BET_CHAIN_IDS.includes(cid))}
+                    .filter((cid) => betChainIds.length === 0 || betChainIds.includes(cid))}
                 chainRegistry={chainRegistry}
             />
             {fromAddress ? (

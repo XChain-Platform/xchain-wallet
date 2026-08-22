@@ -8,11 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §35 Settings: schema v1 to v2 migration.
+// Smoke for §35 Settings: schema migrations (v1 -> v2 -> v3).
 //
-// Adds reducedMotion, privacy.{blurOnBlur, labelsSurviveRestore},
+// v2 added reducedMotion, privacy.{blurOnBlur, labelsSurviveRestore},
 // grace.testSendThresholdSats, panicMode.enabled, backupReminders.
-// Defaults preserve v1 behavior.
+// v3 (§35.10 / §36.6) un-freezes legacy copied per-chain defaults:
+// values equal to what v2 seeding wrote become null = follow the
+// current release default, resolved against the chain descriptor.
 
 import { strict as assert } from 'node:assert';
 import { webcrypto } from 'node:crypto';
@@ -28,16 +30,16 @@ import {
 } from '../../../packages/core/src/schemas/settings.js';
 import { migrateSettings } from '../../../packages/core/src/schemas/migrations.js';
 
-// --- 1. Schema constants are at v2 ------------------------------------------
+// --- 1. Schema constants are at v3 ------------------------------------------
 
-assert.equal(CURRENT_VERSION, 2, 'schema bumped to v2');
+assert.equal(CURRENT_VERSION, 3, 'schema bumped to v3');
 assert.deepEqual([...REDUCED_MOTION_MODES], ['auto', 'always', 'never']);
 assert.deepEqual([...BACKUP_REMINDER_CADENCES], ['off', 'monthly', 'quarterly']);
 
 // --- 2. createDefaultSettings carries the new fields -------------------------
 
 const fresh = createDefaultSettings();
-assert.equal(fresh.schemaVersion, 2);
+assert.equal(fresh.schemaVersion, 3);
 assert.equal(fresh.reducedMotion, 'auto');
 assert.equal(fresh.privacy.blurOnBlur, false);
 assert.equal(fresh.privacy.labelsSurviveRestore, false);
@@ -82,7 +84,7 @@ const v1 = {
 };
 
 const migrated = migrateSettings(v1);
-assert.equal(migrated.schemaVersion, 2, 'migrated to v2');
+assert.equal(migrated.schemaVersion, 3, 'migrated all the way to v3');
 // Pre-existing v1 fields preserved
 assert.equal(migrated.theme, 'dark');
 assert.equal(migrated.autolockMinutes, 30);
@@ -97,6 +99,12 @@ assert.equal(migrated.privacy.labelsSurviveRestore, false);
 assert.equal(migrated.grace.testSendThresholdSats, 0);
 assert.equal(migrated.panicMode.enabled, false);
 assert.equal(migrated.backupReminders, 'off');
+
+// v3 un-freezes the copied per-chain defaults: the fixture's fees entry
+// holds exactly what v2 seeding wrote for BTC (strategy 'normal',
+// rbfByDefault true), so both become null = follow the release default.
+assert.equal(migrated.fees['bitcoin-mainnet'].strategy, null, 'legacy seeded strategy nulled by v3');
+assert.equal(migrated.fees['bitcoin-mainnet'].rbfByDefault, null, 'legacy seeded rbf nulled by v3');
 
 // Migrated record validates clean.
 const v2 = validateSettings(migrated);

@@ -234,16 +234,28 @@ function messageFormatFor(template, locale) {
     return mf;
 }
 
+// formatjs AST element types whose argument formatjs coerces to a
+// number or date before rendering: 2 number, 3 date, 4 time, 6 plural
+// and selectordinal. A bare `{name}` string fed to one of these renders
+// "NaN" / "$NaN" / "NaNth" (the date ones throw) instead of the token,
+// so a template missing such an arg is routed to legacyFormat, whose
+// getVar emits the token for every type. 1 argument and 5 select take
+// the string as-is and keep the pre-fill.
+const COERCING_ARG_TYPES = new Set([2, 3, 4, 6]);
+
 /**
  * Walk a parsed ICU AST collecting every argument name it references
- * (including args nested inside plural / select cases and tags).
+ * (including args nested inside plural / select cases and tags), mapped
+ * to whether any of its uses is a coercing type.
  */
 function collectArgNames(ast, out) {
     for (const el of ast) {
         // 0 = literal, 7 = pound (`#`): neither names an argument.
         if (el.type === 0 || el.type === 7) continue;
         // 8 = tag: `el.value` is the tag name, not an arg.
-        if (el.type !== 8 && typeof el.value === 'string') out.add(el.value);
+        if (el.type !== 8 && typeof el.value === 'string') {
+            out.set(el.value, out.get(el.value) || COERCING_ARG_TYPES.has(el.type));
+        }
         if (el.options) {
             for (const selector in el.options) {
                 collectArgNames(el.options[selector].value, out);
@@ -279,6 +291,10 @@ export function format(template, vars, locale = 'en') {
         // formatjs doesn't throw on a missing value; translators still
         // see the untranslated placeholder in the rendered output.
         const filled = fillMissingArgs(mf, values);
+        // A missing plural / number / date arg cannot be pre-filled: the
+        // token would render as NaN, so the legacy path renders the
+        // whole template with bare tokens instead.
+        if (filled === null) return legacyFormat(template, values, locale);
         return String(mf.format(filled));
     } catch (_err) {
         // Malformed ICU (or an unsupported construct): never throw at
@@ -291,12 +307,15 @@ export function format(template, vars, locale = 'en') {
  * Return a values object with every arg the template requires present:
  * caller-supplied values win; anything missing gets its bare `{name}`
  * token so the rendered string shows the untranslated placeholder.
+ * Returns null when a missing arg is of a coercing type (see
+ * COERCING_ARG_TYPES), which the token string cannot stand in for.
  */
 function fillMissingArgs(mf, values) {
-    const names = collectArgNames(mf.getAst(), new Set());
+    const names = collectArgNames(mf.getAst(), new Map());
     let filled = values;
-    for (const name of names) {
+    for (const [name, coercing] of names) {
         if (!Object.prototype.hasOwnProperty.call(values, name)) {
+            if (coercing) return null;
             if (filled === values) filled = { ...values };
             filled[name] = `{${name}}`;
         }

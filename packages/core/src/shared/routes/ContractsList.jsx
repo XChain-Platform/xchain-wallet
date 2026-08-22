@@ -12,27 +12,27 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Which chains have contracts to browse, asked of the registry rather than
-// pinned to a coin here. This file held the wallet's last hard-coded
-// bitcoin pin for the VM surfaces: the gate has ONE home, registry/actions.js
-// BTC_EXCLUSIVE_ACTIONS, and a private copy in this file meant that when the
-// registry opened contracts to LTC/DOGE the browse surface silently did not.
-// Same descriptor-driven pattern as DeployContractForm, StakingList and
-// BetFeedsList.
+// Which chains have contracts to browse, asked of the LIVE registry rather
+// than pinned to a coin here (useChainIdsWithAction('DEPLOY') in the
+// component body). This file held the wallet's last hard-coded bitcoin pin
+// for the VM surfaces: the gate has ONE home, the descriptor's
+// supportedActions as registry/actions.js builds it (DEPLOY sits in
+// COMMON_ACTIONS today, so every bundled chain qualifies), and a private copy
+// in this file meant that when the registry opened contracts to LTC/DOGE the
+// browse surface silently did not. Same descriptor-driven pattern as
+// DeployContractForm, StakingList and BetFeedsList.
 //
 // DEPLOY is the right question to ask, not EXECUTE: a chain that can deploy is
 // a chain that can have contracts to list, and the two travel together.
 // The Contracts nav item is gated on the wallet having an address on one of
 // these chains; this component assumes the caller did that gating but also
 // surfaces the no-address case defensively.
-const VM_CHAINS = chainRegistry.supportedChains()
-    .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('DEPLOY'))
-    .map((d) => d.id);
 
 /**
  * Contracts browse landing (§42.2).
@@ -48,7 +48,7 @@ const VM_CHAINS = chainRegistry.supportedChains()
  *   3. "Browse all contracts": sdk.getContracts() paginated.
  *
  * The chain filter offers the chains whose descriptors advertise DEPLOY
- * (VM_CHAINS above), so it follows the registry rather than a coin pinned
+ * (vmChains below), so it follows the registry rather than a coin pinned
  * here; testnet / regtest chains appear when present. The
  * search input filters the currently-rendered rows client-side on
  * CONTRACT_ACTION_INDEX prefix or NAME substring. The explorer
@@ -65,7 +65,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
-    const vmChains = useMemo(() => VM_CHAINS, []);
+    const vmChains = useChainIdsWithAction('DEPLOY');
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),

@@ -22,6 +22,7 @@
 //   - RBF-by-default toggle.
 
 import { registry as registryLib } from '@xchain-wallet/core';
+import { resolveFeeConfig } from '../../../schemas/settings.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { INPUT, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
@@ -84,7 +85,11 @@ export function FeesSection() {
     return (
         <div style={STACK}>
             {chainIds.map((chainId) => {
-                const fees = settings.fees[chainId];
+                // §35.10: stored null = follow the release default; render
+                // the resolved preference. Writes may carry concrete
+                // values - updateSettings normalizes a value equal to the
+                // descriptor default back to null.
+                const fees = resolveFeeConfig(settings.fees[chainId], chainRegistry.get(chainId));
                 const descriptor = chainRegistry.get(chainId);
                 const displayName = descriptor?.displayName || chainId;
                 const networkSuffix = descriptor && descriptor.networkKind !== 'mainnet'

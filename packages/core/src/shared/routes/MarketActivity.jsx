@@ -13,6 +13,7 @@ import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import styles from './MarketActivity.module.css';
@@ -61,7 +62,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
-    const chains = useMemo(() => chainRegistry.supportedChains().map((d) => d.id), []);
+    // Live registry read (re-rendered on every descriptor mutation), so a
+    // synced chain reaches the market picker without a restart.
+    const supportedChains = useSupportedChains(chainRegistry);
+    const chains = useMemo(() => supportedChains.map((d) => d.id), [supportedChains]);
     // A representative chain for the featured-token icon (prefer Bitcoin).
     const defaultChainId = useMemo(
         () => chains.find((id) => coinFromChainId(id) === 'bitcoin') || chains[0] || null,

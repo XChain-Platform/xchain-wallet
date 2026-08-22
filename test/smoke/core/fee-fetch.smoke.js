@@ -15,9 +15,9 @@ import { fetchNativeSendFeeTiers } from '../../../packages/core/src/flows/feeEst
 
 const registry = {
     get(id) {
-        if (id === 'bitcoin-mainnet') return { coin: 'bitcoin' };
-        if (id === 'litecoin-mainnet') return { coin: 'litecoin' };
-        if (id === 'dogecoin-mainnet') return { coin: 'dogecoin' };
+        if (id === 'bitcoin-mainnet') return { coin: 'bitcoin', feeStrategy: { unit: 'sats-per-vbyte' } };
+        if (id === 'litecoin-mainnet') return { coin: 'litecoin', feeStrategy: { unit: 'sats-per-vbyte' } };
+        if (id === 'dogecoin-mainnet') return { coin: 'dogecoin', feeStrategy: { unit: 'sats-per-kbyte' } };
         return null;
     },
 };

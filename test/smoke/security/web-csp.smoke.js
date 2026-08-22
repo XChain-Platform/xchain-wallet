@@ -19,7 +19,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTENT_SECURITY_POLICY, cspMetaTag } from '../../../packages/web/src/csp.js';
+import { CONTENT_SECURITY_POLICY, cspMetaTag, metaContentSecurityPolicyFor } from '../../../packages/web/src/csp.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -109,14 +109,31 @@ assert.doesNotMatch(
 // --- 2. The meta-tag helper wraps the policy -----------------------------
 
 assert.match(cspMetaTag(), /^<meta http-equiv="Content-Security-Policy" content="/, 'meta tag is well-formed');
-assert.ok(cspMetaTag().includes(CONTENT_SECURITY_POLICY), 'meta tag embeds the full policy');
+// The meta policy is the full policy minus the header-only directives: a
+// <meta> CSP ignores frame-ancestors by spec (and every supporting browser
+// warns about it, once per document and again per extension content-script
+// world), so shipping it there bought nothing but console noise. The header
+// policy must still carry it, and the fronting server must send that header
+// for framing protection to exist at all.
+assert.ok(cspMetaTag().includes(metaContentSecurityPolicyFor()), 'meta tag embeds the meta policy');
+assert.doesNotMatch(cspMetaTag(), /frame-ancestors/, 'meta tag omits header-only directives');
+const metaShipped = parsePolicy(metaContentSecurityPolicyFor());
+assert.deepEqual(
+    Object.keys(metaShipped).sort(),
+    Object.keys(EXPECTED_DIRECTIVES).filter((d) => d !== 'frame-ancestors').sort(),
+    'the meta policy is exactly the full policy minus frame-ancestors',
+);
+for (const [name, sources] of Object.entries(metaShipped)) {
+    assert.deepEqual(sources, EXPECTED_DIRECTIVES[name], `meta ${name} matches the full policy`);
+}
+assert.match(CONTENT_SECURITY_POLICY, /frame-ancestors 'none'/, 'the header policy still carries frame-ancestors');
 
 // --- 3. vite.config wires the injector, build-only -----------------------
 
 assert.match(
     viteSrc,
-    /import \{ contentSecurityPolicyFor \} from '\.\/src\/csp\.js'/,
-    'vite imports the policy builder',
+    /import \{ metaContentSecurityPolicyFor \} from '\.\/src\/csp\.js'/,
+    'vite imports the meta policy builder',
 );
 // The injected policy is the one for THIS build's profile, and the
 // profile is resolved once so the meta tag and the stamp written into the dist
@@ -128,8 +145,8 @@ assert.match(
 );
 assert.match(
     viteSrc,
-    /content: contentSecurityPolicyFor\(BUILD_PROFILE\)/,
-    'the injected CSP is the profile-specific one, not always the default',
+    /content: metaContentSecurityPolicyFor\(BUILD_PROFILE\)/,
+    'the injected CSP is the profile-specific meta policy, not always the default',
 );
 assert.match(
     viteSrc,

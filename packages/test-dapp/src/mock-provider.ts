@@ -70,9 +70,37 @@ export interface MockProviderOptions {
     // than `rejectAll`. Used to exercise the dApp's retry-after path.
     throttle?: { retryAfterMs: number; burst?: number; windowMs?: number };
     // Only these ACTION types are claimed as supported by signAction;
-    // anything else returns UNSUPPORTED_ACTION. Default Phase 1 set.
+    // anything else returns UNSUPPORTED_ACTION. Default Phase 1 set. This
+    // is the wallet's SIGNABLE set and is deliberately a SUBSET of the
+    // descriptor's protocol set (DEFAULT_PROTOCOL_ACTIONS below): a chain
+    // advertising ISSUE does not mean this wallet will sign ISSUE.
     supportedActions?: string[];
 }
+
+// Two distinct action contracts, kept apart exactly as the real extension
+// bridge keeps them (extension/src/bridge/handlers.js):
+//
+//   - ChainDescriptor.supportedActions advertises what the CHAIN'S PROTOCOL
+//     accepts. The live bridge returns the registry's full set verbatim from
+//     getSupportedChains (30+ actions on a bitcoin chain).
+//   - The wallet's SIGNABLE set is much smaller (SUPPORTED_BRIDGE_ACTIONS =
+//     ['SEND', 'SWEEP']) and is only reported on an UNSUPPORTED_ACTION refusal
+//     from signAction.
+//
+// A dApp that reads the descriptor as "actions this wallet will sign" is wrong
+// against the live extension, so the mock advertises the registry-shaped set
+// here and refuses everything outside the signable set in signAction. Source
+// of truth for the protocol list: packages/core/src/registry/actions.js
+// (BITCOIN_ACTIONS); this package depends only on @xchain-wallet/bridge-spec,
+// so the list is a literal here rather than an import of wallet internals.
+export const DEFAULT_PROTOCOL_ACTIONS: readonly string[] = [
+    'ADDRESS', 'AIRDROP', 'BATCH', 'BET', 'BROADCAST', 'CALLBACK', 'COINPAY',
+    'COLLECT', 'DELEGATE', 'DEPLOY', 'DEPOSIT', 'DESTROY', 'DISPENSER',
+    'DIVIDEND', 'EXECUTE', 'FILE', 'ISSUE', 'LINK', 'LIST', 'MESSAGE', 'MINT',
+    'ORDER', 'PRICE', 'SEND', 'SLEEP', 'STAKE', 'SWAP', 'SWEEP', 'UNSTAKE',
+    'VOTE', 'WITHDRAW',
+];
+export const DEFAULT_SIGNABLE_ACTIONS: readonly string[] = ['SEND', 'SWEEP'];
 
 const hexEncode = (s: string): string =>
     Array.from(s, (c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join(
@@ -90,7 +118,8 @@ const DEFAULT_CHAIN: ChainDescriptor = {
     icon: '',
     addressTypes: ['p2wpkh'],
     defaultAddressType: 'p2wpkh',
-    supportedActions: ['SEND', 'SWEEP'],
+    // Protocol set, NOT the signable set: see DEFAULT_PROTOCOL_ACTIONS.
+    supportedActions: [...DEFAULT_PROTOCOL_ACTIONS],
     uriScheme: 'bitcoin',
 };
 
@@ -143,7 +172,7 @@ export class MockXChainProvider implements XChainProvider {
             rejectAll: opts.rejectAll ?? false,
             blockedSite: opts.blockedSite ?? false,
             throttle: opts.throttle ?? null,
-            supportedActions: opts.supportedActions ?? ['SEND', 'SWEEP'],
+            supportedActions: opts.supportedActions ?? [...DEFAULT_SIGNABLE_ACTIONS],
         };
     }
 

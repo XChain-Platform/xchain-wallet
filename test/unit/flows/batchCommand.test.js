@@ -18,9 +18,13 @@ import {
     validateBatchConstraints,
     buildBatchCommand,
     classifyIssueTick,
+    batchEntryWeight,
+    batchQueueWeight,
     BATCH_FORBIDDEN_ACTIONS,
     BATCH_SINGLETON_ACTIONS,
     BATCH_MAX_COMMANDS,
+    BATCH_WEIGHT_BUDGET,
+    BATCH_COMMAND_WEIGHTS,
 } from '../../../packages/core/src/flows/batchCommand.js';
 
 describe('validateBatchConstraints (PC-36 pre-check)', () => {
@@ -149,6 +153,75 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
         const subActions = Array.from({ length: BATCH_MAX_COMMANDS + 1 }, () => ({ action: 'SEND' }));
         const errs = validateBatchConstraints(subActions);
         expect(errs.some((e) => /at most 250 actions/i.test(e))).toBe(true);
+    });
+});
+
+// The weighted cost budget: VM actions weigh 30, fan-out actions 25,
+// everything else 1, summed against a budget of 250. This is what makes a
+// small batch of heavy actions rejectable client-side before signing, even
+// though its raw command count is nowhere near the 250-command cap.
+describe('validateBatchConstraints (weighted cost budget)', () => {
+    const sends = (n) => Array.from({ length: n }, () => ({ action: 'SEND' }));
+    const executes = (n) => Array.from({ length: n }, () => ({ action: 'EXECUTE' }));
+
+    it('publishes the SDK-mirror surface (budget 250, EXECUTE 30, AIRDROP 25)', () => {
+        expect(BATCH_WEIGHT_BUDGET).toBe(250);
+        expect(BATCH_COMMAND_WEIGHTS).toEqual({ AIRDROP: 25, DIVIDEND: 25, DEPLOY: 30, EXECUTE: 30, XEXEC: 30 });
+    });
+
+    it('accepts a batch weighing exactly the budget', () => {
+        // 8 EXECUTEs (240) + 10 SENDs (10) = 250, at-budget.
+        const subActions = [...executes(8), ...sends(10)];
+        expect(batchQueueWeight(subActions)).toBe(BATCH_WEIGHT_BUDGET);
+        expect(validateBatchConstraints(subActions)).toEqual([]);
+    });
+
+    it('rejects a batch one weight unit over the budget, quoting the weight', () => {
+        // 8 EXECUTEs (240) + 11 SENDs (11) = 251.
+        const errs = validateBatchConstraints([...executes(8), ...sends(11)]);
+        expect(errs.some((e) => /cost weight of 251/.test(e) && /250/.test(e))).toBe(true);
+    });
+
+    it('rejects on weight, not count: 9 EXECUTEs refuse while 9 SENDs pass', () => {
+        const heavy = validateBatchConstraints(executes(9));
+        expect(heavy.some((e) => /cost weight of 270/.test(e))).toBe(true);
+        expect(validateBatchConstraints(sends(9))).toEqual([]);
+    });
+
+    it('weighs fan-out actions at 25, including via the DROP wire alias', () => {
+        // 10 AIRDROPs = 250 fits; an 11th (275) does not, spelled either way.
+        const airdrops = Array.from({ length: 10 }, () => ({ action: 'AIRDROP' }));
+        expect(validateBatchConstraints(airdrops)).toEqual([]);
+        const over = validateBatchConstraints([...airdrops, { action: 'DROP' }]);
+        expect(over.some((e) => /cost weight of 275/.test(e))).toBe(true);
+    });
+
+    it('discounts a format-4 DEPLOY (chunk carrier) to weight 1', () => {
+        expect(batchEntryWeight({ action: 'DEPLOY', params: { VERSION: '4' } })).toBe(1);
+        expect(batchEntryWeight({ action: 'DEPLOY', params: { VERSION: 4 } })).toBe(1);
+        // Any other (or unreadable) format takes the full VM weight.
+        expect(batchEntryWeight({ action: 'DEPLOY', params: { VERSION: '2' } })).toBe(30);
+        expect(batchEntryWeight({ action: 'DEPLOY' })).toBe(30);
+        expect(batchEntryWeight({ action: 'DEPLOY', params: { VERSION: 'garbage' } })).toBe(30);
+        // A chunk carrier plus 249 SENDs sits exactly at the budget; the same
+        // batch with a constructor-running DEPLOY (weight 30) is over it.
+        const carrier = [{ action: 'DEPLOY', params: { VERSION: '4' } }, ...sends(249)];
+        expect(validateBatchConstraints(carrier)).toEqual([]);
+        const vm = validateBatchConstraints([{ action: 'DEPLOY', params: { VERSION: '2' } }, ...sends(249)]);
+        expect(vm.some((e) => /cost weight of 279/.test(e))).toBe(true);
+    });
+
+    it('reports only the count cap when both caps are broken (chain precedence)', () => {
+        const errs = validateBatchConstraints(executes(BATCH_MAX_COMMANDS + 1));
+        expect(errs.some((e) => /at most 250 actions/i.test(e))).toBe(true);
+        expect(errs.some((e) => /cost weight/.test(e))).toBe(false);
+    });
+
+    it('weighs unknown and default actions at 1', () => {
+        expect(batchEntryWeight({ action: 'SEND' })).toBe(1);
+        expect(batchEntryWeight({ action: 'MINT', params: { TICK: 'JDOG' } })).toBe(1);
+        expect(batchEntryWeight({})).toBe(1);
+        expect(batchQueueWeight(null)).toBe(0);
     });
 });
 

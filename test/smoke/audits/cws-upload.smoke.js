@@ -44,7 +44,8 @@ const TOOL = join(walletRoot, 'tools', 'release', 'cws-upload.mjs');
 const ITEM = 'abcdefghijklmnopabcdefghijklmnop';
 
 const {
-    parseArgs, checkPublishTarget, credentialState, hashFromManifest, checkProvenance, Refusal, PUBLISH_TARGETS,
+    parseArgs, checkPublishTarget, credentialState, hashFromManifest, headerField, checkProvenance,
+    Refusal, PUBLISH_TARGETS,
 } = await import(TOOL);
 
 /** Run the tool as an operator would, and report what they would see. */
@@ -107,16 +108,29 @@ function run(args, env = {}) {
             ['missing --item-id', ['--zip', zip]],
             ['a flag with no value', ['--item-id']],
             ['an unknown argument', ['--item-id', ITEM, '--zip', zip, '--publsh', 'x']],
-            ['an unknown publish target', ['--item-id', ITEM, '--zip', zip, '--publish', 'production']],
-            ['the public-publish guard', ['--item-id', ITEM, '--zip', zip, '--publish', 'default']],
-            ['a missing manifest', ['--item-id', ITEM, '--zip', '/nonexistent/x.zip']],
-            ['an unsigned manifest', ['--item-id', ITEM, '--zip', zip]],
+            // Every row below the --tag row must actually PASS --tag, or the
+            // run stops at the required-argument check and the branch the row
+            // is named for never executes. A canary is only as good as the
+            // set of exits it walks, and a new required flag silently empties
+            // that set.
+            ['a missing --tag', ['--item-id', ITEM, '--zip', zip]],
+            ['an unknown publish target',
+                ['--item-id', ITEM, '--zip', zip, '--tag', 'v9.9.9', '--publish', 'production']],
+            ['the public-publish guard',
+                ['--item-id', ITEM, '--zip', zip, '--tag', 'v9.9.9', '--publish', 'default']],
+            ['a missing manifest',
+                ['--item-id', ITEM, '--zip', '/nonexistent/x.zip', '--tag', 'v9.9.9']],
+            ['an unsigned manifest', ['--item-id', ITEM, '--zip', zip, '--tag', 'v9.9.9']],
+            ['a manifest for another release',
+                ['--item-id', ITEM, '--zip', zip, '--tag', 'v9.9.8', '--allow-unsigned']],
             // The one that matters most: credentials present, every check
             // passed, and the run stops right where they would be used.
-            ['a successful dry run', ['--item-id', ITEM, '--zip', zip, '--allow-unsigned', '--dry-run']],
+            ['a successful dry run',
+                ['--item-id', ITEM, '--zip', zip, '--tag', 'v9.9.9', '--allow-unsigned', '--dry-run']],
             // And the live token exchange, pointed at a host that cannot
             // answer, so the failure path that HANDLES the credentials runs.
-            ['a failed token exchange', ['--item-id', ITEM, '--zip', zip, '--allow-unsigned']],
+            ['a failed token exchange',
+                ['--item-id', ITEM, '--zip', zip, '--tag', 'v9.9.9', '--allow-unsigned']],
         ];
 
         for (const [label, args] of exits) {
@@ -166,6 +180,11 @@ function run(args, env = {}) {
         'FAIL: a flag with no value was accepted.');
     assert.throws(() => parseArgs(['--zip', '--dry-run']), (err) => err.code === 2,
         'FAIL: the next flag was swallowed as a value, so --zip would be the string "--dry-run".');
+    assert.equal(parseArgs(['--tag', 'v0.336.0']).tag, 'v0.336.0',
+        'FAIL: --tag was not parsed. It is the release anchor, so a dropped value would silently '
+        + 'restore the unanchored gate.');
+    assert.throws(() => parseArgs(['--tag']), (err) => err.code === 2,
+        'FAIL: --tag with no value was accepted.');
     assert.throws(() => parseArgs(['--publsh', 'x']), (err) => err.code === 2,
         'FAIL: an unknown argument was ignored. A misspelled --publish that is silently dropped uploads '
         + 'without publishing and reads as a store problem.');
@@ -182,38 +201,97 @@ function run(args, env = {}) {
         const write = (hash) => writeFileSync(manifest,
             `# XChain Wallet release manifest\n# tag: v9.9.9\n${hash}  xchain-wallet-extension-v9.9.9.zip\n`);
 
+        const TAG = 'v9.9.9';
+
         // (a) no manifest at all
         await assert.rejects(
-            checkProvenance({ zipPath: zip, manifestPath: join(dir, 'absent.txt'), allowUnsigned: true }),
+            checkProvenance({
+                zipPath: zip, manifestPath: join(dir, 'absent.txt'), tag: TAG, allowUnsigned: true,
+            }),
             (err) => err instanceof Refusal && /no release manifest/.test(err.message),
             'FAIL: an upload with NO release manifest was allowed. That is the whole provenance chain gone.');
 
         // (b) manifest present, signature absent, no flag
         write(good);
         await assert.rejects(
-            checkProvenance({ zipPath: zip, manifestPath: manifest, allowUnsigned: false }),
+            checkProvenance({ zipPath: zip, manifestPath: manifest, tag: TAG, allowUnsigned: false }),
             (err) => /no detached signature/.test(err.message),
             'FAIL: an unsigned manifest was accepted without --allow-unsigned.');
 
         // (c) the flag is honoured, so the refusal is a gate and not a wall
-        const ok = await checkProvenance({ zipPath: zip, manifestPath: manifest, allowUnsigned: true });
+        const ok = await checkProvenance({
+            zipPath: zip, manifestPath: manifest, tag: TAG, allowUnsigned: true,
+        });
         assert.equal(ok.sha256, good);
         assert.equal(ok.signed, false);
+        assert.equal(ok.release, TAG, 'the gate reports which release it anchored to');
 
         // (d) the artifact is not in the manifest
         writeFileSync(manifest, `# tag: v9.9.9\n${good}  some-other-artifact.zip\n`);
         await assert.rejects(
-            checkProvenance({ zipPath: zip, manifestPath: manifest, allowUnsigned: true }),
+            checkProvenance({
+                zipPath: zip, manifestPath: manifest, tag: TAG, allowUnsigned: true,
+            }),
             (err) => /is not listed in/.test(err.message),
             'FAIL: a zip absent from the manifest was accepted.');
 
         // (e) TAMPER: the manifest describes this filename, with another hash
         write('0'.repeat(64));
         await assert.rejects(
-            checkProvenance({ zipPath: zip, manifestPath: manifest, allowUnsigned: true }),
+            checkProvenance({
+                zipPath: zip, manifestPath: manifest, tag: TAG, allowUnsigned: true,
+            }),
             (err) => /does not match the hash/.test(err.message),
             'FAIL: bytes that do not match the signed manifest were accepted for upload. This is the '
             + 'assertion the whole tool exists for.');
+
+        // --- the release anchor -----------------------------------------
+        //
+        // (f) THE STALE-BUT-SIGNED SHAPE, which is the one thing the two
+        // checks above cannot see. The zip and the manifest here agree with
+        // each other perfectly - same name, same hash, same tag - and they
+        // are simply a PREVIOUS release. Every check but the anchor passes.
+        write(good);
+        await assert.rejects(
+            checkProvenance({
+                zipPath: zip, manifestPath: manifest, tag: 'v9.9.10', allowUnsigned: true,
+            }),
+            (err) => err instanceof Refusal && /describes v9\.9\.9, but you named v9\.9\.10/
+                .test(err.message),
+            'FAIL: a previous release\'s zip and its own genuinely-signed manifest were accepted for '
+            + 'upload. They hash-check and signature-check perfectly, which is exactly why the anchor '
+            + 'has to come from outside the pair.');
+
+        // (g) A RE-SIGNATURE satisfies a request for the release it corrects.
+        writeFileSync(manifest,
+            `# XChain Wallet release manifest\n# tag: v9.9.9-resign1\n${good}  `
+            + 'xchain-wallet-extension-v9.9.9.zip\n');
+        const resigned = await checkProvenance({
+            zipPath: zip, manifestPath: manifest, tag: TAG, allowUnsigned: true,
+        });
+        assert.equal(resigned.release, 'v9.9.9-resign1',
+            'a re-signature of v9.9.9 answers a request for v9.9.9');
+
+        // (h) ONE WAY ONLY: the superseded original does NOT satisfy a
+        // request for the re-signature, or fetching the correction and being
+        // handed the false one would verify.
+        write(good);
+        await assert.rejects(
+            checkProvenance({
+                zipPath: zip, manifestPath: manifest, tag: 'v9.9.9-resign1', allowUnsigned: true,
+            }),
+            (err) => /describes v9\.9\.9, but you named v9\.9\.9-resign1/.test(err.message),
+            'FAIL: the superseded original passed as its own re-signature.');
+
+        // (i) `verify.sh --recompute` stamps `(none)` to say it describes no
+        // release. That is a value to refuse, never one to match.
+        writeFileSync(manifest, `# tag: (none)\n${good}  xchain-wallet-extension-v9.9.9.zip\n`);
+        await assert.rejects(
+            checkProvenance({
+                zipPath: zip, manifestPath: manifest, tag: TAG, allowUnsigned: true,
+            }),
+            (err) => /names no release/.test(err.message),
+            'FAIL: a locally recomputed manifest passed as a release manifest.');
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
@@ -232,9 +310,18 @@ function run(args, env = {}) {
     // A comment line that happens to contain a hash-shaped token is not a row.
     assert.equal(hashFromManifest(`# ${'c'.repeat(64)}  decoy.zip\n`, 'decoy.zip'), null,
         'FAIL: a commented line was read as a manifest row.');
+
+    // The header fields the anchor and the coverage line read. They are the
+    // SIGNED half of the document, so reading them is reading a claim the
+    // release key made, not a label.
+    assert.equal(headerField(real, 'tag'), 'v0.336.0');
+    assert.equal(headerField(real, 'lanes'), '', 'a whole-release manifest declares no lane subset');
+    assert.equal(headerField('# coverage: partial\n# lanes: mac, linux\n', 'lanes'), 'mac, linux');
 }
 
 console.log('OK: cws-upload smoke (D4: --help exits 0 and names its credentials, no credential value'
     + 'is ever printed, blank credentials count as missing, public publish needs saying twice, unknown '
     + 'targets and arguments refuse rather than guess, and the provenance gate refuses a missing manifest, '
-    + 'an unsigned one, an unlisted artifact and tampered bytes)');
+    + 'an unsigned one, an unlisted artifact, tampered bytes, and a manifest that belongs to another '
+    + 'release - including the stale-but-signed pair that agrees with itself, with the re-sign rule '
+    + 'accepted one way only)');

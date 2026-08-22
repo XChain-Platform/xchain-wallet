@@ -12,16 +12,17 @@ import { useEffect, useState } from 'react';
 import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Chains whose descriptor advertises BET. Derived the same way governance
-// derives its own list, so a chain gaining or losing the action needs no edit here.
-export const BET_CHAIN_IDS = chainRegistry
-    .supportedChains()
-    .filter((d) => Array.isArray(d.supportedActions) && d.supportedActions.includes('BET'))
-    .map((d) => d.id);
+// Chains whose descriptor advertises BET, asked of the LIVE registry (the
+// same way governance derives its own list), so a chain gaining or losing the
+// action needs no edit here and a synced descriptor lands without a restart.
+export function useBetChainIds() {
+    return useChainIdsWithAction('BET');
+}
 
 // Feed lifecycle -> pill colour. The wallet shows the STORED status, never a
 // status recomputed from the clock, so what a user sees is what the chain thinks.
@@ -83,6 +84,7 @@ function extractRows(resp) {
 export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyMarkets, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const betChainIds = useBetChainIds();
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [noChain, setNoChain] = useState(false);
@@ -96,14 +98,14 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                const avail = BET_CHAIN_IDS.filter((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
+                const avail = betChainIds.filter((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
                 setBetChains(avail);
                 if (avail.length > 0) setChainId(avail[0]);
                 else setNoChain(true);
             })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, betChainIds]);
 
     useEffect(() => {
         if (!chainId) return undefined;

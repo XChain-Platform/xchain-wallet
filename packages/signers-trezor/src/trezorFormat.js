@@ -51,6 +51,61 @@ const INPUT_SCRIPT_TYPE = {
     p2pkh: 'SPENDADDRESS',
 };
 
+// The only sighash this seam signs under; see the refusal in
+// toTrezorSignTransaction for why an override is refused, never forwarded.
+const SIGHASH_ALL = 1;
+
+/**
+ * The data payload of a nulldata (OP_RETURN) scriptPubKey, or `null` when the
+ * script is not one. Returned WITHOUT the 6a opcode or the push prefix, which
+ * is the shape Trezor Connect's `op_return_data` takes.
+ *
+ * Strict on purpose: the payload is consensus-visible data the device shows
+ * and signs, so a push whose declared length does not match the bytes that
+ * follow, or a push opcode this parser does not know, throws rather than
+ * emitting a truncated or padded payload.
+ *
+ * @param {string} scriptPubKeyHex
+ * @returns {string | null}
+ */
+export function opReturnPayloadHex(scriptPubKeyHex) {
+    if (typeof scriptPubKeyHex !== 'string') return null;
+    const hex = scriptPubKeyHex.toLowerCase();
+    if (!hex.startsWith('6a')) return null;
+    if (hex.length % 2 !== 0 || !/^[0-9a-f]*$/.test(hex)) {
+        throw new Error('trezorFormat: OP_RETURN scriptPubKey is not valid hex');
+    }
+    // A bare OP_RETURN carries no payload.
+    if (hex.length === 2) return '';
+    const opcode = parseInt(hex.slice(2, 4), 16);
+    let dataStart;
+    let dataLen;
+    if (opcode >= 0x01 && opcode <= 0x4b) {
+        dataStart = 4;
+        dataLen = opcode;
+    } else if (opcode === 0x4c) {
+        // OP_PUSHDATA1: one length byte.
+        dataStart = 6;
+        dataLen = parseInt(hex.slice(4, 6), 16);
+    } else if (opcode === 0x4d) {
+        // OP_PUSHDATA2: two length bytes, little-endian.
+        dataStart = 8;
+        dataLen = parseInt(hex.slice(4, 6), 16) | (parseInt(hex.slice(6, 8), 16) << 8);
+    } else {
+        throw new Error(
+            `trezorFormat: unsupported OP_RETURN push opcode 0x${hex.slice(2, 4)}; `
+            + 'only a single direct push, OP_PUSHDATA1 or OP_PUSHDATA2 is carried',
+        );
+    }
+    if (Number.isNaN(dataLen) || hex.length - dataStart !== dataLen * 2) {
+        throw new Error(
+            'trezorFormat: OP_RETURN push length does not match the script bytes; '
+            + 'refusing to emit a truncated or padded payload',
+        );
+    }
+    return hex.slice(dataStart);
+}
+
 /**
  * Build the `signTransaction` argument payload for Trezor Connect.
  *
@@ -79,6 +134,23 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
                 'toTrezorSignTransaction: every signingPaths entry needs { inputIndex, path }',
             );
         }
+        // REFUSE a sighash override; never forward one. Trezor Connect's
+        // signTransaction input type has no per-input sighash key, so a value
+        // copied onto the envelope is not consumed: the device signs under its
+        // default SIGHASH_ALL while the signer reports success under the
+        // requested sighash, and TrezorSigner.signPsbt accepts any returned
+        // serializedTx without checking the flag. A wrong-sighash signature is
+        // worse than a refused one; this mirrors toLedgerCreatePayment so both
+        // vendor seams take the same posture. No wallet flow sets the field on
+        // a hardware path today, so this refuses nothing being asked for.
+        if (sp.sighashType !== undefined && sp.sighashType !== null
+            && sp.sighashType !== SIGHASH_ALL) {
+            throw new Error(
+                `toTrezorSignTransaction: Trezor cannot sign under sighashType ${sp.sighashType} `
+                + `(input ${sp.inputIndex}); this signer supports only the default SIGHASH_ALL `
+                + `(${SIGHASH_ALL}). Re-request the signature without a sighash override.`,
+            );
+        }
         pathByIndex.set(sp.inputIndex, sp);
     }
 
@@ -95,8 +167,7 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
                 `toTrezorSignTransaction: unsupported input scriptType "${inp.scriptType}" at index ${idx}`,
             );
         }
-        /** @type {any} */
-        const out = {
+        return {
             address_n: pathToAddressN(sp.path),
             prev_hash: inp.prevTxHash,
             prev_index: inp.prevTxIndex,
@@ -104,17 +175,28 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
             script_type: scriptType,
             sequence: inp.sequence,
         };
-        if (typeof sp.sighashType === 'number') {
-            out.script_sig = undefined;
-            out.sighash = sp.sighashType;
-        }
-        return out;
     });
 
     const outputs = decomposed.outputs.map((out, idx) => {
+        // OP_RETURN first: the default small-action lane and every native-coin
+        // send carry the action as an address-less nulldata output, which
+        // Connect takes as PAYTOOPRETURN + op_return_data (hex payload, no
+        // opcode). Ledger serializes the raw script and never needed this.
+        const payloadHex = opReturnPayloadHex(out.scriptPubKeyHex);
+        if (payloadHex !== null) {
+            // Connect requires amount 0 on this script type; a funded nulldata
+            // output is a burn, so it is refused rather than coerced.
+            if (Number(out.value) !== 0) {
+                throw new Error(
+                    `toTrezorSignTransaction: OP_RETURN output ${idx} carries value ${out.value}; `
+                    + 'a funded data output would burn coin, refusing to sign it',
+                );
+            }
+            return { amount: '0', op_return_data: payloadHex, script_type: 'PAYTOOPRETURN' };
+        }
         if (!out.address) {
             throw new Error(
-                `toTrezorSignTransaction: output ${idx} has no address (raw script outputs not yet supported)`,
+                `toTrezorSignTransaction: output ${idx} has no address (raw script outputs other than OP_RETURN not yet supported)`,
             );
         }
         return {

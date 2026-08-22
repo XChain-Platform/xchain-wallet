@@ -93,8 +93,11 @@ export { broadcastAction } from './broadcastAction.js';
 export {
     buildBatchCommand,
     validateBatchConstraints,
+    batchEntryWeight,
+    batchQueueWeight,
     BATCH_FORBIDDEN_ACTIONS,
     BATCH_SINGLETON_ACTIONS,
+    BATCH_WEIGHT_BUDGET,
 } from './batchCommand.js';
 export { oraclePriceAction } from './oraclePriceAction.js';
 export {
@@ -151,6 +154,8 @@ export {
     signerSupportsTapscript,
     encoderSignerOptions,
     TAPSCRIPT_CAPABLE_SOURCES,
+    signerSupportsChunkReveal,
+    CHUNK_REVEAL_CAPABLE_SIGNER_KINDS,
 } from './signerCapability.js';
 export { storedSizeSummary, storedSizeLine } from './storedSizeSummary.js';
 export { getProjectForTick } from './projectQueries.js';
@@ -214,6 +219,8 @@ export {
     settingsCustomToDisplayRate,
     displayRateToSettingsCustom,
     satsToCoinDecimal,
+    resolveFeeUnit,
+    isPerKbUnit,
 } from './feeEstimate.js';
 export {
     isEntryReplaceable,

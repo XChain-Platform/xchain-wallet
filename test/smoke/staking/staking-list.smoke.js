@@ -49,10 +49,13 @@ assert.ok(/export function StakingList\b/.test(listSrc),
 // fired at explorers that can only answer empty.
 assert.ok(/VALIDATOR_COIN\s*=\s*['"]bitcoin['"]/.test(listSrc),
     'StakingList pins the validator lane to bitcoin');
-assert.ok(/supportedChains\(\)[\s\S]{0,200}includes\('STAKE'\)/.test(listSrc),
-    'StakingList derives its staking chains from the registry, not a hardcoded coin');
+// The list is read from the LIVE registry (useSupportedChains re-renders on a
+// descriptor mutation), never memoised once at mount, so a synced descriptor
+// that adds STAKE reaches the dashboard without a restart.
+assert.ok(/useSupportedChains\(chainRegistry\)[\s\S]{0,400}includes\('STAKE'\)/.test(listSrc),
+    'StakingList derives its staking chains from the live registry, not a hardcoded coin');
 assert.ok(/validatorChainIds\s*=\s*useMemo/.test(listSrc)
-    && /byCoin\(VALIDATOR_COIN\)/.test(listSrc),
+    && /coin === VALIDATOR_COIN/.test(listSrc),
     'StakingList resolves the validator-lane chain IDs via the registry');
 assert.ok(/const isValidatorChain = validatorChainIds\.has\(cid\)/.test(listSrc)
     && /\.\.\.\(isValidatorChain \? \[/.test(listSrc),

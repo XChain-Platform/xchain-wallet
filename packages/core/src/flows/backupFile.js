@@ -8,40 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Encrypted backup-file flows (§19.4).
-//
-// `exportBackupFile` reads everything the vault knows about a wallet
-// (wallet record incl. encryptedSeed + importedKeys, accounts, addresses
-// incl. labels + pinned state, contacts, connectedSites, settings,
-// pendingTxs) and wraps it in the §19.4 envelope under a user-chosen
-// password. The password is independent of the wallet-unlock password.
-//
-// `importBackupFile` decrypts an envelope, RE-KEYS the wallet's sealed
-// key material under this device's password (see
-// `rekeyWalletRecord`; without it a restored wallet still opens only
-// under the password it had on the device it left, and fails silently at
-// the first signature), then merges the contents into the live vault.
-// Three passwords are in play and they are all different things:
-//
-//   password         opens the backup FILE's envelope
-//   walletPassword   opens the backed-up WALLET's seed / imported keys
-//   devicePassword   what the restored wallet is re-sealed under here
-//
-// Conflict policy:
-//
-//   onConflict = 'overwrite'   existing records replaced by incoming
-//   onConflict = 'preserve'    existing records kept; incoming skipped if id matches
-//   onConflict = 'error'       throw BackupConflictError if any collision exists
-//
-// Not included in the payload (per §19.4):
-//   - BIP39 passphrase (user re-enters on restore; the passphrase is a
-//     security property of the seed, not stored state).
-//   - Hardware-wallet private keys (they live on the device; the backup
-//     only records the pairing metadata in `signers`).
-//
-// `signers` is reserved in the payload shape for future hardware-signer
-// records. Phase 1 ships only SoftwareSigner (coupled 1:1 with the
-// wallet record), so the list is currently empty both ways.
+// Encrypted backup-file flows (§19.4): export wraps the BackupPayload below in
+// the §19.4 envelope under a user-chosen password; import decrypts it, RE-KEYS
+// the wallet's sealed key material under this device's password, then merges.
+
+// Three distinct passwords, and conflating them fails silently: `password`
+// opens the backup FILE's envelope, `walletPassword` opens the backed-up
+// WALLET's seed and imported keys, `devicePassword` is what the restore
+// re-seals them under.
+
+// Skipping the re-key leaves a restored wallet openable only under the password
+// it had on the device it left, failing at its first signature with no message.
+
+// onConflict: 'overwrite' replaces existing records, 'preserve' keeps them and
+// skips a matching incoming id, 'error' throws BackupConflictError on a
+// collision.
+
+// Never in the payload (§19.4): the BIP39 passphrase (a security property of
+// the seed, re-entered on restore rather than stored) and hardware-wallet
+// private keys, which stay on the device; `signers` carries only pairing
+// metadata.
 
 import {
     decodeBackupEnvelope,
@@ -56,6 +42,7 @@ import {
     base64ToBytes,
 } from '../crypto/index.js';
 import { randomUUID } from '../util/uuid.js';
+import { migrateSettings } from '../schemas/migrations.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import {
@@ -75,21 +62,15 @@ export class BackupConflictError extends Error {
 }
 
 /**
- * The re-key could not open the backed-up wallet's own seal.
- *
- * Distinct from a bad envelope password on purpose. If the envelope had
- * not already opened we would never reach here, so "wrong password" on
- * its own is the wrong thing to tell the user: it is the OTHER password
- * - the one the wallet itself used on the device it came from - that is
- * wrong, and the message has to say which.
+ * The re-key could not open the backed-up wallet's own seal. Deliberately
+ * distinct from a bad envelope password: the envelope already opened, so the
+ * wrong one is the WALLET's, and the message has to name which.
  */
 export class BackupSeedPasswordError extends Error {
     /** @param {string} what   'seed' | 'imported key' */
     constructor(what) {
-        // The copy names the field, not the function. The user is
-        // looking at three password boxes, and this one is about the middle
-        // one; a message that opens with `importBackupFile:` tells them which
-        // function failed and nothing about which box to fix.
+        // Name the password BOX, not the function: the user is looking at three
+        // of them and needs to know which one to fix.
         super(
             `The backup file opened, but that is not the password of the wallet inside it (its `
             + `${what} stayed locked). The "${RESTORE_PASSWORD_LABELS.wallet}" field wants the `
@@ -273,37 +254,27 @@ export async function importBackupFile({
         throw new Error('importBackupFile: payload missing wallet record');
     }
 
-    // Re-seal the wallet's key material under this device's
-    // password BEFORE anything is written. Doing it here rather than at
-    // the shell means a seal we cannot open fails at RESTORE time, with
-    // a message naming which password is wrong, instead of at the user's
-    // first signature with no message at all. Nothing has touched the
-    // vault yet at this point, so the throw leaves it untouched.
+    // Re-seal key material under the device password BEFORE any write: an
+    // unopenable seal then throws at RESTORE time naming which password is
+    // wrong, with the vault untouched, not at the user's first signature.
     const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword });
 
-    // §19.4 / Cluster H FOLLOWUP 3: 'add' mode re-mints wallet /
-    // account / address ids so the restored wallet coexists with what
-    // the vault already has, even if the source vault and target vault
-    // happened to share an id (a from-seed restore on the same device,
-    // for example, would deterministically produce some equal ids).
-    // Contacts / connectedSites / settings stay shared (their ids are
-    // already global); collisions there fall through to the existing
-    // onConflict policy.
+    // §19.4: 'add' mode re-mints wallet / account / address ids so a restored
+    // wallet coexists even where both vaults derived equal ones (a same-device
+    // from-seed restore does); globally-id'd records fall through to
+    // onConflict.
     if (mode === 'add') {
         remintIdentifiers(decoded);
     }
 
-    // Collect conflicts up-front; onConflict='error' fails fast. Add
-    // mode skips the wallet / account / address collisions because we
-    // just re-minted those ids; only contacts / connectedSites can
-    // still conflict.
-    //
-    // Settings is exempt in 'add' mode: it is a vault-global singleton,
-    // so an initialized vault ALWAYS has one and the incoming record
-    // would always collide - which made every restore-alongside fail on
-    // the default onConflict='error'. The joining wallet does not get to
-    // redefine the vault's network / fee / privacy choices, so its
-    // settings are simply not applied (see the write below).
+    // Collect conflicts up-front so onConflict='error' fails fast. 'add' mode
+    // skips the wallet / account / address ids just re-minted, leaving
+    // contacts and connectedSites as the only records that can still collide.
+
+    // Settings is exempt in 'add' mode: the vault-global singleton always
+    // exists, so an incoming record would always collide and fail every
+    // restore-alongside. A joining wallet does not redefine the vault's
+    // network / fee / privacy choices, so its settings are not applied.
     const conflicts = await collectConflicts(
         vault, decoded, { skipWalletScoped: mode === 'add', skipSettings: mode === 'add' },
     );
@@ -337,16 +308,17 @@ export async function importBackupFile({
     await applyCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites');
     await applyCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs');
 
-    // Settings is a singleton; overwrite/preserve decisions apply to
-    // the whole record. In 'add' mode the vault's own settings win even
-    // under onConflict='overwrite': that flag exists to resolve record
-    // collisions for the wallet being restored, not to hand a joining
-    // wallet the vault-wide network / fee / privacy configuration the
-    // user is currently running under.
+    // Settings is a singleton, so overwrite/preserve covers the whole record.
+    // In 'add' mode the vault's own settings win even under 'overwrite': that
+    // flag resolves collisions for the wallet being restored, never the
+    // vault-wide configuration the user is currently running under.
     if (decoded.settings) {
         const existing = await vault.settings.get();
         if (!existing || (onConflict === 'overwrite' && mode !== 'add')) {
-            await vault.settings.put(decoded.settings);
+            // A backup can carry an older schema (e.g. a v2 record whose
+            // per-chain values are frozen copies of that release's
+            // defaults); migrate before put or validation rejects it.
+            await vault.settings.put(migrateSettings(decoded.settings));
             writes.settings = true;
         } else {
             skipped.settings = true;
@@ -395,14 +367,10 @@ export class BackupPointerUnresolvedError extends Error {
  */
 
 /**
- * §15.4 QR-from-backup-pointer restore. Parses (or accepts) a backup
- * pointer, hands it to the shell-injected `resolveBackupContent` to
- * fetch the encrypted §19.4 envelope, then runs the exact same
- * `importBackupFile` decrypt-and-merge path the file lane uses. The
- * pointer only carries a location; the envelope is still
- * password-encrypted, so the caller must supply the backup password
- * just like the file lane.
- *
+ * §15.4 QR-from-backup-pointer restore: resolve the pointer through the
+ * shell-injected `resolveBackupContent`, then run the file lane's own
+ * `importBackupFile` decrypt-and-merge. A pointer carries only a location, so
+ * the envelope is still password-encrypted and the caller supplies its password.
  * @param {RestoreFromBackupPointerOpts} opts
  * @returns {Promise<RestoreFromBackupPointerResult>}
  */
@@ -480,23 +448,10 @@ async function collectConflicts(vault, payload, opts = {}) {
 }
 
 /**
- * Re-mint wallet / account / address ids on the decoded payload so
- * an `add`-mode import can land alongside what the vault already
- * has. Mutates `decoded` in place. Updates every field that
- * references one of the re-minted ids:
- *
- *   - wallet.id
- *   - wallet.importedKeys[].addressId
- *   - account.id, account.walletId
- *   - address.id, address.accountId
- *   - pendingTx.id    (kept independent; pending txs are address-scoped
- *                     via `fromAddress`, not id-scoped)
- *
- * Contacts / connectedSites / settings ids stay as-is (they're global
- * across wallets and there's nothing to disambiguate). Exported for
- * test access; production callers go through `importBackupFile({mode:
- * 'add'})`.
- *
+ * Re-mint wallet / account / address ids in place so an `add`-mode import lands
+ * alongside the vault's own, rewiring every field that references one.
+ * Contacts / connectedSites / settings ids are global and stay as-is.
+ * Exported for tests; production goes through `importBackupFile({mode:'add'})`.
  * @param {BackupPayload} decoded
  */
 export function remintIdentifiers(decoded) {
@@ -541,10 +496,9 @@ export function remintIdentifiers(decoded) {
         }
     }
 
-    // PendingTxs: re-mint id so a re-import of the same backup doesn't
-    // collide; keep the rest of the row (fromAddress / txid / status)
-    // untouched. fromAddress is the canonical address string, not an
-    // id, so it survives the address-id re-mint.
+    // PendingTxs: re-mint only the id so a re-import cannot collide.
+    // fromAddress is the canonical address STRING, not an id, so it survives
+    // the re-mint and the rest of the row stays untouched.
     for (const ptx of decoded.pendingTxs ?? []) {
         if (ptx && typeof ptx.id === 'string') {
             ptx.id = randomUUID();
@@ -553,34 +507,14 @@ export function remintIdentifiers(decoded) {
 }
 
 /**
- * Re-seal a restored wallet's key material under THIS device's
- * password.
- *
- * The §19.4 envelope carries the wallet record verbatim - `encryptedSeed`,
- * `importedKeys[].encryptedWif` and the wallet's OWN `kdfParams` - so
- * without this step a restored wallet is still sealed under whatever
- * password it had on the device it left. The vault opens, the wallet
- * looks complete, and `SignerPool.populate` then skips it silently
- * because the one password it was handed does not derive that wallet's
- * master key. The user meets the defect at their first spend.
- *
- * `importedKeys` are re-keyed alongside the seed because `importWif`
- * seals them with the SAME master key (see importWif.js): re-keying only
- * the seed would move the failure rather than fix it, and a wif-only
- * wallet (empty `encryptedSeed`, key material entirely in `importedKeys`)
- * would not be repaired at all.
- *
- * The new params copy the source's argon2 COST (a device that calibrated
- * upward keeps its calibration) but always take a fresh salt: reusing a
- * salt under the same password would derive the same master key for two
- * wallets.
- *
- * A record with no sealed material - a watch-only shape, or a test
- * fixture whose `encryptedSeed` was never real ciphertext - has nothing
- * to move, and is returned untouched with `false`.
- *
- * Mutates `wallet` in place.
- *
+ * Re-seal a restored wallet's key material under THIS device's password,
+ * in place. The §19.4 envelope carries `encryptedSeed`,
+ * `importedKeys[].encryptedWif` and the wallet's OWN `kdfParams` verbatim, so
+ * skipping this leaves the wallet sealed under its old device's password and
+ * `SignerPool.populate` skips it silently. `importedKeys` re-key with the seed
+ * because `importWif` seals them under the SAME master key (importWif.js).
+ * New params copy the source's argon2 COST but ALWAYS take a fresh salt: one
+ * salt reused under one password derives the same master key for two wallets.
  * @param {import('../schemas/wallet.js').Wallet} wallet
  * @param {Object} opts
  * @param {string} opts.walletPassword    what the backed-up wallet was sealed under
@@ -596,9 +530,8 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     );
     if (!hasSeed && sealedKeys.length === 0) return false;
 
-    // Each of these says which BOX on the restore screen is empty.
-    // They used to name the parameter (`walletPassword is required`), which is
-    // the one thing on screen the user cannot see.
+    // Name which BOX on the restore screen is empty, never the parameter: the
+    // parameter name is the one thing on screen the user cannot see.
     if (typeof walletPassword !== 'string' || walletPassword.length === 0) {
         throw new Error(restorePasswordRequiredMessage('wallet'));
     }

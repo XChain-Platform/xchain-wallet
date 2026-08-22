@@ -444,7 +444,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         }
         return wrap(
             <>
-                <p className={styles.successTitle}>Cross-chain SWAP broadcast</p>
+                <p className={styles.successTitle}>Cross-chain swap broadcast</p>
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Give-chain transaction</p>
@@ -557,7 +557,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                             ? 'Create unsigned transaction'
                             : hw
                                 ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign cross-chain SWAP'}
+                                : 'Sign cross-chain swap'}
                     </Button>
                 </div>
             </form>,

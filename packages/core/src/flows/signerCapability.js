@@ -79,3 +79,49 @@ export function signerSupportsTapscript(addressRecord) {
 export function encoderSignerOptions(addressRecord) {
     return { signerSupportsTapscript: signerSupportsTapscript(addressRecord) };
 }
+
+/**
+ * Signer kinds that can sign the P2SH/P2WSH phase-2 reveal (the chunk lane).
+ *
+ * The reveal spends the data-carrier script outputs the phase-1 commit funded
+ * and needs the SDK's reveal finalizer over the wallet's own key, which is
+ * what `SoftwareSigner.signPsbt({ reveal: true })` does.
+ *
+ * Deliberately ABSENT, and each for its own reason:
+ * - `trezor`/`ledger` (and the RemoteSigner shim that carries either kind):
+ *   both device signers drop the `reveal` flag and their format converters
+ *   have no P2SH/P2WSH data-carrier input type, so the request fails inside
+ *   the vendor layer. Add a kind here only once a real device has signed a
+ *   real reveal.
+ * - `multisig` / `airgap`: no chunk-lane signing path exists for them at all.
+ *
+ * Same fail-closed container as TAPSCRIPT_CAPABLE_SOURCES, for the same reason.
+ */
+export const CHUNK_REVEAL_CAPABLE_SIGNER_KINDS = Object.freeze(['software']);
+
+/**
+ * Whether an injected Signer can sign the P2SH/P2WSH phase-2 reveal.
+ *
+ * Differs in shape from `signerSupportsTapscript`: that one takes an Address
+ * record and reads `source` (the question is asked before an encoding is
+ * chosen); this one takes the Signer that will be dispatched to and reads
+ * `kind`, because the chunk lane's hazard is the dispatch itself. Called by
+ * `submitWithSigner` BEFORE the phase-1 commit is signed or broadcast: a
+ * refusal there costs an error dialog, a refusal at the signer after the
+ * commit is on chain is the stranded-funds event §6 forbids.
+ *
+ * @param {{ kind?: string } | null | undefined} signer
+ * @returns {boolean}
+ */
+export function signerSupportsChunkReveal(signer) {
+    if (!signer || typeof signer !== 'object') return false;
+    let kind;
+    try {
+        kind = signer.kind;
+    } catch {
+        // The abstract Signer getter throws; an unknown kind is an incapable one.
+        return false;
+    }
+    if (typeof kind !== 'string') return false;
+    return CHUNK_REVEAL_CAPABLE_SIGNER_KINDS.includes(kind);
+}
