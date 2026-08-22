@@ -176,8 +176,8 @@ importers:
         specifier: ^8.9.0
         version: 8.9.0
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@2.0.2
-        version: '@dankest-llc/xchain-sdk@2.0.2'
+        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
+        version: '@dankest-llc/xchain-sdk@0.10.0'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -222,8 +222,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@2.0.2
-        version: '@dankest-llc/xchain-sdk@2.0.2'
+        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
+        version: '@dankest-llc/xchain-sdk@0.10.0'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -298,8 +298,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@2.0.2
-        version: '@dankest-llc/xchain-sdk@2.0.2'
+        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
+        version: '@dankest-llc/xchain-sdk@0.10.0'
     devDependencies:
       '@vitejs/plugin-basic-ssl':
         specifier: ^1.1.0
@@ -606,9 +606,10 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@dankest-llc/xchain-sdk@2.0.2':
-    resolution: {integrity: sha512-lvHGYCiCFFSGjNDe0td69RoUnuzpvhigVhR6EB29smkDxV5GMHnImRLQrBvs3mPb6Xv7I03gGicrmb7LHPtoUg==}
+  '@dankest-llc/xchain-sdk@0.10.0':
+    resolution: {integrity: sha512-jWNsVPkZ6UQBUShYjz+aihIgTz922Vnq7FrTg6W5VnB80Cq6vF5oCuiDqCH38/vHb8A7gp+i3Qi/tP0VrcHeXA==}
     engines: {node: '>=22.0.0'}
+    deprecated: superseded by the platform version stream; install 0.10.0 or later
 
   '@electron-internal/extract-zip@1.0.5':
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
@@ -1567,6 +1568,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abbrev@4.0.0:
     resolution: {integrity: sha512-a1wflyaL0tHtJSmLSOVybYhy22vRih4eduhhrkcjgrWGnRfrZtovJ2FRjxuTtkkj47O/baf0R86QU5OuYpz8fA==}
@@ -4610,7 +4612,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@dankest-llc/xchain-sdk@2.0.2':
+  '@dankest-llc/xchain-sdk@0.10.0':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       '@brandonblack/musig': 0.0.1-alpha.1
@@ -4621,6 +4623,7 @@ snapshots:
       acorn-walk: 8.3.5
       astring: 1.9.0
       axios: 1.19.0
+      bip174: 2.1.1
       bitcoinjs-lib: 6.1.7
       bitcoinjs-message: 2.2.0
       cors: 2.8.6

@@ -139,3 +139,6 @@ allowBuilds:
   secp256k1: false
   sharp: true
   tiny-secp256k1: true
+
+minimumReleaseAgeExclude:
+  - '@dankest-llc/xchain-sdk@0.10.0'

@@ -21,7 +21,7 @@
         "qrcode": "^1.5.4",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@2.0.2"
+        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.10.0"
     },
     "devDependencies": {
         "@vitejs/plugin-basic-ssl": "^1.1.0",
