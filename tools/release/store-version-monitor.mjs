@@ -985,7 +985,7 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
             + 'not check the signature and cannot. This lane has NO staged-rollout halt and NO '
             + 'rollback: the remedy is a signed advisory plus a fixed higher-versionCode build '
             + 'plus the update-check feed notice - '
-            + 'see the platform launch INCIDENT-RUNBOOK, §15.');
+            + 'see the launch INCIDENT-RUNBOOK.md §15.');
     }
     if (otherAlerts.length > 0) {
         err.push(`UNCLASSIFIED ALERT: ${otherAlerts.length} alert(s) from a lane this reporter `
