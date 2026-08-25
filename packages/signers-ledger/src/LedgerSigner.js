@@ -53,6 +53,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import {
     Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
 } from '../../core/src/signers/Signer.js';
+import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
 import {
     addressTypeFromPath,
     composeBitcoinCompactSignature,
@@ -367,6 +368,12 @@ export class LedgerSigner extends Signer {
                 this._id, 'error', 'createPaymentTransaction: Ledger returned no signed tx',
             );
         }
+        // The device never saw the PSBT; it signed the transaction
+        // toLedgerCreatePayment REBUILT from `decomposed`, so the confirm-time
+        // output-set checks covered bytes that are not these ones. Compare the
+        // reply back to the PSBT before its txid escapes this method, because
+        // every caller downstream treats txHex as the approved transaction.
+        assertSignedTxMatchesPsbt({ txHex, decomposed, signerId: this._id });
         const txid = sdk.wallet.txidOf(txHex);
         return { signedPsbtHex: '', txHex, txid };
     }

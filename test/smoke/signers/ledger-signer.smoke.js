@@ -267,6 +267,13 @@ const segwitDecomposed = {
     ],
 };
 
+// What the device returns for `segwitDecomposed`: the same single input
+// (ab…ab:0, sequence fdffffff) and the same single 90,000-sat output to
+// 0014cc…cc. signPsbt compares the reply back to the approved PSBT before it
+// hands out a txid, so a placeholder here would exercise the refusal path
+// rather than the signing path.
+const DEVICE_TX = '0200000001abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc00000000';
+
 let capturedCreateArgs = null;
 let capturedSplitCalls = [];
 const signApp = makeMockApp({
@@ -276,7 +283,7 @@ const signApp = makeMockApp({
     },
     async createPaymentTransaction(args) {
         capturedCreateArgs = args;
-        return '02deadbeef';
+        return DEVICE_TX;
     },
 });
 const wiredSigner = new LedgerSigner({
@@ -293,8 +300,8 @@ const signResult = await wiredSigner.signPsbt({
     chainId: 'bitcoin-mainnet',
     signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/5" }],
 });
-assert.equal(signResult.txHex, '02deadbeef');
-assert.equal(signResult.txid, 'txid-of-02deadbeef');
+assert.equal(signResult.txHex, DEVICE_TX);
+assert.equal(signResult.txid, `txid-of-${DEVICE_TX}`);
 assert.equal(signResult.signedPsbtHex, '');
 assert.ok(capturedCreateArgs, 'createPaymentTransaction was called');
 assert.equal(capturedCreateArgs.segwit, true, 'p2wpkh → segwit');
@@ -317,7 +324,7 @@ let legacyCreate = null;
 let legacySplit = [];
 const legacyApp = makeMockApp({
     splitTransaction(rawTxHex) { legacySplit.push(rawTxHex); return {}; },
-    async createPaymentTransaction(args) { legacyCreate = args; return 'aa' + 'bb'.repeat(4); },
+    async createPaymentTransaction(args) { legacyCreate = args; return DEVICE_TX; },
 });
 const legacySigner = new LedgerSigner({
     id: 'ledger-legacy', displayName: 'L', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport(),

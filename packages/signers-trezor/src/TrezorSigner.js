@@ -41,6 +41,7 @@
 import {
     Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
 } from '../../core/src/signers/Signer.js';
+import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
 import { chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
 
 // Plain-language error for the hardware MuSig2 gap: this message is what the
@@ -255,6 +256,13 @@ export class TrezorSigner extends Signer {
                 this._id, 'error', 'signTransaction: Trezor returned no serializedTx',
             );
         }
+        // The device never saw the PSBT; it signed the transaction
+        // toTrezorSignTransaction REBUILT from `decomposed` (PAYTOADDRESS /
+        // PAYTOOPRETURN, OP_RETURN payloads re-parsed by hand), so the
+        // confirm-time output-set checks covered bytes that are not these ones.
+        // Compare the reply back to the PSBT before its txid escapes this
+        // method, because every caller downstream treats txHex as approved.
+        assertSignedTxMatchesPsbt({ txHex, decomposed, signerId: this._id });
         const txid = sdk.wallet.txidOf(txHex);
         return { signedPsbtHex: '', txHex, txid };
     }
