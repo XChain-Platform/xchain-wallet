@@ -48,19 +48,27 @@
  * Shared by the admin lock matrix (PC-02, editing an existing token)
  * and the create wizard's advanced panel (PC-06, setting flags at
  * issuance) so the two matrices cannot drift apart.
+ *
+ * `field` is the wire param and stays verbatim; `label` and `hint` are
+ * the opposite contract. Both render to a token owner (the hint as body
+ * copy under the checkbox, not a tooltip), directly beneath each other,
+ * so a hint that shouts the wire name stacks two vocabularies on one
+ * control ("Max supply" over "Freezes MAX_SUPPLY"). Keep the hint in the
+ * label's words; a unit guard pins it. The MINT and SLEEP mentions are
+ * protocol COMMAND names the user meets elsewhere, not field names.
  */
 export const LOCK_FLAGS = [
     {
         key: 'max_supply',
         field: 'LOCK_MAX_SUPPLY',
         label: 'Max supply',
-        hint: 'Freezes MAX_SUPPLY. The cap can never be raised again.',
+        hint: 'Freezes the maximum supply. The cap can never be raised again.',
     },
     {
         key: 'max_mint',
         field: 'LOCK_MAX_MINT',
         label: 'Max mint per transaction',
-        hint: 'Freezes MAX_MINT. The per-transaction mint cap can never change again.',
+        hint: 'Freezes the per-transaction mint cap. It can never change again.',
     },
     {
         key: 'mint',
@@ -72,13 +80,13 @@ export const LOCK_FLAGS = [
         key: 'mint_supply',
         field: 'LOCK_MINT_SUPPLY',
         label: 'Mint supply now',
-        hint: 'Permanently disables MINT_SUPPLY (mint-now via a token update). The owner can never mint additional supply that way again.',
+        hint: 'Permanently disables minting supply through a token update. The owner can never mint additional supply that way again.',
     },
     {
         key: 'description',
         field: 'LOCK_DESCRIPTION',
         label: 'Description',
-        hint: 'Freezes DESCRIPTION. The token metadata can never be edited again.',
+        hint: 'Freezes the token description. The token metadata can never be edited again.',
     },
     {
         key: 'sleep',

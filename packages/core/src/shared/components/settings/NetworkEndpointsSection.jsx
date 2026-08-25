@@ -151,12 +151,21 @@ function ChainRegistryRefreshRow() {
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
                         Chain registry refresh
                     </span>
+                    {/* "Descriptor" is the ChainDescriptor type name, and this
+                        panel is an ordinary Settings section, not a
+                        developer-gated one, so the count says "networks". It
+                        stays qualified as "in the registry" on purpose:
+                        descriptorCount is what the hub published registry-wide,
+                        while the chain list below is filtered through
+                        filterChainsForUser (regtest hidden unless developer
+                        mode), so a bare count would name a bigger number than
+                        the list under it. */}
                     <span style={ROW_HINT}>
                         {status?.ok
-                            ? `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${status.descriptorCount} descriptors`
+                            ? `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'} in the registry`
                             : status?.error
                                 ? `Last attempt failed: ${status.error}`
-                                : 'No refresh yet; bundled descriptors active.'}
+                                : 'No refresh yet; the networks bundled with this wallet are active.'}
                     </span>
                 </div>
                 <button

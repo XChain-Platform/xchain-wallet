@@ -128,6 +128,7 @@ import { PollDetail } from '@xchain-wallet/core/shared/routes/PollDetail.jsx';
 import { DelegateVoteForm } from '@xchain-wallet/core/shared/routes/DelegateVoteForm.jsx';
 import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDashboard.jsx';
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
+import { ActionDetail } from '@xchain-wallet/core/shared/routes/ActionDetail.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
 import { AttachContentForm } from '@xchain-wallet/core/shared/routes/AttachContentForm.jsx';
 import { GatedPublishForm } from '@xchain-wallet/core/shared/routes/GatedPublishForm.jsx';
@@ -194,7 +195,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -418,6 +419,13 @@ function AppInner() {
     const [historyInitialChainCoin, setHistoryInitialChainCoin] = useState('');
     const [historyReturnTo, setHistoryReturnTo] = useState(
         /** @type {string} */ ('home'),
+    );
+    // The entry ActionDetail renders. Set when a Home Activity or DeFi row
+    // is clicked; Back returns to Home, which is this shell's only way in.
+    // (History has its own inline expansion here and does not route out to
+    // ActionDetail, so there is no second origin to remember yet.)
+    const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(
+        /** @type {any | null} */ (null),
     );
     // Lock in "this window was detached" at mount; the resume-skip
     // gate stays on for the lifetime of the window even after we
@@ -1784,6 +1792,15 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'action-detail' && activeWalletId && selectedHistoryEntry) {
+                return (
+                    <ActionDetail
+                        entry={selectedHistoryEntry}
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
             // Held-token detail view, ported from the web shell so
             // Home balance rows and palette token commands land somewhere.
             if (unlockedView === 'token-detail' && activeWalletId && tokenDetailRef) {
@@ -1955,13 +1972,9 @@ function AppInner() {
                             onVoteGovernance: hasGovernanceAddress ? () => setUnlockedView('governance-polls') : undefined,
                             onBetting: () => setUnlockedView('bet-markets'),
                             onContacts: () => setUnlockedView('contacts'),
-                            // No onSignMessage / onVerifySignature / onSignPsbt
-                            // here: desktop reaches all three from Home (see
-                            // the <Home> props below), which is where its
-                            // Actions menu has always left them. Preserved
-                            // rather than quietly widened, because the shared
-                            // list declares an entry and each shell decides
-                            // whether to arm it: an unarmed entry is dropped.
+                            onSignMessage: () => setUnlockedView('sign-message'),
+                            onVerifySignature: () => setUnlockedView('verify-signature'),
+                            onSignPsbt: () => setUnlockedView('sign-psbt'),
                         }, { pairsTrezor: true })}
                         onBack={() => setUnlockedView('home')}
                     />
@@ -2146,8 +2159,6 @@ function AppInner() {
                     } : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
                     onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
-                    onMyTokens={activeWalletId ? () => setUnlockedView('my-tokens') : undefined}
-                    onMarketActivity={activeWalletId ? () => setUnlockedView('market-activity') : undefined}
                     onMarkets={activeWalletId ? () => setUnlockedView('markets') : undefined}
                     onMessaging={activeWalletId ? () => { setMessagingThread(null); setUnlockedView('messaging'); } : undefined}
                     onContracts={activeWalletId && hasVmAddress ? () => setUnlockedView('contracts-list') : undefined}
@@ -2162,6 +2173,10 @@ function AppInner() {
                         setTokenDetailRef(tok);
                         setUnlockedView('token-detail');
                     } : undefined}
+                    onSelectEntry={activeWalletId ? (entry) => {
+                        setSelectedHistoryEntry(entry);
+                        setUnlockedView('action-detail');
+                    } : undefined}
                     onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
@@ -2172,9 +2187,17 @@ function AppInner() {
                         setUnlockedView('coinpay');
                     } : undefined}
                     onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
-                    onCrossChain={activeWalletId ? () => setUnlockedView('cross-chain-templates') : undefined}
-                    onContacts={activeWalletId ? () => setUnlockedView('contacts') : undefined}
-                    onMultisig={activeWalletId && hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
+                    // No onMyTokens / onMarketActivity / onCrossChain /
+                    // onContacts / onMultisig here. Home takes an explicit
+                    // parameter list with no rest-spread and reads none of
+                    // those five, so they rendered nothing: four are
+                    // MenuRoute props (only the web shell mounts MenuRoute)
+                    // and the fifth misspells MenuRoute's `onTokens`. This
+                    // shell reaches those surfaces from its Actions menu
+                    // (cross-chain templates, contacts, multisig-create) and
+                    // its Cmd/Ctrl+K palette (`nav-my-tokens`). The one route
+                    // with no desktop caller either way is 'market-activity';
+                    // giving it one is a product decision, not a rename.
                     onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                     onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
                     onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}

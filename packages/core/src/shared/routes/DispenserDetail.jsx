@@ -686,7 +686,29 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             restricted: true,
             findings: covered < 0
                 ? [{
-                    code: 'insufficient_funds',
+                    // The registry code, hand-copied as a literal for the same
+                    // reason PreflightPanel's Tier-1 codes are literals: nothing
+                    // in packages/core may pull the SDK into the extension
+                    // bundle. `findings[].code` has ONE normative home
+                    // (FINDING_CODES in the SDK's preflight/constants.js)
+                    // because the code is the IDENTITY every code-keyed consumer
+                    // matches on - the override key (utils/preflightFindingKey.js),
+                    // the Approve gate (hooks/useConfirmAction.js), the panel's
+                    // ack test id - so a code invented at this call site is one
+                    // none of them can recognise. The wallet's other producer of
+                    // this report shape (packages/web/src/hostBridge.js) already
+                    // emits the registry literal.
+                    //
+                    // `overridable: false` diverges from the registry's `network`
+                    // classification of this code, deliberately. That
+                    // classification exists to give the user an escape hatch from
+                    // a censored or stale NETWORK answer; this report is local
+                    // arithmetic against a balance this wallet already read, so
+                    // there is no staleness to trade against and an override
+                    // would buy only a rejected action and a wasted fee. The same
+                    // reasoning is written out at length in
+                    // test/e2e/tests/dispensers/buy-funding.regtest.spec.js.
+                    code: 'BALANCE_INSUFFICIENT',
                     severity: 'error',
                     overridable: false,
                     message: `This buy pays ${formatWithThousands(totalPayAmount)} ${tickLabel},`

@@ -142,7 +142,9 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
         // serializedTx without checking the flag. A wrong-sighash signature is
         // worse than a refused one; this mirrors toLedgerCreatePayment so both
         // vendor seams take the same posture. No wallet flow sets the field on
-        // a hardware path today, so this refuses nothing being asked for.
+        // a hardware path today, so this side refuses nothing being asked for -
+        // which is also why it is only half the contract: the flag a PASTED
+        // PSBT declares per input is refused in the input loop below.
         if (sp.sighashType !== undefined && sp.sighashType !== null
             && sp.sighashType !== SIGHASH_ALL) {
             throw new Error(
@@ -165,6 +167,21 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
         if (!scriptType) {
             throw new Error(
                 `toTrezorSignTransaction: unsupported input scriptType "${inp.scriptType}" at index ${idx}`,
+            );
+        }
+        // The PSBT carries its OWN per-input sighash (sdk.wallet.decomposePsbt
+        // emits it; types.js DecomposedPsbtInput.sighashType), and the
+        // signingPaths refusal above never reads it. Connect's input type has no
+        // per-input sighash key either way, so a PSBT asking for SIGHASH_SINGLE /
+        // ANYONECANPAY would be signed under the device default and reported as
+        // success. auth.signPsbt.hw builds signingPaths as { inputIndex, path }
+        // only, so on a pasted PSBT this is the only side that can fire.
+        if (inp.sighashType !== undefined && inp.sighashType !== null
+            && inp.sighashType !== SIGHASH_ALL) {
+            throw new Error(
+                `toTrezorSignTransaction: PSBT input ${idx} requests sighashType ${inp.sighashType}; `
+                + `this signer supports only the default SIGHASH_ALL (${SIGHASH_ALL}). `
+                + 'Re-request the signature without a sighash override.',
             );
         }
         return {

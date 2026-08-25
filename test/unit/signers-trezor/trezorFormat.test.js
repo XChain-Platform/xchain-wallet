@@ -248,6 +248,41 @@ describe('toTrezorSignTransaction', () => {
             .toThrow(/cannot sign under sighashType 131/);
     });
 
+    // The PSBT declares its own per-input sighash and the signingPaths guard
+    // never reads it, so a pasted PSBT asking for SIGHASH_SINGLE /
+    // ANYONECANPAY was signed under the device default and reported as
+    // success. auth.signPsbt.hw builds signingPaths as { inputIndex, path }
+    // only, so on that lane this is the ONLY side that can fire.
+    it('refuses a non-default sighashType carried by the PSBT input itself', () => {
+        const d = makeDecomposed();
+        d.inputs[0].sighashType = 0x83;
+        expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
+            .toThrow(/PSBT input 0 requests sighashType 131/);
+    });
+
+    // Either side being non-default refuses: an explicit SIGHASH_ALL on the
+    // signing path must not license a non-default flag on the PSBT input.
+    it('an explicit SIGHASH_ALL signing path cannot suppress the PSBT input flag', () => {
+        const d = makeDecomposed();
+        d.inputs[0].sighashType = 3;
+        expect(() => toTrezorSignTransaction({
+            decomposed: d,
+            coin: 'btc',
+            signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 1 }],
+        })).toThrow(/PSBT input 0 requests sighashType 3/);
+    });
+
+    it('accepts a PSBT input carrying SIGHASH_ALL or no flag at all', () => {
+        const explicit = makeDecomposed();
+        explicit.inputs[0].sighashType = 1;
+        const nulled = makeDecomposed();
+        nulled.inputs[0].sighashType = null;
+        const base = toTrezorSignTransaction({ decomposed: makeDecomposed(), coin: 'btc', signingPaths });
+        expect(toTrezorSignTransaction({ decomposed: explicit, coin: 'btc', signingPaths })).toEqual(base);
+        expect(toTrezorSignTransaction({ decomposed: nulled, coin: 'btc', signingPaths })).toEqual(base);
+        expect(base.inputs[0]).not.toHaveProperty('sighash');
+    });
+
     it('accepts an explicit SIGHASH_ALL and an absent sighashType alike, emitting no sighash key', () => {
         const paths = [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 1 }];
         const payload = toTrezorSignTransaction({ decomposed: makeDecomposed(), coin: 'btc', signingPaths: paths });

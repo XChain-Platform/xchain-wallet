@@ -408,16 +408,39 @@ export function firmwareVersionFromFeatures(features) {
     return null;
 }
 
+// The address types this seam can derive. The doc comment below states the
+// hazard and the map still fell through on it: the bitcoin descriptor lists
+// p2tr as a first-class type (template m/86'), so a p2tr request returned an
+// 84' segwit-v0 address that the caller recorded as taproot - "an address the
+// device will happily sign but the wallet won't recognize later", exactly as
+// warned. SoftwareSigner.getAddresses validates the request against
+// descriptor.addressTypes; this refusal is the hardware equivalent. Do NOT add
+// an 86' branch: Connect would derive it, but this wallet cannot sign taproot,
+// so the failure would only move to spend time on funds already received.
+const TREZOR_DERIVABLE_ADDRESS_TYPES = new Set(['p2pkh', 'p2sh-p2wpkh', 'p2wpkh']);
+
 /**
  * BIP44 purpose field for an address type. Trezor expects the purpose
  * in the path to match the script format; picking the wrong one here
  * produces addresses the device will happily sign but the wallet
  * won't recognize later.
  *
+ * An OMITTED addressType keeps its existing per-coin default and is not an
+ * error; only an explicitly requested type this seam cannot derive is refused.
+ *
  * @param {string | undefined} addressType
  * @param {string} coin
  */
 function bip44PurposeFor(addressType, coin) {
+    if (addressType !== undefined && addressType !== null
+        && !TREZOR_DERIVABLE_ADDRESS_TYPES.has(addressType)) {
+        throw new Error(
+            `This hardware device can't derive ${String(addressType).toUpperCase()} addresses in `
+            + 'this wallet - use a software wallet for this address type. (The device would derive '
+            + 'at a different BIP44 purpose than the rest of the wallet, so the address would not '
+            + 'be recognized later.)',
+        );
+    }
     if (addressType === 'p2wpkh') return "84'";
     if (addressType === 'p2sh-p2wpkh') return "49'";
     if (addressType === 'p2pkh') return "44'";

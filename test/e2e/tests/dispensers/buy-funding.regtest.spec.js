@@ -452,7 +452,13 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // read, so there is no censorship risk to trade against - and an
             // acknowledged override here would only buy the user a rejected
             // action and a wasted network fee.
-            await expect(page.getByTestId('ack-insufficient_funds')).toHaveCount(0);
+            //
+            // The id follows the finding CODE, which the panel derives through
+            // preflightFindingKey. Absent-by-code is the weaker half of this
+            // pair (it would also pass on a typo'd id), so the line below it -
+            // no "Sign anyway" control anywhere in the panel - is the one that
+            // actually holds the gate.
+            await expect(page.getByTestId('ack-BALANCE_INSUFFICIENT')).toHaveCount(0);
             await expect(panel.getByText('Sign anyway')).toHaveCount(0);
 
             // `buyUnderfunded` blocking the buy, which is the fix itself.

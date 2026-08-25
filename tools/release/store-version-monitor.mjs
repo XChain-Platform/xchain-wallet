@@ -933,8 +933,25 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
 
     // stderr carries only what needs a human, so a fully clean run is
     // silent on stderr and the cron line below mails nothing.
-    const chromeAlerts = alerts.filter((r) => r.key !== 'play');
+    //
+    // ONE BUCKET PER LANE, BY NAME, and a residual for anything unknown.
+    // The Chrome bucket was `key !== 'play'` until 2026-08-24, so it was a
+    // catch-all, and the direct lane - added later - was silently adopted
+    // into it: a served APK that does not match its signed manifest mailed
+    // under "a live Chrome Web Store version has no matching row in the
+    // publish log", pointing at the CWS console and §14, while the lane's
+    // own remediation never printed. The deployed cron runs --no-chrome,
+    // so on that host every direct alert was misfiled by construction.
+    //
+    // The residual bucket is the other half of the fix, and it is not
+    // decoration: a bare whitelist would trade misfiling for DROPPING the
+    // next lane's alert off stderr entirely, which is the same mistake
+    // pointed the other way and is worse, because nothing would mail.
+    const chromeAlerts = alerts.filter((r) => r.key === 'main' || r.key === 'beta');
     const playAlerts = alerts.filter((r) => r.key === 'play');
+    const directAlerts = alerts.filter((r) => r.key === 'direct');
+    const KNOWN_LANE_KEYS = new Set(['main', 'beta', 'play', 'direct']);
+    const otherAlerts = alerts.filter((r) => !KNOWN_LANE_KEYS.has(r.key));
     if (chromeAlerts.length > 0) {
         err.push(`ROGUE-PUBLISH INCIDENT SIGNAL: a live Chrome Web Store version has no `
             + `matching row in ${logPath}.`);
@@ -952,6 +969,28 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
             + 'developer-account email before assuming anything. Android emergency levers '
             + '(the staged-rollout halt, and the direct APK lane that has none) are '
             + 'claude/reports/launch/INCIDENT-RUNBOOK.md §15.');
+    }
+    if (directAlerts.length > 0) {
+        err.push('DIRECT APK INCIDENT SIGNAL: the self-hosted download lane does not match its '
+            + 'signed release manifest.');
+        // feed-version=, not live-version=: this lane reads its version out
+        // of the update feed, and the feed is one of the things that can be
+        // the missing piece, so the column can legitimately be absent.
+        for (const r of directAlerts) {
+            err.push(`  item=${r.key} id=${r.itemId} feed-version=${r.version ?? '(unknown)'}: ${r.detail}`);
+        }
+        err.push('This is the lane that has actually shipped to the public, and the digest check '
+            + 'is the only one of these a silent re-upload would break. Re-verify the manifest '
+            + 'and the K1 signature by hand first (release/verify-release.md); the monitor does '
+            + 'not check the signature and cannot. This lane has NO staged-rollout halt and NO '
+            + 'rollback: the remedy is a signed advisory plus a fixed higher-versionCode build '
+            + 'plus the update-check feed notice - '
+            + 'see the platform launch INCIDENT-RUNBOOK, §15.');
+    }
+    if (otherAlerts.length > 0) {
+        err.push(`UNCLASSIFIED ALERT: ${otherAlerts.length} alert(s) from a lane this reporter `
+            + 'does not know, so no remediation could be printed for them:');
+        for (const r of otherAlerts) err.push(`  item=${r.key} id=${r.itemId}: ${r.detail}`);
     }
     if (inconclusive.length > 0) {
         err.push(`CANNOT VERIFY ${inconclusive.length} item(s) this run - NOT an all-clear, `

@@ -469,8 +469,36 @@ function messageToHex(message) {
     return out;
 }
 
+// The address types this seam can derive. The chain descriptors list p2tr as a
+// first-class bitcoin type (registry/descriptors/bitcoin.js, template m/86'),
+// and SoftwareSigner.getAddresses validates a request against them; the maps
+// below are a local re-implementation that never learned about it, so a p2tr
+// request fell through to the segwit-v0 default and returned a bc1q address on
+// an 84' path which the caller then recorded as p2tr. Refuse instead: the Add
+// Address dropdown builds itself straight from descriptor.addressTypes with no
+// hardware filter, so this IS user-reachable, and a mislabeled record also
+// collides in receiveAddress's per-type index space (a later p2wpkh request
+// re-issues that same m/84'/.../0 address under a second label). Do NOT "fix"
+// this by adding an 86' branch: createPaymentTransaction cannot sign taproot,
+// so that only moves the failure to spend time, on funds already received.
+const LEDGER_DERIVABLE_ADDRESS_TYPES = new Set(['p2pkh', 'p2sh-p2wpkh', 'p2wpkh']);
+
+// An OMITTED addressType keeps its existing per-chain default and is not an
+// error; only an explicitly requested type this seam cannot derive is refused.
+function assertDerivableAddressType(addressType) {
+    if (addressType === undefined || addressType === null) return;
+    if (LEDGER_DERIVABLE_ADDRESS_TYPES.has(addressType)) return;
+    throw new Error(
+        `This hardware device can't derive ${String(addressType).toUpperCase()} addresses in this `
+        + 'wallet - use a software wallet for this address type. (The device would derive at a '
+        + 'different BIP44 purpose than the rest of the wallet, so the address would not be '
+        + 'recognized later.)',
+    );
+}
+
 function ledgerFormatFor(addressType, chainId) {
     // Ledger's `format` option: 'legacy' | 'p2sh' | 'bech32' | 'bech32m' | 'cashaddr'.
+    assertDerivableAddressType(addressType);
     if (addressType === 'p2wpkh') return 'bech32';
     if (addressType === 'p2sh-p2wpkh') return 'p2sh';
     if (addressType === 'p2pkh') return 'legacy';
@@ -480,6 +508,7 @@ function ledgerFormatFor(addressType, chainId) {
 }
 
 function bip44PurposeFor(addressType, chainId) {
+    assertDerivableAddressType(addressType);
     if (addressType === 'p2wpkh') return "84'";
     if (addressType === 'p2sh-p2wpkh') return "49'";
     if (addressType === 'p2pkh') return "44'";

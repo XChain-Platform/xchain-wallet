@@ -491,12 +491,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
         return wrap(
             <>
                 <p className={styles.successTitle}>
-                    {roundLabel || (active.status === 'finalized' ? 'Finalized broadcast' : 'Export envelope')}
+                    {roundLabel || (active.status === 'finalized' ? 'Finalized broadcast' : 'Export signing data')}
                 </p>
                 <p className={styles.hint}>
                     Show this animated QR to a cosigner's wallet. Each frame is
                     part of the signing data; the cosigner's wallet reassembles
-                    the envelope on its side.
+                    it on its side.
                 </p>
                 {exportFrames && exportFrames.error ? (
                     // Encode failure is derived from the current session's
@@ -507,14 +507,14 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 ) : exportFrames && Array.isArray(exportFrames) ? (
                     <AnimatedQrFrames
                         frames={exportFrames}
-                        alt="Multisig transaction request envelope"
+                        alt="Multisig signing request QR"
                     />
                 ) : (
                     <p className={styles.hint}>
                         Nothing to export from this status. {active.status === 'cancelled'
                             ? 'Session is cancelled.'
                             : active.status === 'ready-to-finalize'
-                                ? 'Aggregate the round, then finalize, before exporting the broadcast envelope.'
+                                ? 'Aggregate the round, then finalize, before exporting the signed transaction.'
                                 : 'Aggregate the current round to advance.'}
                     </p>
                 )}
@@ -523,7 +523,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                         <summary className={styles.hint}>Plain-text chunks (paste into the cosigner's wallet)</summary>
                         <textarea
                             readOnly
-                            aria-label="Multisig envelope chunks"
+                            aria-label="Signing data to copy"
                             value={exportFrames.join('\n')}
                             rows={6}
                             style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
@@ -580,8 +580,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 <p className={styles.hint}>
                     Scan the cosigner's animated QR with your camera, or paste
                     each XCW chunk on its own line. The wallet reassembles the
-                    envelope, validates the fingerprint against this session,
-                    and applies the contribution.
+                    reply, checks that it belongs to this session, and applies
+                    it.
                 </p>
                 {scannerOpen ? (
                     <QrScanner onFrame={handleScannerFrame} alt="Cosigner reply QR scanner" />
@@ -611,7 +611,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                         {busy ? 'Processing…' : 'Submit chunks'}
                     </Button>
                     <Button variant="ghost" onClick={resetCollector} disabled={busy}>
-                        Reset collector
+                        Clear received reply
                     </Button>
                     <Button variant="ghost" onClick={() => { setScannerOpen(false); setView('tracker'); }}>
                         Back to tracker

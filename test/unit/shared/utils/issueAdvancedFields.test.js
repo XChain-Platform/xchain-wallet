@@ -49,6 +49,26 @@ describe('LOCK_FLAGS', () => {
         expect(Object.keys(EXPECTED_LOCKS).sort())
             .toEqual(LOCK_FLAGS.map((f) => f.key).sort());
     });
+
+    // The hint renders as body copy under the checkbox in both matrices
+    // (TokenAdminForm Locks mode, TokenWizard advanced panel), directly
+    // below the humanized `label`. A wire param shouted there gives the
+    // owner two names for one control. MINT and SLEEP are protocol
+    // COMMAND names the wallet uses with users elsewhere, so they stay.
+    const COMMAND_NAMES = new Set(['MINT', 'SLEEP']);
+
+    it('keeps ISSUE wire parameter names out of the visible hint copy', () => {
+        const leaks = [];
+        for (const f of LOCK_FLAGS) {
+            for (const token of f.hint.match(/\b[A-Z][A-Z_]{2,}\b/g) || []) {
+                if (!COMMAND_NAMES.has(token)) leaks.push(`${f.key} hint: ${token}`);
+            }
+        }
+        expect(leaks,
+            'a LOCK_FLAGS hint is body copy under its own humanized label; say it in the ' +
+            "label's words rather than echoing the wire param (which stays on `field`)."
+        ).toEqual([]);
+    });
 });
 
 describe('applyAdvancedIssueFields', () => {

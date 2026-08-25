@@ -157,6 +157,49 @@ export function normalizePsbtInput(raw) {
 }
 
 /**
+ * One copyable hex artifact on the signing-result screen, under its own
+ * label. Rendered per artifact rather than once, because the software and
+ * hardware lanes return DIFFERENT artifacts and a single block had to name
+ * one of them wrongly.
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {string} props.copyLabel
+ * @param {string} props.value
+ * @param {string} props.testId
+ */
+function ArtifactBlock({ label, copyLabel, value, testId }) {
+    return (
+        <div>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 4,
+            }}>
+                <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                    {label}
+                </span>
+                <CopyButton value={value} label={copyLabel} />
+            </div>
+            <pre
+                data-testid={testId}
+                style={{
+                    background: 'var(--xc-surface)',
+                    border: '1px solid var(--xc-border)',
+                    borderRadius: 'var(--xc-radius-md)',
+                    padding: 'var(--xc-space-2)',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                    fontSize: 'var(--xc-text-xs)',
+                    fontFamily: 'var(--xc-font-mono)',
+                }}
+            >{value}</pre>
+        </div>
+    );
+}
+
+/**
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
@@ -655,29 +698,31 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         <AddressText address={selectedAddress?.address || ''} />
                     </div>
                 </div>
-                <div>
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: 4,
-                    }}>
-                        <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                            Signed transaction (hex)
-                        </span>
-                        <CopyButton value={signedPsbtHex} label="Copy signed transaction" />
-                    </div>
-                    <pre style={{
-                        background: 'var(--xc-surface)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        padding: 'var(--xc-space-2)',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-all',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono)',
-                    }}>{signedPsbtHex}</pre>
-                </div>
+                {/* Two DIFFERENT artifacts, each rendered only when it exists.
+                    The software lane returns a signed PSBT and an empty txHex
+                    until it finalizes; the hardware lane returns the reverse,
+                    `signedPsbtHex: ''` plus a fully serialized transaction,
+                    because the device hands back a tx rather than a PSBT
+                    (LedgerSigner.signPsbt / TrezorSigner.signPsbt). Keying one
+                    block on signedPsbtHex alone rendered an empty <pre> and a
+                    copy button that copied nothing for every hardware signing,
+                    under a label naming the artifact that was not there. */}
+                {signedPsbtHex ? (
+                    <ArtifactBlock
+                        label="Signed PSBT (hex)"
+                        copyLabel="Copy signed PSBT"
+                        value={signedPsbtHex}
+                        testId="signed-psbt-hex"
+                    />
+                ) : null}
+                {signedTxHex ? (
+                    <ArtifactBlock
+                        label="Signed transaction (raw hex)"
+                        copyLabel="Copy signed transaction"
+                        value={signedTxHex}
+                        testId="signed-tx-hex"
+                    />
+                ) : null}
                 {broadcastState === 'broadcast' ? (
                     <div
                         role="status"
@@ -709,10 +754,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)' }}>
                         Broadcast failed: {broadcastError}
                     </div>
-                ) : (
+                ) : signedPsbtHex ? (
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                         Broadcast directly from this wallet, or hand the signed transaction
                         off to a different broadcaster (or the next cosigner).
+                    </p>
+                ) : (
+                    // A device hands back a FULLY signed transaction, not a
+                    // partial PSBT, so there is no cosigner left to pass it to.
+                    // Promising one told hardware users to do something the
+                    // result of this screen cannot support.
+                    <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                        This transaction is fully signed. Broadcast it directly from this
+                        wallet, or hand the raw hex to any other broadcaster.
                     </p>
                 )}
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>

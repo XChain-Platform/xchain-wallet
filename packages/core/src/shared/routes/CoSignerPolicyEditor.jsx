@@ -21,6 +21,8 @@
 
 import { Input, Button, Textarea } from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { BITCOIN_ACTIONS } from '../../registry/actions.js';
 
 /**
  * @typedef {Object} PolicyDraft
@@ -228,6 +230,33 @@ const fieldsetStyle = {
     background: 'var(--xc-bg-muted)',
 };
 
+// The stored policy keys are the protocol's own wire names, and they must stay
+// byte-identical to them (the co-sign gate is an exact-match membership test
+// over the action decoded from the PSBT). Every READ surface, including this
+// account's own detail screen, shows those keys through actionDisplayLabel, so
+// an owner reads "Send, Issue" there and is asked for "SEND, ISSUE" here with
+// nothing connecting the two vocabularies. Echo the typed list back in the
+// read surface's own words instead of asking the owner to hold both.
+const KNOWN_ACTIONS = new Set(BITCOIN_ACTIONS);
+
+/**
+ * Human-readable echo of the typed action list, one entry per parsed name.
+ * A name the protocol has no format for is marked rather than humanized
+ * silently: the Title Case fallback turns a typo ("SENDD") into a
+ * plausible-looking label ("Sendd"), which would present a policy line the
+ * co-signer will never match as if it were a real permission.
+ *
+ * @param {string} text
+ * @returns {Array<{ key: string, label: string, known: boolean }>}
+ */
+function previewActions(text) {
+    return parseActions(text).map((key) => ({
+        key,
+        label: actionDisplayLabel(key),
+        known: KNOWN_ACTIONS.has(key),
+    }));
+}
+
 const legendStyle = { fontWeight: 600, padding: '0 var(--xc-space-2)' };
 const helpStyle = { fontSize: '0.85em', color: 'var(--xc-text-muted)', margin: '0 0 var(--xc-space-2) 0' };
 const rowStyle = { display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-end', marginBottom: 'var(--xc-space-2)' };
@@ -251,15 +280,18 @@ export function CoSignerPolicyEditor({ value, onChange }) {
     const patchRow = (key, i, patch) => set({
         [key]: draft[key].map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
     });
+    const actionPreview = previewActions(draft.allowedActionsText);
 
     return (
         <div>
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed actions</legend>
                 <p style={helpStyle}>
-                    Which actions may the agent sign? Enter action names separated by
-                    commas, for example: SEND, ISSUE, MINT. The agent can never sign an
-                    action that is not listed here.
+                    Which actions may the agent sign? Enter the protocol name of each
+                    one, separated by commas: SEND for {actionDisplayLabel('SEND')},
+                    ISSUE for {actionDisplayLabel('ISSUE')}, MINT for{' '}
+                    {actionDisplayLabel('MINT')}. The agent can never sign an action
+                    that is not listed here.
                 </p>
                 <Textarea
                     label="Actions"
@@ -268,13 +300,25 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     placeholder="SEND, ISSUE"
                     rows={2}
                 />
+                {actionPreview.length > 0 ? (
+                    <p style={helpStyle} data-testid="allowed-actions-preview">
+                        This agent may sign:{' '}
+                        {actionPreview.map((a, i) => (
+                            <span key={a.key}>
+                                {i > 0 ? ', ' : null}
+                                {a.known ? a.label : `${a.key} (not a known action)`}
+                            </span>
+                        ))}
+                    </p>
+                ) : null}
             </fieldset>
 
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Per-action amount limits</legend>
                 <p style={helpStyle}>
                     Cap how much the agent may move in a single action, per token. Use
-                    * as the token to cover every token. Optional.
+                    the same protocol names as the allowed-action list above, and * as
+                    the token to cover every token. Optional.
                 </p>
                 {draft.maxPerAction.map((row, i) => (
                     <div key={i} style={rowStyle}>

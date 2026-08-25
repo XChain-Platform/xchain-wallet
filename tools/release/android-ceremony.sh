@@ -72,7 +72,17 @@ while [ $# -gt 0 ]; do
         --output|-o) OUTPUT_DIR="${2:-}"; shift 2 ;;
         --rehearsal) REHEARSAL=1; shift ;;
         --help|-h)
-            sed -n '17,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            # See sign.sh: bounded by content, not by line numbers. The
+            # range this used to slice ('17,50p') had already drifted. It
+            # started one line BELOW the title, so --help never said what
+            # the tool is, and it stopped ON the heading "THE TWO KEYS ARE
+            # NOT INTERCHANGEABLE:", dropping the paragraph that heading
+            # exists for - that K10 cannot be rotated, so a lost or leaked
+            # one costs every direct user their vault. The person who types
+            # --help here is the person standing at the ceremony holding
+            # both keys.
+            awk '/^#\*+$/{seen++; next} seen>=2 && /^set -euo pipefail/{exit} seen>=2{print}' \
+                "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *) echo "android-ceremony.sh: unknown argument '$1'" >&2; exit 2 ;;
     esac

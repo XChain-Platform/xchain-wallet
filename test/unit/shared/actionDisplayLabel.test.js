@@ -13,7 +13,11 @@
 // all-caps jargon.
 
 import { describe, it, expect } from 'vitest';
-import { actionDisplayLabel } from '../../../packages/core/src/shared/utils/actionDisplayLabel.js';
+import {
+    actionDisplayLabel,
+    hasActionDisplayLabel,
+} from '../../../packages/core/src/shared/utils/actionDisplayLabel.js';
+import MANIFEST from '../../fixtures/action-manifest.json';
 
 describe('shared/actionDisplayLabel', () => {
     it('maps known protocol verbs to their display label', () => {
@@ -60,6 +64,34 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('BET')).toBe('Bet');
         // A History row must not read "Coinpay expire" beside "Coin payment".
         expect(actionDisplayLabel('COINPAY_EXPIRE')).not.toBe('Coinpay expire');
+    });
+
+    it('maps the cancel/edit lifecycle verbs, not the recased opcode', () => {
+        expect(actionDisplayLabel('DISPENSER_CANCEL')).toBe('Dispenser cancelled');
+        expect(actionDisplayLabel('DISPENSER_EDIT')).toBe('Dispenser updated');
+        expect(actionDisplayLabel('ORDER_CANCEL')).toBe('Order cancelled');
+        expect(actionDisplayLabel('ORDER_EDIT')).toBe('Order updated');
+        expect(actionDisplayLabel('SWAP_CANCEL')).toBe('Swap cancelled');
+        expect(actionDisplayLabel('SWAP_EDIT')).toBe('Swap updated');
+        // A History row must not read "Order cancel" beside "Order matched".
+        expect(actionDisplayLabel('ORDER_CANCEL')).not.toBe('Order cancel');
+        expect(actionDisplayLabel('SWAP_EDIT')).not.toBe('Swap edit');
+    });
+
+    // Completeness, not label-by-label: every manifest action the explorer
+    // renders reaches a curated label. One-directional on purpose - the map
+    // also carries UI-only keys (RECEIVE, CROSSCHAIN) that are not manifest
+    // actions, and MANIFEST.aliases is legacy naming canonicalized upstream.
+    it('every explorerRender manifest action has a curated label @regression', () => {
+        const missing = Object.entries(MANIFEST.actions)
+            .filter(([name, meta]) => meta.explorerRender && !hasActionDisplayLabel(name))
+            .map(([name]) => name)
+            .sort();
+        expect(missing,
+            'action-manifest.json marks these explorerRender but they have no entry in ' +
+            'packages/core/src/shared/utils/actionDisplayLabel.js, so History renders a ' +
+            'recased opcode. Add a label there (or re-vendor the manifest).'
+        ).toEqual([]);
     });
 
     it('maps both LINK and CROSSCHAIN to the same cross-chain label', () => {

@@ -251,12 +251,51 @@ if xr_has_header "$MANIFEST"; then
         exit 1
     fi
 
-    # Anchor the manifest to a release. Filename first (the published
-    # name IS the anchor), then --tag.
+    # Anchor the manifest to a release. There are TWO independent sources
+    # for that anchor - the published filename (RELEASE_HASHES/<tag>.txt)
+    # and the caller's --tag - and where both exist they are COMPARED, not
+    # preferred.
+    #
+    # This was an if/elif until 2026-08-24, so whenever the filename parsed
+    # the caller's --tag was discarded without ever being read. That makes
+    # the one event two anchors exist to detect - the two disagreeing -
+    # unreportable, and it emptied the check on the one live-site effector:
+    # deploy-web.sh passes BOTH (its documented recipe names a versioned
+    # manifest), so its header's promise that "another release's manifest
+    # cannot satisfy it" reduced to "the manifest agrees with its own
+    # filename". A stale but genuinely signed pair - last release's tarball
+    # beside last release's manifest and .asc - passed hash, signature and
+    # anchor, and was unpacked into releases/<new tag> and flipped live.
     BASE="$(basename "$MANIFEST")"
-    EXPECT_TAG=""
+    FILE_TAG=""
     if [[ "$BASE" =~ ^(v[0-9][^/]*)\.txt$ ]]; then
-        EXPECT_TAG="${BASH_REMATCH[1]}"
+        FILE_TAG="${BASH_REMATCH[1]}"
+    fi
+    EXPECT_TAG=""
+    if [[ -n "$FILE_TAG" && -n "$TAG" ]]; then
+        # Same release named two ways: anchor to the MORE SPECIFIC one, so
+        # the one-way rule below keeps its direction. Asking for
+        # `v0.336.0-resign1` must not be answered by the superseded
+        # original, while asking for `v0.336.0` is answered by its
+        # re-signature. Two DIFFERENT re-signatures of one release match
+        # neither branch and fall through to the refusal, because neither
+        # of them is the other's release.
+        if [[ "$FILE_TAG" == "$TAG" ]]; then
+            EXPECT_TAG="$FILE_TAG"
+        elif [[ "$(xr_release_tag_of "$FILE_TAG")" == "$TAG" ]]; then
+            EXPECT_TAG="$FILE_TAG"
+        elif [[ "$(xr_release_tag_of "$TAG")" == "$FILE_TAG" ]]; then
+            EXPECT_TAG="$TAG"
+        else
+            echo "verify.sh: the two anchors disagree - this manifest is published" >&2
+            echo "  as '$BASE' (release $FILE_TAG) but you asked for '$TAG'." >&2
+            echo "  A manifest from another release will hash-check and" >&2
+            echo "  signature-check perfectly, because it agrees with itself." >&2
+            echo "  That disagreement is what passing both anchors is for." >&2
+            exit 1
+        fi
+    elif [[ -n "$FILE_TAG" ]]; then
+        EXPECT_TAG="$FILE_TAG"
     elif [[ -n "$TAG" ]]; then
         EXPECT_TAG="$TAG"
     fi

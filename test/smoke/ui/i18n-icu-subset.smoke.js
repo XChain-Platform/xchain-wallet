@@ -8,10 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §54 / G173 ICU subset + locales directory layout. The
-// smoke runs the format helper at runtime (unlike most other smokes
-// which are static-text only) because the ICU interpreter is the
-// load-bearing piece and small parser bugs would slip past a regex.
+// Smoke for §54 / G173: the i18n/locales directory layout, plus the
+// plural / select / mixed templates the `en` dictionary uses today,
+// rendered through formatjs. The smoke runs the format helper at
+// runtime (unlike most other smokes, which are static-text only)
+// because rendering is the load-bearing piece and a regression there
+// would slip past a regex.
+//
+// The interpreter is NOT a hand-rolled ICU subset any more. `format()`
+// renders through `IntlMessageFormat` (see the corrected header at
+// packages/core/src/i18n/locales/en/index.js:21-28), and the old subset
+// survives only as `legacyFormat()`, reached on exactly two routes: a
+// coercing arg (plural / number / date) the caller omitted, and a
+// template formatjs refuses to parse. Item 9 below pins the first of
+// those; nothing above it touches the legacy path at all.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -90,12 +100,26 @@ assert.strictEqual(format('Hi {missing}', {}), 'Hi {missing}');
 assert.strictEqual(t('home.addressCount', { count: 1 }), '1 address');
 assert.strictEqual(t('home.addressCount', { count: 7 }), '7 addresses');
 
-// 8. The legacy (non-ICU) substitution path still works on existing
-//    keys that use `{name}` placeholders; guards against regressions
-//    in keys we haven't migrated yet.
+// 8. A dictionary key carrying a simple `{name}` placeholder renders
+//    correctly. This runs through formatjs like every other key: the
+//    single arg is supplied, so neither legacy route is taken. It was
+//    once labelled a legacy-path regression guard, which made a green
+//    run read as proof the fallback was healthy while the fallback was
+//    untouched on this input.
 assert.strictEqual(
     t('home.balanceUnavailable', { reason: 'offline' }),
     'Balance unavailable: offline',
 );
 
-console.log('OK: ICU subset (plural / select / mixed) + locales layout smoke');
+// 9. The legacy fallback itself, on the route a real dictionary key can
+//    take: `home.addressCount` is an ICU plural, and a plural arg the
+//    caller omits cannot be pre-filled with its own token (the token
+//    string would coerce to NaN), so format() hands the whole template
+//    to legacyFormat, which emits bare tokens for every arg. Supplying
+//    `count` instead renders through formatjs, as item 7 shows.
+assert.strictEqual(
+    t('home.addressCount', {}),
+    '{count} addresses',
+);
+
+console.log('OK: i18n locales layout + formatjs rendering (plural / select / mixed) + legacy-fallback route smoke');

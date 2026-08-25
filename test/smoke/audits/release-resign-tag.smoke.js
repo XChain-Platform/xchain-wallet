@@ -356,8 +356,8 @@ const execFileSyncPair = (script, args) => {
     // verify.sh says everything on stderr, pass or fail, so both streams are
     // read: the anchor VERDICT is what these cases are about, and it is a
     // sentence rather than an exit code.
-    const runVerify = (file) => execFileSyncPair(VERIFY,
-        ['--input', dir, '--manifest', file, '--no-sig']);
+    const runVerify = (file, extra = []) => execFileSyncPair(VERIFY,
+        ['--input', dir, '--manifest', file, '--no-sig', ...extra]);
 
     const published = join(dir, 'v0.336.0.txt');
     writeFileSync(published, manifest('v0.336.0-resign1'));
@@ -381,6 +381,48 @@ const execFileSyncPair = (script, args) => {
     assert.equal(rev.status, 1,
         'the relation is ONE WAY: asking for the corrected manifest by name and being '
         + `handed the superseded original must NOT verify:\n${rev.out}`);
+
+    // --- 7b. Both anchors are COMPARED, not preferred --------------------
+    //
+    // A manifest fetched under its published name AND a --tag are two
+    // independently-sourced answers to "which release is this for". Until
+    // 2026-08-24 verify.sh took the filename INSTEAD of --tag, so the two
+    // could never disagree detectably - and deploy-web.sh, the one live-site
+    // effector, passes both and documents a versioned --manifest, so its
+    // anchor reduced to "the manifest agrees with its own filename" and a
+    // stale but genuinely signed release pair could be flipped live under a
+    // newer version's name.
+    const mismatch = runVerify(published, ['--tag', 'v0.335.0']);
+    assert.equal(mismatch.status, 1,
+        'a manifest published as v0.336.0.txt must NOT satisfy --tag v0.335.0: that is the '
+        + `one event two anchors exist to detect:\n${mismatch.out}`);
+    assert.match(mismatch.out, /v0\.336\.0/,
+        'and the refusal names the filename anchor, so the reader can see which two things '
+        + `disagreed:\n${mismatch.out}`);
+    assert.match(mismatch.out, /v0\.335\.0/,
+        `and names the --tag anchor as well:\n${mismatch.out}`);
+
+    const agree = runVerify(published, ['--tag', 'v0.336.0']);
+    assert.equal(agree.status, 0,
+        'two anchors that agree still verify - the comparison must not cost the ordinary '
+        + `deploy-web.sh invocation its pass:\n${agree.out}`);
+    assert.match(agree.out, /RE-SIGNATURE of v0\.336\.0/,
+        'and the re-signature allowance survives the comparison: the published v0.336.0.txt '
+        + `carries a v0.336.0-resign1 header and still anchors:\n${agree.out}`);
+
+    const asksForCorrection = runVerify(published, ['--tag', 'v0.336.0-resign1']);
+    assert.equal(asksForCorrection.status, 0,
+        'asking for the correction by name and being handed the correction verifies:\n'
+        + `${asksForCorrection.out}`);
+
+    // Last, because it rewrites `published` in place: the SUPERSEDED original,
+    // still sitting under the release's own name, must not answer a request
+    // for the correction just because a --tag now reaches the comparison.
+    writeFileSync(published, manifest('v0.336.0'));
+    const stale = runVerify(published, ['--tag', 'v0.336.0-resign1']);
+    assert.equal(stale.status, 1,
+        'ONE WAY through the --tag anchor too: asking for v0.336.0-resign1 and being handed '
+        + `the superseded v0.336.0 manifest must NOT verify:\n${stale.out}`);
 }
 
 // --- 8. A check the release predates runs, instead of crashing -----------
@@ -436,5 +478,6 @@ rmSync(work, { recursive: true, force: true });
 console.log('OK  release re-sign tag: prepare-resign-tag.sh cuts and PROVES a tag whose own '
     + 'dev-mock gate reads the staged artifacts (8 groups: caller errors, behavioural refusal, '
     + 'nothing-to-prepare, the tag and its one-file diff under a tag.gpgsign=true config, '
-    + 'unusable names, the -resign rule in bash and JS, verify.sh anchoring one way only, '
+    + 'unusable names, the -resign rule in bash and JS, verify.sh anchoring one way only and '
+    + 'refusing when its filename and --tag anchors disagree, '
     + 'and sign.sh running a check the release predates)');

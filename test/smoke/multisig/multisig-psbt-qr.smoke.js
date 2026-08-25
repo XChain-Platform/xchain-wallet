@@ -260,6 +260,24 @@ for (const status of MULTISIG_SESSION_STATUSES) {
         `STATUS_LABELS covers the "${status}" session status (#3881)`);
 }
 
+// The same pass, one layer out: `collector` and `envelope` are the names of
+// CODE objects (createXcwCollector, encodeMultisigEnvelope), and the screen
+// teaches the user neither. "chunk" and "frame" are exempt on purpose - the
+// copy defines them in place ("paste each XCW chunk on its own line") and the
+// pasted lines literally begin with XCW:, so they name what the user is
+// holding rather than an object only the source knows about.
+const INTERNAL_OBJECT_NAMES = /\b(collector|envelope)s?\b/i;
+
+for (const [, accessibleName] of route.matchAll(/(?:aria-label|alt)="([^"]*)"/g)) {
+    assert.ok(!INTERNAL_OBJECT_NAMES.test(accessibleName),
+        `accessible name "${accessibleName}" names an internal object; screen-reader ` +
+        'users get the same copy pass as everyone else');
+}
+for (const label of ['Reset collector', 'Export envelope', 'broadcast envelope']) {
+    assert.ok(!route.includes(label),
+        `sign-screen copy no longer reads "${label}" (internal object name)`);
+}
+
 // ─── AnimatedQrFrames is exported from core/ui ──────────────────
 
 const uiBarrel = readFileSync(join(core, 'src', 'ui', 'index.js'), 'utf8');

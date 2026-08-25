@@ -29,7 +29,8 @@
 // always sign from the obligation's `payer_address` because that's
 // the address the user has keys for.
 
-import { obligationBaseUnits } from '../market/obligationStatus.js';
+import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationStatus.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 import { submitAction } from './submitAction.js';
 import { buildActionPsbt } from './buildActionPsbt.js';
 import { assertValidDestination, normalizeSource } from './sendToken.js';
@@ -58,6 +59,27 @@ import { verifyCoinpayObligation } from './coinpayQueries.js';
  * @property {boolean} [trackPendingTx]
  * @property {string} [actionSummary]  Override for the PendingTx History label (PC-16 auto-pay)
  */
+
+/**
+ * Native ticker for the pending-tx summary, e.g. 'BTC'. Resolved through
+ * tickerForCoin so the copy reads 'BTC', not the descriptor's 'bitcoin'.
+ * The summary is display copy on a path that must not throw for it, so an
+ * absent/failing registry degrades to the chain id's own family segment
+ * ('bitcoin-mainnet' -> 'BTC') and finally to a neutral 'COIN'.
+ *
+ * @param {import('../registry/index.js').ChainRegistry} [chainRegistry]
+ * @param {string} [chainId]
+ * @returns {string}
+ */
+function summaryCoinTicker(chainRegistry, chainId) {
+    const family = String(chainId || '').split('-')[0];
+    try {
+        const coin = chainRegistry?.get?.(chainId)?.coin ?? family;
+        return tickerForCoin(coin) || 'COIN';
+    } catch {
+        return tickerForCoin(family) || 'COIN';
+    }
+}
 
 /**
  * Validate a base-unit native amount as an integer that survives JS number
@@ -213,12 +235,27 @@ export async function coinpayAction(opts) {
 
     // PC-16: the auto-pay engine labels its payments distinctly so the
     // History annotation reads "Auto-paid match for order #N" instead of
-    // the manual-pay wording; the summary is display-only metadata.
+    // the manual-pay wording.
+    //
+    // The default is the §21.1 plain-English summary submitAction.js:65
+    // documents, and QueuedBroadcastBanner renders it verbatim, so it carries
+    // no wire vocabulary: a coin-scale amount with its ticker, not raw base
+    // units, and no opcode. It is NOT display-only, though: when a PendingTx
+    // row has no params snapshot, pendingTxReferencesMatch() in
+    // notifications/CoinpayAutopayWatcher.js is the double-pay guard and falls
+    // back to matching `match #<index>` in this text. Keep that token in
+    // exactly that shape (no colon, no word between "match" and "#") or a
+    // restarted watcher can pay the same match twice.
+    const coinText = baseUnitsToCoinText(coinAmount);
+    const coinTicker = summaryCoinTicker(opts.chainRegistry, opts.chainId);
+    const amountLabel = coinText
+        ? `${coinText} ${coinTicker}`
+        : `${coinAmount} ${coinTicker} base units`;
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: payeeAddress,
         actionSummary: opts.actionSummary ||
-            `Pay COINPAY: ${coinAmount} (base units) for ORDER_MATCH #${actionIndex}`,
+            `Pay ${amountLabel} for match #${actionIndex}`,
     };
 
     return submitAction({

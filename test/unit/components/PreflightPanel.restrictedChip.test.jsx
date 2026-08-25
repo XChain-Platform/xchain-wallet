@@ -46,7 +46,7 @@ describe('PreflightPanel restricted chip', () => {
         mount(reportWith('fail', {
             restricted: true,
             findings: [{
-                code: 'insufficient_funds',
+                code: 'BALANCE_INSUFFICIENT',
                 severity: 'error',
                 overridable: false,
                 message: 'This buy pays more than this address holds.',

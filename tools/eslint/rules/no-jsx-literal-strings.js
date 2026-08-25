@@ -26,9 +26,10 @@
 //     aria-description, aria-roledescription, aria-valuetext, alt,
 //     title, placeholder, label, hint, caption, tooltip, heading,
 //     emptyText, actionLabel, backLabel, text, body, ariaLabel,
-//     iconLabel, aria
+//     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
+//     menuHeader, emptyTitle
 //     (the USER_FACING_ATTRS set below is the authority; keep this list
-//     in step with it). The last nine are component props rather than
+//     in step with it). The last fifteen are component props rather than
 //     DOM attributes: shipping components render copy through them, so
 //     a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -112,6 +113,22 @@ const USER_FACING_ATTRS = new Set([
     'ariaLabel',
     'iconLabel',
     'aria',
+    // ConfirmActionModal renders `headline` verbatim as the header line
+    // and inside its aria-label; HistoryRow renders `statusLabel` into
+    // the status bubble; CheckboxPicker renders `allLabel` as its
+    // trigger text, `menuHeader` as the menu heading and interpolates
+    // `summaryNoun` into the summary line; BalanceList and
+    // CollectiblesView forward `emptyTitle` to EmptyState's title. Each
+    // was checked across packages/*/src for a technical use (a lookup
+    // key, an id, an enum) and has none: the only same-named identifiers
+    // are CSS-module class names (`styles.headline`, `L.emptyTitle`),
+    // which are not JSX attribute names and never reach these gates.
+    'headline',
+    'statusLabel',
+    'allLabel',
+    'summaryNoun',
+    'menuHeader',
+    'emptyTitle',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

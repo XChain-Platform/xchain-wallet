@@ -753,6 +753,47 @@ for (const tool of releaseScripts) {
         + 'the previous cut of this gate, as a help screen having been shown.');
 }
 
+// 13b. A help screen may not be extracted by absolute line number.
+//
+// The three properties above are all satisfied by a help screen that is
+// SILENTLY TRUNCATED, which is the shape this class actually fails in:
+// android-ceremony.sh printed its usage with `sed -n '17,50p'`, and the
+// header grew underneath it until the slice started one line below the
+// title and stopped ON the heading "THE TWO KEYS ARE NOT INTERCHANGEABLE:",
+// dropping the paragraph saying K10 cannot be rotated and that losing it
+// costs every direct-download user their vault. Exit 0, a Usage: line, the
+// tool's own name and forty lines of output - all four held the whole time.
+// The house form is content-bounded (sign.sh: "bounded by content, not by
+// line numbers - those drifted and printed the licence"), and this is the
+// only thing that keeps the next author from reaching for the slice again.
+{
+    const SLICE = /sed\s+-n\s+'\d+,\d+p'/;
+    const sliced = releaseScripts.filter(
+        (t) => SLICE.test(readFileSync(join(walletRoot, t), 'utf8')),
+    );
+    assert.deepEqual(sliced, [],
+        `${sliced.join(', ')} extract help text by absolute line number. That slice cannot know when `
+        + 'the comment block above it grows, so it silently truncates - and every property this '
+        + 'section already checks stays green while it does. Use the content-bounded form the rest of '
+        + "tools/release/ uses: awk '/^#\\*+$/{seen++; next} seen>=2 && /^set -euo pipefail/{exit} "
+        + "seen>=2{print}' \"$0\".");
+
+    // And the specific sentence that went missing, because a general rule
+    // about extraction says nothing about whether the text survived.
+    const ceremonyHelp = execFileSync('bash',
+        [join(walletRoot, 'tools/release/android-ceremony.sh'), '--help'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.match(ceremonyHelp, /THE TWO KEYS ARE NOT INTERCHANGEABLE:/,
+        'android-ceremony.sh --help no longer carries the two-key heading.');
+    assert.match(ceremonyHelp, /reinstall across a trust break/,
+        'android-ceremony.sh --help prints the "the two keys are not interchangeable" heading and '
+        + 'then stops before the K10 paragraph it introduces. The operator asking how to invoke the '
+        + 'signing ceremony is the operator holding both keys, and the unrotatable one is the whole '
+        + 'reason that heading is there.');
+    assert.match(ceremonyHelp, /android-ceremony\.sh - build AND sign/,
+        'android-ceremony.sh --help does not begin with the line that says what the tool is.');
+}
+
 // 9. Every stage the frontier names has a row in the stage table.
 //
 // Bookkeeping, gated because by hand it failed three times in four stages: the

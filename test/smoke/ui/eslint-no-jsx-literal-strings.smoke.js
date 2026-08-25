@@ -54,8 +54,9 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last nine are component props: copy shipped through them escaped
-// the translator index while the set held DOM attribute names only.
+// The last fifteen are component props: copy shipped through them
+// escaped the translator index while the set held DOM attribute names
+// only.
 // Every documented name is listed here, and the size assertion below
 // closes the other direction: this loop once pinned 11 of 13 members, so
 // dropping aria-description or aria-roledescription from the rule left
@@ -65,6 +66,8 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'alt', 'title', 'placeholder', 'label', 'hint', 'caption', 'tooltip',
     'heading', 'emptyText', 'actionLabel', 'backLabel',
     'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
+    'headline', 'statusLabel', 'allLabel', 'summaryNoun',
+    'menuHeader', 'emptyTitle',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);

@@ -14,10 +14,12 @@
 // and back, since that is where policy-shape bugs would hide.
 
 import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import {
     emptyPolicyDraft,
     buildPolicyDraft,
     draftFromAccount,
+    CoSignerPolicyEditor,
 } from '../../../packages/core/src/shared/routes/CoSignerPolicyEditor.jsx';
 import { createCoSignerAccount } from '../../../packages/core/src/schemas/coSignerAccount.js';
 
@@ -97,5 +99,47 @@ describe('CoSignerPolicyEditor helpers', () => {
         expect(rebuilt.policy.confirmAbove).toEqual(account.policy.confirmAbove);
         expect(rebuilt.policy.allowedDestinations).toEqual(account.policy.allowedDestinations);
         expect(rebuilt.allowedOutputs).toEqual(account.allowedOutputs);
+    });
+});
+
+// The stored keys are protocol wire names and stay that way, but the owner
+// must be able to connect what they type here to what CoSignerAccountDetail
+// shows them ("Send, Issue"). These pin the echo, not the storage.
+describe('CoSignerPolicyEditor allowed-actions vocabulary', () => {
+    const draftWith = (allowedActionsText) => ({ ...emptyPolicyDraft(), allowedActionsText });
+
+    it('echoes the typed actions in the words the account detail screen uses', () => {
+        render(<CoSignerPolicyEditor value={draftWith('SEND, ISSUE')} onChange={() => {}} />);
+        const preview = screen.getByTestId('allowed-actions-preview');
+        expect(preview.textContent).toContain('Send, Issue');
+        expect(preview.textContent).not.toContain('not a known action');
+    });
+
+    it('names a protocol action the user would otherwise have to know by opcode', () => {
+        render(<CoSignerPolicyEditor value={draftWith('COINPAY')} onChange={() => {}} />);
+        expect(screen.getByTestId('allowed-actions-preview').textContent).toContain('Coin payment');
+    });
+
+    it('marks an unrecognized name instead of humanizing it into a plausible label', () => {
+        render(<CoSignerPolicyEditor value={draftWith('SEND, SENDD')} onChange={() => {}} />);
+        const preview = screen.getByTestId('allowed-actions-preview');
+        expect(preview.textContent).toContain('SENDD (not a known action)');
+        expect(preview.textContent).not.toContain('Sendd,');
+    });
+
+    it('renders no echo at all until something is typed', () => {
+        render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={() => {}} />);
+        expect(screen.queryByTestId('allowed-actions-preview')).toBeNull();
+    });
+
+    it('teaches the mapping in the help copy rather than naming opcodes alone', () => {
+        const { container } = render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={() => {}} />);
+        expect(container.textContent).toContain('SEND for Send');
+        expect(container.textContent).toContain('ISSUE for Issue');
+    });
+
+    it('still stores the raw protocol key, never the display label', () => {
+        const out = buildPolicyDraft(draftWith('SEND, COINPAY'));
+        expect(out.policy.allowedActions).toEqual(['SEND', 'COINPAY']);
     });
 });
