@@ -27,6 +27,7 @@ import { gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { formatAmount } from '../components/BalanceList.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -1070,7 +1071,9 @@ function CategoryPreview({ preview, categoryKey }) {
 function describePreviewRow(categoryKey, r) {
     switch (categoryKey) {
         case 'balances':
-            return `${r.quantity} ${r.tick}`;
+            // quantity is atomic units at r.divisibility scale (issue #4);
+            // formatAmount divides it back to human scale for display.
+            return `${formatAmount(r.quantity, r.divisibility)} ${r.tick}`;
         case 'ownerships':
             return `${r.tick} (ownership)`;
         case 'orders':

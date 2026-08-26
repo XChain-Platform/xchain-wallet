@@ -62,22 +62,49 @@ function nativeFromAddress(addrResp, nativeTicker) {
 // `/balances/` returns { data: [...token rows], total }. Map the rows to the
 // { tick, quantity, divisibility, displayName, imageUrl } shape the UI expects,
 // tolerant of column-name variants. A native-only address yields [].
-// D-14: the explorer row carries the token's scale as `decimals` (its `amount`
-// is already at that scale, i.e. whole units when decimals=0), NOT `divisibility`.
-// Read both names and default to 0 (no scaling) when absent, matching the sibling
-// flows (listOwnedTokens/tokenInfo). The old hardcoded default of 8 scaled every
-// token balance down by 1e8 (99 XCHAIN shown as 0.00000099).
+// D-14 / issue #4: the explorer row carries the token's scale as `decimals`
+// and its `amount` at HUMAN scale (the indexer stores AMOUNT literally, so
+// "3000" means 3000 whole tokens whatever the decimals). The wallet-side
+// contract is the opposite: every `quantity` is raw atomic units at
+// `divisibility` scale (see walletBalanceShape.js), and every reader divides
+// back down. So an explorer `amount` must be scaled UP to atomic units here,
+// exactly as nativeFromAddress does for the coin balance; passing it through
+// unscaled made every decimals>0 token read 10^decimals too small (3000
+// XCHAIN shown as 0.00003000). Rows that already carry `quantity` (demo
+// fixtures, dev mocks) are atomic already and pass through untouched.
 export function tokensFromBalances(balResp) {
     const rows = balResp && Array.isArray(balResp.data) ? balResp.data : [];
     return rows
-        .map((r) => ({
-            tick: r.tick,
-            quantity: String(r.quantity != null ? r.quantity : (r.amount != null ? r.amount : '0')),
-            divisibility: Number(r.divisibility ?? r.decimals ?? 0),
-            displayName: r.displayName || r.display_name || r.tick,
-            imageUrl: r.imageUrl || r.image || null,
-        }))
+        .map((r) => {
+            const divisibility = Number(r.divisibility ?? r.decimals ?? 0);
+            let quantity;
+            if (r.quantity != null) {
+                quantity = String(r.quantity);
+            } else {
+                const human = r.amount != null ? r.amount : '0';
+                quantity = atomicFromHumanAmount(human, divisibility) ?? String(human);
+            }
+            return {
+                tick: r.tick,
+                quantity,
+                divisibility,
+                displayName: r.displayName || r.display_name || r.tick,
+                imageUrl: r.imageUrl || r.image || null,
+            };
+        })
         .filter((t) => t.tick);
+}
+
+// Human-scale decimal string -> atomic-unit integer string, BigInt-exact
+// (same conversion nativeFromAddress applies at fixed 8-decimal scale).
+// Fractional digits beyond `decimals` are truncated; anything that isn't a
+// plain non-negative decimal returns null so the caller can fall back.
+function atomicFromHumanAmount(amount, decimals) {
+    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(amount).trim());
+    if (!m) return null;
+    const d = Number.isFinite(decimals) && decimals > 0 ? Math.floor(decimals) : 0;
+    const frac = (m[2] || '').slice(0, d).padEnd(d, '0');
+    return (BigInt(m[1]) * 10n ** BigInt(d) + BigInt(frac || '0')).toString();
 }
 
 // D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger
