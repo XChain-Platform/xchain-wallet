@@ -43,9 +43,11 @@ import { createWallet, expect, gotoSection, mainButton, openSettings, test } fro
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_DESTINATION,
+    REGTEST_TICKER,
     encoderRpc,
     fundAddress,
     readReceiveAddress,
+    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
@@ -153,6 +155,13 @@ async function walletAddresses(page) {
 /** Drives one send to REGTEST_DESTINATION and returns its txid. */
 async function sendAndBroadcast(page) {
     await gotoSection(page, 'Send');
+    // Send picks its chain through the TOKEN picker, not a Network field, and
+    // it re-defaults to Bitcoin every time this screen is opened - so this
+    // belongs here, inside the per-send helper, rather than once during setup.
+    // Without it the funding above goes to this run's chain while the form
+    // composes on Bitcoin, and the send fails for want of funds rather than
+    // for anything about change rotation.
+    await selectVenueSendAsset(page);
     await toField(page).fill(REGTEST_DESTINATION);
     await amountField(page).fill(SEND_BTC);
     await mainButton(page, 'Send').click();
@@ -223,7 +232,7 @@ test.describe('change-address rotation on regtest', () => {
             }
             expect(changeAt,
                 `no address the wallet lists holds the change from ${txid}. The funding address `
-                + `held ${fundingBefore.length} utxo(s) and the send was ${SEND_BTC} BTC, so the `
+                + `held ${fundingBefore.length} utxo(s) and the send was ${SEND_BTC} ${REGTEST_TICKER}, so the `
                 + `remainder has to be somewhere. Listed: ${candidates.join(', ') || '(none)'}`)
                 .not.toBeNull();
         });

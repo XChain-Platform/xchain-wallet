@@ -97,6 +97,15 @@ const VENUES = {
     RBTC: {
         encoderPort: 3023, minerPort: 3025,
         chainId: 'bitcoin-regtest', chainLabel: 'Bitcoin',
+        // The NATIVE COIN'S TICKER as the wallet prints it on screen ("Send
+        // 0.001 BTC on Bitcoin", the confirm fee, the asset picker). Kept here
+        // beside chainLabel rather than derived at each call site, because a
+        // spec that hardcodes "BTC" does not fail when it runs on Litecoin -
+        // it fails several assertions later, reading like a product defect.
+        // Deliberately NOT computed as `REGTEST_COIN.replace(/^R/, '')`: that
+        // trick is correct for these three and silently wrong for the first
+        // venue whose coin code is not its explorer code with an R on it.
+        ticker: 'BTC',
         // The container `seedPrices()` runs its price seed inside. Named
         // here rather than derived from chainId because the stack's naming uses
         // the coin's full name where the wallet's chain id does too, but there is
@@ -117,14 +126,14 @@ const VENUES = {
     },
     RLTC: {
         encoderPort: 3223, minerPort: 3225,
-        chainId: 'litecoin-regtest', chainLabel: 'Litecoin',
+        chainId: 'litecoin-regtest', chainLabel: 'Litecoin', ticker: 'LTC',
         indexerContainer: 'xchain-node-litecoin-regtest-xchain-indexer',
         addressRe: /^(rltc1|[mn2])/,
         destination: 'rltc1qmr46t4ca5wh35k6mczdzrkepqw2d8ne92hnush',
     },
     RDOGE: {
         encoderPort: 3123, minerPort: 3125,
-        chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin',
+        chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin', ticker: 'DOGE',
         indexerContainer: 'xchain-node-dogecoin-regtest-xchain-indexer',
         addressRe: /^[mn2]/,
         // Dogecoin has no segwit, so this one is the P2PKH encoding of that
@@ -158,6 +167,23 @@ export const MINER_URL = `http://localhost:${VENUE.minerPort}`;
 /** The wallet's own id and display name for the chain this run drives. */
 export const REGTEST_CHAIN_ID = VENUE.chainId;
 export const REGTEST_CHAIN_LABEL = VENUE.chainLabel;
+
+/**
+ * The native coin's ticker on the chain this run drives ('BTC'/'LTC'/'DOGE').
+ *
+ * THE OTHER HALF OF MOVING A SPEC BETWEEN CHAINS, and the half that kept being
+ * missed. Selecting the chain in a form is not enough: a spec still asserting
+ * `Send 0.001 BTC on Bitcoin` or matching a fee with /([\d.]+)\s*BTC/ now
+ * FAILS on Litecoin, having correctly switched chains - which reads like the
+ * conversion broke the spec when it is the assertion that was never converted.
+ * Pair every `selectVenueChain()` with this and `REGTEST_CHAIN_LABEL`.
+ *
+ * `send/dust-and-max.regtest.spec.js` worked this out first and locally, and
+ * that is why its dust leg was one of only two specs already passing on
+ * Litecoin. Lifted here so the next spec inherits it instead of rediscovering
+ * it.
+ */
+export const REGTEST_TICKER = VENUE.ticker;
 
 /** Address shape this chain's regtest params produce. */
 export const REGTEST_ADDRESS_RE = VENUE.addressRe;
@@ -1010,6 +1036,67 @@ export async function selectVenueChain(scope, field = 'Network') {
     // wrong-chain run - the exact failure this helper exists to prevent.
     await expect(trigger).toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL),
         { timeout: 15_000 });
+}
+
+/**
+ * Puts the SEND screen on this run's chain by choosing its native coin.
+ *
+ * WHY SEND NEEDS ITS OWN HELPER, which cost this campaign several reverts to
+ * establish. `selectVenueChain()` drives a `ChainPicker`: a popover listbox of
+ * CHAINS whose items are `role="option"` named "Litecoin". Send has no such
+ * widget. It renders a `TokenField` (Send.jsx:2283) whose trigger is named
+ * `Token: BTC on Bitcoin` - close enough to a chain picker to fool a locator,
+ * and not one. Clicking it NAVIGATES to the SendPicker screen (`TokenPicker`
+ * with `purpose="send"`), which contains no `role="option"` element anywhere.
+ * So `selectVenueChain(main, 'Token')` finds the trigger, clicks it, and then
+ * waits for an option that cannot exist until the whole 420s budget is gone:
+ * a hang, not a failure, which is why it read as a slow venue rather than a
+ * wrong locator.
+ *
+ * Send also picks the ASSET and the CHAIN with one control - the coin IS the
+ * chain selection - so there is nothing to switch until an asset is chosen.
+ *
+ * Selection is by `data-balance-key`, which `BalanceList` writes as
+ * `${chainId}:${tick}`, rather than by the row's "Open LTC details" label:
+ * the label is a DISPLAY name and two chains can list the same tick (every
+ * chain has XCHAIN), so the label is ambiguous exactly where it matters and
+ * the key never is.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} [tick]  asset to select; defaults to this chain's native coin
+ */
+export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
+    const main = page.getByRole('main');
+    const trigger = main.getByRole('button', { name: /^Token: / }).first();
+    await expect(trigger, 'no Token field on this screen; is this the Send form?')
+        .toBeVisible({ timeout: 30_000 });
+
+    // Already showing this chain's asset: nothing to do. Anchored on " on
+    // <Chain>" so a tick that merely CONTAINS the chain name cannot satisfy it.
+    const selected = (await trigger.getAttribute('aria-label')) || '';
+    if (new RegExp(`^Token: ${tick} on ${REGTEST_CHAIN_LABEL}$`).test(selected)) return;
+
+    await trigger.click();
+
+    // The picker lists every chain's assets together, so filter first: the row
+    // wanted may otherwise be far down a list this venue keeps growing.
+    const search = page.getByLabel('Search coins or tokens');
+    await expect(search, 'the Token field did not open the asset picker')
+        .toBeVisible({ timeout: 30_000 });
+    await search.fill(tick);
+
+    const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
+    await expect(row, `the asset picker lists no ${tick} on ${REGTEST_CHAIN_LABEL}. A wallet carries `
+        + 'one address per chain from creation, so this usually means the venue chain is not the one '
+        + 'the wallet was created against')
+        .toBeVisible({ timeout: 30_000 });
+    await row.click();
+
+    // Assert the selection took. The picker closes on click either way, so an
+    // unasserted click is a silent wrong-chain run - the same hazard
+    // `selectVenueChain` guards, and the reason both helpers end this way.
+    await expect(main.getByRole('button', { name: /^Token: / }).first())
+        .toHaveAttribute('aria-label', `Token: ${tick} on ${REGTEST_CHAIN_LABEL}`, { timeout: 15_000 });
 }
 
 /**

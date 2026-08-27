@@ -29,11 +29,14 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
+    REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
+    REGTEST_TICKER,
     assertNoActionRecorded,
     failBroadcast,
     fundAddress,
     readReceiveAddress,
+    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
@@ -67,6 +70,14 @@ test.describe('confirm -> broadcast on regtest', () => {
         await page.reload();
         await unlockAfterReload(page, PASSWORD);
         await gotoSection(page, 'Send');
+        // Send has no chain picker and no source field of its own: it selects
+        // asset AND chain through the Token field, and its source only appears
+        // once that chain has an address. Without this the form composes on
+        // Bitcoin while the funding above went to this run's chain, and the
+        // compose fails for want of funds rather than for anything this spec is
+        // about. NOT `selectVenueChain` - see that helper's neighbour for why
+        // the Token field is not a chain picker and hangs one.
+        await selectVenueSendAsset(page);
     });
 
     test('the confirm page states real composed values, then Approve broadcasts', async ({ page }) => {
@@ -79,15 +90,16 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         // §5.2.1-2: what the user is authorizing, from the PARSED composed
         // action string rather than from form state.
-        await expect(confirm).toContainText(`Send ${SEND_BTC} BTC on Bitcoin to ${REGTEST_DESTINATION}`);
-        await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
+        await expect(confirm)
+            .toContainText(`Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to ${REGTEST_DESTINATION}`);
+        await expect(page.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
 
         // §5.2.5: an EXACT fee off the composed PSBT, not the form's rate
         // estimate. Asserted as a bounded real number: a broken decomposition
         // returns null (section absent) or a nonsense total, and "some digits
         // are present" would pass on both.
         const feeText = await page.getByTestId('confirm-fee').innerText();
-        const fee = Number(feeText.match(/([\d.]+)\s*BTC/)?.[1]);
+        const fee = Number(feeText.match(new RegExp(`([\\d.]+)\\s*${REGTEST_TICKER}`))?.[1]);
         expect(Number.isFinite(fee), `unparseable fee: ${feeText}`).toBe(true);
         expect(fee).toBeGreaterThan(0);
         expect(fee).toBeLessThan(0.01);
@@ -170,7 +182,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         await mainButton(page, 'Send').click();
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
         await expect(page.getByTestId('action-intent'))
-            .toContainText(`Send ${SEND_BTC} BTC on Bitcoin to ${REGTEST_DESTINATION}`);
+            .toContainText(`Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to ${REGTEST_DESTINATION}`);
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
     });
 
@@ -235,6 +247,10 @@ test.describe('broadcast permanence on regtest', () => {
         await page.reload();
         await unlockAfterReload(page, PASSWORD);
         await gotoSection(page, 'Send');
+        // Same reason as the first describe's setup: Send opens on its own
+        // Bitcoin default, so without this the form composes on a chain the
+        // funding above never reached and no confirm modal ever opens.
+        await selectVenueSendAsset(page);
     });
 
     async function approveSend(page) {
