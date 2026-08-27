@@ -182,12 +182,15 @@ async function onboardFundedWallet(page, walletName) {
 /**
  * Points the compose form's "Delivery network" at this run's chain.
  *
- * `selectVenueChain` is called because it is the seam's own helper and carries
- * its own assertion, but it CANNOT be the whole check here: it returns early on
- * RBTC, on the (correct, everywhere else) premise that Bitcoin is already the
- * default. This screen defaults to Dogecoin instead. So the pick is repeated
- * unconditionally when the trigger still does not read this run's chain, and
- * the closing assertion is what actually holds the line.
+ * The pick itself is `selectVenueChain`'s job, and it now covers this screen:
+ * it reads the picker on EVERY chain instead of returning early on Bitcoin,
+ * which is precisely what this form defeats by defaulting to Dogecoin.
+ * No local re-pick sits here: it went with that early return.
+ *
+ * What stays is the closing assertion, kept deliberately even though the helper
+ * carries one of its own. This is the screen the wrong-chain bug actually lands
+ * on, so this is where the failure message is worth reading: everywhere else a
+ * message delivered on the wrong chain still looks green.
  */
 async function pickDeliveryNetwork(scope) {
     const trigger = scope.getByRole('button', { name: /^Delivery network:/ });
@@ -195,13 +198,7 @@ async function pickDeliveryNetwork(scope) {
         .toBeVisible({ timeout: 30_000 });
 
     await selectVenueChain(scope, 'Delivery network');
-    if (!((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) {
-        await trigger.click();
-        // Option labels are "Coin (characteristic)" per `buildDeliveryNetworkOptions`
-        // ("Litecoin (faster + cheaper)"), so anchor on the coin and stop.
-        await scope.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) })
-            .first().click();
-    }
+
     await expect(trigger,
         `the message would have been delivered on the wrong chain: this form defaults to `
         + `DOGECOIN, not to ${REGTEST_CHAIN_LABEL}, and the explorer this run reads is `

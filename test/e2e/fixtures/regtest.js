@@ -973,8 +973,17 @@ function actionStatuses(detail) {
 /**
  * Points one of a form's chain pickers at the chain this run drives.
  *
- * A no-op on Bitcoin, which every form already defaults to, so specs written
- * before the venue table behave exactly as they did.
+ * NO EARLY RETURN ON BITCOIN, whatever the belief that every form already
+ * defaults to it. One form does not: `ComposeMessage` deliberately prefers a
+ * DOGECOIN address for its Delivery network picker, because a MESSAGE pays a
+ * native miner fee and DOGE is the cheapest supported chain. So on a Bitcoin
+ * run the early return left a messaging spec driving Dogecoin while the fixture
+ * read Bitcoin's explorer, encoder and miner - a wrong-chain run that reported
+ * itself green, which is the exact failure the assertion at the bottom of this
+ * function exists to prevent. Any form MAY default to a chain that is not this
+ * run's, so the picker is now read on every chain and corrected when it
+ * disagrees; the early return is gone rather than widened, because a second
+ * form with its own preference would silently reopen the same hole.
  *
  * `field` is the picker's own visible label, and it is REQUIRED to be specific
  * because several screens carry more than one: a form's is "Network", the
@@ -988,8 +997,6 @@ function actionStatuses(detail) {
  * @param {string} [field]  the picker's visible label
  */
 export async function selectVenueChain(scope, field = 'Network') {
-    if (REGTEST_COIN === 'RBTC') return;
-
     const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
     await expect(trigger, `no "${field}" chain picker on this screen`)
         .toBeVisible({ timeout: 30_000 });
