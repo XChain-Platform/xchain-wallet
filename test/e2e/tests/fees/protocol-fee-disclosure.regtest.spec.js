@@ -264,6 +264,19 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
+    // BITCOIN BY DESIGN, NOT BY ACCIDENT - see this file's header. Every test
+    // below asks what each of the TWO fee lanes prints, and that choice exists
+    // only on Bitcoin: off it `isNativeFeeMandatory` forces the coin output, so
+    // the XCHAIN lane has nowhere to run and "both lanes agree" is vacuous.
+    // Skipped rather than converted or `fixme`d, because the spec pins no
+    // defect here - it simply has no subject on this chain. Modelled on the
+    // guard `native-fee-requote.regtest.spec.js` already carries.
+    test.beforeEach(() => {
+        test.skip(REGTEST_COIN !== 'RBTC',
+            `the two-lane fee choice this spec measures exists only on Bitcoin; ${REGTEST_COIN} pays its `
+            + 'protocol fee in the coin with no alternative lane');
+    });
+
     test('both lanes state the protocol fee, and each one matches what the chain charges', async ({ page }) => {
         let source;
         let quotedXchain;

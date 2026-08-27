@@ -146,6 +146,19 @@ test.describe('the native-fee flag on each submit lane', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
+    // BITCOIN BY DESIGN, NOT BY ACCIDENT, and this one would go GREEN for the
+    // wrong reason if it ran here. Its own header says it: off Bitcoin
+    // `mandatory` forces the flag on, so "the flag reached the wire" would be
+    // true no matter what the form did with it. A pass on Litecoin would
+    // certify a control this spec never exercised, which is worse than a red.
+    // Skipped rather than converted or `fixme`d: it pins no defect here.
+    // Modelled on the guard `native-fee-requote.regtest.spec.js` already carries.
+    test.beforeEach(() => {
+        test.skip(REGTEST_COIN !== 'RBTC',
+            `off Bitcoin the native-fee flag is forced on by \`mandatory\`, so this spec would pass on `
+            + `${REGTEST_COIN} without the form having done anything - a green that certifies nothing`);
+    });
+
     test('the flag reaches the wire on the confirm path and on the watcher build', async ({ page }) => {
         let source;
         let quotedSats;

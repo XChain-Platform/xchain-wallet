@@ -190,6 +190,21 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
     // above the DEPLOY+EXECUTE spec's 25 minutes for the extra round trips.
     test.setTimeout(1_800_000);
 
+    // BITCOIN BY DESIGN, IN THE PRODUCT, NOT JUST IN THIS SPEC. Staking is
+    // BTC-only at launch: `flows/stakingQueries.js` says so in its own comment
+    // and its callers resolve a BTC chain through `useBtcAddressesPresent`
+    // before querying, and `flows/stakeAction.js` carries the same note. So on
+    // Litecoin there is no staking surface to drive and a red here would be a
+    // defect report against the wallet for honouring its own launch scope.
+    // Skipped rather than converted or `fixme`d. Row 32 drove this green on
+    // Bitcoin; it stays the record, and this guard is what keeps that record
+    // from reading as a failure on every other chain.
+    test.beforeEach(() => {
+        test.skip(REGTEST_COIN !== 'RBTC',
+            `staking is BTC-only at launch (flows/stakingQueries.js); ${REGTEST_COIN} has no staking surface `
+            + 'to drive');
+    });
+
     test.beforeAll(async () => {
         // Heal the shared node's clock before trusting it. Other suites on this
         // venue jump mocktime to cross deadlines and put it back in teardown; a

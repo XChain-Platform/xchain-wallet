@@ -147,6 +147,19 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_200_000);
 
+    // BITCOIN BY DESIGN, NOT BY ACCIDENT - see this file's header, which says
+    // so outright: "Bitcoin is the only chain with two lanes". The claim below
+    // is that NEITHER lane broadcasts an unaffordable fee, and off Bitcoin
+    // there is only one lane to refuse, so the test would assert half of its
+    // own subject. Skipped rather than converted or `fixme`d: it pins no defect
+    // here, it has no subject here. Modelled on the guard
+    // `native-fee-requote.regtest.spec.js` already carries.
+    test.beforeEach(() => {
+        test.skip(REGTEST_COIN !== 'RBTC',
+            `this spec refuses BOTH fee lanes, and two lanes exist only on Bitcoin; ${REGTEST_COIN} pays its `
+            + 'protocol fee in the coin with no alternative lane');
+    });
+
     test('neither fee lane broadcasts when the payer cannot cover the fee', async ({ page }) => {
         let source;
         let quotedSats;
