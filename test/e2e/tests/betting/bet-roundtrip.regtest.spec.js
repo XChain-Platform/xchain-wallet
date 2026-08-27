@@ -237,6 +237,11 @@ async function gotoBettingHub(page) {
     await gotoPalette(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
+    // The HUB has a NetworkField of its own (BetFeedsList), separate from the
+    // create form's, and it defaults to Bitcoin - so a market created on the
+    // venue chain is simply not in the list this lists, and finding it by
+    // "#<index>" waits out its budget looking at the wrong chain.
+    await selectVenueChain(page.getByRole('main'), 'Network');
 }
 
 test.describe('BET round trip on regtest', () => {
@@ -439,7 +444,34 @@ test.describe('BET round trip on regtest', () => {
             // settlement itself was perfectly correct. Read the same value the bet
             // will use, from the same place the oracle address was read.
             await openCreateMarket(page);
+            // Choose the bettor THROUGH THE FORM'S OWN PICKER rather than
+            // relying on the address list's "Use" affordance. Measured
+            // 2026-08-27: after Use, this form still resolved the original
+            // oracle, because CreateBetFeedForm:172 picks its source with
+            // preferredSourceId(byChain[chainId], active[chainId]) and Use was
+            // not moving that per-chain active address. The form exposes an
+            // explicit picker (AddressField iconLabel "Choose oracle address"
+            // -> OwnAddressPickerScreen, already filtered to this chain), and
+            // driving that is both the honest test of "the bet composes from
+            // the address the user chose" and independent of how Use behaves.
+            await page.getByRole('button', { name: 'Choose oracle address' }).click();
+            // Choose from the PICKER'S OWN list, which OwnAddressPickerScreen
+            // already filters to this chain, rather than from the global
+            // Addresses list read above. REGTEST_ADDRESS_RE cannot do this job:
+            // for Litecoin it is /^(rltc1|[mn2])/ and BITCOIN regtest legacy
+            // addresses also start [mn2], so filtering the global list by shape
+            // still hands back a Bitcoin address - which then is not in this
+            // chain-filtered picker at all, and the click waits out its budget.
+            const pickable = page.getByRole('button', { name: /^View address / });
+            await expect(pickable.first(), 'the oracle-address picker listed nothing').toBeVisible({ timeout: 30_000 });
+            const onThisChain = (await pickable.all().then((all) =>
+                Promise.all(all.map((r) => r.getAttribute('aria-label')))))
+                .map((l) => String(l).replace('View address ', ''))
+                .filter((a) => a && a !== oracle);
+            expect(onThisChain.length, 'a second address ON THIS CHAIN exists to bet from').toBeGreaterThan(0);
+            await page.getByRole('button', { name: `View address ${onThisChain[0]}` }).click();
             const willSignAs = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
+            expect(willSignAs, 'the form did not take the oracle address just chosen').toBe(onThisChain[0]);
             expect(willSignAs, 'the wallet now signs as some other address').not.toBe(oracle);
             punter = willSignAs;
 
@@ -459,9 +491,15 @@ test.describe('BET round trip on regtest', () => {
             await page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).click();
 
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });
+            // Anchored on a CONTROL, not on the page title: PageHeader renders
+            // its title as a plain <span> outside main, so
+            // getByRole("heading", { name: "Place a bet" }) matches nothing and
+            // waits out the whole budget. This is the §3.10 screen fact the
+            // SWEEP spec recorded, hit again here.
+            const yes = main.getByRole('button', { name: 'Yes', exact: true });
+            await expect(yes, 'the place-bet surface did not open').toBeVisible({ timeout: 30_000 });
 
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
+            await yes.click();
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Review bet', exact: true }).click();

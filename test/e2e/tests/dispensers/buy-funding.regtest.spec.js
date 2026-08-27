@@ -268,7 +268,11 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     // bcrt1 address nor an "on Bitcoin" string, so grepping for those found
     // nothing here while the browse filter still asked Bitcoin for a dispenser
     // this run had just created on Litecoin.
-    await page.getByLabel('Chain').selectOption(REGTEST_CHAIN_ID);
+    // Scoped to main: getByLabel substring-matches, and the app header has a
+    // "XChain platform sites" button whose label contains "Chain", so an
+    // unscoped lookup is a strict-mode violation. Only reachable once the
+    // earlier chain fixes let the spec get this far.
+    await page.getByRole('main').getByLabel('Chain').selectOption(REGTEST_CHAIN_ID);
 
     // Search by the SELLER's address rather than by ticker: the ticker lane
     // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag
@@ -380,6 +384,11 @@ test.describe('dispenser buy funding gate on regtest', () => {
             await gotoPalette(seller, 'Create dispenser');
 
             const main = seller.getByRole('main');
+            // DispenserForm has its own NetworkField, defaulting to Bitcoin, so
+            // the Source below is a BITCOIN address until the chain is picked -
+            // which the next assertion then reports as the form signing with
+            // the wrong address, several steps after the real cause.
+            await selectVenueChain(main, 'Network');
             expect(await main.getByLabel('Source', { exact: true }).inputValue(),
                 'the dispenser form still signs with the funded address').toBe(sellerAddress);
 
