@@ -55,11 +55,13 @@ import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     fundAddress,
     minerRpc,
     mintXchain,
     nudgeChain,
+    selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -211,10 +213,17 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // address this spec never funded, which fails deep in the confirm
             // pipeline on "insufficient funds" and reads like a wallet bug.
             await gotoDeployForm(page);
-            deployer = await page.getByRole('main').getByLabel('From', { exact: true }).inputValue();
-            // The VENUE's address shape, not Bitcoin's. `/^bcrt1/` was the
-            // strictest form of this bug: it fails on every chain but one.
-            expect(deployer, 'the deploy form names a source address').toMatch(REGTEST_ADDRESS_RE);
+            const deployMain = page.getByRole('main');
+            // Put the form on this run's chain BEFORE reading its source. The
+            // deploy form renders a `NetworkField`, so it carries a real
+            // "Network:" picker and defaults to Bitcoin; asserting the address
+            // SHAPE without switching first (the previous fix) can only turn a
+            // wrong-chain run into a 30s timeout, never into a right one.
+            await selectVenueChain(deployMain, 'Network');
+            const fromField = deployMain.getByLabel('From', { exact: true });
+            await expect(fromField, `the deploy form has no ${REGTEST_CHAIN_LABEL} source address`)
+                .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
+            deployer = await fromField.inputValue();
 
             await fundAddress(deployer, FUNDING_BTC);
 
@@ -239,6 +248,10 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // The address that will sign must still be the one that was funded:
             // the default is derived from wallet state, so assert it rather than
             // trust it across a mint and two reloads.
+            // Re-opened form, so it re-defaults to Bitcoin and has to be put back
+            // on the venue chain the same way; the equality check is what makes
+            // that a re-selection of the funded address rather than a new one.
+            await selectVenueChain(main, 'Network');
             expect(await main.getByLabel('From', { exact: true }).inputValue(),
                 'the form still signs with the funded address').toBe(deployer);
 
