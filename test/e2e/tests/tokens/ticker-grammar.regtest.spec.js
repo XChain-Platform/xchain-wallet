@@ -137,15 +137,22 @@ const REFUSED_BY_WALLET = [
     { klass: 'underscore', tick: `TGR${STAMP}_1` },
     { klass: 'percent', tick: `TGR${STAMP}%1` },
     { klass: 'hash', tick: `TGR${STAMP}#1` },
-    // NOT the tick-ID form (`^999999`). It was in this list until it was driven
-    // on 2026-08-27, and the venue REFUSED it: `chainVerdict` came back
-    // undefined where every other class here came back `valid`, on a run whose
-    // plain-alphanumeric control passed in the same step. So `^` being a member
-    // of TICK_CHARACTERS does not make `^`-prefixed numerics issuable, and the
-    // wallet refusing them is AGREEMENT with the chain rather than a gap. That
-    // is the whole reason this spec asks the chain first: listed as a gap it
-    // would have been a defect report against the wallet for enforcing a rule
-    // the chain also enforces.
+    // STILL NOT the tick-ID form (`^999999`), but for a DIFFERENT reason than
+    // the one an earlier note gave, and the difference matters.
+    //
+    // The superseded reason: "the venue REFUSED it, `chainVerdict` came back
+    // undefined". That was wrong - an absent status is not a refusal, and a
+    // direct probe on 2026-08-27 reads `^999999` as `status: valid`, exactly
+    // like every class in this list. See the describe block's header.
+    //
+    // The real reason it is held out: a caret tick is clean at the fee quote and
+    // MURKY past it. `xchain-indexer/src/actions/issue.js:295-305` records that
+    // `createTicker` never inserts a literal `^…` row, so a caret ISSUE can land
+    // `valid` with a NULL ticker id, and the dotted-caret form is separately
+    // refused by the BATCH_ISSUANCE_LIMITS v2 rule. Putting it in this list
+    // would make the spec demand the wallet widen to a shape whose own
+    // admission path is unsettled. The symbol classes below have no such
+    // question, which is why they are the ones that carry the grammar fix.
 ];
 
 /** The control: plainly alphanumeric, so both sides must say yes. */
@@ -186,7 +193,45 @@ const SINGLE_CHAR_CANDIDATES = (() => {
  */
 async function chainVerdict(tick, source) {
     const quote = await warmFeeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
-    return String(quote?.status);
+
+    // AN ABSENT STATUS IS NOT A VERDICT, AND CONFLATING THE TWO COST THIS SPEC
+    // FOUR RUNS OF WRONG CONCLUSIONS.
+    //
+    // `String(quote?.status)` handed back the literal "undefined" here,
+    // which every caller then compared against 'valid' and reported as
+    // "the venue refuses the <class> class". Four ticker classes were written up
+    // that way, and one of them escalated into a claim that the indexer's own
+    // config constants do not describe what this venue admits. Probed directly
+    // on 2026-08-27, every one of those classes reads `status: valid`, and a
+    // genuine refusal always carries a NAMED reason (`invalid: TICK (length)`,
+    // `invalid: issued by another address`). The venue never answers
+    // `undefined`.
+    //
+    // What produces it is the VENUE PRICE LAPSING MID-RUN. A seeded price lives
+    // `ORACLE_MAX_PRICE_AGE_SECONDS` (1800s) of CHAIN time, this spec's budget
+    // is 2400s of wall time, and every wizard action it drives mines blocks that
+    // burn that chain time - so a long run outlives its own price and
+    // `warmFeeQuote` starts returning an error body with a `code` and no
+    // `status`. The tell is which steps fail: the early classes pass and the
+    // late ones "get refused", which is a clock, not a grammar rule.
+    //
+    // So: re-seed once and ask again, because a lapsed price is a venue state
+    // this spec can repair rather than a fact about the wallet. If it is still
+    // unreadable after that, throw loudly and quote what came back. A spec that
+    // cannot read the chain's answer must say so rather than answer for it.
+    if (!quote || typeof quote.status !== 'string') {
+        await seedPrices();
+        const retry = await warmFeeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
+        if (retry && typeof retry.status === 'string') return retry.status;
+        throw new Error(
+            `the venue returned no verdict for ISSUE of "${tick}" - this is NOT a refusal and must `
+            + 'never be recorded as one. The usual cause is the seeded venue price having lapsed '
+            + `mid-run (it lives ${'1800'}s of CHAIN time and every action here mines blocks), which `
+            + 'makes the action unpriceable rather than invalid. Re-seed the price and re-run. '
+            + `Raw quote: ${JSON.stringify(quote)}`,
+        );
+    }
+    return quote.status;
 }
 
 async function gotoPalette(page, title) {
@@ -317,6 +362,50 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(2_400_000);
 
+    // READ THIS BEFORE THE HEADER BELOW IT: THE FOUR-RUN CONCLUSION THIS FILE
+    // CARRIED WAS WRONG, AND MEASURING IT AT THE VENUE ON 2026-08-27 IS WHY
+    // THIS TEST IS NO LONGER `fixme`.
+    //
+    // The superseded header (kept below, because how it went wrong is the
+    // lesson) said each ticker class in turn "failed the CHAIN half of its own
+    // claim", and concluded that the indexer's config constants do not describe
+    // what this venue admits. That conclusion rested entirely on `chainVerdict`
+    // returning `undefined`, which was read as a refusal. It is not one.
+    //
+    // Probed directly against `/RLTC/api/feequote`, one call per class, with a
+    // plain-alphanumeric control in the same batch:
+    //
+    //   F, 8            (single character)   status=valid
+    //   ^999999         (tick-ID form)       status=valid
+    //   JDOG$, WOW!, A~B (symbol-bearing)    status=valid
+    //   jdogtest        (lowercase)          status=valid
+    //   250 x "A"       (at MAX_TICK_LENGTH) status=valid
+    //   251 x "A"       (over it)            status=`invalid: TICK (length)`
+    //
+    // So the endpoint answers a refusal with a NAMED REASON and never with
+    // `undefined`, the constants describe the venue correctly, and the
+    // `undefined` was this harness returning without a status (a timed-out or
+    // busy quote), not the chain saying no. **An absent field is not a verdict**
+    // - that is the mistake, and `chainVerdict` should be treated as unreadable
+    // rather than as "refused" whenever it is not one of the venue's own status
+    // strings.
+    //
+    // WHAT THAT RESTORES: the row's original premise, narrower but real, and
+    // tracked separately. Both authoring surfaces gate on
+    // `/^[A-Za-z0-9]+$/` (TokenWizard.jsx:306, IssueTokenForm.jsx:306) and both
+    // inputs uppercase every keystroke (:1093, :761), so SYMBOL-bearing and
+    // CARET ticks are refused with an error and a lowercase one is silently
+    // rewritten under the cursor - three shapes the chain admits and nobody can
+    // type. It is two mechanisms, a regex and a coercion, which is why a spec
+    // hunting only for an error message would have called lowercase authorable.
+    //
+    // ONE CAVEAT THE NEXT SESSION MUST NOT LOSE: the caret class is valid at the
+    // fee quote and murky past it. `xchain-indexer/src/actions/issue.js:295-305`
+    // records that `createTicker` never inserts a literal `^…` row, so a caret
+    // ISSUE can land valid with a NULL ticker id. Widen the wallet to the SYMBOL
+    // class first; settle caret against the admission path before allowing it.
+    //
+    // ---- SUPERSEDED HEADER, KEPT SO THE ERROR STAYS VISIBLE ----
     // FIXME'd 2026-08-27, AND THE FOUR RUNS THAT GOT IT HERE ARE THE FINDING.
     // This pins no wallet defect. It very nearly reported four.
     //
@@ -344,12 +433,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
     // than ticker grammar; it belongs to whoever owns the admission path, not to
     // the wallet. Only the SYMBOL class is still a candidate for a genuine gap,
     // and it has not been shown green yet.
-    //
-    // Committed fixme rather than deleted because the structure is right and the
-    // measurements are worth keeping: every step asks the chain FIRST, which is
-    // the only reason this did not become four defect reports against the wallet
-    // for enforcing rules the chain enforces too.
-    test.fixme('the chain accepts ticker shapes the Create token form will not let anybody type', async ({ page }) => {
+    // ---- END SUPERSEDED HEADER ----
+    test('the chain accepts ticker shapes the Create token form will not let anybody type', async ({ page }) => {
         /** The wallet's only address on this chain, and the source every quote is taken from. */
         let source;
 
@@ -621,7 +706,19 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
      * asserts the precondition this needs (the switch exists and is unchecked,
      * so the wizard composes in the XCHAIN lane by default).
      */
-    test.fixme('a protocol fee settles from an XCHAIN balance, and the balance moves', async ({ page }) => {
+    test('a protocol fee settles from an XCHAIN balance, and the balance moves', async ({ page }) => {
+        // SKIPPED off Bitcoin rather than `fixme`d, because a fixme asserts a
+        // defect and there is none here: off Bitcoin `isNativeFeeMandatory`
+        // makes the coin the only fee lane, so this leg has no subject on
+        // Litecoin or Dogecoin at all. A fixme also never runs anywhere, which
+        // would leave the body below un-drivable even on the venue it is for;
+        // a conditional skip runs it the moment somebody points RBTC at it.
+        // Note it has NOT been driven green yet - see the header - so its first
+        // Bitcoin run is a measurement, not a regression check.
+        test.skip(REGTEST_COIN !== 'RBTC',
+            `a protocol fee can only be PAID in XCHAIN on Bitcoin; on ${REGTEST_COIN} the native `
+            + 'coin is the mandatory and only lane, so there is no XCHAIN settlement to observe');
+
         /** Comfortably over one ISSUE's 1.00000000 XCHAIN, so the fee is not the whole balance. */
         const XCHAIN_MINT = 25;
         const TICK = `TGX${STAMP}`;
