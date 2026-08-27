@@ -403,6 +403,14 @@ test.describe('BET round trip on regtest', () => {
             await gotoPalette(page, 'Addresses');
             await page.getByRole('button', { name: 'Add or import address' }).click();
             await page.getByRole('menuitem', { name: 'Add address' }).click();
+            // Generate on THIS RUN'S chain. AddAddressModal carries its own
+            // ChainPicker, labelled "Coin" rather than "Network", and it
+            // defaults to Bitcoin like every other one - so without this the
+            // wallet generates a BITCOIN address, "Use" makes that the active
+            // one, and the create-market form (which is on the venue chain)
+            // goes on resolving the original oracle address. The bet then
+            // never changes hands and the failure reads as a wallet defect.
+            await selectVenueChain(page.getByRole('main'), 'Coin');
             await page.getByRole('button', { name: /^Generate/ }).click();
 
             // Pick the row that is neither the oracle nor already active, open it,
@@ -413,7 +421,10 @@ test.describe('BET round trip on regtest', () => {
             const generated = (await rows.all().then((all) =>
                 Promise.all(all.map((r) => r.getAttribute('aria-label')))))
                 .map((l) => String(l).replace('View address ', ''))
-                .filter((a) => a && a !== oracle);
+                // Venue chain only: the Addresses list shows EVERY chain's
+                // addresses, so "not the oracle" alone can hand back a Bitcoin
+                // one on a Litecoin run.
+                .filter((a) => a && a !== oracle && REGTEST_ADDRESS_RE.test(a));
             expect(generated.length, 'a second address exists to bet from').toBeGreaterThan(0);
 
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();

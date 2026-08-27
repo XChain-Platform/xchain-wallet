@@ -79,6 +79,7 @@ import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_ID,
+    selectVenueChain,
     REGTEST_COIN,
     fundAddress,
     mintXchain,
@@ -322,6 +323,11 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // address this spec never funded - which only works by accident on
             // a chain that happens to carry stale coins.
             await gotoPalette(seller, 'Issue token');
+            // IssueTokenForm picks its chain with a NetworkField that defaults
+            // to Bitcoin, so the `From` read below is a BITCOIN address unless
+            // the chain is chosen first - which is exactly what the address-shape
+            // assertion then catches, several lines after the real cause.
+            await selectVenueChain(seller.getByRole('main'), 'Network');
             sellerAddress = await seller.getByRole('main')
                 .getByLabel('From', { exact: true }).inputValue();
             // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
@@ -344,6 +350,11 @@ test.describe('dispenser buy funding gate on regtest', () => {
         await test.step('seller: issue the throwaway give token', async () => {
             const seller = sellerContext.pages()[0];
             await gotoPalette(seller, 'Issue token');
+            // IssueTokenForm picks its chain with a NetworkField that defaults
+            // to Bitcoin, so the `From` read below is a BITCOIN address unless
+            // the chain is chosen first - which is exactly what the address-shape
+            // assertion then catches, several lines after the real cause.
+            await selectVenueChain(seller.getByRole('main'), 'Network');
 
             const main = seller.getByRole('main');
             // The address that signs must still be the one that was funded.
@@ -416,6 +427,11 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // composes from. On a wallet this fresh there is exactly one, which
             // is also the one the buy panel will pick (newest external HD).
             await gotoPalette(page, 'Issue token');
+            // IssueTokenForm picks its chain with a NetworkField that defaults
+            // to Bitcoin, so the `From` read below is a BITCOIN address unless
+            // the chain is chosen first - which is exactly what the address-shape
+            // assertion then catches, several lines after the real cause.
+            await selectVenueChain(page.getByRole('main'), 'Network');
             buyerAddress = await page.getByRole('main')
                 .getByLabel('From', { exact: true }).inputValue();
             expect(buyerAddress, 'the buyer wallet has a signing address')
