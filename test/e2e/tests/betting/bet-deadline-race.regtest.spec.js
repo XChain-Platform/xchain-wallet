@@ -466,11 +466,38 @@ test.describe('BET deadline race', () => {
             await warmBet(punter, feedIndex, true);
             await main.getByRole('button', { name: 'Review bet', exact: true }).click();
 
-            // The dry run must PASS here. A confirm that is already failing would
-            // make the degradation below unobservable.
+            // The dry run must not be REFUSING here. A confirm that is already
+            // failing would make the degradation below unobservable.
+            //
+            // NOT `pass`, and this file's own header says why without having
+            // noticed it applied here: the assertions are meant to be
+            // TIER-1-ONLY, and `data-verdict` is not a Tier-1 signal - it
+            // aggregates Tier-2 findings too. Off Bitcoin the panel always
+            // carries one, correctly: "This action charges a protocol fee. If
+            // the chain rejects the action, any attached native-coin fee output
+            // is forfeited", which exists because `isNativeFeeMandatory` makes
+            // the coin the only fee lane on every chain but Bitcoin. So on
+            // Litecoin the baseline verdict is `warn` with `data-dryrun`
+            // "approved", and demanding `pass` fails a spec whose subject is
+            // working perfectly.
+            //
+            // Measured in the first whole-suite Litecoin run, 2026-08-27:
+            // `data-verdict="warn" data-dryrun="approved"`, with the panel
+            // reading "The network checked this action and expects it to
+            // succeed." This is the same class the chain-pinning row recorded
+            // on `contracts/deploy-chunked-lane` - **a spec written on Bitcoin
+            // encodes Bitcoin's ABSENCES as well as its values** - one severity
+            // level up, and it is a spec bug rather than a wallet one.
+            //
+            // The transition this spec exists to catch is still a real one: the
+            // degradation below asserts `fail`, which neither `pass` nor `warn`
+            // is, and the Tier-1 check it actually depends on is the
+            // `data-dryrun="approved"` assertion immediately after this.
             await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
-            await expect(page.getByTestId('preflight-panel'))
-                .toHaveAttribute('data-verdict', 'pass', { timeout: 60_000 });
+            await expect(page.getByTestId('preflight-panel'),
+                'the confirm is already refusing before the deadline, so the degradation this spec '
+                + 'measures would not be a transition')
+                .toHaveAttribute('data-verdict', /^(pass|warn)$/, { timeout: 60_000 });
 
             // And it must pass because the NETWORK said so. `pass` alone cannot
             // tell that apart from a dry-run that never answered: DRYRUN_UNAVAILABLE
