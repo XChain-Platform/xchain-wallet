@@ -211,9 +211,8 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
-    // FIXME'd 2026-08-27 ON A VENUE BLOCKER, NOT ON ANYTHING ABOUT SWEEPING,
-    // and it is tracked in the campaign's frontier rather than left as an
-    // anonymous red.
+    // FIXME'd 2026-08-27 ON A PRODUCT DEFECT, NOT ON ANYTHING ABOUT SWEEPING,
+    // and it is a tracked defect rather than an anonymous red.
     //
     // Driven centrally on Litecoin, this reached further than any SWEEP spec
     // has: the form composed with a real source and destination on the venue
@@ -225,11 +224,24 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
     //    LTC payment, and LTC is the only way to pay a protocol fee on this
     //    chain, so it cannot be submitted here."
     //
-    // Litecoin's dust floor is 5460 sats and the quote is 600. The venue seeds
-    // LTC/USD at 30.00, a figure `priceSeed.js` chose as the floor for a
-    // place-bet's much more expensive fee, so every cheaper action prices under
-    // dust. Off Bitcoin there is no XCHAIN lane to fall back to. Un-fixme this
-    // the moment the venue prices these actions above dust; nothing here needs
+    // THE FIRST READING OF THIS WAS WRONG, AND CORRECTING IT HERE MATTERS,
+    // because it sent the next session to retune a fixture constant. It blamed
+    // the venue's LTC/USD 30.00 seed and concluded "every cheaper action prices
+    // under dust". Measured at the source, both halves are false.
+    //
+    // SWEEP and CALLBACK are the only two actions still on the LEGACY per-DB-hit
+    // fee (`getTransactionFee`, a flat 1000 sats of XCHAIN per hit, with no
+    // UNIFIED_FEES branch); DIVIDEND and AIRDROP take the gas schedule and price
+    // far above dust, as does every gas-scheduled action the suite drives. The
+    // quoted 600 sats back-solves to exactly 9 DB hits. A chain's payable
+    // minimum is its dust floor times the coin price, so on Litecoin a SWEEP
+    // needs roughly 273 DB hits at a realistic $100 LTC before it can be
+    // submitted AT ALL, and Litecoin has no XCHAIN lane to fall back to.
+    //
+    // So this reproduces on MAINNET Litecoin, and no venue price fixes it: the
+    // band that lifts a 9-hit sweep over dust also costs ISSUE its headroom
+    // against `fundAddress`'s one-coin default. Un-fixme when the sweep lands a
+    // fee that stays above the target chain's dust floor; nothing here needs
     // rewriting first.
     test.fixme('a sweep drains the address, credits the destination, and force-closes its dispenser', async ({ page }) => {
         expect(DESTINATION,
