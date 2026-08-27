@@ -67,6 +67,11 @@ import {
     fakeSubassetsFor,
     fakeNativeFiatRates,
 } from './devFakeBalances.js';
+import {
+    createDevMockEventBus,
+    seedDefaultFixtures,
+    installDevMockConsole,
+} from './devMockEvents.js';
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -148,6 +153,20 @@ if (!import.meta.env?.PROD) {
             return { ok: false, status: 404, json: async () => ({}) };
         },
     });
+}
+
+// M1.3: one shared event bus across every per-chain mock SDK instance (the
+// factory below is called once per chain), so a developer scripting from the
+// console doesn't need to know or care which chain's SDK object currently
+// holds the subscription - addresses are unique strings regardless. Seeded
+// with a couple of fixtures so the dev shell shows pending activity with no
+// scripting required (I-36); the `!PROD` gate matches the mock SDK's own so
+// this dead-code-eliminates from production the same way.
+let devMockEvents = null;
+if (!import.meta.env?.PROD) {
+    devMockEvents = createDevMockEventBus();
+    seedDefaultFixtures(devMockEvents);
+    installDevMockConsole(devMockEvents);
 }
 
 const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
@@ -406,15 +425,29 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },
-        // §46: no-op WebSocket surface so the notification watcher can
-        // "connect" against the dev mock without a real explorer WS. It
-        // never emits, so no notifications fire in dev-mock mode.
+        // §46: WebSocket surface so the notification watcher can "connect"
+        // against the dev mock without a real explorer WS.
         connectWs() { return Promise.resolve(); },
         disconnectWs() {},
-        onAddress() { return () => {}; },
+        // M1.3: onAddress/onMempoolAction now actually deliver frames, via
+        // the shared devMockEvents bus, scriptable from the console (I-36).
+        // Everything else on this WS surface stays inert - out of this row.
+        onAddress(address, callback) {
+            return devMockEvents ? devMockEvents.onAddress(address, callback) : () => {};
+        },
+        onMempoolAction(address, callback) {
+            return devMockEvents ? devMockEvents.onMempoolAction(address, callback) : () => {};
+        },
         onOrderMatch() { return () => {}; },
         onDispenser() { return () => {}; },
         onCoinpayRequired() { return () => {}; },
+        // getUnconfirmed(address): explorer field names verbatim, served
+        // from the fixtures store (I-10). Explicit on `sdk` (not the
+        // readStub's generic get*() -> [] fallback) so it can honor a limit
+        // and filter by source/destinations rather than always returning [].
+        getUnconfirmed(address, opts) {
+            return Promise.resolve(devMockEvents ? devMockEvents.getUnconfirmed(address, opts) : []);
+        },
     };
     // Compose: explicit fields (wallet/auth) win; everything else falls
     // through to the read stub so any sdk.getXxx() call resolves to [].
