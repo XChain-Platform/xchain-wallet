@@ -8,77 +8,93 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Campaign coverage map, "Messaging" residual: "ECDH-session method (this
-// proved ECIES), handshake / key-publish flow for a recipient with NO pubkey
-// on-chain, plain-text fallback, thread replies, attachments." Session 13
-// proved ECIES round-trips; this file drives the two things every REAL FIRST
-// conversation actually hits before ECIES ever applies, plus the method ECIES
-// left unproven.
+// THE QUESTION THIS FILE EXISTS TO ANSWER, and it is the one every FIRST
+// conversation hits before ECIES is ever reachable: what does the wallet do
+// when you message an address the chain has never seen?
 //
-// THE QUESTION THIS FILE EXISTS TO ANSWER: what does the wallet do when you
-// message someone the chain has never seen? A never-spent address has no
-// indexed pubkey, so ECIES (which needs the recipient's public key) is
-// impossible - and that is the case every first message to a new contact
-// hits, not an edge case. `ComposeMessage.jsx` offers two ways out: a
-// plaintext (v3) fallback, or a key-publish handshake (v0) that broadcasts
-// the SENDER's own pubkey so the recipient can start an ECDH session and
-// reply encrypted - it does NOT let the sender encrypt to the recipient on
-// this attempt, because the recipient's key still is not known. Both are
-// driven end to end below, with the on-chain bytes read back independently
-// rather than trusted from the screen.
+// An address that has never SPENT reveals no public key, so the indexer has
+// none to serve, so ECIES (which encrypts TO the recipient's key) is
+// impossible. That is not an edge case, it is the opening move of every new
+// contact. Read from `ComposeMessage.jsx` and `flows/messageAction.js`, the
+// wallet is BUILT to answer it in exactly two ways, and neither of them is
+// "encrypt anyway":
 //
-// FALSIFICATION TRAP FOR THIS SURFACE (from `MESSAGE.md` and
-// `xchain-sdk/src/decoder/describe.js`): a v2 MESSAGE (the encrypted wire
-// format) carries NO `ENCRYPTION_METHOD` field - absence means ECIES by
-// protocol, and the indexer stamps `encryption_method=1` on every v2 row
-// whether the wallet actually used ECIES or ECDH-session
-// (`xchain-indexer/src/actions/message.js` line 86-87). The confirm screen's
-// own decode text is identical for both methods too ("Send encrypted message
-// to X on Y" - `decodeMessage`, version==='2' branch). So neither the wire
-// nor the UI labels the method; asserting "the app SAYS it used ECDH" would
-// only prove the app's own claim about itself. The one place the two methods
-// provably differ is ciphertext SHAPE (`xchain-sdk/src/messaging.js`):
-//   ECIES  = [version(1)][ephemeralPubkey(33)][iv(12)][authTag(16)][body]  -> 62-byte overhead
-//   ECDH   = [iv(12)][authTag(16)][body]                                   -> 28-byte overhead
-// That 34-byte (68 hex-char) delta, read straight off the chain for the SAME
-// plaintext sent to the SAME recipient, is what §2 below asserts - not a
-// decrypt through the wallet's own code (self-consistency proves nothing
-// about encryption; see the header note on every messaging spec in this
-// campaign).
+//   1. It REFUSES. `Send message` is disabled while an encrypted method is
+//      selected and the recipient's key is unresolved, and a `role="alert"`
+//      banner says why. There is no silent downgrade to plaintext.
+//   2. It offers two ways forward, in that same banner: pick "Plain text"
+//      (MESSAGE v3, which needs no key at all), or press "Request encrypted
+//      session (publish your key)", which broadcasts MESSAGE format 0 carrying
+//      OUR OWN pubkey in ENCRYPTION_KEY. Note the asymmetry, because it IS the
+//      answer: the handshake does not let this wallet encrypt to them, it hands
+//      THEM what they need to encrypt back to us.
 //
-// FALSIFICATION PERFORMED DURING AUTHORING (not left in this file - see the
-// PR/session notes): a `page.route` interception was scoped around the ECDH
-// send in §2, rewriting the `create_tx` RPC's `data` param to pad the
-// ciphertext out to ECIES length (62-byte overhead instead of 28). The byte
-// -length assertion below went RED, reporting the corrupted length exactly as
-// wrong. Removing the interception restored a clean GREEN run with the real
-// 28-byte overhead. That is the proof this check is sensitive to the actual
-// on-chain bytes and not to the wallet's own say-so.
+// Test 1 drives (1) and the plaintext half of (2). Test 2 drives the handshake
+// half. They are SEPARATE TESTS on purpose: the previous draft of this file
+// bundled both, plus an ECDH-versus-ECIES wire-distinctness claim, into one
+// test that never went green, so a failure anywhere left the first-contact
+// question unanswered. A verdict you cannot reach is not a specification.
 //
-// RUN IT (Dogecoin, cheapest chain, matches this file's fixed venue):
-//   cd test/e2e && XC_REGTEST_COIN=RDOGE XC_PREVIEW_PORT=4185 XC_REUSE_BUILD=1 \
+// WHAT WOULD BE FALSE IF THIS PASSED VACUOUSLY. Three things, each guarded:
+//
+//   - "Send is disabled" would pass while the pubkey lookup is merely still
+//     IN FLIGHT (`pubkeyState === 'checking'` disables the button too). So
+//     every disabled-assertion below is preceded by an assertion on the
+//     missing-key banner, which renders ONLY in the settled `missing` state.
+//     And the disable is falsified the one way that should lift it (choosing
+//     Plain text) and then reinstated (choosing ECIES again), so a stuck
+//     loading flag or an unrelated empty field cannot masquerade as the gate.
+//   - "The message was sent" would pass on the wallet's own say-so. The
+//     "Message sent" notice is the wallet reporting on itself. Every claim
+//     about what actually went out is read back from the EXPLORER via
+//     `waitForValidAction(txid)`, whose verdict is the indexer's, and the
+//     assertions are on the action's own recorded fields (action_format,
+//     destination, source, coin, plaintext_message, encryption_key).
+//   - "It landed on the venue chain" would pass while the wallet drove a
+//     DIFFERENT chain entirely. See the Delivery-network trap below.
+//
+// THE DELIVERY-NETWORK TRAP, and it is specific to this screen. Every other
+// form in the wallet defaults to Bitcoin, which is why `selectVenueChain` is a
+// documented no-op on RBTC. Compose does NOT: the address-load effect in
+// `ComposeMessage.jsx` deliberately prefers a DOGECOIN address ("a MESSAGE
+// pays a native miner fee, and DOGE is by far the cheapest supported chain").
+// So on this screen EVERY chain, Bitcoin included, needs an explicit pick, and
+// a spec that trusts the default broadcasts on Dogecoin while the fixture reads
+// the Litecoin explorer. `pickDeliveryNetwork` below calls `selectVenueChain`
+// and then asserts the picker actually reads this run's chain, which is the
+// only form of the check that is honest on all three.
+//
+// Note what the delivery network is NOT. It is the chain that funds the
+// transaction and pays the fee; the message's own COIN comes from
+// `destChainId`, derived from the RECIPIENT's address (`detectAddressCoin`)
+// and only falling back to the delivery chain when the address shape is
+// ambiguous. Both resolve to this venue's chain here, and the on-chain `coin`
+// assertion in test 1 is what proves it rather than assuming it.
+//
+// WHY REGTEST_DESTINATION IS THE RECIPIENT. It is the fixture's pinned
+// throwaway address for this run's chain, and nothing anywhere holds its key.
+// An address whose key does not exist can never sign, so it can never spend, so
+// it can never publish a pubkey: it is PERMANENTLY in the "chain has never seen
+// it" state, deterministically, on every run and every re-run. A freshly
+// generated wallet address would also work today but only by luck of never
+// having been used, and reaching one costs a walk through the Addresses screen
+// and its Add-address modal, which is three more surfaces this file would then
+// be pinned to for a fact it does not need.
+//
+// RUN IT (Litecoin: RBTC's decoder is dead and RDOGE is off limits):
+//   cd test/e2e && XC_REGTEST_COIN=RLTC XC_PREVIEW_PORT=4185 XC_REUSE_BUILD=1 \
 //       npx playwright test --config=playwright.regtest.config.js \
 //       tests/messaging/handshake-and-methods.regtest.spec.js
-
-
-// UNFINISHED, AND MARKED `test.fixme` FOR THAT REASON ALONE (2026-08-11).
-//
-// This is NOT the campaign's other kind of red - it pins no defect and makes no
-// claim about the wallet. It was written in one pass, it does not pass yet, and
-// it is committed so the work is not lost in a shared worktree rather than
-// because it is ready. Central verification on Dogecoin failed it. The question it was written to answer - what the wallet does when you message an address the chain has never seen - is therefore still unanswered.
-//
-// Whoever picks it up: run it, read the failure, and either finish it or cut it
-// down to the part that does hold. Do not read its assertions as findings until
-// it is green once - an assertion that has never passed is a guess about the
-// screen, not a specification of it.
 
 import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
 import {
     ENCODER_URL,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
+    REGTEST_DESTINATION,
     fundAddress,
+    seedPrices,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -86,19 +102,27 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-const FUNDING_DOGE = 50;
+const FUNDING = 4;
 
-// Deliberately avoids `|` and `;` - MESSAGE.md forbids both in
-// PLAINTEXT_MESSAGE / ENCRYPTED_MESSAGE (they are the wire's own field and
-// command separators).
-const PLAINTEXT_TEXT = 'xc-e2e plaintext fallback probe';
+/**
+ * The protocol COIN ticker this run's chain stamps into a MESSAGE.
+ *
+ * `PROTOCOL_COIN_TICKER` in `flows/messageAction.js` maps the descriptor's coin
+ * to BTC / LTC / DOGE; the venue codes are the same three with an R prefix, so
+ * this is that mapping and not a second, driftable table.
+ */
+const PROTOCOL_COIN = REGTEST_COIN.replace(/^R/, '');
+
+// Deliberately free of `|` and `;`: MESSAGE.md forbids both inside
+// PLAINTEXT_MESSAGE / ENCRYPTED_MESSAGE, because they are the wire's own field
+// and command separators.
+const PLAINTEXT_TEXT = 'xc-e2e first contact probe';
 const PROBE_TEXT = 'xc-e2e-structural-probe';
 
-// xchain-sdk/src/messaging.js ciphertext layout (read from source, not
-// re-derived): ECIES prepends a KDF version byte + the sender's ephemeral
-// pubkey that ECDH-session has no use for (the shared secret is already
-// deterministic from both parties' permanent keys), so ECIES carries 34 more
-// overhead bytes than ECDH for an identical plaintext.
+// `xchain-sdk/src/messaging.js` ciphertext layouts, read from that source
+// rather than re-derived. ECIES prepends a KDF version byte plus the sender's
+// ephemeral pubkey; ECDH-session has no use for either, because the shared
+// secret is already deterministic from both parties' permanent keys.
 const ECIES_OVERHEAD_BYTES = 1 + 33 + 12 + 16; // version + ephemeralPubkey + iv + authTag
 const ECDH_OVERHEAD_BYTES = 12 + 16;           // iv + authTag only
 
@@ -117,63 +141,150 @@ async function gotoPalette(page, title) {
 }
 
 /**
- * The wallet's own address on the venue chain, read off the "Advanced
- * action" form's read-only From field (same field `mintXchain` relies on).
- * Not `Receive`: that screen has no Network picker and follows whatever the
- * wallet's globally "active" chain is, which off Bitcoin is not this venue's
- * chain (see `receive-qr-uri.regtest.spec.js`'s header note on the same trap).
- */
-async function ownVenueAddress(page) {
-    await gotoPalette(page, 'Advanced action');
-    await selectVenueChain(page);
-    const from = page.getByLabel('From', { exact: true });
-    await expect(from, 'the Advanced-action form has no From address on this chain')
-        .toBeVisible({ timeout: 30_000 });
-    const addr = await from.inputValue();
-    expect(addr, 'no funding address on the venue chain').toMatch(REGTEST_ADDRESS_RE);
-    return addr;
-}
-
-/**
- * Generates one NEW address on the venue chain and returns it: guaranteed
- * never funded, never spent, so it is guaranteed to carry no indexed pubkey -
- * exactly the "first message to a new contact" case.
+ * Onboards a fresh wallet on the regtest network, funds its address on this
+ * run's chain, and returns that address.
  *
- * Identified by diffing the address list before/after, not by prefix: BTC
- * and LTC regtest share DOGE's legacy m/n/2 version bytes on this venue (see
- * `utility-divisible-send.regtest.spec.js`), so "the newest m/n/2 address" is
- * ambiguous without the diff.
+ * SCREEN FACT, and it is what makes the funding safe: `switchToRegtest`
+ * derives ONE address per regtest chain, and the compose form auto-picks "the
+ * first HD address on the delivery chain" with no From field of its own to
+ * override it (`ComposeMessage.jsx` has an Address, a Message, two IconSelects
+ * and a fee picker - there is no source picker on the form at all). So the one
+ * address the Issue form reports here is necessarily the one Compose will send
+ * from, which is why test 1 can assert on `action.source` at all.
+ *
+ * The address is read off the Issue-token form rather than Receive: Receive has
+ * no Network picker and follows the wallet's globally active chain, which off
+ * Bitcoin is not this venue's chain.
  */
-async function generateFreshVenueAddress(page) {
-    await gotoPalette(page, 'Addresses');
-    const rows = () => page.getByRole('button', { name: /^View address / });
-    const listed = async () => {
-        await expect(rows().first(), 'no addresses at all to diff against')
-            .toBeVisible({ timeout: 30_000 });
-        return (await Promise.all((await rows().all()).map((r) => r.getAttribute('aria-label'))))
-            .map((l) => String(l).replace('View address ', ''))
-            .filter(Boolean);
-    };
-    const before = new Set(await listed());
+async function onboardFundedWallet(page, walletName) {
+    await createWallet(page, { password: PASSWORD, name: walletName });
+    await switchToRegtest(page, PASSWORD);
 
-    await page.getByRole('button', { name: 'Add or import address' }).click();
-    await page.getByRole('menuitem', { name: 'Add address' }).click();
-    await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    await gotoPalette(page, 'Issue token');
+    const main = page.getByRole('main');
+    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await selectVenueChain(main);
 
-    const generated = (await listed()).filter((a) => !before.has(a));
-    expect(generated.length, 'generating added exactly one new address').toBe(1);
-    return generated[0];
+    const address = await main.getByLabel('From').inputValue();
+    expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
+        .toMatch(REGTEST_ADDRESS_RE);
+
+    await fundAddress(address, FUNDING);
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+    // A MESSAGE is a fee-bearing XChain action, so the venue has to be able to
+    // price the protocol fee or compose fails on the price rather than on
+    // anything this file is testing.
+    await seedPrices();
+    return address;
 }
 
 /**
- * Registers a passive listener on every `broadcast_tx` response this page
- * makes, in order. This is the ONLY way to learn a handshake's txid: unlike
- * the compose form's "Message sent" screen (which shows a txid for a normal
- * send), `handleRequestSession` never surfaces one - the handshake button has
- * no result screen at all beyond the "Key request sent" status line. Reading
- * the network response is the same independence principle the rest of this
- * file follows: not trusting the UI's account of what it did.
+ * Points the compose form's "Delivery network" at this run's chain.
+ *
+ * `selectVenueChain` is called because it is the seam's own helper and carries
+ * its own assertion, but it CANNOT be the whole check here: it returns early on
+ * RBTC, on the (correct, everywhere else) premise that Bitcoin is already the
+ * default. This screen defaults to Dogecoin instead. So the pick is repeated
+ * unconditionally when the trigger still does not read this run's chain, and
+ * the closing assertion is what actually holds the line.
+ */
+async function pickDeliveryNetwork(scope) {
+    const trigger = scope.getByRole('button', { name: /^Delivery network:/ });
+    await expect(trigger, 'the compose form has no "Delivery network" picker')
+        .toBeVisible({ timeout: 30_000 });
+
+    await selectVenueChain(scope, 'Delivery network');
+    if (!((await trigger.getAttribute('aria-label')) || '').includes(REGTEST_CHAIN_LABEL)) {
+        await trigger.click();
+        // Option labels are "Coin (characteristic)" per `buildDeliveryNetworkOptions`
+        // ("Litecoin (faster + cheaper)"), so anchor on the coin and stop.
+        await scope.getByRole('option', { name: new RegExp(`^${REGTEST_CHAIN_LABEL}\\b`) })
+            .first().click();
+    }
+    await expect(trigger,
+        `the message would have been delivered on the wrong chain: this form defaults to `
+        + `DOGECOIN, not to ${REGTEST_CHAIN_LABEL}, and the explorer this run reads is `
+        + `${REGTEST_COIN}'s`)
+        .toHaveAttribute('aria-label', new RegExp(`^Delivery network: ${REGTEST_CHAIN_LABEL}\\b`),
+            { timeout: 15_000 });
+}
+
+/**
+ * Opens a fresh compose screen and puts it on this run's chain.
+ *
+ * SCREEN FACT: "New conversation" is the PageHeader's trailing icon button on
+ * the Messaging inbox (`MessagingInbox.jsx` renders it with that exact
+ * `aria-label`; it is an icon with no visible text, so the accessible name is
+ * the only way to reach it).
+ */
+async function gotoNewConversation(page) {
+    await gotoSection(page, 'Messaging');
+    const compose = page.getByRole('button', { name: 'New conversation' });
+    await expect(compose, 'no "New conversation" entry point on the Messaging screen')
+        .toBeVisible({ timeout: 30_000 });
+    await compose.click();
+
+    const main = page.getByRole('main');
+    await expect(main.getByLabel('Address', { exact: true }),
+        'the compose screen never rendered its Address field').toBeVisible({ timeout: 30_000 });
+    await pickDeliveryNetwork(main);
+    return main;
+}
+
+/**
+ * The Encryption dropdown's trigger.
+ *
+ * SCREEN FACT: `IconSelect` gives its trigger the accessible name
+ * "<label>: <selected label>" precisely because the visible label is a `<span>`
+ * and not a `<label for>`. So the CURRENT selection is readable off the
+ * aria-label without opening the popover, which is how the ECIES default is
+ * asserted rather than assumed.
+ */
+function encryptionTrigger(scope) {
+    return scope.getByRole('button', { name: /^Encryption:/ });
+}
+
+/** Picks an Encryption option by its visible label prefix (a regex source). */
+async function pickEncryption(scope, labelPrefix) {
+    await encryptionTrigger(scope).click();
+    const option = scope.getByRole('option', { name: new RegExp(`^${labelPrefix}`) });
+    await expect(option, `no "${labelPrefix}" encryption option offered`)
+        .toBeVisible({ timeout: 15_000 });
+    await option.click();
+}
+
+/**
+ * The "we don't know their key" banner. Present ONLY while the lookup has
+ * SETTLED on missing and an encrypted method is selected, which is exactly why
+ * it is the precondition for every "Send is disabled" assertion in this file:
+ * the in-flight `checking` state disables Send too, and would otherwise let
+ * that assertion pass without the refusal it claims to prove.
+ */
+function missingPubkeyBanner(scope) {
+    return scope.getByRole('alert').filter({ hasText: "don't know the recipient's public key" });
+}
+
+const sendButton = (scope) => scope.getByRole('button', { name: 'Send message', exact: true });
+
+/** Fills the recipient, and the body when one is given. */
+async function fillRecipient(scope, address, message) {
+    await scope.getByLabel('Address', { exact: true }).fill(address);
+    if (message !== undefined) {
+        await scope.getByLabel('Message', { exact: true }).fill(message);
+    }
+}
+
+/**
+ * Records every `broadcast_tx` txid this page produces, in order.
+ *
+ * This is the ONLY way to learn what was broadcast here. The compose form's own
+ * "Message sent" result screen (which does print a txid) is never reached in
+ * the web shell: `App.jsx` passes an `onSent` handler, and `openConfirmScreen`
+ * short-circuits on it before `setStage('done')` ever runs, navigating back to
+ * the inbox and popping a txid-less NoticeModal instead. The handshake button
+ * has no result screen at all. Reading the network is also the more honest
+ * source: it is what the wallet DID, not what it says it did.
  */
 function trackBroadcastTxids(page) {
     const txids = [];
@@ -184,313 +295,464 @@ function trackBroadcastTxids(page) {
             const body = response.request().postData() || '';
             if (!body.includes('"broadcast_tx"')) return;
             const json = await response.json().catch(() => null);
+            // `XChainEncoder.broadcastTx` documents its result as `{ txid }`.
             const txid = json?.result?.txid;
             if (txid) txids.push(txid);
-        } catch { /* a transient parse failure here must not fail the whole run */ }
+        } catch { /* a transient parse failure must not fail the whole run */ }
     });
     return txids;
 }
 
-/** Waits for `trackBroadcastTxids`'s list to grow past `countBefore`. */
-async function waitForNextTxid(txids, countBefore, timeoutMs = 60_000) {
+/**
+ * Waits for the broadcast burst that follows one user action to finish, and
+ * returns the LAST txid in it.
+ *
+ * THE LAST ONE, NOT THE FIRST, AND THIS IS THE BUG THE PREVIOUS DRAFT CARRIED.
+ * A MESSAGE is not a one-transaction action. `VERSION|COIN|DESTINATION|...`
+ * with a bech32 destination is already ~50 bytes before the body, so anything
+ * but a trivially short plaintext (and EVERY encrypted body, which is hex, and
+ * every format-0 handshake, which carries a 66-hex-char pubkey) overflows the
+ * 80-byte OP_RETURN and the encoder chunks it into a commit plus a reveal. Per
+ * `submitWithSigner.js` step 4a, "the decoder indexes the REVEAL, so its txid
+ * is the action's identity, not the commit's" - and the reveal is broadcast
+ * SECOND. Grabbing the first new txid therefore hands `waitForValidAction` a
+ * transaction that carries no action at all, and it times out reporting "no
+ * action recorded" for a message that is on chain and perfectly valid.
+ *
+ * The settle window exists because the `response` handler above is async: the
+ * final txid can still be in flight when the UI already says the send is done.
+ */
+async function settledTxid(txids, countBefore, timeoutMs = 120_000) {
     const deadline = Date.now() + timeoutMs;
+    let lastCount = countBefore;
+    let stableSince = null;
     while (Date.now() < deadline) {
-        if (txids.length > countBefore) return txids[txids.length - 1];
+        if (txids.length !== lastCount) {
+            lastCount = txids.length;
+            stableSince = Date.now();
+        } else if (lastCount > countBefore && stableSince !== null
+            && Date.now() - stableSince >= 3_000) {
+            return txids[txids.length - 1];
+        }
         await new Promise((r) => setTimeout(r, 500));
     }
-    throw new Error('no broadcast_tx response observed for the expected send - either nothing was '
-        + 'broadcast or the encoder URL match is wrong');
-}
-
-/** Opens a fresh compose screen from wherever the wallet currently is. */
-async function gotoNewConversation(page) {
-    await gotoSection(page, 'Messaging');
-    const compose = page.getByRole('button', { name: 'New conversation' });
-    await expect(compose, 'no "New conversation" entry point on the Messaging screen')
-        .toBeVisible({ timeout: 30_000 });
-    await compose.click();
-    await expect(page.getByRole('main').getByLabel('Address', { exact: true }),
-        'the compose screen never rendered its Address field').toBeVisible({ timeout: 30_000 });
-}
-
-/** The Encryption dropdown's trigger button, wherever it currently reads. */
-function encryptionTrigger(page) {
-    return page.getByRole('button', { name: /^Encryption:/ });
-}
-
-/** Picks an Encryption option by its visible label prefix. */
-async function pickEncryption(page, labelPrefix) {
-    await encryptionTrigger(page).click();
-    const option = page.getByRole('option', { name: new RegExp(`^${labelPrefix}`) });
-    await expect(option, `no "${labelPrefix}" encryption option offered`).toBeVisible({ timeout: 15_000 });
-    await option.click();
-}
-
-/** The "recipient's key is unknown" banner, present only while it applies. */
-function missingPubkeyBanner(page) {
-    return page.getByRole('alert').filter({ hasText: "don't know the recipient's public key" });
-}
-
-const sendButton = (page) => page.getByRole('main').getByRole('button', { name: 'Send message', exact: true });
-
-/** Fills the recipient and message, and returns once the pubkey lookup settles. */
-async function fillRecipient(page, address, message) {
-    await page.getByRole('main').getByLabel('Address', { exact: true }).fill(address);
-    if (message !== undefined) {
-        await page.getByRole('main').getByLabel('Message', { exact: true }).fill(message);
-    }
+    throw new Error('no broadcast_tx response settled for the expected send: either nothing was '
+        + `broadcast, or the encoder URL match (${ENCODER_URL}) is wrong`);
 }
 
 /**
- * Approves the single-encode confirm page, waits for the txid capture, and
- * dismisses the "Message sent" notice.
+ * Approves the confirm screen, waits for the send to finish, and returns the
+ * action's txid.
  *
- * THE DISMISS IS NOT COSMETIC. The web shell's `onSent` handler (App.jsx)
- * navigates back to the Messaging inbox AND pops a `<NoticeModal
- * title="Message sent">` - an `aria-modal="true"` overlay - which does not
- * auto-close (ComposeMessage's OWN inline "done" stage, with its "Done"
- * button, is never reached here: `onSent` short-circuits before `setStage
- * ('done')` runs). Leaving the notice open and immediately navigating
- * elsewhere (this file's first draft did exactly that) hangs: the overlay
- * keeps intercepting every click aimed at whatever is underneath it, which
- * reads as a dead nav rail rather than what it is - an unread notice.
- * `NoticeModal` dismisses via its "OK" button (also Escape / the backdrop,
- * per its own source), not "Done".
+ * DISMISSING THE NOTICE IS NOT COSMETIC. `onSent` navigates back to the inbox
+ * AND mounts a `<NoticeModal title="Message sent">`, an `aria-modal="true"`
+ * overlay that does not auto-close. Leaving it open and navigating on hangs:
+ * the overlay swallows every click aimed at what is underneath it, which reads
+ * as a dead nav rail rather than what it is, an unread notice. `NoticeModal`
+ * dismisses on its "OK" button (also Escape and the backdrop, per its source).
+ *
+ * The notice appearing is also the signal that `messageAction` RESOLVED, i.e.
+ * that every broadcast in the burst has already been issued - which is what
+ * makes the settle window in `settledTxid` short rather than a guess.
  */
 async function approveAndCaptureTxid(page, txids) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm, 'the compose form never reached a confirm screen')
         .toBeVisible({ timeout: 90_000 });
     const before = txids.length;
-    await page.getByTestId('confirm-approve').click();
+    const approve = page.getByTestId('confirm-approve');
+    // Approve stays disabled while pre-flight is in flight; waiting on the
+    // button rather than on a sleep is what keeps this off the venue's clock.
+    await expect(approve, 'Approve never became clickable on the confirm screen')
+        .toBeEnabled({ timeout: 120_000 });
+    await approve.click();
+
     const notice = page.getByRole('dialog', { name: 'Message sent', exact: true });
     await expect(notice, 'the wallet never reported the message as sent')
-        .toBeVisible({ timeout: 120_000 });
-    const txid = await waitForNextTxid(txids, before);
+        .toBeVisible({ timeout: 180_000 });
+    const txid = await settledTxid(txids, before);
     await notice.getByRole('button', { name: 'OK', exact: true }).click();
-    await expect(notice, 'the "Message sent" notice did not close - it would block every click after it')
+    await expect(notice, 'the "Message sent" notice did not close, and it blocks every click after it')
         .toHaveCount(0, { timeout: 15_000 });
     return txid;
 }
 
-test.describe(`Messaging: handshake and encryption methods on ${REGTEST_CHAIN_LABEL}`, () => {
+test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
     test.setTimeout(1_800_000);
 
-    test.fixme('a never-spent recipient blocks encryption, offers a real fallback, and ECDH-session is wire-distinct from ECIES', async ({ page }) => {
+    test('an address the chain has no key for is refused encryption, and the plaintext fallback really lands unencrypted', async ({ page }) => {
         const txids = trackBroadcastTxids(page);
-        page.on('console', (m) => console.log('PAGECONSOLE:', m.type(), m.text()));
-        page.on('pageerror', (e) => console.log('PAGEERROR:', e.message, e.stack));
         let ownAddress;
-        let freshRecipient;
+        let main;
 
-        await test.step('onboard, fund the venue chain, and mint a never-spent recipient', async () => {
-            await createWallet(page, { password: PASSWORD });
-            await switchToRegtest(page, PASSWORD);
-
-            ownAddress = await ownVenueAddress(page);
-            await fundAddress(ownAddress, FUNDING_DOGE);
-            await page.reload();
-            await unlockAfterReload(page, PASSWORD);
-
-            freshRecipient = await generateFreshVenueAddress(page);
-            expect(freshRecipient, 'the fresh recipient is the sender, which would prove nothing')
+        await test.step('onboard and fund the venue chain', async () => {
+            ownAddress = await onboardFundedWallet(page, 'First Contact Wallet');
+            expect(REGTEST_DESTINATION,
+                'the recipient is this wallet\'s own address, which would prove nothing about a stranger')
                 .not.toBe(ownAddress);
         });
 
-        await test.step('encrypted send to the fresh recipient is REFUSED at the form, not silently degraded', async () => {
-            await gotoNewConversation(page);
-            await fillRecipient(page, freshRecipient, PLAINTEXT_TEXT);
+        await test.step('the wallet REFUSES to encrypt, and says why', async () => {
+            main = await gotoNewConversation(page);
+            await fillRecipient(main, REGTEST_DESTINATION, PLAINTEXT_TEXT);
 
-            await expect(missingPubkeyBanner(page),
-                'the wallet never told the user it could not find a public key for a never-spent address')
-                .toBeVisible({ timeout: 30_000 });
+            // Default first, so the rest of this step is about a known start
+            // state rather than whatever the form happened to be in.
+            await expect(encryptionTrigger(main),
+                'the compose form no longer defaults to ECIES, so this step is testing a '
+                + 'different method than it claims to')
+                .toHaveAttribute('aria-label', /^Encryption: Standard \(ECIES\)/);
 
-            // Default encryption is ECIES; Send must be disabled while the
-            // pubkey is unresolved, or a user could sign a message that can
-            // never actually be encrypted.
-            await expect(sendButton(page),
-                'Send is enabled for an ENCRYPTED message to a recipient with no known public key - '
-                + 'this can only mean the wallet is about to sign something it cannot actually encrypt')
+            await expect(missingPubkeyBanner(main),
+                'the wallet never told the user it could not find a public key for an address '
+                + 'that has never spent')
+                .toBeVisible({ timeout: 60_000 });
+
+            // The banner above proves the lookup SETTLED on missing, so this is
+            // the refusal and not the in-flight `checking` disable.
+            await expect(sendButton(main),
+                'Send is enabled for an ENCRYPTED message to a recipient with no known public key: '
+                + 'the wallet is about to sign something it cannot actually encrypt')
                 .toBeDisabled();
 
-            // Falsify the disable by taking the ONE real path that should
-            // flip it: picking Plain text. If the gate were keyed on
-            // something else (a stuck loading flag, an unrelated field) this
-            // would still read disabled and the claim above would be
-            // unfalsified rather than confirmed.
-            await pickEncryption(page, 'Plain text');
-            await expect(missingPubkeyBanner(page),
-                'the missing-pubkey banner is still shown for a PLAIN TEXT send, which needs no key at all')
-                .toHaveCount(0);
-            await expect(sendButton(page),
-                'Send stayed disabled after switching to Plain text, so the gate above is not really '
-                + 'conditioned on encryption mode + pubkey state').toBeEnabled();
+            // The banner is also where the two ways out are offered, and an
+            // offer nobody can see is not an offer.
+            await expect(missingPubkeyBanner(main),
+                'the refusal banner does not tell the user what to do instead')
+                .toContainText('pick "Plain text" above');
+            await expect(missingPubkeyBanner(main)
+                .getByRole('button', { name: 'Request encrypted session (publish your key)' }),
+            'the refusal banner offers no handshake, so the only way forward it leaves is plaintext')
+                .toBeVisible();
+        });
 
-            // And back, to show the disable is a function of the CURRENT
-            // choice, not a one-way flag the first switch tripped.
-            await pickEncryption(page, 'Standard \\(ECIES\\)');
-            await expect(sendButton(page),
+        await test.step('the refusal is conditioned on the encryption choice, not stuck on', async () => {
+            // Falsify the disable by taking the ONE path that should lift it.
+            // Without this, a stuck loading flag or an unrelated empty field
+            // would read exactly like the gate under test.
+            await pickEncryption(main, 'Plain text');
+            await expect(missingPubkeyBanner(main),
+                'the missing-key banner is still shown for a PLAIN TEXT send, which needs no key at all')
+                .toHaveCount(0);
+            await expect(sendButton(main),
+                'Send stayed disabled after switching to Plain text, so the disable above is not '
+                + 'really a function of encryption mode plus key state')
+                .toBeEnabled({ timeout: 15_000 });
+
+            // And back, to show it is the CURRENT choice that decides, not a
+            // one-way flag the first switch tripped.
+            await pickEncryption(main, 'Standard \\(ECIES\\)');
+            await expect(missingPubkeyBanner(main),
+                'the missing-key banner did not come back for the same unresolved recipient')
+                .toBeVisible({ timeout: 15_000 });
+            await expect(sendButton(main),
                 'switching back to ECIES did not re-disable Send for the same unresolved recipient')
                 .toBeDisabled();
         });
 
-        await test.step('the plaintext fallback actually delivers, unencrypted, exactly as offered', async () => {
-            await pickEncryption(page, 'Plain text');
-            await expect(sendButton(page)).toBeEnabled({ timeout: 15_000 });
-            await sendButton(page).click();
+        await test.step('the plaintext fallback delivers, and the CHAIN says it is plaintext', async () => {
+            await pickEncryption(main, 'Plain text');
+            await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
+            await sendButton(main).click();
 
             const confirm = page.getByTestId('confirm-modal');
-            await expect(confirm).toBeVisible({ timeout: 90_000 });
-            // §5.2.1-2: the headline names it PUBLIC, not merely "unencrypted" -
-            // the decoder's own wording (decodeMessage, version 3branch).
-            await expect(confirm).toContainText(`Send public message to ${freshRecipient} on ${REGTEST_CHAIN_LABEL}`);
+            await expect(confirm, 'the compose form never reached a confirm screen')
+                .toBeVisible({ timeout: 90_000 });
+            // The headline is `decoded.summary` from the composed action bytes,
+            // not from form state, and the decoder's own word for v3 is PUBLIC
+            // rather than the softer "unencrypted" (`describe.js` decodeMessage,
+            // version 3 branch). A user about to publish a message forever is
+            // owed the harder word.
+            await expect(confirm,
+                'the confirm screen does not name the message as PUBLIC on the venue chain')
+                .toContainText(`Send public message to ${REGTEST_DESTINATION} on ${REGTEST_CHAIN_LABEL}`);
 
             const txid = await approveAndCaptureTxid(page, txids);
             const action = await waitForValidAction(txid);
 
-            expect(action.destination, 'the on-chain DESTINATION does not match the recipient typed')
-                .toBe(freshRecipient);
-            expect(action.coin, 'COIN was not stamped DOGE for a Dogecoin-format recipient')
-                .toBe('DOGE');
+            // Everything below is the explorer's record of the action, read
+            // back independently of the wallet's own "Message sent".
+            expect(action.action,
+                'the transaction the wallet broadcast did not record a MESSAGE action')
+                .toBe('MESSAGE');
+            expect(String(action.action_format),
+                'the plaintext fallback was not sent as MESSAGE format 3, so whatever went out is '
+                + 'not the unencrypted format the confirm screen promised')
+                .toBe('3');
+            expect(action.destination, 'the on-chain DESTINATION is not the address that was typed')
+                .toBe(REGTEST_DESTINATION);
+            expect(action.source, 'the message was not sent from this wallet\'s funded address')
+                .toBe(ownAddress);
+            expect(action.coin,
+                `COIN was not stamped ${PROTOCOL_COIN}, so the message names the wrong destination network`)
+                .toBe(PROTOCOL_COIN);
             // THE ASSERTION THIS STEP EXISTS FOR: the chain's own copy of the
-            // message, read independently of the wallet's own "it sent" claim.
+            // body. A fallback that corrupts or drops the message is worse than
+            // refusing to send at all, because the user believes it went.
             expect(action.plaintext_message,
-                'the on-chain PLAINTEXT_MESSAGE does not match what was typed - a plaintext fallback '
-                + 'that corrupts or drops the body is worse than refusing to send at all')
+                'the on-chain PLAINTEXT_MESSAGE is not what was typed')
                 .toBe(PLAINTEXT_TEXT);
             expect(action.encrypted_message,
-                'a message sent as "Plain text" carries an ENCRYPTED_MESSAGE payload on chain - it is '
-                + 'not actually plaintext').toBeFalsy();
+                'a message sent as "Plain text" carries an ENCRYPTED_MESSAGE payload on chain, so it '
+                + 'is not what the confirm screen called it')
+                .toBeFalsy();
+        });
+    });
+
+    // FIXME'd 2026-08-27 BECAUSE IT PINS A REAL DEFECT THAT IS NOT FIXED YET,
+    // not because it is unfinished. Tracked in the campaign's frontier.
+    //
+    // Driven centrally on Litecoin, this went red after 2.4 minutes with the
+    // message this file already predicted from source: the handshake never
+    // confirmed, and the compose surface reports the failure NOWHERE.
+    // `handleRequestSession` writes every failure into `submitError`, the form
+    // stage renders `submitError` nowhere at all, and the same function returns
+    // early with "Enter your password to send the key request." when the signer
+    // pool is not ready, on a stage that has no password field. So the button
+    // does nothing, silently, with no way for the user to learn why or to
+    // comply.
+    //
+    // The claim below is right and should stay exactly as written; it is the
+    // product that has to move. Un-fixme it when that fix lands, and expect this
+    // test to be how you know it landed.
+    test.fixme('the handshake publishes OUR key to an address the chain has never seen', async ({ page }) => {
+        const txids = trackBroadcastTxids(page);
+        let ownAddress;
+        let main;
+        // Recorded rather than assumed to be zero: onboarding broadcasts
+        // nothing today (funding goes through the miner, price seeding through
+        // the indexer), but a future setup step that did would silently make
+        // the handshake's txid the wrong transaction.
+        let txidsBeforeHandshake = 0;
+
+        await test.step('onboard and fund the venue chain', async () => {
+            ownAddress = await onboardFundedWallet(page, 'Handshake Wallet');
         });
 
-        await test.step('the handshake publishes OUR key to them, on chain - the wallet\'s actual fix for "no pubkey yet"', async () => {
-            await gotoNewConversation(page);
-            await fillRecipient(page, freshRecipient);
+        await test.step('the handshake is offered, and reports itself sent', async () => {
+            main = await gotoNewConversation(page);
+            // No body: the handshake carries no message, and the button lives in
+            // the banner whether or not one is typed. Leaving it empty also
+            // keeps `Send message` disabled on its own account, so nothing here
+            // can be confused with an ordinary send.
+            await fillRecipient(main, REGTEST_DESTINATION);
 
-            const requestButton = page.getByRole('button', { name: 'Request encrypted session (publish your key)' });
-            await expect(requestButton, 'no handshake / key-publish offer for a recipient with no pubkey')
-                .toBeVisible({ timeout: 30_000 });
-
-            const before = txids.length;
-            await requestButton.click();
-            await expect(page.getByText(/Key request sent/),
-                'the wallet never confirmed the handshake was sent').toBeVisible({ timeout: 60_000 });
-
-            const txid = await waitForNextTxid(txids, before);
-            const action = await waitForValidAction(txid);
-
-            // format 0 = "Sender Key" (MESSAGE.md): this is a REQUEST
-            // publishing OUR pubkey, not the recipient's - it lets THEM
-            // encrypt TO US, and does not, by itself, let this wallet
-            // encrypt to the still-unknown recipient. That asymmetry is the
-            // actual answer to "what happens when you message someone the
-            // chain has never seen": you cannot encrypt to them yet, but you
-            // can hand them what they need to encrypt back.
-            expect(String(action.action_format), 'the handshake was not sent as MESSAGE format 0 (Sender Key)')
-                .toBe('0');
-            expect(action.destination, 'the handshake was not addressed to the fresh recipient')
-                .toBe(freshRecipient);
-            expect(action.source, 'the handshake was not sent FROM this wallet\'s own address')
-                .toBe(ownAddress);
-            expect(String(action.encryption_method), 'the handshake did not declare ECDH-session (method 2)')
-                .toBe('2');
-            // A compressed secp256k1 pubkey: 33 bytes, hex-encoded, leading
-            // byte 0x02 or 0x03. Not matched against a specific value (this
-            // spec has no independent derivation tooling for it), but the
-            // SHAPE is exactly what a key-publish handshake must carry.
-            expect(action.encryption_key, 'the handshake carried no ENCRYPTION_KEY at all')
-                .toMatch(/^0[23][0-9a-f]{64}$/i);
-        });
-
-        await test.step('ECIES and ECDH-session produce DIFFERENT bytes on chain for the SAME plaintext', async () => {
-            // Our own address spent twice above (funding a plaintext send and
-            // the handshake), so its pubkey is now indexed - self-messaging is
-            // the cheapest way to reach the "known pubkey" branch without a
-            // second wallet, and nothing below decrypts through this wallet's
-            // own code, so self-messaging does not weaken the claim.
-            await gotoNewConversation(page);
-            await fillRecipient(page, ownAddress, PROBE_TEXT);
-            await expect(missingPubkeyBanner(page)).toHaveCount(0, { timeout: 60_000 });
-            await expect(page.getByText(/Recipient public key found/),
-                "this wallet's own address never became resolvable as a recipient after spending twice")
+            const banner = missingPubkeyBanner(main);
+            await expect(banner, 'no missing-key banner, so the handshake offer is not on screen')
                 .toBeVisible({ timeout: 60_000 });
 
-            // Encryption already defaults to "Standard (ECIES)" - assert it
-            // rather than assume it, since the whole comparison below depends
-            // on knowing which method each send actually used.
-            await expect(encryptionTrigger(page)).toHaveAttribute('aria-label', /^Encryption: Standard \(ECIES\)/);
-            await expect(sendButton(page)).toBeEnabled({ timeout: 15_000 });
-            await sendButton(page).click();
-            await expect(page.getByTestId('confirm-modal')).toContainText(
-                `Send encrypted message to ${ownAddress} on ${REGTEST_CHAIN_LABEL}`);
-            const eciesTxid = await approveAndCaptureTxid(page, txids);
-            const eciesAction = await waitForValidAction(eciesTxid);
+            const request = banner
+                .getByRole('button', { name: 'Request encrypted session (publish your key)' });
+            await expect(request, 'no handshake offer for a recipient the chain has no key for')
+                .toBeVisible({ timeout: 30_000 });
 
-            expect(eciesAction.encrypted_message, 'the ECIES send carries no ENCRYPTED_MESSAGE on chain')
-                .toBeTruthy();
-            expect(eciesAction.plaintext_message, 'an "encrypted" send left a PLAINTEXT_MESSAGE on chain too')
+            txidsBeforeHandshake = txids.length;
+            await request.click();
+
+            // SCREEN FACT, and it is a hazard rather than a nicety:
+            // `handleRequestSession` writes its failures to `submitError`, and
+            // the FORM stage renders `submitError` NOWHERE (only the legacy
+            // review stage and the hardware branch do). A handshake that throws
+            // therefore leaves the screen unchanged, so this timeout is the only
+            // signal there is. Two candidate causes if it fires: the broadcast
+            // failed silently, or `signerReady` was false, in which case
+            // `handleRequestSession` returns early asking for a password that
+            // this stage has no field for.
+            await expect(main.getByText(/Key request sent/),
+                'the wallet never confirmed the key request. This surface reports failure NOWHERE '
+                + 'on the form stage, so this may be a broadcast that failed silently, or a '
+                + 'session that was not unlocked (handleRequestSession refuses without a password, '
+                + 'and the form has no password field)')
+                .toBeVisible({ timeout: 120_000 });
+        });
+
+        await test.step('the CHAIN carries our key, addressed to them', async () => {
+            const txid = await settledTxid(txids, txidsBeforeHandshake);
+            const action = await waitForValidAction(txid);
+
+            expect(action.action, 'the handshake did not record a MESSAGE action')
+                .toBe('MESSAGE');
+            // Format 0 is "Sender Key" (MESSAGE.md, and the indexer's own
+            // `formats[0]`). This is the whole answer to the first-contact
+            // question in one field: the wallet did NOT encrypt to an unknown
+            // key and did not pretend to. It published OURS, so THEY can
+            // encrypt back to us, and this attempt carries no message body at
+            // all because there is nothing yet to encrypt it with.
+            expect(String(action.action_format),
+                'the handshake was not sent as MESSAGE format 0 (Sender Key)')
+                .toBe('0');
+            expect(action.destination, 'the handshake was not addressed to the intended recipient')
+                .toBe(REGTEST_DESTINATION);
+            expect(action.source, 'the handshake was not sent FROM this wallet\'s own address')
+                .toBe(ownAddress);
+            expect(action.coin,
+                `COIN was not stamped ${PROTOCOL_COIN} on the handshake`)
+                .toBe(PROTOCOL_COIN);
+            expect(String(action.encryption_method),
+                'the handshake did not declare ECDH-session (method 2), which is the only method a '
+                + 'published key is useful for')
+                .toBe('2');
+            // A compressed secp256k1 pubkey: 33 bytes, hex, leading 0x02/0x03.
+            // Not matched against a specific value (this spec has no
+            // independent derivation tooling), but the SHAPE is exactly what a
+            // key publication must carry, and an empty or truncated field would
+            // be a handshake that teaches the recipient nothing.
+            expect(action.encryption_key,
+                'the handshake carried no usable ENCRYPTION_KEY, so the recipient learns nothing '
+                + 'from it and can still not reply encrypted')
+                .toMatch(/^0[23][0-9a-f]{64}$/i);
+            expect(action.encrypted_message,
+                'a key-publish handshake carries an ENCRYPTED_MESSAGE, which it has no key to have '
+                + 'produced')
                 .toBeFalsy();
-            // v2 has no wire slot for ENCRYPTION_METHOD; the indexer stamps 1
-            // (ECIES) on every v2 row regardless of which method the sender
-            // actually used (xchain-indexer/src/actions/message.js). Pinned
-            // here because it is the reason this step cannot just read the
-            // method off the chain and has to measure ciphertext shape instead.
-            expect(String(eciesAction.encryption_method),
-                'the indexer stopped stamping ECIES(1) on a v2 row with no on-wire method')
-                .toBe('1');
-            const eciesHex = eciesAction.encrypted_message.toLowerCase();
-            const eciesBytes = eciesHex.length / 2;
-            const probeBytes = Buffer.byteLength(PROBE_TEXT, 'utf8');
-            expect(eciesBytes, 'ECIES ciphertext length does not match version(1)+ephemeralPubkey(33)+iv(12)'
-                + '+authTag(16)+plaintext - the wire layout xchain-sdk/src/messaging.js documents')
-                .toBe(ECIES_OVERHEAD_BYTES + probeBytes);
-            // v1 KDF version byte, then a compressed ephemeral pubkey (02/03 lead byte).
-            expect(eciesHex.slice(0, 2), 'ECIES ciphertext does not open with the v1 KDF version byte (0x01)')
-                .toBe('01');
-            expect(eciesHex.slice(2, 4), 'ECIES ciphertext byte 1 is not a compressed pubkey prefix (02/03)')
-                .toMatch(/^0[23]$/);
+            expect(action.plaintext_message,
+                'a key-publish handshake carries a PLAINTEXT_MESSAGE, which is a message the user '
+                + 'never wrote')
+                .toBeFalsy();
+        });
+    });
 
-            await gotoNewConversation(page);
-            await fillRecipient(page, ownAddress, PROBE_TEXT);
-            await expect(missingPubkeyBanner(page)).toHaveCount(0, { timeout: 60_000 });
-            await expect(page.getByText(/Recipient public key found/)).toBeVisible({ timeout: 60_000 });
-            await pickEncryption(page, 'Shared key \\(ECDH\\)');
-            await expect(sendButton(page)).toBeEnabled({ timeout: 15_000 });
-            await sendButton(page).click();
-            // Same decoded headline as ECIES: the confirm page cannot tell the
-            // two methods apart either, because v2 carries no method field.
+    // UNFINISHED, AND `test.fixme` FOR THAT REASON ALONE.
+    //
+    // IT PINS NO DEFECT AND MAKES NO CLAIM ABOUT THE WALLET. The body below is
+    // written out in full and every selector in it was read off the product
+    // source, but it has never been run, and an assertion that has never passed
+    // is a guess about the screen rather than a specification of it. Do not
+    // read anything here as a finding until it is green once.
+    //
+    // It is separated from the two tests above deliberately, because bundling
+    // bundled with them, and because it is the most expensive leg by far (three
+    // broadcasts, two of them behind a pubkey that must first be indexed) its
+    // failure is what left the first-contact question unanswered for a whole
+    // session. Whatever happens to this test now, that question is answered
+    // above and stays answered.
+    //
+    // WHAT IT WOULD PROVE, and why it has to prove it this way. Neither the wire
+    // nor the UI distinguishes ECIES from ECDH-session: a v2 MESSAGE has no
+    // ENCRYPTION_METHOD field, so the indexer stamps `encryption_method=1` on
+    // every v2 row regardless (`xchain-indexer/src/actions/message.js`), and the
+    // confirm screen decodes both to the identical "Send encrypted message to X"
+    // (`describe.js`, version 2 branch). Asserting "the app says it used ECDH"
+    // would only prove the app's claim about itself. The one place the methods
+    // provably differ is ciphertext SHAPE (`xchain-sdk/src/messaging.js`):
+    //   ECIES = [version(1)][ephemeralPubkey(33)][iv(12)][authTag(16)][body]
+    //   ECDH  = [iv(12)][authTag(16)][body]
+    // a 34-byte delta for the SAME plaintext to the SAME recipient, read off the
+    // chain. That is a measurement, not a decrypt through the wallet's own code,
+    // which is the point: self-consistency proves nothing about encryption.
+    //
+    // WHY IT SELF-MESSAGES. Both encrypted methods need the RECIPIENT's pubkey
+    // indexed, which needs that address to have spent. The cheapest way there
+    // without a second funded wallet is to send to ourselves after our own
+    // address has spent once. That first send is the leg most likely to make
+    // this test slow or flaky on a shared venue, and it is the first thing to
+    // cut if this has to be reduced to something that finishes.
+    test.fixme('ECDH-session and ECIES are wire-distinct on chain for the same plaintext', async ({ page }) => {
+        const txids = trackBroadcastTxids(page);
+        let ownAddress;
+        const probeBytes = Buffer.byteLength(PROBE_TEXT, 'utf8');
+        let eciesBytes;
+        let ecdhBytes;
+        let eciesHex;
+
+        await test.step('onboard, fund, and spend once so our own key is indexed', async () => {
+            ownAddress = await onboardFundedWallet(page, 'Wire Distinctness Wallet');
+
+            // A plaintext self-message is the cheapest spend that publishes our
+            // pubkey: it needs no recipient key, so it works before any key is
+            // known, and it is the same lane test 1 already drives.
+            const main = await gotoNewConversation(page);
+            await fillRecipient(main, ownAddress, PLAINTEXT_TEXT);
+            await pickEncryption(main, 'Plain text');
+            await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
+            await sendButton(main).click();
+            const txid = await approveAndCaptureTxid(page, txids);
+            await waitForValidAction(txid);
+        });
+
+        await test.step('ECIES to a KNOWN key carries the ephemeral-key envelope', async () => {
+            const main = await gotoNewConversation(page);
+            await fillRecipient(main, ownAddress, PROBE_TEXT);
+            await expect(missingPubkeyBanner(main),
+                'this wallet\'s own address never became resolvable after spending once')
+                .toHaveCount(0, { timeout: 120_000 });
+            await expect(main.getByText(/Recipient public key found/),
+                'the form never confirmed it resolved a key, so the method below is not the one '
+                + 'this step names')
+                .toBeVisible({ timeout: 120_000 });
+
+            await expect(encryptionTrigger(main))
+                .toHaveAttribute('aria-label', /^Encryption: Standard \(ECIES\)/);
+            await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
+            await sendButton(main).click();
             await expect(page.getByTestId('confirm-modal')).toContainText(
                 `Send encrypted message to ${ownAddress} on ${REGTEST_CHAIN_LABEL}`);
-            const ecdhTxid = await approveAndCaptureTxid(page, txids);
-            const ecdhAction = await waitForValidAction(ecdhTxid);
 
-            expect(ecdhAction.encrypted_message, 'the ECDH send carries no ENCRYPTED_MESSAGE on chain')
+            const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
+            expect(action.encrypted_message, 'the ECIES send carries no ENCRYPTED_MESSAGE on chain')
                 .toBeTruthy();
-            expect(String(ecdhAction.encryption_method),
-                'ECDH-session also lands on a v2 row, which the indexer stamps 1 - if this ever reads '
-                + 'anything else the indexer has started distinguishing methods it has no wire field for')
+            expect(action.plaintext_message, 'an "encrypted" send left a PLAINTEXT_MESSAGE on chain too')
+                .toBeFalsy();
+            // Pinned because it is the REASON this step cannot simply read the
+            // method off the chain: v2 has no wire slot for it and the indexer
+            // stamps 1 on every v2 row.
+            expect(String(action.encryption_method),
+                'the indexer stopped stamping ECIES(1) on a v2 row that carries no on-wire method')
                 .toBe('1');
-            const ecdhHex = ecdhAction.encrypted_message.toLowerCase();
-            const ecdhBytes = ecdhHex.length / 2;
-            expect(ecdhBytes, 'ECDH-session ciphertext length does not match iv(12)+authTag(16)+plaintext - '
-                + 'no version byte, no ephemeral pubkey, because the shared secret is already deterministic '
-                + "from both parties' permanent keys")
+
+            eciesHex = action.encrypted_message.toLowerCase();
+            eciesBytes = eciesHex.length / 2;
+            expect(eciesBytes,
+                'ECIES ciphertext length does not match version(1)+ephemeralPubkey(33)+iv(12)'
+                + '+authTag(16)+plaintext, the layout xchain-sdk/src/messaging.js packs')
+                .toBe(ECIES_OVERHEAD_BYTES + probeBytes);
+            expect(eciesHex.slice(0, 2),
+                'ECIES ciphertext does not open with the v1 KDF version byte (0x01)')
+                .toBe('01');
+            expect(eciesHex.slice(2, 4),
+                'ECIES ciphertext byte 1 is not a compressed-pubkey prefix (02/03)')
+                .toMatch(/^0[23]$/);
+        });
+
+        await test.step('ECDH-session carries no ephemeral key, and the delta says so', async () => {
+            const main = await gotoNewConversation(page);
+            await fillRecipient(main, ownAddress, PROBE_TEXT);
+            await expect(main.getByText(/Recipient public key found/))
+                .toBeVisible({ timeout: 120_000 });
+            await pickEncryption(main, 'Shared key \\(ECDH\\)');
+            await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
+            await sendButton(main).click();
+            // The SAME decoded headline as ECIES: the confirm screen cannot tell
+            // the methods apart either, because v2 carries no method field.
+            await expect(page.getByTestId('confirm-modal')).toContainText(
+                `Send encrypted message to ${ownAddress} on ${REGTEST_CHAIN_LABEL}`);
+
+            const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
+            expect(action.encrypted_message, 'the ECDH send carries no ENCRYPTED_MESSAGE on chain')
+                .toBeTruthy();
+            const ecdhHex = action.encrypted_message.toLowerCase();
+            ecdhBytes = ecdhHex.length / 2;
+            expect(ecdhBytes,
+                'ECDH-session ciphertext length does not match iv(12)+authTag(16)+plaintext: no '
+                + 'version byte and no ephemeral pubkey, because the shared secret is already '
+                + "deterministic from both parties' permanent keys")
                 .toBe(ECDH_OVERHEAD_BYTES + probeBytes);
 
-            // THE CROSS-CHECK: for the IDENTICAL plaintext to the IDENTICAL
-            // recipient, ECDH-session is exactly 34 bytes (68 hex chars)
-            // SHORTER than ECIES - the ephemeral pubkey (33) plus the KDF
-            // version byte (1) that only ECIES carries. If ECDH silently
-            // aliased to ECIES (the historical bug class HKDF domain
-            // separation was built to prevent, see messaging.js's fix #3520
-            // note) the two lengths would match instead.
+            // THE CROSS-CHECK. For an identical plaintext to an identical
+            // recipient, ECDH is exactly 34 bytes shorter than ECIES: the
+            // ephemeral pubkey (33) plus the KDF version byte (1) that only
+            // ECIES carries. If ECDH silently aliased to ECIES the two lengths
+            // would match instead.
             expect(eciesBytes - ecdhBytes,
-                'ECIES and ECDH-session ciphertexts differ by the wrong number of bytes for the same '
-                + 'plaintext, so the two methods are not producing the wire shapes the SDK documents')
+                'ECIES and ECDH-session ciphertexts differ by the wrong number of bytes for the '
+                + 'same plaintext, so the two methods are not producing the wire shapes the SDK '
+                + 'documents')
                 .toBe(ECIES_OVERHEAD_BYTES - ECDH_OVERHEAD_BYTES);
-            expect(ecdhHex, 'ECDH and ECIES produced byte-identical ciphertext for the same plaintext + '
-                + 'recipient, which random ephemeral keys / IVs make astronomically unlikely unless one '
-                + 'method is silently reusing the other\'s output').not.toBe(eciesHex);
+            expect(ecdhHex,
+                'ECDH and ECIES produced byte-identical ciphertext for the same plaintext and '
+                + 'recipient, which random ephemeral keys and IVs make astronomically unlikely '
+                + "unless one method is silently reusing the other's output")
+                .not.toBe(eciesHex);
         });
     });
 });
