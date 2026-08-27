@@ -574,6 +574,14 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     // indexing waits) and it is the half that failed central verification
     // before reaching any History assertion at all; keeping it here means a
     // failure in it can never again hide the send claim above.
+    //
+    // THE DEFECT IT PINS IS TRACKED. The explorer's
+    // `projectActionSummary` writes every per-action field under a `details`
+    // sub-object with only `status` left at the top level, while `History.jsx`
+    // reads `row.source` and `row.tick` one level above that. So
+    // `historyGrouping.js`'s `pickField` never finds a tick and Grouped mode
+    // groups nothing at all, silently - which is exactly the claim below. Fixing
+    // The grouping fix is what turns this green.
     test.fixme('an ISSUE and its MINTs collapse into one Launch card under Grouped mode', async ({ page }) => {
         // Unique per run: protocol tickers are global once issued, so a fixed
         // one would collide with its own previous run on this shared venue.

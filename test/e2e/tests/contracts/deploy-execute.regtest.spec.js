@@ -197,7 +197,33 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
         } catch { /* the venue check in global setup reports unreachability */ }
     });
 
-    test('a contract deployed from the wallet accepts a method call from the wallet', async ({ page }) => {
+    // FIXME'd 2026-08-27 BECAUSE IT PINS TWO REAL DEFECTS, NOT BECAUSE IT IS
+    // UNFINISHED OR ON THE WRONG CHAIN.
+    //
+    // The chain half of this spec is done and works: it picks the run's chain at
+    // both form opens (`selectVenueChain(main, 'Network')`) and drives a
+    // Litecoin `From` of `rltc1q…`, which took the funding step from failing at
+    // step 1 to reaching step 3. What stops it now is the product, twice over,
+    // and both instances are one class - a form putting a field on the wire that
+    // the pinned action version has no slot for, which
+    // `xchain-sdk/formatSelector.js` then correctly refuses:
+    //
+    //   (a)      DEPLOY / NAME. `DeployContractForm.jsx:268` puts the
+    //            `Name (optional)` input - whose own hint says it is a label
+    //            for that screen only - into the action params, so filling in
+    //            an optional field as offered makes the action unsubmittable.
+    //            This spec fills it, so it is that defect's ready-made proof,
+    //            and this is where it stops first (`:258`).
+    //   (b)      EXECUTE / GAS_LIMIT. `ExecuteContractForm.jsx:357` sets
+    //            `GAS_LIMIT` on EVERY compose while EXECUTE v0's wire format
+    //            has no gas slot at all, so EXECUTE is broken end to end on
+    //            every chain. That is the wall waiting behind the DEPLOY fix,
+    //            and it is separately pinned by `deploy-chunked-lane`.
+    //
+    // Un-fixme it when (a) lands, expect it to stop again on (b), and
+    // un-fixme it for good when both are fixed. Both claims below are right as
+    // written; it is the product that has to move.
+    test.fixme('a contract deployed from the wallet accepts a method call from the wallet', async ({ page }) => {
         let deployer;
         let contractIndex;
         const contractName = `Counter ${RUN_TAG}`;

@@ -497,7 +497,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
     });
 
     // FIXME'd 2026-08-27 BECAUSE IT PINS A REAL DEFECT THAT IS NOT FIXED YET,
-    // not because it is unfinished. Tracked in the campaign's frontier.
+    // not because it is unfinished. The defect is tracked.
     //
     // Driven centrally on Litecoin, this went red after 2.4 minutes with the
     // message this file already predicted from source: the handshake never
