@@ -1209,16 +1209,59 @@ export async function unlockAfterReload(page, password) {
 }
 
 /**
- * Reads the wallet's own regtest receive address off the Receive screen.
+ * Reads the wallet's own regtest receive address off the Receive screen, ON THE
+ * CHAIN THIS RUN DRIVES.
  *
  * This is the only way to learn it: addresses derive from a random seed
  * at wallet creation, so the spec cannot know it in advance.
+ *
+ * WHY THIS DRIVES A PICKER INSTEAD OF JUST READING A FIELD. Receive has no
+ * chain picker of its own for the address: `Receive.jsx` seeds `activeChainId`
+ * from `Object.keys(byChain)[0]`, the first chain the address map yields, and
+ * that is Bitcoin on every wallet. So on any other venue this screen opens on
+ * the WRONG chain, and `selectVenueChain` cannot help because there is no
+ * "Network" trigger here to point at. The one real UI path to a venue-chain
+ * address is the picker behind the field's own icon, and nothing in the fixture
+ * drove it, which is why this helper was structurally Bitcoin-pinned.
+ *
+ * That pin was INVISIBLE while Bitcoin was also the venue, because the wrong
+ * answer and the right answer were the same string. It only became a failure
+ * when a run moved to Litecoin, and it is worth stating plainly that the
+ * dangerous version of this bug is the silent one: a spec reading a Bitcoin
+ * address while the fixture funds Litecoin does not fail, it passes while
+ * testing a chain nobody asked for.
+ *
+ * The correction is conditional on the ADDRESS SHAPE rather than on the coin,
+ * deliberately. Keying it on `REGTEST_COIN === 'RBTC'` would be the same
+ * mistake `selectVenueChain` just had removed: a screen is allowed to open on
+ * whatever chain it likes, so the check has to be "is this the chain I need"
+ * and never "is this the chain I assume it defaulted to".
  */
 export async function readReceiveAddress(page) {
     await gotoSection(page, 'Receive');
 
     const field = page.getByLabel('Address', { exact: true });
     await expect(field).toBeVisible({ timeout: 30_000 });
-    await expect(field).toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
+
+    if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {
+        await page.getByRole('button', { name: 'Choose receive address' }).first().click();
+
+        const filter = page.getByRole('button', { name: 'Filter by network' });
+        await expect(filter, 'the address picker has no network filter').toBeVisible({ timeout: 30_000 });
+        await filter.click();
+        // The filter's options are coin FAMILIES ("Bitcoin" / "Litecoin" /
+        // "Dogecoin"), not network-qualified names, so a venue's chain label is
+        // already the exact option text and no mapping is needed.
+        await page.getByRole('option', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+
+        await page.getByRole('list', { name: 'Wallet addresses' })
+            .getByRole('button', { name: /^View address / }).first().click();
+    }
+
+    await expect(field,
+        `Receive never showed a ${REGTEST_CHAIN_LABEL} address. A wallet carries one per chain `
+        + `from creation, so an empty ${REGTEST_CHAIN_LABEL} filter means the address map itself `
+        + `is wrong, not that this run needs to generate an address first.`)
+        .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
     return field.inputValue();
 }
