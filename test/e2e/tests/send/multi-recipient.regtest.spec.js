@@ -45,10 +45,12 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
+    REGTEST_CHAIN_LABEL,
     fundAddress,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
+    selectVenueSendAsset,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
@@ -214,9 +216,10 @@ test.describe('multi-recipient SEND on regtest', () => {
             // first is therefore part of the flow, not setup.
             await expect(page.getByRole('button', { name: '+ Add recipient' })).toHaveCount(0);
 
-            await page.getByRole('button', { name: /Change asset/ }).click();
-            await page.getByLabel('Search coins or tokens').fill('XCHAIN');
-            await page.getByLabel(/Open XCHAIN details/i).click();
+            // Was three lines that searched for XCHAIN and clicked the first
+            // "Open XCHAIN details" row - which is CHAIN-BLIND: every chain
+            // lists an XCHAIN, so on Litecoin it picked Bitcoin's.
+            await selectVenueSendAsset(page, 'XCHAIN');
 
             await toField(page).fill(RECIPIENTS[0].address);
             await amountField(page).fill(RECIPIENTS[0].amount);
@@ -247,7 +250,7 @@ test.describe('multi-recipient SEND on regtest', () => {
             // states the total, the chain and the count, and every leg is
             // itemised below it.
             const intent = page.getByTestId('action-intent');
-            await expect(intent).toContainText(`Send ${TOTAL_SENT} XCHAIN on Bitcoin to 3 recipients`);
+            await expect(intent).toContainText(`Send ${TOTAL_SENT} XCHAIN on ${REGTEST_CHAIN_LABEL} to 3 recipients`);
             for (let i = 0; i < RECIPIENTS.length; i++) {
                 await expect(intent).toContainText(`Recipient ${i + 1}`);
                 await expect(intent)

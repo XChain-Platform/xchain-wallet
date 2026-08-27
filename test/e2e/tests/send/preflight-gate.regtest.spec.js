@@ -42,10 +42,12 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
+    REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
     fundAddress,
     mintXchain,
     readReceiveAddress,
+    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -99,9 +101,11 @@ async function warmSend(source, amount, expected) {
 /** Picks XCHAIN in the Send asset picker, fills the form, opens the modal. */
 async function composeTokenSend(page, amount) {
     await gotoSection(page, 'Send');
-    await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('XCHAIN');
-    await page.getByLabel(/Open XCHAIN details/i).click();
+    // Was three lines that searched for XCHAIN and clicked the first
+    // "Open XCHAIN details" row - CHAIN-BLIND, since every chain lists an
+    // XCHAIN, so on Litecoin it picked Bitcoin's and the dry runs below were
+    // asked about a source on a different chain than the form was spending.
+    await selectVenueSendAsset(page, 'XCHAIN');
     await toField(page).fill(REGTEST_DESTINATION);
     await amountField(page).fill(amount);
     await mainButton(page, 'Send').click();
@@ -220,7 +224,7 @@ test.describe('pre-flight gate on regtest', () => {
         // what the encoder built - not the native-payment shortcut, and not
         // the form params the surface used to describe.
         await expect(page.getByTestId('action-intent'))
-            .toContainText(`Send ${AFFORDABLE} XCHAIN on Bitcoin to ${REGTEST_DESTINATION}`);
+            .toContainText(`Send ${AFFORDABLE} XCHAIN on ${REGTEST_CHAIN_LABEL} to ${REGTEST_DESTINATION}`);
 
         // No override control at all, because there is nothing to override.
         // Its presence would mean the previous report leaked into this one.
