@@ -151,6 +151,45 @@ async function fillPasswordIfPresent(scope) {
  * pipeline being in step, and blocks are only ever needed to advance state, not
  * to make an already-mined action visible.
  */
+/**
+ * Whether THIS chain's regtest miner can move the node's clock.
+ *
+ * Measured 2026-08-27, and it is a venue fact rather than a protocol one: the
+ * three miner containers on this stack run three different images (litecoin
+ * 2026-07-11, bitcoin 2026-07-23, dogecoin 2026-08-09), and the litecoin one
+ * predates `set_mock_time` entirely - `grep -c set_mock_time api.js` is 0 there
+ * and 1 on the other two. So a spec that jumps the clock to cross a deadline
+ * works on two of the three chains and dies on the third with
+ * `Method not found`, which reads as a wallet or protocol failure and is
+ * neither, and the gap is tracked.
+ *
+ * Probed rather than keyed off REGTEST_COIN, because the answer is about which
+ * IMAGE a container happens to be running and will change the moment somebody
+ * redeploys it - a coin list would then be wrong in the safe-looking direction
+ * (falling back to a slow wall-clock wait forever on a venue that no longer
+ * needs it). The probe is the same tip+5 pin `beforeAll` already does, so it
+ * costs nothing and cannot leave the clock anywhere new.
+ *
+ * @returns {Promise<boolean>}
+ */
+let mockTimeSupport = null;
+async function supportsMockTime() {
+    if (mockTimeSupport !== null) return mockTimeSupport;
+    const tip = await chainTime();
+    try {
+        await minerRpc('set_mock_time', { timestamp: tip + 5 });
+        mockTimeSupport = true;
+    } catch (err) {
+        // Only the missing METHOD is a capability answer. Anything else (the
+        // miner down, a bad timestamp) is a real failure and has to keep
+        // travelling, or this helper would quietly turn every venue outage
+        // into "no mocktime here" and the slow path would hide it.
+        if (!/Method not found/i.test(String(err?.message || err))) throw err;
+        mockTimeSupport = false;
+    }
+    return mockTimeSupport;
+}
+
 async function nudgeChain() {
     let lag = 0;
     try {
@@ -253,12 +292,14 @@ test.describe('BET round trip on regtest', () => {
     // 30-minute blind one.
     test.use({ actionTimeout: 30_000 });
 
-    // Onboarding, two funded addresses, four signed actions and a clock jump,
-    // each waiting on real blocks. The chain is the long pole throughout, and
-    // this venue is shared: when another suite is also driving it the decode and
-    // index pipeline runs minutes behind the node, so the per-step waits and this
-    // budget are sized for a busy stack rather than an idle one.
-    test.setTimeout(1_800_000);
+    // Onboarding, two funded addresses, four signed actions and a deadline to
+    // cross, each waiting on real blocks. The chain is the long pole throughout,
+    // and this venue is shared: when another suite is also driving it the decode
+    // and index pipeline runs minutes behind the node, so the per-step waits and
+    // this budget are sized for a busy stack rather than an idle one. The budget
+    // also has to cover the WALL-CLOCK deadline wait below, which is what this
+    // spec falls back to on a miner that cannot jump the clock.
+    test.setTimeout(2_700_000);
 
     test.beforeAll(async () => {
         // Heal the shared node's clock BEFORE trusting it. This spec pins mocktime
@@ -364,7 +405,14 @@ test.describe('BET round trip on regtest', () => {
             // below lands while the market is still open, short enough that the
             // jump to close it does not need to be large.
             const now = await chainTime();
-            deadlineSec = now + 1_800;
+            // How far out the deadline goes depends on how it will be CROSSED.
+            // With a clock the miner can jump, a long lead is free and keeps the
+            // bet comfortably inside the open window. Without one the remainder
+            // is paid in wall time, so the lead is the whole cost of the close
+            // step and is sized to be just longer than the bet takes to place
+            // (funding, a mint, two remounts and a signed action: ~5 minutes on
+            // this venue) rather than to be generous.
+            deadlineSec = now + (await supportsMockTime() ? 1_800 : 900);
             await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(deadlineSec));
 
             await main.getByLabel('Your fee (optional)').fill(FEE_PCT);
@@ -486,6 +534,41 @@ test.describe('BET round trip on regtest', () => {
             await unlockAfterReload(page, PASSWORD);
         });
 
+        // ACTIVATE THE BETTOR LAST, AND PROVE IT TOOK, because the market screen
+        // will not let anything else choose.
+        //
+        // Measured 2026-08-27: with the activation left where the address was
+        // generated (before two reloads and a mint), the market screen rendered
+        // "You run this market, so you cannot bet on it" and no place-bet form at
+        // all. BetFeedDetail:207 resolves its bettor with
+        // preferredSourceId(byChain[chainId], active[chainId]) and exposes NO
+        // picker of its own, so the only address it will ever stake from is the
+        // chain's active one - and when that is still the feed's own source, the
+        // §6-format-2 self-bet rule hides the form. The failure reads as "the
+        // place-bet surface did not open", which names the symptom and not this.
+        //
+        // So the activation moves to the last thing before the bet, and the
+        // "Active" badge on the address's own screen is asserted rather than
+        // assumed: that badge is the same activeAddresses map the market screen
+        // reads, so it is the honest precondition check. If a future change makes
+        // the badge disagree with what the market screen then does, the defect is
+        // in the wallet and this step is where it shows.
+        await test.step('make the bettor the active address, and check it took', async () => {
+            await gotoPalette(page, 'Addresses');
+            await page.getByRole('button', { name: `View address ${punter}` }).click();
+            await page.getByRole('group', { name: 'Address actions' })
+                .getByRole('button', { name: 'Use' }).click();
+
+            // Use navigates back to Home on success, so the badge has to be read
+            // by walking in again - the same §5 screen fact the WIF-import spec
+            // recorded about this control.
+            await gotoPalette(page, 'Addresses');
+            await page.getByRole('button', { name: `View address ${punter}` }).click();
+            await expect(page.getByRole('main').getByText('Active', { exact: true }),
+                'the bettor did not become the active address, so the market screen will '
+                + 'refuse the bet as a self-bet').toBeVisible({ timeout: 15_000 });
+        });
+
         await test.step('place a bet from the second address', async () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).click();
@@ -536,9 +619,26 @@ test.describe('BET round trip on regtest', () => {
 
         await test.step('cross the deadline and let the chain latch the market closed', async () => {
             // The latch is written by the end-of-block pass, so it needs blocks
-            // stamped past DEADLINE, not merely a clock that has moved.
-            await minerRpc('set_mining_time', { max_time: 3_600_000, tx_added_time: 3_600_000 });
-            await minerRpc('set_mock_time', { timestamp: deadlineSec + 120 });
+            // stamped past DEADLINE, not merely a clock that has moved. Two ways
+            // to get one, and which is available is a property of this chain's
+            // miner image rather than of the chain (see supportsMockTime).
+            if (await supportsMockTime()) {
+                await minerRpc('set_mining_time', { max_time: 3_600_000, tx_added_time: 3_600_000 });
+                await minerRpc('set_mock_time', { timestamp: deadlineSec + 120 });
+            } else {
+                // No clock to jump, so the deadline is crossed the way a user's
+                // would be: in real time. A block generated with no mocktime in
+                // force is stamped at the node's wall clock, and this venue's
+                // chain clock tracks it (measured: tip timestamp 78s behind
+                // wall, which is just the age of the last block), so waiting
+                // past DEADLINE and then mining is what stamps a block over it.
+                // Polled rather than slept in one go so a run that is already
+                // past the deadline - the common case, since placing the bet
+                // eats most of the lead - pays nothing.
+                while (Math.floor(Date.now() / 1000) <= deadlineSec + 30) {
+                    await new Promise((r) => setTimeout(r, 5_000));
+                }
+            }
             await minerRpc('generate_blocks', { count: 2 });
 
             const feed = await waitForFeed(feedIndex, (f) => f?.feed_status === 'closed', 'closed');
