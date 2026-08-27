@@ -483,6 +483,12 @@ test.describe('BET round trip on regtest', () => {
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
+            // Same in-flight-write race as the one documented at the bettor
+            // activation below: Use awaits the write before navigating, so
+            // anything that navigates on its own before then gets overridden.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
 
             // Read the bettor address back off a FORM rather than trusting the row
             // that was clicked. Forms resolve their source through the wallet's
@@ -558,6 +564,20 @@ test.describe('BET round trip on regtest', () => {
             await page.getByRole('button', { name: `View address ${punter}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
+
+            // WAIT FOR USE TO FINISH BEFORE NAVIGATING, and this is a race that
+            // really bit: `setAsActive` (AddressList.jsx:820) AWAITS the write
+            // and only then calls `onBack()`, so pressing Use and walking
+            // straight back to Addresses lands there and is knocked to Home by
+            // the late navigation. The click below then waits out its budget on
+            // a screen with no addresses on it. Measured in the whole-suite run
+            // 2026-08-27: this spec passed standalone and failed here, with the
+            // failure screenshot showing HOME, which is the whole tell.
+            // Leaving the detail screen IS the write having completed, so that
+            // is what gets waited on rather than a timeout.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
 
             // Use navigates back to Home on success, so the badge has to be read
             // by walking in again - the same §5 screen fact the WIF-import spec
@@ -651,6 +671,13 @@ test.describe('BET round trip on regtest', () => {
             await page.getByRole('button', { name: `View address ${oracle}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
+            // Third site of the same in-flight-write race, and the most costly
+            // if it fires: "My markets" lists by the ACTIVE address, so an
+            // unfinished switch shows the oracle's console empty and the
+            // failure reads as the market having vanished.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
 
             await gotoPalette(page, 'My markets');
 

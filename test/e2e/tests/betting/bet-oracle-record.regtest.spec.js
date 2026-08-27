@@ -42,7 +42,7 @@
 //    same class as a wrong number.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
-import { EXPLORER_URL, REGTEST_COIN, switchToRegtest } from '../../fixtures/regtest.js';
+import { EXPLORER_URL, REGTEST_COIN, selectVenueChain, switchToRegtest } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -148,6 +148,18 @@ test.describe('BET oracle record against a live explorer', () => {
             await gotoPalette(page, 'Betting');
             await expect(page.getByRole('button', { name: 'Create market', exact: true }))
                 .toBeVisible({ timeout: 60_000 });
+
+            // PICK THE RUN'S CHAIN BEFORE FILTERING, because the hub filters
+            // WHICH RECORDS IT LISTS by chain and defaults to Bitcoin like every
+            // other surface. The fixture above came off THIS chain's explorer,
+            // so without this the market simply is not in the list being
+            // searched and the failure reads "market #N is listed" - which names
+            // the assertion and not the cause. Measured in the whole-suite
+            // Litecoin run 2026-08-27, where this spec failed on exactly that.
+            // `BetFeedsList` is a `NetworkField` on a LIST screen rather than a
+            // form, which is the row-57 widget class that the earlier sweeps
+            // kept missing.
+            await selectVenueChain(page.getByRole('main'), 'Network');
 
             // The list defaults to markets still taking bets; the fixture is
             // whatever the chain has, which is usually settled by now.
