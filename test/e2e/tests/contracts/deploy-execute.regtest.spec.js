@@ -54,6 +54,7 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
     minerRpc,
@@ -211,7 +212,9 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // pipeline on "insufficient funds" and reads like a wallet bug.
             await gotoDeployForm(page);
             deployer = await page.getByRole('main').getByLabel('From', { exact: true }).inputValue();
-            expect(deployer, 'the deploy form names a source address').toMatch(/^bcrt1/);
+            // The VENUE's address shape, not Bitcoin's. `/^bcrt1/` was the
+            // strictest form of this bug: it fails on every chain but one.
+            expect(deployer, 'the deploy form names a source address').toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(deployer, FUNDING_BTC);
 

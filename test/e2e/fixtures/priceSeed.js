@@ -502,6 +502,18 @@ export function unusablePriceMessage({ regtestCoin, reason, seeded, state }) {
             'not be reached over SSH), so the venue was left with whatever it already had.',
             'Unset XC_REGTEST_NO_PRICE_SEED / XCHAIN_E2E_NO_PRICE_SEED, or check that',
             '`ssh ' + sshHostHint() + '` works from this machine.',
+            '',
+            // The remedy that cost 2026-08-27 a run: the default ssh host is
+            // `jdog@localhost`, which only resolves on a machine that either IS
+            // the venue or forwards port 22 to it. From a dev box that reaches
+            // the venue as a named host, `ssh jdog@localhost` fails with "Host
+            // key verification failed" and the message above sends the reader
+            // off to debug ssh - when the fix is one environment variable that
+            // nothing here named.
+            'IF THAT SSH TARGET IS SIMPLY THE WRONG ONE, set XC_REGTEST_SSH_HOST to the host',
+            'that runs the venue containers, as your ssh config already names it, and re-run.',
+            'The seed shells out to `ssh <host> docker exec <indexer>`, so it needs the name',
+            'your ssh config already uses, not a tunnel.',
         );
     }
     if (state) {

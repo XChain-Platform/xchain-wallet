@@ -61,6 +61,7 @@ import { randomBytes } from 'node:crypto';
 import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
+import { venueVerdict } from './venueHealth.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -108,18 +109,28 @@ const VENUES = {
         // chain's) fails on the address itself rather than several steps later
         // on a funding that never arrives.
         addressRe: /^(bcrt1|[mn2])/,
+        // See REGTEST_DESTINATION below. All three are the SAME witness
+        // program (hash160 d8eba5d7...cf25), re-encoded for each chain, so a
+        // spec that sends to "the throwaway destination" sends to the same
+        // nobody's-key on whichever chain it runs.
+        destination: 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f',
     },
     RLTC: {
         encoderPort: 3223, minerPort: 3225,
         chainId: 'litecoin-regtest', chainLabel: 'Litecoin',
         indexerContainer: 'xchain-node-litecoin-regtest-xchain-indexer',
         addressRe: /^(rltc1|[mn2])/,
+        destination: 'rltc1qmr46t4ca5wh35k6mczdzrkepqw2d8ne92hnush',
     },
     RDOGE: {
         encoderPort: 3123, minerPort: 3125,
         chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin',
         indexerContainer: 'xchain-node-dogecoin-regtest-xchain-indexer',
         addressRe: /^[mn2]/,
+        // Dogecoin has no segwit, so this one is the P2PKH encoding of that
+        // same program under the regtest version byte (0x6f), not a bech32
+        // address with the HRP swapped.
+        destination: 'n1HvYayKZr8qW54uBoDgveVS7waeaUrBEy',
     },
 };
 
@@ -152,15 +163,32 @@ export const REGTEST_CHAIN_LABEL = VENUE.chainLabel;
 export const REGTEST_ADDRESS_RE = VENUE.addressRe;
 
 /**
- * A deterministic, checksum-valid regtest P2WPKH destination.
+ * A deterministic, checksum-valid regtest destination FOR THE CHAIN THIS RUN
+ * DRIVES.
  *
  * Derived once from a fixed sha256 (`bitcoinjs-lib` p2wpkh over
- * hash160('xchain-wallet-e2e-regtest-destination')) and pinned as a
- * literal so specs assert on a stable string. Nothing holds its key:
- * anything sent here is intentionally unspendable-by-us, which is what
- * a throwaway e2e destination should be.
+ * hash160('xchain-wallet-e2e-regtest-destination')) and pinned as a literal so
+ * specs assert on a stable string. Nothing holds its key: anything sent here is
+ * intentionally unspendable-by-us, which is what a throwaway e2e destination
+ * should be.
+ *
+ * ONE LITERAL FOR ALL THREE CHAINS IS A SILENT TRAP, which is why this is a
+ * table. A Bitcoin `bcrt1` address is not a Litecoin address. A send to it is either refused by the form (the good
+ * case, a confusing failure) or composed against a chain that cannot spend it.
+ * The Bitcoin string is unchanged, so no existing Bitcoin spec's expectations
+ * move.
  */
-export const REGTEST_DESTINATION = 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f';
+export const REGTEST_DESTINATION = VENUE.destination;
+
+// A wrong-chain literal in the table above is invisible until a spec fails
+// several screens deep on it, so check it here, at import, where the message
+// can name the exact problem. This is the same class of bug the destination
+// itself just was.
+if (!VENUE.addressRe.test(REGTEST_DESTINATION)) {
+    throw new Error(
+        `The ${REGTEST_COIN} venue's destination ${REGTEST_DESTINATION} is not an address `
+        + `this chain accepts (${VENUE.addressRe}). One of the two is from another chain.`);
+}
 
 /** JSON-RPC 2.0 call against a venue service. Throws on RPC-level errors. */
 async function venueRpc(url, method, params = {}, timeoutMs = 30_000) {
@@ -220,13 +248,8 @@ export async function assertVenueReachable() {
     // A reachable-but-lagging chain produces confusing spec failures
     // (funds that never arrive), so check liveness, not just liveness of
     // the socket.
-    const lag = status?.chain_lag_blocks?.[REGTEST_COIN];
-    if (typeof lag !== 'number') {
-        throw new Error(`${hint}\n\nExplorer answered but reports no ${REGTEST_COIN} chain.`);
-    }
-    if (lag > 2) {
-        throw new Error(`Regtest ${REGTEST_COIN} indexer is ${lag} blocks behind; wait for it to catch up.`);
-    }
+    const unfit = venueVerdict(status, REGTEST_COIN);
+    if (unfit) throw new Error(`${hint}\n\n${unfit}`);
 
     let miner;
     try {
@@ -881,7 +904,12 @@ export async function assertNoActionRecorded(txid) {
 export async function waitForValidAction(txid, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-        await minerRpc('generate_blocks', { count: 1 });
+        // `nudgeChain`, never a bare `generate_blocks`: this loop ran for up to
+        // five minutes mining on EVERY pass, which is the exact hazard
+        // `nudgeChain` was written for. Blocks only ever ADVANCE state; they
+        // cannot make an already-mined action index faster, so mining at a
+        // decoder that is already behind just puts it further behind.
+        await nudgeChain();
         // limit=100 because that is the explorer's REAL page cap: it silently
         // clamps anything larger, so asking for 200 bought imaginary headroom.
         // The list is newest-first, so one page is ample for an action just
@@ -1090,7 +1118,11 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_00
             last = row ? row.amount : null;
             if (row && Number(row.amount) >= min) return row;
         } catch { /* transient while a block lands */ }
-        await minerRpc('generate_blocks', { count: 1 });
+        // See `nudgeChain`. Mining unconditionally every 1.5s for two minutes
+        // put ~80 empty blocks on Dogecoin regtest and wedged its indexer,
+        // which cost this campaign a whole coverage row: the symptom is a
+        // balance that never arrives, and the cause is the code asking for it.
+        await nudgeChain();
         await new Promise((r) => setTimeout(r, 1_500));
     }
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);

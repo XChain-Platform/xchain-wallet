@@ -77,6 +77,7 @@ import {
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     EXPLORER_URL,
+    REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
     mintXchain,
@@ -317,8 +318,11 @@ test.describe('dispenser buy funding gate on regtest', () => {
             await gotoPalette(seller, 'Issue token');
             sellerAddress = await seller.getByRole('main')
                 .getByLabel('From', { exact: true }).inputValue();
+            // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
+            // alternative happens to pass on Litecoin (both accept `[mn2]`)
+            // and hides a wrong-chain address on a chain that does not.
             expect(sellerAddress, 'the issue form names a source address')
-                .toMatch(/^(bcrt1|[mn2])/);
+                .toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(sellerAddress, FUNDING_BTC);
             await remount(seller);
@@ -409,7 +413,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             buyerAddress = await page.getByRole('main')
                 .getByLabel('From', { exact: true }).inputValue();
             expect(buyerAddress, 'the buyer wallet has a signing address')
-                .toMatch(/^(bcrt1|[mn2])/);
+                .toMatch(REGTEST_ADDRESS_RE);
             expect(buyerAddress, 'the buyer is a different wallet from the seller')
                 .not.toBe(sellerAddress);
 

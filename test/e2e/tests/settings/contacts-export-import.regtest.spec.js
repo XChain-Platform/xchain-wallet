@@ -69,13 +69,19 @@
 import { readFile } from 'node:fs/promises';
 
 import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
+import { REGTEST_DESTINATION } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 
 const CONTACT_NAME = 'E2E Round Trip';
-// A checksum-valid regtest P2WPKH nobody holds the key to. Fixed, so the
+// A checksum-valid regtest address nobody holds the key to. Fixed, so the
 // assertion below is an exact string rather than "an address came back".
-const CONTACT_ADDRESS = 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f';
+//
+// From the fixture rather than a literal: this was the Bitcoin `bcrt1…` string
+// until 2026-08-27, which made a spec about ADDRESS BOOK PORTABILITY refuse its
+// own contact on any chain but one. `REGTEST_DESTINATION` is the same key
+// re-encoded for whichever chain `XC_REGTEST_COIN` names.
+const CONTACT_ADDRESS = REGTEST_DESTINATION;
 
 /** Opens the Contacts route through the command palette. */
 async function gotoContacts(page) {

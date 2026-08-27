@@ -43,6 +43,7 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
     minerRpc,
@@ -286,7 +287,10 @@ test.describe('BET round trip on regtest', () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             oracle = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
-            expect(oracle, 'the create form names an oracle address').toMatch(/^(bcrt1|[mn2])/);
+            // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
+            // alternative passes on Litecoin only because `[mn2]` also matches
+            // there, and fails outright on a chain whose bech32 HRP differs.
+            expect(oracle, 'the create form names an oracle address').toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(oracle, FUNDING_BTC);
 
