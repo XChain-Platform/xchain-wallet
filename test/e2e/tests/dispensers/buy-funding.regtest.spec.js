@@ -78,6 +78,7 @@ import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_ID,
     REGTEST_COIN,
     fundAddress,
     mintXchain,
@@ -261,7 +262,12 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     // Litecoin and Dogecoin included - which is both slower and a live
     // mainnet call from a regtest test. Narrowing it keeps the run entirely
     // on the regtest venue.
-    await page.getByLabel('Chain').selectOption('bitcoin-regtest');
+    // THE VENUE'S chain id, not Bitcoin's. This was hardcoded, and it is a
+    // chain pin that every earlier sweep of this suite missed: it is neither a
+    // bcrt1 address nor an "on Bitcoin" string, so grepping for those found
+    // nothing here while the browse filter still asked Bitcoin for a dispenser
+    // this run had just created on Litecoin.
+    await page.getByLabel('Chain').selectOption(REGTEST_CHAIN_ID);
 
     // Search by the SELLER's address rather than by ticker: the ticker lane
     // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag

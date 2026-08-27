@@ -46,6 +46,7 @@ import {
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
+    selectVenueChain,
     minerRpc,
     mintXchain,
     switchToRegtest,
@@ -217,6 +218,21 @@ async function gotoPalette(page, title) {
     await page.keyboard.press('Enter');
 }
 
+/**
+ * Opens the Create-market form ON THIS RUN'S CHAIN.
+ *
+ * CreateBetFeedForm selects its chain with a NetworkField, which re-defaults to
+ * Bitcoin every time the form is opened - so the pick belongs here, beside the
+ * open, rather than once per test. Without it the market is authored on a chain
+ * the funding never reached and the compose fails for want of funds, which
+ * looks like a betting defect and is not one.
+ */
+async function openCreateMarket(page) {
+    await gotoBettingHub(page);
+    await page.getByRole('button', { name: 'Create market', exact: true }).click();
+    await selectVenueChain(page.getByRole('main'), 'Network');
+}
+
 async function gotoBettingHub(page) {
     await gotoPalette(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
@@ -284,8 +300,7 @@ test.describe('BET round trip on regtest', () => {
             // address this spec had never funded, which only worked at all because
             // a previous run had left coins on it, and would fail on a clean chain.
             // Fund the address the form will actually sign with.
-            await gotoBettingHub(page);
-            await page.getByRole('button', { name: 'Create market', exact: true }).click();
+            await openCreateMarket(page);
             oracle = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
             // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
             // alternative passes on Litecoin only because `[mn2]` also matches
@@ -316,8 +331,7 @@ test.describe('BET round trip on regtest', () => {
         });
 
         await test.step('create the market', async () => {
-            await gotoBettingHub(page);
-            await page.getByRole('button', { name: 'Create market', exact: true }).click();
+            await openCreateMarket(page);
 
             const main = page.getByRole('main');
             // The address that will sign must still be the one that was funded: the
@@ -413,8 +427,7 @@ test.describe('BET round trip on regtest', () => {
             // the assertions then measured a balance nobody had credited, while the
             // settlement itself was perfectly correct. Read the same value the bet
             // will use, from the same place the oracle address was read.
-            await gotoBettingHub(page);
-            await page.getByRole('button', { name: 'Create market', exact: true }).click();
+            await openCreateMarket(page);
             const willSignAs = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
             expect(willSignAs, 'the wallet now signs as some other address').not.toBe(oracle);
             punter = willSignAs;
