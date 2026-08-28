@@ -377,7 +377,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // decimals and every amount below stays a whole number.
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
-            await approveConfirm(seller);
+            await approveConfirm(seller, `the ISSUE of the throwaway give token ${GIVE_TICK}`);
 
             // The chain's answer, not the app's.
             await waitForToken(sellerAddress, GIVE_TICK, Number(GIVE_SUPPLY));
@@ -418,7 +418,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
 
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Create', exact: true }).click();
-            await approveConfirm(seller);
+            await approveConfirm(seller, `the DISPENSER create for ${GIVE_TICK}`);
 
             dispenserRow = await waitForDispenser(sellerAddress, GIVE_TICK);
 
