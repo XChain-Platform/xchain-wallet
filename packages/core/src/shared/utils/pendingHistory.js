@@ -42,6 +42,12 @@
  *                                          the timestamp floor that keeps the entry
  *                                          inside the default date filter
  * @property {number | null} broadcastAtMs when we broadcast it, ms (local records only)
+ * @property {number | null} lastMempoolSeenMs  the last time a mempool read
+ *                                          actually listed this transaction, ms.
+ *                                          Only meaningful once no mempool
+ *                                          lists it any more, which is what
+ *                                          separates "dropped" from "never
+ *                                          seen at all"
  * @property {'in' | 'out' | null} direction
  * @property {string[]} destinations       matched recipient addresses, refs resolved
  * @property {string | null} data          raw pipe-joined action string
@@ -72,6 +78,24 @@
  * @property {null} link
  * @property {PendingMeta} pending
  */
+
+/**
+ * How long a broadcast transaction may go unseen by any mempool before the UI
+ * stops calling it healthy (I-17). Twice the measured worst case: the decoder
+ * polls its node every 60s, its getmempool response is cached 5s, the
+ * explorer caches its snapshot 15s and the change detector polls every 5s, so
+ * ~85s can pass with nothing wrong at all. A window that trips on a healthy
+ * send teaches the user to ignore it.
+ */
+export const NETWORK_SEEN_WINDOW_MS = 180000;
+
+/**
+ * How long a transaction that HAS been seen may be absent from the mempool
+ * before the UI says so (I-18). Covers the indexer's write lag behind the
+ * shared 5s detector poll, so a transaction that is merely mid-confirmation
+ * is not announced as dropped.
+ */
+export const DROPPED_GRACE_MS = 90000;
 
 /** PendingTx statuses that describe a transaction which is ON the network. */
 const LIVE_PENDING_STATUSES = new Set(['broadcasting', 'broadcast', 'rbf-replaced']);
@@ -185,6 +209,7 @@ export function mempoolRowToEntry({ chainId, address, row, ownAddresses, observe
             firstSeenMs,
             observedAtMs,
             broadcastAtMs: null,
+            lastMempoolSeenMs: observedAtMs,
             direction: directionFor({ source, destinations }, ownAddresses),
             destinations,
             data: row?.data == null ? null : String(row.data),
@@ -206,9 +231,13 @@ export function mempoolRowToEntry({ chainId, address, row, ownAddresses, observe
  * @param {object} params.pendingTx
  * @param {Set<string>} params.ownAddresses
  * @param {number} params.observedAtMs
+ * @param {number | null} [params.lastMempoolSeenMs]  when a mempool read last
+ *        listed this transaction, if it ever did
  * @returns {PendingEntry | null}
  */
-export function pendingTxToEntry({ chainId, address, pendingTx, ownAddresses, observedAtMs }) {
+export function pendingTxToEntry({
+    chainId, address, pendingTx, ownAddresses, observedAtMs, lastMempoolSeenMs = null,
+}) {
     const txHash = normalizeHash(pendingTx?.txid);
     if (!txHash) return null;
     if (!isLivePendingStatus(pendingTx?.status)) return null;
@@ -240,6 +269,7 @@ export function pendingTxToEntry({ chainId, address, pendingTx, ownAddresses, ob
             firstSeenMs,
             observedAtMs,
             broadcastAtMs,
+            lastMempoolSeenMs,
             direction: directionFor({ source, destinations }, ownAddresses),
             destinations,
             data: null,
@@ -272,6 +302,7 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
             origin: 'both',
             observedAtMs: Math.min(networkEntry.pending.observedAtMs, localEntry.pending.observedAtMs),
             broadcastAtMs: localEntry.pending.broadcastAtMs,
+            lastMempoolSeenMs: networkEntry.pending.lastMempoolSeenMs,
             // Our own record is authoritative about direction: we know we sent
             // it, where the segment scan only guesses who the parties are.
             direction: localEntry.pending.direction || networkEntry.pending.direction,
@@ -334,6 +365,65 @@ export function mergePendingEntries({ confirmed, pending }) {
 
     const pendingEntries = [...byHash.values()];
     return { entries: [...pendingEntries, ...confirmedList], pending: pendingEntries };
+}
+
+/**
+ * The one answer to "what is going on with this pending transaction". The
+ * timeline, the History row badge and the pending detail branch all read it,
+ * because three components each deriving their own reading of the same fields
+ * is how a row comes to say "waiting to confirm" beside a warning that the
+ * network has never seen it.
+ *
+ * States, and each one is a claim the wallet can defend:
+ *   `awaiting-network`  we broadcast it; no mempool has reported it YET, and
+ *                       not enough time has passed for that to be worrying
+ *   `seen`              a mempool reported it; this is healthy pending
+ *   `not-seen`          broadcast, and still unreported past the window
+ *   `dropped`           a mempool DID report it and no longer does, with no
+ *                       confirmation, past the grace window
+ *   `replaced`          we replaced it ourselves via RBF
+ *
+ * Note what is NOT here: "accepted", "confirmed", or anything implying the
+ * indexer has validated the action. A mempool row is pre-validation and the
+ * indexer can still reject it at confirmation (§7 honesty rule).
+ *
+ * @param {{ pending?: PendingMeta }} entry
+ * @param {number} nowMs
+ * @param {{ seenWindowMs?: number, droppedGraceMs?: number }} [windows]
+ * @returns {'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced'}
+ */
+export function pendingDisplayState(entry, nowMs, windows) {
+    const meta = entry?.pending;
+    if (!meta) return 'awaiting-network';
+    if (meta.replaced) return 'replaced';
+
+    const seenWindowMs = Number(windows?.seenWindowMs) > 0
+        ? Number(windows.seenWindowMs)
+        : NETWORK_SEEN_WINDOW_MS;
+    const droppedGraceMs = Number(windows?.droppedGraceMs) > 0
+        ? Number(windows.droppedGraceMs)
+        : DROPPED_GRACE_MS;
+
+    // Present in a mempool as of the latest read: unambiguously healthy.
+    if (meta.origin === 'mempool' || meta.origin === 'both') return 'seen';
+
+    // Local-only from here down, so no mempool is reporting it right now.
+    if (meta.lastMempoolSeenMs != null) {
+        // It WAS reported and is not any more. Confirmation is the usual
+        // reason and it arrives on its own feed, so wait out the grace before
+        // saying anything alarming.
+        return nowMs - meta.lastMempoolSeenMs > droppedGraceMs ? 'dropped' : 'seen';
+    }
+    if (meta.firstSeenMs != null) {
+        // A network sighting recorded on our own PendingTx (M2.2) without a
+        // live row beside it: same situation, timed from that sighting.
+        return nowMs - meta.firstSeenMs > droppedGraceMs ? 'dropped' : 'seen';
+    }
+
+    // Never reported by anything. The clock runs from our broadcast, not from
+    // when this wallet session happened to start looking.
+    const since = meta.broadcastAtMs ?? meta.observedAtMs;
+    return nowMs - since > seenWindowMs ? 'not-seen' : 'awaiting-network';
 }
 
 /**

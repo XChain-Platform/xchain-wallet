@@ -14,10 +14,13 @@ import { describe, it, expect } from 'vitest';
 import {
     compareMergedEntries,
     directionFor,
+    DROPPED_GRACE_MS,
     firstSeenToMs,
     isLivePendingStatus,
     mempoolRowToEntry,
     mergePendingEntries,
+    NETWORK_SEEN_WINDOW_MS,
+    pendingDisplayState,
     pendingTxToEntry,
 } from '../../../packages/core/src/shared/utils/pendingHistory.js';
 import {
@@ -263,6 +266,91 @@ describe('a merged pending entry satisfies the contracts History already has', (
 
     it('is not offered for RBF when the action is not coin-moving', () => {
         expect(isEntryReplaceable(fromMempool({ action: 'MINT' })).ok).toBe(false);
+    });
+});
+
+describe('pendingDisplayState', () => {
+    const local = (meta = {}) => ({
+        pending: {
+            origin: 'local',
+            firstSeenMs: null,
+            observedAtMs: NOW,
+            broadcastAtMs: NOW,
+            lastMempoolSeenMs: null,
+            direction: 'out',
+            destinations: [],
+            data: null,
+            localStatus: 'broadcast',
+            pendingTxId: 'ptx-1',
+            replaced: false,
+            replacementTxHash: null,
+            ...meta,
+        },
+    });
+
+    it('calls a live mempool row healthy, whatever else is true of it', () => {
+        expect(pendingDisplayState(fromMempool(), NOW)).toBe('seen');
+        expect(pendingDisplayState(fromMempool({ first_seen: null }), NOW)).toBe('seen');
+    });
+
+    it('does not cry wolf inside the window: the decoder polls once a minute', () => {
+        // 85s is the measured worst case with nothing at all wrong.
+        expect(pendingDisplayState(local(), NOW + 85000)).toBe('awaiting-network');
+        expect(pendingDisplayState(local(), NOW + NETWORK_SEEN_WINDOW_MS)).toBe('awaiting-network');
+    });
+
+    it('warns once the window has passed with no sighting', () => {
+        expect(pendingDisplayState(local(), NOW + NETWORK_SEEN_WINDOW_MS + 1)).toBe('not-seen');
+    });
+
+    it('times the window from our broadcast, not from when the view opened', () => {
+        // A wallet reopened long after a broadcast must warn immediately
+        // rather than restart the clock and look healthy.
+        const stale = local({ broadcastAtMs: NOW - 10 * 60 * 1000, observedAtMs: NOW });
+        expect(pendingDisplayState(stale, NOW)).toBe('not-seen');
+    });
+
+    it('falls back to our own first sighting when there is no broadcast time', () => {
+        const noBroadcast = local({ broadcastAtMs: null, observedAtMs: NOW });
+        expect(pendingDisplayState(noBroadcast, NOW + NETWORK_SEEN_WINDOW_MS + 1)).toBe('not-seen');
+    });
+
+    it('holds a vanished row at healthy through the grace window', () => {
+        const gone = local({ lastMempoolSeenMs: NOW });
+        expect(pendingDisplayState(gone, NOW + DROPPED_GRACE_MS)).toBe('seen');
+    });
+
+    it('reports a vanished row as dropped once the grace window passes', () => {
+        const gone = local({ lastMempoolSeenMs: NOW });
+        expect(pendingDisplayState(gone, NOW + DROPPED_GRACE_MS + 1)).toBe('dropped');
+    });
+
+    it('never reports "not seen" for something that WAS seen', () => {
+        // The distinction the two windows exist to make.
+        const gone = local({ lastMempoolSeenMs: NOW, broadcastAtMs: NOW - 3600000 });
+        expect(pendingDisplayState(gone, NOW + DROPPED_GRACE_MS + 1)).toBe('dropped');
+    });
+
+    it('uses a recorded sighting on our own record when no row is live', () => {
+        const seenThenGone = local({ firstSeenMs: NOW });
+        expect(pendingDisplayState(seenThenGone, NOW + 1000)).toBe('seen');
+        expect(pendingDisplayState(seenThenGone, NOW + DROPPED_GRACE_MS + 1)).toBe('dropped');
+    });
+
+    it('lets replaced outrank every other reading', () => {
+        expect(pendingDisplayState(local({ replaced: true, lastMempoolSeenMs: null }), NOW + 1e9))
+            .toBe('replaced');
+    });
+
+    it('honours a per-venue window override', () => {
+        expect(pendingDisplayState(local(), NOW + 6000, { seenWindowMs: 5000 })).toBe('not-seen');
+        expect(pendingDisplayState(local({ lastMempoolSeenMs: NOW }), NOW + 6000, { droppedGraceMs: 5000 }))
+            .toBe('dropped');
+    });
+
+    it('does not throw on an entry with no pending metadata', () => {
+        expect(pendingDisplayState({}, NOW)).toBe('awaiting-network');
+        expect(pendingDisplayState(null, NOW)).toBe('awaiting-network');
     });
 });
 

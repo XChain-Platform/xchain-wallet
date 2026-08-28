@@ -272,6 +272,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         observedAtRef.current.set(key, nowMs);
         return nowMs;
     };
+    // M2.2 needs to tell "the network never saw this" apart from "the network
+    // saw it and no longer does", and the difference is only visible ACROSS
+    // polls: once the mempool row is gone, the read that would have carried it
+    // is simply absent. So the last poll that did list each transaction is
+    // remembered here, and travels to the entry that outlives the row.
+    const lastMempoolSeenRef = useRef(/** @type {Map<string, number>} */ (new Map()));
 
     // M2.1: History had no cadence of its own; a confirmed row only ever
     // appeared because the route remounted. Pending rows need one, so the
@@ -426,6 +432,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 for (const row of (r.mempool || [])) {
                     const hash = String(row?.tx_hash ?? row?.txHash ?? '');
                     if (!hash) continue;
+                    lastMempoolSeenRef.current.set(`${r.chainId}:${hash.toLowerCase()}`, nowMs);
                     pendingCandidates.push(mempoolRowToEntry({
                         chainId: r.chainId,
                         address: r.address,
@@ -436,12 +443,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 }
                 for (const record of (r.pendingTxs || [])) {
                     if (!record?.txid) continue;
+                    const key = `${r.chainId}:${String(record.txid).toLowerCase()}`;
                     pendingCandidates.push(pendingTxToEntry({
                         chainId: r.chainId,
                         address: r.address,
                         pendingTx: record,
                         ownAddresses,
                         observedAtMs: rememberObservedAt(r.chainId, record.txid, nowMs),
+                        lastMempoolSeenMs: lastMempoolSeenRef.current.get(key) ?? null,
                     }));
                 }
             }
@@ -452,6 +461,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             const liveKeys = new Set(merged.pending.map((e) => `${e.chainId}:${e.txHash}`));
             for (const key of [...observedAtRef.current.keys()]) {
                 if (!liveKeys.has(key)) observedAtRef.current.delete(key);
+            }
+            for (const key of [...lastMempoolSeenRef.current.keys()]) {
+                if (!liveKeys.has(key)) lastMempoolSeenRef.current.delete(key);
             }
             merged.entries.sort(compareMergedEntries);
             setEntries(merged.entries);
