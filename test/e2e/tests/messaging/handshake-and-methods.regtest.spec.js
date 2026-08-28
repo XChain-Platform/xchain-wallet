@@ -496,6 +496,31 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
         });
     });
 
+    // THE SILENT BUTTON IS FIXED AND THIS TEST IS HOW WE KNOW: un-fixme'd and driven
+    // 2026-08-27 (sixth run), it now fails with the venue's own words on screen
+    // where it used to fail against a blank surface. The page snapshot carries
+    // `alert: "Encoder RPC error: Transaction would burn significant satoshis
+    // as fees. Please provide a change address."` - the exact sentence this
+    // file was written to make visible.
+    //
+    // RE-FIXME'D AGAINST WHAT IT UNCOVERED, which is a different
+    // defect one layer down: the key request cannot compose at all.
+    // `handshakeAction` (flows/messageAction.js:378) builds
+    // `encoderOpts: { pubkey, fee?, feePerKb?, rbf? }` with no `change` and no
+    // `sourceAddress`, and `submitAction` only ROTATES a change address that is
+    // already there (`submitAction.js:241`), it never supplies one. Same shape
+    // as the label-sync publish, whose own defect entry claimed
+    // `publishLabelsNow` was "the only action flow in the wallet that omits
+    // them" - it is not.
+    //
+    // WHAT IS NOT PROVEN, and the next session should not assume it: why the
+    // SEND path in this same file succeeds (row 33 drove the plaintext fallback
+    // green on chain) while the handshake does not, when neither sets `change`
+    // literally. That difference is the thing to measure first, and guessing at
+    // it is how this campaign has produced wrong causes before.
+    //
+    // The assertions below are right and should stay exactly as written.
+    // Superseded header follows.
     // FIXME'd 2026-08-27 BECAUSE IT PINS A REAL DEFECT THAT IS NOT FIXED YET,
     // not because it is unfinished. The defect is tracked.
     //
