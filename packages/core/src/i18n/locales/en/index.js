@@ -198,6 +198,20 @@ export const en = {
         'Taken from this wallet\'s own record of the send. The network has not reported the transaction data yet.',
     'pending.detail.noData': 'No action data has been reported for this transaction yet.',
 
+    // M2.5: the amount annotation on a pending row. Verbs still in
+    // progress, never a settled figure and never a signed one: the
+    // wallet only puts a side on this when it recognized one of the
+    // parties as its own, and "moves" is everything it knows otherwise.
+    // The caveat travels with the figure as its accessible name, because
+    // the styling that sets it apart from the settled amounts below it
+    // is not something a screen reader conveys.
+    'pending.amount.entry': '{amount} {tick}',
+    'pending.amount.separator': ', ',
+    'pending.amount.sending': 'sending {amounts}',
+    'pending.amount.receiving': 'receiving {amounts}',
+    'pending.amount.moving': 'moves {amounts}',
+    'pending.amount.caveat': 'Pending, not yet validated by the indexer: {summary}',
+
     // --- errors ---------------------------------------------------
     'error.vaultClosed': 'Wallet is locked. Unlock to continue.',
     'error.genericLoad': 'Failed to load.',

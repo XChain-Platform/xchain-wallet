@@ -239,6 +239,46 @@ function describePendingAction(entry) {
 }
 
 /**
+ * M2.5: which verb the row annotation uses, keyed by the direction the
+ * merge already decided (I-9). A null direction is not in the table on
+ * purpose: it means neither party was identified as ours, and a plus or
+ * a minus there would put a sign on money the wallet cannot attribute.
+ */
+const PENDING_AMOUNT_COPY = {
+    out: 'pending.amount.sending',
+    in: 'pending.amount.receiving',
+};
+
+/**
+ * M2.5: what a pending transaction is about to move, or null when the
+ * wallet cannot say.
+ *
+ * Null is the answer for every action but SEND v0-v3 and our own record
+ * of a send. A MINT carries its supply at the same segment offset a SEND
+ * carries its amount, so reading it positionally would invent a figure
+ * rather than report one, which is the whole point of I-9. The decode
+ * comes from `describePendingAction`, which yields outputs for nothing
+ * else; the kind check below states that contract rather than enforcing
+ * it a second time.
+ *
+ * Amount strings are the wire's own, untouched: a value too large or too
+ * precise for a JS number reaches the screen intact because nothing here
+ * parses one.
+ *
+ * @param {any} entry
+ * @returns {{ direction: 'in' | 'out' | null,
+ *             outputs: Array<{ tick: string, amount: string }> } | null}
+ */
+function pendingAmountAnnotation(entry) {
+    if (!entry?.pending) return null;
+    const desc = describePendingAction(entry);
+    if (desc.kind !== 'send' && desc.kind !== 'local') return null;
+    const outputs = desc.outputs.filter((o) => o.amount !== '' && o.tick !== '');
+    if (outputs.length === 0) return null;
+    return { direction: entry.pending.direction ?? null, outputs };
+}
+
+/**
  * History route: §23 unified timeline + §23.5 cross-chain thread
  * rendering.
  *
@@ -2605,6 +2645,51 @@ function PendingRowLabel({ entry }) {
 }
 
 /**
+ * M2.5: what the pending row moves, on the row itself. Until now a
+ * pending entry named its action, its state and its counterparty and
+ * said nothing about the value at stake, so the list gave the user no
+ * way to tell a dust send from their rent without opening every row.
+ *
+ * Renders nothing rather than a placeholder when no amount can be stood
+ * behind. A blank says the wallet does not know; a zero would say the
+ * transaction moves nothing, which is a different and false claim.
+ *
+ * The phrasing is a verb still in progress, and the accessible name
+ * carries the pre-validation caveat for a reader who never sees the
+ * styling. Neither is decoration: this figure sits inches from settled
+ * amounts in the same list, and the indexer can still reject the action
+ * when its block lands.
+ *
+ * @param {{ entry: any }} props
+ */
+function PendingAmountLabel({ entry }) {
+    const [balancesHidden] = useBalancesHidden();
+    const annotation = pendingAmountAnnotation(entry);
+    if (!annotation) return null;
+    const amounts = annotation.outputs
+        .map((o) => t('pending.amount.entry', {
+            amount: balancesHidden ? '•••••' : o.amount,
+            tick: o.tick,
+        }))
+        .join(t('pending.amount.separator'));
+    const summary = t(
+        PENDING_AMOUNT_COPY[annotation.direction] || 'pending.amount.moving',
+        { amounts },
+    );
+    const caveat = t('pending.amount.caveat', { summary });
+    return (
+        <span
+            className={styles.pendingAmount}
+            data-pending-amount={annotation.direction || 'unknown'}
+            aria-label={caveat}
+            title={caveat}
+        >
+            {summary}
+        </span>
+    );
+}
+
+/**
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
@@ -2659,7 +2744,12 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                                 </span>
                             ) : null}
                         </>
-                    ) : <PendingRowLabel entry={entry} />}
+                    ) : (
+                        <>
+                            <PendingRowLabel entry={entry} />
+                            <PendingAmountLabel entry={entry} />
+                        </>
+                    )}
                     {entry.timestamp ? (
                         <span className={styles.rowRelativeTime}>
                             {formatRelativeTime(entry.timestamp)}

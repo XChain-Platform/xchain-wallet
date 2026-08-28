@@ -1422,3 +1422,14 @@
 .pendingMemo {
     color: var(--xc-text-muted);
 }
+
+/* M2.5: the amount annotation on a pending row's meta line. Styled
+   deliberately unlike every settled figure in the same list, because it
+   is a pre-validation claim sitting inches from confirmed ones: italic,
+   muted, and never given the weight or the alignment that the confirmed
+   rows' numbers get. */
+.pendingAmount {
+    font-style: italic;
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}
