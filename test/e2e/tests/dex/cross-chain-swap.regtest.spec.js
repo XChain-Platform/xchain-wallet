@@ -251,7 +251,17 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main).toContainText(
                 new RegExp(`${GET_AMOUNT} ${TICK} on ${GET.chainLabel}`));
 
-            await main.getByLabel('Password', { exact: true }).fill(PASSWORD);
+            // CONDITIONAL, and not out of caution: `SignCredentials` renders
+            // no password field at all when the signer pool is already
+            // rehydrated, showing "Wallet unlocked. No password needed."
+            // instead, and the form's submit gate agrees (`!signerReady &&
+            // password.length === 0`). An unconditional fill would wait out the
+            // full budget on a screen that is ready to sign. Same shape the
+            // betting lane settled on.
+            const password = main.getByLabel('Password', { exact: true });
+            if (await password.count() > 0 && await password.isVisible()) {
+                await password.fill(PASSWORD);
+            }
             await main.getByRole('button', { name: 'Sign cross-chain swap' }).click();
         });
 
