@@ -238,21 +238,39 @@ async function approveAndGetTxid(page) {
     await expect(page.getByRole('main'),
         'no success screen appeared after Approve: no transaction id ever reached the screen')
     //
-    // THE BOUND IS NOT THE PROBLEM AND RAISING IT WAS A WRONG INFERENCE, kept
-    // at 180s deliberately. Reasoning that the screen was "a second late" led
-    // to a 300s drive that failed the same way at 5.4 minutes, with the same
-    // "Token issued" heading, txid and Done button in its failure snapshot. So
-    // the success screen is DEMONSTRABLY on screen while this assertion times
-    // out against it, and one earlier drive cleared this exact step. That
-    // contradiction is the next session's starting point, and it is not a
-    // timeout: suspects are a second `main` landmark resolving ahead of the
-    // success one, or the screen mounting only after the expect gives up.
-        .toContainText(/\b[0-9a-f]{64}\b/, { timeout: 180_000 });
+    // THE CONTRADICTION IS SOLVED, AND IT WAS THE WORD BOUNDARIES.
+    //
+    // The record of the hunt, because the wrong answers cost more than the
+    // right one: raising the bound was a wrong inference (a 300s drive failed
+    // the same way at 5.4 minutes with the txid and Done button in its
+    // snapshot), and the two suspects named next - a second `main` landmark, or
+    // a late mount - were wrong too. The success screen really was on screen
+    // the whole time.
+    //
+    // `toContainText` matches against textContent, which CONCATENATES adjacent
+    // nodes with no separator, so the screen reads
+    // "…Transaction IDd1a97d03…aae634b4Copy…". `\b` needs a word/non-word
+    // transition: `D`→`d` is not one, and `4`→`C` is not one, so the anchored
+    // pattern could not match a 64-character txid that was plainly there.
+    // Proven against the exact failing string: with the anchors `false`,
+    // without them `true`, hex run exactly 64.
+    //
+    // The sibling reads below and in the send/ lane keep their anchors and are
+    // correct to: they call `.innerText()`, which inserts the line breaks
+    // textContent omits, which is why only this assertion ever failed.
+        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
     await expect(page.getByRole('button', { name: 'Done' }),
         'a transaction id is on screen but this is not the success screen, so the walk would '
         + 'read an id off some other surface')
         .toBeVisible({ timeout: 30_000 });
-    const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
+    // Anchor-free for the same reason as the assertion above. `innerText` DOES
+    // insert the separators textContent omits, so `\b` works here and the
+    // send/ lane's identical reads are green on it - but a read that returns
+    // `undefined` when it silently stops matching hands the next line an
+    // undefined txid, and this campaign has paid for enough absent-field-read-
+    // as-a-verdict failures to not leave a second copy of the same hazard.
+    const txid = (await page.getByRole('main').innerText()).match(/[0-9a-f]{64}/)?.[0];
+    expect(txid, 'the success screen showed no transaction id to read').toBeTruthy();
     expect(txid, 'the success screen showed no transaction id').toBeTruthy();
     return txid;
 }
