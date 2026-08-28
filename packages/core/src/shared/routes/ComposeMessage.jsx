@@ -158,6 +158,13 @@ export function ComposeMessage({
     // branch can confirm it without leaving the compose screen.
     const [handshakeBusy, setHandshakeBusy] = useState(false);
     const [handshakeSent, setHandshakeSent] = useState(false);
+    // The key request's OWN error, deliberately not `submitError`. It used to
+    // write into that one, which the form stage renders nowhere (only the
+    // review stage and the hardware branch do), so every failure of this button
+    // was invisible: pressing it did nothing, silently, with no way to learn
+    // why. Its own state also keeps a stale send failure from surfacing in the
+    // handshake box, and vice versa.
+    const [handshakeError, setHandshakeError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
@@ -551,12 +558,21 @@ export function ComposeMessage({
     async function handleRequestSession() {
         if (handshakeBusy || !fromAddress || !chainId || !toAddress.trim()) return;
         if (!hw && !signerReady && password.length === 0) {
-            setSubmitError('Enter your password to send the key request.');
+            // NAMES SOMETHING THE USER CAN ACTUALLY DO. This used to read
+            // "Enter your password to send the key request", and there is no
+            // password field on this stage to enter it into: the send path
+            // collects the password on the review screen, which a key request
+            // never reaches. Unlocking is the real remedy.
+            setHandshakeError('Your wallet is locked, so the key request cannot be signed. '
+                + 'Unlock it and press this again.');
             return;
         }
-        if (hw && hwStatus !== 'available') return;
+        if (hw && hwStatus !== 'available') {
+            setHandshakeError('Connect and unlock your hardware wallet to send the key request.');
+            return;
+        }
         setHandshakeBusy(true);
-        setSubmitError(null);
+        setHandshakeError(null);
         try {
             const base = {
                 walletId,
@@ -577,7 +593,7 @@ export function ComposeMessage({
                 : messaging.sendHandshake({ ...base, password }));
             setHandshakeSent(true);
         } catch (err) {
-            setSubmitError(err?.message || 'Could not send the key request.');
+            setHandshakeError(err?.message || 'Could not send the key request.');
         } finally {
             setHandshakeBusy(false);
         }
@@ -829,15 +845,30 @@ export function ComposeMessage({
                             message them encrypted.
                         </p>
                     ) : (
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            loading={handshakeBusy}
-                            onClick={handleRequestSession}
-                        >
-                            Request encrypted session (publish your key)
-                        </Button>
+                        <>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                loading={handshakeBusy}
+                                onClick={handleRequestSession}
+                            >
+                                Request encrypted session (publish your key)
+                            </Button>
+                            {/* The button's failures live HERE, beside it. This
+                                is the only stage it is reachable from, and
+                                nothing on this stage rendered an error before,
+                                so a refused or failed key request looked like a
+                                button that does nothing. */}
+                            {handshakeError ? (
+                                <p
+                                    role="alert"
+                                    style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.8rem' }}
+                                >
+                                    {handshakeError}
+                                </p>
+                            ) : null}
+                        </>
                     )}
                 </div>
             ) : null}
