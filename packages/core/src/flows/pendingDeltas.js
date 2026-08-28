@@ -29,6 +29,20 @@ export const UNCONFIRMED_COMMITTED_STATUSES = /** @type {const} */ ([
 const UNCONFIRMED = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
 /**
+ * A plain positive decimal string, tested by shape rather than by parsing to a
+ * Number: amounts are decimal strings precisely because they can exceed what a
+ * float represents exactly (§4.5), so `Number(amount) > 0` would be the wrong
+ * question asked in the wrong arithmetic.
+ *
+ * @param {unknown} amount
+ */
+function isPositiveDecimalString(amount) {
+    const s = String(amount).trim();
+    if (!/^\d+(\.\d+)?$/.test(s)) return false;
+    return /[1-9]/.test(s);
+}
+
+/**
  * Pending debits to subtract from a source's balance in pre-flight.
  *
  * Pure: takes the raw PendingTx list and the venue/source to filter on, returns
@@ -47,6 +61,13 @@ export function unconfirmedPendingDeltas(pendingTxs, { coin, network, source } =
         if (p.chain !== coin || p.network !== network) continue;
         if (!UNCONFIRMED.has(p.status)) continue;
         if (!p.tick || p.amount == null || p.amount === '') continue;
+        // Every delta here is SUBTRACTED from what the user may spend, so a
+        // non-positive amount would be netted as a credit and hand them
+        // spendable balance for a transaction the network has not accepted.
+        // The schema only checks that `amount` is a string, so nothing
+        // upstream rules this out; refusing it here is the cheap half of
+        // M2.5's rule that a pending amount is never added to a balance.
+        if (!isPositiveDecimalString(p.amount)) continue;
         out.push({ tick: String(p.tick), amount: String(p.amount) });
     }
     return out;
