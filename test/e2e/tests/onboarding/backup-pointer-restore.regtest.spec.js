@@ -492,6 +492,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
 
                 await test.step('AND IT CAN SIGN: a real transaction, confirmed by the chain', async () => {
                     await gotoSection(two, 'Send');
+                    const main = two.getByRole('main');
                     // NOT `selectVenueChain`: Send has no "Network" picker
                     // either. It renders a `TokenField` whose trigger reads
                     // "Token: <TICK> on <Chain>" and whose click NAVIGATES to a
@@ -616,7 +617,16 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 await expect(alert, 'the refusal does not rule OUT the other two passwords, so a '
                     + 'user who mixed them up learns nothing')
                     .toContainText(/not this file's password and not the password for this device/i);
-                await expect(alert).toContainText(/device it was backed up from/i);
+                // A SECOND wrong-phrase assertion, and it was invisible until the
+                // one above it was fixed: the copy says "the device you backed it
+                // up from", never "the device it was backed up from". It has
+                // therefore never passed, and nobody could see it because the
+                // assertion in front of it failed first. Kept rather than
+                // deleted, because the claim is real and distinct - it is what
+                // tells the user WHERE the password they need was set.
+                await expect(alert, 'the refusal does not say WHICH device the wanted password '
+                    + 'was set on, so a user with several backups cannot tell which one to try')
+                    .toContainText(/device you backed it up from/i);
 
                 // Still fresh: Welcome, not an unlock screen. An unlock screen
                 // here would mean a vault was written for a restore that never
