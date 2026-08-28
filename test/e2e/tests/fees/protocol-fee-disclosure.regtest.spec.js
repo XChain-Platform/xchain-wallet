@@ -52,16 +52,17 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
-    EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_COIN,
-    REGTEST_DESTINATION,
     encoderRpc,
+    expectConfirmModal,
+    EXPLORER_URL,
     fundAddress,
     minerRpc,
     mintXchain,
-    tokenBalance,
+    REGTEST_ADDRESS_RE,
+    REGTEST_COIN,
+    REGTEST_DESTINATION,
     switchToRegtest,
+    tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
 } from '../../fixtures/regtest.js';
@@ -241,7 +242,7 @@ async function composeIssue(page, tick, { nativeFee }) {
     // confirm screen directly, with no review stage in between.
     await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-    await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+    await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
     return main;
 }
@@ -531,7 +532,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
         };
 
@@ -578,7 +579,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
             await mainButton(page, 'Send').click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             // A bare native payment carries no XChain action at all,
             // so there is no fee to disclose and nothing to project.
             await expect(page.getByTestId('confirm-protocol-fee'),

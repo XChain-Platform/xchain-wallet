@@ -51,11 +51,12 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
     EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_COIN,
     fundAddress,
     minerRpc,
+    REGTEST_ADDRESS_RE,
+    REGTEST_COIN,
     switchToRegtest,
     unlockAfterReload,
     warmFeeQuote,
@@ -199,7 +200,7 @@ test.describe('the native-fee flag on each submit lane', () => {
             // stage in between. Watcher mode is the one that gets "Preview".
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
             await page.getByTestId('confirm-approve').click();
 

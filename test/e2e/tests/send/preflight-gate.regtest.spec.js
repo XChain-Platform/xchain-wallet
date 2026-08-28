@@ -42,11 +42,12 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
-    REGTEST_CHAIN_LABEL,
-    REGTEST_DESTINATION,
+    expectConfirmModal,
     fundAddress,
     mintXchain,
     readReceiveAddress,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_DESTINATION,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
@@ -109,7 +110,7 @@ async function composeTokenSend(page, amount) {
     await toField(page).fill(REGTEST_DESTINATION);
     await amountField(page).fill(amount);
     await mainButton(page, 'Send').click();
-    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expectConfirmModal(page, 'this action', 30_000);
 }
 
 test.describe('pre-flight gate on regtest', () => {
@@ -215,7 +216,7 @@ test.describe('pre-flight gate on regtest', () => {
         // changes.
         await amountField(page).fill(AFFORDABLE);
         await mainButton(page, 'Send').click();
-        await expect(page.getByTestId('confirm-modal')).toBeVisible();
+        await expectConfirmModal(page, 'this action', 30_000);
 
         await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
 

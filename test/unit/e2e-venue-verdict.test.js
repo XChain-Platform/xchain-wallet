@@ -24,7 +24,13 @@
 // future simplification of the guard pass while re-opening the hole.
 
 import { describe, it, expect } from 'vitest';
-import { createOutageWatch, probeVerdict, venueVerdict } from '../e2e/fixtures/venueHealth.js';
+import {
+    RATE_LIMIT_WINDOW_MS,
+    createOutageWatch,
+    probeVerdict,
+    rateLimitDelayMs,
+    venueVerdict,
+} from '../e2e/fixtures/venueHealth.js';
 
 // Recorded 2026-08-27: all three chains as the explorer reported them, with
 // RLTC healthy and RBTC's decoder crash-looping on a REORG_HALT marker.
@@ -207,5 +213,51 @@ describe('createOutageWatch: notice it, then name it', () => {
         const wedged = { httpStatus: 200, body: STATUS_WEDGED_RDOGE };
         expect(watch.observe(wedged, 0, 'RDOGE')).toBeNull();
         expect(watch.observe(wedged, 20_000, 'RDOGE')).toMatch(/WEDGED/);
+    });
+});
+
+// The shared explorer's rate limit, and the reason a fixture has to
+// know about it. `RateLimit-Limit: 120` / `RateLimit-Policy: 120;w=60` sit in
+// the headers of every explorer response; three long `tokens/` specs crossed
+// that limit while the wallet was reading the same explorer, and every one of
+// them reported a locator timeout with the 429 nowhere in sight.
+describe('rateLimitDelayMs', () => {
+    const headers = (obj) => new Headers(obj);
+
+    it('says nothing at all about a response that is not a rate limit', () => {
+        expect(rateLimitDelayMs(200, headers({}))).toBeNull();
+        expect(rateLimitDelayMs(500, headers({ 'retry-after': '5' })),
+            'a 500 carrying a stray Retry-After is still not a rate limit').toBeNull();
+    });
+
+    it('waits what the venue asks, in the venue own units', () => {
+        expect(rateLimitDelayMs(429, headers({ 'retry-after': '7' }))).toBe(7_000);
+        expect(rateLimitDelayMs(429, headers({ 'ratelimit-reset': '12' }))).toBe(12_000);
+    });
+
+    it('prefers Retry-After when the venue sends both', () => {
+        expect(rateLimitDelayMs(429, headers({ 'retry-after': '3', 'ratelimit-reset': '40' })))
+            .toBe(3_000);
+    });
+
+    it('falls back to the advertised window rather than to a guess', () => {
+        expect(rateLimitDelayMs(429, headers({}))).toBe(RATE_LIMIT_WINDOW_MS);
+        expect(rateLimitDelayMs(429, headers({ 'retry-after': 'soon' })),
+            'a garbage header must not become NaN milliseconds').toBe(RATE_LIMIT_WINDOW_MS);
+    });
+
+    it('treats a zero as the real answer it is, not as a missing header', () => {
+        expect(rateLimitDelayMs(429, headers({ 'retry-after': '0' })),
+            'the window has just rolled: ask again now').toBe(0);
+    });
+
+    it('caps a hostile header so one response cannot park a spec for its whole budget', () => {
+        expect(rateLimitDelayMs(429, headers({ 'retry-after': '86400' }))).toBe(RATE_LIMIT_WINDOW_MS);
+        expect(rateLimitDelayMs(429, headers({ 'retry-after': '30' }), { capMs: 5_000 })).toBe(5_000);
+    });
+
+    it('reads a plain object as well as a Headers, case-insensitively', () => {
+        expect(rateLimitDelayMs(429, { 'Retry-After': '4' })).toBe(4_000);
+        expect(rateLimitDelayMs(429, undefined)).toBe(RATE_LIMIT_WINDOW_MS);
     });
 });

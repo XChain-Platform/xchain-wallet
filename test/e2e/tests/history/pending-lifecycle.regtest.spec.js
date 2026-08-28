@@ -102,14 +102,15 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
-    REGTEST_CHAIN_ID,
-    REGTEST_CHAIN_LABEL,
-    REGTEST_COIN,
-    REGTEST_DESTINATION,
+    expectConfirmModal,
     explorerJson,
     fundAddress,
     minerRpc,
     mintXchain,
+    REGTEST_CHAIN_ID,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
+    REGTEST_DESTINATION,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -397,7 +398,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 30_000 });
+            await expectConfirmModal(page, 'this action', 30_000);
             sendTxid = await approveAndGetTxid(page);
         });
 
@@ -620,7 +621,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 30_000 });
+            await expectConfirmModal(page, 'this action', 30_000);
             sendTxid = await approveAndGetTxid(page);
             await page.getByRole('button', { name: 'View in history' }).click();
         });

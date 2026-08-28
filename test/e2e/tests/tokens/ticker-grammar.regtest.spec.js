@@ -73,11 +73,12 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
+    fundAddress,
+    mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
-    fundAddress,
-    mintXchain,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -776,7 +777,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 90_000 });
+            await expectConfirmModal(page, 'this action', 90_000);
             const approve = page.getByTestId('confirm-approve');
             await expect(approve).toBeEnabled({ timeout: 120_000 });
             await approve.click();

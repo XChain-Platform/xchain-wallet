@@ -29,13 +29,14 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
-    REGTEST_CHAIN_LABEL,
-    REGTEST_DESTINATION,
-    REGTEST_TICKER,
     assertNoActionRecorded,
+    expectConfirmModal,
     failBroadcast,
     fundAddress,
     readReceiveAddress,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_DESTINATION,
+    REGTEST_TICKER,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
@@ -166,7 +167,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         await toField(page).fill(REGTEST_DESTINATION);
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();
-        await expect(page.getByTestId('confirm-modal')).toBeVisible();
+        await expectConfirmModal(page, 'this action', 30_000);
 
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
@@ -180,7 +181,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         // again. (Approve's enabled-ness is NOT the probe here - a later change leaves
         // it gated behind the override for native sends.)
         await mainButton(page, 'Send').click();
-        await expect(page.getByTestId('confirm-modal')).toBeVisible();
+        await expectConfirmModal(page, 'this action', 30_000);
         await expect(page.getByTestId('action-intent'))
             .toContainText(`Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to ${REGTEST_DESTINATION}`);
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
@@ -208,7 +209,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();
 
-        await expect(page.getByTestId('confirm-modal')).toBeVisible();
+        await expectConfirmModal(page, 'this action', 30_000);
         await expect(page.getByTestId('confirm-approve')).toBeEnabled();
         await expect(page.getByText(/Will likely fail/i)).toHaveCount(0);
 
@@ -257,7 +258,7 @@ test.describe('broadcast permanence on regtest', () => {
         await toField(page).fill(REGTEST_DESTINATION);
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();
-        await expect(page.getByTestId('confirm-modal')).toBeVisible();
+        await expectConfirmModal(page, 'this action', 30_000);
         await page.getByTestId('confirm-approve').click();
     }
 

@@ -159,3 +159,63 @@ export function createOutageWatch({ toleranceMs = 120_000 } = {}) {
         },
     };
 }
+
+/** The default the explorer's own headers advertise: `RateLimit-Policy: 120;w=60`. */
+export const RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * How long to wait before asking a rate-limited explorer again, or null
+ * when the answer was not a rate limit at all.
+ *
+ * WHY A FIXTURE NEEDS THIS. The shared explorer allows 120 requests per 60
+ * seconds (`RateLimit-Limit: 120`, `RateLimit-Policy: 120;w=60`, in the headers
+ * of every response). A long spec polls it for an action while the WALLET is
+ * also reading it, the pair cross the limit, and the venue starts refusing -
+ * whereupon this suite's poll loops, which catch a failed read and immediately
+ * poll again, spend the rest of the window making the burst worse. So the loop
+ * that trips the limit is also the loop that will not let it clear.
+ *
+ * Waiting the window out is therefore the fix rather than a slower poll
+ * everywhere: it costs nothing on the happy path, where no 429 is ever seen,
+ * and it changes no timing in the specs that were never near the limit.
+ *
+ * The venue is asked what to wait, in its own units, before any default is used:
+ * `Retry-After` (seconds) and `RateLimit-Reset` (seconds until the window rolls)
+ * are both standard and both cheap to honour. A garbage or absent header falls
+ * back to the advertised window rather than to a guess, and everything is capped
+ * so a hostile header cannot park a spec for its whole budget.
+ *
+ * Pure and header-only on purpose, so every branch is unit-drivable in
+ * milliseconds instead of by starving a live venue.
+ *
+ * @param {number} status the HTTP status the venue answered with
+ * @param {{get: (name: string) => string|null} | Record<string, string>} [headers]
+ * @param {{capMs?: number}} [opts]
+ * @returns {number | null} milliseconds to wait, or null when this was not a 429
+ */
+export function rateLimitDelayMs(status, headers, { capMs = RATE_LIMIT_WINDOW_MS } = {}) {
+    if (status !== 429) return null;
+
+    const read = (name) => {
+        if (!headers) return null;
+        if (typeof headers.get === 'function') return headers.get(name);
+        // A plain object may carry either spelling; headers are case-insensitive.
+        const hit = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase());
+        return hit ? headers[hit] : null;
+    };
+
+    for (const name of ['retry-after', 'ratelimit-reset']) {
+        const raw = read(name);
+        // An ABSENT header must fall through to the next one, and `Number(null)`
+        // is 0, which would answer "ask again immediately" for a header the venue
+        // never sent. So absence is checked before the value is read as a number.
+        if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+        const seconds = Number(raw);
+        // A zero IS a real answer ("the window has just rolled"), so only a
+        // non-finite or negative value falls through to the default.
+        if (Number.isFinite(seconds) && seconds >= 0) {
+            return Math.min(Math.round(seconds * 1000), capMs);
+        }
+    }
+    return Math.min(RATE_LIMIT_WINDOW_MS, capMs);
+}

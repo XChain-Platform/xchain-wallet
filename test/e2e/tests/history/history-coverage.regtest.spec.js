@@ -102,13 +102,14 @@ import { randomBytes } from 'node:crypto';
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
     EXPLORER_URL,
+    fundAddress,
+    mintXchain,
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     REGTEST_DESTINATION,
-    fundAddress,
-    mintXchain,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -419,7 +420,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 30_000 });
+            await expectConfirmModal(page, 'this action', 30_000);
             sendTxid = await approveAndGetTxid(page);
 
             // The chain's own verdict, before any screen is consulted. A
@@ -649,7 +650,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(tick);
             await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
             await page.getByRole('button', { name: 'Sign action' }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 30_000 });
+            await expectConfirmModal(page, 'this action', 30_000);
             return approveAndGetTxid(page);
         };
 
@@ -673,7 +674,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await main.getByLabel('Supply', { exact: true }).fill(ISSUE_SUPPLY);
             await main.getByLabel(/Initial mint/).fill(INITIAL_MINT);
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 30_000 });
+            await expectConfirmModal(page, 'this action', 30_000);
             await waitForValidAction(await approveAndGetTxid(page));
             await reloadToHome(page);
         });

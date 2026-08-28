@@ -64,12 +64,13 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
     EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_COIN,
     fundAddress,
     minerRpc,
     mintXchain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -493,7 +494,7 @@ test.describe('BET deadline race', () => {
             // degradation below asserts `fail`, which neither `pass` nor `warn`
             // is, and the Tier-1 check it actually depends on is the
             // `data-dryrun="approved"` assertion immediately after this.
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('preflight-panel'),
                 'the confirm is already refusing before the deadline, so the degradation this spec '
                 + 'measures would not be a transition')
@@ -527,7 +528,7 @@ test.describe('BET deadline race', () => {
 
             // The confirm screen is untouched by any of that: the wallet has no
             // idea yet, which is the whole point of the race.
-            await expect(page.getByTestId('confirm-modal')).toBeVisible();
+            await expectConfirmModal(page, 'this action', 30_000);
         });
 
         await test.step('Approve is refused by the §4.6 re-check', async () => {

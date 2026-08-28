@@ -61,7 +61,7 @@ import { randomBytes } from 'node:crypto';
 import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
-import { venueVerdict } from './venueHealth.js';
+import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -1120,15 +1120,34 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
  */
 export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_000 } = {}) {
     const url = `${EXPLORER_URL}/${coin}/api/${path}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+
+    // A 429 is WAITED OUT, not thrown, because almost every caller here
+    // sits in a poll loop that catches a failed read and immediately reads again.
+    // Throwing turns the venue's "slow down" into the busiest second of the run,
+    // and the spec then dies on a locator with the rate limit nowhere in sight.
+    // Bounded on purpose: two waits, so a genuinely saturated venue still fails
+    // inside a spec's budget and says why.
+    let res;
+    for (let attempt = 0; ; attempt += 1) {
+        res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+        const waitMs = rateLimitDelayMs(res.status, res.headers);
+        if (waitMs === null || attempt >= 2) break;
+        await new Promise((r) => setTimeout(r, waitMs));
+    }
+
     const body = await res.json().catch(() => null);
     if (!res.ok || (body && body.error)) {
         throw new Error(
             `the venue REFUSED ${coin}/api/${path} with HTTP ${res.status}`
             + (body?.code ? ` [${body.code}]` : '')
             + (body?.error ? `: ${body.error}` : '')
-            + '. This is the venue answering, not the wallet publishing nothing - read the '
-            + 'explorer container log for the query behind it before touching a spec.',
+            + (res.status === 429
+                ? `. That is the shared explorer's rate limit, still refusing after two `
+                  + `waits: its policy header reads ${res.headers.get('ratelimit-policy') || '120;w=60'}`
+                  + ', and this suite polls it while the wallet is reading it too. Nothing about '
+                  + 'the wallet is broken here.'
+                : '. This is the venue answering, not the wallet publishing nothing - read the '
+                  + 'explorer container log for the query behind it before touching a spec.'),
         );
     }
     return body;

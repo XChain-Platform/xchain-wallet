@@ -69,14 +69,15 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
+    fundAddress,
+    mintXchain,
+    nudgeChain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     REGTEST_DESTINATION,
-    fundAddress,
-    mintXchain,
-    nudgeChain,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -144,15 +145,22 @@ async function gotoPalette(page, title) {
 }
 
 /** Waits for the confirm surface itself, WITHOUT requiring Approve to be live. */
+/**
+ * The shared reader, plus this lane's own checks.
+ *
+ * A narrower wait races the modal against the stale-price alert and nothing
+ * else, so every OTHER refusal the screen carried read as the modal simply
+ * not being there - which is how the shared explorer's 429 was reported as a
+ * locator timeout for four runs. `expectConfirmModal` reads every alert on
+ * the screen instead. The price check stays because it names one venue state
+ * early and by itself.
+ */
 async function expectConfirmModal(page) {
-    const modal = page.getByTestId('confirm-modal');
-    const priceAlert = page.getByText(/fee price is temporarily unavailable/);
-    await modal.or(priceAlert).first().waitFor({ state: 'visible', timeout: 60_000 });
-    expect(await priceAlert.count(),
-        'the venue could not price this action: the price sentinel has gone stale mid-run. Venue '
-        + 'state, not a wallet defect - re-seed (campaign §3.2) and re-run')
+    const modal = await sharedConfirmModal(page, 'this action', 60_000);
+    expect(await page.getByText(/fee price is temporarily unavailable/).count(),
+        'the venue could not price this action: the price sentinel has gone stale mid-run. '
+        + 'Venue state, not a wallet defect - re-seed (campaign §3.2) and re-run')
         .toBe(0);
-    await expect(modal).toBeVisible({ timeout: 60_000 });
     return modal;
 }
 

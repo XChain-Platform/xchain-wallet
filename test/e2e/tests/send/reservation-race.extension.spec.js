@@ -38,10 +38,11 @@
 // regtest), which has a pre-flight and a reservable delta.
 
 import {
+    } from '../../fixtures/wallet.js';,
     createWallet, gotoSection, mainButton,
-} from '../../fixtures/wallet.js';
-import { expect, openSecondPopup, test } from '../../fixtures/extension.js';
-import {
+    expectConfirmModal,
+    import {,
+    import { expect, openSecondPopup, test } from '../../fixtures/extension.js';,
     REGTEST_DESTINATION, fundAddress, minerRpc, mintXchain, readReceiveAddress,
     switchToRegtest, unlockAfterReload, waitForTokenBalance,
 } from '../../fixtures/regtest.js';
@@ -68,7 +69,7 @@ async function composeTokenSend(page) {
     await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_XCHAIN);
     await mainButton(page, 'Send').click();
-    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expectConfirmModal(page, 'this action', 30_000);
 }
 
 test.describe('two-window same-balance race (extension)', () => {
