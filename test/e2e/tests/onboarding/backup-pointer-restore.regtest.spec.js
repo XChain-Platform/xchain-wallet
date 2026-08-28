@@ -72,7 +72,7 @@ import {
     REGTEST_COIN,
     fundAddress,
     readReceiveAddress,
-    selectVenueChain,
+    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
@@ -492,8 +492,16 @@ test.describe('backup-pointer restore (§15.4)', () => {
 
                 await test.step('AND IT CAN SIGN: a real transaction, confirmed by the chain', async () => {
                     await gotoSection(two, 'Send');
-                    const main = two.getByRole('main');
-                    await selectVenueChain(main);
+                    // NOT `selectVenueChain`: Send has no "Network" picker
+                    // either. It renders a `TokenField` whose trigger reads
+                    // "Token: <TICK> on <Chain>" and whose click NAVIGATES to a
+                    // picker SCREEN with no listbox on it, so the chain helper
+                    // throws "no Network chain picker on this screen" - which is
+                    // exactly how this line failed in the second whole-suite
+                    // run. The campaign's widget map (frontier row 57) already
+                    // records Send as the one form in that third bucket, and
+                    // `selectVenueSendAsset` is the tool it names.
+                    await selectVenueSendAsset(two);
 
                     // Sent to its OWN address on purpose. The destination is
                     // irrelevant to what this proves - that the restored seal
@@ -587,10 +595,27 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     .toBeVisible({ timeout: 180_000 });
                 // Says which one. "Wrong password" would be true and useless:
                 // the file password WAS right, and the envelope did open.
-                await expect(alert,
-                    'the refusal does not tell the user WHICH of the three passwords was wrong, '
-                    + 'which is the whole reason BackupSeedPasswordError exists')
-                    .toContainText(/backed-up wallet's password/i);
+                //
+                // THE CLAIM IS THE DISTINCTION, NOT A PHRASE, and that is a
+                // correction made 2026-08-27 on the second whole-suite run. This
+                // asserted the literal string "backed-up wallet's password",
+                // which the copy has never used, and reported the miss as "the
+                // refusal does not tell the user WHICH password was wrong" - a
+                // product defect that does not exist. What the wallet actually
+                // says is better than what was demanded: it confirms the file
+                // opened, names the field that is wrong, and rules out the other
+                // two passwords by name. Same family as the `fees/` article
+                // mismatch (D42): a spec asking for words rather than for
+                // meaning accuses the product of a gap it does not have.
+                await expect(alert, 'the refusal does not say the backup FILE opened, so the user '
+                    + 'cannot tell which of the three passwords to change')
+                    .toContainText(/backup file opened/i);
+                await expect(alert, 'the refusal does not name the wallet-in-the-backup password as '
+                    + 'the wrong one, which is the whole reason BackupSeedPasswordError exists')
+                    .toContainText(/password of the wallet/i);
+                await expect(alert, 'the refusal does not rule OUT the other two passwords, so a '
+                    + 'user who mixed them up learns nothing')
+                    .toContainText(/not this file's password and not the password for this device/i);
                 await expect(alert).toContainText(/device it was backed up from/i);
 
                 // Still fresh: Welcome, not an unlock screen. An unlock screen
