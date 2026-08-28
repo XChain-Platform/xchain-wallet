@@ -207,6 +207,14 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             await selectVenueChain(main, 'Give chain');
             await selectNamedChain(main, 'Get chain', GET.chainLabel);
 
+            // CHAINS BEFORE TOKENS, and the order is load-bearing rather than
+            // tidy: each token picker is opened with
+            // `networkFilter={coinFromChainId(...)}` taken from its own side's
+            // chain (`:593`, `:609`), so a picker opened before the chain is
+            // set is filtered to the wrong network and the row this spec asks
+            // for is simply absent. The pickers only ever set the TICK back
+            // (`:595`, `:611`), so neither one re-targets a chain already
+            // chosen - which is why picking both chains up front is safe.
             await selectNamedToken(page, 'Give token', {
                 chainId: REGTEST_CHAIN_ID, chainLabel: REGTEST_CHAIN_LABEL, tick: TICK,
             });
