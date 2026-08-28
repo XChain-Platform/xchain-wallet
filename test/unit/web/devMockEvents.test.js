@@ -14,7 +14,7 @@
 // isolation between subscribers, and `getUnconfirmed` fixture filtering.
 
 import { describe, it, expect } from 'vitest';
-import { createDevMockEventBus, seedDefaultFixtures } from '../../../packages/web/src/devMockEvents.js';
+import { createDevMockEventBus, seedDefaultFixtures, installDevMockConsole } from '../../../packages/web/src/devMockEvents.js';
 
 describe('createDevMockEventBus', () => {
     it('delivers a MEMPOOL_ACTION frame to an onAddress subscriber on the source address', () => {
@@ -167,5 +167,34 @@ describe('createDevMockEventBus', () => {
 
         expect(bus.getUnconfirmed('seed-a').length).toBeGreaterThan(0);
         expect(bus.getUnconfirmed('seed-b').length).toBeGreaterThan(0);
+    });
+});
+
+describe('installDevMockConsole subscribe surface', () => {
+    it('lets a developer watch what a subscriber receives, not just emit', () => {
+        const bus = createDevMockEventBus();
+        const g = globalThis;
+        const had = 'window' in g;
+        if (!had) g.window = {};
+        installDevMockConsole(bus);
+        const m = g.window.__xchainDevMock;
+
+        const seen = [];
+        const off = m.onMempoolAction('c-dest', f => seen.push(f));
+        m.pushMempoolAction({ tx_hash: 'c-tx', source: 'c-src', destinations: ['c-dest'] });
+        expect(seen).toHaveLength(1);
+        expect(seen[0].type).toBe('MEMPOOL_ACTION');
+
+        // The returned unsubscribe has to work from the console too.
+        off();
+        m.pushMempoolAction({ tx_hash: 'c-tx2', source: 'c-src', destinations: ['c-dest'] });
+        expect(seen).toHaveLength(1);
+
+        const addrSeen = [];
+        const offA = m.onAddress('c-dest', f => addrSeen.push(f));
+        m.removeMempoolAction('c-tx');
+        expect(addrSeen.map(f => f.type)).toContain('MEMPOOL_REMOVED');
+        offA();
+        if (!had) delete g.window;
     });
 });

@@ -247,5 +247,11 @@ export function installDevMockConsole(bus) {
         removeMempoolAction: (txHash, opts) => bus.removeMempoolAction(txHash, opts),
         getUnconfirmed: (address, opts) => bus.getUnconfirmed(address, opts),
         clear: () => bus.clearFixtures(),
+        // Subscribing from the console matters as much as emitting: without it a
+        // developer can push a fixture but cannot watch what a subscriber would
+        // actually receive, which is the half that catches a wrong frame shape.
+        // Both return their unsubscribe function, same as the SDK surface.
+        onMempoolAction: (address, cb) => bus.onMempoolAction(address, cb),
+        onAddress: (address, cb) => bus.onAddress(address, cb),
     };
 }
