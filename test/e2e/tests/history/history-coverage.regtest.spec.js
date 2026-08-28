@@ -575,6 +575,22 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     // before reaching any History assertion at all; keeping it here means a
     // failure in it can never again hide the send claim above.
     //
+    // THE GROUPING DEFECT IS FIXED AND THIS TEST WAS DRIVEN AGAINST THE FIX,
+    // 2026-08-27 (sixth run). It is still red, and it is red EARLIER than
+    // before rather than at a History assertion: it now dies in its own setup
+    // walk on `getByRole('heading', { name: 'Broadcast pending' })` after 3.4
+    // minutes, so nothing is yet known about whether Grouped mode groups.
+    //
+    // RECORDED AS A MOVED FAILURE, NOT A CLOSED ONE, which is the distinction
+    // this campaign keeps having to relearn: a fix that relocates a red has not
+    // closed it. The next session should drive JUST this test and read the
+    // screen at that step - the run's own artifact write failed with ENOENT on
+    // its trace, so no page snapshot survives to say which of the four
+    // broadcasts (ISSUE, two MINTs, SEND) never confirmed. `test.fixme` stands
+    // until it has been seen, because a knowingly-red spec in a green directory
+    // teaches the suite to ignore reds.
+    //
+    // Superseded header follows.
     // THE DEFECT IT PINS IS TRACKED. The explorer's
     // `projectActionSummary` writes every per-action field under a `details`
     // sub-object with only `status` left at the top level, while `History.jsx`
