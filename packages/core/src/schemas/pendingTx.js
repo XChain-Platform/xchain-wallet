@@ -27,7 +27,14 @@ import { randomUUID } from '../util/uuid.js';
 // pending-delta machinery (§4.7) needs the tick + amount a pending tx
 // will move, not just a human-readable summary string, so a concurrent
 // approval window can net them against the fetched balance.
-export const CURRENT_VERSION = 2;
+//
+// v3: `mempoolSeenAt`. Deliberately a field and not a tenth
+// PENDING_TX_STATUSES member (I-25): every status switch in the wallet
+// (RBF eligibility, the queued-broadcast drain, the pending-history
+// filter) would have to learn a new member, and the state it describes
+// is orthogonal to all of them. A transaction is still `broadcast`
+// whether or not a mempool has reported it back to us.
+export const CURRENT_VERSION = 3;
 
 export const PENDING_TX_STATUSES = /** @type {const} */ ([
     'composing',
@@ -63,6 +70,10 @@ export const PENDING_TX_STATUSES = /** @type {const} */ ([
  * @property {string | null} [tick]     v2: the token this tx moves (null for native-only / multi-tick)
  * @property {string | null} [amount]   v2: decimal-string amount moved (NEVER a JS number, §4.5)
  * @property {object | null} [params]   v2: raw action params snapshot (optional)
+ * @property {string | null} [mempoolSeenAt]  v3: when the NETWORK first told us
+ *          it holds this transaction (ISO). Null from creation until a mempool
+ *          reports it, which is the whole point: null is the honest reading
+ *          "broadcast, awaiting network", not "not yet checked"
  */
 
 /**
@@ -103,6 +114,11 @@ export function createPendingTx(input) {
         tick: input.tick === undefined ? null : String(input.tick),
         amount: input.amount === undefined || input.amount === null ? null : String(input.amount),
         params: input.params === undefined ? null : input.params,
+        // v3: no network has seen a transaction that has not been broadcast
+        // yet, so this is null at creation for every record without exception.
+        // It is stamped later, by whatever sees it first (an own-address
+        // MEMPOOL_ACTION frame or the mempool poll).
+        mempoolSeenAt: null,
     };
 }
 
@@ -150,5 +166,14 @@ export function validatePendingTx(record) {
     check(errors, 'tick', r.tick === undefined || isNullableString(r.tick), 'must be null or a string');
     check(errors, 'amount', r.amount === undefined || isNullableString(r.amount), 'must be null or a string');
     check(errors, 'params', r.params === undefined || isNullableObject(r.params), 'must be null or an object');
+    // v3 additive field, same undefined-tolerance as the v2 three above: the
+    // migration seeds it, and a reader that predates it must not be broken by
+    // a record it wrote itself.
+    check(
+        errors,
+        'mempoolSeenAt',
+        r.mempoolSeenAt === undefined || r.mempoolSeenAt === null || isIsoTimestamp(r.mempoolSeenAt),
+        'must be null or an ISO timestamp',
+    );
     return result(errors);
 }

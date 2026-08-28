@@ -323,6 +323,7 @@ async function ensureHost() {
             notify: chromeNotify,
             getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
             onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
+            onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
             logger: console,
         });
         notificationService.start().catch((err) => {

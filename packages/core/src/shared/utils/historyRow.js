@@ -61,3 +61,35 @@ export function flattenActionDetails(row) {
     }
     return flat;
 }
+
+/**
+ * Turn one explorer history row into the entry shape every History consumer
+ * reads. Extracted so the list and the standalone detail page agree by
+ * construction: a pending entry has to be able to UPGRADE into a confirmed one
+ * without the two sides normalizing the same row differently.
+ *
+ * @param {any} row              a history row as the explorer publishes it
+ * @param {object} ctx
+ * @param {string} ctx.chainId
+ * @param {string} ctx.address   the wallet address this row was fetched for
+ * @param {any} [ctx.link]       the cross-chain LINK record, when this row is one side of a pair
+ * @returns {any | null}         null when the row carries no action index
+ */
+export function normalizeHistoryRow(row, { chainId, address, link = null }) {
+    const actionIndex = String(row?.action_index ?? row?.actionIndex ?? '');
+    if (!actionIndex) return null;
+    const flat = flattenActionDetails(row);
+    return {
+        key: `${chainId}:${actionIndex}:${address}`,
+        chainId,
+        address,
+        actionIndex,
+        action: String(row.action || row.ACTION || 'ACTION'),
+        blockIndex: Number(row.block_index ?? row.blockIndex ?? 0),
+        timestamp: Number(row.timestamp ?? row.block_time ?? 0),
+        txHash: String(row.tx_hash ?? row.txHash ?? ''),
+        source: String(flat.source ?? flat.SOURCE ?? ''),
+        raw: flat,
+        link,
+    };
+}

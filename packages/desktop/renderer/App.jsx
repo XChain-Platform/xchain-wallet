@@ -668,6 +668,11 @@ function AppInner() {
                 return (
                     <Send
                         walletId={activeWalletId}
+                        onViewHistory={(target) => {
+                            setHistoryInitialQuery('');
+                            setHistoryInitialFocus(target || null);
+                            setUnlockedView('history');
+                        }}
                         prefill={sendPrefill}
                         onBack={() => {
                             setSendPrefill(null);

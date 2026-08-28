@@ -587,6 +587,7 @@ function startNotifications() {
         notify: createWebNotifyAdapter(),
         getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
         onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
+        onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
         logger: console,
     });
     notificationService.start().catch((err) => {

@@ -221,6 +221,13 @@ function AppInner() {
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
+    // M2.4: the entry the History route should open on, set when the user
+    // follows the send success card straight to their new transaction. It is
+    // a tx hash rather than an action index because nothing has indexed it
+    // yet, which is the whole reason the card offers the jump.
+    const [historyInitialFocus, setHistoryInitialFocus] = useState(
+        /** @type {{ chainId?: string, txHash?: string } | null} */ (null),
+    );
     // Coin family to scope History's chain filter to on entry (e.g.
     // arriving from the Bitcoin TokenDetail). Empty = no scoping; the
     // remembered chain-filter applies instead.
@@ -778,6 +785,11 @@ function AppInner() {
                 return (
                     <Send
                         walletId={activeWalletId}
+                        onViewHistory={(target) => {
+                            setHistoryInitialQuery('');
+                            setHistoryInitialFocus(target || null);
+                            setUnlockedView('history');
+                        }}
                         prefill={sendPrefill}
                         onBack={() => {
                             setSendPrefill(null);
@@ -1874,6 +1886,7 @@ function AppInner() {
                         onBack={() => setUnlockedView(historyReturnTo)}
                         onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         initialSearchQuery={historyInitialQuery}
+                        initialFocus={historyInitialFocus}
                         initialChainCoin={historyInitialChainCoin}
                         onSelectEntry={(entry) => {
                             setSelectedHistoryEntry(entry);

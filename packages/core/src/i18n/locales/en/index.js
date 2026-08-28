@@ -102,6 +102,15 @@ export const en = {
     'send.txid': 'Transaction ID',
     'send.noAddresses':
         'No addresses on any chain yet. Use Receive to generate one.',
+    // M2.4: the success card's in-wallet link to the merged History entry.
+    // The entry exists the moment this card does (built from the wallet's
+    // own pending record), but the network has not necessarily reported it
+    // yet, so the hint sets that expectation instead of letting a still-
+    // "awaiting network" row read as broken.
+    'send.success.viewInHistory': 'View in history',
+    'send.success.viewInHistoryHint':
+        'It is already in your history. It may still read "Broadcast, '
+        + 'awaiting network" for up to a minute before the network reports it.',
     'send.failed': 'Send failed.',
 
     // --- extension banner ----------------------------------------
@@ -145,6 +154,49 @@ export const en = {
         'Multi-frame transaction chunk {n}/{total}. Open the Sign panel to capture every frame.',
     'scan.error.unknown':
         'Scanned content was not recognized ({type}). Try a clearer code.',
+
+    // --- pending (unconfirmed) transactions -----------------------
+    // Terminology is fixed: "pending" in every string a user reads,
+    // "unconfirmed" only in data and method names. Nothing here may say
+    // confirmed or accepted either, because a mempool sighting is
+    // pre-validation: the indexer can still reject the action when the
+    // block lands, and copy that promises otherwise is a lie the wallet
+    // has no way to take back.
+    'pending.row.awaitingNetwork': 'awaiting network',
+    'pending.row.seen': 'pending',
+    'pending.row.notSeen': 'not seen by network',
+    'pending.row.dropped': 'no longer in mempool',
+    'pending.row.replaced': 'replaced',
+    'pending.row.generic': 'pending',
+
+    'pending.detail.sectionLabel': 'Pending transaction',
+    'pending.detail.awaitingNetwork': 'Broadcast, awaiting network',
+    'pending.detail.seen': 'In the mempool, waiting for a block',
+    'pending.detail.notSeen': 'Not seen by the network',
+    'pending.detail.dropped': 'No longer in the mempool',
+    'pending.detail.replaced': 'Replaced by a newer transaction',
+    'pending.detail.awaitingNetworkHelp':
+        'The transaction has been sent. It can take a minute before any node reports holding it.',
+    'pending.detail.seenHelp':
+        'A node is holding this transaction, and no miner has put it in a block yet.',
+    'pending.detail.notSeenHelp':
+        'Nothing has reported this transaction since it was broadcast, so it may never have reached the network.',
+    'pending.detail.droppedHelp':
+        'A node reported this transaction earlier and no longer does, and no block carries it yet.',
+    'pending.detail.replacedHelp':
+        'This wallet replaced this transaction with a newer one. Follow the replacement instead.',
+    'pending.detail.notValidated': 'Pending, not yet validated by the indexer.',
+    'pending.detail.firstSeen': 'First seen by the network {when}',
+    'pending.detail.broadcastAt': 'Broadcast from this wallet {when}',
+    'pending.detail.replacementTx': 'Replacement transaction: {txHash}',
+    'pending.detail.decodedHeading': 'What this transaction does',
+    'pending.detail.sendOutput': '{amount} {tick} to {destination}',
+    'pending.detail.memo': 'Memo: {memo}',
+    'pending.detail.undecodable':
+        'This wallet does not read {action} data. The fields below are shown exactly as the network carries them.',
+    'pending.detail.localRecordNote':
+        'Taken from this wallet\'s own record of the send. The network has not reported the transaction data yet.',
+    'pending.detail.noData': 'No action data has been reported for this transaction yet.',
 
     // --- errors ---------------------------------------------------
     'error.vaultClosed': 'Wallet is locked. Unlock to continue.',

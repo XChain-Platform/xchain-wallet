@@ -197,6 +197,17 @@ export const pendingTxMigrations = {
         amount: r.amount === undefined ? null : r.amount,
         params: r.params === undefined ? null : r.params,
     }),
+    // v2 → v3: `mempoolSeenAt`, the network's own sighting of a transaction we
+    // broadcast (§4 M2.2). Seed null, never a guess: a v2 record carries no
+    // evidence that any mempool ever reported it, and back-dating one would
+    // make the timeline claim a sighting the wallet never had. An in-flight
+    // v2 record re-earns the stamp from the next mempool frame or poll; a
+    // long-settled one keeps null and nothing reads it. Purely additive.
+    2: (r) => ({
+        ...r,
+        schemaVersion: 3,
+        mempoolSeenAt: r.mempoolSeenAt === undefined ? null : r.mempoolSeenAt,
+    }),
 };
 /** @type {MigrationMap} */
 export const multisigConfigMigrations = {
