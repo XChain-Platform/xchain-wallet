@@ -80,6 +80,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    plantedOracleFeedRefusal,
     runInIndexer,
     seedPrices,
     selectVenueChain,
@@ -240,6 +241,14 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
     test.setTimeout(2_400_000);
 
     test('a dispenser priced by a user oracle pays that oracle, then settles at its quote', async ({ page }) => {
+        // The same venue-data gap oracle-priced-fill carries: the PRICE
+        // v1 quote this lane settles against was published from ORACLE.address by
+        // Session 33 and removed by the 2026-08-24 re-genesis. Ask the venue
+        // first, so a missing feed says so instead of surfacing as a wrong
+        // number many screens later. Heals the day a feed is re-planted.
+        const feedGap = await plantedOracleFeedRefusal(ORACLE.address);
+        test.skip(!!feedGap, `the venue has no planted oracle feed: ${feedGap}`);
+
         let seller;
         let buyer;
         let dispenserIndex;

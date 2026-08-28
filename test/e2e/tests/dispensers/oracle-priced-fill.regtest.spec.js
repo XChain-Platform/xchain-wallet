@@ -49,6 +49,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    plantedOracleFeedRefusal,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -233,6 +234,14 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
     test.setTimeout(2_400_000);
 
     test('a dispenser priced by a user oracle pays the usage fee and fills at the published price', async ({ page }) => {
+        // This lane settles against the PRICE v1 feed ORACLE_ADDRESS
+        // published, and the 2026-08-24 re-genesis removed it. Ask the venue
+        // BEFORE any UI work: without the feed there is nothing here to measure,
+        // and the failure would otherwise arrive many screens later reading like
+        // a wallet defect. It heals itself the day somebody re-plants a feed.
+        const feedGap = await plantedOracleFeedRefusal(ORACLE_ADDRESS);
+        test.skip(!!feedGap, `the venue has no planted oracle feed: ${feedGap}`);
+
         let seller;
         let buyer;
         let dispenserIndex;

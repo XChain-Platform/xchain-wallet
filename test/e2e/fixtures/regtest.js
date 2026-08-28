@@ -1161,6 +1161,42 @@ export async function priceFamilyRefusal() {
 }
 
 /**
+ * The venue's own answer about a PLANTED oracle feed, or null when the
+ * feed is really there and the lane can be driven.
+ *
+ * The Mode B dispenser lane settles against a PRICE v1 feed published by a
+ * specific address, and a PRICE v1 publish is inert for 24 hours
+ * (`PriceAggregator.js`, `effective_at = block_time + 86400`, unconditional).
+ * So the ten feeds those specs use were planted on 2026-07-30 and matured the
+ * next day, and the 2026-08-24 re-genesis removed them. **A spec cannot
+ * make itself a replacement inside a run**: the earliest a fresh publish could
+ * price anything is a day after it lands, which is why this is a venue-data
+ * gap and not a fixture that forgot to seed something.
+ *
+ * Probed rather than `test.fixme`d, for D35's reason and D41's: a fixme never
+ * runs ANYWHERE, so it would leave the lane dead on a venue that has been
+ * re-planted, while a probe heals itself the moment one is. It reads
+ * `bet_feeds/<address>/source`, which is healthy on RLTC, rather than
+ * `oracle_prices`, which is inside the venue's refused price family and would
+ * report a configuration gap as a missing feed.
+ *
+ * @param {string} oracleAddress the publisher the spec settles against
+ * @returns {Promise<string | null>} the reason to skip, or null to run
+ */
+export async function plantedOracleFeedRefusal(oracleAddress) {
+    let body;
+    try {
+        body = await explorerJson(`bet_feeds/${oracleAddress}/source`);
+    } catch (err) {
+        return `the venue would not answer for ${oracleAddress}: ${err?.message || String(err)}`;
+    }
+    if (Array.isArray(body?.data) && body.data.length > 0) return null;
+    return `the venue publishes no feed for ${oracleAddress} (${body?.total ?? 0} rows): the ten `
+        + 'feeds planted on 2026-07-30 were removed by the 2026-08-24 re-genesis, and a fresh '
+        + 'PRICE v1 publish is inert for 24h, so this lane cannot re-provision itself in a run';
+}
+
+/**
  * Every visible refusal on the screen right now, as one string.
  *
  * A form that will not compose does not go quiet: it renders the reason in a
