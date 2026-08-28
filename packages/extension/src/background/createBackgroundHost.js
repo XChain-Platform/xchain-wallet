@@ -223,6 +223,8 @@ const {
     walletBalances,
     addressBalances,
     addressHistory,
+    addressMempool,
+    livePendingTxs,
     chainTipBlockTime,
     indexerWatermark,
     verifyAddressBalance,
@@ -4070,6 +4072,20 @@ export function createBackgroundHost(deps) {
 
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
+    });
+
+    // M2.1: the unconfirmed half of the same read. Kept as its own channel
+    // rather than folded into 'history.address' so a mempool outage degrades
+    // to "no pending rows" instead of taking the confirmed history with it.
+    host.register('mempool.address', async (req, { sdkRegistry }) => {
+        return addressMempool({ ...req, sdkRegistry });
+    });
+
+    // M2.1: this wallet's own in-flight sends, the only record of a
+    // transaction that exists between our broadcast and the network's first
+    // sighting of it. Summaries only; the psbt/tx hex never leaves the host.
+    host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry }) => {
+        return livePendingTxs({ ...req, vault, chainRegistry });
     });
 
     // §28.3 "Indexed" timeline stage: latest block the indexer has

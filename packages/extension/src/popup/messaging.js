@@ -1601,6 +1601,30 @@ export function getAddressHistory(req) {
 }
 
 /**
+ * Unconfirmed (mempool) actions touching `address` as either party, in the
+ * explorer's own vocabulary: `{tx_hash, source, action, data, first_seen,
+ * destinations[]}`. Resolves `[]` rather than rejecting when the chain's
+ * explorer or SDK predates the unconfirmed surface.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getAddressMempool(req) {
+    return /** @type {any} */ (sendMessage('mempool.address', req));
+}
+
+/**
+ * This wallet's own in-flight sends for a chain (broadcast but not yet
+ * confirmed), as summaries. History merges them with the mempool rows so a
+ * freshly broadcast transaction is visible immediately, before the network
+ * has been polled.
+ *
+ * @param {{ chainId: string, address?: string }} req
+ */
+export function getPendingTxsForAddress(req) {
+    return /** @type {any} */ (sendMessage('pendingTxs.forAddress', req));
+}
+
+/**
  * List LINK actions where `address` is the source. Backs the §23.5
  * cross-chain thread rendering : a LINK row pairs (coin1,
  * coin1_action_index) with (coin2, coin2_action_index), and the

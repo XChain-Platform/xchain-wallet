@@ -29,6 +29,12 @@ import { coinToFiat } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { flattenActionDetails } from '../utils/historyRow.js';
+import {
+    compareMergedEntries,
+    mempoolRowToEntry,
+    mergePendingEntries,
+    pendingTxToEntry,
+} from '../utils/pendingHistory.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
@@ -250,8 +256,49 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Step 2: fan out history + links per (chain, address). Merge
-    // results into a single sorted list.
+    // M2.1: pending rows have to keep the same timestamp between polls or
+    // they would jump around the list, so the moment WE first saw each one is
+    // remembered here rather than recomputed. It is only ever a fallback: a
+    // row the network has actually seen carries `first_seen` instead.
+    const observedAtRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+    // Read inside the fetch effect, which must not re-run when the list it
+    // produces changes, so the current list travels by ref rather than by dep.
+    const entriesRef = useRef(/** @type {HistoryEntry[]} */ ([]));
+    entriesRef.current = entries;
+    const rememberObservedAt = (chainId, txHash, nowMs) => {
+        const key = `${chainId}:${String(txHash || '').toLowerCase()}`;
+        const seen = observedAtRef.current.get(key);
+        if (seen != null) return seen;
+        observedAtRef.current.set(key, nowMs);
+        return nowMs;
+    };
+
+    // M2.1: History had no cadence of its own; a confirmed row only ever
+    // appeared because the route remounted. Pending rows need one, so the
+    // fetch below re-runs on the same 20s beat Home already uses for
+    // balances, plus on focus, plus on mount. The tick is what re-triggers
+    // it; the fetch itself decides whether to show the loading state.
+    const [refreshTick, setRefreshTick] = useState(0);
+    useEffect(() => {
+        if (!addressesByChain) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        const bump = () => setRefreshTick((n) => n + 1);
+        const id = setInterval(() => {
+            // A hidden tab is not watching; polling it only burns the shared
+            // rate limit the explorer zone is sized against.
+            if (typeof document !== 'undefined' && document.hidden) return;
+            bump();
+        }, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        if (typeof window === 'undefined') return () => clearInterval(id);
+        window.addEventListener('focus', bump);
+        return () => {
+            clearInterval(id);
+            window.removeEventListener('focus', bump);
+        };
+    }, [addressesByChain, walletId]);
+
+    // Step 2: fan out history + links + unconfirmed rows + our own in-flight
+    // sends per (chain, address). Merge results into a single sorted list.
     useEffect(() => {
         if (!addressesByChain) return;
         const chainsToLoad = Object.entries(addressesByChain)
@@ -263,7 +310,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             return;
         }
         let cancelled = false;
-        setLoadingChains(new Set(chainsToLoad));
+        // A background refresh must not blank the list it is refreshing; the
+        // loading state belongs to the first load only.
+        if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
 
         // Cluster J FOLLOWUP 1: for the demo wallet, replace the SDK
         // fetch with synthesized fixture data so the History view
@@ -291,8 +340,23 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         messaging.getLinksForAddress({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r))
                             .catch(() => []),
-                    ]).then(([history, links]) => (
-                        { chainId: cid, address: a.address, history, links }
+                        // M2.1: both pending sources. Each degrades to [] on
+                        // its own, so an explorer without the unconfirmed
+                        // surface still shows our own broadcast sends, and a
+                        // shell whose messaging predates these channels shows
+                        // confirmed history exactly as it did before.
+                        typeof messaging.getAddressMempool === 'function'
+                            ? messaging.getAddressMempool({ chainId: cid, address: a.address })
+                                .then((r) => extractRows(r))
+                                .catch(() => [])
+                            : Promise.resolve([]),
+                        typeof messaging.getPendingTxsForAddress === 'function'
+                            ? messaging.getPendingTxsForAddress({ chainId: cid, address: a.address })
+                                .then((r) => extractRows(r))
+                                .catch(() => [])
+                            : Promise.resolve([]),
+                    ]).then(([history, links, mempool, pendingTxs]) => (
+                        { chainId: cid, address: a.address, history, links, mempool, pendingTxs }
                     )),
                 );
             }
@@ -345,17 +409,58 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     });
                 }
             }
-            all.sort((a, b) => {
-                if (b.blockIndex !== a.blockIndex) return b.blockIndex - a.blockIndex;
-                return Number(b.actionIndex) - Number(a.actionIndex);
-            });
-            setEntries(all);
+            // M2.1: build the pending side, then reconcile it against the
+            // confirmed side by transaction hash. A hash present on both is
+            // the SAME transaction that has just confirmed, and the confirmed
+            // record replaces the pending one in place rather than joining it.
+            const ownAddresses = new Set();
+            for (const cid of Object.keys(addressesByChain || {})) {
+                for (const a of (addressesByChain[cid] || [])) {
+                    if (a && a.address) ownAddresses.add(String(a.address).toLowerCase());
+                }
+            }
+            const nowMs = Date.now();
+            /** @type {any[]} */
+            const pendingCandidates = [];
+            for (const r of perAddrResults) {
+                for (const row of (r.mempool || [])) {
+                    const hash = String(row?.tx_hash ?? row?.txHash ?? '');
+                    if (!hash) continue;
+                    pendingCandidates.push(mempoolRowToEntry({
+                        chainId: r.chainId,
+                        address: r.address,
+                        row,
+                        ownAddresses,
+                        observedAtMs: rememberObservedAt(r.chainId, hash, nowMs),
+                    }));
+                }
+                for (const record of (r.pendingTxs || [])) {
+                    if (!record?.txid) continue;
+                    pendingCandidates.push(pendingTxToEntry({
+                        chainId: r.chainId,
+                        address: r.address,
+                        pendingTx: record,
+                        ownAddresses,
+                        observedAtMs: rememberObservedAt(r.chainId, record.txid, nowMs),
+                    }));
+                }
+            }
+            const merged = mergePendingEntries({ confirmed: all, pending: pendingCandidates });
+            // Forget the observation times of transactions that are no longer
+            // pending, so the map tracks the mempool rather than growing with
+            // every transaction the wallet has ever made.
+            const liveKeys = new Set(merged.pending.map((e) => `${e.chainId}:${e.txHash}`));
+            for (const key of [...observedAtRef.current.keys()]) {
+                if (!liveKeys.has(key)) observedAtRef.current.delete(key);
+            }
+            merged.entries.sort(compareMergedEntries);
+            setEntries(merged.entries);
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
         });
 
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging]);
+    }, [addressesByChain, messaging, refreshTick]);
 
     // Lowercase set of every wallet address across every chain. Used by
     // the action-type filter to discriminate Send (wallet is source)
@@ -435,10 +540,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             searchQuery,
             actionTypes: actionTypeFilter,
             statusSet: statusFilter,
-            dateFromMs: dateFrom ? Date.parse(dateFrom) : null,
+            dateFromMs: localDayStartMs(dateFrom),
             // dateTo is interpreted as end-of-day so a "to: 2026-04-27"
             // pick includes everything that happened that day.
-            dateToMs: dateTo ? Date.parse(dateTo) + 24 * 60 * 60 * 1000 - 1 : null,
+            dateToMs: localDayEndMs(dateTo),
             walletAddresses: walletAddressSet,
         });
     }, [
@@ -854,8 +959,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         const sourceEntries = exportScope === 'all' ? entries : visibleEntries;
                         const ranged = (exportFromDate || exportToDate)
                             ? flowsLib.filterEntriesByDateRange(sourceEntries, {
-                                fromTs: exportFromDate ? Math.floor(Date.parse(exportFromDate) / 1000) : null,
-                                toTs: exportToDate ? Math.floor((Date.parse(exportToDate) + 24 * 60 * 60 * 1000 - 1) / 1000) : null,
+                                // Same local-day reading as the filter bar, so an
+                                // export of "today" contains what the list showed.
+                                fromTs: exportFromDate ? Math.floor(localDayStartMs(exportFromDate) / 1000) : null,
+                                toTs: exportToDate ? Math.floor(localDayEndMs(exportToDate) / 1000) : null,
                             })
                             : sourceEntries;
                         runExport({
@@ -2684,6 +2791,42 @@ function DoubleChevron({ direction = 'down' }) {
 
 /** Format a date N days ago in local time as YYYY-MM-DD for the
  *  native <input type="date"> control. */
+/**
+ * The date inputs speak in the user's own days. `isoDateDaysAgo` builds its
+ * string from LOCAL calendar components and `<input type="date">` shows the
+ * user a local day, but `Date.parse('2026-08-27')` is UTC midnight by spec.
+ * Reading the two the same way is the whole point of these helpers.
+ *
+ * The asymmetry was not cosmetic. West of UTC, "today" as a UTC-parsed day
+ * ends BEFORE the current moment for as long as the local date lags the UTC
+ * date: in US Pacific that is every evening from 17:00 until midnight, and
+ * for those seven hours the default 30-day window silently hid everything
+ * that had just happened, which is exactly the moment a pending transaction
+ * needs to be visible.
+ *
+ * @param {string} iso  `YYYY-MM-DD`, or empty for no bound
+ * @returns {number | null}
+ */
+function localDayStartMs(iso) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!parts) return null;
+    return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), 0, 0, 0, 0).getTime();
+}
+
+/**
+ * End of the local day named by `iso`, inclusive.
+ *
+ * @param {string} iso
+ * @returns {number | null}
+ */
+function localDayEndMs(iso) {
+    const start = localDayStartMs(iso);
+    if (start == null) return null;
+    const d = new Date(start);
+    d.setDate(d.getDate() + 1);
+    return d.getTime() - 1;
+}
+
 function isoDateDaysAgo(days) {
     const d = new Date();
     d.setDate(d.getDate() - days);

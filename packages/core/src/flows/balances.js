@@ -211,6 +211,36 @@ export async function addressHistory({ sdkRegistry, chainId, address, opts }) {
 }
 
 /**
+ * @typedef {Object} AddressMempoolOpts
+ * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
+ * @property {string} chainId
+ * @property {string} address
+ * @property {object} [opts]                  passed through to `sdk.getUnconfirmed`
+ */
+
+/**
+ * Unconfirmed (mempool) actions touching one address, as either party. Rows
+ * come back in the explorer's own vocabulary:
+ * `{tx_hash, source, action, data, first_seen, destinations[]}`.
+ *
+ * Degrades to `[]` against an SDK or an explorer that predates the
+ * unconfirmed surface, rather than throwing: History merges these rows on
+ * top of the confirmed feed, so a wallet pointed at an older explorer must
+ * lose the pending rows and nothing else.
+ *
+ * @param {AddressMempoolOpts} params
+ * @returns {Promise<unknown>}
+ */
+export async function addressMempool({ sdkRegistry, chainId, address, opts }) {
+    if (!sdkRegistry) throw new Error('addressMempool: sdkRegistry is required');
+    if (!chainId) throw new Error('addressMempool: chainId is required');
+    if (!address) throw new Error('addressMempool: address is required');
+    const sdk = sdkRegistry.get(chainId);
+    if (!sdk || typeof sdk.getUnconfirmed !== 'function') return [];
+    return sdk.getUnconfirmed(address, opts);
+}
+
+/**
  * @typedef {Object} IndexerWatermarkResult
  * @property {string} chainId
  * @property {number | null} watermark   latest block index the indexer has

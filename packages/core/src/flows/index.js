@@ -451,11 +451,13 @@ export { unclaimedRewards, cooldownStatus, cooldownText, toBaseUnits, fromBaseUn
 export {
     addressBalances,
     addressHistory,
+    addressMempool,
     chainTipBlockTime,
     indexerWatermark,
     walletBalances,
     BALANCE_POLL_INTERVAL_MS,
 } from './balances.js';
+export { livePendingTxs } from './pendingTxFeed.js';
 export {
     verifyAddressBalance,
     verifyAddressAction,
