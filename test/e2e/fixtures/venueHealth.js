@@ -70,3 +70,92 @@ export function venueVerdict(status, coin) {
 
     return null;
 }
+
+/**
+ * One probe of the venue, mid-run, classified. Returns null when the venue is
+ * answering and fit, else the sentence.
+ *
+ * `venueVerdict` above guards the START of a run and assumes it HAS a status
+ * body. This is the other half: what a poll sees when the venue stops existing
+ * underneath it. The shapes are different and so is the reader's next move.
+ *
+ * @param {{error?: unknown, httpStatus?: number, body?: unknown}} probe
+ *   `error` is set when the fetch itself failed, `httpStatus` when it answered.
+ */
+export function probeVerdict(probe, coin) {
+    if (probe?.error) {
+        const detail = probe.error?.message || String(probe.error);
+        // THE SHAPE THAT COST 13 MINUTES OF A RUN'S BUDGET, 2026-08-27. The
+        // explorer container was recreated mid-session and `/api/status` stopped
+        // answering for about six minutes. An ssh tunnel whose LOCAL listener is
+        // still up while the forwarded service is gone accepts the connection
+        // and then closes it, so this is a socket hang-up rather than a
+        // refusal, and "connection refused" advice sends the reader to the
+        // wrong end of the tunnel.
+        return `the venue stopped answering mid-run: ${detail}. A tunnel whose local listener is `
+            + 'up while the forwarded service is gone hangs up rather than refusing, so check the '
+            + `container as well as the tunnel. Nothing about ${coin} or the wallet is proven by `
+            + 'whatever this spec was waiting for.';
+    }
+
+    if (typeof probe?.httpStatus === 'number' && (probe.httpStatus < 200 || probe.httpStatus >= 300)) {
+        return `the venue answered /api/status with HTTP ${probe.httpStatus} mid-run, so it is `
+            + 'serving errors rather than state. This is the venue, not the wallet.';
+    }
+
+    return venueVerdict(probe?.body, coin);
+}
+
+/**
+ * A watchdog for a poll loop: notices that the venue went away, and refuses to
+ * spend the rest of a spec's budget on it.
+ *
+ * WHY IT TOLERATES THE FIRST FAILURES INSTEAD OF THROWING ON ONE. The outage
+ * this exists for healed itself: the container came back on its own
+ * (`RestartCount 0`, so a recreate rather than a crash-loop) and a run that
+ * aborted on the first missed probe would have thrown away work over a blip.
+ * What was actually wrong is that NOTHING EVER NOTICED - the spec waited out
+ * its whole budget and then failed on a locator, which reads as a wallet
+ * defect. So the rule is: tolerate a gap, then name it.
+ *
+ * Pure and clock-injected on purpose (`nowMs` is passed in, never read here),
+ * so the tolerance window can be driven in a unit test in milliseconds instead
+ * of waiting two minutes per case.
+ *
+ * @param {{toleranceMs?: number}} [opts]
+ * @returns {{observe: (probe: object, nowMs: number, coin: string) => string|null}}
+ *   `observe` returns null while the venue is healthy OR still inside the
+ *   tolerance window, and the sentence once it has been unreachable for longer
+ *   than `toleranceMs`. A single healthy probe clears the window.
+ */
+export function createOutageWatch({ toleranceMs = 120_000 } = {}) {
+    let sickSince = null;
+    let lastSentence = null;
+
+    return {
+        observe(probe, nowMs, coin) {
+            const sentence = probeVerdict(probe, coin);
+            if (!sentence) {
+                // Recovery CLEARS the window rather than decaying it: a venue
+                // that answers is a venue that answers, and a half-open window
+                // would fail the next spec on the last one's outage.
+                sickSince = null;
+                lastSentence = null;
+                return null;
+            }
+
+            if (sickSince === null) {
+                sickSince = nowMs;
+                lastSentence = sentence;
+                return null;
+            }
+            lastSentence = sentence;
+
+            const downMs = nowMs - sickSince;
+            if (downMs < toleranceMs) return null;
+
+            return `${lastSentence} It has been like this for ${Math.round(downMs / 1000)}s, `
+                + 'which is longer than a poll should spend on a venue that is not there.';
+        },
+    };
+}

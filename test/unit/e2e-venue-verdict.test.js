@@ -24,7 +24,7 @@
 // future simplification of the guard pass while re-opening the hole.
 
 import { describe, it, expect } from 'vitest';
-import { venueVerdict } from '../e2e/fixtures/venueHealth.js';
+import { createOutageWatch, probeVerdict, venueVerdict } from '../e2e/fixtures/venueHealth.js';
 
 // Recorded 2026-08-27: all three chains as the explorer reported them, with
 // RLTC healthy and RBTC's decoder crash-looping on a REORG_HALT marker.
@@ -140,5 +140,72 @@ describe('venueVerdict', () => {
             expect(venueVerdict({}, 'RLTC')).toMatch(/reports no RLTC chain/);
             expect(venueVerdict(undefined, 'RLTC')).toMatch(/reports no RLTC chain/);
         });
+    });
+});
+
+// The MID-RUN half. `venueVerdict` guards the start of a run; these two guard a
+// poll loop, which is where a venue that disappears actually costs budget. The
+// outage recorded here is 2026-08-27: the shared explorer container was
+// recreated mid-session, /api/status stopped answering for about six minutes,
+// and it came back healthy on its own (RestartCount 0). The in-flight spec
+// noticed nothing and spent 13 minutes waiting.
+describe('probeVerdict: the venue seen from inside a poll', () => {
+    it('names a hang-up as a hang-up, and points at the container as well as the tunnel', () => {
+        // What fetch throws when a tunnel's local listener accepts and the
+        // forwarded service is gone. curl reports this as HTTP 000.
+        const said = probeVerdict({ error: new TypeError('fetch failed') }, 'RLTC');
+        expect(said).toMatch(/stopped answering mid-run/);
+        expect(said).toMatch(/fetch failed/);
+        expect(said, 'a hang-up must not be described as a refusal').not.toMatch(/refused/i);
+        expect(said).toMatch(/container/);
+    });
+
+    it('separates a venue serving errors from a venue that is gone', () => {
+        expect(probeVerdict({ httpStatus: 502 }, 'RLTC')).toMatch(/HTTP 502 mid-run/);
+        expect(probeVerdict({ httpStatus: 500 }, 'RLTC')).toMatch(/the venue, not the wallet/);
+    });
+
+    it('falls through to the pre-flight verdict when the venue is answering', () => {
+        expect(probeVerdict({ httpStatus: 200, body: STATUS_2026_08_27 }, 'RLTC')).toBeNull();
+        expect(probeVerdict({ httpStatus: 200, body: STATUS_2026_08_27 }, 'RBTC'))
+            .toMatch(/decoder reports "unreachable"/);
+    });
+});
+
+describe('createOutageWatch: notice it, then name it', () => {
+    const gone = { error: new Error('socket hang up') };
+    const well = { httpStatus: 200, body: STATUS_2026_08_27 };
+
+    it('tolerates a blip, because the real outage healed itself', () => {
+        const watch = createOutageWatch({ toleranceMs: 60_000 });
+        expect(watch.observe(gone, 1_000, 'RLTC'), 'the first miss must not abort a run').toBeNull();
+        expect(watch.observe(gone, 30_000, 'RLTC'), 'still inside the window').toBeNull();
+        expect(watch.observe(well, 40_000, 'RLTC')).toBeNull();
+    });
+
+    it('fails once the venue has been gone longer than the window, and says how long', () => {
+        const watch = createOutageWatch({ toleranceMs: 60_000 });
+        expect(watch.observe(gone, 1_000, 'RLTC')).toBeNull();
+        const said = watch.observe(gone, 91_000, 'RLTC');
+        expect(said, 'a venue gone for 90s must not be waited out silently').toBeTruthy();
+        expect(said).toMatch(/stopped answering mid-run/);
+        expect(said).toMatch(/90s/);
+    });
+
+    it('CLEARS the window on recovery, so one spec cannot fail on the previous one outage', () => {
+        const watch = createOutageWatch({ toleranceMs: 60_000 });
+        watch.observe(gone, 1_000, 'RLTC');
+        watch.observe(well, 2_000, 'RLTC');
+        // Sick again much later: the clock restarts from HERE, not from 1_000.
+        expect(watch.observe(gone, 500_000, 'RLTC'), 'recovery must reset the window').toBeNull();
+        expect(watch.observe(gone, 530_000, 'RLTC')).toBeNull();
+        expect(watch.observe(gone, 600_000, 'RLTC')).toBeTruthy();
+    });
+
+    it('carries a WEDGE through the same window, not just a dead socket', () => {
+        const watch = createOutageWatch({ toleranceMs: 10_000 });
+        const wedged = { httpStatus: 200, body: STATUS_WEDGED_RDOGE };
+        expect(watch.observe(wedged, 0, 'RDOGE')).toBeNull();
+        expect(watch.observe(wedged, 20_000, 'RDOGE')).toMatch(/WEDGED/);
     });
 });
