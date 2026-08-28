@@ -178,6 +178,24 @@ const SEND_WIRE_LAYOUTS = {
 const ACTION_NAME_RE = /^[A-Z_]{2,32}$/;
 
 /**
+ * The SDK's `isPosNum` (`xchain-sdk/src/x402.js`), the gate every output
+ * of `parseActionString` passes: a bare decimal above zero, with no
+ * sign, no exponent and no surrounding whitespace. Another hand-copy for
+ * the same reason the layouts are, and it drifts as easily.
+ *
+ * The SDK settles "above zero" through a bignumber; the shape settles it
+ * here, since a string of digits is zero exactly when none of them is
+ * 1-9. Asking a JS number instead would answer in the wrong arithmetic
+ * and there is no third party to hand the parsed value to anyway.
+ *
+ * @param {unknown} v
+ */
+function isWireAmount(v) {
+    const s = String(v);
+    return /^\d+(\.\d+)?$/.test(s) && /[1-9]/.test(s);
+}
+
+/**
  * What a pending transaction is about to do, read off its action data
  * (I-9). SEND v0-v3 is the only layout anything on this platform can
  * parse, so it is the only one this claims to understand. Every other
@@ -224,10 +242,14 @@ function describePendingAction(entry) {
     if (!layout || segments.length !== layout.count) return asSegments;
     const outputs = [];
     for (const map of layout.outputs) {
-        const amount = String(segments[map.amount] || '').trim();
-        // Matched the count but carries no amount: not a SEND we
-        // understand, and the segments are the honest answer.
-        if (!amount) return asSegments;
+        const amount = String(segments[map.amount] || '');
+        // Matched the count but the amount position holds something that
+        // is not an amount: not a SEND we understand, and the segments
+        // are the honest answer. Whitespace is not trimmed away first
+        // because the SDK does not trim either, and this has to fail
+        // wherever the SDK fails or the two disagree about what the
+        // network will accept.
+        if (!isWireAmount(amount)) return asSegments;
         outputs.push({
             tick: String(segments[map.tick] || '').toUpperCase(),
             amount,

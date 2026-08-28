@@ -63,7 +63,10 @@ function mempoolRow(over = {}) {
         tx_hash: SEEN_HASH,
         source: THEIRS,
         action: 'SEND',
-        data: `SEND|2|XCHAIN|100|${OURS}|SPARE|0|${THEIRS}|thanks`,
+        // Both amounts are above zero on purpose: the decoder mirrors the
+        // SDK's `isPosNum`, which fails the whole action on a zero output,
+        // and this fixture is here for the pairing rather than for that.
+        data: `SEND|2|XCHAIN|100|${OURS}|SPARE|7|${THEIRS}|thanks`,
         first_seen: Math.floor(Date.now() / 1000) - 30,
         destinations: [OURS],
         ...over,
@@ -185,7 +188,7 @@ describe('History pending detail branch', () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
         expect(within(region).getByText(`100 XCHAIN to ${OURS}`)).toBeTruthy();
-        expect(within(region).getByText(`0 SPARE to ${THEIRS}`)).toBeTruthy();
+        expect(within(region).getByText(`7 SPARE to ${THEIRS}`)).toBeTruthy();
     });
 
     it('shows raw segments for an action it cannot decode, and invents no amounts', async () => {

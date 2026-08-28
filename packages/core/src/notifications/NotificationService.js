@@ -241,16 +241,27 @@ export class NotificationService {
                 const destination = data.destination || null;
                 if (source && source === addr.address) {
                     // An action we broadcast has been indexed → tx confirmed.
-                    if (!flags.txConfirmations) break;
+                    //
+                    // Retiring our own pending record is an OBSERVATION, not a
+                    // notification, so it runs ahead of the toggle the same way
+                    // the mempool sighting above does. pendingDeltas subtracts
+                    // every still-committed record from spendable balance to
+                    // block a double-spend, and this hook is the only thing
+                    // that ever clears one: gating it on a preference would
+                    // understate the balance of a user who turned the toggle
+                    // off, by the full amount of every send, for good.
                     const txid = data.tx_hash || data.txid || null;
+                    let ours = true;
                     if (this._getPendingTxids) {
                         const pending = await this._safePendingTxids();
-                        if (!txid || !pending.has(txid)) break; // not one we're tracking
+                        ours = Boolean(txid) && pending.has(txid);
                     }
-                    plan = { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
+                    if (!ours) break; // a stranger's transaction: never write, never notify
                     if (txid && this._onTxConfirmed) {
                         try { await this._onTxConfirmed(txid); } catch (e) { this._log.warn('NotificationService: onTxConfirmed failed', e); }
                     }
+                    if (!flags.txConfirmations) break;
+                    plan = { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
                 } else if (destination && destination === addr.address) {
                     // An inbound action landed at our address. A MESSAGE is its
                     // own notification kind (gated by its own flag); everything
