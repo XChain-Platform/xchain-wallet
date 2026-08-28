@@ -28,6 +28,7 @@ import { formatFiat } from '../components/BalanceList.jsx';
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import { flattenActionDetails } from '../utils/historyRow.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
@@ -324,6 +325,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     if (!aIdx) continue;
                     const k = keyFor(r.chainId, aIdx);
                     const link = linkMap.get(k) || null;
+                    // The explorer nests every per-action field under `details`
+                    // (see historyRow.js). Flattening HERE fixes the source
+                    // chip, grouping and payload search together, because all
+                    // three read `entry.raw`.
+                    const flat = flattenActionDetails(row);
                     all.push({
                         key: `${k}:${r.address}`,
                         chainId: r.chainId,
@@ -333,8 +339,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         blockIndex: Number(row.block_index ?? row.blockIndex ?? 0),
                         timestamp: Number(row.timestamp ?? row.block_time ?? 0),
                         txHash: String(row.tx_hash ?? row.txHash ?? ''),
-                        source: String(row.source ?? row.SOURCE ?? ''),
-                        raw: row,
+                        source: String(flat.source ?? flat.SOURCE ?? ''),
+                        raw: flat,
                         link,
                     });
                 }
