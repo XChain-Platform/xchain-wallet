@@ -36,32 +36,53 @@
 import { expect } from '@playwright/test';
 
 /**
- * Picks a NAMED chain in a `ChainPicker`, and proves the pick took.
+ * Picks a NAMED chain in a `ChainPicker`, on a named NETWORK, and proves the
+ * pick took.
  *
  * The venue-pinned sibling (`selectVenueChain`) is the one to use for any
  * field that should follow the chain this run drives. Use this one only where
  * the chain is deliberately NOT the venue's - which in practice means the get
  * half of a cross-chain form.
  *
+ * WHY THIS ONE ASSERTS THE NETWORK KIND AND THE VENUE HELPER DOES NOT, which
+ * is a deliberate difference rather than an inconsistency. A chain's LABEL says
+ * nothing about its network: `ChainPicker` names a mainnet entry `Dogecoin` and
+ * a regtest one `Dogecoin · regtest` (`:115-119`), so matching on the label
+ * alone would accept either. The venue helper can live with that because it
+ * selects the chain the run is already pinned to; this one is handed a chain
+ * name by a caller, and picking mainnet-Dogecoin instead of regtest-Dogecoin
+ * would compose a swap offering to pay a counterparty on the REAL network. That
+ * is the one wrong-chain outcome in this file worth being strict about, so the
+ * option is matched on both halves and the trigger is asserted whole.
+ *
  * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
  * @param {string} field       the picker's label, e.g. 'Get chain'
  * @param {string} chainLabel  the chain's display name, e.g. 'Dogecoin'
+ * @param {string} [networkKind]  the network suffix the picker renders, e.g. 'regtest'
  */
-export async function selectNamedChain(scope, field, chainLabel) {
+export async function selectNamedChain(scope, field, chainLabel, networkKind = 'regtest') {
     const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
     await expect(trigger, `no "${field}" chain picker on this screen`)
         .toBeVisible({ timeout: 30_000 });
-    if (((await trigger.getAttribute('aria-label')) || '').includes(chainLabel)) return;
+
+    const want = `${field}: ${chainLabel} · ${networkKind}`;
+    if (((await trigger.getAttribute('aria-label')) || '') === want) return;
 
     await trigger.click();
-    await scope.getByRole('option', { name: new RegExp(`^${chainLabel}\\b`) })
-        .first().click();
-    // Assert the switch took. The picker closes on click whether or not the
-    // option was the one intended, so an unasserted click is a silent
+    // An option's accessible name is its label, its ticker and its network
+    // suffix run together ("Dogecoin DOGE · regtest"), so both halves are
+    // matched: the label alone would also select the mainnet entry sitting
+    // beside it whenever the wallet holds an address on one.
+    await scope.getByRole('option', {
+        name: new RegExp(`^${chainLabel}\\b.*\\b${networkKind}\\b`),
+    }).first().click();
+
+    // Assert the switch took, WHOLE. The picker closes on click whether or not
+    // the option was the one intended, so an unasserted click is a silent
     // wrong-chain run - the same hazard `selectVenueChain` ends on, and the
     // reason both helpers end this way.
-    await expect(trigger, `the "${field}" picker did not settle on ${chainLabel}`)
-        .toHaveAttribute('aria-label', new RegExp(chainLabel), { timeout: 15_000 });
+    await expect(trigger, `the "${field}" picker did not settle on ${chainLabel} · ${networkKind}`)
+        .toHaveAttribute('aria-label', want, { timeout: 15_000 });
 }
 
 /**
