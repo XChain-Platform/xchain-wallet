@@ -1135,6 +1135,32 @@ export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_0
 }
 
 /**
+ * `null` when this venue serves the oracle-price family, else the venue's own
+ * refusal, for a `test.skip(...)` that heals itself the day the venue is fixed.
+ *
+ * On RLTC every price route (`oracle_prices`, `price_snapshots`,
+ * `price_snapshots/FINALIZED/status`) answers HTTP 500 in about a millisecond,
+ * because the explorer has no co-located hub DB configured for that coin
+ * (`No co-located hub DB configured for coin RLTC`, from its own log; the
+ * throw is deliberate, db.js `_checkpointSource`, rather than a fallback to
+ * stale rows). The identical routes serve real data on RDOGE, so it is a
+ * per-coin configuration gap and nothing about the wallet.
+ *
+ * A conditional skip rather than a `test.fixme` on purpose, following the same
+ * reasoning as the ticker-grammar fee leg: a fixme never runs ANYWHERE, so it
+ * would leave these tests dead on the venue they were written for and dead
+ * again after somebody configures the checkpoint DB. This probes.
+ */
+export async function priceFamilyRefusal() {
+    try {
+        await explorerJson('price_snapshots/FINALIZED/status?limit=1');
+        return null;
+    } catch (err) {
+        return err?.message || String(err);
+    }
+}
+
+/**
  * Every visible refusal on the screen right now, as one string.
  *
  * A form that will not compose does not go quiet: it renders the reason in a

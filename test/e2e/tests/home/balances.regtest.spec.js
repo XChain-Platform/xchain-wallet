@@ -66,6 +66,7 @@ import {
     REGTEST_COIN,
     explorerJson,
     fundAddress,
+    priceFamilyRefusal,
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
@@ -230,6 +231,20 @@ test.describe('Home balances against the chain', () => {
     /** @type {number} */ let coinUsd;
 
     test.beforeEach(async ({ page }) => {
+        // This venue answers its whole oracle-price family with HTTP
+        // 500 (no co-located hub DB configured for this coin), so the finalized
+        // round every test here prices against cannot be read at all. The guard
+        // lives in the HOOK rather than in the bodies because `venueCoinUsdPrice`
+        // is called right below, so a body-level skip never got a turn. A
+        // conditional skip rather than a fixme: it runs itself again the day the
+        // checkpoint DB is configured.
+        //
+        // It takes the `test.fail()` fiat pin below with it, and that is the
+        // honest outcome rather than a loss: an expected-failure that "passes"
+        // because the venue will not serve a price proves nothing about the
+        // Home fiat defect it was written to pin.
+        const priceGap = await priceFamilyRefusal();
+        test.skip(!!priceGap, `the venue refuses the oracle-price family here. ${priceGap}`);
         // Read the venue's price BEFORE any UI work. The fiat test below is
         // pinned `test.fail()`, and an expected-failure absorbs a setup failure
         // silently; doing this here means a venue with no oracle round reds the

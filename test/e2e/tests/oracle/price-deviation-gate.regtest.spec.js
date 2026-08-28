@@ -52,6 +52,7 @@ import {
     REGTEST_COIN,
     explorerJson as venueExplorerJson,
     fundAddress,
+    priceFamilyRefusal,
     minerRpc,
     seedPrices,
     selectVenueChain,
@@ -177,6 +178,14 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
 
     test('a big move takes a typed PUBLISH, a first publish and a small move do not',
         async ({ page }) => {
+            // This venue answers its whole oracle-price family with
+            // HTTP 500 (no co-located hub DB configured for this coin), so the
+            // oracle_prices row the deviation gate reads cannot be seen here at
+            // all. A conditional skip rather than a fixme: it runs itself again
+            // the day the checkpoint DB is configured.
+            const priceGap = await priceFamilyRefusal();
+            test.skip(!!priceGap, `the venue refuses the oracle-price family here. ${priceGap}`);
+
             let oracle;
 
             await test.step('onboard and fund the publishing address', async () => {
