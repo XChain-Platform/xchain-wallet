@@ -22,6 +22,7 @@
 // report a down tunnel as a price problem if it ran first.
 
 import { assertVenueReachable, seedPrices, REGTEST_COIN } from './fixtures/regtest.js';
+import { startPriceKeeper } from './fixtures/priceKeeper.js';
 
 export default async function globalSetup() {
     await assertVenueReachable();
@@ -37,4 +38,20 @@ export default async function globalSetup() {
     const margin = Number.isFinite(price.marginSeconds) ? `, ${price.marginSeconds}s of chain life left` : '';
     console.log(`[regtest ${REGTEST_COIN}] price ${price.seeded ? 'seeded' : 'already on venue'}: `
         + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})${margin}`);
+
+    // A seed checked ONCE is not a priced venue, it is a priced first minute.
+    // The margin is spent in chain seconds and a chain that mines on demand can
+    // burn thousands of them in one block, so a whole-suite run outlives its own
+    // seed: measured on the second Litecoin suite run, five of nine failures
+    // carried "The LTC fee price is temporarily unavailable" on screen, all of
+    // them between the setup seed and the first `dispensers/` spec, which
+    // repairs the price for everyone downstream by accident. See priceKeeper.js.
+    const keeper = startPriceKeeper({ seed: seedPrices, log: console.log, warn: console.warn });
+    return () => {
+        const stats = keeper.stop();
+        // Printed even when it is all zeros: how many times a run had to be
+        // rescued is the first thing to know when comparing two suite numbers.
+        console.log(`[price keeper] ${stats.reseeds} re-seed(s) over ${stats.ticks} check(s)`
+            + `, ${stats.failures} failure(s), ${stats.skipped} skipped`);
+    };
 }
