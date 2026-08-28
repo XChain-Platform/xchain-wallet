@@ -718,11 +718,39 @@ test.describe('BET round trip on regtest', () => {
             expect(credits.reduce((n, c) => n + Number(c.amount), 0),
                 'everything escrowed left again').toBe(Number(STAKE));
 
-            // Pools are summed over open bets only, so a settled market shows none:
-            // every row it summed left `open` in the same action.
-            const settled = await explorerJson(`bet_feed/${feedIndex}`);
-            const settledFeed = Array.isArray(settled) ? settled[0] : settled;
-            expect((settledFeed.pools || []).length, 'no bet is still open after settlement').toBe(0);
+            // NO BET IS STILL OPEN - ASKED OF THE BET ROWS, WHICH IS THE ONLY
+            // PLACE THAT ANSWERS IT.
+            //
+            // Reading `feed.pools` and requiring it to be
+            // EMPTY, on the premise that "pools are summed over open bets only".
+            // That premise is false, and the explorer says so in the query's own
+            // header: `getBetFeedPools` excludes `invalid` rows and NOTHING
+            // else, under a comment reading "This is a display aggregation, NOT
+            // the settlement predicate (which counts open rows alone)". A
+            // settled market therefore keeps its figure on purpose - measured
+            // across six resolved feeds on this venue, every one of them still
+            // carrying its pool long after payout.
+            //
+            // WHY IT NEVERTHELESS WENT GREEN, WHICH IS THE PART WORTH KEEPING:
+            // that aggregation LEFT JOINs the status table, and `NULL <>
+            // 'invalid'` is NULL, so a bet whose status row is not yet
+            // resolvable is dropped from the sum. The old assertion passed only
+            // inside the window where the data was still inconsistent, and
+            // failed once it settled - a green bought from a race, which is
+            // worse than a red because it looks like proof. Adding a poll (the
+            // reflex, when a chain read disagrees) would have hidden that.
+            //
+            // The bet rows carry the real answer, and they are already this
+            // spec's source of truth for who staked what.
+            const settledBets = (await explorerJson(`bets/${feedIndex}/feed`))?.data || [];
+            expect(settledBets.length, 'the bet is still on the chain after settlement').toBe(1);
+            for (const b of settledBets) {
+                expect(['won', 'lost'], `bet ${b.action_index} is still open after settlement `
+                    + `(bet_status "${b.bet_status}")`).toContain(String(b.bet_status));
+                expect(Number(b.settled_block),
+                    `bet ${b.action_index} carries no settled block, so nothing closed it`)
+                    .toBeGreaterThan(0);
+            }
         });
     });
 });
