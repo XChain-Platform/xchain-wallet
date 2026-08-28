@@ -306,7 +306,12 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             const balances = await explorerJson(`balances/${source}`);
             const row = (balances?.data || []).find((b) => String(b.tick).toUpperCase() === TICK);
             expect(row, `the give chain no longer lists a ${TICK} balance for the offerer`).toBeTruthy();
-            expect(Number(row.quantity),
+            // `amount`, not `quantity`: the explorer's balance rows use the
+            // former and `tokenBalance` in the fixture reads it that way. Named
+            // here because the wrong one reads `undefined` -> NaN and would
+            // report "the offer moved the giver's tokens", which is a much
+            // larger claim than a typo deserves.
+            expect(Number(row.amount),
                 'composing an offer moved the giver\'s tokens; a SWAP must settle atomically or not at all')
                 .toBe(MINT);
         });
