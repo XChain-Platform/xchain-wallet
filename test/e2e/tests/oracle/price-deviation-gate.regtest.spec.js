@@ -50,6 +50,7 @@ import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    explorerJson as venueExplorerJson,
     fundAddress,
     minerRpc,
     seedPrices,
@@ -72,12 +73,10 @@ const BIG_MOVE = '3.00';
 /** +5% against BIG_MOVE: as clearly under the gate as the other is over it. */
 const SMALL_MOVE = '3.15';
 
-async function explorerJson(path) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    return res.json();
-}
+// The FIXTURE's reader, not a local copy: the local one handed a 500 back as an
+// ordinary body, so the poll below erased a venue refusal into "no row ever
+// reached the hub mirror" and pointed the reader at the hub.
+const explorerJson = (path) => venueExplorerJson(path);
 
 async function mineIfPending() {
     try {
@@ -106,14 +105,21 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
 /** Waits until the form can see a prior quote for this pair, pending included. */
 async function waitForOracleRow(address, tick, timeoutMs = 180_000) {
     const deadline = Date.now() + timeoutMs;
+    // Retried on a refusal exactly as before, but the refusal is CARRIED to the
+    // failure rather than discarded (see the sibling spec's note).
+    let refusal = null;
     while (Date.now() < deadline) {
-        const body = await explorerJson(`oracle_prices/${address}/address`).catch(() => null);
+        const body = await explorerJson(`oracle_prices/${address}/address`)
+            .catch((err) => { refusal = err?.message || String(err); return null; });
         const seen = (body?.data || []).find((r) => String(r.tick) === tick);
         if (seen) return seen;
         await mineIfPending();
         await new Promise((r) => setTimeout(r, 3_000));
     }
-    throw new Error(`no oracle_prices row for ${address}/${tick} ever reached the hub mirror`);
+    throw new Error(refusal
+        ? `no oracle_prices row for ${address}/${tick} could be READ, and the venue is the `
+          + `reason rather than the publish: ${refusal}`
+        : `no oracle_prices row for ${address}/${tick} ever reached the hub mirror`);
 }
 
 async function gotoPalette(page, title) {

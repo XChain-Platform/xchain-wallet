@@ -1100,6 +1100,95 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
 }
 
 /**
+ * Reads a JSON endpoint off the venue explorer and REFUSES to turn a refusal
+ * into an empty list.
+ *
+ * The suite's own copies of this read `res.json()` and hand the body straight
+ * back, so every caller then writes `Array.isArray(body?.data) ? body.data : []`
+ * or `.catch(() => null)` - and a venue answering **HTTP 500** becomes "the
+ * venue publishes nothing". That is not a hypothetical: the whole-suite
+ * Litecoin run of 2026-08-27 failed four tests across two areas on messages
+ * that sent the reader to seeding and to the hub mirror, while
+ * `/RLTC/api/price_snapshots/FINALIZED/status` and `/RLTC/api/oracle_prices`
+ * were both answering 500 in ONE millisecond with the explorer's own log
+ * naming the cause exactly (`No co-located hub DB configured for coin RLTC`).
+ * The endpoints answer normally on RDOGE, so it is a per-coin venue gap and
+ * nothing about what the wallet published.
+ *
+ * Throwing here costs nothing on a healthy read and is the difference between
+ * a run that names its venue and a run that blames the product.
+ */
+export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_000 } = {}) {
+    const url = `${EXPLORER_URL}/${coin}/api/${path}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || (body && body.error)) {
+        throw new Error(
+            `the venue REFUSED ${coin}/api/${path} with HTTP ${res.status}`
+            + (body?.code ? ` [${body.code}]` : '')
+            + (body?.error ? `: ${body.error}` : '')
+            + '. This is the venue answering, not the wallet publishing nothing - read the '
+            + 'explorer container log for the query behind it before touching a spec.',
+        );
+    }
+    return body;
+}
+
+/**
+ * Every visible refusal on the screen right now, as one string.
+ *
+ * A form that will not compose does not go quiet: it renders the reason in a
+ * `role="alert"`. Nothing in this suite was reading those, so a compose that
+ * REFUSED and a compose that never ran produced the identical failure - a bare
+ * `toBeVisible` timeout on some downstream locator - and three separate parts
+ * of three runs have now been spent chasing a wrong cause because of it
+ * (an absent field read as a verdict).
+ */
+async function readScreenRefusals(page) {
+    const said = [];
+    const alerts = page.getByRole('alert');
+    const count = await alerts.count().catch(() => 0);
+    for (let i = 0; i < Math.min(count, 6); i += 1) {
+        const one = alerts.nth(i);
+        if (!(await one.isVisible().catch(() => false))) continue;
+        const text = ((await one.innerText().catch(() => '')) || '').trim().replace(/\s+/g, ' ');
+        if (text && !said.includes(text)) said.push(text);
+    }
+    return said.join(' || ').slice(0, 700);
+}
+
+/**
+ * Waits for the confirm modal, and when it never opens, says what the SCREEN
+ * said instead of `element(s) not found`.
+ *
+ * The confirm modal is where every signing flow in this wallet goes, so its
+ * absence is the most common failure shape in the suite and the least
+ * informative one: `expect(getByTestId('confirm-modal')).toBeVisible()` reports
+ * that a locator did not resolve, which is true of a refused compose, a
+ * pre-flight that never answered, an unaffordable fee and a form that was never
+ * filled in. The whole-suite Litecoin run of 2026-08-27 failed three separate
+ * specs on ONE line of `mintXchain` this way, and none of the three failures
+ * carried a single word about why. Reading the alert costs one query on a path
+ * that is already failing.
+ */
+export async function expectConfirmModal(page, what = 'this action', timeoutMs = 60_000) {
+    const modal = page.getByTestId('confirm-modal');
+    try {
+        await expect(modal).toBeVisible({ timeout: timeoutMs });
+    } catch {
+        const said = await readScreenRefusals(page);
+        throw new Error(
+            `the confirm modal never opened for ${what}`
+            + (said
+                ? `, and the screen says: ${said}`
+                : ', and the screen carries no alert either, so the compose never got as far '
+                  + 'as refusing - look at the form itself rather than at the chain'),
+        );
+    }
+    return modal;
+}
+
+/**
  * Mints `amount` XCHAIN to the active address and waits for the balance.
  *
  * XCHAIN is free-mintable on regtest and testnet by any address, so this is
@@ -1136,7 +1225,7 @@ export async function mintXchain(page, amount) {
     await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
     await page.getByRole('button', { name: 'Sign action' }).click();
 
-    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expectConfirmModal(page, `the MINT of ${amount} XCHAIN`);
     await page.getByTestId('confirm-approve').click();
     // The advanced-action flow has its own terminal screen; rather than
     // couple to it, wait on the thing that actually matters downstream - the

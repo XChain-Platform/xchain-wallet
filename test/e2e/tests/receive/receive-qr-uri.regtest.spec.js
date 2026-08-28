@@ -39,10 +39,11 @@
 //   cd test/e2e && npx playwright test \
 //       --config=playwright.regtest.config.js tests/receive/receive-qr-uri.regtest.spec.js
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
+    readReceiveAddress,
     switchToRegtest,
 } from '../../fixtures/regtest.js';
 
@@ -110,21 +111,19 @@ test.describe('Receive: the request the payer actually scans', () => {
     test.beforeEach(async ({ page }) => {
         await createWallet(page, { password: PASSWORD });
         await switchToRegtest(page, PASSWORD);
-        await gotoSection(page, 'Receive');
-
-        // NO `selectVenueChain` HERE, deliberately: the Receive screen carries
-        // no "Network" picker at all - it follows the wallet's ACTIVE chain -
-        // so the venue helper throws "no Network chain picker on this screen".
-        // That is why the campaign's other multi-chain specs read an address
-        // off a form instead. The regex below is what keeps it honest: on a
-        // venue whose chain Receive is not showing, this fails here naming the
-        // shape it wanted rather than asserting URI contents for another chain.
-        const field = page.getByLabel('Address', { exact: true });
-        await expect(field,
-            `Receive is not showing a ${REGTEST_COIN} address; it follows the active chain and has `
-            + 'no network picker, so this spec runs on whichever chain the wallet opens on')
-            .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
-        ownAddress = await field.inputValue();
+        // NO `selectVenueChain` HERE: the Receive screen carries no "Network"
+        // picker at all - it follows the wallet's ACTIVE chain - so the venue
+        // helper throws "no Network chain picker on this screen". It does NOT
+        // follow that this spec is stuck on whichever chain the wallet opens
+        // on, which is what an earlier refusal here assumed.
+        // `readReceiveAddress` drives the REAL path a user takes: the picker
+        // behind the field's icon, filtered by network, first address of that
+        // chain. On Litecoin the old code failed here on its own message while
+        // the address it wanted was two clicks away.
+        ownAddress = await readReceiveAddress(page);
+        expect(ownAddress,
+            `Receive never reached a ${REGTEST_COIN} address even through its own picker`)
+            .toMatch(REGTEST_ADDRESS_RE);
     });
 
     test('the QR encodes the address on screen, and the amount and fee the form was given', async ({ page }) => {

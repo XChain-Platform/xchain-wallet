@@ -71,6 +71,7 @@ import {
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     fundAddress,
+    readReceiveAddress,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -232,27 +233,24 @@ async function openFreshRestoreScreen(page) {
 }
 
 /**
- * Reads the wallet's receive address, and refuses one from the wrong chain.
+ * Reads the wallet's receive address ON THE VENUE'S CHAIN.
  *
- * DELIBERATELY NOT `selectVenueChain` HERE. The Receive screen carries no
- * "Network" picker at all - it follows the wallet's active chain, and its only
- * chain-ish control is the address picker - so calling the venue helper on it
- * throws "no Network chain picker on this screen". That is why the campaign's
- * other multi-chain specs read an address off a FORM (which does have a
- * picker) rather than off Receive. The regex is the guard that keeps this
- * honest: on a venue whose chain Receive is not showing, the address comes back
- * belonging to another chain and this fails HERE, naming the shape it wanted,
- * instead of stranding the funding step until its budget runs out.
+ * STILL NOT `selectVenueChain`: the Receive screen carries no "Network" picker
+ * at all - it follows the wallet's active chain - so the venue helper throws
+ * "no Network chain picker on this screen" here. An earlier reading concluded
+ * from that, and what was wrong, is that the spec was therefore stuck on
+ * whichever chain the wallet opens on: it refused a Litecoin run at this line
+ * while the Litecoin address sat two clicks away behind the field's own picker.
+ * `readReceiveAddress` drives that picker (filter by network, first address of
+ * that chain), which is the path a user takes, and still fails naming the shape
+ * it wanted if the address map really has no address for this chain.
  */
 async function readVenueReceiveAddress(page) {
-    await gotoSection(page, 'Receive');
-    const field = page.getByLabel('Address', { exact: true });
-    await expect(field).toBeVisible({ timeout: 30_000 });
-    await expect(field,
-        `Receive is not showing a ${REGTEST_COIN} address. Receive follows the ACTIVE chain and has `
-        + 'no network picker, so this spec runs on whichever chain the wallet opens on (Bitcoin).')
-        .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
-    return field.inputValue();
+    const address = await readReceiveAddress(page);
+    expect(address,
+        `Receive never reached a ${REGTEST_COIN} address even through its own picker`)
+        .toMatch(REGTEST_ADDRESS_RE);
+    return address;
 }
 
 test.describe('backup-pointer restore (§15.4)', () => {

@@ -64,6 +64,7 @@ import { createWallet, expect, gotoSection, test, unlockedShell } from '../../fi
 import {
     EXPLORER_URL,
     REGTEST_COIN,
+    explorerJson,
     fundAddress,
     switchToRegtest,
     unlockAfterReload,
@@ -125,10 +126,13 @@ async function chainConfirmed(coin, address) {
  */
 async function venueCoinUsdPrice() {
     const pair = VENUE_PRICE[REGTEST_COIN].coinPair;
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/price_snapshots/FINALIZED/status?limit=25`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    const body = await res.json();
+    // Through the fixture reader, which THROWS on a refusal. The line under it
+    // read `Array.isArray(body?.data) ? body.data : []`, so this endpoint
+    // answering HTTP 500 in one millisecond produced "the venue publishes no
+    // finalized round" and sent two runs to look at seeding. On RLTC it is
+    // still 500ing: `No co-located hub DB configured for coin RLTC`, which is a
+    // venue configuration gap and answers fine on RDOGE.
+    const body = await explorerJson('price_snapshots/FINALIZED/status?limit=25');
     const rows = Array.isArray(body?.data) ? body.data : [];
     const row = rows.find((r) => r && r.coin_pair === pair);
     expect(row, `the venue publishes no finalized ${pair} round; global setup seeds one, so this is venue state`)

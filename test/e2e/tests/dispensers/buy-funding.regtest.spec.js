@@ -81,6 +81,7 @@ import {
     REGTEST_CHAIN_ID,
     selectVenueChain,
     REGTEST_COIN,
+    expectConfirmModal,
     fundAddress,
     mintXchain,
     nudgeChain,
@@ -172,9 +173,13 @@ async function gotoPalette(page, title) {
 }
 
 /** The wallet's shared confirm surface. */
-async function approveConfirm(page) {
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible({ timeout: 60_000 });
+async function approveConfirm(page, what = 'this action') {
+    // Through the fixture rather than a bare locator wait: this spec is GREEN
+    // standalone and went red in the whole-suite run of 2026-08-27 on nothing
+    // but `element(s) not found`, which cannot tell a refused compose apart
+    // from one that never ran. `expectConfirmModal` reads the screen's own
+    // alert on the way out.
+    await expectConfirmModal(page, what, 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
     await page.getByTestId('confirm-approve').click();
 }

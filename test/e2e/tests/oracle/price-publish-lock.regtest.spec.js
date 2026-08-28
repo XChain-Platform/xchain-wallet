@@ -68,6 +68,7 @@ import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    explorerJson as venueExplorerJson,
     fundAddress,
     minerRpc,
     mintXchain,
@@ -95,12 +96,11 @@ const MINT = 500;
 const ESCROW = 100;
 const GIVE_PER_FILL = 1;
 
-async function explorerJson(path) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    return res.json();
-}
+// Deliberately the FIXTURE's reader rather than a local copy. A local copy would
+// swallow the venue's answer (`.catch(() => null)` below), so a 500 from
+// `/RLTC/api/oracle_prices` read as "the row never reached the hub mirror" and
+// sent the reader to the hub. The venue was refusing the endpoint outright.
+const explorerJson = (path) => venueExplorerJson(path);
 
 async function mineIfPending() {
     try {
@@ -134,15 +134,25 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
 async function waitForOracleRow(address, tick, timeoutMs = 180_000) {
     const deadline = Date.now() + timeoutMs;
     let seen = null;
+    // Kept, because a poll must tolerate a transient - but no longer DISCARDED.
+    // The read is retried on a refusal exactly as before; what changed is that
+    // the refusal is carried to the failure message instead of being erased
+    // into "no row ever arrived", which is the sentence that sent a whole run
+    // hunting the hub mirror for a venue that was answering 500.
+    let refusal = null;
     while (Date.now() < deadline) {
-        const body = await explorerJson(`oracle_prices/${address}/address`).catch(() => null);
+        const body = await explorerJson(`oracle_prices/${address}/address`)
+            .catch((err) => { refusal = err?.message || String(err); return null; });
         seen = (body?.data || []).find((r) => String(r.tick) === tick);
         if (seen) return seen;
         await mineIfPending();
         await new Promise((r) => setTimeout(r, 3_000));
     }
-    throw new Error(`the PRICE indexed but no oracle_prices row for ${address}/${tick} ever `
-        + 'reached the hub mirror, so no dispenser could ever read this quote');
+    throw new Error(refusal
+        ? `no oracle_prices row for ${address}/${tick} could be READ, and the venue is the `
+          + `reason rather than the publish: ${refusal}`
+        : `the PRICE indexed but no oracle_prices row for ${address}/${tick} ever `
+          + 'reached the hub mirror, so no dispenser could ever read this quote');
 }
 
 async function oracleFeeQuote({ address, coin, tick, fiat, escrow, blockTime }) {

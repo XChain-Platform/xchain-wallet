@@ -44,8 +44,20 @@ const PASSWORD = 'regtestpassword123';
 
 /** The row as a CHOICE: Bitcoin, where an XCHAIN balance can pay the fee. */
 const CHOICE_LABEL = /^Pay protocol fee in BTC instead of XCHAIN/;
-/** The row as a STATEMENT: off Bitcoin, where the coin output is the only lane. */
-const STATEMENT_TEXT = /LTC is the only way to pay the protocol fee on this chain/;
+/**
+ * The row as a STATEMENT: off Bitcoin, where the coin output is the only lane.
+ *
+ * QUOTED FROM THE PRODUCT, not paraphrased. `protocolFeeRowCopy`
+ * (`packages/core/src/flows/protocolFeeRow.js:144`) renders "<COIN> is the only
+ * way to pay **a** protocol fee on this chain."; this regex asked for "**the**
+ * protocol fee" and could therefore never match on any chain. The whole-suite
+ * Litecoin run of 2026-08-27 failed here and reported it as
+ * "`mandatory` was seeded at mount instead of derived per render" - an
+ * accusation against `useNativeFee`, whose source derives `mandatory` on every
+ * render under a comment saying exactly why it must not be seeded. One wrong
+ * article, and the failure named a product defect that does not exist.
+ */
+const STATEMENT_TEXT = /LTC is the only way to pay a protocol fee on this chain/;
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -110,8 +122,11 @@ test.describe('the native-fee rule when the chain changes under an open form', (
             await switchFormChain(main, 'Litecoin');
 
             await expect(main.getByText(STATEMENT_TEXT),
-                'the form still offers Bitcoin\'s choice after switching to Litecoin: `mandatory` was '
-                + 'seeded at mount instead of derived per render')
+                'the form still offers Bitcoin\'s choice after switching to Litecoin, so the fee row '
+                + 'is not tracking the chain. Check the CHAIN INPUT before the hook: `useNativeFee` '
+                + 'derives `mandatory` per render, so a stale row means `chainId` did not move with '
+                + 'the picker - and check this regex against `protocolFeeRowCopy`, because a copy '
+                + 'change here reads exactly like a product defect')
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByRole('switch', { name: CHOICE_LABEL })
                 .or(main.getByRole('checkbox', { name: CHOICE_LABEL })).first(),
