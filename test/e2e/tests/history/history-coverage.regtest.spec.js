@@ -219,8 +219,38 @@ async function approveAndGetTxid(page) {
         .toBeEnabled({ timeout: 120_000 });
     await approve.click();
 
-    await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
-        .toBeVisible({ timeout: 180_000 });
+    // SUCCESS DOES NOT HAVE ONE HEADING, AND IT DOES NOT HAVE TWO EITHER.
+    // This helper waited for "Broadcast pending" and reported a SUCCESSFUL
+    // issue as a broadcast that never happened, which cost this spec two
+    // 3.4-minute runs. The first repair enumerated a second heading ("Token
+    // issued") and the next run found a third ("Mint sent"). Measured properly
+    // rather than guessed a fourth time: every action lane names its own
+    // success screen - "Airdrop sent", "Bet sent", "Buy submitted", "Callback
+    // broadcast", "Dividend sent", "Market submitted", roughly thirty of them -
+    // so an enumeration is a list that breaks on whichever action is added
+    // next.
+    //
+    // The invariant is what the caller actually needs, and it is lane-blind: a
+    // success screen shows a txid and a Done button. Waiting on the txid also
+    // removes the gap the old shape carried, where the heading could arrive a
+    // beat before the id the next line reads.
+    await expect(page.getByRole('main'),
+        'no success screen appeared after Approve: no transaction id ever reached the screen')
+    //
+    // THE BOUND IS NOT THE PROBLEM AND RAISING IT WAS A WRONG INFERENCE, kept
+    // at 180s deliberately. Reasoning that the screen was "a second late" led
+    // to a 300s drive that failed the same way at 5.4 minutes, with the same
+    // "Token issued" heading, txid and Done button in its failure snapshot. So
+    // the success screen is DEMONSTRABLY on screen while this assertion times
+    // out against it, and one earlier drive cleared this exact step. That
+    // contradiction is the next session's starting point, and it is not a
+    // timeout: suspects are a second `main` landmark resolving ahead of the
+    // success one, or the screen mounting only after the expect gives up.
+        .toContainText(/\b[0-9a-f]{64}\b/, { timeout: 180_000 });
+    await expect(page.getByRole('button', { name: 'Done' }),
+        'a transaction id is on screen but this is not the success screen, so the walk would '
+        + 'read an id off some other surface')
+        .toBeVisible({ timeout: 30_000 });
     const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
     expect(txid, 'the success screen showed no transaction id').toBeTruthy();
     return txid;
