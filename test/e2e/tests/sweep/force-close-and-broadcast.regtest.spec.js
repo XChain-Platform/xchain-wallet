@@ -99,23 +99,25 @@ const GIVE_PER_FILL = 25;
 const TRIGGER = '0.001';
 
 /**
- * Throwaway destinations, per chain, that nothing holds the key to.
+ * The throwaway destination that nothing holds the key to, on whichever chain
+ * this run drives.
  *
- * The fixture pins the Bitcoin one; the Litecoin one is the address the Send
- * lane's `dust-and-max` spec derived and wrote down for exactly this need (a
- * p2wpkh over `hash160('xchain-wallet-e2e-rltc-destination')` on
- * litecoin-regtest params), and its bech32 decode was re-checked against the
- * wallet's OWN validator table (`shared/utils/addressValidation.js`: litecoin
- * regtest hrp `rltc`) before being used here. A cross-HRP address is refused by
- * the form's destination field long before any of this spec's subject matter is
- * reached, so a chain with no entry fails loudly in the first step rather than
- * on a mystery form error.
+ * A LOCAL PER-CHAIN MAP STOOD HERE AND HAD NO DOGECOIN ROW, which
+ * is what stopped the first Dogecoin drive of this spec dead in its first step.
+ * It predated the fixture going per-chain: `REGTEST_DESTINATION` is now the
+ * same witness program re-encoded for each venue (Dogecoin gets the P2PKH form,
+ * having no segwit), with an import-time self-check that a venue's destination
+ * matches that venue's own address shape. The local map's own Bitcoin row was
+ * already just forwarding to it.
+ *
+ * So the map was a copy of something the fixture already knew, and like every
+ * other local copy this campaign has found, it was a copy that had stopped
+ * being updated. A cross-HRP address is refused by the form's destination field
+ * long before any of this spec's subject matter is reached, which is why an
+ * unlisted chain failed loudly rather than mysteriously - the one good thing
+ * about it, and the fixture's self-check does that job now.
  */
-const DESTINATIONS = {
-    RBTC: REGTEST_DESTINATION,
-    RLTC: 'rltc1q94wew2dxt8psxdx670k2yc9620ljmd4w847rcl',
-};
-const DESTINATION = DESTINATIONS[REGTEST_COIN];
+const DESTINATION = REGTEST_DESTINATION;
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -251,7 +253,30 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
     // against `fundAddress`'s one-coin default. Un-fixme when the sweep lands a
     // fee that stays above the target chain's dust floor; nothing here needs
     // rewriting first.
-    test.fixme('a sweep drains the address, credits the destination, and force-closes its dispenser', async ({ page }) => {
+    //
+    // THE FEE WALL IS PER-CHAIN, NOT UNIVERSAL, AND THE ARITHMETIC SAYS
+    // WHICH CHAINS IT BITES. Measured 2026-08-28: the legacy fee is a flat 1000
+    // XCHAIN-sats per DB hit regardless of chain, while a chain's payable
+    // minimum is its own dust floor. So the SAME nine-hit sweep prices
+    //
+    //   LTC   600 sats against a  5,460 floor   (9x short, blocked)
+    //   DOGE  180,000 sats against a 100,000 floor   (1.8x over, DRIVABLE)
+    //
+    // from `dustThreshold` in xchain-indexer/src/coins/{LTC,DOGE}.js and the
+    // seeded prices in priceSeed.js (LTC/USD 30.00, DOGE/USD 0.10). Bitcoin is
+    // out for a different reason: it is the only chain with an XCHAIN fee lane,
+    // so it never meets this wall at all, and its regtest decoder is dead.
+    //
+    // The gate is therefore the chains where the fee lands under dust, and it
+    // is a `fixme` only there, so the registered red stays a registered red on
+    // Litecoin while Dogecoin actually drives the lane. Drive it with
+    // `XC_REGTEST_COIN=RDOGE`, whose own global setup seeds DOGE/USD - that
+    // pair is NOT maintained by a run pointed at another chain, and its absence
+    // presents as `invalid: no current oracle price for DOGE/USD`, which reads
+    // like a wallet bug and is not one.
+    const feeClearsDust = REGTEST_COIN === 'RDOGE';
+    const sweepTest = feeClearsDust ? test : test.fixme;
+    sweepTest('a sweep drains the address, credits the destination, and force-closes its dispenser', async ({ page }) => {
         expect(DESTINATION,
             `no throwaway destination is pinned for ${REGTEST_COIN}; add one derived on this `
             + 'chain\'s regtest params rather than reusing another chain\'s (the form refuses it)')
@@ -448,11 +473,32 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // this spec would have to re-derive on every schedule change. What
             // is pinned is the part that matters: essentially all of it arrived,
             // and none of it went anywhere else.
-            expect(credited, 'the destination was credited MORE than the source held')
-                .toBeLessThanOrEqual(before);
-            expect(before - credited,
-                `only ${credited} of ${before} ${TICK} reached the destination; the shortfall is `
-                + 'far larger than any protocol fee, so the sweep lost tokens on the way')
+            // THE ESCROW DOES NOT TRAVEL WITH THE SWEEP, AND IT IS EASY TO
+            // FORGET THAT. `tokenBalance` reports what the address HOLDS,
+            // escrowed amounts included, so `before` is the whole MINT while a
+            // sweep can only move the FREE balance - the dispenser's ESCROW is
+            // still committed to the dispenser at the moment it is swept. That
+            // escrow reaches this same destination when the force-closed
+            // dispenser actually closes, which is the parked test below and
+            // exactly what the broadcast screen promises two steps up ("close
+            // after the standard 1-hour window").
+            //
+            // FOUND 2026-08-28 BY THE FIRST DRIVE THAT EVER GOT THIS FAR.
+            // The sweep fee wall stopped every previous run before any money
+            // moved, so an assertion demanding 100% arrive immediately had
+            // never once been contradicted. Measured on the chain rather than
+            // reasoned about: the destination holds 900 where MINT is 1000 and
+            // ESCROW is 100, and the source drained to 0, so the arithmetic
+            // closes exactly and nothing was lost.
+            const movable = before - ESCROW;
+            expect(credited, 'the destination was credited MORE than the free balance a sweep '
+                + 'could move, so something other than the sweep paid it')
+                .toBeLessThanOrEqual(movable);
+            expect(movable - credited,
+                `only ${credited} of the ${movable} FREE ${TICK} reached the destination (the `
+                + `address held ${before}, of which ${ESCROW} is dispenser escrow that settles at `
+                + 'close time). The shortfall is far larger than any protocol fee, so the sweep '
+                + 'lost tokens on the way')
                 .toBeLessThan(0.01);
         });
 
