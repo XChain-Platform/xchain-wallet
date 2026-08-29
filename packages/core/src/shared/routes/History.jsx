@@ -2224,26 +2224,21 @@ function xchainCoinForChainId(chainId) {
 
 /**
  * Build a full XChain explorer action URL from the chain descriptor.
- * Mainnet/testnet descriptors embed the coin path in `defaultUrl`
- * (e.g. `https://explorer.xchain.io/BTC`), so we append just
- * `/action/<index>`. For non-standard ports (regtest localhost) the
- * descriptor carries only the host, so we append the coin ticker path
- * and the port before `/action/<index>`.
+ * The explorer base URL is bare on EVERY network (see the note on
+ * `explorerCoinCode` in registry/coinTicker.js), so the coin segment is
+ * always ours to append: `<base>[:port]/<COIN>/action/<index>`. Only the
+ * port differs, and a standard 80/443 is left implicit.
  * Returns null when the descriptor or coin ticker is unavailable.
  */
 function xchainActionUrl(chainId, actionIndex) {
     const desc = chainRegistry.get(chainId);
     const ex = desc?.explorer;
     if (!ex || !actionIndex) return null;
-    const standardPort = ex.defaultPort === 80 || ex.defaultPort === 443;
-    if (standardPort) {
-        // defaultUrl already includes the coin path.
-        return `${ex.defaultUrl}/action/${actionIndex}`;
-    }
-    // Non-standard port: descriptor URL is just the host; append coin path.
     const coin = xchainCoinForChainId(chainId);
     if (!coin) return null;
-    return `${ex.defaultUrl}:${ex.defaultPort}/${coin}/action/${actionIndex}`;
+    const standardPort = ex.defaultPort === 80 || ex.defaultPort === 443;
+    const origin = standardPort ? ex.defaultUrl : `${ex.defaultUrl}:${ex.defaultPort}`;
+    return `${origin}/${coin}/action/${actionIndex}`;
 }
 
 /**
