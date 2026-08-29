@@ -29,11 +29,14 @@ Electron main
      ↑
   ipcMain.handle('xchain-wallet:message', …)
 
-preload.js
+preload.cjs
   contextBridge.exposeInMainWorld(
     'xchainWalletBridge',
     { sendMessage(message) { … } },
   )
+  … and the other worlds pinned in BRIDGE_WORLDS
+    (xchainWalletWindow, xchainWalletUpdater,
+     xchainWalletRegistry, xchainWalletSignerBridge)
 
 Electron renderer
   messaging.js (popup/web parity helpers)
@@ -53,8 +56,12 @@ Electron renderer
   adapter around `createBackgroundHost` so Step 17 (OS keychain) and
   Step 18 (native HW transports) hook into the same host surface the
   extension uses.
-- `preload.js` - exposes exactly `window.xchainWalletBridge.sendMessage`
-  and nothing else.
+- `preload.cjs` - exposes exactly the function-only worlds pinned in
+  `BRIDGE_WORLDS`
+  (`test/integration/shells/desktop-preload-contract.test.js`) and nothing
+  else: `xchainWalletBridge` (`sendMessage`, `wipeStorage`),
+  `xchainWalletWindow`, `xchainWalletUpdater`, `xchainWalletRegistry`,
+  `xchainWalletSignerBridge`.
 - `renderer/main.jsx` + `renderer/App.jsx` - mounts the shared React
   app under `shell="desktop"`. Every route from popup/web renders
   unchanged.

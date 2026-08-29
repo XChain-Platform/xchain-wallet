@@ -110,7 +110,7 @@ export function opReturnPayloadHex(scriptPubKeyHex) {
  * Build the `signTransaction` argument payload for Trezor Connect.
  *
  * @param {Object} opts
- * @param {import('./types').DecomposedPsbt} opts.decomposed   from sdk.wallet.decomposePsbt
+ * @param {import('../../core/src/signers/types.js').DecomposedPsbt} opts.decomposed   from sdk.wallet.decomposePsbt
  * @param {string} opts.coin                                    Trezor coin short name ('btc' | 'ltc' | 'doge'). Testnet/regtest are deliberately absent (see CHAIN_ID_TO_TREZOR_COIN).
  * @param {Array<{inputIndex: number, path: string, sighashType?: number}>} opts.signingPaths
  * @returns {{ coin: string, inputs: object[], outputs: object[], refTxs: object[] }}

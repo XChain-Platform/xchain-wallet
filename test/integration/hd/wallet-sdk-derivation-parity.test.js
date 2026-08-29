@@ -64,19 +64,38 @@ import { ADDRESS_PARAMS } from '../../../packages/core/src/shared/utils/addressV
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// Resolve through the `xchain-sdk` alias as packages/core sees it (the
-// published package), falling back to a sibling checkout. Returns null when
+// Resolve the published package through a shell that actually declares the
+// `xchain-sdk` alias, falling back to a sibling checkout. Returns null when
 // neither exists, which the gate below turns into a loud failure under
 // XCHAIN_REQUIRE_SIBLINGS=1 and a skip on any other run.
-const requireFromCore = createRequire(join(here, '..', '..', '..', 'packages', 'core', 'package.json'));
+//
+// Anchoring at packages/core is wrong: it declares no such alias and
+// documents that it never will (packages/core/src/sdk/SDKRegistry.js). That
+// resolved only because the root .npmrc sets shamefully-hoist=true for an
+// unrelated vite shim reason, so narrowing that flag would have reddened the
+// drift-guards job on the resolution gate rather than on real drift. Each
+// shell carries its own node_modules/xchain-sdk link under either layout, so
+// anchoring there makes the resolution match what the comment claims. Same
+// reasoning as test/smoke/audits/linux-update-lanes.smoke.js, which anchors at
+// packages/desktop "which is what actually depends on it".
+//
+// All three shells pin the identical alias spec, so the order is arbitrary and
+// the probe exists only so a partially-installed shell falls through instead
+// of failing the run.
+const SDK_ANCHOR_SHELLS = ['web', 'extension', 'desktop'];
+const shellRequires = SDK_ANCHOR_SHELLS.map((shell) =>
+    createRequire(join(here, '..', '..', '..', 'packages', shell, 'package.json')));
 const sdkFile = (...parts) => {
     const spec = `xchain-sdk/${parts.join('/')}`;
-    try {
-        return requireFromCore.resolve(spec);
-    } catch {
-        const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
-        return existsSync(sibling) ? sibling : null;
+    for (const requireFromShell of shellRequires) {
+        try {
+            return requireFromShell.resolve(spec);
+        } catch {
+            // Next shell; the sibling fallback below is the last resort.
+        }
     }
+    const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
+    return existsSync(sibling) ? sibling : null;
 };
 
 const sdkNetworksPath = sdkFile('src', 'networks.js');
@@ -99,7 +118,8 @@ describe('wallet descriptors vs xchain-sdk network params', () => {
             if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') {
                 throw new Error(
                     'xchain-sdk could not be resolved, either as the published package via the ' +
-                    '`xchain-sdk` alias in packages/core or as a sibling checkout. This suite ' +
+                    '`xchain-sdk` alias in packages/{web,extension,desktop} or as a sibling ' +
+                    'checkout. This suite ' +
                     'guards wallet descriptor wifVersionByte/coin-type parity against xchain-sdk ' +
                     'and must run with the SDK present; XCHAIN_REQUIRE_SIBLINGS=1 was set but ' +
                     'the SDK is absent.'

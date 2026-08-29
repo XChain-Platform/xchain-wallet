@@ -46,9 +46,15 @@ function fakeLinks({ pending = null, overrides = {} } = {}) {
 
 afterEach(() => __setLinksPluginForTests(undefined));
 
+// The canonical web link, spelled the way both manifests claim it:
+// `/wallet/link/`, carrying an `xchain:` URI in `uri`.
+const CLAIMED_LINK = `https://xchain.io/wallet/link/?uri=${encodeURIComponent('xchain:TBTC/receive')}`;
+
 describe('isAcceptableDeepLink', () => {
     it('accepts the two shapes the manifest claims', () => {
-        expect(isAcceptableDeepLink('https://xchain.io/wallet/send?to=abc')).toBe(true);
+        expect(isAcceptableDeepLink(CLAIMED_LINK)).toBe(true);
+        // The claim is a wildcard, so deeper paths under it travel too.
+        expect(isAcceptableDeepLink('https://xchain.io/wallet/link/v1/invoice/9')).toBe(true);
         expect(isAcceptableDeepLink('xchain:BTC/send?address=abc')).toBe(true);
         expect(isAcceptableDeepLink('XCHAIN:BTC/send')).toBe(true);
     });
@@ -77,9 +83,16 @@ describe('isAcceptableDeepLink', () => {
         }
     });
 
-    it('rejects https paths outside the wallet prefix', () => {
+    it('rejects https paths outside the claimed prefix', () => {
         expect(isAcceptableDeepLink('https://xchain.io/')).toBe(false);
         expect(isAcceptableDeepLink('https://xchain.io/docs/send')).toBe(false);
+        // The pages the pre-narrowing `/wallet` gate swallowed. Both store
+        // listings publish them, and neither manifest claims them.
+        expect(isAcceptableDeepLink('https://xchain.io/wallet/privacy/')).toBe(false);
+        expect(isAcceptableDeepLink('https://xchain.io/wallet/support/')).toBe(false);
+        expect(isAcceptableDeepLink('https://xchain.io/wallet/send?to=abc')).toBe(false);
+        // The adjacent-name trap a `/wallet/link` prefix would swallow.
+        expect(isAcceptableDeepLink('https://xchain.io/wallet/linkage/x')).toBe(false);
     });
 
     it('rejects non-strings, empties, and absurd lengths', () => {
@@ -102,11 +115,11 @@ describe('subscribeToNativeDeepLinks', () => {
     it('collects the link that launched the app', async () => {
         // The cold-start case: the intent was delivered before this JS
         // existed, so it can only come from the native queue.
-        const plugin = fakeLinks({ pending: 'https://xchain.io/wallet/send?to=abc' });
+        const plugin = fakeLinks({ pending: CLAIMED_LINK });
         __setLinksPluginForTests(plugin);
         const onLink = vi.fn();
         subscribeToNativeDeepLinks(onLink);
-        await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith('https://xchain.io/wallet/send?to=abc'));
+        await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith(CLAIMED_LINK));
     });
 
     it('delivers taps that arrive while the app is running', async () => {

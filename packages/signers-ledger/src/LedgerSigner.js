@@ -152,7 +152,7 @@ export class LedgerSigner extends Signer {
      * @param {string} opts.deviceIdentifier
      * @param {LedgerBtcApp} opts.app          Ledger Bitcoin app client
      * @param {{ send: Function }} opts.transport   The same transport the app client talks over; getStatus reads the open app through it
-     * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional; required for signPsbt
+     * @param {import('../../core/src/sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional; required for signPsbt
      */
     constructor({ id, displayName, model, deviceIdentifier, app, transport, sdkRegistry }) {
         super();
@@ -201,7 +201,7 @@ export class LedgerSigner extends Signer {
      * chain is chosen).
      *
      * @param {{ chainId?: string }} [opts]
-     * @returns {Promise<import('./Signer.js').SignerStatus>}
+     * @returns {Promise<import('../../core/src/signers/Signer.js').SignerStatus>}
      */
     async getStatus(opts = {}) {
         let info;
@@ -237,8 +237,8 @@ export class LedgerSigner extends Signer {
      * addressed per session (Ledger caches the "unlocked" state while
      * the app is open).
      *
-     * @param {import('./Signer.js').GetAddressesParams} params
-     * @returns {Promise<import('./Signer.js').DerivedAddress[]>}
+     * @param {import('../../core/src/signers/Signer.js').GetAddressesParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').DerivedAddress[]>}
      */
     async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const format = ledgerFormatFor(addressType, chainId);
@@ -276,8 +276,8 @@ export class LedgerSigner extends Signer {
      * Used by the pairing flow to compute the `deviceIdentifier`
      * (factory-side) and by multisig setup in Phase 4+.
      *
-     * @param {import('./Signer.js').GetPublicKeyParams} params
-     * @returns {Promise<import('./Signer.js').GetPublicKeyReturn>}
+     * @param {import('../../core/src/signers/Signer.js').GetPublicKeyParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').GetPublicKeyReturn>}
      */
     async getPublicKey({ chainId, path }) {
         // The format is NOT optional in practice. Omitting it makes
@@ -315,8 +315,8 @@ export class LedgerSigner extends Signer {
      * `signedPsbtHex` is returned empty because Ledger hands back a
      * fully serialized tx, not a PSBT.
      *
-     * @param {import('./Signer.js').SignPsbtParams} params
-     * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
+     * @param {import('../../core/src/signers/Signer.js').SignPsbtParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').SignPsbtReturn>}
      */
     async signPsbt({ psbtHex, chainId, signingPaths, envelopeReveal }) {
         // The renderer registers THIS class as the live signer, so the
@@ -386,8 +386,8 @@ export class LedgerSigner extends Signer {
      * accepts. The header byte's script-type base (31 / 35 / 39) is
      * derived from the BIP44 purpose on the path.
      *
-     * @param {import('./Signer.js').SignMessageParams} params
-     * @returns {Promise<import('./Signer.js').SignMessageReturn>}
+     * @param {import('../../core/src/signers/Signer.js').SignMessageParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').SignMessageReturn>}
      */
     async signMessage({ message, path }) {
         if (typeof message !== 'string') {
@@ -426,13 +426,13 @@ export class LedgerSigner extends Signer {
     // Class.method: developer breadcrumb). `err.code` carries the typed
     // identifier for any caller that wants to branch on it; the original
     // qualified string survives as `err.cause` for logs.
-    /** @returns {Promise<import('./Signer.js').SignMusig2Round1Return>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMusig2Round1Return>} */
     async signMusig2Round1() {
         throw hwMusig2UnsupportedError('LedgerSigner.signMusig2Round1',
             'hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
     }
 
-    /** @returns {Promise<import('./Signer.js').SignMusig2Round2Return>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMusig2Round2Return>} */
     async signMusig2Round2() {
         throw hwMusig2UnsupportedError('LedgerSigner.signMusig2Round2',
             'hardware MuSig2 is not supported on this Ledger Bitcoin app. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
@@ -442,7 +442,7 @@ export class LedgerSigner extends Signer {
     // the full createPaymentTransaction + registerWallet flow, not a
     // raw msgHash. Surface the limit until the proper hardware
     // multisig PSBT path lands (Step 22+).
-    /** @returns {Promise<import('./Signer.js').SignMultisigClassicalReturn>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMultisigClassicalReturn>} */
     async signMultisigClassical() {
         throw new Error(
             'LedgerSigner.signMultisigClassical: classical multisig signing on Ledger is not yet wired. Use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
@@ -455,7 +455,7 @@ export class LedgerSigner extends Signer {
     // 2.1.0 but registering + storing the hmac is a separate
     // provisioning flow the wallet hasn't built yet. Surface the
     // limit with guidance until the provisioning flow lands.
-    /** @returns {Promise<import('./Signer.js').SignMultisigPsbtReturn>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMultisigPsbtReturn>} */
     async signMultisigPsbt() {
         throw new Error(
             'LedgerSigner.signMultisigPsbt: hardware multisig PSBT signing on Ledger requires a registered wallet policy (Bitcoin app >= 2.1.0 registerWallet flow) which this wallet hasn\'t provisioned yet. Use the wallet\'s software signer for this cosigner.',

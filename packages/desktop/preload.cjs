@@ -11,9 +11,13 @@
 // Electron preload: the single bridge between renderer and main.
 //
 // §9.3.2: "keys never cross the contextBridge IPC boundary into the
-// renderer." This preload upholds that by exposing exactly three narrow
-// APIs via contextBridge. Nothing about Node, the filesystem, Electron
-// internals, or native modules is exposed to the renderer.
+// renderer." This preload upholds that by exposing, via contextBridge, only
+// the named function-only worlds pinned in BRIDGE_WORLDS
+// (test/integration/shells/desktop-preload-contract.test.js) and enumerated
+// below. Nothing about Node, the filesystem, Electron internals, or native
+// modules is exposed to the renderer. Adding a world means editing that list,
+// deliberately; the list is the count, so no number is written down here (a
+// count and a prose list drift apart silently, and this one did).
 //
 //   - `xchainWalletBridge.sendMessage(message)`: request/response for
 //     every MessageHost call (unlock, sendToken, etc.). Mirrors the
@@ -54,6 +58,14 @@
 //     so main performs the hub fetch + Ed25519 verification and the
 //     renderer pulls the verified descriptor batch through this call
 //     to hot-swap its own registry realm.
+//
+//   - `xchainWalletUpdater.{onEvent,getState,install}`: the renderer's
+//     half of the update path. Main runs the check, the K1 signature
+//     gate and `quitAndInstall`; the renderer subscribes to the offer
+//     (`onEvent`), reads an offer that landed before it mounted
+//     (`getState`), and asks for the verified install (`install`).
+//     Read-and-ask only: nothing here hands the renderer a path, a
+//     URL, or a way to skip the signature gate.
 
 // CommonJS on purpose: Electron loads sandboxed preloads (webPreferences
 // sandbox: true) through its CJS wrapper, so an ESM `import` here throws

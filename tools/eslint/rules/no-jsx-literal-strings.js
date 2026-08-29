@@ -27,9 +27,9 @@
 //     title, placeholder, label, hint, caption, tooltip, heading,
 //     emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
-//     menuHeader, emptyTitle
+//     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel
 //     (the USER_FACING_ATTRS set below is the authority; keep this list
-//     in step with it). The last fifteen are component props rather than
+//     in step with it). The last eighteen are component props rather than
 //     DOM attributes: shipping components render copy through them, so
 //     a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -129,6 +129,19 @@ const USER_FACING_ATTRS = new Set([
     'summaryNoun',
     'menuHeader',
     'emptyTitle',
+    // `emptyTitle`'s siblings, admitted for the same reason and missed when
+    // it was: BalanceList and CollectiblesView forward `emptyBody` to
+    // EmptyState's `body` (both sink props are already here, but the English
+    // is written one hop earlier under the prop name, e.g. HomeTabs
+    // `emptyBody={…}`), and ConfirmModal / NoticeModal render `confirmLabel`
+    // and `cancelLabel` verbatim as button text, which is exactly the shape
+    // the prop-default branch exists for ('Confirm', 'Cancel', 'OK'; 'Cancel'
+    // is already `common.cancel` in the dictionary). Checked across
+    // packages/*/src for a technical use and there is none: every occurrence
+    // is copy heading for a rendered string.
+    'emptyBody',
+    'confirmLabel',
+    'cancelLabel',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -179,6 +192,46 @@ export function templateCopy(node, allow = [], minLength = 2) {
     for (const quasi of node.quasis ?? []) {
         const text = quasi?.value?.cooked ?? quasi?.value?.raw ?? '';
         if (!isTrivialString(text, allow, minLength)) return text;
+    }
+    return null;
+}
+
+/**
+ * Return the first non-trivial copy carried by a ternary or a `||` / `??`
+ * fallback, or null.
+ *
+ * Toggle copy is written as `aria-label={open ? 'Hide filters' : 'Show
+ * filters'}` far more often in this codebase than as a template, and both
+ * attribute paths enumerated exactly three value shapes: Literal, container
+ * Literal, container TemplateLiteral. A ConditionalExpression matched none of
+ * them, and the generic recursion is no rescue because nothing reports a BARE
+ * Literal, so the string was walked and silently discarded. Same argument the
+ * header already makes for templates.
+ *
+ * Nested branches recurse, which is how the three-state form
+ * `a ? x : b ? y : z` is judged. Only the FIRST non-trivial branch is
+ * returned, so one attribute is still one violation: exactly what
+ * `templateCopy` does with a multi-chunk template.
+ *
+ * @param {object} node
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {string | null}
+ */
+function branchCopy(node, allow = [], minLength = 2) {
+    if (node?.type !== 'ConditionalExpression' && node?.type !== 'LogicalExpression') return null;
+    const branches = node.type === 'ConditionalExpression'
+        ? [node.consequent, node.alternate]
+        : [node.left, node.right];
+    for (const branch of branches) {
+        if (branch?.type === 'Literal' && typeof branch.value === 'string'
+            && !isTrivialString(branch.value, allow, minLength)) {
+            return branch.value;
+        }
+        const fromTemplate = templateCopy(branch, allow, minLength);
+        if (fromTemplate !== null) return fromTemplate;
+        const nested = branchCopy(branch, allow, minLength);
+        if (nested !== null) return nested;
     }
     return null;
 }
@@ -292,6 +345,15 @@ export function findViolations(node, options = {}) {
                             message: `Inline ${attrName}={\`${truncate(copy)}\`} should use t('key') with placeholders.`,
                         });
                     }
+                } else if (v?.type === 'JSXExpressionContainer') {
+                    // Toggle copy in a ternary / `||` fallback. See branchCopy.
+                    const copy = branchCopy(v.expression, allow, minLength);
+                    if (copy !== null) {
+                        out.push({
+                            node: v.expression,
+                            message: `Inline ${attrName} branch copy "${truncate(copy)}" should use t('key').`,
+                        });
+                    }
                 }
             }
             // Descend once, and enter an expression container at its
@@ -395,6 +457,13 @@ function create(context) {
                 && v.expression?.type === 'TemplateLiteral'
                 && templateCopy(v.expression, allow, minLength) !== null) {
                 context.report({ node: v.expression, message: `Inline ${attrName} template copy should use t('key') with placeholders` });
+            }
+            // Toggle copy in a ternary / `||` fallback, e.g.
+            // aria-label={open ? 'Hide filters' : 'Show filters'}. Mirrors the
+            // findViolations branch; the two attribute paths must stay in step.
+            if (v?.type === 'JSXExpressionContainer'
+                && branchCopy(v.expression, allow, minLength) !== null) {
+                context.report({ node: v.expression, message: `Inline ${attrName} branch copy should use t('key')` });
             }
         },
         JSXExpressionContainer(node) {

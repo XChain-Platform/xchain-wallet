@@ -207,7 +207,7 @@ export function synthesizeMinimalPrevTx(vout, value, scriptPubKeyHex) {
  * back to a synthesized minimal tx when the PSBT only carries a
  * witnessUtxo (segwit lane).
  *
- * @param {import('./types.js').DecomposedPsbtInput} inp
+ * @param {import('../../core/src/signers/types.js').DecomposedPsbtInput} inp
  * @returns {string}
  */
 function prevTxHexForInput(inp) {
@@ -273,7 +273,7 @@ function isSegwitScriptType(scriptType) {
  * `app.splitTransaction(...)` at call time.
  *
  * @param {Object} opts
- * @param {import('./types.js').DecomposedPsbt} opts.decomposed
+ * @param {import('../../core/src/signers/types.js').DecomposedPsbt} opts.decomposed
  * @param {string} opts.chainId
  * @param {Array<{inputIndex: number, path: string, sighashType?: number}>} opts.signingPaths
  * @param {number} [opts.lockTime]

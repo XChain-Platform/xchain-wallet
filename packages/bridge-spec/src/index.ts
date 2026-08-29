@@ -293,7 +293,10 @@ export type SignActionResult =
 
 export interface PsbtSigningPath {
     inputIndex: number;
-    // Either an address the wallet owns, or a BIP32 derivation path.
+    // Either an address, or a BIP32 derivation path. Wallet ownership is
+    // necessary but not sufficient: whichever form is used must resolve to an
+    // account inside this site's connect grant, or the wallet answers
+    // ADDRESS_NOT_AUTHORIZED, the refusal getAddresses and getBalances give.
     address?: string;
     derivationPath?: string;
     // Optional sighash override (default SIGHASH_ALL).

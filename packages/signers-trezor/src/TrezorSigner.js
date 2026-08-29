@@ -88,7 +88,7 @@ export class TrezorSigner extends Signer {
      * @param {string} opts.model             Model code (matches SignerRecord.model + firmware-manifest keys)
      * @param {string} opts.deviceIdentifier  Opaque per-device id
      * @param {TrezorConnect} opts.connect    Injected Connect instance (production: @trezor/connect-web post-init; tests: fake)
-     * @param {import('../sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional; required for signPsbt (decomposePsbt lookup)
+     * @param {import('../../core/src/sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional; required for signPsbt (decomposePsbt lookup)
      */
     constructor({ id, displayName, model, deviceIdentifier, connect, sdkRegistry }) {
         super();
@@ -120,7 +120,7 @@ export class TrezorSigner extends Signer {
      *   - `'disconnected'`: Connect rejects or the device identifier doesn't match
      *   - `'error'`: unexpected Connect failure
      *
-     * @returns {Promise<import('./Signer.js').SignerStatus>}
+     * @returns {Promise<import('../../core/src/signers/Signer.js').SignerStatus>}
      */
     async getStatus() {
         let res;
@@ -157,8 +157,8 @@ export class TrezorSigner extends Signer {
      * user is prompted on-device once per session (Connect caches the
      * "this host is trusted" decision).
      *
-     * @param {import('./Signer.js').GetAddressesParams} params
-     * @returns {Promise<import('./Signer.js').DerivedAddress[]>}
+     * @param {import('../../core/src/signers/Signer.js').GetAddressesParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').DerivedAddress[]>}
      */
     async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const coin = chainIdToTrezorCoin(chainId);
@@ -201,8 +201,8 @@ export class TrezorSigner extends Signer {
      * Used by the pairing flow to derive a stable xpub the wallet can
      * match against on reconnect, and by multisig setup (Phase 4+).
      *
-     * @param {import('./Signer.js').GetPublicKeyParams} params
-     * @returns {Promise<import('./Signer.js').GetPublicKeyReturn>}
+     * @param {import('../../core/src/signers/Signer.js').GetPublicKeyParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').GetPublicKeyReturn>}
      */
     async getPublicKey({ chainId, path }) {
         const coin = chainIdToTrezorCoin(chainId);
@@ -225,8 +225,8 @@ export class TrezorSigner extends Signer {
      * serialized tx directly (not a signed PSBT), so `signedPsbtHex`
      * is returned empty; the caller broadcasts `txHex`.
      *
-     * @param {import('./Signer.js').SignPsbtParams} params
-     * @returns {Promise<import('./Signer.js').SignPsbtReturn>}
+     * @param {import('../../core/src/signers/Signer.js').SignPsbtParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').SignPsbtReturn>}
      */
     async signPsbt({ psbtHex, chainId, signingPaths, envelopeReveal }) {
         // The renderer registers THIS class as the live signer, so the
@@ -273,8 +273,8 @@ export class TrezorSigner extends Signer {
      * message-signing convention (the same shape xchain-sdk's
      * `auth.signMessage` produces, so no protocol wrapping is needed.
      *
-     * @param {import('./Signer.js').SignMessageParams} params
-     * @returns {Promise<import('./Signer.js').SignMessageReturn>}
+     * @param {import('../../core/src/signers/Signer.js').SignMessageParams} params
+     * @returns {Promise<import('../../core/src/signers/Signer.js').SignMessageReturn>}
      */
     async signMessage({ message, chainId, path }) {
         if (typeof message !== 'string') {
@@ -311,13 +311,13 @@ export class TrezorSigner extends Signer {
     // releases through Q2 2026). Surface a clear error so the sign
     // screen can prompt the user to update; SoftwareSigner remains
     // the supported MuSig2 path on this device.
-    /** @returns {Promise<import('./Signer.js').SignMusig2Round1Return>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMusig2Round1Return>} */
     async signMusig2Round1() {
         throw hwMusig2UnsupportedError('TrezorSigner.signMusig2Round1',
             'hardware MuSig2 is not supported on Trezor. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
     }
 
-    /** @returns {Promise<import('./Signer.js').SignMusig2Round2Return>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMusig2Round2Return>} */
     async signMusig2Round2() {
         throw hwMusig2UnsupportedError('TrezorSigner.signMusig2Round2',
             'hardware MuSig2 is not supported on Trezor. Update firmware to use MuSig2 on this device, or use the wallet\'s software signer for the MuSig2 cosigner.');
@@ -328,7 +328,7 @@ export class TrezorSigner extends Signer {
     // multisig PSBT, not produce a single-input partial sig from a
     // raw msgHash. Surface the limit clearly until the proper
     // signTransaction-based multisig path lands (Step 22+).
-    /** @returns {Promise<import('./Signer.js').SignMultisigClassicalReturn>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMultisigClassicalReturn>} */
     async signMultisigClassical() {
         throw new Error(
             'TrezorSigner.signMultisigClassical: classical multisig signing on Trezor is not yet wired. Use the wallet\'s software signer for this cosigner, or wait for the §22 hardware-multisig PSBT path.',
@@ -343,7 +343,7 @@ export class TrezorSigner extends Signer {
     // Connect's multisig flow requires is a separate substantial
     // piece of work. Surface the limit with a clear path to the
     // software signer until the full envelope lands.
-    /** @returns {Promise<import('./Signer.js').SignMultisigPsbtReturn>} */
+    /** @returns {Promise<import('../../core/src/signers/Signer.js').SignMultisigPsbtReturn>} */
     async signMultisigPsbt() {
         throw new Error(
             'TrezorSigner.signMultisigPsbt: hardware multisig PSBT signing on Trezor is not yet wired. The signTransaction envelope requires multisig `signatures` arrays + public-key-ordering plumbing that isn\'t in trezorFormat.js today. Use the wallet\'s software signer for this cosigner.',

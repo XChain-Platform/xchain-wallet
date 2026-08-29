@@ -14,6 +14,10 @@ import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
+// The flows this screen calls throw function-prefixed preconditions
+// ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
+// EMPTY message, so those reached the recovery screen verbatim.
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -300,7 +304,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     }
                 })
                 .catch((err) => {
-                    setError(err?.message || 'Could not decode QR from the dropped image.');
+                    setError(userFacingMessage(err, 'Could not decode QR from the dropped image.'));
                 });
             return;
         }
@@ -369,7 +373,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             }
             onImported();
         } catch (err) {
-            setError(err?.message || 'Failed to import wallet.');
+            setError(userFacingMessage(err, 'Failed to import wallet.'));
             setBusy(false);
         }
     }

@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last fifteen are component props: copy shipped through them
+// The last eighteen are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -67,7 +67,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'heading', 'emptyText', 'actionLabel', 'backLabel',
     'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
-    'menuHeader', 'emptyTitle',
+    'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -97,6 +97,12 @@ const template = (...chunks) => ({
     quasis: chunks.map((cooked) => ({ type: 'TemplateElement', value: { cooked, raw: cooked } })),
     expressions: [],
 });
+// Toggle copy: `open ? 'Hide filters' : 'Show filters'` and `custom || 'Pin'`.
+const identifier = (name) => ({ type: 'Identifier', name });
+const conditional = (consequent, alternate) => ({
+    type: 'ConditionalExpression', test: identifier('flag'), consequent, alternate,
+});
+const logical = (left, right) => ({ type: 'LogicalExpression', operator: '||', left, right });
 
 // 1. Plain text content is flagged.
 let v = findViolations(jsxElement([jsxText('Sign in to continue')]));
@@ -213,6 +219,56 @@ assert.strictEqual(v.length, 1, 'flags template copy in a text prop');
 v = findViolations(jsxAttr('aria-labelledby', literal('some-id')));
 assert.strictEqual(v.length, 0, 'aria-labelledby stays technical');
 
+// 18b. The three props admitted alongside emptyTitle: BalanceList /
+// CollectiblesView forward `emptyBody` verbatim to EmptyState's body, and
+// ConfirmModal / NoticeModal render `confirmLabel` / `cancelLabel` as button
+// text. The English is written one hop earlier under these names, so the
+// already-covered sink props (`title`, `body`) never saw it.
+for (const [attr, copy] of [
+    ['emptyBody', 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'],
+    ['confirmLabel', 'Delete'],
+    ['cancelLabel', 'Keep it'],
+]) {
+    v = findViolations(jsxAttr(attr, literal(copy)));
+    assert.strictEqual(v.length, 1, `flags an ${attr} literal`);
+    assert.match(v[0].message, new RegExp(attr));
+}
+// 18c. Toggle copy in a ternary attribute value. Both attribute paths
+// enumerated three value shapes (Literal, container Literal, container
+// TemplateLiteral); a ConditionalExpression matched none, and the generic
+// recursion reports no bare Literal, so the copy was walked and discarded.
+v = findViolations(jsxAttr('aria-label', jsxExpr(conditional(literal('Hide filters'), literal('Show filters')))));
+assert.strictEqual(v.length, 1, 'flags copy in a ternary aria-label, once');
+assert.match(v[0].message, /Hide filters/);
+assert.strictEqual(v[0].node.type, 'ConditionalExpression', 'reports the whole ternary node');
+
+// Only the first non-trivial branch is reported, the way templateCopy
+// reports only the first non-trivial chunk: one attribute, one violation.
+v = findViolations(jsxElement([
+    jsxAttr('title', jsxExpr(conditional(literal('Unpin'), literal('Pin to top')))),
+]));
+assert.strictEqual(v.length, 1, 'a two-branch ternary is one violation, not two');
+
+// The nested three-state form, and a `||` fallback, are the same shape.
+v = findViolations(jsxAttr('label', jsxExpr(
+    conditional(literal('a'), conditional(literal('Confirm password'), literal('b'))),
+)));
+assert.strictEqual(v.length, 1, 'flags copy in a nested ternary branch');
+assert.match(v[0].message, /Confirm password/);
+v = findViolations(jsxAttr('title', jsxExpr(logical(identifier('custom'), literal('Pin to top')))));
+assert.strictEqual(v.length, 1, 'flags copy in a `||` fallback');
+
+// Templates inside a branch count, and a technical attribute stays silent.
+v = findViolations(jsxAttr('aria-label', jsxExpr(conditional(template('Hide ', ' filters'), identifier('other')))));
+assert.strictEqual(v.length, 1, 'flags template copy inside a ternary branch');
+v = findViolations(jsxAttr('className', jsxExpr(conditional(literal('btn btn--primary'), literal('btn btn--ghost')))));
+assert.strictEqual(v.length, 0, 'a technical attribute ternary stays silent');
+v = findViolations(jsxAttr('aria-label', jsxExpr(conditional(identifier('a'), identifier('b')))));
+assert.strictEqual(v.length, 0, 'a ternary with no static copy stays silent');
+v = findViolations(jsxAttr('aria-label', jsxExpr(conditional(literal('Hide filters'), literal('Show filters')))),
+    { allow: ['Hide filters', 'Show filters'] });
+assert.strictEqual(v.length, 0, 'allowlist suppresses ternary branch copy');
+
 // 19. Copy shipped as a destructured prop default never reaches a JSX
 // node, so `function C({ label = 'Copy' })` was invisible to the rule.
 // The key decides, not the local binding, and the set keeps technical
@@ -245,6 +301,21 @@ v = findViolations(fn([objectPattern(
 assert.strictEqual(v.length, 0, 'technical and trivial defaults are not flagged');
 v = findViolations(fn([objectPattern(defaulted('label', literal('Copy')))]), { allow: ['Copy'] });
 assert.strictEqual(v.length, 0, 'allowlist suppresses a prop default');
+
+// 19b. The prop defaults the three newly admitted names ship: ConfirmModal
+// `confirmLabel = 'Confirm', cancelLabel = 'Cancel'`, NoticeModal
+// `confirmLabel = 'OK'`, BalanceList `emptyTitle = 'No balances yet'`. This is
+// the shape the prop-default branch exists for, and the set is what gates it.
+for (const [name, copy] of [
+    ['confirmLabel', 'Confirm'],
+    ['cancelLabel', 'Cancel'],
+    ['emptyTitle', 'No balances yet'],
+    ['emptyBody', 'Receive Bitcoin to populate this list.'],
+]) {
+    v = findViolations(fn([objectPattern(defaulted(name, literal(copy)))]));
+    assert.strictEqual(v.length, 1, `flags a ${name} = "${copy}" prop default`);
+    assert.match(v[0].message, new RegExp(name));
+}
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -318,12 +389,26 @@ visitors.JSXAttribute(jsxAttr('ariaLabel', literal('Copy tx hash')));
 visitors.JSXAttribute(jsxAttr('iconLabel', literal('Choose source address')));
 visitors.JSXAttribute(jsxAttr('aria', literal('Fee priority help')));
 assert.strictEqual(reports.length, 9, 'create() flags the verbatim-rendered component props');
+// The ternary branch, pinned on the shipping side too: the two attribute
+// paths are two implementations of one rule and drift silently.
+visitors.JSXAttribute(jsxAttr('aria-label', jsxExpr(conditional(literal('Hide filters'), literal('Show filters')))));
+assert.strictEqual(reports.length, 10, 'create() flags ternary branch copy in a supported attribute');
+visitors.JSXAttribute(jsxAttr('title', jsxExpr(logical(identifier('custom'), literal('Pin to top')))));
+assert.strictEqual(reports.length, 11, 'create() flags `||` fallback copy');
+visitors.JSXAttribute(jsxAttr('className', jsxExpr(conditional(literal('btn btn--primary'), literal('btn btn--ghost')))));
+assert.strictEqual(reports.length, 11, 'create() ignores a technical attribute ternary');
+visitors.JSXAttribute(jsxAttr('aria-label', jsxExpr(conditional(identifier('a'), identifier('b')))));
+assert.strictEqual(reports.length, 11, 'create() ignores a ternary with no static copy');
+visitors.JSXAttribute(jsxAttr('emptyBody', literal('Receive Bitcoin to populate this list.')));
+visitors.JSXAttribute(jsxAttr('confirmLabel', literal('Delete')));
+visitors.JSXAttribute(jsxAttr('cancelLabel', literal('Keep it')));
+assert.strictEqual(reports.length, 14, 'create() flags the three newly admitted copy props');
 // The shipping ObjectPattern visitor carries the prop-default branch too.
 assert.ok(typeof visitors.ObjectPattern === 'function', 'create() returns an ObjectPattern visitor');
 visitors.ObjectPattern(objectPattern(plainProp('value'), defaulted('label', literal('Copy'))));
-assert.strictEqual(reports.length, 10, 'create() flags a label = "Copy" prop default');
+assert.strictEqual(reports.length, 15, 'create() flags a label = "Copy" prop default');
 visitors.ObjectPattern(objectPattern(defaulted('size', literal('md'))));
-assert.strictEqual(reports.length, 10, 'create() ignores a technical prop default');
+assert.strictEqual(reports.length, 15, 'create() ignores a technical prop default');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

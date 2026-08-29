@@ -174,6 +174,12 @@ export function assertFullInputCoverage(signerId, inputCount, signingPaths) {
  *                                the chunk-lane data-carrier outputs, which need the SDK's
  *                                reveal finalizer (not the default single-sig one). Software
  *                                signer only; two-phase P2SH is rejected for HW/remote signers.
+ * @property {boolean} [envelopeReveal]: the Taproot envelope reveal tx (BIP341
+ *                                script-path spend), dispatched by submitWithSigner step 3b
+ *                                while nothing is on chain yet. A signer that cannot produce
+ *                                a script-path spend REFUSES it here, via
+ *                                `assertCannotSignEnvelopeReveal`; unlike `reveal`, refusing
+ *                                costs an error rather than a stranded commit.
  */
 
 /**

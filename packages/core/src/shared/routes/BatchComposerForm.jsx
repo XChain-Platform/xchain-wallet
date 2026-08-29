@@ -400,7 +400,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                         loading={stage === 'submitting'}
                         disabled={!composed || (!isWatcherMode && (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))}
                     >
-                        {isWatcherMode ? 'Build unsigned PSBT' : hw ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Sign batch'}
+                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Sign batch'}
                     </Button>
                 </div>
             </form>,

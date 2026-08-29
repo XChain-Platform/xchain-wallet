@@ -660,9 +660,12 @@ assert.match(deepLinkJs, /LINKS_PLUGIN = 'XChainLinks'/, 'JS looks up the name J
 const { isAcceptableDeepLink } = await import(
     pathToFileURL(join(wsRoot, 'packages', 'web', 'src', 'deeplinks', 'nativeDeepLinks.js')).href
 );
-assert.equal(isAcceptableDeepLink('https://xchain.io/wallet/send?to=x'), true);
-assert.equal(isAcceptableDeepLink('https://xchain.io.evil.com/wallet/send'), false);
-assert.equal(isAcceptableDeepLink('http://xchain.io/wallet/send'), false);
+assert.equal(isAcceptableDeepLink('https://xchain.io/wallet/link/?uri=xchain%3ATBTC%2Freceive'), true);
+assert.equal(isAcceptableDeepLink('https://xchain.io.evil.com/wallet/link/'), false);
+assert.equal(isAcceptableDeepLink('http://xchain.io/wallet/link/'), false);
+// The gate is the claim, not the whole /wallet tree: these are the store
+// listing pages the pre-narrowing prefix swallowed.
+assert.equal(isAcceptableDeepLink('https://xchain.io/wallet/privacy/'), false);
 
 // assetlinks: a template, because the fingerprints do not exist until the
 // operator generates K9/K10. Shipping it half-filled would be worse than
