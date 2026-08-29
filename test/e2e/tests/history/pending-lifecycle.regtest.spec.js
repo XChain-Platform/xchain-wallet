@@ -51,6 +51,15 @@
 //     something neither of them made up; a screen-only assertion would pass on
 //     a wallet that renders "pending" off its own optimism.
 //
+//   - "Speed up and Cancel are offered" (CLAIM 3B) is a claim about a REAL
+//     pending entry and cannot be made anywhere else. The offer was once gated
+//     on the entry having an explorer link, so it was withdrawn from precisely
+//     the transactions it serves: a pending regtest send has no action index
+//     for the XChain link and regtest has no third-party explorer. A fixture
+//     that hands the component an entry with links attached never sees that.
+//     What the buttons DO is deliberately not asserted - no shell registers a
+//     `replaceTx` handler, so there is no replacement engine in any build.
+//
 // A DEFECT THIS FILE PINS RATHER THAN HIDES, stated here because it explains
 // the shape of everything below. The wallet builds against the PUBLISHED
 // `@dankest-llc/xchain-sdk@0.10.0`, which predates M1.2 and therefore has no
@@ -509,6 +518,48 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
 
             await expect(page.getByRole('region', { name: 'Pending transaction' }),
                 'the pending panel is missing from the detail view').toBeVisible();
+        });
+
+        await test.step('CLAIM 3B: the pending entry still OFFERS Speed up and Cancel', async () => {
+            // M2 acceptance test 4's list-side half, driven here because this
+            // is the surface a real user reaches: every shell wires
+            // `onSelectEntry` to navigate, and the standalone page renders the
+            // SAME `DetailCard`, so the offer proven here is the offer proven
+            // for both surfaces.
+            //
+            // Why a venue test and not a unit test: gating the offer
+            // on the entry having an explorer link, which withdrew it from
+            // exactly the transactions it exists for - a pending regtest send
+            // has no action index for the XChain link, and regtest has no
+            // third-party explorer, so the gate closed on every row this
+            // feature serves. That gate is fixed, and nothing until now had
+            // driven the fixed path against a REAL pending entry.
+            //
+            // Nothing here asserts what the buttons DO. There is no
+            // replacement engine in any build: no shell registers a
+            // `replaceTx` handler, so pressing Speed up raises
+            // `RbfNotSupportedError` by design. The offer is the claim.
+            const options = page.getByRole('group', { name: 'Action options' });
+            await expect(options, 'the pending entry renders no action options at all, which is '
+                + 'the exact shape the explorer-link gate used to produce on a regtest send')
+                .toBeVisible({ timeout: 30_000 });
+
+            await options.getByRole('button', { name: 'More' }).click();
+            const menu = options.getByRole('menu');
+            await expect(menu.getByRole('menuitem', { name: 'Speed up' }),
+                'Speed up is not offered on a pending, replaceable SEND')
+                .toBeVisible({ timeout: 15_000 });
+            await expect(menu.getByRole('menuitem', { name: 'Cancel transaction' }),
+                'Cancel is not offered on a pending, replaceable SEND').toBeVisible();
+
+            // Closed again on purpose: an open menu carries a click-outside
+            // handler that would eat CLAIM 4's first interaction.
+            await options.getByRole('button', { name: 'More' }).click();
+            await expect(menu, 'the More menu stayed open').toHaveCount(0);
+
+            expect(await blocksMined(), 'a block was mined while the miner was supposed to be '
+                + 'parked, so the offer above was not measured against an unconfirmed transaction')
+                .toBe(heldBlocks);
         });
 
         await test.step('CLAIM 4: mining confirms the SAME entry rather than adding a second one', async () => {
