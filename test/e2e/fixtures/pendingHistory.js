@@ -21,6 +21,9 @@
 // budget, or narrative. Those stay local, because they are choices a spec
 // makes rather than facts about the app.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import {
     explorerJson,
     minerRpc,
@@ -32,6 +35,41 @@ import { expect, gotoSection } from './wallet.js';
 
 /** The venue's native ticker, e.g. RLTC -> LTC. */
 export const NATIVE_COIN = REGTEST_COIN.replace(/^R/, '');
+
+/**
+ * The `@dankest-llc/xchain-sdk` version the web shell actually depends on.
+ *
+ * Read from the shell's own manifest rather than written down here, so the
+ * specs that gate on it enable themselves when the pin moves instead of
+ * waiting for someone to remember a flag.
+ */
+export const PINNED_SDK = (() => {
+    try {
+        const manifest = fileURLToPath(new URL(
+            '../../../packages/web/package.json', import.meta.url));
+        const pkg = JSON.parse(readFileSync(manifest, 'utf8'));
+        return String(pkg?.dependencies?.['xchain-sdk'] || '').split('@').pop() || 'unknown';
+    } catch {
+        return 'unknown';
+    }
+})();
+
+/**
+ * Whether the pinned SDK can see unconfirmed transactions at all.
+ *
+ * `getUnconfirmed` first shipped in 0.11.1. Below that, the wallet's
+ * `addressMempool` guard returns `[]` and the NETWORK half of the M2.1
+ * history merge is a silent no-op, so anything asserting on a network
+ * sighting would be pinning a published-package gap as a wallet defect.
+ */
+export const SDK_HAS_UNCONFIRMED = (() => {
+    const parts = PINNED_SDK.split('.').map(Number);
+    if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return false;
+    const [maj, min, patch] = parts;
+    if (maj !== 0) return maj > 0;
+    if (min !== 11) return min > 11;
+    return patch >= 1;
+})();
 
 /* ───── venue probes ───────────────────────────────────────────────── */
 

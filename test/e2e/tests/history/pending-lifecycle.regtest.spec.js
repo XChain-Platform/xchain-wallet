@@ -119,7 +119,9 @@ import {
     NATIVE_COIN as COIN,
     pendingRowFor,
     pickAssetByChainAndTick,
+    PINNED_SDK,
     readOwnAddress,
+    SDK_HAS_UNCONFIRMED,
     searchForTx,
     waitForMempoolRow,
 } from '../../fixtures/pendingHistory.js';
@@ -484,9 +486,17 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
     // tested; they are calling a method that does not exist in the artifact
     // they are built against.
     //
-    // Do NOT un-fixme this while it is red: a knowingly-red spec in a green
-    // directory teaches the suite to ignore reds.
-    test.fixme('a mempool sighting upgrades the pending row from "awaiting network" to "pending"', async ({ page }) => {
+    // It is NOT un-fixme'd by hand, and that is the point: the gate below reads
+    // the version `packages/web/package.json` actually pins, so the repin that
+    // fixes this enables the test in the same commit. A knowingly-red spec in a
+    // green directory teaches the suite to ignore reds, and a hand-flipped flag
+    // is the thing that gets left in the wrong position.
+    test('a mempool sighting upgrades the pending row from "awaiting network" to "pending"', async ({ page }) => {
+        test.fixme(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, which has `
+            + 'no getUnconfirmed, so the network half of the History merge is a silent no-op and '
+            + 'the row can never leave "awaiting network". Enables itself on the repin to 0.11.1 '
+            + 'or later (spec frontier rows 26/27).');
+
         let own;
         let sendTxid;
 

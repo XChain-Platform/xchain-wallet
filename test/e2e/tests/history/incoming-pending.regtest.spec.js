@@ -62,9 +62,6 @@
 // (a tracked defect) and the decoder is the platform's ONLY mempool store (spec
 // I-47), so no mempool row can ever exist for it.
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
 import {
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
@@ -81,7 +78,9 @@ import {
     historyRows,
     pendingRowFor,
     pickAssetByChainAndTick,
+    PINNED_SDK,
     readOwnAddress,
+    SDK_HAS_UNCONFIRMED,
     searchForTx,
     waitForMempoolRow,
 } from '../../fixtures/pendingHistory.js';
@@ -113,37 +112,6 @@ const TICK = 'XCHAIN';
  * only mempool store, so RBTC can produce a pending sighting for nothing.
  */
 const VENUE_HAS_NO_MEMPOOL = REGTEST_COIN === 'RBTC';
-
-/**
- * Whether the pinned SDK can see unconfirmed transactions at all.
- *
- * Read from the web shell's own manifest rather than from a constant in this
- * file, so this spec enables itself when the repin lands instead of waiting
- * for someone to remember it. `getUnconfirmed` shipped in 0.11.1; every
- * earlier published version lacks it, and the wallet's guard degrades to `[]`
- * without saying anything.
- */
-const PINNED_SDK = (() => {
-    try {
-        const manifest = fileURLToPath(new URL(
-            '../../../../packages/web/package.json', import.meta.url));
-        const pkg = JSON.parse(readFileSync(manifest, 'utf8'));
-        const spec = String(pkg?.dependencies?.['xchain-sdk'] || '');
-        return spec.split('@').pop() || 'unknown';
-    } catch {
-        return 'unknown';
-    }
-})();
-
-/** 0.11.1 is the first published SDK carrying `getUnconfirmed`. */
-const SDK_HAS_UNCONFIRMED = (() => {
-    const parts = PINNED_SDK.split('.').map(Number);
-    if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return false;
-    const [maj, min, patch] = parts;
-    if (maj !== 0) return maj > 0;
-    if (min !== 11) return min > 11;
-    return patch >= 1;
-})();
 
 /**
  * A second, fully independent wallet in its own browser context: the PAYER.
