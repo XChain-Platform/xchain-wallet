@@ -218,6 +218,21 @@ export class NotificationService {
         // because the user turned a notification toggle off.
         if (msg.type === 'MEMPOOL_ACTION') await this._recordMempoolSeen(msg);
 
+        // And retiring our own pending record once its transaction is INDEXED
+        // is the same kind of observation, so it has to run ahead of the same
+        // gates. It sits here rather than in the switch below because the
+        // switch is unreachable on a replay: a wallet that was closed when the
+        // block landed sees that confirmation only as `catch_up` on its next
+        // connect, which is the ordinary path for every send that did not wait
+        // inline for confirmation. Dropped there, the record stays at
+        // 'broadcast' forever and pendingDeltas keeps subtracting it from
+        // spendable balance.
+        //
+        // The return value is also the "is this ours" answer the notification
+        // below needs, so the pending-set lookup happens exactly once.
+        let confirmedOwnSend = false;
+        if (msg.type === 'NEW_ACTION') confirmedOwnSend = await this._recordConfirmedOwnSend(addr, msg);
+
         // catch_up events are historical replays sent on (re)connect, not a
         // live occurrence, so never notify on them.
         if (msg.catch_up) return;
@@ -241,25 +256,11 @@ export class NotificationService {
                 const destination = data.destination || null;
                 if (source && source === addr.address) {
                     // An action we broadcast has been indexed → tx confirmed.
-                    //
-                    // Retiring our own pending record is an OBSERVATION, not a
-                    // notification, so it runs ahead of the toggle the same way
-                    // the mempool sighting above does. pendingDeltas subtracts
-                    // every still-committed record from spendable balance to
-                    // block a double-spend, and this hook is the only thing
-                    // that ever clears one: gating it on a preference would
-                    // understate the balance of a user who turned the toggle
-                    // off, by the full amount of every send, for good.
-                    const txid = data.tx_hash || data.txid || null;
-                    let ours = true;
-                    if (this._getPendingTxids) {
-                        const pending = await this._safePendingTxids();
-                        ours = Boolean(txid) && pending.has(txid);
-                    }
-                    if (!ours) break; // a stranger's transaction: never write, never notify
-                    if (txid && this._onTxConfirmed) {
-                        try { await this._onTxConfirmed(txid); } catch (e) { this._log.warn('NotificationService: onTxConfirmed failed', e); }
-                    }
+                    // The pending record was already retired above, ahead of
+                    // both the replay return and the toggle, because that write
+                    // is an observation rather than a notification. All that is
+                    // left here is whether to TELL the user.
+                    if (!confirmedOwnSend) break; // a stranger's transaction: never notify
                     if (!flags.txConfirmations) break;
                     plan = { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
                 } else if (destination && destination === addr.address) {
@@ -360,6 +361,42 @@ export class NotificationService {
         } catch (e) {
             this._log.warn('NotificationService: onMempoolSeen failed', e);
         }
+    }
+
+    /**
+     * Retire our own PendingTx once its transaction has been indexed.
+     *
+     * Deliberately mirrors `_recordMempoolSeen`: both are writes that record
+     * what the network did with a transaction we sent, and neither may be
+     * gated on a notification preference or skipped on a replay.
+     *
+     * Note the asymmetry with `_recordMempoolSeen`'s guard, which is
+     * inherited behavior rather than an oversight: with no `getPendingTxids`
+     * dependency wired, a source-matched action is treated as ours, because
+     * the frame already arrived on a subscription for this very address.
+     *
+     * @param {import('./getActiveAddresses.js').ActiveAddress} addr
+     * @param {{ data?: any }} msg
+     * @returns {Promise<boolean>} whether this frame confirms a send of ours,
+     *   which is also the only case a 'tx-confirmed' notification may follow.
+     */
+    async _recordConfirmedOwnSend(addr, msg) {
+        const data = msg.data || {};
+        const source = data.source || null;
+        if (!source || source !== addr.address) return false;
+
+        const txid = data.tx_hash || data.txid || null;
+        let ours = true;
+        if (this._getPendingTxids) {
+            const pending = await this._safePendingTxids();
+            ours = Boolean(txid) && pending.has(txid);
+        }
+        if (!ours) return false;
+
+        if (txid && this._onTxConfirmed) {
+            try { await this._onTxConfirmed(txid); } catch (e) { this._log.warn('NotificationService: onTxConfirmed failed', e); }
+        }
+        return true;
     }
 
     async _safePendingTxids() {

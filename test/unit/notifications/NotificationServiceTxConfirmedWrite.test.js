@@ -245,3 +245,111 @@ describe('a confirmation with notifications off still frees the balance', () => 
         expect(h.notify).not.toHaveBeenCalled();
     });
 });
+
+// The SAME defect by a second route. A wallet that was closed when the block
+// landed never sees a live NEW_ACTION for it at all: the confirmation arrives
+// as a `catch_up` replay on the next connect. That is not an edge case, it is
+// the ordinary path for every send that did not wait inline for confirmation,
+// and `submitAction` only writes 'indexed' itself on the sends that DID wait.
+describe('a confirmation replayed on reconnect is still a confirmation', () => {
+    /** The same frame the explorer replays to a client that missed it live. */
+    const replayed = (over = {}) => ({ ...confirmFrame(over), catch_up: true });
+
+    it('writes the confirmation from a catch_up frame, and still raises no notification', async () => {
+        // Both halves matter. The write must happen (it is an observation),
+        // and the notification must not (a replay is not a live occurrence,
+        // or every reconnect would re-announce old transactions).
+        const h = harness();
+        await h.svc.start();
+
+        h.sdk.emit('addrBTC', replayed());
+        await flush();
+
+        expect(h.onTxConfirmed).toHaveBeenCalledTimes(1);
+        expect(h.onTxConfirmed).toHaveBeenCalledWith(OUR_TX);
+        expect(h.notify).not.toHaveBeenCalled();
+    });
+
+    it('writes the confirmation from a catch_up frame with the toggle off too', async () => {
+        const h = harness({ txConfirmations: false });
+        await h.svc.start();
+
+        h.sdk.emit('addrBTC', replayed());
+        await flush();
+
+        expect(h.onTxConfirmed).toHaveBeenCalledWith(OUR_TX);
+        expect(h.notify).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing for a replayed transaction that is not ours', async () => {
+        const h = harness();
+        await h.svc.start();
+
+        h.sdk.emit('addrBTC', replayed({ tx_hash: STRANGER_TX }));
+        await flush();
+
+        expect(h.onTxConfirmed).not.toHaveBeenCalled();
+        expect(h.notify).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing for a replayed action that did not leave our address', async () => {
+        const h = harness();
+        await h.svc.start();
+
+        h.sdk.emit('addrBTC', replayed({ source: 'addrOther', destination: 'addrBTC' }));
+        await flush();
+
+        expect(h.onTxConfirmed).not.toHaveBeenCalled();
+        // And no incoming-receipt either: a replay never notifies.
+        expect(h.notify).not.toHaveBeenCalled();
+    });
+
+    it('frees the balance the wallet was closed through', async () => {
+        // The consequence, through the real modules rather than through the
+        // spy: this is the wallet that broadcast a send, was closed before the
+        // block, and reopened. Without the fix the record sits at 'broadcast'
+        // for good and the send is subtracted from spendable balance forever.
+        const record = {
+            id: 'p1',
+            txid: OUR_TX,
+            status: 'broadcast',
+            action: 'SEND',
+            chain: 'BTC',
+            network: 'mainnet',
+            fromAddress: 'addrBTC',
+            toAddress: 'addrOther',
+            tick: 'PEPECREATURE',
+            amount: '25',
+            confirmedAt: null,
+        };
+        const store = [record];
+        const vault = {
+            pendingTxs: {
+                async findBy(field, value) {
+                    return store.filter((r) => r[field] === value).map((r) => ({ ...r }));
+                },
+                async put(rec) {
+                    const i = store.findIndex((r) => r.id === rec.id);
+                    if (i >= 0) store[i] = rec; else store.push(rec);
+                },
+            },
+        };
+        const venue = { coin: 'BTC', network: 'mainnet', source: 'addrBTC' };
+
+        expect(unconfirmedPendingDeltas(store, venue)).toEqual([
+            { tick: 'PEPECREATURE', amount: '25' },
+        ]);
+
+        const h = harness({
+            onTxConfirmed: (txid) => markPendingTxIndexed(vault, txid, {
+                now: () => '2026-08-29T00:40:00.000Z',
+            }),
+        });
+        await h.svc.start();
+        h.sdk.emit('addrBTC', replayed());
+        await flush();
+
+        expect(store[0].status).toBe('indexed');
+        expect(unconfirmedPendingDeltas(store, venue)).toEqual([]);
+    });
+});
