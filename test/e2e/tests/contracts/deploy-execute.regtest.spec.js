@@ -90,7 +90,6 @@ const CONTRACT_SOURCE =
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
 const DEPLOY_GAS = '200000';
-const EXECUTE_GAS = '100000';
 
 /** Unique per run: the venue is shared and its contract list is cumulative. */
 const RUN_TAG = `e2e${Date.now()}`;
@@ -197,33 +196,18 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
         } catch { /* the venue check in global setup reports unreachability */ }
     });
 
-    // FIXME'd 2026-08-27 BECAUSE IT PINS TWO REAL DEFECTS, NOT BECAUSE IT IS
-    // UNFINISHED OR ON THE WRONG CHAIN.
+    // This spec pinned two defects of one class - a form putting a field on
+    // the wire that the pinned action version has no slot for, which
+    // `xchain-sdk/formatSelector.js` correctly refuses. Both are fixed and
+    // this spec is their regression proof:
     //
-    // The chain half of this spec is done and works: it picks the run's chain at
-    // both form opens (`selectVenueChain(main, 'Network')`) and drives a
-    // Litecoin `From` of `rltc1q…`, which took the funding step from failing at
-    // step 1 to reaching step 3. What stops it now is the product, twice over,
-    // and both instances are one class - a form putting a field on the wire that
-    // the pinned action version has no slot for, which
-    // `xchain-sdk/formatSelector.js` then correctly refuses:
-    //
-    //   (a)      DEPLOY / NAME. `DeployContractForm.jsx:268` puts the
-    //            `Name (optional)` input - whose own hint says it is a label
-    //            for that screen only - into the action params, so filling in
-    //            an optional field as offered makes the action unsubmittable.
-    //            This spec fills it, so it is that defect's ready-made proof,
-    //            and this is where it stops first (`:258`).
-    //   (b)      EXECUTE / GAS_LIMIT. `ExecuteContractForm.jsx:357` sets
-    //            `GAS_LIMIT` on EVERY compose while EXECUTE v0's wire format
-    //            has no gas slot at all, so EXECUTE is broken end to end on
-    //            every chain. That is the wall waiting behind the DEPLOY fix,
-    //            and it is separately pinned by `deploy-chunked-lane`.
-    //
-    // Un-fixme it when (a) lands, expect it to stop again on (b), and
-    // un-fixme it for good when both are fixed. Both claims below are right as
-    // written; it is the product that has to move.
-    test.fixme('a contract deployed from the wallet accepts a method call from the wallet', async ({ page }) => {
+    //   DEPLOY / NAME. The `Name (optional)` input rode into the action
+    //   params; it is a screen-local label and now never leaves the screen.
+    //   This spec fills it, so a reintroduction stops the deploy step cold.
+    //   EXECUTE / GAS_LIMIT. The form set GAS_LIMIT on every compose while
+    //   EXECUTE v0 has no gas slot at all (a top-level call runs at the
+    //   protocol gas ceiling); the form no longer carries the concept.
+    test('a contract deployed from the wallet accepts a method call from the wallet', async ({ page }) => {
         let deployer;
         let contractIndex;
         const contractName = `Counter ${RUN_TAG}`;
@@ -365,7 +349,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // No ABI is declared, so the form is in its manual lane: a free-text
             // method name and pipe-delimited params. `inc` takes none.
             await main.getByLabel('Method', { exact: true }).fill('inc');
-            await main.getByLabel('Gas limit').fill(EXECUTE_GAS);
+            // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await main.getByRole('button', { name: 'Execute', exact: true }).click();
             await approveConfirm(page);
 
@@ -382,8 +366,6 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // Gas is metered, so a body that ran costs more than nothing. A zero
             // here would mean the action indexed without the VM executing it.
             expect(Number(action.gas_used), 'the VM charged for real work').toBeGreaterThan(0);
-            expect(Number(action.gas_used), 'within the limit the form sent')
-                .toBeLessThanOrEqual(Number(EXECUTE_GAS));
 
             // Venue fact 4: the state the method wrote. This is what separates a
             // round trip from a well-formed no-op.

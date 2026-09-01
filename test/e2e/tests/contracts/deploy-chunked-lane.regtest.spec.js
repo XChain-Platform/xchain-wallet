@@ -74,7 +74,6 @@ const COUNTER_BODY =
     "module.exports = { inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
-const EXECUTE_GAS = '100000';
 /** A chunked DEPLOY assembles a bigger body, so it is metered above the inline lane's 200000. */
 const CHUNKED_DEPLOY_GAS = '300000';
 
@@ -550,24 +549,14 @@ test.describe('§11.3: the chunked deploy lane', () => {
     // The VM state write is the assertion that cannot be faked: a reassembled
     // body that does not compile cannot increment a counter, and a `gas_used` of
     // zero would mean the action indexed without the VM running at all.
-    // FIXME: THIS PINS A REAL PRODUCT DEFECT AND IS NOT AN UNFINISHED
-    // SPEC. Everything up to the EXECUTE leg passes: the chunked deploy lands
-    // and the chain holds the contract. Then the wallet cannot call a method on
-    // it, on ANY chain. ExecuteContractForm.jsx:357 puts `GAS_LIMIT` into every
-    // EXECUTE's params unconditionally (defaulting to '50000', so it is there
-    // even when the user types nothing), and EXECUTE v0's wire format is
-    // `VERSION|CONTRACT_ACTION_INDEX|METHOD|...PARAMS` with no gas slot at all
-    // (xchain-sdk/src/formats.js:119). The SDK refuses, correctly, and the
-    // screen shows `EXECUTE v0 has no slot for GAS_LIMIT; serializing it would
-    // silently discard that field` where the confirm modal should be.
-    //
-    // Gas is not user-specified for EXECUTE in the first place: the indexer
-    // uses GAS_CEILING for anything without IS_EMISSION + VM_GAS_LIMIT. DEPLOY
-    // does take gas, which is the likely origin of the copied field.
-    //
-    // Not a chain-conversion residual: the conversion above WORKS, and this
-    // reproduces on Bitcoin. Un-fixme this to prove the fix.
-    test.fixme('a contract assembled from chunks compiles and runs', async ({ page }) => {
+    // This spec pinned the EXECUTE / GAS_LIMIT defect: the form put GAS_LIMIT
+    // into every EXECUTE's params while EXECUTE v0's wire format
+    // (`VERSION|CONTRACT_ACTION_INDEX|METHOD|...PARAMS`) has no gas slot, so
+    // the SDK's leg-field guard correctly refused every compose and no
+    // contract method could be called from the wallet on any chain. The form
+    // no longer carries a gas-limit concept (a top-level EXECUTE runs at the
+    // protocol gas ceiling); this EXECUTE leg is the fix's regression proof.
+    test('a contract assembled from chunks compiles and runs', async ({ page }) => {
         const runTag = `s29x-${Date.now()}`;
         const source = chunkedCounterSource(runTag);
         const codeHash = codeHashOf(source);
@@ -687,7 +676,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // modal. Converting the deploy form alone left this failing here.
             await selectVenueChain(scope, 'Network');
             await scope.getByLabel('Method', { exact: true }).fill('inc');
-            await scope.getByLabel('Gas limit').fill(EXECUTE_GAS);
+            // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await scope.getByRole('button', { name: 'Execute', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
