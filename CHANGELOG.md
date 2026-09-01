@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings store only what the user changed; everything left at its default follows the defaults of the installed release, so a later release can retune them.
 
 ### Fixed
+- Contract method calls compose again: the EXECUTE form no longer offers or sends a gas limit the wire format has no slot for (#5).
+- Deploying a contract with the optional Name field filled works again; the screen-local label is no longer put on the wire (#6).
+- My dispensers badges each row with its live state (open, cancelled, expired) instead of a constant `valid`, and stops quoting escrow a closed dispenser refunded (#7).
+- The dispenser detail page shows the delegated pay-to address instead of the opener's address for dispensers with a delegated GET_ADDRESS (#8).
+- Deep-linked `execute` URIs ignore a `gas` parameter instead of prefilling a field that no longer exists.
 - The Send form's fee-bump default now respects each chain's capability, instead of defaulting Dogecoin to an RBF flag it does not support.
 - The CSP meta tag no longer carries `frame-ancestors`, which browsers ignore in meta and warn about on every load; the serving host sends it as a header instead.
 - `sign.sh` now launches the packaged app before writing the manifest, so a release that cannot start refuses to be signed.

@@ -59,7 +59,7 @@ describe('parseXchainUri BIP21 req- enforcement', () => {
 
 describe('parseXchainUri execute action', () => {
 
-    it('parses contract, method, params, and gas from an execute URI', () => {
+    it('parses contract, method, and params from an execute URI, ignoring gas', () => {
         const intent = parseXchainUri(
             'xchain:RBTC/execute?contract=362&method=fund&params=alice%7C1000&gas=75000',
             { chainRegistry },
@@ -69,7 +69,9 @@ describe('parseXchainUri execute action', () => {
         expect(intent.contractActionIndex).toBe('362');
         expect(intent.method).toBe('fund');
         expect(intent.executeParams).toBe('alice|1000');
-        expect(intent.gasLimit).toBe('75000');
+        // EXECUTE v0 has no GAS_LIMIT slot on the wire, so a link's gas
+        // value has nothing to prefill and must never reach the intent.
+        expect(intent.gasLimit).toBeUndefined();
     });
 
     it('round-trips pipe separators through percent-encoding', () => {
@@ -112,7 +114,7 @@ describe('parseXchainUri execute action', () => {
         expect(intent.contractActionIndex).toBe('9');
     });
 
-    it('drops a non-numeric contract index and gas limit (falls back to the manual form)', () => {
+    it('drops a non-numeric contract index (falls back to the manual form)', () => {
         const intent = parseXchainUri(
             'xchain:RBTC/execute?contract=<script>&method=m&gas=lots',
             { chainRegistry },

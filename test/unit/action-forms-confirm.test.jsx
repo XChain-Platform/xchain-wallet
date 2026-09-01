@@ -477,6 +477,11 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             params: { METHOD: 'transfer' },
             submitMethod: 'executeAction',
         });
+        // EXECUTE v0 has no GAS_LIMIT slot; the form used to inject one
+        // anyway, and the SDK's leg-field guard then refused every compose,
+        // so no contract method could be called from the wallet at all.
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.actionData.params.GAS_LIMIT).toBeUndefined();
     });
 
     it('ContractStakeForm composes STAKE v3 and signs the prebuilt PSBT', async () => {
@@ -518,9 +523,15 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                 if (!code) throw new Error('no contract-code textarea');
                 fireEvent.change(code, { target: { value: 'export function main() {}' } });
                 setValue(utils, 'Gas limit', '100000');
+                // Filled deliberately: NAME used to ride into actionParams,
+                // and no DEPLOY version has a slot for it, so a filled Name
+                // field made the deploy uncomposable.
+                setValue(utils, /^Name/, 'MyContract');
             },
         });
         expectSingleEncode(calls, { action: 'DEPLOY', submitMethod: 'deployAction' });
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.actionData.params.NAME).toBeUndefined();
     });
 
     it('TokenAdminForm composes ISSUE and signs the prebuilt PSBT', async () => {

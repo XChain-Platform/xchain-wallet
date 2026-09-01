@@ -81,7 +81,10 @@ function coinLabel(c) {
  *
  * Hex-encoding of the source happens inside the SDK validator chain;
  * callers pass raw UTF-8 as `params.CODE`. GAS_LIMIT is a decimal
- * string per the protocol. NAME + CONSTRUCTOR_PARAMS are optional.
+ * string per the protocol. CONSTRUCTOR_PARAMS is optional. The Name
+ * input is a screen-local label only and must never reach actionParams:
+ * no DEPLOY version carries a NAME slot, and the SDK's leg-field guard
+ * hard-rejects any action carrying a field its format cannot hold.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -265,7 +268,6 @@ export function DeployContractForm({ walletId, onBack }) {
             CODE: code,
             GAS_LIMIT: String(gasLimit || suggestedGas || ''),
         };
-        if (name.trim()) p.NAME = name.trim();
         // PC-38: CONSTRUCTOR_PARAMS is a REST field on the non-stakeable
         // formats (`...CONSTRUCTOR_PARAMS` on v0/v2), so the wire wants the
         // ARRAY and emits one segment per entry. Sending the raw pipe-delimited
@@ -285,7 +287,7 @@ export function DeployContractForm({ walletId, onBack }) {
             p.SLASH_DESTINATION = slashDestination.trim() || 'BURN';
         }
         return p;
-    }, [code, gasLimit, suggestedGas, name, constructorParams, cooldownBlocks, slashDestination]);
+    }, [code, gasLimit, suggestedGas, constructorParams, cooldownBlocks, slashDestination]);
 
     // PC-38: load the template list + any resumable run once the chain is known.
     useEffect(() => {
@@ -696,7 +698,7 @@ export function DeployContractForm({ walletId, onBack }) {
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Deploy contract {actionParams.NAME ? `"${actionParams.NAME}"` : ''} to{' '}
+                    Deploy contract {name.trim() ? `"${name.trim()}"` : ''} to{' '}
                     {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
                 </p>
                 <dl className={styles.detailsList}>
@@ -709,7 +711,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         <AddressText address={fromAddress.address} />
                     </dd>
                     <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{actionParams.NAME || '(unnamed)'}</dd>
+                    <dd className={styles.detailsValue}>{name.trim() || '(unnamed)'}</dd>
                     <dt className={styles.detailsLabel}>Code</dt>
                     <dd className={styles.detailsValue}>
                         {sizeInfo ? `${sizeInfo.bytes} bytes` : `${new Blob([code]).size} bytes`}

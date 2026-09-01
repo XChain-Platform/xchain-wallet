@@ -309,7 +309,7 @@ function AppInner() {
     // xchain:{COIN}/execute?...). Mirrors `sendPrefill`; consumed by the
     // 'contract-execute' route and cleared when the user backs out.
     const [executePrefill, setExecutePrefill] = useState(
-        /** @type {{ method?: string, paramsText?: string, gasLimit?: string } | null} */ (null),
+        /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
     // Which view Send should return to when the user hits Back. Defaults
     // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
@@ -464,7 +464,6 @@ function AppInner() {
                 setExecutePrefill({
                     method: intent.method || '',
                     paramsText: intent.executeParams || '',
-                    gasLimit: intent.gasLimit || '',
                 });
                 setUnlockedView('contract-execute');
                 pendingUriView.current = 'contract-execute';
@@ -1694,7 +1693,6 @@ function AppInner() {
                         contractActionIndex={contractRef.contractActionIndex}
                         initialMethod={executePrefill?.method}
                         initialParamsText={executePrefill?.paramsText}
-                        initialGasLimit={executePrefill?.gasLimit}
                         onBack={() => { setExecutePrefill(null); setUnlockedView('contract-detail'); }}
                     />
                 );

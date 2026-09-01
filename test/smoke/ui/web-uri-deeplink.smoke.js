@@ -89,7 +89,7 @@ assert.ok(
 assert.ok(/const \[executePrefill, setExecutePrefill\] = useState/.test(webApp),
     'web App declares an executePrefill state slot');
 assert.ok(
-    /initialMethod=\{executePrefill\?\.method\}[\s\S]*?initialParamsText=\{executePrefill\?\.paramsText\}[\s\S]*?initialGasLimit=\{executePrefill\?\.gasLimit\}/.test(webApp),
+    /initialMethod=\{executePrefill\?\.method\}[\s\S]*?initialParamsText=\{executePrefill\?\.paramsText\}/.test(webApp),
     'contract-execute route passes the executePrefill fields into ExecuteContractForm',
 );
 assert.ok(

@@ -41,7 +41,7 @@ const KINDS = new Set(['send', 'receive', 'execute', 'unknown']);
 // which is how a future field lands here deliberately rather than by
 // accident.
 const STRING_FIELDS = [
-    'action', 'contractActionIndex', 'method', 'executeParams', 'gasLimit',
+    'action', 'contractActionIndex', 'method', 'executeParams',
     'chainId', 'tick', 'address', 'amount', 'memo', 'feePriority',
     'label', 'message',
 ];
@@ -166,14 +166,15 @@ describe('fuzz/xchain-uri', () => {
         );
     });
 
-    it('gates the execute numerics: contract index and gas limit are digits only', () => {
+    it('gates the execute numerics: contract index is digits only, gas never parses', () => {
         fc.assert(
             fc.property(uriArb(), (uri) => {
                 const intent = parse(uri);
                 if (intent.contractActionIndex !== undefined
                     && !NUMERIC_RE.test(intent.contractActionIndex)) return false;
-                if (intent.gasLimit !== undefined
-                    && !NUMERIC_RE.test(intent.gasLimit)) return false;
+                // EXECUTE v0 carries no GAS_LIMIT slot, so no URI shape may
+                // ever produce a gasLimit on the intent.
+                if (intent.gasLimit !== undefined) return false;
                 return true;
             }),
             { numRuns: RUNS },
