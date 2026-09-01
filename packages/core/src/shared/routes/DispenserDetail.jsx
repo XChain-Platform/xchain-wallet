@@ -1416,7 +1416,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }
 
     const source = dispenser?.source || action?.source;
-    const dispAddress = dispenser?.address;
+    // Same key trap as dispAddr above: the by-action-index row carries the
+    // delegated pay-to address as `get_address`, not `address`. Reading only
+    // `address` made the stats hero fall back to `source`, presenting the
+    // WRONG pay-to address for a delegated-GET_ADDRESS dispenser (payments
+    // to source do not fill; the coin arrives as a plain transfer).
+    const dispAddress = dispenser?.address || dispenser?.get_address;
     // D-38: a fill belongs to this dispenser only when it names it (see
     // dispensesOfDispenser for why ticks cannot decide it).
     const matchingDispenses = flowsLib.dispensesOfDispenser(dispenses, actionIndex, dispenser);

@@ -200,7 +200,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             const label = row.address ? dispenserLabels[row.address] : undefined;
             return [
                 row.give_tick, row.get_tick, row.get_coin, row.status,
-                row.memo, row.address, row.source, label,
+                row.current_status, row.memo, row.address, row.source, label,
                 String(row.action_index ?? ''),
             ].some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
         });
@@ -294,7 +294,17 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
 function DispenserRow({ row, label, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    const status = String(row.status || '?');
+    // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
+    // complete), not the create action's validity: `row.status` is frozen at
+    // 'valid' forever, which dressed every dispenser - cancelled and drained
+    // ones included - in the same badge. dispenserLiveState resolves the
+    // list lane's `current_status`, demo fixtures' `status`, and falls back
+    // to validity against an explorer that predates the lifecycle column.
+    const status = String(flowsLib.dispenserLiveState(row).status || '?');
+    // A terminal dispenser's escrow went back to its owner with the closing
+    // action; saying "in escrow" on such a row misstates where the tokens
+    // are, so the line only renders while the figure still means something.
+    const isTerminal = ['cancelled', 'expired', 'complete', 'closed'].includes(status);
     return (
         <button
             type="button"
@@ -343,7 +353,7 @@ function DispenserRow({ row, label, onSelect }) {
                     fallback then told every owner their fully-escrowed
                     dispenser had not funded yet (D-40). Open the dispenser to
                     see its live balance. */}
-                {row.escrow_remaining != null ? (
+                {row.escrow_remaining != null && !isTerminal ? (
                     <div className={local.subtitle}>
                         {`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}
                     </div>
