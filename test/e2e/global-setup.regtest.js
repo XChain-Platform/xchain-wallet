@@ -24,8 +24,9 @@
 import { assertVenueReachable, seedPrices, runInIndexer, REGTEST_COIN } from './fixtures/regtest.js';
 import { readStateScript } from './fixtures/priceSeed.js';
 import { startPriceKeeper } from './fixtures/priceKeeper.js';
+import { ensureGasToken } from './fixtures/gasToken.js';
 
-export default async function globalSetup() {
+export default async function globalSetup(config) {
     await assertVenueReachable();
 
     // CAN this run RENEW its price, not just read one today?
@@ -67,6 +68,15 @@ export default async function globalSetup() {
     const margin = Number.isFinite(price.marginSeconds) ? `, ${price.marginSeconds}s of chain life left` : '';
     console.log(`[regtest ${REGTEST_COIN}] price ${price.seeded ? 'seeded' : 'already on venue'}: `
         + `XCHAIN/USD ${price.xchainUsdPrice}, coin/USD ${price.coinUsdPrice} (round ${price.oracleRound})${margin}`);
+
+    // A priced venue with no gas token still cannot fund a single spec: every
+    // one of them MINTs XCHAIN, and on a re-genesised chain that tick does not
+    // exist until somebody ISSUEs it. After the seed, because the ISSUE is
+    // itself a priced action; before the keeper, because nothing downstream
+    // matters until this holds. See gasToken.js.
+    const baseURL = config?.projects?.[0]?.use?.baseURL
+        || `http://localhost:${process.env.XC_PREVIEW_PORT || 4173}`;
+    await ensureGasToken({ baseURL, log: console.log });
 
     // A seed checked ONCE is not a priced venue, it is a priced first minute.
     // The margin is spent in chain seconds and a chain that mines on demand can

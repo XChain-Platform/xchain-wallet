@@ -286,6 +286,9 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
         let source;
         let dispenserIndex;
+        // How much of the dispenser's ESCROW this venue has already taken OUT
+        // of the source's reported balance: 0 or ESCROW, measured below.
+        let escrowNetted;
 
         await test.step('fund an address, give it a token balance and an open dispenser', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Sweep Owner' });
@@ -330,6 +333,23 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // force-close later supersedes, and the whole force-close leg of
             // this spec is meaningless if the dispenser was never open.
             await waitForDispenserStatus(dispenserIndex, 'open');
+            // Does `balances` report what the address HOLDS (escrow included)
+            // or what it can SPEND (escrow already out)? Measured, because the
+            // two venues this spec has run on answered differently: on
+            // 2026-08-28 the source still read the whole MINT with the
+            // dispenser open, and on 2026-09-01 (indexer image of 08-31) it
+            // read MINT - ESCROW, with the holders list carrying 900 against a
+            // supply of 1000 and the 100 sitting in the dispenser. Either is a
+            // consistent ledger; assuming one of them is how this step failed
+            // on the other. Anything but those two means money moved that this
+            // spec did not move.
+            const held = await tokenBalance(source, TICK);
+            escrowNetted = MINT - held;
+            expect([0, ESCROW],
+                `the source holds ${held} ${TICK} with its dispenser open, which is neither the `
+                + `whole MINT (${MINT}) nor MINT less the ESCROW (${MINT - ESCROW}); something other `
+                + 'than the dispenser escrow moved tokens before the sweep')
+                .toContain(escrowNetted);
         });
 
         let before;
@@ -474,10 +494,12 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // is pinned is the part that matters: essentially all of it arrived,
             // and none of it went anywhere else.
             // THE ESCROW DOES NOT TRAVEL WITH THE SWEEP, AND IT IS EASY TO
-            // FORGET THAT. `tokenBalance` reports what the address HOLDS,
-            // escrowed amounts included, so `before` is the whole MINT while a
-            // sweep can only move the FREE balance - the dispenser's ESCROW is
-            // still committed to the dispenser at the moment it is swept. That
+            // FORGET THAT. A sweep can only move the FREE balance - the
+            // dispenser's ESCROW is still committed to the dispenser at the
+            // moment it is swept - and whether `before` still counts that
+            // escrow is `escrowNetted`, measured at setup rather than assumed
+            // (2026-09-01: assuming it double-subtracted the escrow and failed
+            // a correct sweep with "credited MORE than the free balance"). That
             // escrow reaches this same destination when the force-closed
             // dispenser actually closes, which is the parked test below and
             // exactly what the broadcast screen promises two steps up ("close
@@ -490,13 +512,14 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // reasoned about: the destination holds 900 where MINT is 1000 and
             // ESCROW is 100, and the source drained to 0, so the arithmetic
             // closes exactly and nothing was lost.
-            const movable = before - ESCROW;
+            const escrowStillCounted = ESCROW - escrowNetted;
+            const movable = before - escrowStillCounted;
             expect(credited, 'the destination was credited MORE than the free balance a sweep '
                 + 'could move, so something other than the sweep paid it')
                 .toBeLessThanOrEqual(movable);
             expect(movable - credited,
                 `only ${credited} of the ${movable} FREE ${TICK} reached the destination (the `
-                + `address held ${before}, of which ${ESCROW} is dispenser escrow that settles at `
+                + `address read ${before}, of which ${escrowStillCounted} is dispenser escrow that settles at `
                 + 'close time). The shortfall is far larger than any protocol fee, so the sweep '
                 + 'lost tokens on the way')
                 .toBeLessThan(0.01);
