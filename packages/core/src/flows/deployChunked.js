@@ -164,7 +164,7 @@ export function normalizeConstructorParams(v) {
  * XChain action. The DEPLOY filter is belt-and-braces for a future batching
  * change, and falls back to the sole entry rather than refusing.
  */
-function indexedActionIndex(res) {
+export function indexedActionIndex(res) {
     const indexed = res && res.indexed;
     if (!indexed || typeof indexed !== 'object') return null;
     const direct = indexed.action_index ?? indexed.actionIndex;

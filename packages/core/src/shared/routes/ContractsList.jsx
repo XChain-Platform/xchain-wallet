@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { mergeContractNames } from '../utils/contractNameMemory.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -51,8 +52,14 @@ const chainRegistry = registryLib.defaultRegistry();
  * (vmChains below), so it follows the registry rather than a coin pinned
  * here; testnet / regtest chains appear when present. The
  * search input filters the currently-rendered rows client-side on
- * CONTRACT_ACTION_INDEX prefix or NAME substring. The explorer
+ * CONTRACT_ACTION_INDEX prefix or name substring. The explorer
  * doesn't expose a server-side contract-name search today.
+ *
+ * Names: contracts have none on chain (the protocol identifies them by
+ * action index), so a row's name is the device-local label the user gave
+ * it at deploy time or renamed it to on the detail page;
+ * contractNameMemory.js owns the store, and `mergeContractNames` attaches
+ * `row.localName` to every row loaded here.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -147,11 +154,17 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 }
                 const uniq = dedupeByActionIndex(merged);
                 uniq.sort(newestFirst);
+                // Attach the device-local labels. This is also where a
+                // label filed at deploy time under its txid (the action index
+                // was not knowable yet) gets settled under the index the
+                // indexer has since assigned. Done here rather than inside the
+                // state updater, which React may call more than once.
+                const named = mergeContractNames(cid, uniq);
                 setMyByChain((prev) => ({
                     ...prev,
                     [cid]: {
                         loading: false,
-                        rows: uniq,
+                        rows: named,
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
                 }));
@@ -212,8 +225,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         entry.kinds.add(r.kind);
                     }
                 }
-                const rows = Array.from(byContract.values())
-                    .sort((a, b) => b.latestBlock - a.latestBlock);
+                const rows = mergeContractNames(cid, Array.from(byContract.values())
+                    .sort((a, b) => b.latestBlock - a.latestBlock));
                 setInteractionsByChain((prev) => ({
                     ...prev,
                     [cid]: {
@@ -243,9 +256,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     if (cancelled) return;
                     const rows = extractRows(resp);
                     rows.sort(newestFirst);
+                    const named = mergeContractNames(cid, rows);
                     setBrowseByChain((prev) => ({
                         ...prev,
-                        [cid]: { loading: false, rows, error: null },
+                        [cid]: { loading: false, rows: named, error: null },
                     }));
                 })
                 .catch((err) => {
@@ -431,7 +445,7 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
                         key={String(rowKey(row)) + ':' + i}
                         type="button"
                         className={styles.entry}
-                        aria-label={row.name || row.NAME || `Contract ${rowKey(row)}`}
+                        aria-label={row.localName || row.name || row.NAME || `Contract ${rowKey(row)}`}
                         onClick={() => onOpenContract(chainId, String(rowKey(row)))}
                     >
                         {renderRow(row)}
@@ -443,7 +457,10 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
 }
 
 function ContractRow({ row }) {
-    const name = row.name || row.NAME || '(unnamed)';
+    // The local label wins over anything the indexer returns: it is the name
+    // this user gave this contract, and the chain has no name of its own to
+    // contradict it (contracts are identified by their action index).
+    const name = row.localName || row.name || row.NAME || '(unnamed)';
     const owner = row.source || row.SOURCE || row.owner || row.OWNER;
     const status = String(row.status || row.STATUS || '(unknown)');
     return (
@@ -466,7 +483,7 @@ function InteractionRow({ row }) {
     return (
         <>
             <span className={styles.entryLabel}>
-                Contract #{row.contract_action_index ?? '?'}
+                {row.localName ? `${row.localName} ` : ''}Contract #{row.contract_action_index ?? '?'}
             </span>
             <span className={styles.entryDescription}>
                 {kinds || '(none)'} · last block {row.latestBlock || '?'}
@@ -505,7 +522,7 @@ function applySearch(rows, query) {
     const q = String(query || '').trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) => {
-        const name = String(row.name || row.NAME || '').toLowerCase();
+        const name = String(row.localName || row.name || row.NAME || '').toLowerCase();
         const idx = String(row.action_index ?? row.contract_action_index ?? '').toLowerCase();
         return name.includes(q) || idx.startsWith(q.replace(/^#/, ''));
     });
