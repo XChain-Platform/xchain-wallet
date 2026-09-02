@@ -41,6 +41,20 @@
 // by one SEND: two broadcasts, versus the ISSUE + two MINTs + SEND this spec
 // on the critical path, and no issuance fee quote.
 //
+// THE DEFECT THE NEXT PARAGRAPH DESCRIBES IS FIXED, and
+// the fix is now driven through the RENDERED History route rather than through
+// its helpers: `test/unit/routes/History.groupedIssueMints.test.jsx` mounts
+// History on explorer-shaped rows (an ISSUE plus TWO MINTs, the smallest
+// fixture that can fail) and asserts the Launch card, the Flat/Grouped round
+// trip and the tick search. Removing the lift reddens four of its five tests.
+// The paragraph is KEPT rather than deleted because everything it says about
+// the explorer's wire shape is still true, and because the two spec choices it
+// justifies below are still the right ones: claim 2 searching by TXID is a
+// strictly stronger identifier than a tick (a tick search would now match, but
+// it would match every action of that token), and claim 3 asserting that
+// Grouped KEEPS the row is correct for its own data - a lone MINT and a SEND
+// have nothing to collapse under any grouping rule.
+//
 // A DEFECT THIS SPEC DELIBERATELY DOES NOT ASSERT, recorded here because the
 // next session pays to rediscover it otherwise. `getActionSummaryData`
 // (xchain-explorer/src/db.js) nests every per-action field under a `details`
@@ -638,6 +652,23 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     // broadcasts (ISSUE, two MINTs, SEND) never confirmed. `test.fixme` stands
     // until it has been seen, because a knowingly-red spec in a green directory
     // teaches the suite to ignore reds.
+    //
+    // WHAT IS NOW KNOWN, 2026-09-01, WITHOUT THIS TEST HAVING RUN. The claim it
+    // was written to settle - that Grouped mode really does collapse an ISSUE
+    // and its two MINTs once the nested fields are lifted - is answered, driven
+    // through the rendered History route in
+    // `test/unit/routes/History.groupedIssueMints.test.jsx`: one Launch card
+    // counting three actions, the same three as separate rows under Flat and
+    // back again, and a search for the issued tick narrowing to that launch.
+    // Deleting the lift reddens four of its five tests, so it cannot pass on a
+    // build without the fix.
+    //
+    // That does NOT close this test, and it is not offered as a substitute: a
+    // jsdom mount over a mocked messaging channel proves the wallet's own
+    // rendering, never that a real chain, indexer and explorer put the fields
+    // where the wallet expects them. This walk remains the only thing that
+    // would, and it stays `test.fixme` until somebody drives it and reads the
+    // setup failure recorded above.
     //
     // Superseded header follows.
     // THE DEFECT IT PINS IS TRACKED. The explorer's
