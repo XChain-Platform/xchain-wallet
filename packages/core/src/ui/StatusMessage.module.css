@@ -41,20 +41,27 @@
     outline-offset: 1px;
 }
 
-.status {
+/* The variant selectors are compound (.row.error, not .error) on purpose.
+   Callers pass their own `className` for layout, and many route modules
+   name that class `.error` with `color: var(--xc-danger)`. At equal
+   specificity whichever rule lands later in the bundle wins, and on the
+   Add addresses page that produced danger-red text on a danger-red
+   background: a blank red bar where the message should be. Two classes
+   outrank one, so the banner's colours are the banner's own. */
+.row.status {
     background: var(--xc-bg-muted);
     color: var(--xc-text);
     border: 1px solid var(--xc-border);
 }
 
-.error {
+.row.error {
     background: var(--xc-danger);
     color: var(--xc-on-danger);
     border: 1px solid var(--xc-danger);
     font-weight: 500;
 }
 
-.success {
+.row.success {
     background: var(--xc-success-bg, var(--xc-bg-muted));
     color: var(--xc-text);
     border: 1px solid var(--xc-success, var(--xc-border));

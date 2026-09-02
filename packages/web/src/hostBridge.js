@@ -489,6 +489,23 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk 
         throw err;
     });
 
+// Every path that binds a signer pool and a host awaits this first. Those
+// two capture the `sdkRegistry` VALUE at bind time, so a wallet unlocked
+// before the real factory swapped in kept the boot placeholder for the
+// whole session: on a slow link a quick password after the network-switch
+// reload beat the 1.9 MB SDK chunk, and every derive, balance and
+// notification call then failed with "xchain-sdk is not loaded yet" until
+// the user locked and unlocked again. A failed load is NOT swallowed here:
+// the registry stays on the placeholder, which throws per call by design,
+// and `sdkResolved` itself still rejects for anyone who reads it.
+async function sdkBound() {
+    try {
+        await sdkResolved;
+    } catch (_err) {
+        /* already logged by sdkResolved's own catch */
+    }
+}
+
 /** Default active chains for onboarding. Users can change later via Settings. */
 export const DEFAULT_ACTIVE_CHAIN_IDS = [
     'bitcoin-mainnet',
@@ -814,6 +831,7 @@ export async function createWalletLocal(req) {
         });
         await v.save();
         vault = v;
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         await signerPool.populate({
             vault,
@@ -897,6 +915,7 @@ export async function importMnemonicLocal(req) {
         });
         await v.save();
         vault = v;
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         await signerPool.populate({
             vault,
@@ -994,6 +1013,7 @@ export async function importBackupLocal(req) {
             : await flowsNs.importBackupFile({ ...common, fileContent: req.fileContent });
         await v.save();
         vault = v;
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         // The restored seal now opens under `password`, which is exactly why
         // the re-key had to happen first: populate would otherwise skip the
@@ -1067,6 +1087,7 @@ export async function unlockWalletLocal(req) {
         // subsequent HD-derive ops (account.create, receive.getAddress
         // for software signers) reuse pre-unlocked signers without
         // re-prompting. Pool is cleared in lockWalletLocal.
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         await signerPool.populate({
             vault,
