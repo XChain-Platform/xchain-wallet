@@ -64,6 +64,22 @@ function allDown(chainIds) {
     };
 }
 
+/**
+ * One service slow, the rest fine: the shape a distant client produces when a
+ * single 3s probe budget runs out behind a CORS preflight while every backend
+ * is healthy. This is what used to paint the banner off one sample.
+ */
+function oneServiceDown(chainIds) {
+    return {
+        overall: 'degraded',
+        perChain: chainIds.map((chainId) => ({
+            chainId,
+            mode: 'degraded',
+            services: { encoder: 'reachable', hub: 'unreachable', explorer: 'reachable' },
+        })),
+    };
+}
+
 /** What the host actually answers when it is handed no chains at all. */
 const EMPTY_CHAIN_SET_ANSWER = { overall: 'offline', perChain: [] };
 
@@ -141,14 +157,81 @@ describe('useReachability', () => {
     it('reports a genuine outage, with the per-chain evidence behind it', async () => {
         const check = vi.fn(async ({ chainIds }) => allDown(chainIds));
         const messaging = lockedThenUnlockedMessaging(check);
-        const { result } = renderHook(() => useReachability({ intervalMs: 0 }), {
-            wrapper: wrapperFor(messaging),
-        });
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 }),
+            { wrapper: wrapperFor(messaging) },
+        );
         await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
         messaging.unlock();
 
         await waitFor(() => expect(result.current.overall).toBe('offline'));
         expect(result.current.perChain).toHaveLength(2);
+        // It took a corroborating probe to get there: a real outage still
+        // surfaces, it just is not published off a single sample.
+        expect(check.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('does not publish a degraded verdict off one probe, so a lone slow probe never paints the banner', async () => {
+        // The 2026-09-02 report in one test. Each service has its own 3s
+        // budget and they fire together behind CORS preflights, so a distant
+        // client times ONE of them out while every backend is healthy. That
+        // used to be a full-width bar over a working wallet.
+        const check = vi.fn()
+            .mockImplementationOnce(async ({ chainIds }) => oneServiceDown(chainIds))
+            .mockImplementation(async ({ chainIds }) => healthy(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+
+        const seen = [];
+        const { result } = renderHook(
+            () => {
+                const state = useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 });
+                seen.push(state.overall);
+                return state;
+            },
+            { wrapper: wrapperFor(messaging) },
+        );
+
+        await waitFor(() => expect(result.current.overall).toBe('normal'));
+        // Not for one paint. The flake never reached the screen at all.
+        expect(seen).not.toContain('degraded');
+        expect(check.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('stays silent about a degraded chain while the wallet is still starting up', async () => {
+        // Cold start is when TLS, DNS, the shell host and every preflight are
+        // cold at once, and it is exactly when a first-time user decides
+        // whether this thing works.
+        const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 60_000 }),
+            { wrapper: wrapperFor(messaging) },
+        );
+
+        await waitFor(() => expect(check).toHaveBeenCalled());
+        // Probed, answered "degraded", and still says nothing: inside the
+        // grace window the verdict is held rather than shown.
+        expect(result.current.overall).not.toBe('degraded');
+        expect(result.current.overall).not.toBe('offline');
+    });
+
+    it('publishes a recovery immediately, without waiting for corroboration', async () => {
+        // Confirmation is asymmetric on purpose: clearing a banner early is
+        // always safe, so a chain that comes back stops nagging at once.
+        const check = vi.fn(async ({ chainIds }) => allDown(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 }),
+            { wrapper: wrapperFor(messaging) },
+        );
+        await waitFor(() => expect(result.current.overall).toBe('offline'));
+
+        check.mockImplementation(async ({ chainIds }) => healthy(chainIds));
+        const before = check.mock.calls.length;
+        await act(async () => { result.current.refresh(); });
+        await waitFor(() => expect(result.current.overall).toBe('normal'));
+        expect(check.mock.calls.length).toBe(before + 1);
     });
 
     it('never lets a slower older probe overwrite the current verdict', async () => {
@@ -241,10 +324,27 @@ describe('ReachabilityBanner', () => {
         const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
         render(
             <MessagingContext.Provider value={{ shell: 'web', messaging }}>
-                <ReachabilityBanner intervalMs={0} />
+                <ReachabilityBanner intervalMs={0} confirmMs={5} startupGraceMs={0} />
             </MessagingContext.Provider>,
         );
 
         await waitFor(() => expect(screen.getByText(/You're offline/)).toBeTruthy());
+    });
+
+    it('names what the user actually loses, not which of our services fell over', async () => {
+        // "some features may not work" is what a first-time user was told on
+        // 2026-09-02 while the thing blocking them was the fee price.
+        const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+        render(
+            <MessagingContext.Provider value={{ shell: 'web', messaging }}>
+                <ReachabilityBanner intervalMs={0} confirmMs={5} startupGraceMs={0} />
+            </MessagingContext.Provider>,
+        );
+
+        await waitFor(() => expect(screen.getByText(/fee prices are unavailable/)).toBeTruthy());
+        // Our vocabulary stays ours: no service names, no raw chain ids.
+        expect(screen.queryByText(/hub|encoder|explorer/i)).toBeNull();
+        expect(screen.queryByText(/bitcoin-regtest|litecoin-regtest/)).toBeNull();
     });
 });

@@ -24,17 +24,24 @@
 // independently; that's tolerable given typical mount counts).
 
 import { useReachability } from '../hooks/useReachability.js';
+import { registry as registryLib } from '../../index.js';
 import styles from './ReachabilityBanner.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * @param {object} [props]
  * @param {string[]} [props.chainIds]   override chain set (otherwise read from settings.fees)
  * @param {number} [props.intervalMs]   override poll cadence
+ * @param {number} [props.confirmMs]    override the corroborating-probe delay
+ * @param {number} [props.startupGraceMs] override the cold-start silence window
  */
-export function ReachabilityBanner({ chainIds, intervalMs }) {
+export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGraceMs }) {
     const { overall, perChain, refresh, lastChecked } = useReachability({
         chainIds,
         intervalMs,
+        confirmMs,
+        startupGraceMs,
     });
 
     if (overall !== 'degraded' && overall !== 'offline') return null;
@@ -76,9 +83,38 @@ export function ReachabilityBanner({ chainIds, intervalMs }) {
     );
 }
 
-// Plain-language summaries only: internal backend service names (encoder /
-// hub / explorer) and dev vocabulary like "endpoint configuration" never
-// belong in user copy. Per-chain detail stays at "partly" vs "fully" down.
+// What an unreachable backend actually COSTS the user. The service names
+// themselves (encoder / hub / explorer) stay out of the copy, because they
+// are our vocabulary and not the user's; what replaces them is not a name at
+// all but the consequence, which is the part someone stuck on a form needs.
+//
+// "partly unavailable; some features may not work" told a first-time user
+// nothing: on 2026-09-02 one was blocked by the fee-price half of exactly
+// this banner and had no way to learn that from it. The probe result already
+// carries which service failed, so the answer was in hand and thrown away.
+const CONSEQUENCE = {
+    encoder: "you can't send or create transactions",
+    hub: 'fee prices are unavailable',
+    explorer: 'balances and history may be out of date',
+};
+
+// Chain ids are ours too: "bitcoin-testnet" is a config key, not something to
+// show a person. Fall back to the raw id only for a chain the registry does
+// not know, where a wrong-but-recognisable string beats an empty one.
+function chainLabel(chainId) {
+    const d = chainRegistry.get(chainId);
+    if (!d || !d.displayName) return chainId;
+    return d.networkKind && d.networkKind !== 'mainnet'
+        ? `${d.displayName} ${d.networkKind}`
+        : d.displayName;
+}
+
+// "a", "a and b", "a, b and c".
+function joinList(items) {
+    if (items.length <= 1) return items[0] || '';
+    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 function summariseDegradation(perChain) {
     if (!Array.isArray(perChain) || perChain.length === 0) {
         return "Can't reach the network. Check your internet connection.";
@@ -90,12 +126,13 @@ function summariseDegradation(perChain) {
     }
     const summaries = [];
     for (const c of degraded) {
-        if (countUnreachable(c) > 0) {
-            summaries.push(`${c.chainId}: partly unavailable; some features may not work.`);
+        const effects = consequencesFor(c);
+        if (effects.length > 0) {
+            summaries.push(`On ${chainLabel(c.chainId)}, ${joinList(effects)}.`);
         }
     }
     for (const c of offline) {
-        summaries.push(`${c.chainId}: can't reach the network.`);
+        summaries.push(`${chainLabel(c.chainId)}: can't reach the network.`);
     }
     if (summaries.length === 0) {
         return 'Part of the network is unavailable right now.';
@@ -103,13 +140,15 @@ function summariseDegradation(perChain) {
     return summaries.join(' ');
 }
 
-function countUnreachable(chainResult) {
+function consequencesFor(chainResult) {
     const services = chainResult?.services || {};
-    let n = 0;
+    const out = [];
+    // Ordered by how much the user cares, not alphabetically: being unable to
+    // spend outranks a stale balance.
     for (const name of ['encoder', 'hub', 'explorer']) {
-        if (services[name] === 'unreachable') n += 1;
+        if (services[name] === 'unreachable' && CONSEQUENCE[name]) out.push(CONSEQUENCE[name]);
     }
-    return n;
+    return out;
 }
 
 function formatAgo(diffMs) {
