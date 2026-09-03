@@ -17,6 +17,7 @@
 import {
     calibrateKdfParams,
     encryptWalletSeed,
+    encryptWalletPassphrase,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
@@ -84,7 +85,8 @@ export async function persistHdWallet({
         mnemonicBytes.fill(0);
     }
 
-    // 3. Build & persist the Wallet record.
+    // 3. Build (do not yet persist) the Wallet record. It is not put
+    //    until step 7, once it carries its final shape.
     const walletRecord = createWalletRecord({
         name,
         origin,
@@ -93,9 +95,11 @@ export async function persistHdWallet({
         encryptedSeed,
         kdfParams: storedKdfParams,
     });
-    await vault.wallets.put(walletRecord);
 
-    // 4. Build & persist the first Account.
+    // 4. Build & persist the first Account. `validateAccount` checks
+    //    only that walletId is a non-empty string, no foreign-key
+    //    lookup against the vault, so this is safe before the wallet
+    //    itself is stored.
     const account = createAccount({
         walletId: walletRecord.id,
         name: accountName,
@@ -103,9 +107,11 @@ export async function persistHdWallet({
     });
     await vault.accounts.put(account);
 
-    // 5. Unlock the persisted wallet via the shared primitive so
-    //    address derivation uses the exact same path as a subsequent
-    //    unlock. No duplicate signer logic.
+    // 5. Unlock the in-memory wallet record via the shared primitive
+    //    so address derivation uses the exact same path as a
+    //    subsequent unlock. No duplicate signer logic, and this is
+    //    also where the master key needed to seal a 25th-word
+    //    passphrase (step 6) comes from.
     const signer = await unlockWalletRecord({
         wallet: walletRecord,
         password,
@@ -115,7 +121,23 @@ export async function persistHdWallet({
     });
 
     try {
-        // 6. First address per active chain.
+        // 6. Seal the BIP39 passphrase under this wallet's own master
+        //    key, once, at capture time (§15.6). Only a non-empty
+        //    passphrase on a passphrase-enabled wallet is sealed; a
+        //    wallet with none keeps encryptedPassphrase null.
+        if (passphraseEnabled && bip39Passphrase.length > 0) {
+            walletRecord.encryptedPassphrase = await encryptWalletPassphrase({
+                masterKey: signer.getMasterKey(),
+                passphrase: bip39Passphrase,
+            });
+        }
+
+        // 7. Persist the Wallet record, now in its final shape. One
+        //    put instead of two: there is no window in which the
+        //    record exists without its passphrase already sealed.
+        await vault.wallets.put(walletRecord);
+
+        // 8. First address per active chain.
         const addresses = [];
         for (const chainId of activeChainIds) {
             const descriptor = chainRegistry.get(chainId);
@@ -149,7 +171,7 @@ export async function persistHdWallet({
             addresses.push({ chainId, address: record });
         }
 
-        // 7. Seed per-chain Settings entries (fees + ADS) for any
+        // 9. Seed per-chain Settings entries (fees + ADS) for any
         //    active chain not already configured. Idempotent: a user's
         //    customized fee strategy on an earlier wallet is preserved
         //    if they create a second wallet in the same vault.

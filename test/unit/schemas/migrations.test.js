@@ -136,7 +136,40 @@ describe('walletMigrations: v1 to v2', () => {
     });
 });
 
+describe('walletMigrations: v2 to v3', () => {
+    it('seeds encryptedPassphrase null and touches nothing else', () => {
+        const v2 = { schemaVersion: 2, id: 'w1', passphraseEnabled: true, multisigs: [], name: 'W' };
+        const r = walletMigrations[2](v2);
+        expect(r.schemaVersion).toBe(3);
+        expect(r.encryptedPassphrase).toBeNull();
+        expect(r.passphraseEnabled).toBe(true);
+        expect(r.id).toBe('w1');
+        expect(r.name).toBe('W');
+    });
+
+    it('distinguishes a migrated record from an unmigrated one (the point of the bump)', () => {
+        const v2 = { schemaVersion: 2, id: 'w1', passphraseEnabled: true, multisigs: [] };
+        expect('encryptedPassphrase' in v2).toBe(false);
+        expect('encryptedPassphrase' in walletMigrations[2](v2)).toBe(true);
+    });
+
+    it('returns a new object rather than mutating its input', () => {
+        const v2 = { schemaVersion: 2, id: 'w1', passphraseEnabled: false, multisigs: [] };
+        const r = walletMigrations[2](v2);
+        expect(r).not.toBe(v2);
+        expect(v2.schemaVersion).toBe(2);
+        expect(v2.encryptedPassphrase).toBeUndefined();
+    });
+});
+
 describe('migrateWallet', () => {
+    it('walks a v1 wallet all the way to v3 with encryptedPassphrase seeded', () => {
+        const migrated = migrateWallet(makeV1Wallet());
+        expect(migrated.schemaVersion).toBe(3);
+        expect(migrated.encryptedPassphrase).toBeNull();
+        expect(migrated.multisigs).toEqual([]);
+    });
+
     it('migrates a v1 wallet to current version', () => {
         const w = makeV1Wallet();
         const migrated = migrateWallet(w);

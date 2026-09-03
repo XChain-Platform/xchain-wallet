@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
 
 ### Changed
+- The optional BIP39 passphrase is now stored on the wallet, encrypted under the wallet's own password, so it is entered once at setup instead of on every unlock.
 - Donation defaults are per coin (1,000 sats/tx on Bitcoin, 0.001 LTC on Litecoin, 0.05 DOGE on Dogecoin, each sent at 25x accumulated) instead of one flat number that was wrong on two of the three chains.
 - Settings store only what the user changed; everything left at its default follows the defaults of the installed release, so a later release can retune them.
 

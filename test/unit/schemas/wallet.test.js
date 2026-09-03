@@ -274,3 +274,59 @@ describe('validateWallet', () => {
         expect(r.errors.some((e) => e.includes('duplicate id'))).toBe(true);
     });
 });
+
+describe('validateWallet: encryptedPassphrase (§15.6)', () => {
+    const withPassphrase = () =>
+        createWallet({ ...BASE_INPUT, format: 'bip39', passphraseEnabled: true });
+    const errorFor = (record) =>
+        validateWallet(record).errors.filter((e) => e.startsWith('encryptedPassphrase'));
+
+    it('createWallet seeds the field null', () => {
+        expect(createWallet(BASE_INPUT).encryptedPassphrase).toBeNull();
+    });
+
+    it('a fresh record is at schema version 3', () => {
+        expect(createWallet(BASE_INPUT).schemaVersion).toBe(3);
+        expect(CURRENT_VERSION).toBe(3);
+    });
+
+    it('accepts null on a bip39 passphrase wallet (the legacy, awaiting-capture state)', () => {
+        expect(errorFor({ ...withPassphrase(), encryptedPassphrase: null })).toEqual([]);
+    });
+
+    it('accepts a non-empty string on a bip39 passphrase wallet', () => {
+        expect(errorFor({ ...withPassphrase(), encryptedPassphrase: 'Y2lwaGVy' })).toEqual([]);
+    });
+
+    it('rejects an empty string on a bip39 passphrase wallet', () => {
+        expect(errorFor({ ...withPassphrase(), encryptedPassphrase: '' })).toHaveLength(1);
+    });
+
+    it('rejects a non-null value when the wallet has no passphrase', () => {
+        const w = createWallet({ ...BASE_INPUT, passphraseEnabled: false });
+        expect(errorFor({ ...w, encryptedPassphrase: 'Y2lwaGVy' })).toHaveLength(1);
+    });
+
+    it('rejects a non-null value on counterwallet-legacy even with passphraseEnabled', () => {
+        // The passphraseEnabled rule above guards wif-only only; the format
+        // half of this rule is what covers counterwallet-legacy.
+        const w = createWallet({
+            ...BASE_INPUT,
+            format: 'counterwallet-legacy',
+            passphraseEnabled: true,
+        });
+        expect(errorFor({ ...w, encryptedPassphrase: 'Y2lwaGVy' })).toHaveLength(1);
+    });
+
+    it('rejects undefined (an unmigrated v2 record) in every state', () => {
+        const w = createWallet(BASE_INPUT);
+        delete w.encryptedPassphrase;
+        expect(errorFor(w)).toHaveLength(1);
+    });
+
+    it('rejects a v2 record outright', () => {
+        const r = validateWallet({ ...createWallet(BASE_INPUT), schemaVersion: 2 });
+        expect(r.ok).toBe(false);
+        expect(r.errors.some((e) => e.startsWith('schemaVersion'))).toBe(true);
+    });
+});

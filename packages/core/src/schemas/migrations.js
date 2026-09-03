@@ -68,6 +68,14 @@ export const walletMigrations = {
         }
         return next;
     },
+    // v2 → v3: §15.6. The BIP39 passphrase is stored with the wallet, so
+    // the record gains `encryptedPassphrase`. Seeding it null is the whole
+    // step, and the reason the version bump exists at all: without it an
+    // unmigrated record reads `undefined`, which is falsy exactly like the
+    // null this migration writes, and "wallet has no passphrase" would be
+    // indistinguishable from "wallet predates the change and still owes us
+    // its passphrase once". Those two states take opposite unlock paths.
+    2: (r) => ({ ...r, schemaVersion: 3, encryptedPassphrase: null }),
 };
 /** @type {MigrationMap} */
 export const accountMigrations = {

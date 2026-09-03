@@ -48,7 +48,7 @@ import {
     decodeLabelSyncPayload,
     encodeLabelSyncPayload,
 } from '../crypto/index.js';
-import { decryptWalletSeed } from '../crypto/walletBlob.js';
+import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { bip39MnemonicToSeed } from '../crypto/mnemonic.js';
 import { counterwalletMnemonicToSeedBytes } from '../crypto/counterwallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
@@ -378,20 +378,42 @@ export async function publishLabelsNow({
 
     // Decrypt mnemonic, derive seed for the commitment key. Both buffers
     // are zeroed in the finally so they never outlive this scope.
+    // retainMasterKey hands back a fresh copy of the derived master key
+    // (ours to zero, unlike a signer's) so a stored passphrase (§15.6) can
+    // be opened without a second Argon2id round.
+    let sessionMasterKey = null;
     const plaintext = await decryptWalletSeed({
         password,
         encryptedSeed: wallet.encryptedSeed,
         kdfParams: wallet.kdfParams,
         aad: wallet.aad,
+        retainMasterKey: (k) => { sessionMasterKey = k; },
     });
     let seed;
+    let passphraseBytes = null;
     try {
         const mnemonic = new TextDecoder().decode(plaintext);
+        // The stored passphrase always wins. A non-null encryptedPassphrase
+        // means the 25th word was captured once at setup; deriving from a
+        // caller-supplied bip39Passphrase instead (the old typed-at-unlock
+        // path) would silently compute the WRONG commitment key and publish
+        // labels under the wrong address, so the stored value overrides
+        // whatever the caller passed, ignoring it entirely.
+        let effectivePassphrase = bip39Passphrase;
+        if (wallet.encryptedPassphrase != null) {
+            passphraseBytes = await decryptWalletPassphrase({
+                masterKey: sessionMasterKey,
+                encryptedPassphrase: wallet.encryptedPassphrase,
+            });
+            effectivePassphrase = new TextDecoder().decode(passphraseBytes);
+        }
         seed = format === 'counterwallet-legacy'
             ? counterwalletMnemonicToSeedBytes(mnemonic)
-            : await bip39MnemonicToSeed(mnemonic, bip39Passphrase);
+            : await bip39MnemonicToSeed(mnemonic, effectivePassphrase);
     } finally {
         plaintext.fill(0);
+        if (passphraseBytes) passphraseBytes.fill(0);
+        if (sessionMasterKey) sessionMasterKey.fill(0);
     }
 
     let payload;

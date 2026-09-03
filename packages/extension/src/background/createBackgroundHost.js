@@ -633,6 +633,11 @@ function toSafeWallet(w) {
         origin: w.origin,
         format: w.format,
         passphraseEnabled: w.passphraseEnabled,
+        // Derived, never the ciphertext itself: lets the UI tell "stored"
+        // (unlock needs nothing) apart from "needs its passphrase once"
+        // (passphraseEnabled but not yet captured) without ever seeing
+        // encryptedPassphrase.
+        passphraseStored: typeof w.encryptedPassphrase === 'string' && w.encryptedPassphrase.length > 0,
         multisigs: Array.isArray(w.multisigs) ? w.multisigs : [],
     };
 }

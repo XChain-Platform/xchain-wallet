@@ -716,7 +716,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         <span>This wallet uses a BIP39 passphrase</span>
                         <InfoTip
                             aria="BIP39 passphrase help"
-                            label="The optional 25th word that derives a different wallet from the same recovery phrase. Required to land on the same addresses as the original software wallet. Hardware wallets (Trezor / Ledger) handle passphrases on the device itself. This lane is for software-wallet imports only; pair a hardware wallet via Add Account → Hardware Signer instead."
+                            label="The optional 25th word that derives a different wallet from the same recovery phrase. Required to land on the same addresses as the original software wallet. You enter it once here; the wallet stores it, protected by your password, and will not ask for it again on this device. Hardware wallets (Trezor / Ledger) handle passphrases on the device itself; pair a hardware wallet via Add Account → Hardware Signer instead."
                         />
                     </label>
                     {showPassphrase ? (

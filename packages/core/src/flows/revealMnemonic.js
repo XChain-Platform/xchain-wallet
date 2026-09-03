@@ -18,10 +18,17 @@
 // (12–24 space-separated words for BIP39; 12 words for Counterwallet
 // legacy; both formats are handled identically downstream).
 //
+// §15.6: when the wallet has a stored 25th-word passphrase, this also
+// decrypts it (under the same password-derived master key, retained
+// from the seed decrypt rather than re-derived) and returns it as
+// `bip39Passphrase` so the same reveal gate covers both secrets. A
+// wallet with no stored passphrase (either not using one, or a legacy
+// wallet that has not captured it yet) gets `bip39Passphrase: null`.
+//
 // Wif-only wallets throw `NoMnemonicForWifOnlyError` because by definition
 // they have no mnemonic to reveal.
 
-import { decryptWalletSeed } from '../crypto/walletBlob.js';
+import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 
 export class NoMnemonicForWifOnlyError extends Error {
@@ -43,6 +50,8 @@ export class NoMnemonicForWifOnlyError extends Error {
  * @property {string} mnemonic    UTF-8 string; 12 / 15 / 18 / 21 / 24 words for BIP39
  * @property {'bip39' | 'counterwallet-legacy'} format
  * @property {boolean} passphraseEnabled  whether the user also entered a 25th-word at create-time
+ * @property {string | null} bip39Passphrase  the stored 25th-word passphrase, decrypted; null
+ *     when the wallet has none stored (not enabled, or a legacy wallet awaiting capture)
  */
 
 /**
@@ -63,20 +72,37 @@ export async function revealMnemonic({ vault, walletId, password }) {
     if (format === 'wif-only') {
         throw new NoMnemonicForWifOnlyError();
     }
+    // Only a wallet with a stored passphrase needs the derived master key
+    // kept around past the seed decrypt; every other wallet lets it go.
+    const hasStoredPassphrase = Boolean(wallet.passphraseEnabled && wallet.encryptedPassphrase);
+    let masterKey = null;
     const plaintext = await decryptWalletSeed({
         password,
         encryptedSeed: wallet.encryptedSeed,
         kdfParams: wallet.kdfParams,
         aad: wallet.aad,
+        retainMasterKey: hasStoredPassphrase ? (key) => { masterKey = key; } : undefined,
     });
+    let passphraseBytes = null;
     try {
         const mnemonic = new TextDecoder().decode(plaintext);
+        let bip39Passphrase = null;
+        if (hasStoredPassphrase) {
+            passphraseBytes = await decryptWalletPassphrase({
+                masterKey,
+                encryptedPassphrase: wallet.encryptedPassphrase,
+            });
+            bip39Passphrase = new TextDecoder().decode(passphraseBytes);
+        }
         return {
             mnemonic,
             format,
             passphraseEnabled: Boolean(wallet.passphraseEnabled),
+            bip39Passphrase,
         };
     } finally {
         plaintext.fill(0);
+        if (passphraseBytes) passphraseBytes.fill(0);
+        if (masterKey) masterKey.fill(0);
     }
 }

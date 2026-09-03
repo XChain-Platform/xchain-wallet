@@ -509,16 +509,18 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <span>Add a BIP39 passphrase (advanced)</span>
                     <InfoTip
                         aria="BIP39 passphrase help"
-                        label="An optional 25th word that mixes with your seed to derive a different wallet. Anyone who learns your recovery phrase but not the passphrase sees an empty decoy. If you forget the passphrase the funds are gone; it cannot be reset. Hardware wallets handle passphrases on the device itself (Trezor Suite / Ledger Live); this option only applies to software wallets created here."
+                        label="An optional 25th word that mixes with your recovery phrase to derive a different wallet. Someone who learns your recovery phrase but not the passphrase cannot reach your funds. You enter it once here; the wallet stores it, protected by your password. You will need it again only to restore this wallet somewhere else. If you forget it, the wallet is unrecoverable; it cannot be reset. Hardware wallets handle passphrases on the device itself."
                     />
                 </label>
                 {showPassphrase ? (
                     <>
                         <p className={styles.advancedWarning}>
                             The passphrase becomes a permanent part of your wallet.
-                            You will need BOTH your recovery phrase AND this
-                            passphrase to recover. If you forget it, your wallet is
-                            unrecoverable. It is not stored anywhere and cannot be reset.
+                            It is stored on this device, protected by your wallet
+                            password, so you will not be asked for it again here. To
+                            restore this wallet anywhere else you will need BOTH your
+                            recovery phrase AND this passphrase. If you forget it,
+                            your wallet cannot be recovered or reset.
                         </p>
                         <Input
                             type="password"

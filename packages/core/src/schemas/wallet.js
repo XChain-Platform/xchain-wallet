@@ -30,7 +30,7 @@ import {
 import { validateMultisigConfig } from './multisigConfig.js';
 import { randomUUID } from '../util/uuid.js';
 
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 3;
 
 export const WALLET_ORIGINS = /** @type {const} */ ([
     'created',
@@ -64,7 +64,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
 
 /**
  * @typedef {Object} Wallet
- * @property {2} schemaVersion
+ * @property {3} schemaVersion
  * @property {string} id
  * @property {string} name
  * @property {string} createdAt
@@ -73,6 +73,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @property {boolean} passphraseEnabled
  * @property {'aes-256-gcm'} encryptionAlgorithm
  * @property {string} encryptedSeed   base64 ciphertext
+ * @property {string|null} encryptedPassphrase  §15.6 BIP39 passphrase, base64 ciphertext under this wallet's own master key; null when the wallet has none, and null on a passphrase wallet created before the passphrase was stored (awaiting the one-time capture step)
  * @property {KdfParams} kdfParams
  * @property {ImportedKey[]} importedKeys
  * @property {import('./multisigConfig.js').MultisigConfig[]} multisigs   §22: multiple per wallet (BTC-only at launch)
@@ -99,6 +100,9 @@ export function createWallet(input) {
         passphraseEnabled: input.passphraseEnabled,
         encryptionAlgorithm: 'aes-256-gcm',
         encryptedSeed: input.encryptedSeed,
+        // Filled in by persistHdWallet while the create-time signer still
+        // holds the master key; never set at construction.
+        encryptedPassphrase: null,
         kdfParams: input.kdfParams,
         importedKeys: [],
         multisigs: [],
@@ -154,6 +158,28 @@ export function validateWallet(record) {
     }
     if (r.format === 'wif-only' && r.passphraseEnabled === true) {
         errors.push('passphraseEnabled: wif-only wallet has no mnemonic; must be false');
+    }
+
+    // encryptedPassphrase (§15.6). The `format` half is carried here and not
+    // inherited from the passphraseEnabled rule above: only wif-only is
+    // guarded there, while counterwallet-legacy is refused a passphrase by
+    // the signer at runtime and is unguarded at the schema.
+    if (r.format === 'bip39' && r.passphraseEnabled === true) {
+        // null is the legacy state: a wallet written before the passphrase
+        // was stored, awaiting its one-time capture at unlock.
+        check(
+            errors,
+            'encryptedPassphrase',
+            r.encryptedPassphrase === null || isNonEmptyString(r.encryptedPassphrase),
+            'must be null or a non-empty base64 string',
+        );
+    } else {
+        check(
+            errors,
+            'encryptedPassphrase',
+            r.encryptedPassphrase === null,
+            'must be null unless the wallet is bip39 with a passphrase',
+        );
     }
 
     if (!isArray(r.multisigs)) {
