@@ -38,14 +38,34 @@ const chainRegistry = registryLib.defaultRegistry();
 // estimate on the review screen.
 const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+/**
+ * The address a message is funded from on its delivery chain. The chain's
+ * active address wins when the wallet holds it (that is where the user keeps
+ * their funds, and where every other action form spends from); otherwise the
+ * first HD or imported-key address, which is what this screen always chose
+ * before the active address was consulted at all.
+ *
+ * @param {any[] | undefined} addrs   the wallet's addresses on the chain
+ * @param {any} [active]              getActiveAddresses()[chainId], if any
+ * @returns {any | null}
+ */
+function pickFundingAddress(addrs, active) {
+    const list = Array.isArray(addrs) ? addrs : [];
+    if (active?.id) {
+        const held = list.find((a) => a.id === active.id);
+        if (held) return held;
+    }
+    return list.find((a) => a.source === 'hd' || a.source === 'imported-wif') || null;
+}
+
 
 /**
  * §41.7.3 Compose encrypted message.
  *
  * Flow:
- *   1. User picks a source (chain + address, defaults to the first
- *      HD address on the first available chain, or pre-selected when
- *      opened from the Inbox / a Contact).
+ *   1. User picks a delivery network; the funding address is the chain's
+ *      active address (else its first HD address), or pre-selected when
+ *      opened from the Inbox / a Contact. See `pickFundingAddress`.
  *   2. Recipient address input. On blur / debounce, the wallet looks
  *      up the recipient's on-chain pubkey via
  *      `messaging.getRecipientPubkey`. Three states:
@@ -95,6 +115,17 @@ export function ComposeMessage({
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId]: the address the user has made the
+    // chain's operating one, which is where every other action form spends
+    // from (useActionForm Block 1b, Send). Loaded WITH the address list and
+    // held null until both settle, so the funding pick below never lands on
+    // the first-listed address and then swaps out under the user once the
+    // active map arrives. Before this the message was always funded from the
+    // first HD address on the chain, and a wallet whose first address was
+    // empty could not send a message at all, with no picker to change it.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
     const [fromAddressId, setFromAddressId] = useState(
@@ -138,10 +169,19 @@ export function ComposeMessage({
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        // The active map is best-effort: a host without `getActiveAddresses`,
+        // or one whose call fails, still yields a usable form (the pick then
+        // falls back to the first HD address, the pre-fix behaviour).
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 if (!byChain || Object.keys(byChain).length === 0) {
                     setLoadError('No addresses yet. Use Receive to generate one before sending.');
                     return;
@@ -161,10 +201,8 @@ export function ComposeMessage({
                     : (dogeChain || chainKeys[0]);
                 setChainId((cur) => cur || preferredChain);
                 if (!fromAddressId) {
-                    const hdAddr = (byChain[preferredChain] || []).find(
-                        (a) => a.source === 'hd' || a.source === 'imported-wif',
-                    );
-                    if (hdAddr) setFromAddressId(hdAddr.id);
+                    const picked = pickFundingAddress(byChain[preferredChain], active?.[preferredChain]);
+                    if (picked) setFromAddressId(picked.id);
                 }
             })
             .catch((err) => {
@@ -263,15 +301,18 @@ export function ComposeMessage({
         return opts;
     }, [hw]);
 
-    // Auto-pick the funding address (first HD/imported address) on the selected
-    // delivery network, so the form needs no separate "from address" field.
+    // Auto-pick the funding address on the selected delivery network, so the
+    // form needs no separate "from address" field: the chain's ACTIVE address
+    // when it has one, else the first HD/imported address. Waits for the
+    // active map (null until the load settles) for the reason given at its
+    // declaration.
     useEffect(() => {
-        if (!addressesByChain || !chainId) return;
+        if (!addressesByChain || !activeByChain || !chainId) return;
         const addrs = addressesByChain[chainId] || [];
         if (fromAddressId && addrs.some((a) => a.id === fromAddressId)) return;
-        const hd = addrs.find((a) => a.source === 'hd' || a.source === 'imported-wif');
-        setFromAddressId(hd ? hd.id : null);
-    }, [chainId, addressesByChain, fromAddressId]);
+        const picked = pickFundingAddress(addrs, activeByChain[chainId]);
+        setFromAddressId(picked ? picked.id : null);
+    }, [chainId, addressesByChain, activeByChain, fromAddressId]);
 
     // Network-fee tiers for the selected delivery network, plus the live
     // estimate for the current pick (a tier, or the custom rate). Drives the
@@ -726,7 +767,10 @@ export function ComposeMessage({
                 label="Address"
                 icon="contacts"
                 value={toAddress}
-                onChange={(e) => setToAddress(e.target.value)}
+                onChange={(e) => {
+                    setToAddress(e.target.value);
+                    if (submitError) setSubmitError(null);
+                }}
                 onIconClick={() => setContactsPickerOpen(true)}
                 placeholder="Recipient address"
                 error={addressError}
@@ -736,7 +780,10 @@ export function ComposeMessage({
             <Textarea
                 label="Message"
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) => {
+                    setMessage(e.target.value);
+                    if (submitError) setSubmitError(null);
+                }}
                 rows={isFull ? 6 : 4}
                 placeholder="Write your message…"
                 style={{ minHeight: isFull ? '6rem' : '4rem' }}
@@ -799,7 +846,11 @@ export function ComposeMessage({
             <IconSelect
                 label="Delivery network"
                 value={chainId || ''}
-                onChange={(v) => { setChainId(v); setFromAddressId(null); }}
+                onChange={(v) => {
+                    setChainId(v);
+                    setFromAddressId(null);
+                    if (submitError) setSubmitError(null);
+                }}
                 options={networkOptions}
             />
 
@@ -814,6 +865,18 @@ export function ComposeMessage({
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? customEstimate : null}
                 />
+            ) : null}
+
+            {/* The send's own failure, on the stage the send is pressed from.
+                On the confirm-page path the host composes and pre-flights
+                BEFORE the confirm screen opens, and a failure there (no funds
+                on the funding address, encoder unreachable, a fee gate) rejects
+                back to this stage. Until this block existed that message had
+                nowhere to render: only the review stage read `submitError`, so
+                Send message looked like a button that does nothing. Cleared by
+                the next edit of the address, message or delivery network. */}
+            {submitError ? (
+                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
             ) : null}
 
             <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
