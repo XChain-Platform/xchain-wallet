@@ -73,7 +73,6 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import { selectNamedChain, selectNamedToken } from '../../fixtures/crossChain.js';
 import {
-    explorerJson,
     fundAddress,
     mintXchain,
     readReceiveAddress,
@@ -83,6 +82,7 @@ import {
     REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
+    tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
@@ -316,22 +316,46 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(receiveAt);
         });
 
-        await test.step('the give balance is still the offerer\'s until somebody fills it', async () => {
-            // An OFFER escrows nothing on this chain: the swap settles
-            // atomically or not at all. If this ever starts failing, a swap is
-            // moving money at compose time, which is a far larger claim than
-            // anything else in this file.
-            const balances = await explorerJson(`balances/${source}`);
-            const row = (balances?.data || []).find((b) => String(b.tick).toUpperCase() === TICK);
-            expect(row, `the give chain no longer lists a ${TICK} balance for the offerer`).toBeTruthy();
-            // `amount`, not `quantity`: the explorer's balance rows use the
-            // former and `tokenBalance` in the fixture reads it that way. Named
-            // here because the wrong one reads `undefined` -> NaN and would
-            // report "the offer moved the giver's tokens", which is a much
-            // larger claim than a typo deserves.
-            expect(Number(row.amount),
-                'composing an offer moved the giver\'s tokens; a SWAP must settle atomically or not at all')
-                .toBe(MINT);
+        await test.step('the give side is escrowed, and only the give side', async () => {
+            // THE GIVE SIDE MOVES AT COMPOSE TIME, and it is tempting to assert
+            // the opposite. `SWAP.md` is explicit about it: "Cross-chain swaps
+            // (GET_COIN != the posting chain) escrow the GIVE side locally" and
+            // settle from that escrow when the hub mirror matches the two legs -
+            // there is no per-trade transaction to move it later, so an offer
+            // that left the balance spendable could be spent twice.
+            //
+            // The old assertion (`.toBe(MINT)`) read "an OFFER escrows nothing on
+            // this chain", which is true of a SAME-chain order book and not of
+            // this action, and it went unnoticed for as long as the file could
+            // not be driven. It is the wrong direction to be wrong in: it demands
+            // that the chain leave money spendable while it is committed
+            // elsewhere, so a wallet that broke escrow would pass it.
+            // POLLED, not read once. The step above proves the ACTION is on the
+            // record; the debit is applied by the indexer and is not guaranteed
+            // to be visible in the same instant. Runs 8 and 9 of this campaign
+            // both failed here on `Expected 490, Received 500` while the venue,
+            // read minutes later, held exactly 490 - so the single read was
+            // seeing the pre-debit number and reporting it as "the swap escrowed
+            // nothing at all", which sent two run reports after a defect that was
+            // not there.
+            //
+            // `waitForTokenBalance` is the wrong tool and that is worth saying:
+            // it waits for a MINIMUM, and this balance goes DOWN, so 500 already
+            // satisfies a floor of 490 and it would return instantly on the very
+            // number this step exists to reject.
+            const escrowed = MINT - Number(GIVE_AMOUNT);
+            const deadline = Date.now() + 120_000;
+            let held = null;
+            while (Date.now() < deadline) {
+                held = await tokenBalance(source, TICK);
+                if (Number(held) === escrowed) break;
+                await new Promise((r) => setTimeout(r, 3_000));
+            }
+            expect(Number(held),
+                `composing the offer should have escrowed exactly ${GIVE_AMOUNT} ${TICK} of the `
+                + `offerer's ${MINT}; a different number means the swap escrowed the wrong side, `
+                + 'the wrong amount, or nothing at all')
+                .toBe(escrowed);
         });
     });
 });
