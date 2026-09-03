@@ -272,12 +272,17 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * reason this fixture exists at all.
  *
  * Pass `bip39Passphrase` to take the "Add a BIP39 passphrase (advanced)"
- * branch. That is not a cosmetic variant: `SignerPool.populate` deliberately
- * SKIPS a passphrase wallet (`w.passphraseEnabled && !bip39Passphrase`) and no
- * unlock path carries a passphrase, so such a wallet is unlocked in the UI and
- * has NO pre-unlocked signer for the whole session. It is the one state a
- * browser can reach where `signerReady` is false on a working wallet, which is
- * what the key-request error spec needs.
+ * branch. That produces an ORDINARY wallet: the passphrase typed here is
+ * sealed onto the record under the wallet's own master key, and every later
+ * unlock pools a signer from the password alone. It is no longer a way to reach
+ * a wallet with `signerReady` false.
+ *
+ * The state that HAS no signer is now the legacy one - `passphraseEnabled` true
+ * with nothing stored - and no create walk can produce it, because create
+ * always stores what it was given. A browser reaches it only by restoring the
+ * pre-spec backup envelope in `test/e2e/fixtures/`; see
+ * `tests/wallet/passphrase-stored.regtest.spec.js`, which drives it, and the
+ * generator beside the envelope, which builds it.
  *
  * @returns {Promise<string[]>} the generated recovery phrase
  */
