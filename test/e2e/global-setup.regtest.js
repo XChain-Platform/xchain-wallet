@@ -21,13 +21,38 @@
 // Order matters: `seedPrices` talks to the explorer and the miner, so it would
 // report a down tunnel as a price problem if it ran first.
 
-import { assertVenueReachable, seedPrices, runInIndexer, REGTEST_COIN } from './fixtures/regtest.js';
+import { assertVenueReachable, healVenueClock, seedPrices, runInIndexer, REGTEST_COIN } from './fixtures/regtest.js';
 import { readStateScript } from './fixtures/priceSeed.js';
 import { startPriceKeeper } from './fixtures/priceKeeper.js';
 import { ensureGasToken } from './fixtures/gasToken.js';
 
 export default async function globalSetup(config) {
     await assertVenueReachable();
+
+    // START THE RUN ON A CHAIN THAT TRACKS WALL TIME, because almost nothing in
+    // this suite works on one that does not and the failure never says so.
+    //
+    // The venue is shared, and a frozen node clock is the state it is most often
+    // left in: `setmocktime` is how any suite on this stack crosses a deadline,
+    // a mock clock does not tick, and a killed run never puts it back. Measured
+    // 2026-09-02, RLTC's tip stamped five hours behind wall time after days of
+    // that. What a run then sees is not a clock complaint: every market deadline
+    // this suite picks is computed from the CHAIN's clock and validated by the
+    // form against the BROWSER's, so five betting specs refuse with "Betting
+    // must close in the future", the chunked-deploy lane times out waiting for
+    // an index, and the price seed spends its whole margin in one block.
+    //
+    // Healing here rather than in the specs that noticed it: this is a property
+    // of the VENUE a run starts on, and every spec inherits it. `healVenueClock`
+    // releases the node back to real time when real time is above the tip, and
+    // pins just above the tip when the chain sits in the future (releasing there
+    // would drop it under median-time-past and wedge block production). Logged,
+    // never fatal: a clock this could not reach is worth knowing about at the
+    // top of a run, and is not on its own a reason to refuse to run.
+    const clock = await healVenueClock();
+    console.log(`[regtest ${REGTEST_COIN}] node clock ${clock.clock}`
+        + (Number.isFinite(clock.tipTime) ? ` (tip ${clock.tipTime}, wall ${clock.wall})` : '')
+        + (clock.reason ? `: ${clock.reason}` : ''));
 
     // CAN this run RENEW its price, not just read one today?
     //

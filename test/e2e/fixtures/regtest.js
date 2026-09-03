@@ -1118,7 +1118,7 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
  * Throwing here costs nothing on a healthy read and is the difference between
  * a run that names its venue and a run that blames the product.
  */
-export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_000 } = {}) {
+export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_000, allowErrorBody = false } = {}) {
     const url = `${EXPLORER_URL}/${coin}/api/${path}`;
 
     // A 429 is WAITED OUT, not thrown, because almost every caller here
@@ -1136,7 +1136,15 @@ export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_0
     }
 
     const body = await res.json().catch(() => null);
-    if (!res.ok || (body && body.error)) {
+    // `allowErrorBody` is for the endpoints whose REFUSAL is the answer a spec
+    // came for. `/oraclefeequote` answers HTTP 200 with
+    // `{valid:false, error:'invalid: ORACLE_ADDRESS (no effective oracle price)'}`
+    // while a PRICE v1 publish is inside its 24-hour maturation window, and the
+    // oracle lock spec exists to assert exactly that string - so the blanket
+    // throw below turned its subject into a venue complaint. Off by default:
+    // treating a refusal as data is right for one caller and wrong for the two
+    // dozen poll loops this helper was hardened for.
+    if (!res.ok || (body && body.error && !allowErrorBody)) {
         throw new Error(
             `the venue REFUSED ${coin}/api/${path} with HTTP ${res.status}`
             + (body?.code ? ` [${body.code}]` : '')
@@ -1376,10 +1384,16 @@ export async function mintXchain(page, amount) {
  * @returns {Promise<number>}
  */
 export async function tokenBalance(address, tick) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    const body = await res.json();
+    // Through `explorerJson`, not a bare fetch, and that is the whole point of
+    // this helper's existence being reconsidered: the raw read turned EVERY
+    // venue refusal into the number 0. A rate-limited read (HTTP 429)
+    // carries no `data`, so `row` is undefined and this returned "the address
+    // holds none", which is indistinguishable from a real zero and is asserted
+    // on as one. It cost a whole-suite run on 2026-09-02: `access-list-bind`
+    // failed with "the refused send still debited the sender, expected 990,
+    // received 0" over an address whose balance was untouched. `explorerJson`
+    // waits a 429 out twice and then names the venue.
+    const body = await explorerJson(`balances/${address}`);
     const row = (body?.data || []).find((b) => b.tick === tick);
     return row ? Number(row.amount) : 0;
 }
@@ -1410,6 +1424,94 @@ export async function nudgeChain() {
 }
 
 /**
+ * The timestamp this chain's tip actually carries.
+ *
+ * Walks back from the reported tip rather than reading `last_block_time`
+ * directly, because the indexer is routinely a block or two behind the node and
+ * `block/{tip}` is then simply absent. An older block time is the conservative
+ * answer for every caller here: it can only make a computed deadline further in
+ * the chain's future, never accidentally in its past.
+ *
+ * @returns {Promise<number>} unix seconds
+ */
+export async function chainTipTime() {
+    const status = await explorerJson('status');
+    const tip = Number(status?.chain_tip?.[REGTEST_COIN]);
+    if (Number.isFinite(tip) && tip > 0) {
+        for (let h = tip; h > tip - 10 && h > 0; h -= 1) {
+            const block = await explorerJson(`block/${h}`).catch(() => null);
+            const ts = Number(block?.timestamp);
+            if (Number.isFinite(ts) && ts > 0) return ts;
+        }
+    }
+    const reported = Number(status?.last_block_time?.[REGTEST_COIN]);
+    if (Number.isFinite(reported) && reported > 0) return reported;
+    throw new Error(`no ${REGTEST_COIN} block with a timestamp within 10 blocks of tip ${tip}`);
+}
+
+/**
+ * Leaves the shared node's clock somewhere the NEXT run can use it, and returns
+ * which way it went.
+ *
+ * THE BUG THIS EXISTS TO STOP IS A RATCHET, and it took the whole Litecoin
+ * venue out for a day before anyone read it as one. Three specs here jump
+ * mocktime to cross a deadline and "put it back" by pinning it to `tip + 5`.
+ * Pinning is not putting it back: a mock clock does not TICK, so every block
+ * after that teardown carries the same frozen instant while wall time keeps
+ * moving, and the next run pins tip+5 again from wherever the frozen chain now
+ * is. Measured 2026-09-02, RLTC's tip stamped 1788325709 against a wall clock
+ * of 1788344302 - five hours behind, after days of runs each leaving it a
+ * little further back.
+ *
+ * A chain that lags wall time cannot run this suite at all, and the failure is
+ * unrecognisable: `CreateBetFeedForm` validates the deadline against the
+ * BROWSER's clock (`nowSec`, wall time) while every spec computes it from the
+ * CHAIN's, so a market five hours in the chain's future is already in the
+ * browser's past and five betting specs die on "Betting must close in the
+ * future" with nothing on screen about a clock.
+ *
+ * RELEASING IS THE REPAIR, and pinning stays the fallback rather than the
+ * default. `set_mock_time 0` hands the node back its real clock, which is right
+ * whenever real time is AHEAD of the tip. It is only dangerous the other way:
+ * a chain a spec has jumped INTO THE FUTURE would, on release, find its own
+ * clock under median-time-past, where `generate_blocks` fails outright and
+ * every spec on the machine looks broken (the regtest-miner wedge this stack
+ * has hit before). So the direction is measured, never assumed.
+ *
+ * Never throws. A miner too old to carry `set_mock_time` (the image on one of
+ * these three chains was, until 2026-09) and a venue blip are both reported in
+ * the return value; a teardown that failed a run over a clock would be worse
+ * than the clock.
+ *
+ * @returns {Promise<{clock: 'released'|'pinned'|'unknown', tipTime?: number, wall?: number, reason?: string}>}
+ */
+export async function healVenueClock() {
+    const wall = Math.floor(Date.now() / 1000);
+    let tipTime;
+    try {
+        tipTime = await chainTipTime();
+    } catch (err) {
+        return { clock: 'unknown', wall, reason: err?.message || String(err) };
+    }
+
+    try {
+        if (wall > tipTime) {
+            // Real time is above the tip, so the node cannot land under
+            // median-time-past by taking its own clock back.
+            await minerRpc('set_mock_time', { timestamp: 0 });
+            return { clock: 'released', tipTime, wall };
+        }
+        // The chain sits in the future (a spec jumped it and has not finished,
+        // or this run is the one that jumped it): pin just above the tip, which
+        // keeps block production working without rewinding under MTP.
+        await minerRpc('set_mock_time', { timestamp: tipTime + 5 });
+        return { clock: 'pinned', tipTime, wall };
+    } catch (err) {
+        return { clock: 'unknown', tipTime, wall, reason: err?.message || String(err) };
+    }
+}
+
+/**
  * Polls the explorer until `address` holds at least `min` of `tick`.
  *
  * Mines on each pass for the same reason `fundAddress` does: the wallet and
@@ -1422,14 +1524,15 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_00
     let last = null;
     while (Date.now() < deadline) {
         try {
-            const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`, {
-                signal: AbortSignal.timeout(15_000),
-            });
-            const body = await res.json();
+            // Same read as `tokenBalance`, and through the same guard: a poll
+            // loop may retry a refused read, but it must not mistake one for a
+            // balance of zero and keep waiting for a number that is already
+            // there.
+            const body = await explorerJson(`balances/${address}`);
             const row = (body?.data || []).find((b) => b.tick === tick);
             last = row ? row.amount : null;
             if (row && Number(row.amount) >= min) return row;
-        } catch { /* transient while a block lands */ }
+        } catch { /* transient while a block lands, or a venue refusal to wait out */ }
         // See `nudgeChain`. Mining unconditionally every 1.5s for two minutes
         // put ~80 empty blocks on Dogecoin regtest and wedged its indexer,
         // which cost this campaign a whole coverage row: the symptom is a
