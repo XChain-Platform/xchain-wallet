@@ -21,7 +21,11 @@
 import { describe, it, expect } from 'vitest';
 import {
     BASE_ROUNDS,
+    LEGACY_DB_HIT_GAS,
+    MAX_FEE_SHARE_OF_FUNDING,
+    MEASURED_LEGACY_SWEEP_DB_HITS,
     MIN_SEED_MARGIN_SECONDS,
+    NATIVE_FEE_ONLY,
     ORACLE_MAX_PRICE_AGE_SECONDS,
     SYNTHETIC_ROUNDS,
     VENUE_PRICE,
@@ -29,6 +33,7 @@ import {
     XCHAIN_USD_PRICE,
     planPairRows,
     planSeedRows,
+    priceBand,
     priceVerdict,
     readStateScript,
     seedMarginSeconds,
@@ -149,9 +154,96 @@ describe('e2e price seed', () => {
             expect(Number(VENUE_PRICE.RLTC.price)).toBeLessThan(36.6);
         });
 
+        it('derives that ceiling instead of remembering it', () => {
+            // The same $36.6 the assertion above pins, recomputed from the
+            // cheapest fee the suite drives and Litecoin's dust floor. If the
+            // gas schedule or the floor ever moves, this is where it is caught
+            // - the hand-written number above cannot notice.
+            const band = priceBand({ regtestCoin: 'RLTC' });
+            expect(band.ceilingUsd).toBeCloseTo(36.63, 2);
+        });
+
         it('refuses a chain it has no fixture price for', () => {
             expect(() => planSeedRows({ regtestCoin: 'RXMR', chainTime: CHAIN, wallTime: WALL }))
                 .toThrow(/not a regtest chain/);
+        });
+
+        it('seeds every NATIVE-FEE venue from the CHEAPEST fee its suite drives', () => {
+            // The band's upper end. Off Bitcoin the protocol fee must be a coin
+            // output and there is no XCHAIN-balance lane behind it, so the
+            // smallest fee the suite can produce has to buy an above-dust one
+            // or the action cannot be submitted at all.
+            for (const regtestCoin of NATIVE_FEE_ONLY) {
+                const band = priceBand({ regtestCoin });
+                expect(band.cheapestFeeSats,
+                    `${regtestCoin} seeds ${band.seededUsd}, which prices the cheapest fee the `
+                    + `suite drives at ${Math.round(band.cheapestFeeSats)} sats against a `
+                    + `${band.dustSats}-sat dust floor; reseed at or under ${band.ceilingUsd}`)
+                    .toBeGreaterThan(band.dustSats);
+                expect(band.seededUsd).toBeLessThan(band.ceilingUsd);
+            }
+        });
+
+        it('exempts Bitcoin, which pays a below-dust fee from an XCHAIN balance', () => {
+            // Stated as a test rather than a comment because it is the reason
+            // the loop above cannot simply cover every venue: at the seeded
+            // $100000 the cheapest fee is 2 sats, four hundred times under
+            // Bitcoin's own floor, and nothing refuses it.
+            expect(NATIVE_FEE_ONLY).not.toContain('RBTC');
+            const band = priceBand({ regtestCoin: 'RBTC' });
+            expect(band.cheapestFeeSats).toBeLessThan(band.dustSats);
+        });
+
+        it('leaves the DEAREST fee affordable out of the funding its specs hand out', () => {
+            // The band's lower end, and the half a naive "just seed the coin
+            // cheaper" repair breaks. On Litecoin the fee specs fund with
+            // `fundAddress`'s one-coin default and drive an ISSUE at 100000
+            // gas, the largest fee any of them pays.
+            const ltc = priceBand({ regtestCoin: 'RLTC' });
+            expect(ltc.dearestFeeSats,
+                `RLTC seeds ${ltc.seededUsd}, which prices an ISSUE at `
+                + `${Math.round(ltc.dearestFeeSats)} sats - more than a quarter of the one coin `
+                + 'fundAddress hands out by default')
+                .toBeLessThan(1e8 * MAX_FEE_SHARE_OF_FUNDING);
+            expect(ltc.minFundingCoins).toBeLessThan(1);
+
+            // Dogecoin is seeded for the other end of the same trade and is
+            // NOT a one-coin venue: at $0.10 a $2 ISSUE is 20 DOGE, so a DOGE
+            // spec driving one has to pass an amount rather than take the
+            // default. Pinned as the arithmetic fact it is, not as a defect.
+            expect(priceBand({ regtestCoin: 'RDOGE' }).minFundingCoins).toBeCloseTo(80, 6);
+        });
+
+        it('REGRESSION: the legacy per-DB-hit SWEEP has an EMPTY band, so no reseed fixes it', () => {
+            // THE CLAIM THIS FILE EXISTS TO STOP BEING RE-ARGUED. A campaign
+            // session read a Litecoin SWEEP refused for a 600-sat fee, blamed
+            // the seeded $30, and the next session was pointed at this constant.
+            // Measured, the two ends of the band cross: lifting a nine-hit
+            // legacy sweep over Litecoin's floor needs a coin price at or under
+            // ~$3.30, and an ISSUE stays affordable out of one coin only at $8
+            // and up. There is no price that satisfies both, so the repair is a
+            // protocol one (a BASE term under the fee), not a fixture one.
+            const legacy = priceBand({
+                regtestCoin: 'RLTC',
+                cheapestGas: MEASURED_LEGACY_SWEEP_DB_HITS * LEGACY_DB_HIT_GAS,
+            });
+            expect(legacy.ceilingUsd).toBeCloseTo(3.30, 2);
+            expect(legacy.floorUsd).toBe(8);
+            expect(legacy.emptyBand,
+                'the legacy sweep band is no longer empty; if the fee schedule gained a floor, '
+                + 'this regression has been fixed at the protocol and the note above is stale')
+                .toBe(true);
+
+            // And the unified schedule, which is what closes it: the same
+            // smallest sweep priced at a 5000-gas base clears the floor with
+            // room to spare at the price already seeded.
+            const unified = priceBand({ regtestCoin: 'RLTC', cheapestGas: 5_000 });
+            expect(unified.emptyBand).toBe(false);
+            expect(unified.cheapestFeeSats).toBeGreaterThan(unified.dustSats);
+        });
+
+        it('refuses to band a chain it has no dust floor for', () => {
+            expect(() => priceBand({ regtestCoin: 'RXMR' })).toThrow(/not a regtest chain/);
         });
 
         it('writes only rounds the platform-wide cleanup already knows', () => {
