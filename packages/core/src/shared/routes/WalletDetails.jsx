@@ -143,7 +143,11 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                 <Row label="Origin" value={originLabel} />
                 <Row
                     label="25th-word passphrase"
-                    value={wallet.passphraseEnabled ? 'Enabled' : 'Disabled'}
+                    value={!wallet.passphraseEnabled
+                        ? 'Disabled'
+                        : wallet.passphraseStored
+                            ? 'Stored'
+                            : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
                 />
                 <Row label="Accounts" value={accountCount === null ? '…' : String(accountCount)} />
                 <Row label="Created" value={createdLabel} />

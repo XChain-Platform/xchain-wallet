@@ -557,11 +557,14 @@ export function ComposeMessage({
     // DIFFERENT sentences, because one of them has a remedy and the other does
     // not. A pool entry that was merely dropped (a worker restart that could
     // not rehydrate it) comes back on the next unlock, so "unlock it again" is
-    // true. A 25th-word passphrase wallet is in the pool only when the unlock
-    // screen's passphrase field was filled in: `SignerPool.populate` skips it
-    // otherwise (`w.passphraseEnabled && !bip39Passphrase`). So "unlock again"
-    // is true for that user too, but only with the extra step named, or they
-    // go round a loop that can never succeed - the same class of
+    // true. A 25th-word passphrase wallet that has already stored its
+    // passphrase (`passphraseStored`) unlocks on the password alone, so that
+    // same sentence is still true for it. Only a LEGACY record, one that has
+    // never captured its passphrase yet (`passphraseEnabled` true,
+    // `passphraseStored` false), needs the extra step named: the unlock
+    // screen is what captures it, once, and typing it here would do nothing
+    // (this stage has no passphrase field). Naming the wrong remedy sends the
+    // user round a loop that can never succeed - the same class of
     // un-compliable instruction this whole error state exists to kill. The
     // surrounding banner's plain-text option stays as the no-signer way out.
     //
@@ -575,10 +578,10 @@ export function ComposeMessage({
                 const record = Array.isArray(wallets)
                     ? wallets.find((w) => w?.id === walletId)
                     : null;
-                if (record?.passphraseEnabled) {
-                    return 'This wallet uses a 25th-word passphrase and was unlocked without it, so '
-                        + 'the key request cannot be signed. Lock the wallet and unlock it again with '
-                        + 'the passphrase filled in, or pick "Plain text" above to message them '
+                if (record?.passphraseEnabled && !record?.passphraseStored) {
+                    return 'This wallet uses a 25th-word passphrase that has not been stored yet, so '
+                        + 'the key request cannot be signed. Lock the wallet; the unlock screen will '
+                        + 'capture it, or pick "Plain text" above to message them '
                         + 'without encryption.';
                 }
             }

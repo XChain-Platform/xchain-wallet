@@ -141,16 +141,17 @@ describe('the message key-request reports its failures', () => {
             .not.toMatch(/enter your password/i);
     });
 
-    it('tells a 25th-word passphrase wallet the truth instead of sending it round the unlock loop', async () => {
+    it('tells a legacy 25th-word passphrase wallet the truth instead of sending it round the unlock loop', async () => {
         // The same `!signerReady` branch as above, and a DIFFERENT sentence is
         // owed. This wallet is not locked: `SignerPool.populate` skips a
-        // passphrase wallet on purpose (`w.passphraseEnabled && !bip39Passphrase`)
-        // and no unlock path carries a passphrase, so "unlock it and press this
-        // again" is an instruction that can never succeed - the same class of
-        // un-compliable copy this whole error state exists to kill.
+        // legacy passphrase wallet (`passphraseEnabled` true, nothing stored
+        // yet) on purpose, and no field on THIS screen can supply the
+        // passphrase, so "unlock it and press this again" is an instruction
+        // that can never succeed - the same class of un-compliable copy this
+        // whole error state exists to kill.
         const messaging = stubMessaging({
             signerReady: () => Promise.resolve({ ready: false }),
-            listWallets: () => Promise.resolve([{ id: 'w', passphraseEnabled: true }]),
+            listWallets: () => Promise.resolve([{ id: 'w', passphraseEnabled: true, passphraseStored: false }]),
         });
         const utils = await openHandshakeBox(messaging);
 
@@ -162,6 +163,8 @@ describe('the message key-request reports its failures', () => {
         const said = alertText(utils);
         expect(said, 'the reason does not name why this wallet has no signer')
             .toMatch(/25th-word passphrase/i);
+        expect(said, 'names the unlock screen as the remedy, not typing on this screen')
+            .toMatch(/unlock screen/i);
         expect(said, 'a wallet that is not locked was told it was locked')
             .not.toMatch(/wallet is locked/i);
         // The banner it renders inside already offers Plain text; the reason
@@ -169,6 +172,30 @@ describe('the message key-request reports its failures', () => {
         // has for a first-contact message.
         expect(said, 'no remedy this wallet can actually reach was named')
             .toMatch(/plain text/i);
+    });
+
+    it('gives a wallet with a STORED passphrase the plain locked message, not the capture one', async () => {
+        // A stored passphrase (§3.4) makes the password the only secret the
+        // unlock needs, so a not-ready signer here really is just locked: the
+        // generic "unlock it and press this again" is true and sufficient.
+        // Reading `passphraseEnabled` alone (without `passphraseStored`) would
+        // wrongly send this wallet the legacy capture sentence instead.
+        const messaging = stubMessaging({
+            signerReady: () => Promise.resolve({ ready: false }),
+            listWallets: () => Promise.resolve([{ id: 'w', passphraseEnabled: true, passphraseStored: true }]),
+        });
+        const utils = await openHandshakeBox(messaging);
+
+        await domAct(async () => {
+            fireEvent.click(requestButton(utils));
+            await drainMicrotasks();
+        });
+
+        const said = alertText(utils);
+        expect(said, 'a stored-passphrase wallet gets the generic locked message')
+            .toMatch(/locked/i);
+        expect(said, 'the one-time capture sentence does not apply once it is stored')
+            .not.toMatch(/25th-word passphrase that has not been stored/i);
     });
 
     it('surfaces a REFUSED send instead of swallowing it', async () => {

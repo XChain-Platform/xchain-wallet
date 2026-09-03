@@ -126,10 +126,11 @@ export class SignerPool {
             // that is the extension's marker-slot re-pool after a worker restart,
             // and the only path that still hands a 25th word to an unlock.
             const awaitingCapture = w.passphraseEnabled && w.encryptedPassphrase === null;
-            // §15.6 25th-word passphrase wallets need the right secret
-            // here. Unlocked without it they stay out of the pool, and the
-            // per-op prompt then explains (PassphraseRequiredError) that
-            // the remedy is an unlock with the passphrase filled in.
+            // A legacy §15.6 25th-word passphrase wallet (nothing captured
+            // yet) needs the right secret here. Left out of the pool without
+            // it, the per-op prompt then explains (PassphraseRequiredError)
+            // that the remedy is locking the wallet and letting the unlock
+            // screen capture it once.
             if (awaitingCapture && !bip39Passphrase) {
                 summary.passphraseCaptureNeeded.push(w.id);
                 summary.passphraseCaptureNames.push(w.name || '');
