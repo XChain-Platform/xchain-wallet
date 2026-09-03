@@ -424,6 +424,7 @@ export function CreateBetFeedForm({
             // word on the wire rules, and its refusals reached the user as log
             // lines - "betting.createBetFeedParams: ..." (D-118).
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Creating the market failed.',
             }));

@@ -16,7 +16,9 @@ import {
     NativeFeeForfeitError,
     NATIVE_FEE_WARNING,
     nativeFeeErrorMessage,
+    nativeFeeToggleLabel,
 } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
+import { protocolFeeRowCopy } from '../../../packages/core/src/flows/protocolFeeRow.js';
 
 // Minimal SDK stub whose quoteNativeFee returns a canned quote and records its args.
 function makeSdk(quote) {
@@ -154,7 +156,7 @@ describe('nativeFeeErrorMessage', () => {
         const err = { reason: 'dust', quote: { requiredFeeNative: '0.00000002' } };
         const btc = nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false });
         expect(btc).toMatch(/0\.00000002 BTC/);
-        expect(btc).toMatch(/pay in XCHAIN/);
+        expect(btc).toMatch(/pay it from your XCHAIN balance/);
         // No XCHAIN lane off Bitcoin: say the action cannot be submitted, not "turn it off".
         const doge = nativeFeeErrorMessage(err, { coinTicker: 'DOGE', mandatory: true });
         expect(doge).toMatch(/cannot be submitted/);
@@ -186,18 +188,101 @@ describe('nativeFeeErrorMessage', () => {
     it('offers the XCHAIN fallback only where one exists', () => {
         const err = { reason: 'unsupported' };
         expect(nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false }))
-            .toMatch(/Turn it off to pay in XCHAIN/);
+            .toMatch(/Untick "Pay protocol fee in BTC instead of XCHAIN"/);
         const ltc = nativeFeeErrorMessage(err, { coinTicker: 'LTC', mandatory: true });
-        expect(ltc).not.toMatch(/turn it off/i);
+        expect(ltc).not.toMatch(/untick/i);
         expect(ltc).toMatch(/only way to pay a protocol fee here/);
     });
 
     it('drops the turn-it-off suggestion from the stale-price message too', () => {
         const err = { reason: 'invalid' };
         expect(nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false }))
-            .toMatch(/turn off native-coin fee payment/);
+            .toMatch(/untick "Pay protocol fee in BTC instead of XCHAIN"/);
         expect(nativeFeeErrorMessage(err, { coinTicker: 'DOGE', mandatory: true }))
             .toBe('The DOGE fee price is temporarily unavailable. Try again in a moment.');
+    });
+
+    // The refusal message has to name the control by the exact words printed beside
+    // it on the form, not a generic "turn off native-coin fee payment" that matches
+    // no control the user can find: a pre-flight that has already refused the action
+    // forfeits the native fee output on mainnet if signed anyway, so the advice has
+    // to be something the user can act on. The sentence quotes the control's own
+    // label, and the label has ONE definition (nativeFeeToggleLabel) shared with the
+    // row that renders it.
+    describe('names the control the user has to find', () => {
+        const REFUSALS = [
+            ['dust', { reason: 'dust', quote: { requiredFeeNative: '0.00000002' } }],
+            ['unsupported', { reason: 'unsupported' }],
+            ['stale price', { reason: 'invalid' }],
+        ];
+
+        for (const [label, err] of REFUSALS) {
+            it(`quotes the checkbox label verbatim on a ${label} refusal`, () => {
+                const msg = nativeFeeErrorMessage(err, { coinTicker: 'BTC', mandatory: false });
+                expect(msg).toContain('"Pay protocol fee in BTC instead of XCHAIN"');
+                expect(msg).toContain('pay it from your XCHAIN balance instead');
+            });
+        }
+
+        it('uses the SAME words the form prints beside the checkbox', () => {
+            const row = protocolFeeRowCopy({ fee: '0.5', coinTicker: 'BTC', mandatory: false });
+            expect(row.variant).toBe('toggle');
+            expect(nativeFeeToggleLabel('BTC')).toBe(row.label);
+            expect(nativeFeeErrorMessage({ reason: 'unsupported' }, { coinTicker: 'BTC' }))
+                .toContain(`"${row.label}"`);
+        });
+
+        it('has no checkbox to name where the native fee is the only lane', () => {
+            for (const coinTicker of ['LTC', 'DOGE']) {
+                const msg = nativeFeeErrorMessage({ reason: 'dust' }, { coinTicker, mandatory: true });
+                expect(msg).not.toContain('Pay protocol fee in');
+                expect(msg).not.toMatch(/XCHAIN balance/);
+            }
+        });
+    });
+
+    // The other half: "pay in XCHAIN instead" is only actionable if the
+    // user can GET XCHAIN, and on testnet/regtest anyone can mint it. The wallet knows
+    // the network from the chain id it is submitting on, so it can name the screen.
+    describe('says where the XCHAIN comes from on a test network', () => {
+        const MINT_PATH = 'Menu > More actions > Mint';
+
+        it('points a testnet user at the Mint action', () => {
+            const msg = nativeFeeErrorMessage(
+                { reason: 'invalid' },
+                { coinTicker: 'BTC', mandatory: false, chainId: 'bitcoin-testnet' },
+            );
+            expect(msg).toContain('Anyone can mint XCHAIN on this test network');
+            expect(msg).toContain(MINT_PATH);
+        });
+
+        it('accepts the network kind directly, for a caller holding the descriptor', () => {
+            const msg = nativeFeeErrorMessage(
+                { reason: 'unsupported' },
+                { coinTicker: 'BTC', mandatory: false, networkKind: 'regtest' },
+            );
+            expect(msg).toContain(MINT_PATH);
+        });
+
+        it('says nothing about minting on mainnet, or when the chain is unknown', () => {
+            for (const where of [{}, { chainId: 'bitcoin-mainnet' }, { networkKind: 'mainnet' },
+                { chainId: 'not-a-chain' }, { chainId: null }]) {
+                const msg = nativeFeeErrorMessage(
+                    { reason: 'dust' }, { coinTicker: 'BTC', mandatory: false, ...where },
+                );
+                expect(msg).not.toMatch(/mint/i);
+            }
+        });
+
+        // XCHAIN exists on the bitcoin chain only, and LTC/DOGE have no XCHAIN fee
+        // lane at all, so a mandatory-chain refusal must not send anyone minting.
+        it('never offers the mint route where there is no XCHAIN lane', () => {
+            const msg = nativeFeeErrorMessage(
+                { reason: 'dust' },
+                { coinTicker: 'LTC', mandatory: true, chainId: 'litecoin-testnet' },
+            );
+            expect(msg).not.toMatch(/mint/i);
+        });
     });
 
     // `invalid` is two situations under one name, and only the price half is

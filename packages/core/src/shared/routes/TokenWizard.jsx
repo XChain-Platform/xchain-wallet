@@ -407,6 +407,7 @@ export function TokenWizard({ walletId, onBack }) {
             // pre-flight failed (dust): ..."). This is the path the confirm flow actually
             // takes, so leaving it unmapped showed that wording to every user.
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Issue failed.',
@@ -446,6 +447,7 @@ export function TokenWizard({ walletId, onBack }) {
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFeeMandatory,
                         fallback: err?.message || 'Sign failed.',

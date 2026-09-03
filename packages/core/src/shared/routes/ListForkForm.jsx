@@ -344,6 +344,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'List fork broadcast failed.',
             }));
             if (!hw && !isWatcherMode) { passwordRef.current?.focus(); passwordRef.current?.select(); }
@@ -373,6 +374,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'List fork broadcast failed.',
             }));
             if (!hw) { passwordRef.current?.focus(); passwordRef.current?.select(); }

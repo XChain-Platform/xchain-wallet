@@ -901,6 +901,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         } catch (err) {
             if (isUserRejection(err)) return;
             setSubmitError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'LIST broadcast failed.',
             }));
         }
@@ -953,6 +954,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         } catch (err) {
             if (isUserRejection(err)) return;
             setSubmitError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'AIRDROP broadcast failed.',
             }));
         }
@@ -1009,6 +1011,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'LIST broadcast failed.',
@@ -1069,6 +1072,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'AIRDROP broadcast failed.',

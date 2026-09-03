@@ -63,13 +63,29 @@ export class NativeFeeForfeitError extends Error {
  * output is the only way to pay a protocol fee, so telling the user to turn it off would send
  * them to build a transaction the network rejects outright.
  *
+ * The Bitcoin advice names the control by the words printed beside it
+ * (`nativeFeeToggleLabel`, the same string the form's row renders) rather than a generic
+ * "turn it off" that matches nothing the user can find on the form, and, on a test network,
+ * says where the XCHAIN it sends the user to comes from: on mainnet a refused native-fee
+ * pre-flight forfeits the fee output if signed anyway, so the advice has to be something
+ * the user can actually act on.
+ *
  * @param {{ reason?: string } | null | undefined} err   the NativeFeeForfeitError
- * @param {{ coinTicker?: string, mandatory?: boolean }} [chain]
+ * @param {{ coinTicker?: string, mandatory?: boolean, chainId?: string, networkKind?: string }} [chain]
+ *   `chainId` ('bitcoin-testnet') or `networkKind` ('testnet') - either one tells the message
+ *   whether XCHAIN is mintable by anyone here; omitting both just drops that sentence.
  * @returns {string}
  */
-export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {}) {
+export function nativeFeeErrorMessage(
+    err, { coinTicker, mandatory = false, chainId, networkKind } = {},
+) {
     const coin = coinTicker || 'the native coin';
     const reason = forfeitReason(err);
+    // Only ever appended to the Bitcoin (non-mandatory) advice: XCHAIN exists on the
+    // bitcoin chain alone, and on LTC/DOGE there is no XCHAIN lane to send anyone to.
+    const mint = mandatory ? '' : xchainMintHint({ chainId, networkKind });
+    const untick = `Untick "${nativeFeeToggleLabel(coinTicker)}" on the form to pay it from your `
+        + 'XCHAIN balance instead.';
     if (reason === 'dust') {
         const quoted = (err && err.quote && err.quote.requiredFeeNative)
             || dustAmountFromMessage(err);
@@ -78,13 +94,13 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
             ? `This action's protocol fee${amount} is too small to send as a ${coin} payment, and ${coin} is ` +
               `the only way to pay a protocol fee on this chain, so it cannot be submitted here.`
             : `This action's protocol fee${amount} is too small to send as a ${coin} payment - the network will ` +
-              `not relay it. Turn off ${coin} fee payment to pay in XCHAIN instead.`;
+              `not relay it. ${untick}${mint}`;
     }
     if (reason === 'unsupported') {
         return mandatory
             ? `This action cannot be submitted on this chain: its protocol fee has no ${coin} price, ` +
               `and ${coin} is the only way to pay a protocol fee here.`
-            : `Paying the protocol fee in ${coin} is not available for this action. Turn it off to pay in XCHAIN.`;
+            : `Paying the protocol fee in ${coin} is not available for this action. ${untick}${mint}`;
     }
     // `invalid` is two different situations wearing one name (see the class doc:
     // "stale price / bad sizing"). Only the price half is temporary. The indexer's own
@@ -107,10 +123,59 @@ export function nativeFeeErrorMessage(err, { coinTicker, mandatory = false } = {
         return `The network would refuse this action as it stands: ${detail}. Nothing was signed or ` +
                'sent. Waiting will not change this, so adjust the action and try again.';
     }
+    const stale = `The ${coin} fee price is temporarily unavailable. Try again in a moment`;
     return mandatory
-        ? `The ${coin} fee price is temporarily unavailable. Try again in a moment.`
-        : 'The native-coin fee price is temporarily unavailable. Try again in a moment, or turn off ' +
-          'native-coin fee payment.';
+        ? `${stale}.`
+        : `${stale}, or ${untick.charAt(0).toLowerCase()}${untick.slice(1)}${mint}`;
+}
+
+/**
+ * The words printed beside the native-fee control, and the only name a message may
+ * call it by.
+ *
+ * Lives here rather than in flows/protocolFeeRow.js, which renders the row, because
+ * protocolFeeRow already imports this module and a message that names the control has to
+ * be unable to drift from it. Copying the sentence into either file is how "turn off
+ * native-coin fee payment" ended up pointing at a checkbox labelled "Pay protocol fee in
+ * BTC instead of XCHAIN".
+ *
+ * @param {string} [coinTicker]   BTC/LTC/DOGE; blank falls back to the generic phrasing
+ * @returns {string}
+ */
+export function nativeFeeToggleLabel(coinTicker) {
+    return `Pay protocol fee in ${coinTicker || 'the native coin'} instead of XCHAIN`;
+}
+
+/**
+ * The sentence that says where XCHAIN comes from, on the networks where anyone can
+ * mint it, and '' everywhere else.
+ *
+ * "Pay in XCHAIN instead" is only advice a tester can act on if they can get XCHAIN.
+ * On mainnet that is a market purchase and none of the wallet's business; on testnet and
+ * regtest XCHAIN is mint-by-anyone (see MintForm's token picker note and the Developer
+ * Mode faucet row), so the wallet can name the screen that does it. The path is the one
+ * the shells actually render: Menu -> More actions opens the Token Actions page, whose
+ * Mint entry is the MINT form (shared/routes/MenuRoute.jsx, shared/actionEntries.js).
+ *
+ * @param {{ chainId?: string, networkKind?: string }} where
+ * @returns {string}   a leading-space sentence, or ''
+ */
+function xchainMintHint({ chainId, networkKind } = {}) {
+    const kind = String(networkKind || networkKindFromChainId(chainId) || '').toLowerCase();
+    if (kind !== 'testnet' && kind !== 'regtest') return '';
+    return ' Anyone can mint XCHAIN on this test network: open Menu > More actions > Mint,'
+        + ' pick XCHAIN and mint yourself some (you pay only the network fee).';
+}
+
+// The network half of a chain id, which the registry writes as '<coin>-<network>'
+// (registry/nativeFee.js parses the coin half of the same string). Parsed here rather
+// than looked up, so this module keeps importing nothing: an id whose tail is not one of
+// the three known networks answers null, and the caller simply says nothing about minting.
+const NETWORK_KINDS = new Set(['mainnet', 'testnet', 'regtest']);
+function networkKindFromChainId(chainId) {
+    const parts = String(chainId || '').trim().toLowerCase().split('-');
+    const tail = parts.length > 1 ? parts[parts.length - 1] : '';
+    return NETWORK_KINDS.has(tail) ? tail : null;
 }
 
 // Whether an indexer verdict is about the price feed, which is the only part of the

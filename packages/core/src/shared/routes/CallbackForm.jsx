@@ -331,6 +331,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Callback (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'callback').message,
@@ -406,6 +407,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
                 isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                    chainId,
                     coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Callback failed.',
                 }),
             );

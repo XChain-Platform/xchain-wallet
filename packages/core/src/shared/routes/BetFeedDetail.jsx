@@ -328,6 +328,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             // own log line - "betting.placeBetParams: amount must be a positive
             // stake" for a zero stake, measured on regtest (D-118).
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory,
                 // The raw message stays the fallback (the in-repo convention): a node
                 // rejection reason is worth showing verbatim when nothing recognises it.

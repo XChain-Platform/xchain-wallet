@@ -443,6 +443,7 @@ export function SweepForm({
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Sweep (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'sweep').message,
@@ -520,6 +521,7 @@ export function SweepForm({
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Sweep failed.',

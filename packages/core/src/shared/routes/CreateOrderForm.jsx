@@ -342,6 +342,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Create order (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'order').message,
@@ -383,6 +384,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Order failed.',
             }));
             setStage('review');

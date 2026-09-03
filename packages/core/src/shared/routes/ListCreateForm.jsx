@@ -289,6 +289,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         } catch (err) {
             if (isUserRejection(err)) return;
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Create list failed.',
             }));
         }
@@ -366,6 +367,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Create list failed.',
             }));
             setStage('review');

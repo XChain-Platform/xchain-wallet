@@ -288,6 +288,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         } catch (err) {
             if (isUserRejection(err)) return;
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Execute failed.',
@@ -432,6 +433,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Contract call failed.',

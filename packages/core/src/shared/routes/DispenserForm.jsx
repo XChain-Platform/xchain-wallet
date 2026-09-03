@@ -726,6 +726,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Dispenser failed.',
@@ -784,6 +785,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 submitMsg = 'Incorrect password.';
             } else {
                 submitMsg = submitFailureMessage(err, {
+                    chainId,
                     coinTicker,
                     mandatory: nativeFeeMandatory,
                     fallback: err?.message || 'Dispenser creation failed.',

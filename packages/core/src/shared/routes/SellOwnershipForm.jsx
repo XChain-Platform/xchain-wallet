@@ -289,6 +289,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             // can act on. Now that this form has a native-fee lane it
             // needs the same mapping every other swept form uses.
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Sign failed.',
             }));
             setStage('review');

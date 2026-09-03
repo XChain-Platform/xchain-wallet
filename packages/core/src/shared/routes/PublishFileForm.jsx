@@ -367,6 +367,7 @@ export function PublishFileForm({ walletId, onBack }) {
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publish failed.',
             }));
             setStage('review');

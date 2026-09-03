@@ -120,8 +120,9 @@ describe('Native-fee refusals are translated on every submit path', () => {
         expect(ltc).toContain('cannot be submitted here');
         expect(ltc).not.toContain('Turn off');
 
-        // On Bitcoin it is the fix, so it must still be offered.
+        // On Bitcoin it is the fix, so it must still be offered - by the control's
+        // own label, which is the only name the user can find on the form.
         const btc = nativeFeeErrorMessage(crossed, { coinTicker: 'BTC', mandatory: false });
-        expect(btc).toContain('Turn off BTC fee payment');
+        expect(btc).toContain('Untick "Pay protocol fee in BTC instead of XCHAIN"');
     });
 });

@@ -331,6 +331,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Order placement failed.',
@@ -418,6 +419,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 errorMessage = 'Incorrect password.';
             } else {
                 errorMessage = submitFailureMessage(err, {
+                    chainId,
                     coinTicker,
                     mandatory: nativeFeeMandatory,
                     fallback: err?.message || 'Order placement failed.',

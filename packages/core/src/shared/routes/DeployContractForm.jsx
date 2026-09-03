@@ -491,6 +491,7 @@ export function DeployContractForm({ walletId, onBack }) {
         } catch (err) {
             if (isUserRejection(err)) return;
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Deploy failed.',
@@ -583,6 +584,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Deploy failed.',
