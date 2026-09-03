@@ -141,6 +141,36 @@ describe('the message key-request reports its failures', () => {
             .not.toMatch(/enter your password/i);
     });
 
+    it('tells a 25th-word passphrase wallet the truth instead of sending it round the unlock loop', async () => {
+        // The same `!signerReady` branch as above, and a DIFFERENT sentence is
+        // owed. This wallet is not locked: `SignerPool.populate` skips a
+        // passphrase wallet on purpose (`w.passphraseEnabled && !bip39Passphrase`)
+        // and no unlock path carries a passphrase, so "unlock it and press this
+        // again" is an instruction that can never succeed - the same class of
+        // un-compliable copy this whole error state exists to kill.
+        const messaging = stubMessaging({
+            signerReady: () => Promise.resolve({ ready: false }),
+            listWallets: () => Promise.resolve([{ id: 'w', passphraseEnabled: true }]),
+        });
+        const utils = await openHandshakeBox(messaging);
+
+        await domAct(async () => {
+            fireEvent.click(requestButton(utils));
+            await drainMicrotasks();
+        });
+
+        const said = alertText(utils);
+        expect(said, 'the reason does not name why this wallet has no signer')
+            .toMatch(/25th-word passphrase/i);
+        expect(said, 'a wallet that is not locked was told it was locked')
+            .not.toMatch(/wallet is locked/i);
+        // The banner it renders inside already offers Plain text; the reason
+        // has to point at it, because it is the only way forward this wallet
+        // has for a first-contact message.
+        expect(said, 'no remedy this wallet can actually reach was named')
+            .toMatch(/plain text/i);
+    });
+
     it('surfaces a REFUSED send instead of swallowing it', async () => {
         const messaging = stubMessaging({
             sendHandshake: () => Promise.reject(new Error('the chain refused the handshake')),

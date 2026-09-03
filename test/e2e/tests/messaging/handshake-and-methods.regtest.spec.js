@@ -496,7 +496,15 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
         });
     });
 
-    // THE SILENT BUTTON IS FIXED AND THIS TEST IS HOW WE KNOW: un-fixme'd and driven
+    // THE BROWSER PROOF FOR THE SILENT KEY-REQUEST BUTTON DOES NOT LIVE HERE.
+    // It is `tests/messaging/key-request-error.spec.js`, which drives the
+    // not-ready-signer refusal on the dev-mock venue and runs GREEN: that
+    // branch returns before any signing, composing or broadcast, so it needs a
+    // browser and a real wallet and it does not need a chain. Parking a proof
+    // that is available today behind a chain-side defect that is not fixed is
+    // what this note exists to stop the next reader from re-doing.
+    //
+    // THE SILENT BUTTON IS FIXED AND THIS TEST IS ALSO HOW WE KNOW: un-fixme'd and driven
     // 2026-08-27 (sixth run), it now fails with the venue's own words on screen
     // where it used to fail against a blank surface. The page snapshot carries
     // `alert: "Encoder RPC error: Transaction would burn significant satoshis

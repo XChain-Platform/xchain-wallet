@@ -551,6 +551,45 @@ export function ComposeMessage({
         }
     }
 
+    // WHY THERE IS NO READY SIGNER, in words the user can act on.
+    //
+    // Two different states reach the `!signerReady` branch below and they need
+    // DIFFERENT sentences, because one of them has a remedy and the other does
+    // not. A pool entry that was merely dropped (a worker restart that could
+    // not rehydrate it) comes back on the next unlock, so "unlock it again" is
+    // true. A 25th-word passphrase wallet is in the pool only when the unlock
+    // screen's passphrase field was filled in: `SignerPool.populate` skips it
+    // otherwise (`w.passphraseEnabled && !bip39Passphrase`). So "unlock again"
+    // is true for that user too, but only with the extra step named, or they
+    // go round a loop that can never succeed - the same class of
+    // un-compliable instruction this whole error state exists to kill. The
+    // surrounding banner's plain-text option stays as the no-signer way out.
+    //
+    // The lookup happens HERE rather than on mount so the screen costs nothing
+    // extra in the common case; this branch is only reached by a press that
+    // would otherwise do nothing at all.
+    async function signerNotReadyReason() {
+        try {
+            if (typeof messaging.listWallets === 'function') {
+                const wallets = await messaging.listWallets();
+                const record = Array.isArray(wallets)
+                    ? wallets.find((w) => w?.id === walletId)
+                    : null;
+                if (record?.passphraseEnabled) {
+                    return 'This wallet uses a 25th-word passphrase and was unlocked without it, so '
+                        + 'the key request cannot be signed. Lock the wallet and unlock it again with '
+                        + 'the passphrase filled in, or pick "Plain text" above to message them '
+                        + 'without encryption.';
+                }
+            }
+        } catch {
+            // A shell that cannot list wallets still gets an answer; the
+            // generic reason below is true of every not-ready signer.
+        }
+        return 'Your wallet is locked, so the key request cannot be signed. '
+            + 'Unlock it and press this again.';
+    }
+
     // Publish our pubkey to the recipient (MESSAGE format-0 handshake) so they
     // can derive the ECDH shared secret and message us, even before our address
     // has spent. Used when the recipient's key is unknown: it requests a session
@@ -562,9 +601,9 @@ export function ComposeMessage({
             // "Enter your password to send the key request", and there is no
             // password field on this stage to enter it into: the send path
             // collects the password on the review screen, which a key request
-            // never reaches. Unlocking is the real remedy.
-            setHandshakeError('Your wallet is locked, so the key request cannot be signed. '
-                + 'Unlock it and press this again.');
+            // never reaches. See `signerNotReadyReason` for why one sentence
+            // could not be honest for both of the states that land here.
+            setHandshakeError(await signerNotReadyReason());
             return;
         }
         if (hw && hwStatus !== 'available') {
