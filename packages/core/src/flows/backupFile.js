@@ -24,10 +24,20 @@
 // skips a matching incoming id, 'error' throws BackupConflictError on a
 // collision.
 
-// Never in the payload (§19.4): the BIP39 passphrase (a security property of
-// the seed, re-entered on restore rather than stored) and hardware-wallet
-// private keys, which stay on the device; `signers` carries only pairing
-// metadata.
+// The BIP39 passphrase (§15.6) RIDES in the payload, as the wallet record's
+// `encryptedPassphrase`: it is sealed under the wallet's own master key, so the
+// envelope carries ciphertext the backup password cannot open, and the restore
+// re-keys it exactly as it re-keys the seed. It is not "the passphrase in the
+// file"; it is the same blob the device held, moved to a new password. Before
+// it was stored the passphrase was re-typed at every unlock and so had nothing
+// to back up. Still never in the payload (§19.4): hardware-wallet private
+// keys, which stay on the device; `signers` carries only pairing metadata.
+
+// A backup can also carry an OLDER schema than this release reads, and `put`
+// never migrates (storage/Vault.js) - it only validates, and validation
+// rejects any version but the current one. So the wallet and the settings
+// records are migrated on the way out of the envelope; without that, a backup
+// taken before a schema bump dies inside the vault's validator on restore.
 
 import {
     decodeBackupEnvelope,
@@ -40,9 +50,10 @@ import {
     decrypt,
     bytesToBase64,
     base64ToBytes,
+    PASSPHRASE_AAD,
 } from '../crypto/index.js';
 import { randomUUID } from '../util/uuid.js';
-import { migrateSettings } from '../schemas/migrations.js';
+import { migrateSettings, migrateWallet } from '../schemas/migrations.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import {
@@ -67,7 +78,7 @@ export class BackupConflictError extends Error {
  * wrong one is the WALLET's, and the message has to name which.
  */
 export class BackupSeedPasswordError extends Error {
-    /** @param {string} what   'seed' | 'imported key' */
+    /** @param {string} what   'seed' | 'imported key' | 'passphrase' */
     constructor(what) {
         // Name the password BOX, not the function: the user is looking at three
         // of them and needs to know which one to fix.
@@ -253,6 +264,15 @@ export async function importBackupFile({
     if (!decoded.wallet || typeof decoded.wallet.id !== 'string') {
         throw new Error('importBackupFile: payload missing wallet record');
     }
+
+    // Migrate the wallet the moment it leaves the envelope, for the same
+    // reason settings are migrated below: `put` validates against the CURRENT
+    // schema version and never migrates, so a record written before any bump
+    // fails the restore rather than the wallet. Ordering is load-bearing:
+    // `migrateWallet` returns a NEW object, while the re-key below rewrites
+    // the sealed blobs IN PLACE, so migrating afterwards would hand `put` a
+    // copy still sealed under the old device's password.
+    decoded.wallet = migrateWallet(decoded.wallet);
 
     // Re-seal key material under the device password BEFORE any write: an
     // unopenable seal then throws at RESTORE time naming which password is
@@ -512,9 +532,14 @@ export function remintIdentifiers(decoded) {
  * `importedKeys[].encryptedWif` and the wallet's OWN `kdfParams` verbatim, so
  * skipping this leaves the wallet sealed under its old device's password and
  * `SignerPool.populate` skips it silently. `importedKeys` re-key with the seed
- * because `importWif` seals them under the SAME master key (importWif.js).
+ * because `importWif` seals them under the SAME master key (importWif.js), and
+ * so does the §15.6 `encryptedPassphrase`, which is the third leg below.
  * New params copy the source's argon2 COST but ALWAYS take a fresh salt: one
  * salt reused under one password derives the same master key for two wallets.
+ * That fresh salt is also why the passphrase cannot simply ride through
+ * verbatim: nothing about the new seal matches the old one, so an untouched
+ * passphrase blob would fail its GCM tag at the first unlock and leave a wallet
+ * that opens but derives the wrong seed.
  * @param {import('../schemas/wallet.js').Wallet} wallet
  * @param {Object} opts
  * @param {string} opts.walletPassword    what the backed-up wallet was sealed under
@@ -528,7 +553,11 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     const sealedKeys = allKeys.filter(
         (k) => k && typeof k.encryptedWif === 'string' && k.encryptedWif.length > 0,
     );
-    if (!hasSeed && sealedKeys.length === 0) return false;
+    // A legacy passphrase wallet carries null here and is re-captured at its
+    // next unlock, so only a real blob counts as key material to move.
+    const hasPassphrase = typeof wallet?.encryptedPassphrase === 'string'
+        && wallet.encryptedPassphrase.length > 0;
+    if (!hasSeed && sealedKeys.length === 0 && !hasPassphrase) return false;
 
     // Name which BOX on the restore screen is empty, never the parameter: the
     // parameter name is the one thing on screen the user cannot see.
@@ -552,6 +581,8 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     let seed = null;
     /** @type {Uint8Array[]} */
     let wifs = [];
+    /** @type {Uint8Array | null} */
+    let passphrase = null;
     try {
         if (hasSeed) {
             try {
@@ -565,6 +596,20 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
                 wifs.push(await decrypt(oldKey, base64ToBytes(k.encryptedWif)));
             } catch {
                 throw new BackupSeedPasswordError('imported key');
+            }
+        }
+        if (hasPassphrase) {
+            try {
+                // The AAD is what distinguishes this blob from a seed blob
+                // under the same key, so it is mandatory on both sides. Kept in
+                // BYTES the whole way across: decoding to a string would put
+                // the passphrase somewhere that cannot be zeroed (§17.7.3),
+                // and nothing here needs to read it.
+                passphrase = await decrypt(
+                    oldKey, base64ToBytes(wallet.encryptedPassphrase), PASSPHRASE_AAD,
+                );
+            } catch {
+                throw new BackupSeedPasswordError('passphrase');
             }
         }
     } finally {
@@ -583,13 +628,20 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         for (let i = 0; i < sealedKeys.length; i += 1) {
             sealedKeys[i].encryptedWif = bytesToBase64(await encrypt(newKey, wifs[i]));
         }
+        if (passphrase) {
+            wallet.encryptedPassphrase = bytesToBase64(
+                await encrypt(newKey, passphrase, PASSPHRASE_AAD),
+            );
+        }
         wallet.kdfParams = nextParams;
     } finally {
         newKey.fill(0);
         if (seed) seed.fill(0);
         for (const w of wifs) w.fill(0);
+        if (passphrase) passphrase.fill(0);
         seed = null;
         wifs = [];
+        passphrase = null;
     }
     return true;
 }
