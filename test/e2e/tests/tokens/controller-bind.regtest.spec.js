@@ -74,7 +74,7 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
-    EXPLORER_URL,
+    explorerJson,
     fundAddress,
     minerRpc,
     mintXchain,
@@ -161,12 +161,17 @@ const DENY_ALL_SOURCE =
  */
 const ALLOW_SOURCE = 'module.exports = { guard: function(){ return {}; } };';
 
-async function explorerJson(path) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    return res.json();
-}
+// A local `explorerJson` here would be a bare fetch that returned
+// whatever JSON came back, error bodies included. The shared fixture helper of
+// the same name waits out a 429 twice and THROWS with the venue named
+// rather than answering, and shadowing it locally meant a rate-limited read arrived here as
+// `{error:'Too many requests'}`, an object with no `controllers` key, which
+// `?? null` below then turned into an accusation about the chain's state. Run 7
+// died exactly that way: "this address already carried a controller binding
+// before the spec bound one", on a venue where nothing was bound and the
+// explorer had simply refused the read. Import the hardened one instead - a
+// local copy of a helper the campaign has hardened three times is a copy that
+// misses every hardening.
 
 /**
  * Mines only while something is actually waiting for a block (campaign §3.5).
@@ -251,9 +256,16 @@ async function expectUnmovedBalance(address, tick, want, what) {
     throw new Error(`${what} (${tick} for ${address} read ${last}, expected ${want})`);
 }
 
-/** The controller bindings the chain says are still gating `tick`, right now. */
+/**
+ * The controller bindings the chain says are still gating `tick`, right now.
+ *
+ * Deliberately does NOT catch: a read that failed and a token with nothing
+ * bound to it are different answers, and collapsing them into `null` is what
+ * let a rate limit read as a verdict about the chain. The poll loops below
+ * catch for themselves, because there "not yet" is the expected answer.
+ */
 async function controllerBindings(tick) {
-    return (await explorerJson(`token/${tick}`).catch(() => null))?.controllers ?? null;
+    return (await explorerJson(`token/${tick}`))?.controllers ?? null;
 }
 
 /**
@@ -265,7 +277,7 @@ async function controllerBindings(tick) {
  * wrong one would still read as "a controller is attached" on the other.
  */
 async function addressBindings(address) {
-    return (await explorerJson(`address/${address}`).catch(() => null))?.controllers ?? null;
+    return (await explorerJson(`address/${address}`))?.controllers ?? null;
 }
 
 /** Polls until `predicate` accepts the address's live controller list. */
@@ -273,7 +285,7 @@ async function waitForAddressBindings(address, predicate, what, timeoutMs = 180_
     const deadline = Date.now() + timeoutMs;
     let last = null;
     while (Date.now() < deadline) {
-        last = await addressBindings(address);
+        last = await addressBindings(address).catch(() => null);
         if (last && predicate(last)) return last;
         await mineIfPending();
         await new Promise((r) => setTimeout(r, 2_000));
@@ -286,7 +298,7 @@ async function waitForBindings(tick, predicate, what, timeoutMs = 180_000) {
     const deadline = Date.now() + timeoutMs;
     let last = null;
     while (Date.now() < deadline) {
-        last = await controllerBindings(tick);
+        last = await controllerBindings(tick).catch(() => null);
         if (last && predicate(last)) return last;
         await mineIfPending();
         await new Promise((r) => setTimeout(r, 2_000));

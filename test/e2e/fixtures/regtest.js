@@ -1216,6 +1216,54 @@ export async function plantedOracleFeedRefusal(oracleAddress) {
 }
 
 /**
+ * The venue's own answer about whether a PUBLISHED PRICE v1 quote can
+ * ever mature here, or null when the maturation gate can really be driven.
+ *
+ * The explorer lists `oracle_prices` from the HUB MIRROR; the indexer's
+ * consensus lookup (`utility.requireEffectiveOraclePrice` ->
+ * `db.getOraclePrice`) reads the table of the same name in its OWN database.
+ * On mainnet/testnet those are the same rows, because xchain-node sets
+ * HUB_DB_NAME/HUB_DB_SYNC_ENABLED and HubDbSync mirrors the hub's rows back
+ * into the indexer DB. On REGTEST xchain-node deliberately does not (arming the
+ * mirror also arms the block-loop price barriers, and regtest blocks stamped at
+ * ~now can never satisfy the 600s frozen-price grace, which wedged the LTC
+ * block loop when it was tried) - so a regtest PRICE v1 publish reaches the hub,
+ * shows up on the explorer, and stays invisible to every consensus read forever.
+ *
+ * Measured by asking the quote about a time far past the row's own
+ * `effective_at`: the 24-hour lock cannot still be closed in ten years, so a
+ * refusal there is the mirror gap and nothing about this publish.
+ *
+ * A probe rather than a `test.fixme` for D41's reason: it heals itself the day
+ * the venue arms the mirror leg (HUB_DB_NAME + HUB_DB_USER +
+ * HUB_DB_SYNC_ENABLED with HUB_SYNC_PRICE_GRACE_S=0 and
+ * HUB_SYNC_ORACLE_GRACE_S=0, which hub_db_sync honours on regtest for exactly
+ * this), where a fixme would leave the lane dead on a venue that had.
+ *
+ * @param {{address: string, coin: string, tick: string, fiat: string,
+ *          effectiveAt: number|string}} row the publish to ask about
+ * @returns {Promise<string | null>} the reason to skip, or null to run
+ */
+export async function oracleMaturationUnreadable({ address, coin, tick, fiat, effectiveAt }) {
+    const farFuture = Number(effectiveAt) + 315_360_000; // ten years past the lock
+    const q = new URLSearchParams({
+        oracleAddress: address, giveCoin: coin, giveTick: tick, fiatCode: fiat,
+        getCoin: coin, giveEscrow: '1', blockTime: String(farFuture),
+    });
+    let body;
+    try {
+        body = await explorerJson(`oraclefeequote?${q.toString()}`, { allowErrorBody: true });
+    } catch (err) {
+        return `the venue would not quote ${address}: ${err?.message || String(err)}`;
+    }
+    if (!/no effective oracle price/.test(String(body?.error || ''))) return null;
+    return `ten years past its own effective_at (${effectiveAt}) the indexer still reads no `
+        + `effective oracle price for ${address} ${coin}/${tick}/${fiat}, while the explorer `
+        + 'lists the row: the hub mirror is not armed on this regtest venue, so no PRICE v1 '
+        + 'publish here can ever become effective';
+}
+
+/**
  * Every visible refusal on the screen right now, as one string.
  *
  * A form that will not compose does not go quiet: it renders the reason in a
