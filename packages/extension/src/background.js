@@ -51,7 +51,10 @@ import {
 // ServiceWorkerGlobalScope), and keeping it off the barrel is what lets the
 // Node smokes go on importing sdkFactory.js without an installed SDK.
 import { XChainSDK } from './background/sdkStatic.js';
-import { SIGNING_SECRET_SESSION_KEY, loadSigningCredentials } from './background/signingSecretSession.js';
+import {
+    SIGNING_SECRET_SESSION_KEY,
+    loadSigningCredentials,
+} from './background/signingSecretSession.js';
 import { initPanicModePersistence } from './background/panicModeStorage.js';
 import {
     readAutoLockState,
@@ -238,6 +241,12 @@ async function ensureHost() {
     // survive). The master key can't decrypt seeds, so we use the password
     // cached in the signing-secret session slot. Best-effort: a failure just
     // leaves the per-op password prompt as the fallback.
+    //
+    // `cached.bip39Passphrase` is empty for anything this build wrote, because
+    // a passphrase wallet re-pools from the password alone once its record
+    // holds the encrypted 25th word. It is non-empty only for a session that
+    // was unlocked on the previous build and has not locked since, which is
+    // the one case where passing it through is what keeps signing alive.
     if (signerPool.size() === 0) {
         try {
             const cached = await loadSigningCredentials(

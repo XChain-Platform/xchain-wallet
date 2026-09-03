@@ -63,7 +63,6 @@
  * @property {string} [address]               for signIn: user-chosen address
  * @property {string} [walletId]              for flows that need to pick a wallet
  * @property {string} [password]              popup captures password entry
- * @property {string} [bip39Passphrase]
  */
 
 /**

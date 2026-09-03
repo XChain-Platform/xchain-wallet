@@ -37,21 +37,27 @@ const SIGNING_SECRET_DECODER = new TextDecoder();
 /** chrome.storage.session key for the cached signing secret (the password). */
 export const SIGNING_SECRET_SESSION_KEY = 'xchain-wallet:session-signing-secret';
 
-// Slot format. A bare password is stored as its UTF-8 bytes, unchanged from
-// before the 25th word was cached alongside it, so a slot written by an
-// older worker still reads. When a passphrase is present the slot holds this
-// marker followed by JSON; the marker starts with a NUL byte, which no typed
-// password begins with, so the two shapes cannot be confused.
+// Slot format. A bare password is stored as its UTF-8 bytes. When a passphrase
+// is present the slot holds this marker followed by JSON; the marker starts
+// with a NUL byte, which no typed password begins with, so the two shapes
+// cannot be confused.
+//
+// No shipped caller passes a passphrase any more, because a passphrase
+// wallet now carries its own encrypted 25th word on the record and re-pools
+// from the password alone. Both halves of the marker form stay for one release
+// so a session that was already unlocked when the user upgraded keeps signing
+// until its next lock. The READ branch is the load-bearing half; the write
+// branch survives only so the pair can be retired together.
 const CREDENTIALS_MARKER = '\u0000xchain-creds:';
 
 /**
- * Persist the password, and the §15.6 25th word when one was typed, to the
- * signing-secret session slot. No-op when the backend is absent (e.g. the
- * desktop pre-host path, which doesn't need it).
+ * Persist the password to the signing-secret session slot. No-op when the
+ * backend is absent (e.g. the desktop pre-host path, which doesn't need it).
  *
  * @param {{ save: (blob: Uint8Array) => Promise<void> } | undefined | null} backend
  * @param {string} password
- * @param {string} [bip39Passphrase]
+ * @param {string} [bip39Passphrase]   no caller supplies one; kept only
+ *   so the marker write and its reader retire in the same release
  */
 export async function saveSigningSecret(backend, password, bip39Passphrase = '') {
     if (!backend || typeof password !== 'string' || password.length === 0) return;
@@ -63,6 +69,11 @@ export async function saveSigningSecret(backend, password, bip39Passphrase = '')
 
 /**
  * Read the cached credentials, or null when none are stored.
+ *
+ * The marker branch below is the upgrade path: a slot written by the previous
+ * build still yields its passphrase, which the re-pool passes through so a
+ * session unlocked before the upgrade keeps signing its legacy passphrase
+ * wallets. A slot written by this build always takes the bare-password branch.
  *
  * @param {{ load: () => Promise<Uint8Array | null> } | undefined | null} backend
  * @returns {Promise<{ password: string, bip39Passphrase: string } | null>}
@@ -107,3 +118,4 @@ export async function clearSigningSecret(backend) {
     if (!backend) return;
     await backend.clear();
 }
+

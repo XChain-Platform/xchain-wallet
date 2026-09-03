@@ -202,11 +202,12 @@ export async function handleWalletUnlock(request, deps) {
         // backend (that's what `ensureHost()` reads to build the host).
         if (throttle) await throttle.clear().catch(() => { /* best-effort */ });
         await deps.sessionBackend.save(masterKey);
-        // Cache the password (and the 25th word, when one was typed) so the
-        // SignerPool can be rebuilt after a service-worker restart (the
-        // master key can't decrypt seeds, and the password alone cannot
-        // re-pool a passphrase wallet).
-        await saveSigningSecret(deps.signingSecretBackend, password, bip39Passphrase);
+        // Cache the password so the SignerPool can be rebuilt after a
+        // service-worker restart; the master key can't decrypt seeds. The
+        // password is now the whole secret: a passphrase wallet carries its
+        // own encrypted 25th word on the record, so a typed one has nothing
+        // left to unlock and is deliberately NOT written to the slot.
+        await saveSigningSecret(deps.signingSecretBackend, password);
     } finally {
         masterKey.fill(0);
     }

@@ -137,7 +137,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!shouldAutoApproveSign({ origin, settings })) return;
         signPasswordCache.remember(
             walletId,
-            { password: decision.password, bip39Passphrase: decision.bip39Passphrase },
+            { password: decision.password },
             settings.autoSignLocalhostMs,
         );
     };
@@ -447,7 +447,6 @@ export function registerBridgeHandlers(host, opts = {}) {
                     ...req,
                     walletId,
                     password: cached.password,
-                    bip39Passphrase: cached.bip39Passphrase,
                 }));
             }
         }
@@ -474,7 +473,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             ...req,
             walletId: signWalletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
         });
         if (!site.permissions.canSignMessage && decision.savePermanent) {
             await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
@@ -525,7 +523,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             vault: deps.vault,
             walletId: decision.walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
@@ -585,7 +582,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             sdkRegistry: deps.sdkRegistry,
             accountId: account.id,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             request: {
                 psbt: req.psbtHex,
                 agentPublicNonce: req.agentPublicNonce,
@@ -756,7 +752,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             vault: deps.vault,
             walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId,
@@ -887,7 +882,6 @@ async function executeSignAction(req, deps, ctx) {
                 approved: true,
                 walletId,
                 password: cached.password,
-                bip39Passphrase: cached.bip39Passphrase,
             };
             fromCache = true;
         }
@@ -985,7 +979,6 @@ async function executeSignAction(req, deps, ctx) {
             vault: deps.vault,
             walletId: decision.walletId ?? walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
@@ -1005,7 +998,6 @@ async function executeSignAction(req, deps, ctx) {
             vault: deps.vault,
             walletId: decision.walletId ?? walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             trackPendingTx: true,
@@ -1477,7 +1469,6 @@ async function invokeSignMessage(deps, req) {
         vault: deps.vault,
         walletId: req.walletId,
         password: req.password,
-        bip39Passphrase: req.bip39Passphrase,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         chainId: req.chainId,

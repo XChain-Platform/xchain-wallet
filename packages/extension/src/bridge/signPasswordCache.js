@@ -30,8 +30,13 @@
 //
 // The clock is injectable so tests can advance time deterministically.
 
+// The cache holds the password and nothing else. No approval screen
+// ever collected a BIP39 passphrase, and a passphrase wallet now carries its
+// own encrypted 25th word on the record, so the second field was always
+// undefined and is now gone from the shape.
+
 /**
- * @typedef {{ password: string, bip39Passphrase?: string }} CachedCredential
+ * @typedef {{ password: string }} CachedCredential
  */
 
 /**
@@ -49,7 +54,7 @@
  */
 export function createSignPasswordCache(opts = {}) {
     const now = typeof opts.now === 'function' ? opts.now : () => Date.now();
-    /** @type {Map<string, { password: string, bip39Passphrase?: string, expiresAt: number }>} */
+    /** @type {Map<string, { password: string, expiresAt: number }>} */
     const entries = new Map();
 
     return {
@@ -63,7 +68,6 @@ export function createSignPasswordCache(opts = {}) {
             if (!Number.isFinite(ttlMs) || ttlMs <= 0) return;
             entries.set(walletId, {
                 password: creds.password,
-                bip39Passphrase: creds.bip39Passphrase,
                 expiresAt: now() + ttlMs,
             });
         },
@@ -76,10 +80,7 @@ export function createSignPasswordCache(opts = {}) {
                 entries.delete(walletId);
                 return null;
             }
-            return {
-                password: entry.password,
-                bip39Passphrase: entry.bip39Passphrase,
-            };
+            return { password: entry.password };
         },
 
         forget(walletId) {
