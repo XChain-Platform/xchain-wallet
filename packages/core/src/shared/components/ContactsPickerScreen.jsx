@@ -11,6 +11,7 @@
 import { useMemo, useState } from 'react';
 import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
+import { contactEntryChain } from '../utils/contactChain.js';
 import styles from './ContactsPickerScreen.module.css';
 
 export { styles as contactsPickerStyles };
@@ -43,7 +44,10 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
         for (const c of contacts || []) {
             for (const e of c?.entries || []) {
                 if (!e?.address) continue;
-                if (network !== 'all' && e.chain !== network) continue;
+                // Resolved, not read raw: an entry the old detector stored as
+                // 'unknown' (every Dogecoin testnet address) still has to
+                // answer to the Dogecoin filter here as it does in Contacts.
+                if (network !== 'all' && contactEntryChain(e) !== network) continue;
                 if (q) {
                     const hay = `${c?.name || ''} ${e.address} ${e.label || ''}`.toLowerCase();
                     if (!hay.includes(q)) continue;

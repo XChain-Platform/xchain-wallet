@@ -15,9 +15,13 @@
 // the marker is rejected like any other non-address.
 
 import { describe, it, expect } from 'vitest';
+import { base58check } from '@scure/base';
+import { sha256 } from '@noble/hashes/sha2';
 import {
     isValidAddressForChain,
     isValidAddressAnyNetwork,
+    detectAddressCoin,
+    detectAddressChain,
 } from '../../../../packages/core/src/shared/utils/addressValidation.js';
 import {
     MOCK_ADDRESS_PREFIXES,
@@ -102,5 +106,68 @@ describe('isValidAddressAnyNetwork', () => {
         for (const s of ['devmock', 'a devmock b', 'Devmock']) {
             expect(isValidAddressAnyNetwork(s), s).toBe(false);
         }
+    });
+});
+
+// Legacy addresses built from a version byte plus a fixed 20-byte hash, so
+// each case pins exactly the byte the detector must read. A Dogecoin testnet
+// P2PKH (0x71) prints with the same leading 'n' as a Bitcoin testnet one
+// (0x6f), which is how every Dogecoin testnet contact came to show a
+// question mark: the old detector stopped at the first character.
+const HASH160 = new Uint8Array(20).fill(7);
+function legacy(version) {
+    return base58check(sha256).encode(new Uint8Array([version, ...HASH160]));
+}
+
+describe('detectAddressChain', () => {
+    it('reads coin and network from a bech32 HRP', () => {
+        expect(detectAddressChain(REAL_BCRT)).toEqual({ coin: 'bitcoin', network: 'regtest', candidates: ['bitcoin'] });
+    });
+
+    it('reads mainnet coins from their exclusive version bytes', () => {
+        expect(detectAddressChain(legacy(0x00))).toMatchObject({ coin: 'bitcoin', network: 'mainnet' });
+        expect(detectAddressChain(legacy(0x30))).toMatchObject({ coin: 'litecoin', network: 'mainnet' });
+        expect(detectAddressChain(legacy(0x1e))).toMatchObject({ coin: 'dogecoin', network: 'mainnet' });
+    });
+
+    it('reads Dogecoin testnet from 0x71 even though it prints as a shared "n"', () => {
+        const addr = legacy(0x71);
+        expect(addr[0]).toBe('n');
+        expect(detectAddressChain(addr)).toEqual({ coin: 'dogecoin', network: 'testnet', candidates: ['dogecoin'] });
+    });
+
+    it('leaves the shared 0x6f and 0xc4 bytes undecided but names the candidates', () => {
+        const p2pkh = detectAddressChain(legacy(0x6f));
+        expect(p2pkh.coin).toBeNull();
+        expect(p2pkh.network).toBeNull();
+        expect(p2pkh.candidates.sort()).toEqual(['bitcoin', 'dogecoin', 'litecoin']);
+        const p2sh = detectAddressChain(legacy(0xc4));
+        expect(p2sh.coin).toBeNull();
+        expect(p2sh.candidates.sort()).toEqual(['bitcoin', 'dogecoin', 'litecoin']);
+    });
+
+    it('returns null for a string that is not an address', () => {
+        expect(detectAddressChain('')).toBeNull();
+        expect(detectAddressChain('not an address')).toBeNull();
+        expect(detectAddressChain(legacy(0x00).slice(0, -1))).toBeNull();
+        expect(detectAddressChain('tb1qnotreallyvalid')).toBeNull();
+    });
+});
+
+describe('detectAddressCoin', () => {
+    it('keeps the first-character answers for exclusive leaders', () => {
+        expect(detectAddressCoin('1BitcoinEaterAddressDontSendf59kuE')).toBe('bitcoin');
+        expect(detectAddressCoin('LTCexample')).toBe('litecoin');
+        expect(detectAddressCoin('DExampleDogeAddr')).toBe('dogecoin');
+        expect(detectAddressCoin('tb1qanything')).toBe('bitcoin');
+    });
+
+    it('resolves a Dogecoin testnet address instead of returning null', () => {
+        expect(detectAddressCoin(legacy(0x71))).toBe('dogecoin');
+    });
+
+    it('still returns null for the genuinely shared testnet bytes', () => {
+        expect(detectAddressCoin(legacy(0x6f))).toBeNull();
+        expect(detectAddressCoin(legacy(0xc4))).toBeNull();
     });
 });

@@ -99,12 +99,72 @@ export function detectAddressCoin(address) {
     if (lower.startsWith('bc1') || lower.startsWith('tb1') || lower.startsWith('bcrt1')) return 'bitcoin';
     if (lower.startsWith('ltc1') || lower.startsWith('tltc1') || lower.startsWith('rltc1')) return 'litecoin';
     // Legacy base58 leaders. Coin-exclusive on mainnet; also the dev-mock
-    // prefixes. '3' / 'm' / 'n' / '2' are shared, so left ambiguous (null).
+    // prefixes. '3' / 'm' / 'n' / '2' are shared BY LEADING CHARACTER, but
+    // the version byte underneath still tells some of them apart: Dogecoin
+    // testnet P2PKH is 0x71 while Bitcoin/Litecoin testnet is 0x6f, and both
+    // print as 'n'. Reading the leader alone filed every Dogecoin testnet
+    // contact as an unknown network. Decode before giving up.
     const c = a[0];
     if (c === '1') return 'bitcoin';
     if (c === 'L' || c === 'M') return 'litecoin';
     if (c === 'D' || c === 'A' || c === '9') return 'dogecoin';
-    return null;
+    return detectAddressChain(a)?.coin ?? null;
+}
+
+/**
+ * Coin and network read from the address itself, by decoding rather than by
+ * first character. A bech32 HRP names both. A base58check version byte names
+ * both on mainnet and for Dogecoin testnet (0x71); 0x6f and 0xc4 are shared
+ * across several testnet and regtest chains, so for those `coin` and
+ * `network` come back null and `candidates` lists the coin families the byte
+ * could belong to (the set a picker should offer).
+ *
+ * Returns null for a string that is not a well-formed address at all
+ * (bad checksum, wrong length), which is what distinguishes "ambiguous" from
+ * "garbage" for the callers that must not save the latter.
+ *
+ * @param {string} address
+ * @returns {{ coin: 'bitcoin' | 'litecoin' | 'dogecoin' | null,
+ *             network: 'mainnet' | 'testnet' | 'regtest' | null,
+ *             candidates: Array<'bitcoin' | 'litecoin' | 'dogecoin'> } | null}
+ */
+export function detectAddressChain(address) {
+    const a = String(address || '').trim();
+    if (!a) return null;
+    const lower = a.toLowerCase();
+    for (const coin of Object.keys(ADDRESS_PARAMS)) {
+        for (const network of Object.keys(ADDRESS_PARAMS[coin])) {
+            const params = ADDRESS_PARAMS[coin][network];
+            if (params.hrp && lower.startsWith(`${params.hrp}1`)) {
+                return matchesParams(a, params)
+                    ? { coin: /** @type {any} */ (coin), network: /** @type {any} */ (network), candidates: [/** @type {any} */ (coin)] }
+                    : null;
+            }
+        }
+    }
+    let payload;
+    try {
+        payload = bsc.decode(a);
+    } catch {
+        return null;
+    }
+    if (payload.length !== 21) return null;
+    const version = payload[0];
+    const hits = [];
+    for (const coin of Object.keys(ADDRESS_PARAMS)) {
+        for (const network of Object.keys(ADDRESS_PARAMS[coin])) {
+            const params = ADDRESS_PARAMS[coin][network];
+            if (version === params.p2pkh || version === params.p2sh) hits.push({ coin, network });
+        }
+    }
+    if (hits.length === 0) return null;
+    const coins = [...new Set(hits.map((h) => h.coin))];
+    const networks = [...new Set(hits.map((h) => h.network))];
+    return {
+        coin: coins.length === 1 ? /** @type {any} */ (coins[0]) : null,
+        network: networks.length === 1 ? /** @type {any} */ (networks[0]) : null,
+        candidates: /** @type {any} */ (coins),
+    };
 }
 
 /**
