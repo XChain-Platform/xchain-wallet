@@ -102,7 +102,11 @@ const GIVE_PER_FILL = 1;
 // swallow the venue's answer (`.catch(() => null)` below), so a 500 from
 // `/RLTC/api/oracle_prices` read as "the row never reached the hub mirror" and
 // sent the reader to the hub. The venue was refusing the endpoint outright.
-const explorerJson = (path) => venueExplorerJson(path);
+// `options` is forwarded, not dropped: `oracleFeeQuote` below needs
+// `allowErrorBody` to read a refusal as the answer it came for, and a wrapper
+// that silently swallowed the second argument made that flag look like it did
+// not work.
+const explorerJson = (path, options) => venueExplorerJson(path, options);
 
 async function mineIfPending() {
     try {
@@ -167,7 +171,12 @@ async function oracleFeeQuote({ address, coin, tick, fiat, escrow, blockTime }) 
         giveEscrow: String(escrow),
     });
     if (blockTime != null) q.set('blockTime', String(blockTime));
-    return explorerJson(`oraclefeequote?${q.toString()}`);
+    // `allowErrorBody`: a REFUSAL is what this spec is here to read. The quote
+    // answers HTTP 200 carrying `valid:false` and an `error` string while the
+    // publish is inside its 24-hour maturation window, and `explorerJson` throws
+    // on any body-level `error` by default - which reported the lock working
+    // correctly as "the venue REFUSED /oraclefeequote".
+    return explorerJson(`oraclefeequote?${q.toString()}`, { allowErrorBody: true });
 }
 
 async function gotoPalette(page, title) {

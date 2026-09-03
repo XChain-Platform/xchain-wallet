@@ -46,6 +46,7 @@ import {
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
+    healVenueClock,
     selectVenueChain,
     minerRpc,
     mintXchain,
@@ -305,28 +306,27 @@ test.describe('BET round trip on regtest', () => {
         // Heal the shared node's clock BEFORE trusting it. This spec pins mocktime
         // to cross a deadline, and the afterAll below puts it back - but a killed
         // run (Ctrl-C, a lost preview server, a contended port) never reaches that
-        // teardown, and the next suite then inherits a node whose clock sits under
-        // median-time-past, where `generate_blocks` fails outright with "Error
-        // generating to address" and every spec on the machine looks broken.
-        // Pinning to tip+5 here is the same repair the ops recipe prescribes, and
-        // it costs nothing when the clock is already fine.
-        try {
-            const tip = await chainTime();
-            await minerRpc('set_mock_time', { timestamp: tip + 5 });
-            await minerRpc('set_default_mining_time', {});
-        } catch { /* the venue check in global setup reports unreachability */ }
+        // teardown, and the next suite then inherits whatever clock was left
+        // behind. `healVenueClock` hands the node back its real clock when real
+        // time is above the tip and only pins when the chain sits in the future,
+        // which is the half that matters here: the deadline below is computed
+        // from the CHAIN's clock and validated by the form against the BROWSER's,
+        // so a chain left frozen in the past refuses every create with "Betting
+        // must close in the future" and says nothing about a clock.
+        await healVenueClock();
     });
 
     test.afterAll(async () => {
-        // Leave the shared node's clock where the next suite can mine: pinned
-        // just above the tip rather than released to 0, which would put the
-        // node clock BELOW median-time-past and wedge block production for
-        // everyone (the regtest-miner wedge this stack has hit before).
-        try {
-            const tip = await chainTime();
-            await minerRpc('set_mock_time', { timestamp: tip + 5 });
-            await minerRpc('set_default_mining_time', {});
-        } catch { /* best effort: never fail a run in teardown */ }
+        // Leave the shared node's clock where the next suite can mine AND where it
+        // can still track wall time. Pinning tip+5 unconditionally was the old
+        // teardown, and it is what walked this venue five hours behind: a mock
+        // clock does not tick, so every later block carried the frozen instant and
+        // the next run pinned again from there. `healVenueClock` releases whenever
+        // real time is above the tip, and keeps the pin only for the case it was
+        // written for - a chain this spec has jumped into the future, where
+        // releasing would drop the node under median-time-past and wedge block
+        // production for everyone.
+        await healVenueClock();
     });
 
     test('a market authored in the wallet takes a bet and pays it out', async ({ page }) => {

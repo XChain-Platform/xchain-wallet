@@ -296,7 +296,21 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // An explorer result row reads "<TICK> @ <addr> · <rate>" with
             // "#<index> · status open" underneath - not the "Open … dispenser
             // #N" aria-label the OWNER's list uses.
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
+            //
+            // MATCHED ON THE SELLER'S ADDRESS AS WELL AS THE INDEX, because a
+            // dispenser index is per-CHAIN and this search is not. Dogecoin's
+            // #343 and Litecoin's #343 are different dispensers with equal
+            // standing in one result list, and the index alone resolved to both
+            // on 2026-09-02 - a strict-mode violation reported as "the buyer
+            // cannot find it", which is the opposite of what happened. The
+            // address is the only part of the row that is unique across chains.
+            //
+            // Read off the ACCESSIBLE NAME rather than the row's text: the
+            // rendered address is truncated for width, so a `hasText` on the
+            // full string matches nothing at all - which fails identically to a
+            // dispenser that never landed.
+            const row = main.getByRole('button', { name: new RegExp(`@\\s*${seller}\\b`) })
+                .filter({ hasText: `#${dispenserIndex} ` });
             await expect(row,
                 `the seller's dispenser #${dispenserIndex} is on chain but the buyer cannot find it by `
                 + 'searching the token it sells')

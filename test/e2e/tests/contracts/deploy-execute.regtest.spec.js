@@ -58,7 +58,7 @@ import {
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     fundAddress,
-    minerRpc,
+    healVenueClock,
     mintXchain,
     nudgeChain,
     selectVenueChain,
@@ -180,20 +180,13 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
 
     test.beforeAll(async () => {
         // Heal the shared node's clock before trusting it. Other suites on this
-        // venue jump mocktime to cross deadlines and put it back in teardown; a
-        // killed run never reaches that teardown, and the next suite then
-        // inherits a node whose clock sits under median-time-past, where
-        // `generate_blocks` fails outright and every spec on the machine looks
-        // broken. Pinning to tip+5 is the ops recipe's repair and costs nothing
-        // when the clock is already fine.
-        try {
-            const status = await explorerJson('status');
-            const tip = Number(status?.last_block_time?.[REGTEST_COIN]);
-            if (Number.isFinite(tip) && tip > 0) {
-                await minerRpc('set_mock_time', { timestamp: tip + 5 });
-                await minerRpc('set_default_mining_time', {});
-            }
-        } catch { /* the venue check in global setup reports unreachability */ }
+        // venue jump mocktime to cross deadlines, and a killed run never reaches
+        // the teardown that would undo it - so the next suite inherits whatever
+        // clock was left behind. `healVenueClock` releases the node back to real
+        // time when that is safe and only pins when the chain sits in the
+        // future; the old unconditional tip+5 pin here was itself the ratchet
+        // that walked this venue five hours behind wall time.
+        await healVenueClock();
     });
 
     // This spec pinned two defects of one class - a form putting a field on
@@ -326,14 +319,27 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // Reach the contract the way a user does: find it in the list, open
             // it, and call a method from the detail page.
             //
-            // By ACTION INDEX, not by the name typed at deploy: contracts are
-            // identified on chain by their index and by nothing else, so every
-            // row in this list reads "(unnamed)" (see the deploy assertion
-            // above). `.first()` because the list renders the same contract
-            // twice on purpose - once under "My contracts (deployed by me)",
-            // once under "Browse all contracts" - and the first is the one that
-            // proves the wallet recognises the deploy as its own.
-            const row = page.getByRole('button', { name: `Contract ${contractIndex}`, exact: true });
+            // FILTERED TO THIS RUN'S CHAIN FIRST, with the list's own chain
+            // tabs. A contract's action index is per-CHAIN, and this list shows
+            // every chain at once, so "#376" alone can name a Litecoin contract
+            // and a Dogecoin one in the same screen - the same collision the
+            // dispenser browse hit on 2026-09-02. The filter is also the real
+            // user path, so nothing is being reached around here.
+            //
+            // FOUND BY THE NAME THIS RUN TYPED, which is also what the row is
+            // labelled with. The wallet labels a row `row.localName || ... ||
+            // 'Contract <n>'`, so a spec that fills the deploy form's Name
+            // field gets a row reading "Counter e2e<stamp>" rather than the
+            // bare `Contract <index>` an index-based locator looks for. The
+            // name carries RUN_TAG, so it is unique across runs and across
+            // chains, which the index by itself is not.
+            //
+            // `.first()` because the list renders the same contract twice on
+            // purpose - once under "My contracts (deployed by me)", once under
+            // "Browse all contracts" - and the first is the one that proves the
+            // wallet recognises the deploy as its own.
+            await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+            const row = page.getByRole('button', { name: contractName, exact: true });
             await expect(row.first()).toBeVisible({ timeout: 60_000 });
             expect(await row.count(),
                 'the wallet lists its own deploy under "My contracts", not only under browse-all')

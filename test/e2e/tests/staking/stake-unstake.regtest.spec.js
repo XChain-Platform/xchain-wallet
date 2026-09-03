@@ -60,7 +60,7 @@ import {
     REGTEST_COIN,
     failBroadcast,
     fundAddress,
-    minerRpc,
+    healVenueClock,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
@@ -207,20 +207,13 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
 
     test.beforeAll(async () => {
         // Heal the shared node's clock before trusting it. Other suites on this
-        // venue jump mocktime to cross deadlines and put it back in teardown; a
-        // killed run never reaches that teardown, and the next suite then
-        // inherits a node whose clock sits under median-time-past, where
-        // `generate_blocks` fails outright and every spec on the machine looks
-        // broken. Pinning to tip+5 is the ops recipe's repair and costs nothing
-        // when the clock is already fine.
-        try {
-            const status = await explorerJson('status');
-            const tip = Number(status?.last_block_time?.[REGTEST_COIN]);
-            if (Number.isFinite(tip) && tip > 0) {
-                await minerRpc('set_mock_time', { timestamp: tip + 5 });
-                await minerRpc('set_default_mining_time', {});
-            }
-        } catch { /* the venue check in global setup reports unreachability */ }
+        // venue jump mocktime to cross deadlines, and a killed run never reaches
+        // the teardown that would undo it - so the next suite inherits whatever
+        // clock was left behind. `healVenueClock` releases the node back to real
+        // time when that is safe and only pins when the chain sits in the
+        // future; the old unconditional tip+5 pin here was itself the ratchet
+        // that walked this venue five hours behind wall time.
+        await healVenueClock();
     });
 
     test('a stake activates, a partial UNSTAKE broadcasts valid, and a same-key top-up broadcasts as VERSION 2', async ({ page }) => {

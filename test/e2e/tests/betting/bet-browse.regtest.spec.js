@@ -56,6 +56,7 @@ import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    healVenueClock,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -222,6 +223,14 @@ test.describe('BET browse', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
+    // UNCONDITIONAL. The hold window below parks the SHARED venue miner, and its
+    // own `finally` does not run when Playwright kills a timed-out step - which
+    // would leave the next spec, and another session's whole suite, waiting on
+    // funding that can never confirm with nothing in their logs naming this run.
+    test.afterEach(async () => {
+        await minerRpc('continue_mining', {}).catch(() => {});
+    });
+
     test('the list shows the status the chain stored, and filters on it', async ({ page }) => {
         let oracle;
         let feedIndex;
@@ -248,6 +257,18 @@ test.describe('BET browse', () => {
         });
 
         await test.step('open a market with a short deadline', async () => {
+            // THE CHAIN'S CLOCK HAS TO BE RUNNING for this spec to mean anything,
+            // and on a shared venue it often is not. Every deadline below is
+            // computed from the CHAIN's clock, and the last step waits for a
+            // BLOCK past that deadline; a node left under `setmocktime` by a
+            // neighbouring suite (or by a run of this one that was killed before
+            // its teardown) stamps every block at the frozen instant, so the
+            // deadline is never crossed no matter how many blocks are mined. It
+            // reported as "a block past the deadline did not latch the market
+            // closed" on 2026-09-02, which reads as an indexer defect and is a
+            // clock nobody restarted. Cheap when the clock is already fine.
+            await healVenueClock();
+
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
@@ -312,10 +333,27 @@ test.describe('BET browse', () => {
             // The wallet must follow the CHAIN, not the clock. Nothing here
             // mines: the point is that the market is past its deadline in
             // wall-clock terms and still `open` on chain.
+            //
+            // THE MINER IS PARKED FOR THE WHOLE WINDOW, because "nothing here
+            // mines" was only ever true of this spec. The venue miner mines on
+            // its own whenever the mempool is non-empty (its tx timer re-arms as
+            // long as anything is pending), so a neighbour's broadcast - or, on
+            // 2026-09-02, four permanently unmineable sub-fee transactions left
+            // in the shared mempool - advances the chain under a spec that is
+            // deliberately standing still, latches the market closed and reports
+            // as a wallet defect. `pause_mining` is the same lever
+            // `history/pending-lifecycle` uses for the same reason, and the
+            // release below is unconditional: a run that leaves the SHARED miner
+            // parked breaks every run after it, including another session's.
             const stored = await feedRow(feedIndex);
             const deadline = Number(stored.deadline);
             const waitMs = Math.max(0, (deadline - Math.floor(Date.now() / 1000)) + 15) * 1000;
-            await new Promise((r) => setTimeout(r, waitMs));
+            try {
+                await minerRpc('pause_mining', {});
+                await new Promise((r) => setTimeout(r, waitMs));
+            } finally {
+                await minerRpc('continue_mining', {}).catch(() => {});
+            }
             expect(Math.floor(Date.now() / 1000),
                 'the deadline has not actually passed in wall-clock terms').toBeGreaterThan(deadline);
 
@@ -350,6 +388,13 @@ test.describe('BET browse', () => {
         });
 
         await test.step('a block lands, and the filter follows the chain', async () => {
+            // Again, and deliberately not only at the top of the test: the hold
+            // window above is minutes long, and the venue is shared for every one
+            // of them. A neighbour that froze the clock during the wait would
+            // otherwise turn this step into 240s of mining blocks that all carry
+            // the same instant.
+            await healVenueClock();
+
             const until = Date.now() + 240_000;
             let stored = null;
             while (Date.now() < until) {

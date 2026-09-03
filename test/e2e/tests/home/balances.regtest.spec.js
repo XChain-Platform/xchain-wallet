@@ -227,6 +227,18 @@ async function receiveAddressFor(page, chain) {
 }
 
 test.describe('Home balances against the chain', () => {
+    // The config's 420s default is not enough for what the hook below does, and
+    // the failure it produces is the least legible one this suite can produce.
+    // Every test here pays for a full onboarding (Argon2id), a network switch, a
+    // per-chain receive-address walk, a funding that waits on a real block, and a
+    // reload that re-derives the vault - and on a busy shared venue that measured
+    // 7 minutes on 2026-09-02, against a body that then took 22 seconds. Worse,
+    // the fiat test below is `test.fail()`: an assertion failure there is the
+    // expected outcome, but a TIMEOUT is not, so a slow venue turns the pinned
+    // defect into a red with a message about a hook. Sized like the rest of the
+    // chain-bound specs in this suite rather than to a measurement.
+    test.setTimeout(900_000);
+
     /** @type {string} */ let address;
     /** @type {number} */ let coinUsd;
 

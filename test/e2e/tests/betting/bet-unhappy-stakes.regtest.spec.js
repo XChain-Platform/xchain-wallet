@@ -315,7 +315,17 @@ test.describe('BET unhappy stakes', () => {
         const openMarket = async () => {
             await gotoBettingHub(page);
             const row = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
-            await expect(row).toBeVisible({ timeout: 30_000 });
+            // 90s, not 30s. The market is already confirmed on chain by the step
+            // above, so what is being waited on here is the HUB's own fetch, and
+            // it re-runs from scratch every time `gotoBettingHub` switches the
+            // chain picker - over a venue list that now carries hundreds of
+            // markets. Two whole-suite runs (2026-09-02) failed here with the row
+            // present in the failure snapshot, which is the signature of a budget
+            // that is too tight rather than of a market that never landed.
+            await expect(row,
+                `the Betting hub never listed market #${feedIndex}, which the chain has already `
+                + 'recorded as valid')
+                .toBeVisible({ timeout: 90_000 });
             await row.click();
             const main = page.getByRole('main');
             await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });

@@ -67,6 +67,7 @@ import {
     expectConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    healVenueClock,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -396,6 +397,16 @@ test.describe('BET deadline race', () => {
         });
 
         await test.step('open a market, as the oracle, whose deadline arrives in minutes', async () => {
+            // THE CHAIN'S CLOCK HAS TO BE RUNNING, and on a shared venue it is
+            // often frozen where a neighbour's `setmocktime` left it (§3.2 above
+            // says this spec needs a chain whose clock actually reaches the
+            // deadline; this is the line that makes it so rather than hoping).
+            // The deadline below is computed from the CHAIN's clock and validated
+            // by the form against the BROWSER's, so a node stamping blocks in the
+            // past refuses the create outright with "Betting must close in the
+            // future" - which arrives here as a confirm modal that never opens.
+            await healVenueClock();
+
             await useAddress(page, oracle);
 
             await gotoBettingHub(page);
