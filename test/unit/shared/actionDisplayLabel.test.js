@@ -42,6 +42,7 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('ANCHOR')).toBe('Network checkpoint');
         expect(actionDisplayLabel('ATTEST')).toBe('Validator attestation');
         expect(actionDisplayLabel('NODEPROOF')).toBe('Node proof');
+        expect(actionDisplayLabel('ROLLCALL')).toBe('Validator roll call');
         expect(actionDisplayLabel('SLASH')).toBe('Validator penalty');
         expect(actionDisplayLabel('XCALL')).toBe('Cross-chain call');
         expect(actionDisplayLabel('XEXEC')).toBe('Cross-chain execution');
@@ -49,6 +50,7 @@ describe('shared/actionDisplayLabel', () => {
         // The Title-Case fallback used to produce these; assert it no longer does.
         expect(actionDisplayLabel('XCALL')).not.toBe('Xcall');
         expect(actionDisplayLabel('NODEPROOF')).not.toBe('Nodeproof');
+        expect(actionDisplayLabel('ROLLCALL')).not.toBe('Rollcall');
         expect(actionDisplayLabel('CROSS_SETTLE')).not.toBe('Cross settle');
     });
 

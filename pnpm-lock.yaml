@@ -7,9 +7,9 @@ settings:
 overrides:
   tar: ^7.5.7
   ws: ^8.20.1
-  brace-expansion@1: ^1.1.15
-  brace-expansion@2: ^2.1.2
-  brace-expansion@5: ^5.0.6
+  brace-expansion@1: ^1.1.18
+  brace-expansion@2: ^2.1.4
+  brace-expansion@5: ^5.0.9
   vite: '>=6.4.3 <7'
   protobufjs: ^7.5.8
   form-data: ^4.0.6
@@ -177,8 +177,8 @@ importers:
         specifier: ^8.9.0
         version: 8.9.0
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
-        version: '@dankest-llc/xchain-sdk@0.10.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.12.0
+        version: '@dankest-llc/xchain-sdk@0.12.0'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -223,8 +223,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
-        version: '@dankest-llc/xchain-sdk@0.10.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.12.0
+        version: '@dankest-llc/xchain-sdk@0.12.0'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -299,8 +299,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
-        version: '@dankest-llc/xchain-sdk@0.10.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.12.0
+        version: '@dankest-llc/xchain-sdk@0.12.0'
     devDependencies:
       '@vitejs/plugin-basic-ssl':
         specifier: ^1.1.0
@@ -607,10 +607,9 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@dankest-llc/xchain-sdk@0.10.0':
-    resolution: {integrity: sha512-jWNsVPkZ6UQBUShYjz+aihIgTz922Vnq7FrTg6W5VnB80Cq6vF5oCuiDqCH38/vHb8A7gp+i3Qi/tP0VrcHeXA==}
+  '@dankest-llc/xchain-sdk@0.12.0':
+    resolution: {integrity: sha512-d7+VCrZVzeh1ek0WXjg+5dLk7Tj+SvovG9sJA+w/MSJYioPUyQNtrZ8ZnobWf6LvjqXc2ScrIuhg8NYm9uwoww==}
     engines: {node: '>=22.0.0'}
-    deprecated: superseded by the platform version stream; install 0.10.0 or later
 
   '@electron-internal/extract-zip@1.0.5':
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
@@ -1792,15 +1791,15 @@ packages:
     resolution: {integrity: sha512-apC2+fspHGI3mMKj+dGevkGo/tCqVB8jMb6i+OX+E29p0Iposz07fABkRIfVUPNd5A5VbuOz1bZbnmkKLYF+wQ==}
     engines: {node: '>= 5.10.0'}
 
-  brace-expansion@1.1.15:
-    resolution: {integrity: sha512-EwOCDEex4quD37XhqM3omwtMoJjr//isUZz1JopUNWms+4Z2ViyM/k1YIRePpoVNnQhENnxtFjLaxNHrT7xIUg==}
+  brace-expansion@1.1.18:
+    resolution: {integrity: sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==}
 
   brace-expansion@2.1.4:
     resolution: {integrity: sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==}
 
-  brace-expansion@5.0.6:
-    resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
-    engines: {node: 18 || 20 || >=22}
+  brace-expansion@5.0.9:
+    resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
+    engines: {node: 20 || >=22}
 
   brorand@1.1.0:
     resolution: {integrity: sha512-cKV8tMCEpQs4hK/ik71d6LrPOnpkpGBR0wzxqr68g2m/LB2GxVYQroAjMJZRVM1Y4BCjCKc3vAamxSzOY2RP+w==}
@@ -4613,7 +4612,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@dankest-llc/xchain-sdk@0.10.0':
+  '@dankest-llc/xchain-sdk@0.12.0':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       '@brandonblack/musig': 0.0.1-alpha.1
@@ -5899,7 +5898,7 @@ snapshots:
     dependencies:
       big-integer: 1.6.52
 
-  brace-expansion@1.1.15:
+  brace-expansion@1.1.18:
     dependencies:
       balanced-match: 1.0.2
       concat-map: 0.0.1
@@ -5908,7 +5907,7 @@ snapshots:
     dependencies:
       balanced-match: 1.0.2
 
-  brace-expansion@5.0.6:
+  brace-expansion@5.0.9:
     dependencies:
       balanced-match: 4.0.4
 
@@ -7306,11 +7305,11 @@ snapshots:
 
   minimatch@10.2.5:
     dependencies:
-      brace-expansion: 5.0.6
+      brace-expansion: 5.0.9
 
   minimatch@3.1.5:
     dependencies:
-      brace-expansion: 1.1.15
+      brace-expansion: 1.1.18
 
   minimatch@5.1.9:
     dependencies:
