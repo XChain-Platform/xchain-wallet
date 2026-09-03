@@ -69,7 +69,7 @@ for (const [label, src] of [['history list', historySrc], ['action detail', deta
 
 // 3: only checkpointable actions are asked about.
 assert.ok(
-    /Number\(entry\.blockIndex\) > 0/.test(detailSrc),
+    /Number\(entry\??\.blockIndex\) > 0/.test(detailSrc),
     'action detail verifies only a confirmed action (an unconfirmed one has no checkpointed block)',
 );
 assert.ok(

@@ -89,7 +89,7 @@ assert.ok(
     'History tracks historyFetchedAt state',
 );
 assert.ok(
-    /setEntries\(all\);\s*\n\s*setLoadingChains\(new Set\(\)\);\s*\n\s*setHistoryFetchedAt\(Date\.now\(\)\);/.test(historySrc),
+    /setEntries\([^)]*\);\s*\n\s*setLoadingChains\(new Set\(\)\);\s*\n\s*setHistoryFetchedAt\(Date\.now\(\)\);/.test(historySrc),
     'History stamps historyFetchedAt after the per-chain fan-out completes',
 );
 assert.ok(

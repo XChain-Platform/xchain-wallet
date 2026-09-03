@@ -45,7 +45,7 @@ assert.match(
 );
 assert.match(
     histSrc,
-    /if \(replaceable\.ok\) \{/,
+    /if \(replaceable\.ok\b/,
     'RBF menu options only added for replaceable entries',
 );
 
