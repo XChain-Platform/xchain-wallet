@@ -8,17 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Campaign coverage map, "Create token" -> the TICKER GRAMMAR GAP: the set of
-// names the chain will accept and the wallet will not let anybody type.
+// Driven: the ticker grammar gap is CLOSED, and this file is the
+// record of it on a real venue.
 //
-// WHY IT IS WORTH A RUN, AND WHAT IT DELIBERATELY DOES NOT DO. Row 21 asks
-// whether the wallet SHOULD widen its ticker rule. That is a product decision
-// and it is not this spec's; row 43 asks only for the measurable half, so this
-// file measures the delta and refuses to argue about it. Every assertion here
-// is of the form "the chain says X and the form does Y", both sides driven in
-// the same run against the same venue at the same block.
+// WHAT THIS FILE MEASURED. A delta: the set of names the chain
+// admitted and the wallet would not let anybody type. Both authoring surfaces
+// gated on `/^[A-Za-z0-9]+$/` (TokenWizard.jsx, IssueTokenForm.jsx) and both
+// inputs uppercased on every keystroke, so symbol-bearing ticks were refused
+// with a message and lowercase ones were silently rewritten under the user's
+// cursor. Every assertion was of the form "the chain says yes and the form says
+// no", both halves driven in the same run against the same venue.
 //
-// THE TWO RULES, QUOTED FROM HEAD RATHER THAN FROM THE COVERAGE ROW.
+// THE OPERATOR RULING, 2026-08-29: widen to the SYMBOL class and drop the
+// uppercase coercion on both surfaces; leave the caret closed until its
+// admission path is settled. So the delta this file measured is now the delta
+// it DEFENDS, and every leg that once asserted a refusal asserts an
+// acceptance, in the same shape and against the same authority.
+//
+// THE TWO RULES AS THEY STAND, QUOTED FROM HEAD.
 //
 //   CHAIN (xchain-indexer/src/config.js):
 //     TICK_CHARACTERS  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
@@ -27,45 +34,44 @@
 //     MAX_TICK_LENGTH  250
 //   enforced in `issue.js` as an allowlist loop ("invalid: TICK (character)")
 //   plus a length band ("invalid: TICK (length)"). `xchain-sdk/src/validator.js`
-//   mirrors it byte for byte (TICK_REGEX, MAX_TICK_LENGTH 250), so the SDK is
-//   NOT the narrowing.
+//   mirrors it byte for byte (TICK_REGEX, MAX_TICK_LENGTH 250).
 //
-//   WALLET, both authoring surfaces, and they are the whole narrowing:
-//     TokenWizard.jsx      /^[A-Za-z0-9]+$/   "Token name must be A-Z, 0-9."
-//     IssueTokenForm.jsx   /^[A-Za-z0-9]+$/   "Ticker must be A-Z, 0-9 only."
+//   WALLET, both authoring surfaces, now reading ONE module:
+//     packages/core/src/shared/utils/tickerGrammar.js
+//   which is TICK_CHARACTERS minus `^` and the same 1..250 band. No case
+//   coercion anywhere: the input keeps what was typed and the params builder
+//   passes it through. The dot stays out of the fields that COIN a name,
+//   because `issue.js` reads `A.B` as a child of `A` and answers "parent
+//   unknown" only after the miner fee is spent; the wizard's Parent ticker
+//   field, which references a token that already exists, takes it.
 //
-// AND THE COVERAGE ROW IS WRONG ABOUT HALF OF IT, which is the reason this file
-// earns its runtime rather than restating a known gap. The row names four
-// classes as unauthorable: 1-character, lowercase, symbol-bearing, over-long.
-// Read the regex: `+` is one-or-more, so a 1-character tick PASSES; the
-// character class contains `a-z`, so lowercase PASSES; and neither ticker input
-// carries a `maxLength` (the Description and Image URL inputs beside them do,
-// at 250), so a 250-character alphanumeric tick PASSES too. Only the
-// SYMBOL-BEARING class is actually refused.
+// WHY THE CARET IS STILL REFUSED, and it is the one place this file still
+// measures a deliberate narrowing rather than agreement. `^999999` quotes
+// `valid` at the venue, but `db.js createTicker` never inserts a literal `^…`
+// row (issue.js:295-305), so a caret ISSUE can land valid with a NULL ticker
+// id, and the dotted caret form is only refused above the BATCH_ISSUANCE_LIMITS
+// v2 flag. The wallet refusing a shape whose admission path is unsettled is a
+// decision, not a defect, and the caret step below pins it as one so that
+// opening it later is a deliberate edit to this file rather than a silent drift.
 //
-// Lowercase is unreachable all the same, and by a different mechanism worth
-// pinning on its own: both fields uppercase on every keystroke
-// (`onChange={(e) => setName(e.target.value.toUpperCase())}`), so a lowercase
-// tick is not refused with a message, it is silently rewritten under the
-// user's cursor. A spec that only looked for an error message would have
-// reported that class as authorable.
-//
-// WHAT WOULD BE FALSE IF THIS PASSED VACUOUSLY. Three things, and each has a
+// WHAT WOULD BE FALSE IF THIS PASSED VACUOUSLY. Three things, each with a
 // control in the run:
 //   - "the chain accepts these" is asserted against the venue's own /feequote,
 //     not against the config file above, so a chain that had quietly narrowed
 //     fails here rather than being argued with.
-//   - "the form refuses these" is asserted against the exact grammar message,
-//     and the SAME helper is asserted to NOT produce it on the classes the
-//     regex allows. A helper that could never find the message would fail the
-//     refusal legs; one that always found it would fail the acceptance legs.
+//   - "the form accepts these" is asserted by reaching the confirm screen, and
+//     the SAME helper is asserted to find the grammar refusal on the caret. A
+//     helper that could never reach a confirm screen would fail the acceptance
+//     legs; one that never found a refusal would fail the caret leg.
 //   - a plain alphanumeric CONTROL tick is driven through both sides first, so
 //     a venue that refuses everything, or a form that refuses everything,
 //     cannot produce a green.
 //
-// NOTHING HERE BROADCASTS. Every leg stops at the confirm screen or earlier, so
-// the run spends miner fees on nothing and no protocol fee is paid; the only
-// on-chain writes are the funding this needs to make a compose possible at all.
+// ONE LEG BROADCASTS, and it is the point of the file: a symbol-bearing tick is
+// issued for real and its balance is read back off the explorer, because
+// "the form let me type it" and "the chain took it" are different claims and
+// only the second one closes the item. Every other leg stops at the confirm
+// screen or earlier.
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
@@ -90,8 +96,8 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-/** No leg here broadcasts, so this only has to make a COMPOSE possible. */
-const FUNDING = 2;
+/** One leg here pays a real protocol fee on top of the miner fees. */
+const FUNDING = 4;
 const SUPPLY = 1000;
 const STAMP = Date.now().toString().slice(-6);
 
@@ -115,46 +121,57 @@ const NATIVE_TICKER = REGTEST_COIN.replace(/^R/, '');
 const NATIVE_FEE_MANDATORY = NATIVE_TICKER !== 'BTC';
 
 /**
- * The grammar refusals, matched WITHOUT the dash character.
+ * The two refusals the widened grammar still produces, matched on their
+ * distinguishing clause rather than on the whole sentence.
  *
- * The product copy spells the ranges with an en dash ("A-Z, 0-9" with U+2013),
- * and hardcoding that byte makes the spec fail on a typographic edit that
- * changed nothing about the rule. A wildcard for the dash keeps the assertion
- * on the sentence rather than on its punctuation.
+ * Both surfaces now share one module, so the copy is identical apart from the
+ * field noun ("Token name" in the wizard, "Ticker" in the direct form). The
+ * noun is what tells the two surfaces apart, and the direct-form step below
+ * asserts on it for exactly that reason.
  */
-const WIZARD_GRAMMAR_MESSAGE = /Token name must be A.Z, 0.9/;
-const DIRECT_GRAMMAR_MESSAGE = /Ticker must be A.Z, 0.9 only/;
+const CARET_REFUSAL = /reserved for token IDs/;
+const CHARACTER_REFUSAL = /can only use letters, numbers/;
 
 /**
- * Ticks the chain's allowlist accepts and the wallet's regex does not.
+ * The symbol classes: ticks the chain's allowlist accepts, and the wallet ought not
+ * to refuse outright.
  *
- * Every symbol here is a literal member of TICK_CHARACTERS. The caret case is
- * the tick-ID wire form: `issue.js` accepts `^<numeric>` outright (it only
- * rejects a non-numeric tail as "invalid: TICK (id)"), and no literal `^...`
- * row is ever created, so the name cannot be taken by an earlier run.
+ * Every symbol here is a literal member of TICK_CHARACTERS. Measured at the
+ * venue's own /feequote on 2026-08-27, each reads `status: valid`.
  */
-const REFUSED_BY_WALLET = [
+// Five, not the whole symbol set, and the ceiling is the run's own clock rather
+// than taste: each class costs a full wizard walk (reload, unlock, template,
+// chain, details) and a seeded venue price lives 1800s of CHAIN time that every
+// one of those walks burns. Five spans the shapes that differ mechanically
+// (leading-position symbol, trailing symbol, symbols the encoder must not treat
+// as delimiters) and leaves headroom for the broadcast leg. The exhaustive
+// per-character sweep is `test/unit/utils/tickerGrammar.test.js`, which needs
+// no venue at all.
+const SYMBOL_CLASSES = [
     { klass: 'hyphen', tick: `TGR${STAMP}-1` },
     { klass: 'underscore', tick: `TGR${STAMP}_1` },
     { klass: 'percent', tick: `TGR${STAMP}%1` },
-    { klass: 'hash', tick: `TGR${STAMP}#1` },
-    // STILL NOT the tick-ID form (`^999999`), but for a DIFFERENT reason than
-    // the one an earlier note gave, and the difference matters.
-    //
-    // The superseded reason: "the venue REFUSED it, `chainVerdict` came back
-    // undefined". That was wrong - an absent status is not a refusal, and a
-    // direct probe on 2026-08-27 reads `^999999` as `status: valid`, exactly
-    // like every class in this list. See the describe block's header.
-    //
-    // The real reason it is held out: a caret tick is clean at the fee quote and
-    // MURKY past it. `xchain-indexer/src/actions/issue.js:295-305` records that
-    // `createTicker` never inserts a literal `^…` row, so a caret ISSUE can land
-    // `valid` with a NULL ticker id, and the dotted-caret form is separately
-    // refused by the BATCH_ISSUANCE_LIMITS v2 rule. Putting it in this list
-    // would make the spec demand the wallet widen to a shape whose own
-    // admission path is unsettled. The symbol classes below have no such
-    // question, which is why they are the ones that carry the grammar fix.
+    { klass: 'dollar', tick: `TGR${STAMP}$` },
+    { klass: 'tilde inside', tick: `TGR${STAMP}~1` },
 ];
+
+/**
+ * The one tick this file actually issues.
+ *
+ * A dollar sign, because it is the class the ledger entry named first and it
+ * survives every hop it has to cross to get here: the action string's own
+ * delimiters are `|` and `;`, neither of which is on the allowlist at all.
+ */
+const ISSUED_TICK = `TGI${STAMP}$`;
+
+/**
+ * The tick-ID form, held closed on purpose. See the header.
+ *
+ * It is asserted REFUSED here rather than left out of the file, because "the
+ * wallet does not author this yet" is a decision with a reason and an unpinned
+ * decision is indistinguishable from an oversight.
+ */
+const CARET_TICK = '^999999';
 
 /** The control: plainly alphanumeric, so both sides must say yes. */
 const CONTROL_TICK = `TGC${STAMP}`;
@@ -163,8 +180,8 @@ const CONTROL_TICK = `TGC${STAMP}`;
  * A 250-character tick, which is exactly MAX_TICK_LENGTH.
  *
  * Alphanumeric on purpose: the point is the LENGTH, and mixing a symbol in
- * would let the wallet's character rule take the credit for a refusal the
- * coverage row attributes to length.
+ * would let the character rule take the credit for a refusal this step
+ * attributes to length.
  */
 const OVERLONG_TICK = `TGL${STAMP}`.padEnd(250, 'Z');
 
@@ -326,11 +343,32 @@ async function openWizardDetails(page) {
  * the same stage would read the first case's message and every refusal after
  * the first would be unattributable.
  *
- * Returns what the FIELD held after filling as well as the verdict, because on
- * this surface the two are different questions: the input uppercases on change,
- * so "what the user typed" and "what the form validated" are not the same
- * string.
+ * Returns what the FIELD held after filling as well as the verdict, because the
+ * two were different questions on this surface: the input uppercased on
+ * change, so "what the user typed" and "what the form validated" were not the
+ * same string. The grammar module removed the coercion, and `held` is what proves it.
  */
+/**
+ * The shared confirm wait, with the venue's rate limit turned into a SKIP.
+ *
+ * When the shared explorer refuses a read mid-compose the wallet says
+ * so in its own words ("The service that reads the chain is temporarily
+ * unavailable (error 429). Nothing was signed or sent") and correctly never
+ * opens the confirm screen. Every leg here that broadcasts goes through this,
+ * because a red carrying that sentence is about the venue's rate limit and not
+ * about a ticker grammar rule - the file's own messages already say so, and a
+ * reader still has to re-derive it before ignoring the failure.
+ */
+async function confirmOrSkipOnRateLimit(page, what = 'this action', timeoutMs = 60_000) {
+    try {
+        return await expectConfirmModal(page, what, timeoutMs);
+    } catch (err) {
+        test.skip(/error 429/i.test(String(err?.message || '')),
+            `the shared explorer rate-limited the wallet mid-compose - ${err?.message || err}`);
+        throw err;
+    }
+}
+
 async function submitWizardName(page, tick) {
     const main = await openWizardDetails(page);
     const field = main.getByLabel('Token name (ticker)');
@@ -339,13 +377,14 @@ async function submitWizardName(page, tick) {
     await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
     await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-    const grammar = page.getByRole('alert').filter({ hasText: WIZARD_GRAMMAR_MESSAGE });
+    const grammar = page.getByRole('alert')
+        .filter({ hasText: /Token name (?:cannot|can only use|is required)/ });
     const confirm = page.getByTestId('confirm-modal');
     // Raced rather than waited on in sequence: a refused submit never composes
     // and an accepted one never shows a grammar error, so whichever appears IS
     // the verdict. The catch matters for the over-long leg, where a compose can
     // legitimately fail for a reason that is not the grammar rule - that is
-    // still a form that got PAST the regex, which is all this measures.
+    // still a form that got PAST the rule, which is all this measures.
     let settled = true;
     await grammar.or(confirm).first().waitFor({ state: 'visible', timeout: 150_000 })
         .catch(() => { settled = false; });
@@ -363,15 +402,13 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(2_400_000);
 
-    // READ THIS BEFORE THE HEADER BELOW IT: THE FOUR-RUN CONCLUSION THIS FILE
-    // CARRIED WAS WRONG, AND MEASURING IT AT THE VENUE ON 2026-08-27 IS WHY
-    // THIS TEST IS NO LONGER `fixme`.
+    // THE HISTORY, KEPT BECAUSE HOW THIS WENT WRONG IS THE LESSON.
     //
-    // The superseded header (kept below, because how it went wrong is the
-    // lesson) said each ticker class in turn "failed the CHAIN half of its own
-    // claim", and concluded that the indexer's config constants do not describe
-    // what this venue admits. That conclusion rested entirely on `chainVerdict`
-    // returning `undefined`, which was read as a refusal. It is not one.
+    // This file spent four runs concluding that the chain refused the classes
+    // it was measuring, and therefore that the wallet was AGREEING with the
+    // chain rather than narrowing it. That conclusion rested entirely on
+    // `chainVerdict` returning `undefined`, which was read as a refusal. It is
+    // not one.
     //
     // Probed directly against `/RLTC/api/feequote`, one call per class, with a
     // plain-alphanumeric control in the same batch:
@@ -387,55 +424,16 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
     // `undefined`, the constants describe the venue correctly, and the
     // `undefined` was this harness returning without a status (a timed-out or
     // busy quote), not the chain saying no. **An absent field is not a verdict**
-    // - that is the mistake, and `chainVerdict` should be treated as unreadable
-    // rather than as "refused" whenever it is not one of the venue's own status
-    // strings.
+    // - that is the mistake, and `chainVerdict` treats an unreadable answer as
+    // unreadable rather than as "refused".
     //
-    // WHAT THAT RESTORES: the row's original premise, narrower but real, and
-    // tracked separately. Both authoring surfaces gate on
-    // `/^[A-Za-z0-9]+$/` (TokenWizard.jsx:306, IssueTokenForm.jsx:306) and both
-    // inputs uppercase every keystroke (:1093, :761), so SYMBOL-bearing and
-    // CARET ticks are refused with an error and a lowercase one is silently
-    // rewritten under the cursor - three shapes the chain admits and nobody can
-    // type. It is two mechanisms, a regex and a coercion, which is why a spec
-    // hunting only for an error message would have called lowercase authorable.
-    //
-    // ONE CAVEAT THE NEXT SESSION MUST NOT LOSE: the caret class is valid at the
-    // fee quote and murky past it. `xchain-indexer/src/actions/issue.js:295-305`
-    // records that `createTicker` never inserts a literal `^…` row, so a caret
-    // ISSUE can land valid with a NULL ticker id. Widen the wallet to the SYMBOL
-    // class first; settle caret against the admission path before allowing it.
-    //
-    // ---- SUPERSEDED HEADER, KEPT SO THE ERROR STAYS VISIBLE ----
-    // FIXME'd 2026-08-27, AND THE FOUR RUNS THAT GOT IT HERE ARE THE FINDING.
-    // This pins no wallet defect. It very nearly reported four.
-    //
-    // The coverage row this spec was written for names four ticker classes the
-    // chain supposedly accepts and the wallet refuses. Driven against the venue,
-    // one at a time, each class in turn failed the CHAIN half of its own claim:
-    //
-    //   `^999999` (tick-ID form)  the venue refused it, though `^` is a literal
-    //                            member of TICK_CHARACTERS.
-    //   1 character              all six candidates refused, though
-    //                            MIN_TICK_LENGTH is 1.
-    //   250 characters           refused at exactly MAX_TICK_LENGTH. Plausibly
-    //                            the chunked-encoding lane rather than grammar;
-    //                            250 chars is far past a bare OP_RETURN.
-    //   lowercase                refused, and this one explains itself: ticks
-    //                            resolve CASE-INSENSITIVELY, so a lowercase
-    //                            tick reads as already-taken the moment the
-    //                            uppercase form exists. The wallet silently
-    //                            uppercasing it is therefore agreement, and
-    //                            arguably just correct.
-    //
-    // So the wallet is largely AGREEING with the chain, and the config constants
-    // (TICK_CHARACTERS, MIN_TICK_LENGTH, MAX_TICK_LENGTH) do not describe what
-    // this venue actually admits. That gap is the real question and it is bigger
-    // than ticker grammar; it belongs to whoever owns the admission path, not to
-    // the wallet. Only the SYMBOL class is still a candidate for a genuine gap,
-    // and it has not been shown green yet.
-    // ---- END SUPERSEDED HEADER ----
-    test('the chain accepts ticker shapes the Create token form will not let anybody type', async ({ page }) => {
+    // What that restored was the row's original premise, narrower but real, and
+    // tracked: symbol-bearing ticks refused with an error and
+    // lowercase ones silently rewritten, three shapes the chain admits and
+    // nobody could type. The operator ruled on 2026-08-29 to widen to the
+    // symbol class and drop the coercion, leaving the caret closed, and this
+    // file now defends that outcome.
+    test('the Create token form authors every ticker shape the chain accepts', async ({ page }) => {
         /** The wallet's only address on this chain, and the source every quote is taken from. */
         let source;
 
@@ -469,9 +467,19 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe('valid');
 
             const verdict = await submitWizardName(page, CONTROL_TICK);
+            // A skip rather than a red: when the shared explorer
+            // rate-limits a read mid-compose the wallet says so in its own words
+            // and correctly never opens the confirm screen. The control below
+            // then reports "never reached the confirm screen", which is true and
+            // is about the venue - this spec's own message already says as much,
+            // and a red that says "venue state, not a grammar rule" is one the
+            // next reader has to re-derive before ignoring.
+            test.skip(/error 429/i.test(String(verdict.alertText || '')),
+                'the shared explorer rate-limited the wallet mid-compose, so the control '
+                + `ISSUE never reached a confirm screen - ${verdict.alertText}`);
             expect(verdict.refusedOnGrammar,
-                'the wizard refused a plainly alphanumeric ticker, so the grammar matcher below '
-                + 'would report a "gap" on every name in existence')
+                'the wizard refused a plainly alphanumeric ticker, so every acceptance below '
+                + 'would be measuring a form that is broken in some other way')
                 .toBe(false);
             expect(verdict.reachedConfirm,
                 `a plain ISSUE of ${CONTROL_TICK} never reached the confirm screen `
@@ -479,33 +487,122 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(true);
         });
 
-        await test.step('THE GAP: five shapes the chain allows and the form refuses outright', async () => {
-            for (const { klass, tick } of REFUSED_BY_WALLET) {
-                // The chain's half first, so the refusal below is measured
+        await test.step('THE FIX: five symbol classes the chain allows and the form now authors', async () => {
+            for (const { klass, tick } of SYMBOL_CLASSES) {
+                // The chain's half first, so the acceptance below is measured
                 // against something rather than believed. Every one of these
-                // characters is a literal member of TICK_CHARACTERS, and this
-                // is the venue agreeing.
+                // characters is a literal member of TICK_CHARACTERS.
                 expect(await chainVerdict(tick, source),
-                    `the venue refuses the ${klass} class (${tick}), so the wallet refusing it is `
-                    + 'agreement rather than a gap. TICK_CHARACTERS has narrowed, or this venue '
-                    + 'runs an older indexer')
+                    `the venue refuses the ${klass} class (${tick}), so the wallet accepting it `
+                    + 'would be composing an ISSUE that cannot land. TICK_CHARACTERS has narrowed, '
+                    + 'or this venue runs an older indexer')
                     .toBe('valid');
 
                 const verdict = await submitWizardName(page, tick);
+                expect(verdict.held,
+                    `the name field rewrote the ${klass} class under the user's cursor`)
+                    .toBe(tick);
                 expect(verdict.refusedOnGrammar,
-                    `the wizard did NOT refuse the ${klass} class (${tick}) on grammar, so the `
-                    + 'narrowing this spec measures is no longer in force. If the rule was widened '
-                    + `on purpose, this row is the record of it (last alert: ${verdict.alertText})`)
-                    .toBe(true);
-                expect(verdict.reachedConfirm,
-                    `a ticker the wizard refused still reached the confirm screen (${klass})`)
+                    `the wizard refused the ${klass} class (${tick}) on grammar, so the widened grammar has `
+                    + `regressed on this surface (alert: ${verdict.alertText})`)
                     .toBe(false);
+                expect(verdict.reachedConfirm,
+                    `the ${klass} class never reached the confirm screen `
+                    + `(${verdict.alertText || 'no alert either'})`)
+                    .toBe(true);
             }
         });
 
-        await test.step('THE CORRECTION, part 1: a 1-character tick is authorable after all', async () => {
-            // The coverage row lists this class as unauthorable. The regex says
-            // otherwise (`+` is one-or-more), and the run says otherwise.
+        await test.step('THE DRIVE: a symbol-bearing token is issued for real and lands', async () => {
+            // The leg that closes the item. Everything above proves the FORM
+            // stopped refusing; only this proves the chain takes what the form
+            // now composes, which is the claim the ledger entry actually makes.
+            //
+            // Re-seeded first: this is the only leg that BROADCASTS, and the
+            // five walks above have burned chain time against a price that
+            // lives 1800s of it. A lapsed price makes the compose unpriceable,
+            // which would fail this step for a reason that has nothing to do
+            // with the ticker.
+            await seedPrices();
+            expect(await chainVerdict(ISSUED_TICK, source),
+                'the venue will not price the tick this step issues').toBe('valid');
+
+            const main = await openWizardDetails(page);
+            await main.getByLabel('Token name (ticker)').fill(ISSUED_TICK);
+            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
+            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+
+            await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
+            const approve = page.getByTestId('confirm-approve');
+            await expect(approve).toBeEnabled({ timeout: 120_000 });
+            await approve.click();
+            const shell = page.getByRole('main');
+            await expect(shell, 'no transaction id ever appeared after Approve')
+                .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
+            const txid = (await shell.innerText()).match(/[0-9a-f]{64}/)?.[0];
+
+            const action = await waitForValidAction(txid);
+            // The chain's own record of the name, which is the half that proves
+            // no hop between the input and the ledger rewrote it.
+            expect(String(action?.tick ?? action?.params?.TICK ?? ''),
+                'the settled action does not carry the symbol-bearing tick that was typed')
+                .toBe(ISSUED_TICK);
+            await waitForTokenBalance(source, ISSUED_TICK, SUPPLY);
+        });
+
+        await test.step('THE CARET: still refused, and that is a decision rather than a defect', async () => {
+            // `createTicker` never inserts a literal `^…` row, so a caret ISSUE
+            // can land valid with a NULL ticker id. The venue prices it all the
+            // same, which is exactly why this is asserted against the venue: it
+            // is the one class where the wallet is deliberately narrower than
+            // the chain, and an unpinned deliberate narrowing is
+            // indistinguishable from an oversight.
+            expect(await chainVerdict(CARET_TICK, source),
+                'the venue no longer prices the caret form, so the reason this class is held '
+                + 'closed may have changed. Re-read issue.js before opening it')
+                .toBe('valid');
+
+            const verdict = await submitWizardName(page, CARET_TICK);
+            expect(verdict.refusedOnGrammar,
+                'the wizard now authors a caret ticker. If the admission path was settled, this '
+                + `step is the record of it and must be rewritten deliberately (${verdict.alertText})`)
+                .toBe(true);
+            expect(verdict.alertText,
+                'the caret refusal no longer explains itself, so a user reaching for the tick-ID '
+                + 'form is told only that some character is wrong')
+                .toMatch(CARET_REFUSAL);
+            expect(verdict.reachedConfirm,
+                'a ticker the wizard refused still reached the confirm screen (caret)')
+                .toBe(false);
+        });
+
+        await test.step('and what the CHAIN refuses, the form still refuses too', async () => {
+            // The other side of the widening: it opened the allowlist, it did
+            // not remove the rule. A space is not in TICK_CHARACTERS at all, so
+            // letting it through would only move the refusal to a screen that
+            // costs a round trip.
+            const verdict = await submitWizardName(page, `TG ${STAMP}`);
+            expect(verdict.refusedOnGrammar,
+                'the wizard composes a ticker with a space in it, which issue.js rejects as '
+                + '"invalid: TICK (character)" after the miner fee is spent')
+                .toBe(true);
+            expect(verdict.alertText).toMatch(CHARACTER_REFUSAL);
+
+            // And the dot, which is the subtler one: it IS on the chain's
+            // allowlist, so a character check would let it through, and the
+            // ISSUE it composes is a CHILD of a parent this wallet does not
+            // own. That is refused as `invalid: TICK (parent unknown)` with the
+            // miner fee already spent, so the wizard names its Subtoken
+            // template instead.
+            const dotted = await submitWizardName(page, `TG${STAMP}.KID`);
+            expect(dotted.refusedOnGrammar,
+                'the wizard composes a dotted ticker from a name field, which the chain reads as '
+                + 'a subtoken issuance and refuses at a cost')
+                .toBe(true);
+            expect(dotted.alertText).toMatch(/cannot contain a dot/);
+        });
+
+        await test.step('a 1-character tick is authorable, as MIN_TICK_LENGTH says', async () => {
             let single = null;
             const seen = [];
             for (const candidate of SINGLE_CHAR_CANDIDATES) {
@@ -513,20 +610,10 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 seen.push(`${candidate}:${status}`);
                 if (status === 'valid') { single = candidate; break; }
             }
-            // MEASURED 2026-08-27 AND IT IS A CONTRADICTION, recorded rather
-            // than asserted past. `MIN_TICK_LENGTH` is 1 in the indexer's own
-            // config, and this venue answered `undefined` for all six
-            // candidates (1, 8, F, M, T, 0) in the same run where multi-
-            // character alphanumerics answered `valid`. So something between
-            // the config constant and the admission path refuses one-character
-            // ticks, and until that is named it is NOT safe to call the
-            // wallet's refusal a gap: it may be agreement, exactly as the
-            // tick-ID class turned out to be.
-            //
-            // Failing here would report a wallet defect on the strength of a
-            // premise the chain just declined to confirm, so the step records
-            // what it saw and stands down. Give this a venue with a free
-            // one-character tick and it runs.
+            // Every single-character tick is a name somebody else may already
+            // hold, and this venue is shared. A venue with none free is a fact
+            // about the venue, not about the wallet, so it is recorded rather
+            // than failed on. Give this a free one and the leg runs.
             if (!single) {
                 test.info().annotations.push({
                     type: 'venue-limit',
@@ -538,8 +625,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const verdict = await submitWizardName(page, single);
             expect(verdict.refusedOnGrammar,
-                `the wizard refused the 1-character tick ${single}. That contradicts its own `
-                + 'regex, so a length rule has been added somewhere since this was measured')
+                `the wizard refused the 1-character tick ${single}, so a length rule has been `
+                + 'added somewhere since this was measured')
                 .toBe(false);
             expect(verdict.reachedConfirm,
                 `a 1-character ISSUE of ${single} never reached the confirm screen `
@@ -547,21 +634,15 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(true);
         });
 
-        await test.step('THE CORRECTION, part 2: a 250-character tick clears the grammar rule too', async () => {
+        await test.step('a 250-character tick clears the grammar rule too', async () => {
             expect(OVERLONG_TICK.length, 'the over-long fixture is not MAX_TICK_LENGTH').toBe(250);
 
-            // THE THIRD CONTRADICTION, measured 2026-08-27 and recorded rather
-            // than asserted past, for the same reason as the 1-character class
-            // above: the venue answered `undefined` for a tick at exactly
-            // MAX_TICK_LENGTH, which the indexer's own config says is legal.
-            //
-            // There is a plausible mechanical cause that is NOT a protocol
-            // rule, and it has to be ruled out before anyone calls the wallet's
-            // refusal a gap: a 250-character tick is far past the ~80 bytes a
-            // bare OP_RETURN carries, so an ISSUE naming one needs the chunked
-            // multisig encoding lane. "The encoder could not fit it" and "the
-            // protocol forbids it" are different findings with different
-            // owners, and this step cannot tell them apart.
+            // A 250-character tick is far past the ~80 bytes a bare OP_RETURN
+            // carries, so an ISSUE naming one needs the chunked multisig
+            // encoding lane. "The encoder could not fit it" and "the protocol
+            // forbids it" are different findings with different owners, and
+            // this step cannot tell them apart, so a venue that will not price
+            // it is recorded rather than failed on.
             if (await chainVerdict(OVERLONG_TICK, source) !== 'valid') {
                 test.info().annotations.push({
                     type: 'venue-limit',
@@ -580,65 +661,92 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(250);
             // Asserted on the GRAMMAR rule alone, deliberately. Whether a
             // 250-character OP_RETURN payload then composes is an encoder
-            // question (it is far past the 80-byte bare-OP_RETURN limit, so it
-            // needs the multisig lane), and row 43 asks about the wallet's
-            // ticker rule, not about that.
+            // question, and this file is about the wallet's ticker rule.
             expect(verdict.refusedOnGrammar,
-                'the wizard refused a 250-character alphanumeric ticker on grammar. Its regex has '
-                + 'no length bound, so a length rule has been added since this was measured')
+                'the wizard refused a 250-character alphanumeric ticker on grammar, though the '
+                + 'rule allows exactly MAX_TICK_LENGTH')
                 .toBe(false);
         });
 
-        await test.step('THE COERCION: lowercase is not refused, it is silently rewritten', async () => {
-            // A different mechanism from every case above, and the reason it
-            // gets its own step: `/^[A-Za-z0-9]+$/` ACCEPTS lowercase. What
-            // makes the class unreachable is the input's own
-            // `onChange={(e) => setName(e.target.value.toUpperCase())}`, so
-            // there is no message, no warning, and nothing to appeal to. A
-            // spec that only looked for an error would have called this class
-            // authorable.
+        await test.step('THE COERCION IS GONE: lowercase survives the field and the compose', async () => {
+            // The silent half of the defect, and the reason it gets its own
+            // step: the old rule ACCEPTED lowercase and the input rewrote it
+            // anyway (`onChange={(e) => setName(e.target.value.toUpperCase())}`),
+            // so there was no message, no warning and nothing to appeal to. A
+            // step that only looked for an error would have called this class
+            // authorable both before the fix and after it, which is why this
+            // one reads the field back.
             const lower = `tgw${STAMP}`;
             expect(await chainVerdict(lower, source),
-                'the venue refuses a lowercase tick, so the wallet uppercasing it is agreement. '
-                + 'Note the chain resolves ticks CASE-INSENSITIVELY, so this reads "another '
-                + 'address" once the uppercase form exists')
+                'the venue refuses a lowercase tick, so the wallet keeping the case as typed '
+                + 'would be composing an ISSUE that cannot land')
                 .toBe('valid');
 
+            const verdict = await submitWizardName(page, lower);
+            expect(verdict.held,
+                'the name field rewrote a lowercase ticker under the user\'s cursor, so the '
+                + 'uppercase coercion the grammar module removed is back')
+                .toBe(lower);
+            expect(verdict.reachedConfirm,
+                `a lowercase ISSUE of ${lower} never reached the confirm screen `
+                + `(${verdict.alertText || 'no alert either'})`)
+                .toBe(true);
+
+            // The hint is the only disclosure a user gets about the rule, so it
+            // is worth an assertion: it once ended "Uppercase.", which was the
+            // one place the coercion was admitted to.
             const main = await openWizardDetails(page);
-            const field = main.getByLabel('Token name (ticker)');
-            await field.fill(lower);
-            expect(await field.inputValue(),
-                'the name field kept the lowercase characters, so the silent uppercasing this '
-                + 'step pins is gone and the class is now authorable')
-                .toBe(lower.toUpperCase());
-            // The hint says so out loud, and that is the only disclosure a user
-            // gets, so it is worth an assertion: it is the difference between a
-            // rule and a surprise. Dash-agnostic for the same reason the
-            // grammar matchers are.
-            await expect(main.getByText(/A.Z, 0.9\. Uppercase\./).first(),
-                'the ticker field no longer discloses that it uppercases')
+            expect(await main.getByText(/Uppercase\./).count(),
+                'the ticker hint still promises to uppercase what is typed, which is the one '
+                + 'place the coercion was ever disclosed')
+                .toBe(0);
+            await expect(main.getByText(/Case is kept exactly as typed/).first(),
+                'the ticker field no longer discloses its rule at all')
                 .toBeVisible({ timeout: 15_000 });
         });
 
-        await test.step('the DIRECT Issue form narrows identically, so a widening has two sites', async () => {
-            // Row 21 has to move both surfaces or neither, so the second one is
-            // measured here rather than assumed from a matching regex. Its
-            // message is its OWN string ("Ticker must be ...", not "Token name
-            // must be ..."), which is what proves this leg drove the other form.
-            const { tick } = REFUSED_BY_WALLET[0];
+        await test.step('the DIRECT Issue form widened identically, so the two surfaces agree', async () => {
+            // The ruling had to move both surfaces or neither, so the second
+            // one is measured here rather than assumed from a shared import.
+            // Its refusal copy is its OWN string ("Ticker cannot ...", not
+            // "Token name cannot ..."), which is what proves this leg drove the
+            // other form.
+            const { tick } = SYMBOL_CLASSES[0];
             await reloadToHome(page);
             await gotoPalette(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            await main.getByLabel('Ticker').fill(tick);
+            const field = main.getByLabel('Ticker');
+            await field.fill(tick.toLowerCase());
+            expect(await field.inputValue(),
+                'the direct form still uppercases what is typed, so the two surfaces have drifted '
+                + 'apart on the coercion')
+                .toBe(tick.toLowerCase());
+
+            await field.fill(tick);
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-            const alert = page.getByRole('alert').filter({ hasText: DIRECT_GRAMMAR_MESSAGE });
+            await expect(page.getByTestId('confirm-modal'),
+                'the direct Issue form refused a symbol-bearing ticker, so the two authoring '
+                + 'surfaces have drifted apart on the ticker rule')
+                .toBeVisible({ timeout: 90_000 });
+            await dismissConfirmIfOpen(page);
+
+            // And its caret refusal, named on this surface's own noun.
+            await reloadToHome(page);
+            await gotoPalette(page, 'Issue token');
+            const second = page.getByRole('main');
+            await expect(second.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await selectVenueChain(second);
+            await second.getByLabel('Ticker').fill(CARET_TICK);
+            await second.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
+            await second.getByRole('button', { name: 'Issue token', exact: true }).click();
+
+            const alert = page.getByRole('alert').filter({ hasText: /Ticker cannot contain \^/ });
             await expect(alert,
-                'the direct Issue form no longer refuses a symbol-bearing ticker, so the two '
-                + 'authoring surfaces have drifted apart on the ticker rule')
+                'the direct Issue form now authors a caret ticker while the wizard refuses one')
                 .toBeVisible({ timeout: 60_000 });
             expect(await page.getByTestId('confirm-modal').count(),
                 'a ticker the direct form refused still reached the confirm screen')
@@ -678,8 +786,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
     });
 
     /**
-     * UNFINISHED, AND IT PINS NO DEFECT. Marked `fixme` rather than deleted or
-     * dressed up as a skip, because the body is right and the VENUE is what is
+     * UNFINISHED, AND IT PINS NO DEFECT. Marked skip-off-Bitcoin rather than
+     * deleted or dressed up, because the body is right and the VENUE is what is
      * missing.
      *
      * WHY IT CANNOT RUN TODAY, measured 2026-08-27. A protocol fee settles from
@@ -702,10 +810,10 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
      * instruction. There is no wallet change that would make this pass, so
      * nothing about the wallet is claimed here either way.
      *
-     * TO FINISH IT: bring RBTC back, run this file with XC_REGTEST_COIN=RBTC,
-     * and drop the `.fixme`. The `NATIVE_FEE_MANDATORY` guard above already
-     * asserts the precondition this needs (the switch exists and is unchecked,
-     * so the wizard composes in the XCHAIN lane by default).
+     * TO FINISH IT: bring RBTC back and run this file with XC_REGTEST_COIN=RBTC.
+     * The `NATIVE_FEE_MANDATORY` guard above already asserts the precondition
+     * this needs (the switch exists and is unchecked, so the wizard composes in
+     * the XCHAIN lane by default).
      */
     test('a protocol fee settles from an XCHAIN balance, and the balance moves', async ({ page }) => {
         // SKIPPED off Bitcoin rather than `fixme`d, because a fixme asserts a
@@ -777,7 +885,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-            await expectConfirmModal(page, 'this action', 90_000);
+            await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
             const approve = page.getByTestId('confirm-approve');
             await expect(approve).toBeEnabled({ timeout: 120_000 });
             await approve.click();
