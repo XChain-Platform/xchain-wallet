@@ -669,6 +669,11 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
     // address has spent once. That first send is the leg most likely to make
     // this test slow or flaky on a shared venue, and it is the first thing to
     // cut if this has to be reduced to something that finishes.
+    // Tracked rather than left as an unowned red: this is the one
+    // deliberate `test.fixme` in the suite that named no item, which is the
+    // second clause of the campaign's whole-suite acceptance test. It marks
+    // ABSENT COVERAGE, not a known defect - nothing else establishes that the
+    // two encrypted methods differ on the wire.
     test.fixme('ECDH-session and ECIES are wire-distinct on chain for the same plaintext', async ({ page }) => {
         const txids = trackBroadcastTxids(page);
         let ownAddress;
