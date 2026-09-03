@@ -169,6 +169,12 @@ if (!import.meta.env?.PROD) {
     installDevMockConsole(devMockEvents);
 }
 
+// The "on-chain-revealed" public key the dev-mock venue serves for an address
+// it has seen. A valid compressed-key SHAPE (33 bytes, 02 prefix) so callers
+// that measure or parse it behave as they would on chain; it is not derived
+// from anything and nothing can sign with it.
+const MOCK_RECIPIENT_PUBKEY = `02${'ab'.repeat(32)}`;
+
 const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     // Each per-chain SDK instance carries its own `network` (chainId)
     // so the fake-balance dataset can return chain-appropriate values.
@@ -447,6 +453,23 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         // and filter by source/destinations rather than always returning [].
         getUnconfirmed(address, opts) {
             return Promise.resolve(devMockEvents ? devMockEvents.getUnconfirmed(address, opts) : []);
+        },
+        // getPublicKey(address): has the chain ever seen this address SPEND?
+        //
+        // Explicit here because the readStub's generic `get*() -> []` fallback
+        // is actively wrong for this one call. An empty array is not a public
+        // key, but it IS truthy, so every caller read it as "found": compose
+        // reported "✓ Recipient public key found." for every address ever
+        // typed, and the first-contact surface behind the missing-key banner -
+        // the plaintext fallback and the "Request encrypted session" handshake -
+        // could not be reached in the dev shell at all.
+        //
+        // The rule mirrors the chain's: a key exists only for an address the
+        // wallet itself derived (dev-mock shape, so it has "spent" as far as
+        // this venue is concerned). Any real address is one this venue has
+        // never seen, which is what first contact means.
+        getPublicKey(address) {
+            return Promise.resolve(sdkLib.isDevMockAddress(address) ? MOCK_RECIPIENT_PUBKEY : null);
         },
     };
     // Compose: explicit fields (wallet/auth) win; everything else falls
