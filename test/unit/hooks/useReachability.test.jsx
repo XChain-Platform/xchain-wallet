@@ -30,9 +30,14 @@ import { renderHook, render, screen, waitFor, act } from '@testing-library/react
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useReachability } from '../../../packages/core/src/shared/hooks/useReachability.js';
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const BTC = 'bitcoin-regtest';
 const LTC = 'litecoin-regtest';
+// The chain-id memo-key separator, built rather than typed so this file
+// never carries a raw NUL byte either (see the chain-id memo key block below).
+const NUL = String.fromCharCode(0);
 
 /** The settings record a regtest wallet has once the vault is readable. */
 function unlockedSettings() {
@@ -346,5 +351,34 @@ describe('ReachabilityBanner', () => {
         // Our vocabulary stays ours: no service names, no raw chain ids.
         expect(screen.queryByText(/hub|encoder|explorer/i)).toBeNull();
         expect(screen.queryByText(/bitcoin-regtest|litecoin-regtest/)).toBeNull();
+    });
+});
+
+describe('the chain-id memo key', () => {
+    // The memo key that joins the probed chain ids is separated by
+    // NUL, which is right: no chain id can contain one, so no id can forge a
+    // key boundary. Embedding it as a RAW byte, though, made git classify the
+    // whole hook as binary, so every change to it landed with no readable
+    // diff (git show --numstat printed a pair of dashes). The \u0000 escape
+    // is the identical string value in plain text. These two assertions are a
+    // pair: one keeps the file readable, the other keeps the separator
+    // unforgeable, so nobody "fixes" the first by swapping in a printable
+    // character.
+    // vitest anchors its root to the wallet repo, so cwd is the repo root.
+    const HOOK = join(process.cwd(), 'packages', 'core', 'src', 'shared', 'hooks', 'useReachability.js');
+
+    it('is written as an escape, so the hook stays a text file git can diff', () => {
+        expect(readFileSync(HOOK, 'utf8').includes(NUL)).toBe(false);
+    });
+
+    it('still splits on NUL, so ids survive the round trip whole', async () => {
+        const seen = [];
+        const check = vi.fn(async ({ chainIds }) => { seen.push(chainIds); return healthy(chainIds); });
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+        renderHook(() => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 }), { wrapper: wrapperFor(messaging) });
+
+        await waitFor(() => expect(seen.length).toBeGreaterThan(0));
+        expect(seen[0]).toEqual([BTC, LTC]);
+        expect([BTC, LTC].join(NUL).split(NUL)).toEqual([BTC, LTC]);
     });
 });
