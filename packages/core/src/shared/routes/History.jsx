@@ -2299,6 +2299,7 @@ function groupBadgeLabel(subkind) {
     if (subkind === 'dispenser-dispense') return actionDisplayLabel('DISPENSER');
     if (subkind === 'order-fills') return actionDisplayLabel('ORDER');
     if (subkind === 'link-pair') return actionDisplayLabel('LINK');
+    if (subkind === 'batch') return actionDisplayLabel('BATCH');
     return 'Group';
 }
 
