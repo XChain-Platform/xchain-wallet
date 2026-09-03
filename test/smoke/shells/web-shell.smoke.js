@@ -286,7 +286,7 @@ const kdfParams = cryptoLib.makeFreshKdfParams();
 //      returns the seeded wallet.
 {
     const result = await hostBridge.unlockWalletLocal({ password });
-    assert.deepEqual(result, { unlocked: true });
+    assert.deepEqual(result, { unlocked: true, passphraseCaptureNeeded: [] });
     const status = await hostBridge.getSessionStatus();
     assert.equal(status.state, 'unlocked');
 

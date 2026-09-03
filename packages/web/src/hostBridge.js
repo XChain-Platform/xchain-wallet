@@ -1119,7 +1119,10 @@ async function getFlows() {
  *   §15.6 25th word; supplied, it unlocks every passphrase-enabled wallet into the pool
  *   and is checked against each one's stored addresses (a wrong one is refused, not
  *   silently accepted as a different seed)
- * @returns {Promise<{ unlocked: true }>}
+ * @returns {Promise<{ unlocked: true, passphraseCaptureNeeded: Array<{ id: string, name: string }> }>}
+ *   `passphraseCaptureNeeded` lists the legacy wallets the password opened but that hold no
+ *   stored passphrase yet; the unlock screen asks for each one's 25th word once and sends it
+ *   to `wallet.passphrase.capture` (§3.4)
  */
 export async function unlockWalletLocal(req) {
     const password = req?.password;
@@ -1180,7 +1183,17 @@ export async function unlockWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
         });
         startNotifications();
-        return { unlocked: true };
+        // Legacy passphrase wallets the password opened but that hold no
+        // stored 25th word yet. The pool reports them as two parallel arrays;
+        // zip them here so the caller cannot pair the wrong name with the
+        // wrong wallet.
+        return {
+            unlocked: true,
+            passphraseCaptureNeeded: pooled.passphraseCaptureNeeded.map((id, i) => ({
+                id,
+                name: pooled.passphraseCaptureNames[i] || '',
+            })),
+        };
     } finally {
         masterKey.fill(0);
     }

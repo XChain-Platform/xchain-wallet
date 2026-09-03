@@ -991,6 +991,46 @@ export function createBackgroundHost(deps) {
         };
     });
 
+    // §3.4: the one-time capture of a legacy wallet's 25th word. A
+    // wallet created before the passphrase was stored opens only when the user
+    // supplies it, so the unlock screen asks once, sends it here, and the
+    // record carries an encrypted copy from then on.
+    //
+    // Registered here rather than per shell because this is the one host every
+    // shell runs: the web bridge imports `createBackgroundHost` instead of
+    // reimplementing it, so a second copy would only be a second thing to
+    // drift. The vault this reads is the host's own, opened for the session,
+    // not the short-lived one the pre-host unlock handler closes.
+    host.register('wallet.passphrase.capture', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const walletId = req?.walletId;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('wallet.passphrase.capture: walletId is required');
+        }
+        if (!signerPool) {
+            throw new Error('wallet.passphrase.capture: this session has no signer pool');
+        }
+        const wallet = await vault.wallets.get(walletId);
+        if (!wallet) {
+            throw new Error(`wallet.passphrase.capture: wallet "${walletId}" not found`);
+        }
+        // captureOne verifies the passphrase against the wallet's stored
+        // addresses before writing anything, and throws PassphraseMismatchError
+        // when it does not own them. Let that reach the caller unchanged: the
+        // unlock screen branches on it to mark the field.
+        const record = await signerPool.captureOne({
+            vault,
+            wallet,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+        // The safe projection carries `passphraseStored: true`, which is the
+        // whole answer the UI needs: this wallet no longer asks for anything
+        // but the password.
+        return { wallet: toSafeWallet(record) };
+    });
+
     host.register('wallet.rename', async (req, { vault }) => {
         const updated = await renameWallet({ ...req, vault });
         return { wallet: toSafeWallet(updated) };

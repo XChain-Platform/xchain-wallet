@@ -248,7 +248,7 @@ await withChromeStubs(async (stub) => {
         type: 'wallet.unlock',
         request: { password },
     });
-    assert.deepEqual(r, { ok: true, result: { unlocked: true } });
+    assert.deepEqual(r, { ok: true, result: { unlocked: true, passphraseCaptureNeeded: [] } });
     assert.equal(onUnlockedFired, 1, 'onUnlocked fired exactly once');
 
     // Session backend now has a 32-byte master key.

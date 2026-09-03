@@ -43,7 +43,9 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 // ─── Schema versions bumped ──────────────────────────────────
 
-assert.equal(WALLET_VERSION, 2, 'Wallet schema is at v2');
+// v3 added the stored BIP39 passphrase (§15.6); the multisig array this
+// smoke covers arrived in v2 and is unchanged by that bump.
+assert.equal(WALLET_VERSION, 3, 'Wallet schema is at v3');
 assert.equal(MULTISIG_VERSION, 2, 'MultisigConfig schema is at v2');
 
 // ─── buildMultisigConfig assigns an id ────────────────────────
@@ -116,7 +118,9 @@ const legacyV1 = {
 };
 
 const migratedV2 = migrateWallet(legacyV1);
-assert.equal(migratedV2.schemaVersion, 2, 'wallet migrates to v2');
+assert.equal(migratedV2.schemaVersion, 3, 'wallet migrates to v3');
+assert.equal(migratedV2.encryptedPassphrase, null,
+    'the v2 to v3 step seeds encryptedPassphrase null');
 assert.equal(migratedV2.multisig, undefined,
     'legacy `multisig` slot is stripped after migration');
 assert.ok(Array.isArray(migratedV2.multisigs) && migratedV2.multisigs.length === 1,

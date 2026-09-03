@@ -123,6 +123,24 @@ export function addImportedWallet(opts) {
 }
 
 /**
+ * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
+ * A wallet created before the passphrase was stored is opened by the password
+ * plus a typed 25th word; this seals that word onto the record, encrypted under
+ * the wallet's own master key, so later unlocks need the password alone.
+ *
+ * Rejects with PassphraseMismatchError when the passphrase does not own the
+ * wallet's addresses, and stores nothing in that case.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.bip39Passphrase
+ */
+export function capturePassphrase(opts) {
+    return /** @type {any} */ (sendMessage('wallet.passphrase.capture', opts));
+}
+
+/**
  * Rename a wallet.
  * @param {object} opts
  * @param {string} opts.walletId

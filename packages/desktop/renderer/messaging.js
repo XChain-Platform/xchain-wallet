@@ -112,6 +112,17 @@ export function getDiagnosticDump() {
     return /** @type {any} */ (sendMessage('diagnostic.dump'));
 }
 
+/**
+ * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
+ * Rejects with PassphraseMismatchError when the passphrase does not own the
+ * wallet's addresses, and stores nothing in that case.
+ *
+ * @param {{ walletId: string, password: string, bip39Passphrase: string }} opts
+ */
+export function capturePassphrase(opts) {
+    return /** @type {any} */ (sendMessage('wallet.passphrase.capture', opts));
+}
+
 /** @param {object} opts */
 export function renameWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.rename', opts));
