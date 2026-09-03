@@ -40,6 +40,17 @@
 //        password alone (the re-key leg); and the pre-spec envelope restores
 //        without a validation error and routes its wallet into the capture step
 //        (asserted inside AT2, which is the test that consumes it).
+//   AT5  Settings, this wallet, reveal recovery phrase shows the stored
+//        passphrase UNDER the words, behind the same password gate and the same
+//        blur, with no copy control in that block; and a wallet created without
+//        a passphrase shows nothing extra there.
+//
+// AT5 IS THE ONE TEST HERE THAT NEVER TOUCHES THE CHAIN, and that is correct
+// rather than a gap: what it proves is that the stored secret is READABLE BACK
+// by its owner. Every other test proves the wallet can use the passphrase; AT5
+// proves the user has not lost it. A design that seals a passphrase onto a
+// record and offers no way to read it out has taken a secret away from the
+// person who owns it, which is a worse outcome than the prompt it replaced.
 //
 // THE LEGACY WALLET COMES FROM A BACKUP, and that is a deliberate choice rather
 // than a convenience. No e2e mechanism pre-seeds a vault: the fixtures only
@@ -234,6 +245,48 @@ async function exportEnvelope(page, walletName) {
         .toBe('XCHAIN-WALLET-BACKUP');
     expect(parsed?.walletName, 'the captured envelope is not this wallet\'s').toBe(walletName);
     return envelope;
+}
+
+/**
+ * Walks Settings, Backup, "Back up seed phrase" and through the password gate,
+ * leaving the revealed block on screen.
+ *
+ * The password gate is the point: the reveal runs a full Argon2id decrypt of the
+ * seed blob (and, for a stored-passphrase wallet, a second unwrap of the
+ * passphrase under the SAME master key), so it is budgeted like an unlock.
+ */
+async function revealRecoveryPhrase(page, password) {
+    await openSettingsViaPalette(page);
+    await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
+
+    const show = page.getByRole('main').getByRole('button', { name: 'Show…', exact: true });
+    await expect(show, 'the Backup section offers no seed-phrase reveal')
+        .toBeVisible({ timeout: 30_000 });
+    await show.click();
+
+    await page.getByLabel('Wallet password', { exact: true }).fill(password);
+    await page.getByRole('button', { name: 'Reveal', exact: true }).click();
+    await expect(page.getByText('Your seed phrase'),
+        'the wallet password did not open the reveal, so nothing below can be read back')
+        .toBeVisible({ timeout: kdfStepTimeout() });
+}
+
+/**
+ * The revealed panel itself, not the Settings page around it.
+ *
+ * Scoping matters for the no-copy-control assertion. Settings at large carries
+ * copy buttons that have every right to exist (addresses, ids); the claim is
+ * about THIS block, whose own hint says "Never type or paste it into anything
+ * else". A page-wide sweep would fail on innocent buttons, and a sweep that was
+ * loosened enough to pass would stop proving anything.
+ */
+function revealBlock(page) {
+    return page.getByRole('button', { name: /^(Reveal|Hide) seed phrase$/ }).locator('..');
+}
+
+/** The blurred value button the reveal renders for the stored 25th word. */
+function revealedPassphraseButton(page) {
+    return page.getByRole('button', { name: /^(Reveal|Hide) passphrase$/ });
 }
 
 /** Walks a vault-less browser to the restore screen's Encrypted-backup tab. */
@@ -673,6 +726,128 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                             + 'restored, so the re-keyed passphrase is not the one that went in')
                             .toBe(originAddress);
                         await signSelfSend(two, restoredAddress);
+                    });
+            } finally {
+                await context.close();
+            }
+        });
+
+    // AT5. The way back OUT. A passphrase the user typed once and can never
+    // read again is a secret the wallet has taken from them, so the reveal row
+    // is part of the bargain the capture copy makes.
+    test('AT5 reveal recovery phrase shows the stored passphrase under the words, and nothing extra without one',
+        async ({ page, browser }) => {
+            /** @type {string[]} */
+            let words;
+
+            await test.step('a wallet created WITH a passphrase', async () => {
+                words = await createWallet(page, {
+                    password: PASSWORD,
+                    name: 'Revealed Passphrase Wallet',
+                    bip39Passphrase: PASSPHRASE,
+                });
+            });
+
+            await test.step('the same password gate reveals the words AND the 25th word', async () => {
+                await revealRecoveryPhrase(page, PASSWORD);
+
+                await expect(page.getByText('Passphrase (25th word)'),
+                    'the reveal shows the seed but not the stored passphrase, so a user who took '
+                    + 'the capture step at its word can never read back the secret it kept')
+                    .toBeVisible();
+
+                const seed = page.getByRole('button', { name: /^(Reveal|Hide) seed phrase$/ });
+                const pass = revealedPassphraseButton(page);
+                await expect(pass, 'the reveal names a passphrase row but renders no value in it')
+                    .toBeVisible();
+
+                // Compared as booleans. A failing `toBe` prints both sides, and
+                // one of those sides would be the passphrase itself, in a
+                // report that outlives the run.
+                expect((await seed.innerText()).trim() === words.join(' '),
+                    'the revealed seed is not the phrase this wallet was created with')
+                    .toBe(true);
+                expect((await pass.innerText()).trim() === PASSPHRASE,
+                    'the revealed 25th word is not the passphrase this wallet was created with. A '
+                    + 'reveal that shows the WRONG string is worse than one that shows none: it '
+                    + 'sends the user away to write down something that opens nothing')
+                    .toBe(true);
+            });
+
+            await test.step('it sits UNDER the words, behind the same blur, toggled by the same tap',
+                async () => {
+                    const seed = page.getByRole('button', { name: /^(Reveal|Hide) seed phrase$/ });
+                    const pass = revealedPassphraseButton(page);
+
+                    const seedBox = await seed.boundingBox();
+                    const passBox = await pass.boundingBox();
+                    expect(passBox.y > seedBox.y,
+                        'the passphrase is not rendered under the words, so the reveal reads as two '
+                        + 'unrelated secrets rather than a phrase and its 25th word')
+                        .toBe(true);
+
+                    // Blurred on arrival is the whole guardrail: this panel opens
+                    // over the user's shoulder, and the seed and the passphrase
+                    // are equally fatal to leak.
+                    await expect(seed).toHaveCSS('filter', /blur/);
+                    await expect(pass,
+                        'the passphrase is legible the moment the panel opens, while the seed above '
+                        + 'it is blurred')
+                        .toHaveCSS('filter', /blur/);
+
+                    await seed.click();
+                    await expect(seed).toHaveCSS('filter', 'none');
+                    await expect(pass,
+                        'one tap uncovers the words but leaves the passphrase blurred, so the two '
+                        + 'halves of one secret are behind two different controls')
+                        .toHaveCSS('filter', 'none');
+                });
+
+            await test.step('and there is no copy control anywhere in that block', async () => {
+                // §15.6: the block's own hint says "Never type or paste it into
+                // anything else". A clipboard button here would contradict the
+                // sentence directly above it, and would put the seed on a
+                // surface every other app on the device can read.
+                const names = await revealBlock(page).getByRole('button').allInnerTexts();
+                expect(names.length,
+                    'the reveal block scoped to nothing, so the sweep below proves nothing')
+                    .toBeGreaterThan(0);
+                expect(names.some((t) => /copy/i.test(t)),
+                    'the reveal block offers a copy control, which invites the user to put their '
+                    + 'seed and passphrase on the system clipboard')
+                    .toBe(false);
+            });
+
+            const context = await freshContext(browser);
+            try {
+                await test.step('a wallet created WITHOUT a passphrase shows nothing extra there',
+                    async () => {
+                        // A separate vault rather than a second wallet in this
+                        // one: the reveal reads the ACTIVE wallet, and a lane
+                        // that switched wallets could show the right emptiness
+                        // for the wrong reason.
+                        const plain = await context.newPage();
+                        await plain.goto(BASE_URL);
+                        await createWallet(plain, {
+                            password: PASSWORD,
+                            name: 'No Passphrase Wallet',
+                            navigate: false,
+                        });
+                        await revealRecoveryPhrase(plain, PASSWORD);
+
+                        await expect(plain.getByText('Passphrase (25th word)'),
+                            'a wallet with no passphrase is offered a passphrase row, so the reveal '
+                            + 'is describing a secret that does not exist')
+                            .toHaveCount(0);
+                        await expect(revealedPassphraseButton(plain),
+                            'a wallet with no passphrase renders an empty passphrase value')
+                            .toHaveCount(0);
+                        await expect(plain.getByText(/25th-word passphrase/),
+                            'a wallet with no passphrase is told something about a 25th word it '
+                            + 'never had. That note belongs to the LEGACY state (enabled, nothing '
+                            + 'stored), and showing it here would send the user hunting for a '
+                            + 'passphrase to capture')
+                            .toHaveCount(0);
                     });
             } finally {
                 await context.close();
