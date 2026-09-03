@@ -20,8 +20,9 @@
 //      SignApproval renders for dApp-initiated ISSUE.
 //   4. Sign stage calls messaging.issueToken (the Step 5 helper), not
 //      a new flow. Piece 3a intentionally does not add new messaging.
-//   5. Validation blocks submit on: empty ticker, non-A/0-9 ticker,
-//      missing/zero supply.
+//   5. Validation blocks submit on a bad ticker and on missing/zero supply,
+//      and the ticker half is delegated to the shared grammar module rather
+//      than re-implemented here.
 //   6. Params composer applies the same ISSUE-v0 shape as the wizard's
 //      Custom composer: MAX_SUPPLY + MINT_SUPPLY from supply, DECIMALS
 //      8/0 from divisible, LOCK_MAX_SUPPLY + LOCK_MINT on lock, TRANSFER
@@ -118,13 +119,26 @@ assert.ok(
 
 // --- 5. Validation ----------------------------------------------------
 
+// The ticker rule lives outside this file, in `shared/utils/tickerGrammar.js`:
+// a local `/^[A-Za-z0-9]+$/` or a local "Ticker is required" here is exactly
+// how the two authoring surfaces would drift into refusing names the chain
+// admits. What this smoke checks is the WIRING. A copy of the rule
+// reappearing here is the regression to catch.
 assert.ok(
-    /Ticker is required/.test(src),
-    'IssueTokenForm rejects empty ticker',
+    /tickerGrammarError\s*\(\s*ticker\s*\)/.test(src),
+    'IssueTokenForm validates the ticker through the shared grammar module',
 );
 assert.ok(
-    /\[A-Za-z0-9\]\+/.test(src),
-    'IssueTokenForm validates ticker is A-Z/0-9',
+    !/\[A-Za-z0-9\]\+\$\/\.test\(\s*ticker/.test(src),
+    'IssueTokenForm has grown its own ticker regex again, which is how the surfaces drifted',
+);
+assert.ok(
+    !/setTicker\(e\.target\.value\.toUpperCase\(\)\)/.test(src),
+    'IssueTokenForm does not uppercase the ticker under the user\'s cursor',
+);
+assert.ok(
+    !/TICK:\s*ticker\.trim\(\)\.toUpperCase\(\)/.test(src),
+    'IssueTokenForm does not uppercase the ticker on the wire',
 );
 assert.ok(
     /Supply must be a positive number/.test(src),
@@ -137,9 +151,13 @@ assert.ok(
     /VERSION:\s*'0'/.test(src),
     'IssueTokenForm pins VERSION=0',
 );
+// The composer must not upper-case the ticker on its way to the wire: the
+// chain records a tick exactly as written, so upper-casing here is the half
+// of the coercion a user cannot see, silently reaching the ledger under a
+// different name than typed. It passes through trimmed only.
 assert.ok(
-    /\.toUpperCase\(\)/.test(src),
-    'IssueTokenForm uppercases the ticker',
+    /TICK:\s*ticker\.trim\(\),/.test(src),
+    'composer sends the ticker as typed, trimmed and not recased',
 );
 assert.ok(
     /p\.MAX_SUPPLY\s*=\s*s/.test(src),

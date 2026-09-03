@@ -42,6 +42,7 @@ import styles from './IssueTokenForm.module.css';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -240,7 +241,9 @@ export function IssueTokenForm({ walletId, onBack }) {
         /** @type {Record<string, string>} */
         const p = {
             VERSION: '0',
-            TICK: ticker.trim().toUpperCase(),
+            // As typed: the chain records the tick verbatim, so the
+            // wallet must not decide the case of a name a user coined.
+            TICK: ticker.trim(),
         };
         p.DECIMALS = divisible ? '8' : '0';
         if (supply) {
@@ -299,12 +302,12 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (!ticker.trim()) {
-            setFormError('Ticker is required.');
-            return;
-        }
-        if (!/^[A-Za-z0-9]+$/.test(ticker.trim())) {
-            setFormError('Ticker must be A–Z, 0–9 only.');
+        // Same grammar module as the wizard, so the two authoring
+        // surfaces cannot drift apart on what a ticker may be called. It covers
+        // the empty case too, which is why the separate blank check went with it.
+        const tickerError = tickerGrammarError(ticker);
+        if (tickerError) {
+            setFormError(tickerError);
             return;
         }
         if (!supply.trim() || Number(supply) <= 0) {
@@ -758,10 +761,10 @@ export function IssueTokenForm({ walletId, onBack }) {
 
             <Input
                 label="Ticker"
-                hint="A–Z, 0–9. Uppercase."
+                hint={TICKER_HINT}
                 value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                autoCapitalize="characters"
+                onChange={(e) => setTicker(e.target.value)}
+                autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}

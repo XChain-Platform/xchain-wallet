@@ -24,10 +24,12 @@
 // grandchild was uncreatable from the wallet rather than merely awkward.
 //
 // The parent field is a REFERENCE to something already on the ledger, which is
-// why it is widened while the child-name field is deliberately left alone: that
-// one coins a NEW name, and restricting new names to A-Z/0-9 is a product
-// choice rather than a defect. The chain would accept far more in both
-// (`~!@#$%^&*()_+-={}[]:<>.?`); this pins only what is driven.
+// why D-168 widened it while leaving the child-name field alone. Both fields
+// are now widened to the chain's own allowlist minus the caret, with the
+// uppercase coercion dropped, so the two fields share one rule module
+// (`shared/utils/tickerGrammar.js`) and this file's subject is what it has
+// always been about: the DOT, and how deep a parent may nest. The character
+// class is pinned in `test/unit/utils/tickerGrammar.test.js`.
 //
 // Teeth: restore `/^[A-Za-z0-9]+$/` and case 2 fails. The full drive - a real
 // grandchild on chain at the subtoken price - is
@@ -96,8 +98,17 @@ async function submitParent(parent) {
     fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
 }
 
-/** The one message this field can produce, so both directions assert on it. */
-const PARENT_RULE = /parent ticker must be/i;
+/**
+ * Any refusal this field can produce, so both directions assert on it.
+ *
+ * The rule lives in `shared/utils/tickerGrammar.js`, which names the field
+ * and then the reason ("Parent ticker cannot start or end with a dot.",
+ * "Parent ticker can only use ..."), so no single-sentence matcher covers
+ * every refusal. Anchored on the field noun plus the verb rather than on any
+ * one reason: this test is about DEPTH, and it must not fail when a
+ * different rule rewords itself.
+ */
+const PARENT_RULE = /parent ticker (cannot|can only use|is required)/i;
 
 describe('TokenWizard subtoken parent depth (D-168)', () => {
     afterEach(cleanup);
