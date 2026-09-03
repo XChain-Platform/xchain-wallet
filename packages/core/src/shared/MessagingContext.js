@@ -21,7 +21,11 @@ import { createContext } from 'react';
  * `messaging.unlockWallet(password)` without caring which transport
  * (chrome.runtime vs in-page host) fulfils it.
  *
- * @property {(password: string, opts?: { bip39Passphrase?: string }) => Promise<any>} unlockWallet
+ * @property {(password: string, opts?: { bip39Passphrase?: string }) => Promise<{ unlocked: true, passphraseCaptureNeeded?: Array<{ id: string, name: string }>, poolUnavailable?: true }>} unlockWallet
+ * @property {(opts: { walletId: string, password: string, bip39Passphrase: string }) => Promise<any>} [capturePassphrase]
+ *   §15.6 one-time capture: stores a legacy wallet's passphrase under its own
+ *   key. Rejects with `PassphraseMismatchError` when the passphrase does not
+ *   own the wallet's stored addresses, and stores nothing in that case.
  * @property {() => Promise<any>} [lockWallet]
  * @property {() => Promise<any>} [listWallets]
  * @property {(walletId: string) => Promise<any>} [getWalletBalances]

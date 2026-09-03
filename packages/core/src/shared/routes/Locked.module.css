@@ -56,12 +56,18 @@
     margin: 0;
 }
 
-/* The 25th-word disclosure sits under the password field, right-aligned and
-   quiet: most wallets have no passphrase and must not be made to wonder. */
-.passphraseToggle {
-    display: flex;
-    justify-content: flex-end;
-    margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-2);
+/* §15.6 step 2. The sentence carries the whole explanation of why a
+   passphrase is being asked for once and never again, so it reads at body
+   size rather than as a hint. */
+.captureCopy {
+    margin: 0 0 var(--xc-space-4);
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+    color: var(--xc-text-muted);
+}
+
+.captureCopy strong {
+    color: var(--xc-text);
 }
 
 .lockoutBanner {
