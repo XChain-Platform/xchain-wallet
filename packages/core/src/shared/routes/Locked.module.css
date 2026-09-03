@@ -56,6 +56,14 @@
     margin: 0;
 }
 
+/* The 25th-word disclosure sits under the password field, right-aligned and
+   quiet: most wallets have no passphrase and must not be made to wonder. */
+.passphraseToggle {
+    display: flex;
+    justify-content: flex-end;
+    margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-2);
+}
+
 .lockoutBanner {
     display: flex;
     align-items: center;

@@ -59,6 +59,16 @@ export function Locked({ onUnlocked }) {
 
     const [password, setPassword] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // §15.6 25th word. Collapsed by default: the vault is sealed until the
+    // password lands, so this screen cannot know whether any wallet inside
+    // was created with a passphrase, and most were not. Typed here, it
+    // rides along with the unlock so passphrase wallets join the signer pool
+    // like every other; left blank, they sit out and the confirm screen says
+    // so (PassphraseRequiredError) instead of failing on an internal name.
+    const [passphrase, setPassphrase] = useState('');
+    const [passphraseOpen, setPassphraseOpen] = useState(false);
+    const [passphraseError, setPassphraseError] = useState(/** @type {string | null} */ (null));
+    const passphraseRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const [busy, setBusy] = useState(false);
     const [lockout, setLockout] = useState(getLockoutState);
     const [remainingMs, setRemainingMs] = useState(() =>
@@ -212,20 +222,40 @@ export function Locked({ onUnlocked }) {
 
     const isLockedOut = remainingMs > 0;
 
+    // The unlock request's second argument: only ever a non-empty passphrase,
+    // so a wallet without one sends the exact request it always did.
+    function unlockOpts() {
+        return passphraseOpen && passphrase.length > 0 ? { bip39Passphrase: passphrase } : undefined;
+    }
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (busy || password.length === 0 || isLockedOut) return;
         setBusy(true);
         setError(null);
+        setPassphraseError(null);
         try {
-            await messaging.unlockWallet(password);
+            await messaging.unlockWallet(password, unlockOpts());
             recordLockoutSuccess();
             setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
             setRemainingMs(0);
             setPassword('');
+            setPassphrase('');
             haptic.success();
             onUnlocked?.();
         } catch (err) {
+            if (err?.name === 'PassphraseMismatchError') {
+                // The password was right (the vault opened); only the 25th
+                // word missed. Mark that field, leave the password in place,
+                // and count nothing against the lockout: this is not a guess
+                // at the password.
+                setPassphraseError(err.message);
+                haptic.error();
+                setBusy(false);
+                passphraseRef.current?.focus();
+                passphraseRef.current?.select();
+                return;
+            }
             const isBadPassword = err?.name === 'InvalidPasswordError';
             if (isBadPassword) {
                 // §26.5 / G068: silently arm panic mode if the entered
@@ -261,13 +291,23 @@ export function Locked({ onUnlocked }) {
         setError(null);
         try {
             const unwrapped = await unlockWithBiometric();
-            await messaging.unlockWallet(unwrapped);
+            // A passphrase typed before pressing the biometric button rides
+            // along; biometrics unwrap the password, never the 25th word.
+            await messaging.unlockWallet(unwrapped, unlockOpts());
             recordLockoutSuccess();
             setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
             setRemainingMs(0);
+            setPassphrase('');
             haptic.success();
             onUnlocked?.();
         } catch (err) {
+            if (err?.name === 'PassphraseMismatchError') {
+                setPassphraseError(err.message);
+                haptic.error();
+                setBusy(false);
+                passphraseRef.current?.focus();
+                return;
+            }
             // Biometric failures (cancelled prompt, missing credential,
             // PRF failure) are surfaced raw: they are not bad-password
             // guesses and must NOT increment the lockout counter.
@@ -319,6 +359,39 @@ export function Locked({ onUnlocked }) {
                 disabled={busy || isLockedOut}
                 error={error || undefined}
             />
+            {!passphraseOpen ? (
+                <div className={styles.passphraseToggle}>
+                    <button
+                        type="button"
+                        className={styles.forgotLink}
+                        onClick={() => {
+                            setPassphraseOpen(true);
+                            setTimeout(() => passphraseRef.current?.focus(), 0);
+                        }}
+                        aria-expanded="false"
+                        aria-controls="locked-passphrase-field"
+                        disabled={busy || isLockedOut}
+                    >
+                        Wallet has a 25th-word passphrase?
+                    </button>
+                </div>
+            ) : (
+                <Input
+                    id="locked-passphrase-field"
+                    ref={passphraseRef}
+                    type="password"
+                    label="25th-word passphrase"
+                    hint="Only for a wallet created with a passphrase. Leave blank otherwise."
+                    value={passphrase}
+                    onChange={(e) => {
+                        setPassphrase(e.target.value);
+                        if (passphraseError) setPassphraseError(null);
+                    }}
+                    autoComplete="off"
+                    disabled={busy || isLockedOut}
+                    error={passphraseError || undefined}
+                />
+            )}
             <Button
                 type="submit"
                 variant="primary"

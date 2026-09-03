@@ -67,7 +67,9 @@ overrides:
   tar: ^7.5.7
   ws: ^8.20.1
   brace-expansion@1: ^1.1.15
-  brace-expansion@2: ^2.1.1
+  # 2.1.2 closes GHSA/CVE-2026-13149 (exponential-time expansion of
+  # consecutive non-expanding {} groups, a DoS in dev tooling paths).
+  brace-expansion@2: ^2.1.2
   brace-expansion@5: ^5.0.6
   vite: '>=6.4.3 <7'
   protobufjs: ^7.5.8
@@ -86,7 +88,15 @@ overrides:
   # override is for. Pinned in BOTH homes because pnpm 9 reads package.json and
   # pnpm 10 reads this file, neither errors on the copy it ignores, and
   # pnpm-config-parity.smoke.js fails the build if they drift.
-  fast-uri: ^3.1.5
+  # 3.1.6 closes four more (GHSA-5jgf-p345-68v8, -f65p-4m7j-42xc, -fph4-wmhf-6fwf,
+  # -jqff-g426-hqxp: host confusion and SSRF through skipped IDN
+  # canonicalization), all published 2026-09-02 and all high.
+  fast-uri: ^3.1.6
+  # hono arrives under the SDK's @modelcontextprotocol/sdk dependency;
+  # 4.12.33 carries CVE-2026-71848/-71849/-71850 (language-middleware DoS,
+  # Connection-header passthrough in the proxy helper, memo() retaining SSR
+  # output across requests). Floor at the first patched version.
+  hono: ^4.12.34
 
 # "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall

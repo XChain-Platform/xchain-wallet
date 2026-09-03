@@ -36,8 +36,15 @@ export function getSessionStatus() {
  * @param {string} password
  * @returns {Promise<{ unlocked: true }>}
  */
-export function unlockWallet(password) {
-    return /** @type {any} */ (sendMessage('wallet.unlock', { password }));
+/**
+ * @param {string} password
+ * @param {{ bip39Passphrase?: string }} [opts]   the §15.6 25th word, for wallets created with one
+ */
+export function unlockWallet(password, opts) {
+    const bip39Passphrase = typeof opts?.bip39Passphrase === 'string' && opts.bip39Passphrase.length > 0
+        ? opts.bip39Passphrase
+        : undefined;
+    return /** @type {any} */ (sendMessage('wallet.unlock', bip39Passphrase ? { password, bip39Passphrase } : { password }));
 }
 
 /**

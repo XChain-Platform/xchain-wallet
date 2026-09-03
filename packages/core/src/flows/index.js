@@ -31,6 +31,8 @@ export {
     withUnlocked,
     withUnlockedRecord,
     WalletNotFoundError,
+    PassphraseRequiredError,
+    PassphraseMismatchError,
 } from './unlockWallet.js';
 export {
     importMnemonic,

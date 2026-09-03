@@ -25,15 +25,21 @@ import {
 
 export { sendMessage, getSessionStatus };
 
-/** @param {string} password */
-export async function unlockWallet(password) {
+/**
+ * @param {string} password
+ * @param {{ bip39Passphrase?: string }} [opts]   the §15.6 25th word, for wallets created with one
+ */
+export async function unlockWallet(password, opts) {
     // The password is passed straight to the in-page host for this one
     // unlock operation and never written to any Web API storage
     // (sessionStorage / localStorage). A page reload re-locks the
     // wallet and the user re-enters their password; that re-prompt is
     // the intended posture (see the threat model, §1 and §2.1:
     // https://docs.xchain.io/components/wallet/threat-model).
-    return unlockWalletLocal({ password });
+    const bip39Passphrase = typeof opts?.bip39Passphrase === 'string' && opts.bip39Passphrase.length > 0
+        ? opts.bip39Passphrase
+        : undefined;
+    return unlockWalletLocal(bip39Passphrase ? { password, bip39Passphrase } : { password });
 }
 
 export async function lockWallet() {

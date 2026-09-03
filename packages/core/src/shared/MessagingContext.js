@@ -21,7 +21,7 @@ import { createContext } from 'react';
  * `messaging.unlockWallet(password)` without caring which transport
  * (chrome.runtime vs in-page host) fulfils it.
  *
- * @property {(password: string) => Promise<any>} unlockWallet
+ * @property {(password: string, opts?: { bip39Passphrase?: string }) => Promise<any>} unlockWallet
  * @property {() => Promise<any>} [lockWallet]
  * @property {() => Promise<any>} [listWallets]
  * @property {(walletId: string) => Promise<any>} [getWalletBalances]

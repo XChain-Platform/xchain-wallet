@@ -16,7 +16,8 @@ import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
-import { isValidAddressAnyNetwork } from '../utils/addressValidation.js';
+import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
+import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
 import { ScanRoute } from './ScanRoute.jsx';
 import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
@@ -98,6 +99,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [addAddrValue, setAddAddrValue] = useState('');
     const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
     const [addAddrSaving, setAddAddrSaving] = useState(false);
+    // The user's answer when the typed address's network cannot be read from
+    // its bytes (shared testnet/regtest version bytes); null until they pick.
+    const [addAddrChain, setAddAddrChain] = useState(/** @type {string | null} */ (null));
 
     // Address-picker dropdown shown when a multi-address contact's Send or
     // Message action needs the user to choose which address to use.
@@ -125,7 +129,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         const q = query.trim().toLowerCase();
         return contacts.filter((c) => {
             const entries = Array.isArray(c.entries) ? c.entries : [];
-            if (networkFilter !== 'all' && !entries.some((e) => e.chain === networkFilter)) {
+            if (networkFilter !== 'all' && !entries.some((e) => resolvedChain(e) === networkFilter)) {
                 return false;
             }
             if (!q) return true;
@@ -150,7 +154,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             onScanPrefillConsumed?.();
             return;
         }
-        const chain = coinFamilyFromChainId(scanPrefill.chainId) || 'bitcoin';
+        const chain = coinFamilyFromChainId(scanPrefill.chainId) || chainFor(scanPrefill.address);
         setActiveId(null);
         setFormName('');
         setFormNotes('');
@@ -201,7 +205,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         // ScanRoute fires { kind: 'send', address, chainId? } for plain
         // addresses, BIP21, and xchain: send URIs.
         if (outcome && outcome.kind === 'send' && outcome.address) {
-            const chain = coinFamilyFromChainId(outcome.chainId) || 'bitcoin';
+            const chain = coinFamilyFromChainId(outcome.chainId) || chainFor(outcome.address);
             if (scanFromEdit) {
                 // Merge into the edit form: fill the first entry whose
                 // address is blank, or overwrite entry[0] if all are filled.
@@ -246,10 +250,19 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             return;
         }
         const cleanedEntries = formEntries
-            .map((e) => ({ chain: e.chain, address: e.address.trim(), label: e.label }))
+            .map((e) => ({ chain: chainFor(e.address, e.chain), address: e.address.trim(), label: e.label }))
             .filter((e) => e.chain && e.address);
         if (cleanedEntries.length === 0) {
             setSubmitError('At least one address entry is required.');
+            return;
+        }
+        // An address whose network cannot be read from its bytes (the shared
+        // testnet/regtest version bytes) needs the user's word for it. Saving it
+        // as 'unknown' is what put a question mark on every such contact and
+        // hid it from the network filter.
+        const undecided = cleanedEntries.find((e) => e.chain === 'unknown' && isValidAddressAnyNetwork(e.address));
+        if (undecided) {
+            setSubmitError(`Pick the network for "${undecided.address}"; it cannot be read from the address.`);
             return;
         }
         // D-4: validate the address is real (checksum / bech32) before saving, so
@@ -343,9 +356,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setAddAddrError('This is not a valid Bitcoin, Litecoin, or Dogecoin address.');
             return;
         }
+        const chain = chainFor(address, addAddrChain);
+        if (chain === 'unknown') {
+            setAddAddrError('Pick the network this address belongs to.');
+            return;
+        }
         setAddAddrSaving(true);
         setAddAddrError(null);
-        const entry = { chain: detectAddressCoin(address), address, label: '' };
+        const entry = { chain, address, label: '' };
         try {
             await messaging.saveContact({ record: { ...active, entries: [...active.entries, entry] } });
             await loadContacts();
@@ -438,8 +456,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         // auto-detected from the address as the user types (Bitcoin /
         // Litecoin / Dogecoin / Unknown) and stored on the entry's chain.
         const entry0 = formEntries[0];
-        const detected = entry0.address.trim() ? entry0.chain : null;
-        const detectedOpt = detected ? NETWORK_OPTIONS.find((n) => n.value === detected) : null;
         return wrap(
             <form onSubmit={handleSave} noValidate>
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
@@ -448,16 +464,16 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     value={entry0.address}
                     onChange={(e) => {
                         const address = e.target.value;
-                        setFormEntries([{ ...entry0, address, chain: detectAddressCoin(address) }]);
+                        setFormEntries([{ ...entry0, address, chain: chainFor(address) }]);
                     }}
                     placeholder=""
                 />
-                {detected ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', margin: '0.25rem 0 0.75rem', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                        {detectedOpt ? <img src={detectedOpt.iconUrl} alt="" className={picker.chainIcon} /> : null}
-                        <span>Network: {detectedOpt ? detectedOpt.label : 'Unknown'}</span>
-                    </div>
-                ) : null}
+                <NetworkReadout
+                    address={entry0.address}
+                    chain={entry0.chain}
+                    onPick={(chain) => setFormEntries([{ ...entry0, chain }])}
+                    style={{ margin: '0.25rem 0 0.75rem' }}
+                />
                 <div className={picker.notesField}>
                     <label className={picker.notesLabel}>Notes</label>
                     <textarea
@@ -512,8 +528,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         const multiAddress = active.entries.length > 1;
         // Fire a Send/Message for a specific entry, then close the picker.
         const runAction = (action, entry) => {
-            if (action === 'send') onSend?.({ chainId: chainIdFor(entry.chain), address: entry.address });
-            else onSendMessage?.({ chainId: chainIdFor(entry.chain), toAddress: entry.address });
+            if (action === 'send') onSend?.({ chainId: chainIdFor(resolvedChain(entry), entry.address), address: entry.address });
+            else onSendMessage?.({ chainId: chainIdFor(resolvedChain(entry), entry.address), toAddress: entry.address });
             setAddrPicker(null);
         };
         // Single-address contacts act immediately; multi-address ones toggle a
@@ -591,7 +607,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         className={picker.addrMenuItem}
                                         onClick={() => runAction(addrPicker, e)}
                                     >
-                                        <ChainCoinIcon chain={e.chain} />
+                                        <ChainCoinIcon chain={resolvedChain(e)} />
                                         <span className={picker.addressText} title={e.address}>{e.address}</span>
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                     </button>
@@ -625,7 +641,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     {active.entries.map((e, i) => {
                         return (
                             <li key={i} className={picker.addressCard}>
-                                <ChainCoinIcon chain={e.chain} />
+                                <ChainCoinIcon chain={resolvedChain(e)} />
                                 <span className={picker.addressText} title={e.address}>{e.address}</span>
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                 <button
@@ -655,22 +671,16 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             <Input
                                 label="Address"
                                 value={addAddrValue}
-                                onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrError(null); }}
+                                onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
                                 placeholder=""
                                 autoFocus
                             />
-                            {addAddrValue.trim() ? (
-                                (() => {
-                                    const det = detectAddressCoin(addAddrValue);
-                                    const detOpt = NETWORK_OPTIONS.find((n) => n.value === det);
-                                    return (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
-                                            {detOpt ? <img src={detOpt.iconUrl} alt="" className={picker.chainIcon} /> : null}
-                                            <span>Network: {detOpt ? detOpt.label : 'Unknown'}</span>
-                                        </div>
-                                    );
-                                })()
-                            ) : null}
+                            <NetworkReadout
+                                address={addAddrValue}
+                                chain={chainFor(addAddrValue, addAddrChain)}
+                                onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
+                                style={{ marginBottom: 'var(--xc-space-2)' }}
+                            />
                             {addAddrError ? (
                                 <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{addAddrError}</p>
                             ) : null}
@@ -709,7 +719,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             ) : (
                 <div className={picker.list} role="list" aria-label="Contacts">
                     {filteredContacts.map((c) => {
-                        const uniqueChains = [...new Set((c.entries || []).map((e) => e.chain))];
+                        const uniqueChains = [...new Set((c.entries || []).map(resolvedChain))];
                         return (
                             <button
                                 key={c.id}
@@ -748,15 +758,22 @@ export function findContactByAddress(contacts, address) {
     ) || null;
 }
 
-function chainIdFor(chain) {
-    // Default to mainnet. Contacts don't currently distinguish network
-    // kinds; if a user has a testnet-only contact, entries.chain can
-    // still be 'bitcoin' and the wallet's own testnet addresses will
-    // match when the entry address happens to be a testnet address.
-    if (chain === 'bitcoin') return 'bitcoin-mainnet';
-    if (chain === 'litecoin') return 'litecoin-mainnet';
-    if (chain === 'dogecoin') return 'dogecoin-mainnet';
-    return null;
+/**
+ * The chainId a contact entry's Send / Message prefill should open on. The
+ * network is read from the address bytes when they say (a `tb1` or an
+ * `n`-leading 0x71 Dogecoin address is testnet, not mainnet), and falls back
+ * to mainnet when the bytes are shared across networks. A testnet contact
+ * used to open the mainnet form no matter what its address said.
+ *
+ * @param {string} chain      coin family, 'bitcoin' | 'litecoin' | 'dogecoin' | 'unknown'
+ * @param {string} [address]
+ * @returns {string | null}
+ */
+function chainIdFor(chain, address) {
+    if (chain !== 'bitcoin' && chain !== 'litecoin' && chain !== 'dogecoin') return null;
+    const network = detectAddressChain(address)?.network || 'mainnet';
+    const exact = `${chain}-${network}`;
+    return chainRegistry.get(exact) ? exact : `${chain}-mainnet`;
 }
 
 function coinFamilyFromChainId(chainId) {
@@ -767,25 +784,47 @@ function coinFamilyFromChainId(chainId) {
     return null;
 }
 
-// Best-effort guess of which coin an address belongs to, from well-known
-// address prefixes. Bech32 HRPs (bc1/ltc1/...) are unambiguous; mainnet
-// base58 leading letters (1, L/M, D/A/9) are reliable. Shared testnet/regtest
-// base58 prefixes (m/n/2) and bare '3' overlap across coins, so anything not
-// clearly one chain returns 'unknown'. This is a heuristic for labeling, not
-// real validation (the SDK validates addresses at send time).
-function detectAddressCoin(address) {
-    const a = (address || '').trim();
-    if (!a) return 'unknown';
-    const lower = a.toLowerCase();
-
-    if (lower.startsWith('bc1') || lower.startsWith('tb1') || lower.startsWith('bcrt1')) return 'bitcoin';
-    if (lower.startsWith('ltc1') || lower.startsWith('tltc1') || lower.startsWith('rltc1')) return 'litecoin';
-    // Dogecoin has no bech32 address format, so it only matches base58 below.
-
-    if (a.startsWith('1')) return 'bitcoin';                                    // BTC p2pkh
-    if (a.startsWith('L') || a.startsWith('M')) return 'litecoin';              // LTC p2pkh / p2sh
-    if (a.startsWith('D') || a.startsWith('A') || a.startsWith('9')) return 'dogecoin'; // DOGE p2pkh / p2sh
-    if (a.startsWith('3')) return 'bitcoin';                                    // BTC p2sh (dominant case)
-
-    return 'unknown';
+/**
+ * "Network: Bitcoin" under an address field, or, when the address is real
+ * but its network cannot be read from its bytes, a picker offering only the
+ * networks that address could belong to. Renders nothing for an empty
+ * field. Garbage that is not an address at all shows "Unknown" and is left
+ * to the save-time validator's message.
+ *
+ * @param {object} props
+ * @param {string} props.address
+ * @param {string} props.chain            the resolved chain ('unknown' when undecided)
+ * @param {(chain: string) => void} props.onPick
+ * @param {React.CSSProperties} [props.style]
+ */
+function NetworkReadout({ address, chain, onPick, style }) {
+    const trimmed = (address || '').trim();
+    if (!trimmed) return null;
+    const opt = NETWORK_OPTIONS.find((n) => n.value === chain) || null;
+    const decoded = detectAddressChain(trimmed);
+    const undecided = !opt && decoded && decoded.candidates.length > 1;
+    const rowStyle = { display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', ...style };
+    if (!undecided) {
+        return (
+            <div style={rowStyle}>
+                {opt ? <img src={opt.iconUrl} alt="" className={picker.chainIcon} /> : null}
+                <span>Network: {opt ? opt.label : 'Unknown'}</span>
+            </div>
+        );
+    }
+    const choices = NETWORK_OPTIONS.filter((n) => decoded.candidates.includes(n.value));
+    return (
+        <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
+            <label htmlFor="contact-network-pick">Network: cannot be read from this address. Which is it?</label>
+            <select
+                id="contact-network-pick"
+                aria-label="Network for this address"
+                value=""
+                onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
+            >
+                <option value="">Choose a network</option>
+                {choices.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
+            </select>
+        </div>
+    );
 }

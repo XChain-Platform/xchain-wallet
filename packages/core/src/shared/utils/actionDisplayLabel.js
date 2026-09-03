@@ -58,12 +58,13 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     VOTE: 'Vote',
     // Validator and mirror-injected verbs the user never authors but the
     // indexer still returns for an address. The vendored action manifest
-    // marks all seven indexerHandled + explorerRender, so History does
+    // marks all eight indexerHandled + explorerRender, so History does
     // render them; unmapped they degrade to recased opcodes ("Xcall",
     // "Nodeproof", "Cross settle").
     ANCHOR: 'Network checkpoint',
     ATTEST: 'Validator attestation',
     NODEPROOF: 'Node proof',
+    ROLLCALL: 'Validator roll call',
     SLASH: 'Validator penalty',
     XCALL: 'Cross-chain call',
     XEXEC: 'Cross-chain execution',
