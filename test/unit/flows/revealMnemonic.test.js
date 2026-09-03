@@ -21,7 +21,15 @@ import { WalletNotFoundError } from '../../../packages/core/src/flows/unlockWall
 import { encryptWalletSeed, encryptWalletPassphrase } from '../../../packages/core/src/crypto/walletBlob.js';
 import { deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
 
-// password -> KDF -> AES-256-GCM: every case pays a real Argon2id derivation.
+// password -> KDF -> AES-256-GCM: every case pays a real Argon2id derivation,
+// at the demo-grade cost this suite's sibling uses. What is pinned here is
+// that the reveal gate decrypts both blobs from one derivation, not the KDF's
+// tuning, which test/unit/crypto/kdf.test.js owns. The calibrated parameters
+// (3 iterations over 64 MiB) put ~4.7s of instrumented Argon2id on each of the
+// sixteen derivations below, and Argon2id is synchronous: a worker blocked
+// that long stops answering vitest's RPC, and the coverage run ends on
+// `[vitest-worker]: Timeout calling "onTaskUpdate"` with every test passing.
+// See test/vitest/unit.config.js for the three suites that pay full cost.
 import { vi } from 'vitest';
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
@@ -30,8 +38,8 @@ const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abando
 const KDF_PARAMS = {
     algorithm: 'argon2id',
     salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
-    iterations: 3,
-    memory: 65536,
+    iterations: 1,
+    memory: 8 * 1024,
     parallelism: 1,
 };
 
