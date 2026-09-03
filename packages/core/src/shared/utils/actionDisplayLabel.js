@@ -64,6 +64,9 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     ANCHOR: 'Network checkpoint',
     ATTEST: 'Validator attestation',
     NODEPROOF: 'Node proof',
+    // ROLLCALL closes a liveness epoch: one on-chain record of which
+    // validators were present and which were absent. A holder only ever sees
+    // it because a validator address they watch published or was named in it.
     ROLLCALL: 'Validator roll call',
     SLASH: 'Validator penalty',
     XCALL: 'Cross-chain call',
