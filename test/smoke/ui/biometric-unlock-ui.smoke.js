@@ -75,7 +75,9 @@ assert.match(
 );
 assert.match(
     lockedSrc,
-    /await messaging\.unlockWallet\(unwrapped\)/,
+    // The second argument is the optional 25th-word passphrase typed on the
+    // unlock screen; biometrics unwrap the password, never the passphrase.
+    /await messaging\.unlockWallet\(unwrapped(?:, unlockOpts\(\))?\)/,
     'biometric path then runs the standard unlock',
 );
 assert.match(
