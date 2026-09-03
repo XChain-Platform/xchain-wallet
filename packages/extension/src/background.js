@@ -51,7 +51,7 @@ import {
 // ServiceWorkerGlobalScope), and keeping it off the barrel is what lets the
 // Node smokes go on importing sdkFactory.js without an installed SDK.
 import { XChainSDK } from './background/sdkStatic.js';
-import { SIGNING_SECRET_SESSION_KEY, loadSigningSecret } from './background/signingSecretSession.js';
+import { SIGNING_SECRET_SESSION_KEY, loadSigningCredentials } from './background/signingSecretSession.js';
 import { initPanicModePersistence } from './background/panicModeStorage.js';
 import {
     readAutoLockState,
@@ -240,13 +240,14 @@ async function ensureHost() {
     // leaves the per-op password prompt as the fallback.
     if (signerPool.size() === 0) {
         try {
-            const cachedPassword = await loadSigningSecret(
+            const cached = await loadSigningCredentials(
                 new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
             );
-            if (cachedPassword) {
+            if (cached) {
                 await signerPool.populate({
                     vault,
-                    password: cachedPassword,
+                    password: cached.password,
+                    bip39Passphrase: cached.bip39Passphrase,
                     chainRegistry,
                     sdkRegistry,
                 });

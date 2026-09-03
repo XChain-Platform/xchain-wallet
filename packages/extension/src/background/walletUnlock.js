@@ -34,7 +34,7 @@
 // Never returns the master key or password to the popup; the session
 // backends are the only place they live outside the service worker.
 
-import { crypto as cryptoLib, storage as storageLib } from '@xchain-wallet/core';
+import { crypto as cryptoLib, storage as storageLib, flows as flowsLib } from '@xchain-wallet/core';
 import { saveSigningSecret } from './signingSecretSession.js';
 import { checkUnlockAllowed, recordFailure } from './unlockThrottle.js';
 
@@ -76,7 +76,9 @@ export class NoVaultError extends Error {
  */
 
 /**
- * @param {unknown} request  Expected shape: `{ password: string }`
+ * @param {unknown} request  Expected shape: `{ password: string, bip39Passphrase?: string }`;
+ *   the optional §15.6 25th word unlocks passphrase-enabled wallets into the pool and is
+ *   verified against their stored addresses
  * @param {WalletUnlockDeps} deps
  * @returns {Promise<{ unlocked: true }>}
  */
@@ -85,6 +87,8 @@ export async function handleWalletUnlock(request, deps) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.unlock: password is required');
     }
+    const rawPassphrase = /** @type {any} */ (request)?.bip39Passphrase;
+    const bip39Passphrase = typeof rawPassphrase === 'string' ? rawPassphrase : '';
     const meta = /** @type {any} */ (await deps.metaBackend.load());
     if (!meta || !meta.kdfParams) {
         throw new NoVaultError();
@@ -117,10 +121,12 @@ export async function handleWalletUnlock(request, deps) {
             // password is in scope. Pool entries outlive this block;
             // they live in background memory until `wallet.lock`.
             if (deps.signerPool && deps.chainRegistry && deps.sdkRegistry) {
+                let pooled = null;
                 try {
-                    await deps.signerPool.populate({
+                    pooled = await deps.signerPool.populate({
                         vault,
                         password,
+                        bip39Passphrase,
                         chainRegistry: deps.chainRegistry,
                         sdkRegistry: deps.sdkRegistry,
                     });
@@ -128,6 +134,17 @@ export async function handleWalletUnlock(request, deps) {
                     // Best-effort: a pool populate failure shouldn't
                     // block unlock. The per-op password prompt remains
                     // as a fallback for any wallet not in the pool.
+                }
+                // A typed 25th word that reproduced none of the passphrase
+                // wallets' addresses is a mistype. Refuse the unlock (the
+                // password was right, so the throttle is untouched) rather
+                // than open a session whose signer owns different coins.
+                // One match among several passphrase wallets lets the
+                // unlock stand; the rest sit out until the next unlock.
+                if (bip39Passphrase && pooled
+                    && pooled.passphraseMismatch.length > 0 && pooled.passphraseMatched.length === 0) {
+                    try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
+                    throw new flowsLib.PassphraseMismatchError(pooled.passphraseMismatchNames);
                 }
             }
         } catch (err) {
@@ -151,9 +168,11 @@ export async function handleWalletUnlock(request, deps) {
         // backend (that's what `ensureHost()` reads to build the host).
         if (throttle) await throttle.clear().catch(() => { /* best-effort */ });
         await deps.sessionBackend.save(masterKey);
-        // Cache the password so the SignerPool can be rebuilt after a
-        // service-worker restart (the master key can't decrypt seeds).
-        await saveSigningSecret(deps.signingSecretBackend, password);
+        // Cache the password (and the 25th word, when one was typed) so the
+        // SignerPool can be rebuilt after a service-worker restart (the
+        // master key can't decrypt seeds, and the password alone cannot
+        // re-pool a passphrase wallet).
+        await saveSigningSecret(deps.signingSecretBackend, password, bip39Passphrase);
     } finally {
         masterKey.fill(0);
     }

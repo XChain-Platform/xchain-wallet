@@ -1058,7 +1058,10 @@ async function getFlows() {
  * Derive the master key from `password`, open the encrypted vault,
  * and build the MessageHost in-page.
  *
- * @param {{ password: string }} req
+ * @param {{ password: string, bip39Passphrase?: string }} req   `bip39Passphrase` is the
+ *   §15.6 25th word; supplied, it unlocks every passphrase-enabled wallet into the pool
+ *   and is checked against each one's stored addresses (a wrong one is refused, not
+ *   silently accepted as a different seed)
  * @returns {Promise<{ unlocked: true }>}
  */
 export async function unlockWalletLocal(req) {
@@ -1066,6 +1069,7 @@ export async function unlockWalletLocal(req) {
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.unlock: password is required');
     }
+    const bip39Passphrase = typeof req?.bip39Passphrase === 'string' ? req.bip39Passphrase : '';
     const meta = /** @type {any} */ (await createMetaBackend().load());
     if (!meta || !meta.kdfParams) {
         throw new NoVaultError();
@@ -1089,12 +1093,27 @@ export async function unlockWalletLocal(req) {
         // re-prompting. Pool is cleared in lockWalletLocal.
         await sdkBound();
         signerPool = new signersLib.SignerPool();
-        await signerPool.populate({
+        const pooled = await signerPool.populate({
             vault,
             password,
+            bip39Passphrase,
             chainRegistry,
             sdkRegistry,
         });
+        // A typed 25th word that reproduced NONE of the passphrase wallets'
+        // addresses is a mistype, and the honest answer is to stay on the
+        // unlock screen with the field marked, not to open a session whose
+        // signer silently owns different coins. The password itself was
+        // right, so nothing counts against the lockout. When at least one
+        // passphrase wallet matched, the unlock stands and the others sit
+        // out until the next unlock, exactly as if no passphrase was typed.
+        if (bip39Passphrase && pooled.passphraseMismatch.length > 0 && pooled.passphraseMatched.length === 0) {
+            try { signerPool.lockAll(); } catch (_err) { /* best-effort */ }
+            signerPool = null;
+            try { v.close(); } catch (_err) { /* best-effort */ }
+            vault = null;
+            throw new flowsLib.PassphraseMismatchError(pooled.passphraseMismatchNames);
+        }
 
         host = createBackgroundHost({
             vault,

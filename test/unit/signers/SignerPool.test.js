@@ -105,8 +105,92 @@ describe('signers/SignerPool', () => {
             unlockWalletRecord.mockResolvedValueOnce(bad).mockResolvedValueOnce(fresh);
             const pool = new SignerPool();
             await pool.populate({ vault, password: 'pw', ...REG });
-            await expect(pool.populate({ vault, password: 'pw', ...REG })).resolves.toBeUndefined();
+            await expect(pool.populate({ vault, password: 'pw', ...REG })).resolves.toMatchObject({ pooled: ['w1'] });
             expect(pool.get('w1')).toBe(fresh);
+        });
+
+        it('reports pooled and skipped wallet ids in its summary', async () => {
+            const vault = { wallets: { list: async () => [
+                { id: 'w1' }, { id: 'w2', passphraseEnabled: true }, { id: 'w3' },
+            ] } };
+            unlockWalletRecord
+                .mockResolvedValueOnce(fakeSigner('s1'))
+                .mockRejectedValueOnce(new Error('bad password'));
+            const pool = new SignerPool();
+            const summary = await pool.populate({ vault, password: 'pw', ...REG });
+            expect(summary.pooled).toEqual(['w1']);
+            expect(summary.skipped).toEqual(['w2', 'w3']);
+            expect(summary.passphraseMatched).toEqual([]);
+            expect(summary.passphraseMismatch).toEqual([]);
+        });
+
+        // A BIP39 passphrase never fails to derive, so the only way to catch a
+        // mistyped 25th word is to compare what it derives against the public
+        // key the stored HD address record was created from.
+        describe('25th-word verification against stored addresses', () => {
+            const PUB = '02aabbcc';
+            function vaultWithHdAddress() {
+                return {
+                    wallets: { list: async () => [{ id: 'w1', name: 'Cold', passphraseEnabled: true }] },
+                    accounts: { findBy: async (f, v) => (f === 'walletId' && v === 'w1' ? [{ id: 'a1', walletId: 'w1' }] : []) },
+                    addresses: { findBy: async (f, v) => (f === 'accountId' && v === 'a1'
+                        ? [
+                            { id: 'x0', accountId: 'a1', derivationPath: null, publicKey: 'ff' },
+                            { id: 'x1', accountId: 'a1', derivationPath: "m/84'/0'/0'/0/0", publicKey: PUB },
+                        ]
+                        : []) },
+                };
+            }
+            function derivingSigner(pubkey) {
+                const s = fakeSigner('sig');
+                s.getPublicKey = async ({ path }) => { s.askedPath = path; return { publicKey: pubkey }; };
+                return s;
+            }
+
+            it('pools the wallet when the passphrase reproduces the stored public key', async () => {
+                const signer = derivingSigner(PUB.toUpperCase());
+                unlockWalletRecord.mockResolvedValue(signer);
+                const pool = new SignerPool();
+                const summary = await pool.populate({ vault: vaultWithHdAddress(), password: 'pw', bip39Passphrase: 'right', ...REG });
+                expect(pool.get('w1')).toBe(signer);
+                expect(signer.askedPath).toBe("m/84'/0'/0'/0/0");
+                expect(summary.passphraseMatched).toEqual(['w1']);
+                expect(summary.passphraseMismatch).toEqual([]);
+            });
+
+            it('locks and refuses the signer when the passphrase derives a different key', async () => {
+                const signer = derivingSigner('03deadbeef');
+                unlockWalletRecord.mockResolvedValue(signer);
+                const pool = new SignerPool();
+                const summary = await pool.populate({ vault: vaultWithHdAddress(), password: 'pw', bip39Passphrase: 'wrong', ...REG });
+                expect(pool.has('w1')).toBe(false);
+                expect(signer.locked).toBe(true);
+                expect(summary.passphraseMismatch).toEqual(['w1']);
+                expect(summary.passphraseMismatchNames).toEqual(['Cold']);
+                expect(summary.pooled).toEqual([]);
+            });
+
+            it('accepts a passphrase wallet that has no HD address record to compare against', async () => {
+                const vault = vaultWithHdAddress();
+                vault.addresses = { findBy: async () => [] };
+                const signer = derivingSigner('03deadbeef');
+                unlockWalletRecord.mockResolvedValue(signer);
+                const pool = new SignerPool();
+                const summary = await pool.populate({ vault, password: 'pw', bip39Passphrase: 'any', ...REG });
+                expect(pool.get('w1')).toBe(signer);
+                expect(summary.passphraseMatched).toEqual(['w1']);
+            });
+
+            it('does not run the check for wallets without a passphrase', async () => {
+                const vault = vaultWithHdAddress();
+                vault.wallets = { wallets: null, list: async () => [{ id: 'w1', name: 'Plain' }] };
+                const signer = derivingSigner('03deadbeef');
+                unlockWalletRecord.mockResolvedValue(signer);
+                const pool = new SignerPool();
+                await pool.populate({ vault, password: 'pw', ...REG });
+                expect(pool.get('w1')).toBe(signer);
+                expect(signer.askedPath).toBeUndefined();
+            });
         });
     });
 
