@@ -35,6 +35,57 @@
 
 import { unlockWalletRecord } from '../flows/unlockWallet.js';
 
+/**
+ * @typedef {Object} PopulateSummary
+ * @property {string[]} pooled               wallet ids now holding a signer
+ * @property {string[]} skipped              wallet ids left out (bad password for that record, or a
+ *                                           passphrase wallet unlocked without its passphrase)
+ * @property {string[]} passphraseMatched    passphrase wallets whose stored addresses the typed 25th word reproduced
+ * @property {string[]} passphraseMismatch   passphrase wallets it did NOT reproduce (signer locked, not pooled)
+ * @property {string[]} passphraseMismatchNames  display names for the mismatch list, for the unlock screen's sentence
+ */
+
+/**
+ * Whether the seed the signer just unlocked owns this wallet's stored
+ * addresses.
+ *
+ * A BIP39 passphrase is never wrong to the derivation: every string yields
+ * a valid seed, only a different one, so a mistyped 25th word unlocks
+ * cleanly and then derives keys that own none of the wallet's coins. The
+ * stored HD address records carry the path and public key the RIGHT seed
+ * produced, so one derivation settles it.
+ *
+ * Returns null when there is nothing to compare against: a vault without
+ * account/address collections (unit fixtures), a wallet with no HD address
+ * yet, or a signer that cannot derive. Nothing to compare means nothing to
+ * refuse; the caller treats null as "accepted".
+ *
+ * @param {any} vault
+ * @param {{ id: string }} wallet
+ * @param {any} signer
+ * @returns {Promise<boolean | null>}
+ */
+async function seedOwnsStoredAddresses(vault, wallet, signer) {
+    if (!vault?.accounts?.findBy || !vault?.addresses?.findBy) return null;
+    if (typeof signer?.getPublicKey !== 'function') return null;
+    const accounts = await vault.accounts.findBy('walletId', wallet.id);
+    for (const acct of accounts) {
+        const addrs = await vault.addresses.findBy('accountId', acct.id);
+        const rec = addrs.find((a) => typeof a.derivationPath === 'string'
+            && a.derivationPath.startsWith('m/')
+            && typeof a.publicKey === 'string'
+            && a.publicKey.length > 0);
+        if (!rec) continue;
+        try {
+            const { publicKey } = await signer.getPublicKey({ path: rec.derivationPath });
+            return String(publicKey).toLowerCase() === rec.publicKey.toLowerCase();
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
 export class SignerPool {
     constructor() {
         /** @type {Map<string, import('./SoftwareSigner.js').SoftwareSigner>} */
@@ -49,38 +100,59 @@ export class SignerPool {
      * @param {object} opts
      * @param {import('../storage/Vault.js').Vault} opts.vault
      * @param {string} opts.password
-     * @param {string} [opts.bip39Passphrase]
+     * @param {string} [opts.bip39Passphrase]   the §15.6 25th word, applied to every
+     *   passphrase-enabled wallet and checked against each one's stored addresses
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
+     * @returns {Promise<PopulateSummary>}
      */
     async populate({ vault, password, bip39Passphrase = '', chainRegistry, sdkRegistry }) {
+        /** @type {PopulateSummary} */
+        const summary = {
+            pooled: [], skipped: [], passphraseMatched: [], passphraseMismatch: [], passphraseMismatchNames: [],
+        };
         const wallets = await vault.wallets.list();
         for (const w of wallets) {
             // §15.6 25th-word passphrase wallets need the right secret
-            // here; for now we only auto-unlock wallets whose seed was
-            // encrypted *without* a 25th word. Wallets that need one
-            // fall back to the per-op password prompt.
-            if (w.passphraseEnabled && !bip39Passphrase) continue;
+            // here. Unlocked without it they stay out of the pool, and the
+            // per-op prompt then explains (PassphraseRequiredError) that
+            // the remedy is an unlock with the passphrase filled in.
+            if (w.passphraseEnabled && !bip39Passphrase) { summary.skipped.push(w.id); continue; }
+            let signer;
             try {
-                const signer = await unlockWalletRecord({
+                signer = await unlockWalletRecord({
                     wallet: w,
                     password,
                     bip39Passphrase,
                     chainRegistry,
                     sdkRegistry,
                 });
-                const existing = this._signers.get(w.id);
-                if (existing) {
-                    try { existing.lock(); } catch { /* best-effort */ }
-                }
-                this._signers.set(w.id, signer);
             } catch {
                 // Bad password for this wallet, or other unlock
                 // failure; skip it. The op-level fallback (password
                 // prompt) will surface the real error if the user
                 // tries to use that wallet.
+                summary.skipped.push(w.id);
+                continue;
             }
+            if (w.passphraseEnabled) {
+                const owns = await seedOwnsStoredAddresses(vault, w, signer);
+                if (owns === false) {
+                    try { signer.lock(); } catch { /* best-effort */ }
+                    summary.passphraseMismatch.push(w.id);
+                    summary.passphraseMismatchNames.push(w.name || '');
+                    continue;
+                }
+                summary.passphraseMatched.push(w.id);
+            }
+            const existing = this._signers.get(w.id);
+            if (existing) {
+                try { existing.lock(); } catch { /* best-effort */ }
+            }
+            this._signers.set(w.id, signer);
+            summary.pooled.push(w.id);
         }
+        return summary;
     }
 
     /**

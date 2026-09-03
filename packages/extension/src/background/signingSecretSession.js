@@ -37,28 +37,65 @@ const SIGNING_SECRET_DECODER = new TextDecoder();
 /** chrome.storage.session key for the cached signing secret (the password). */
 export const SIGNING_SECRET_SESSION_KEY = 'xchain-wallet:session-signing-secret';
 
+// Slot format. A bare password is stored as its UTF-8 bytes, unchanged from
+// before the 25th word was cached alongside it, so a slot written by an
+// older worker still reads. When a passphrase is present the slot holds this
+// marker followed by JSON; the marker starts with a NUL byte, which no typed
+// password begins with, so the two shapes cannot be confused.
+const CREDENTIALS_MARKER = '\u0000xchain-creds:';
+
 /**
- * Persist the password to the signing-secret session slot. No-op when the
- * backend is absent (e.g. the desktop pre-host path, which doesn't need it).
+ * Persist the password, and the §15.6 25th word when one was typed, to the
+ * signing-secret session slot. No-op when the backend is absent (e.g. the
+ * desktop pre-host path, which doesn't need it).
  *
  * @param {{ save: (blob: Uint8Array) => Promise<void> } | undefined | null} backend
  * @param {string} password
+ * @param {string} [bip39Passphrase]
  */
-export async function saveSigningSecret(backend, password) {
+export async function saveSigningSecret(backend, password, bip39Passphrase = '') {
     if (!backend || typeof password !== 'string' || password.length === 0) return;
-    await backend.save(SIGNING_SECRET_ENCODER.encode(password));
+    const text = typeof bip39Passphrase === 'string' && bip39Passphrase.length > 0
+        ? CREDENTIALS_MARKER + JSON.stringify({ password, bip39Passphrase })
+        : password;
+    await backend.save(SIGNING_SECRET_ENCODER.encode(text));
 }
 
 /**
- * Read the cached password, or null when none is stored.
+ * Read the cached credentials, or null when none are stored.
+ *
+ * @param {{ load: () => Promise<Uint8Array | null> } | undefined | null} backend
+ * @returns {Promise<{ password: string, bip39Passphrase: string } | null>}
+ */
+export async function loadSigningCredentials(backend) {
+    if (!backend) return null;
+    const bytes = await backend.load();
+    if (!bytes) return null;
+    const text = SIGNING_SECRET_DECODER.decode(bytes);
+    if (!text.startsWith(CREDENTIALS_MARKER)) return { password: text, bip39Passphrase: '' };
+    try {
+        const parsed = JSON.parse(text.slice(CREDENTIALS_MARKER.length));
+        if (typeof parsed?.password !== 'string' || parsed.password.length === 0) return null;
+        return {
+            password: parsed.password,
+            bip39Passphrase: typeof parsed.bip39Passphrase === 'string' ? parsed.bip39Passphrase : '',
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Read the cached password, or null when none is stored. Kept for callers
+ * that only ever needed the password; the pool rebuild uses
+ * `loadSigningCredentials` so a passphrase wallet survives a worker restart.
  *
  * @param {{ load: () => Promise<Uint8Array | null> } | undefined | null} backend
  * @returns {Promise<string | null>}
  */
 export async function loadSigningSecret(backend) {
-    if (!backend) return null;
-    const bytes = await backend.load();
-    return bytes ? SIGNING_SECRET_DECODER.decode(bytes) : null;
+    const creds = await loadSigningCredentials(backend);
+    return creds ? creds.password : null;
 }
 
 /**
