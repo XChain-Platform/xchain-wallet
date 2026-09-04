@@ -150,6 +150,40 @@ export default defineConfig({
                 'packages/core/src/branding/images/**',
                 'packages/core/src/ui/tokens.css',
             ],
+            // IF `functions` GOES RED AND YOUR CHANGE ADDED NO UNTESTED CODE,
+            // MEASURE THE BASE COMMIT BEFORE WRITING A SINGLE TEST.
+            //
+            // The v8 provider reports a file that no test imports as ONE stub
+            // function. The moment any test imports it, v8 enumerates it for
+            // real and its whole function count lands in the denominator at
+            // once, so the first test to touch a large untested module drops
+            // the global figure by points that have nothing to do with the
+            // change. Measured here: adding the first test to import the
+            // messaging barrels moved `packages/web/src/messaging.js` from
+            // `0/1` to `1/318` and `extension/src/popup/messaging.js` from
+            // `0/1` to `1/320`, +755 functions of long-untested code, while
+            // that change's own covered count went UP by 72. The gate refused
+            // a push that had improved coverage.
+            //
+            // The remedy is to cover the newly-visible file, never to lower a
+            // floor: these are set to measured values on purpose (e3c7ffd3).
+            // Files still in the `0/N` state are the ones that will do this
+            // again - `shared/routes/CreateOrderForm.jsx`, `HomeTabs.jsx` and
+            // `ListCreateForm.jsx` among them.
+            //
+            // `coverage.experimentalAstAwareRemapping` reports the honest
+            // counts (it maps v8 data through the AST, and `ast-v8-to-istanbul`
+            // is already installed as a transitive dependency, so the flag
+            // costs no new package). It is NOT enabled, and the reason is
+            // measured rather than assumed: on this suite it reads 56.07%
+            // functions over 10535 of them against v8's 63.6% over 5754, so
+            // every floor below would need re-seeding - and two identical runs
+            // disagreed on the DENOMINATOR (10535 vs 10311 functions, 54441 vs
+            // 53372 statements). A ratchet cannot sit on a total that moves
+            // between runs; a stable basis that undercounts is safer than an
+            // honest one that drifts. Revisit when the flag leaves
+            // experimental, or price a real istanbul provider.
+            //
             // A RATCHET, not the target. G166 wants >=80% on core; the suite is
             // at ~65% across this lens today, so an 80% gate would just fail
             // every push and get switched off within a week. These floors sit
