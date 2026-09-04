@@ -40,6 +40,36 @@ import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
+// Every case below mints a FRESH vault, and the restore handler tunes that
+// vault with `makeFreshKdfParams()` called with no overrides, i.e. the
+// production floor: 3 passes over 64 MiB, ~1.7s per derivation on a fast dev
+// box. Each restore pays it twice, once inside the handler and once in
+// `openAs` reopening under the params the restore persisted, which is what put
+// this file at 76.4s on a hosted runner. Argon2id is synchronous, so a worker
+// blocked that long stops answering vitest's RPC and an otherwise green run
+// ends on `[vitest-worker]: Timeout calling "onTaskUpdate"` with all thirteen
+// cases passed.
+//
+// What this file pins is the restore lane: which password opens what, and that
+// the new vault's params reach the meta slot. The KDF's tuning belongs to
+// test/unit/crypto/kdf.test.js, so only the no-argument DEFAULT is cheapened.
+// An explicit override still wins, which keeps the one caller that passes them
+// on its production path: `rekeyWalletRecord` re-seals at the cost it INHERITS
+// from the backed-up wallet, asserted in
+// test/integration/flows/backup-restore-seed-password.test.js. The salt still
+// comes from the real helper, so it stays fresh per call.
+//
+// The suite still bites: re-sealing under the wrong password reds four of the
+// thirteen cases with this mock in place.
+vi.mock('../../../packages/core/src/crypto/kdf.js', async (importActual) => {
+    const actual = await importActual();
+    return {
+        ...actual,
+        makeFreshKdfParams: (overrides = {}) =>
+            actual.makeFreshKdfParams({ iterations: 1, memory: 8 * 1024, ...overrides }),
+    };
+});
+
 import { dispatchPreHost, PRE_HOST_MESSAGE_TYPES } from '../../../packages/extension/src/background/sessionMeta.js';
 import {
     exportBackupFile,
@@ -59,10 +89,15 @@ import { createAccount } from '../../../packages/core/src/schemas/account.js';
 import { createAddress } from '../../../packages/core/src/schemas/address.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
+// Demo grade, and one pass rather than two for the reason above: with the
+// default cost mocked out, the fixtures are what is left. Sealing the seed,
+// encoding the envelope, opening it again and re-keying both blobs put 86 of
+// the file's 103 derivations at these parameters, which is 10.8s of its
+// remaining 11.9s. One pass is what the sibling suites already use.
 const KDF_PARAMS = {
     algorithm: 'argon2id',
     salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
-    iterations: 2,
+    iterations: 1,
     memory: 8192,
     parallelism: 1,
 };
