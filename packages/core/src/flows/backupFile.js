@@ -35,9 +35,17 @@
 
 // A backup can also carry an OLDER schema than this release reads, and `put`
 // never migrates (storage/Vault.js) - it only validates, and validation
-// rejects any version but the current one. So the wallet and the settings
-// records are migrated on the way out of the envelope; without that, a backup
-// taken before a schema bump dies inside the vault's validator on restore.
+// rejects any version but the current one. So EVERY record is migrated on the
+// way out of the envelope; without that, a backup taken before a schema bump
+// dies inside the vault's validator on restore.
+//
+// Every collection, not just the wallet and settings: those two were migrated
+// here first and the other five were written straight through, so an envelope
+// holding a v1 account or a v1 address was refused partway down the list -
+// after the wallet had been written and auto-saved, leaving a restored wallet
+// with no addresses under it. The migrator is a required argument of
+// `applyCollection` rather than an optional one, so a collection added later
+// cannot quietly inherit the raw path.
 
 import {
     decodeBackupEnvelope,
@@ -53,7 +61,15 @@ import {
     PASSPHRASE_AAD,
 } from '../crypto/index.js';
 import { randomUUID } from '../util/uuid.js';
-import { migrateSettings, migrateWallet } from '../schemas/migrations.js';
+import {
+    migrateSettings,
+    migrateWallet,
+    migrateAccount,
+    migrateAddress,
+    migrateContact,
+    migrateConnectedSite,
+    migratePendingTx,
+} from '../schemas/migrations.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import {
@@ -321,12 +337,15 @@ export async function importBackupFile({
         settings: false,
     };
 
-    await applyCollection(vault.wallets, [decoded.wallet], onConflict, writes, skipped, 'wallets');
-    await applyCollection(vault.accounts, decoded.accounts ?? [], onConflict, writes, skipped, 'accounts');
-    await applyCollection(vault.addresses, decoded.addresses ?? [], onConflict, writes, skipped, 'addresses');
-    await applyCollection(vault.contacts, decoded.contacts ?? [], onConflict, writes, skipped, 'contacts');
-    await applyCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites');
-    await applyCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs');
+    // `decoded.wallet` was already migrated above, before the re-key rewrote it
+    // in place; migrateWallet here is the same no-op it is for any current
+    // record, and keeps every collection on one path.
+    await applyCollection(vault.wallets, [decoded.wallet], onConflict, writes, skipped, 'wallets', migrateWallet);
+    await applyCollection(vault.accounts, decoded.accounts ?? [], onConflict, writes, skipped, 'accounts', migrateAccount);
+    await applyCollection(vault.addresses, decoded.addresses ?? [], onConflict, writes, skipped, 'addresses', migrateAddress);
+    await applyCollection(vault.contacts, decoded.contacts ?? [], onConflict, writes, skipped, 'contacts', migrateContact);
+    await applyCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites', migrateConnectedSite);
+    await applyCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs', migratePendingTx);
 
     // Settings is a singleton, so overwrite/preserve covers the whole record.
     // In 'add' mode the vault's own settings win even under 'overwrite': that
@@ -646,7 +665,10 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     return true;
 }
 
-async function applyCollection(collection, records, onConflict, writes, skipped, name) {
+async function applyCollection(collection, records, onConflict, writes, skipped, name, migrateRecord) {
+    if (typeof migrateRecord !== 'function') {
+        throw new Error(`applyCollection: a migrator is required for "${name}"`);
+    }
     for (const rec of records) {
         if (!rec || typeof rec.id !== 'string' || !rec.id) continue;
         const existing = await collection.get(rec.id);
@@ -654,7 +676,13 @@ async function applyCollection(collection, records, onConflict, writes, skipped,
             skipped[name] += 1;
             continue;
         }
-        await collection.put(rec);
+        // Idempotent: a record already at the current version has no step to
+        // walk. A record from a NEWER release is refused by the harness itself
+        // (§11.6, "downgrade is unsupported"), which names the two versions;
+        // that is a better error than the validator's field-by-field one, and
+        // the honest outcome either way, since this build cannot know the
+        // fields that release added.
+        await collection.put(migrateRecord(rec));
         writes[name] += 1;
     }
 }
