@@ -21,6 +21,16 @@
 // number); otherwise `unavailable` (thin replica / pre-commitment), and
 // `pending` while proofs are still in flight.
 //
+// The fan-out runs once per (chain, address, token) SET per session, not
+// once per poll: Home hands this hook a new `balances` object every
+// `BALANCE_POLL_INTERVAL_MS` even when nothing changed, so keying the
+// effect on that object re-verified every job every 20 seconds (two
+// uncached explorer reads per job, against 60/min limiters; see the spec's
+// D18/C13). `proofJobsSignature` collapses `balances` to the sorted set of
+// job keys the poll produced; the effect re-fires only when that set
+// changes (a token arriving or leaving an address), never on identity
+// alone.
+//
 // Each verdict also carries the `trust` tier the proof was checked under
 // (`pinned` = an out-of-band launch trust root, `explorer` = the explorer
 // chose the validator set; see flows/verifyBalances.js). It rides along so a
@@ -61,6 +71,30 @@ export function collectBalanceJobs(balances) {
 }
 
 /**
+ * Collapse the per-address `balances` shape to a stable signature of the
+ * proof jobs it produces: the sorted `chainId:address:tick` keys, joined by
+ * '|'. Two structurally equal `balances` objects (even under a new object
+ * identity, as Home hands down every poll) yield the same string, so a
+ * `useEffect` keyed on this instead of on `balances` itself does not re-fire
+ * on a poll that changed nothing. The amount is deliberately left out: a
+ * badge only claims the explorer can back a number for the pair at a
+ * checkpoint, not that the displayed amount matches (C29), so an amount
+ * tick does not need a re-verify; a token arriving or leaving an address
+ * does, and that is exactly what changes the key set.
+ *
+ * @param {Record<string, Array<{ address: string, balances?: { tokens?: Array<{ tick?: string }> } }>> | null} balances
+ * @returns {string}
+ */
+export function proofJobsSignature(balances) {
+    const jobs = collectBalanceJobs(balances);
+    if (jobs.length === 0) return '';
+    return jobs
+        .map((j) => `${j.chainId}:${j.address}:${j.tick}`)
+        .sort()
+        .join('|');
+}
+
+/**
  * Reduce a per-row trust tier. A row spans several addresses, so it may only
  * claim the pinned trust root if EVERY settled address verified against one;
  * one address that fell through to the explorer's validator set decides the
@@ -98,6 +132,7 @@ export function reduceBalanceVerdict(a) {
  */
 export function useProofVerification({ messaging, balances, enabled }) {
     const [verifyMap, setVerifyMap] = useState(/** @type {Record<string, any>} */ ({}));
+    const sig = proofJobsSignature(balances);
 
     useEffect(() => {
         if (!enabled || !balances || typeof messaging?.verifyBalance !== 'function') {
@@ -155,7 +190,13 @@ export function useProofVerification({ messaging, balances, enabled }) {
         Promise.all(Array.from({ length: pool }, () => worker())).catch(() => { /* per-job errors already folded in */ });
 
         return () => { cancelled = true; };
-    }, [messaging, balances, enabled]);
+    // `sig` captures the set of (chain, address, tick) jobs; `balances`
+    // identity changes on every poll (Home hands down a new object every
+    // BALANCE_POLL_INTERVAL_MS) but its job set, and thus the work, does
+    // not. Reading `balances` here still recomputes the jobs for the render
+    // that produced this `sig`, so the two never disagree.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messaging, enabled, sig]);
 
     return verifyMap;
 }

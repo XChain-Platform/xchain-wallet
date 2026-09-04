@@ -25,6 +25,10 @@ import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 
 const DEFAULT_POLL_MS = 60_000;
+// Exported under its own name so the release profiler
+// (tools/release/cold-open-profile.mjs) reads the badge's cadence from the
+// hook rather than restating it.
+export const COINPAY_BADGE_POLL_MS = DEFAULT_POLL_MS;
 
 /**
  * One normalized pending obligation. `chainId` + `address` +
@@ -119,11 +123,28 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     // poll/refresh of the SAME identity they must NOT flush, or the
     // badge would flicker to zero on every sweep.
     const identityRef = useRef(/** @type {string | null} */ (null));
+    // The badge's own re-poll rule, keyed to this instance's poll interval.
+    // A tab switch fires `visibilitychange` here at the same moment Home
+    // re-polls balances, and the scan costs one explorer read per address, so
+    // it is only worth issuing when the rows are already a poll interval old.
+    // Recreated when the caller changes `pollMs`, since the window is keyed to
+    // it. See flows/pollThrottle.js.
+    const throttleRef = useRef(
+        /** @type {ReturnType<typeof flowsLib.createPollThrottle> | null} */ (null));
+    if (!throttleRef.current || throttleRef.current.intervalMs !== pollMs) {
+        throttleRef.current = flowsLib.createPollThrottle(pollMs);
+    }
 
     const refresh = useCallback(() => setScanSeq((n) => n + 1), []);
 
     useEffect(() => {
         aliveRef.current = true;
+        // Every re-run of this effect issues a scan at once: an identity
+        // change, a new interval, or the manual refresh a user pressed. None
+        // of them may be held off by the window the previous scan left, so the
+        // rule starts over here.
+        const throttle = throttleRef.current;
+        throttle.reset();
         const identity = `${walletId || ''}::${accountId || ''}`;
         if (identityRef.current !== identity) {
             identityRef.current = identity;
@@ -143,18 +164,28 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 const found = await scanCoinpayObligations({
                     messaging, walletId, accountId: accountId || undefined,
                 });
+                throttle.succeed();
                 if (!cancelled && aliveRef.current) setObligations(found);
             } catch {
                 // Keep the previous rows on a failed sweep; a transient
-                // outage should not flicker the badge to zero.
+                // outage should not flicker the badge to zero. Release the
+                // window too, so the next event may try again rather than
+                // wait out an interval on a failure.
+                throttle.fail();
             } finally {
                 if (!cancelled && aliveRef.current) setScanning(false);
             }
         };
-        run();
-        const timer = setInterval(run, pollMs);
+        // The scan on mount and the one on the beat are never gated: they are
+        // the badge's freshness. They do take the in-flight slot, so a tab
+        // switch landing mid-scan does not start a second one.
+        const beat = () => { throttle.start(); run(); };
+        beat();
+        const timer = setInterval(beat, pollMs);
         const onVisible = () => {
-            if (typeof document !== 'undefined' && document.visibilityState === 'visible') run();
+            if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+            if (!throttle.start()) return;
+            run();
         };
         if (typeof document !== 'undefined') {
             document.addEventListener('visibilitychange', onVisible);

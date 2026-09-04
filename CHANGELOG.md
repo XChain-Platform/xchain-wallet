@@ -14,8 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A batch can compose a parent token and its sub-tokens in one action.
 - `verify-ci-controls.mjs` measures the public release-CI page against the repository's live settings, one probe per control the page names.
 - The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
+- The cold-open profiler now measures proof verification, the badge's own coinpay scan and the cost of an alt-tab, and prints the per-route worst minute and the ten-second edge burst every rate limit on the wallet's path is derived from.
 
 ### Changed
+- Returning to the wallet re-polls balances, history and the coinpay badge only when the data is older than one poll interval, so an alt-tab costs at most one load instead of two or three.
+- Balance proofs are verified once per session for a given set of addresses and tokens instead of on every 20-second poll.
 - The optional BIP39 passphrase is now stored on the wallet, encrypted under the wallet's own password, so it is entered once at setup instead of on every unlock.
 - Donation defaults are per coin (1,000 sats/tx on Bitcoin, 0.001 LTC on Litecoin, 0.05 DOGE on Dogecoin, each sent at 25x accumulated) instead of one flat number that was wrong on two of the three chains.
 - Settings store only what the user changed; everything left at its default follows the defaults of the installed release, so a later release can retune them.

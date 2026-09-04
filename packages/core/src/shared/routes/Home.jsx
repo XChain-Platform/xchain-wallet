@@ -235,6 +235,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // refresh would be noisy; the user explicitly opting Hide / dismissing
     // the toast counts as "they decided" for the rest of the session.
     const spamNudgedForWalletRef = useRef(/** @type {string | null} */ (null));
+    // One re-poll rule for this mount. The interval below already bounds how
+    // stale a balance can be, so a focus/visibilitychange re-poll only buys
+    // anything once the balances are older than that; without the rule an
+    // alt-tab (which fires both events) cost two full reads of every address
+    // inside one rate-limit period. See flows/pollThrottle.js.
+    const pollThrottleRef = useRef(flowsLib.createPollThrottle(BALANCE_POLL_INTERVAL_MS));
 
     useEffect(() => {
         let cancelled = false;
@@ -423,6 +429,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // incoming token doesn't flash the whole screen back to a skeleton.
     const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
         if (reset) {
+            // A switch (or a manual reload) is about to replace everything on
+            // screen, so nothing an earlier wallet polled may hold off the
+            // re-polls that follow.
+            pollThrottleRef.current.reset();
             setBalances(null);
             setBalancesFetchedAt(null);
             setActiveByChain({});
@@ -447,10 +457,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 b = await messaging.getWalletBalances(walletId, accountId);
             }
             if (!isCancelled()) {
+                // Fresh balances: this is what restarts the re-poll window,
+                // whichever path asked for them.
+                pollThrottleRef.current.succeed();
                 setBalances(b);
                 setBalancesFetchedAt(Date.now());
             }
         } catch (err) {
+            // Release the window rather than move it: a blip must not pin the
+            // screen to stale balances for a whole interval.
+            pollThrottleRef.current.fail();
             // A silent poll that fails (e.g. a transient network blip)
             // should not stomp a screen the user is already looking at
             // with an error banner; only surface it on the reset path.
@@ -567,15 +583,29 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const walletId = activeWalletId;
         const accountId = activeAccountId || undefined;
 
+        const load = () => loadHomeData(walletId, accountId, {
+            reset: false, isCancelled: () => cancelled,
+        });
+
+        // The beat, never gated on the throttle: it is what keeps the window
+        // moving, since loadHomeData notes the success when balances land. It
+        // does take the in-flight slot, so an event arriving mid-load is
+        // dropped instead of reading every address a second time.
         const poll = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            loadHomeData(walletId, accountId, { reset: false, isCancelled: () => cancelled });
+            pollThrottleRef.current.start();
+            load();
         };
 
         const intervalId = setInterval(poll, BALANCE_POLL_INTERVAL_MS);
+        // An alt-tab fires `focus` and `visibilitychange` together, so coming
+        // back to the wallet used to cost two loads. The first event after the
+        // balances have aged past one interval still fires at once; the rest
+        // of the burst rides the data the beat already has.
         const onVisibilityOrFocus = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            poll();
+            if (!pollThrottleRef.current.start()) return;
+            load();
         };
         window.addEventListener('focus', onVisibilityOrFocus);
         document.addEventListener('visibilitychange', onVisibilityOrFocus);

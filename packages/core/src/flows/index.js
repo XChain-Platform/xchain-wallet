@@ -457,6 +457,7 @@ export {
     walletBalances,
     BALANCE_POLL_INTERVAL_MS,
 } from './balances.js';
+export { createPollThrottle } from './pollThrottle.js';
 export { livePendingTxs } from './pendingTxFeed.js';
 export {
     verifyAddressBalance,

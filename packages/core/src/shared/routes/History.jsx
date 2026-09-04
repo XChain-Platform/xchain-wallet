@@ -505,6 +505,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // remembered here, and travels to the entry that outlives the row.
     const lastMempoolSeenRef = useRef(/** @type {Map<string, number>} */ (new Map()));
 
+    // One re-fetch rule for this mount, on the same interval the beat below
+    // runs at: a `focus` bump only buys something once the rows are older than
+    // one beat, and a user flicking between windows used to land a full
+    // history fan-out per switch. See flows/pollThrottle.js.
+    const pollThrottleRef = useRef(flowsLib.createPollThrottle(flowsLib.BALANCE_POLL_INTERVAL_MS));
+
     // M2.1: History had no cadence of its own; a confirmed row only ever
     // appeared because the route remounted. Pending rows need one, so the
     // fetch below re-runs on the same 20s beat Home already uses for
@@ -514,7 +520,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     useEffect(() => {
         if (!addressesByChain) return undefined;
         if (flowsLib.isDemoWallet(walletId)) return undefined;
-        const bump = () => setRefreshTick((n) => n + 1);
+        // The addresses or the wallet just changed, so the rows on screen no
+        // longer describe what is being fetched: no earlier bump may hold off
+        // the next one.
+        const throttle = pollThrottleRef.current;
+        throttle.reset();
+        // Every bump costs a full fan-out per (chain, address), so the tick is
+        // also what restarts the throttle window.
+        const bump = () => { throttle.succeed(); setRefreshTick((n) => n + 1); };
         const id = setInterval(() => {
             // A hidden tab is not watching; polling it only burns the shared
             // rate limit the explorer zone is sized against.
@@ -522,10 +535,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             bump();
         }, flowsLib.BALANCE_POLL_INTERVAL_MS);
         if (typeof window === 'undefined') return () => clearInterval(id);
-        window.addEventListener('focus', bump);
+        // A refocus is worth a fan-out only when the rows are already an
+        // interval old; a burst of window switches used to cost one each.
+        const onFocus = () => { if (throttle.claim()) setRefreshTick((n) => n + 1); };
+        window.addEventListener('focus', onFocus);
         return () => {
             clearInterval(id);
-            window.removeEventListener('focus', bump);
+            window.removeEventListener('focus', onFocus);
         };
     }, [addressesByChain, walletId]);
 

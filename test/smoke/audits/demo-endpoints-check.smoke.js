@@ -1000,7 +1000,7 @@ assert.ok(
 );
 
 // A CLEAN burst must SAY what it measured. These hosts sit on the zone's
-// twelve-hostname rate-limit skip, so an unthrottled burst measures the skip
+// fourteen-host rate-limit skip (custom rule 9), so an unthrottled burst measures the skip
 // and says nothing about the limit under it - and the 2026-08-02 run was read
 // as evidence it did, because a clean burst produced no row at all.
 const cleanBurst = await checkDemoEndpoints({

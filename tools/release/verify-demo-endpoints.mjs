@@ -942,7 +942,7 @@ export async function checkDemoEndpoints({
         } else {
             // A CLEAN burst is not silence, and letting it be silence is what
             // made the 2026-08-02 run read as evidence it was not. These hosts
-            // are on the zone's twelve-hostname rate-limit SKIP, so an
+            // are on the zone's fourteen-host rate-limit SKIP (custom rule 9), so an
             // unthrottled burst measures the skip and says nothing whatever
             // about the limit underneath it. Reported as a row so a
             // green run states what it measured rather than implying the
@@ -1045,7 +1045,7 @@ Options:
                     because it points at PRODUCTION: one request per host
                     cannot see a rate limit, and a wallet opening on three
                     chains is not one request. Note what a CLEAN burst means -
-                    these hosts sit on the zone's twelve-hostname rate-limit
+                    these hosts sit on the zone's fourteen-host rate-limit
                     skip, so an unthrottled burst measures the SKIP and says
                     nothing about the limit under it.
   --json            machine-readable result instead of the table
