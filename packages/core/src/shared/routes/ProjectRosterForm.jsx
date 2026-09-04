@@ -25,6 +25,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -342,7 +343,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'List broadcast failed.',
+                    : submitFailureMessage(err, {
+                        chainId, coinTicker, fallback: err?.message || 'List broadcast failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();
@@ -392,7 +395,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || 'LINK broadcast failed.',
+                    : submitFailureMessage(err, {
+                        chainId, coinTicker, fallback: err?.message || 'LINK broadcast failed.',
+                    }),
             );
             if (!hw) {
                 passwordRef.current?.focus();

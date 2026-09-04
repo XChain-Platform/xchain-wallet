@@ -27,6 +27,9 @@ import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -105,6 +108,10 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    // A leg that was SIGNED but never reached the network. The confirm
+    // lane resolves that case rather than throwing, and the next leg is
+    // keyed on this one's action index, so the flow stops here.
+    const [queuedLeg, setQueuedLeg] = useState(false);
     const [tx1Txid, setTx1Txid] = useState(/** @type {string | null} */ (null));
     const [intermediateIndex, setIntermediateIndex] = useState(/** @type {string | null} */ (null));
     const [tx2Txid, setTx2Txid] = useState(/** @type {string | null} */ (null));
@@ -289,6 +296,66 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         };
     }
 
+    // §5.6: BOTH fork legs sign through the shared confirm lane, the way
+    // ListCreateForm and AirdropForm's LIST leg already do. Migrating one
+    // leg and not the other would leave the form half legacy, which is the
+    // drift this migration exists to end.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = !isWatcherMode;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'createList',
+        hardware: 'createListHw',
+    });
+
+    /**
+     * Compose one leg host-side, approve it on the shared confirm page, and
+     * sign those exact bytes. `onBroadcast` carries the leg's own
+     * post-broadcast bookkeeping, which the shared screen knows nothing of.
+     *
+     * @param {object} params            wire params for this leg
+     * @param {(res: any) => void} onBroadcast
+     */
+    async function runLegThroughConfirm(params, onBroadcast) {
+        const from = sourceDescriptor();
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'LIST', params },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                onApprove: (prebuiltPsbt) => submitConfirmed({
+                    walletId, chainId, from, params,
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            // Signed but never broadcast: the next leg is keyed on this
+            // one's action index, so the chain cannot continue and telling
+            // the user it did would be the worse of the two wrong answers.
+            if (res?.queued) { setQueuedLeg(true); return; }
+            onBroadcast(res);
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setSubmitError(submitFailureMessage(err, {
+                chainId,
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'List fork broadcast failed.',
+            }));
+        }
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
@@ -305,6 +372,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         if (submitting) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        if (singleEncode) {
+            await runLegThroughConfirm(firstParams, (res) => {
+                const txid = res?.txid || res?.broadcast?.txid;
+                if (!txid) throw new Error('List fork broadcast did not return a txid.');
+                setTx1Txid(txid);
+                setPassword('');
+                setStage(twoPhase ? 'wait-index' : 'repoint');
+            });
+            return;
+        }
         setSubmitting(true);
         setSubmitError(null);
         try {
@@ -358,6 +435,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         if (submitting || !intermediateIndex) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
+        if (singleEncode) {
+            await runLegThroughConfirm(secondParams, (res) => {
+                const txid = res?.txid || res?.broadcast?.txid;
+                if (!txid) throw new Error('List fork broadcast did not return a txid.');
+                setTx2Txid(txid);
+                setPassword('');
+                setStage('repoint');
+            });
+            return;
+        }
         setSubmitting(true);
         setSubmitError(null);
         try {
@@ -401,6 +488,38 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain) return wrap(<p className={styles.hint}>Loading…</p>);
+
+    // A leg signed but not broadcast stops the chain: the shared panel
+    // says so and deliberately offers no retry (re-signing while a signed
+    // copy is queued is the double-broadcast trap).
+    if (queuedLeg) {
+        return wrap(<QueuedResultPanel onDone={onBack} what="list fork" />);
+    }
+
+    // Confirm page for whichever leg is in flight, rendered in place of the
+    // review stage; the stage machine stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker || ''}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
+    }
 
     if (stage === 'repoint') {
         return wrap(

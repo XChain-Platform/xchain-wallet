@@ -49,6 +49,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the confirm page previewed + tamper-checked) instead of rebuilding.
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
@@ -110,7 +111,7 @@ export async function linkAction(opts) {
         encoderOpts: {
             pubkey: source.publicKey,
             // Select funding UTXOs BY ADDRESS and return change to the spender.
-            // LinkForm calls this flow live (no prebuiltPsbt), so without these
+            // A caller that builds live (no prebuiltPsbt) needs these, or
             // the encoder selects by `pubkey` and the utxo-tracker rejects it
             // with "has no matching Script" (the D-7 failure). Mirrors
             // advancedAction.js / swapAction.js / composeForConfirm.js.
@@ -126,6 +127,7 @@ export async function linkAction(opts) {
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
+        prebuiltPsbt: opts.prebuiltPsbt,
         pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,

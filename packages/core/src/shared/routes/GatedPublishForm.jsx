@@ -21,6 +21,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -289,7 +290,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Publish failed.');
+            setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || 'Publish failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();

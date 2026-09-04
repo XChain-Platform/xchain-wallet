@@ -21,7 +21,8 @@
 //   4. Settings schema typedef + validator accept `blockedOrigins?:
 //      string[]` as v2-tolerant.
 //   5. Bridge handlers register `assertNotBlocked` and call it from
-//      bridge.connect AND each of the four sign methods.
+//      bridge.connect, bridge.getSupportedChains, and each of the four
+//      sign methods.
 //   6. createBackgroundHost registers `sites.listBlocked` /
 //      `sites.block` / `sites.unblock`.
 //   7. All three messaging shims expose `listBlockedOrigins` /
@@ -106,7 +107,9 @@ assert.ok(/async function assertNotBlocked\(req, deps\)/.test(handlersSrc),
 assert.ok(/bridgeError\('BLOCKED_BY_USER', req\.origin\)/.test(handlersSrc),
     'assertNotBlocked raises BLOCKED_BY_USER on match');
 
-const guardedMethods = ['connect', 'signMessage', 'signAction', 'signPsbt', 'signIn'];
+// getSupportedChains is here because it is the one route with no
+// ConnectedSite to evict, so the blocklist reaches it only via this call.
+const guardedMethods = ['connect', 'getSupportedChains', 'signMessage', 'signAction', 'signPsbt', 'signIn'];
 for (const method of guardedMethods) {
     const re = new RegExp(
         `register\\('bridge\\.${method}',[\\s\\S]*?await assertNotBlocked\\(req, deps\\)`,

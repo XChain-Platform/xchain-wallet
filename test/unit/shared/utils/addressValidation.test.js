@@ -48,6 +48,25 @@ describe('isDevMockAddress', () => {
         expect(isDevMockAddress(mockDeriveAddress('bitcoin-regtest', 'p2wpkh', ''))).toBe(true);
     });
 
+    // Dogecoin is p2pkh-only per its descriptor. A dev stub passing a
+    // hardcoded 'p2wpkh', which has no dogecoin row, makes the fallthrough leak
+    // the literal 'p2wpkh:<pubkey>' where an address belongs.
+    it('derives the chain descriptor default when no type is given', () => {
+        const doge = mockDeriveAddress('dogecoin-mainnet', undefined, PUBKEY_HEX);
+        expect(doge.startsWith('Ddevmock'), doge).toBe(true);
+        expect(doge).not.toContain('p2wpkh');
+        expect(isDevMockAddress(doge)).toBe(true);
+        expect(mockDeriveAddress('bitcoin-mainnet', undefined, PUBKEY_HEX)
+            .startsWith('bc1qdevmock')).toBe(true);
+    });
+
+    it('lists no segwit address type for any dogecoin chain', () => {
+        for (const [chainId, byType] of Object.entries(MOCK_ADDRESS_PREFIXES)) {
+            if (!chainId.startsWith('dogecoin-')) continue;
+            expect(Object.keys(byType), chainId).toEqual(['p2pkh']);
+        }
+    });
+
     it('rejects arbitrary text that merely contains the marker', () => {
         for (const s of [
             'devmock',

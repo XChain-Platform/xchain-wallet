@@ -320,6 +320,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                             encoding: composed.encoding,
                             actionString: composed.actionString,
                             version: composed.version,
+                            // The donation verdict these bytes actually carry, so the submit
+                            // path books from compose time rather than a fresh snapshot.
+                            adsDonation: { included: !!composed.adsPlan?.canSubmit },
                         },
                     },
                 }),

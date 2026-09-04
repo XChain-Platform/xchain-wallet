@@ -51,6 +51,9 @@ import { TokenWizard } from '../../packages/core/src/shared/routes/TokenWizard.j
 import { AirdropForm } from '../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { DispenserForm } from '../../packages/core/src/shared/routes/DispenserForm.jsx';
 import { SwapForm } from '../../packages/core/src/shared/routes/SwapForm.jsx';
+import { SellOwnershipForm } from '../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
+import { LinkForm } from '../../packages/core/src/shared/routes/LinkForm.jsx';
+import { BatchComposerForm } from '../../packages/core/src/shared/routes/BatchComposerForm.jsx';
 import { PlaceOrderPanel } from '../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 import { ComposeMessage } from '../../packages/core/src/shared/routes/ComposeMessage.jsx';
 import { PollDetail } from '../../packages/core/src/shared/routes/PollDetail.jsx';
@@ -687,6 +690,76 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // The value-moving forms the §5.6 migration left behind. Each one signed
+    // from a hand-rolled review stage, so the bytes broadcast were a rebuild
+    // of the bytes the user read. A regression to that path drops
+    // `prebuiltPsbt` and never opens a confirm page, so it fails here.
+    it('SellOwnershipForm composes ORDER and signs the prebuilt PSBT', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: SellOwnershipForm,
+            props: { tick: 'JDOG' },
+            actionLabel: 'List name for sale',
+            fill: (utils) => setValue(utils, /^Price/, '5'),
+        });
+        expectSingleEncode(calls, {
+            action: 'ORDER',
+            params: { VERSION: '0', GIVE_TICK: 'JDOG', GIVE_OWNERSHIP: '1', GET_AMOUNT: '5' },
+            submitMethod: 'orderAction',
+        });
+    });
+
+    // A BATCH is the largest thing one signature can authorise, and its
+    // review list is a decode of what the HOST said it built. Nothing tied
+    // that list to the bytes until the form joined the lane.
+    it('BatchComposerForm composes BATCH and signs the prebuilt PSBT', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: BatchComposerForm,
+            props: {
+                messagingOverrides: {
+                    buildBatchCommand: () => Promise.resolve({
+                        command: 'SEND|0|JDOG|1|bc1qdest', subStrings: ['SEND|0|JDOG|1|bc1qdest'],
+                    }),
+                },
+            },
+            steps: [
+                (utils) => fireEvent.change(utils.getByLabelText('Action'), { target: { value: 'SEND' } }),
+                (utils) => fireEvent.click(utils.getByRole('button', { name: 'Review' })),
+            ],
+            actionLabel: 'Sign batch',
+        });
+        expectSingleEncode(calls, {
+            action: 'BATCH',
+            params: { VERSION: '0', COMMAND: 'SEND|0|JDOG|1|bc1qdest' },
+            submitMethod: 'advancedAction',
+        });
+    });
+
+    it('LinkForm composes LINK and signs the prebuilt PSBT', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: LinkForm,
+            props: {},
+            actionLabel: 'Link',
+            fill: (utils) => {
+                // Both side panels carry the same field label, so they are
+                // addressed positionally: chain A first, chain B second.
+                const [a, b] = utils.getAllByLabelText('Action to reference');
+                fireEvent.change(a, { target: { value: '11' } });
+                fireEvent.change(b, { target: { value: '22' } });
+            },
+        });
+        // The binding is the whole point: the pair the user read has to be
+        // the pair inside the bytes that get signed.
+        expectSingleEncode(calls, {
+            action: 'LINK',
+            params: {
+                VERSION: '0',
+                COIN1: 'BTC', COIN1_ACTION_INDEX: '11',
+                COIN2: 'BTC', COIN2_ACTION_INDEX: '22',
+            },
+            submitMethod: 'linkAction',
+        });
+    });
+
     it('BroadcastForm composes BROADCAST and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: BroadcastForm,
@@ -998,5 +1071,63 @@ describe('§5.6 slice 3: ComposeMessage confirms the encrypted MESSAGE', () => {
         expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
         // The load-bearing assertion: the SAME ciphertext, carried through.
         expect(submit.args.prebuiltParams).toEqual(ENCRYPTED_PARAMS);
+    });
+});
+
+// A migrated form's Approve failure is the LAST place wire wording can still
+// reach a user: the confirm page unmounts on a terminal error ('error' is not
+// an open phase), so what shows is the form's own catch. Several migrated
+// forms mapped nothing there and printed the encoder's developer string.
+// nativeFeeConfirmPathMessage.test.js could not see them: its roster is the
+// forms that mount NativeFeeToggle, and these do not mount it.
+describe('A migrated form maps its Approve failure through the one helper', () => {
+    // The boundary shape a form actually catches: MessageHost.serializeError
+    // keeps only { name, message }, so `code` is gone by the time it lands.
+    function encoderRefusalAcrossBoundary() {
+        const err = new Error('no spendable UTXOs found for the funding address');
+        err.name = 'SDKEncoderError';
+        return err;
+    }
+
+    it('StakeForm shows the encoder sentence, not the encoder wire wording', async () => {
+        const { utils } = await driveThroughConfirm({
+            Form: StakeForm,
+            props: {
+                messagingOverrides: {
+                    stakeAction: () => Promise.reject(encoderRefusalAcrossBoundary()),
+                },
+            },
+            actionLabel: 'Stake',
+            fill: (u) => {
+                setValue(u, /^Amount/, '25');
+                setValue(u, 'Signing public key', 'a'.repeat(64));
+            },
+        });
+        const text = utils.container.textContent || '';
+        expect(text).toContain('has no BTC to spend');
+        expect(text, 'the encoder developer string never reaches the screen')
+            .not.toContain('no spendable UTXOs');
+    });
+
+    it('CreatePollForm shows the encoder sentence, not the encoder wire wording', async () => {
+        const { utils } = await driveThroughConfirm({
+            Form: CreatePollForm,
+            props: {
+                presetTick: 'JDOG',
+                messagingOverrides: {
+                    createPollAction: () => Promise.reject(encoderRefusalAcrossBoundary()),
+                },
+            },
+            actionLabel: 'Create poll',
+            fill: (u) => {
+                setValue(u, 'Closes at block', '900000');
+                setValue(u, 'Option 0', 'Yes');
+                setValue(u, 'Option 1', 'No');
+            },
+        });
+        const text = utils.container.textContent || '';
+        expect(text).toContain('has no BTC to spend');
+        expect(text, 'the encoder developer string never reaches the screen')
+            .not.toContain('no spendable UTXOs');
     });
 });

@@ -27,6 +27,7 @@ import { obligationBaseUnits } from '../../market/obligationStatus.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -313,7 +314,13 @@ export function CoinpayForm({
             }
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : err?.message || 'Sign failed.');
+            // Was the raw `err?.message`, i.e. the encoder's developer string
+            // on screen; every other swept form maps through this helper.
+            setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId: selected.chainId,
+                coinTicker,
+                fallback: err?.message || 'Sign failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !hw) {
                 passwordRef.current?.focus();

@@ -144,6 +144,8 @@ import { CoSignerAccountList } from '@xchain-wallet/core/shared/routes/CoSignerA
 import { CoSignerProvision } from '@xchain-wallet/core/shared/routes/CoSignerProvision.jsx';
 import { CoSignerAccountDetail } from '@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx';
 import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
+import { ViewPrivateKey } from '@xchain-wallet/core/shared/routes/ViewPrivateKey.jsx';
+import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
@@ -195,10 +197,15 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
+    // §17.7: the address staged for the key-reveal ceremony; cleared on Back
+    // so a stale address cannot leak into a later visit.
+    const [privateKeyAddress, setPrivateKeyAddress] = useState(
+        /** @type {any | null} */ (null),
+    );
     // PC-32: the address whose on-chain preferences are being edited.
     const [addressPrefsTarget, setAddressPrefsTarget] = useState(
         /** @type {{ chainId: string, address: string } | null} */ (null),
@@ -910,12 +917,15 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'controller-bind' && activeWalletId && tokenDetailRef) {
+            // D-153: see the web shell. The ADDRESS-scoped half of this form
+            // has nothing to do with tokens, so a token context must not gate
+            // the route.
+            if (unlockedView === 'controller-bind' && activeWalletId) {
                 return (
                     <ControllerBindForm
                         walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
+                        chainId={tokenDetailRef?.chainId}
+                        tick={tokenDetailRef?.tick}
                         onBack={formBack}
                     />
                 );
@@ -1466,9 +1476,27 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
+                        onShowPrivateKey={(addr) => {
+                            setPrivateKeyAddress(addr);
+                            setUnlockedView('view-private-key');
+                        }}
                         onEditPreferences={(sel) => {
                             setAddressPrefsTarget(sel);
                             setUnlockedView('address-preferences');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'view-private-key' && activeWalletId && privateKeyAddress) {
+                return (
+                    <ViewPrivateKey
+                        walletId={activeWalletId}
+                        address={privateKeyAddress}
+                        renderQR={({ value }) => <KeyQR value={value} alt="Private key QR" />}
+                        onBack={() => {
+                            setPrivateKeyAddress(null);
+                            setUnlockedView('addresses');
                         }}
                     />
                 );
@@ -2288,7 +2316,7 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             onCommandPalette={palette.openPalette}
                             walletName={activeWalletName}
-                            hasBtcAddress={hasBtcAddress}
+                            hasVmAddress={hasVmAddress}
                             isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />
@@ -2300,7 +2328,7 @@ function AppInner() {
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
-                            hasBtcAddress={hasBtcAddress}
+                            hasVmAddress={hasVmAddress}
                             isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
                         />

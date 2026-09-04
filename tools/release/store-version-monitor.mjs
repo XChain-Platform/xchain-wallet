@@ -172,6 +172,22 @@ export const DEFAULT_TIMEOUT_MS = 15000;
 
 const LISTING_URL = (itemId) => `https://chromewebstore.google.com/detail/${encodeURIComponent(itemId)}?hl=en`;
 
+/**
+ * Which RELEASE a manifest tag names, with any re-sign suffix stripped.
+ *
+ * Spelled locally rather than imported from `feed-sweep.mjs`, because
+ * `rollback-rerelease.sh` copies THIS file alone into a fixture repo and
+ * runs it there; an import would drag a dependency chain into a tree that
+ * deliberately holds two files. `release-resign-tag.smoke.js` drives every
+ * spelling of the rule over one table so they cannot drift.
+ *
+ * @param {string} tag
+ * @returns {string}
+ */
+export function releaseTagOf(tag) {
+    return String(tag).replace(/-resign\d+$/, '');
+}
+
 // Structural match: a "Version" label div immediately followed by a
 // sibling div holding the value. Not keyed on the (opaque, build-hashed)
 // CSS class names - see the header comment above.
@@ -617,8 +633,12 @@ export function judgeDirect(m) {
             version,
         };
     }
+    // The RELEASE the manifest names, not the signature. A corrected
+    // re-sign manifest is republished under the release's own name while
+    // its header says `-resign<N>`, so comparing verbatim would report
+    // the release that was just repaired as mis-served.
     const { tag, digests } = parseReleaseManifest(m.manifestText);
-    if (tag && tag !== `v${version}`) {
+    if (tag && releaseTagOf(tag) !== `v${version}`) {
         return {
             state: 'alert',
             detail: `the feed says ${version} and the manifest it points at is tagged ${tag}: `

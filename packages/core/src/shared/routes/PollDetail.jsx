@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -245,7 +246,9 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Vote failed.');
+            setFormError(submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || 'Vote failed.',
+            }));
         }
     }
 
@@ -298,7 +301,9 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || 'Vote failed.');
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || 'Vote failed.',
+            }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         }

@@ -92,7 +92,9 @@ export function createDevMockSdk(constructorOpts) {
     return {
         wallet: {
             deriveAddress(publicKeyHex, opts) {
-                return sdkLib.mockDeriveAddress(chainId, opts?.type ?? 'p2wpkh', publicKeyHex);
+                // No fallback type: mockDeriveAddress reads the chain
+                // descriptor's default, which is p2pkh on dogecoin.
+                return sdkLib.mockDeriveAddress(chainId, opts?.type, publicKeyHex);
             },
             signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {

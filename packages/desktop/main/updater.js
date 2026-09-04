@@ -83,6 +83,7 @@ import {
     channelPointerName,
     fetchChannelPointer,
     fetchReleaseManifest,
+    platformLaneName,
     sha256File,
     sha512File,
     verifyDownloadedUpdate,
@@ -248,6 +249,20 @@ export function resolvePointerName({
 }
 
 /**
+ * The release lane this running install belongs to.
+ *
+ * Read from the platform the process IS, for the same reason the pointer
+ * name is: it decides which signed manifests may install here, so a feed
+ * must not get a say in it.
+ *
+ * @param {Object} [opts]
+ * @returns {string|null}
+ */
+export function resolveLaneName({ platform = process.platform } = {}) {
+    return platformLaneName({ platform });
+}
+
+/**
  * Which Linux packaging a running build claims to be, read from the file
  * electron-updater reads: `resources/package-type`.
  *
@@ -377,6 +392,7 @@ export function selectUpdater(mod, {
  * @param {(event: UpdaterEvent) => void} opts.onEvent   forwards updater events (the caller typically relays to the renderer)
  * @param {Object} [opts.select]  overrides for `selectUpdater` (platform/env/resourcesPath/readFile); tests only
  * @param {string|null} [opts.pointerName]  the channel pointer to anchor against; tests only
+ * @param {string|null} [opts.laneName]  the release lane this install belongs to; tests only
  * @returns {Promise<{ checkForUpdates: () => Promise<void>, isActive: boolean }>}
  */
 export async function attachUpdater({
@@ -387,6 +403,7 @@ export async function attachUpdater({
     pinned,
     select,
     pointerName = resolvePointerName(),
+    laneName = resolveLaneName(),
 }) {
     if (typeof onEvent !== 'function') {
         throw new Error('attachUpdater: onEvent must be a function');
@@ -614,6 +631,7 @@ export async function attachUpdater({
                     artifactSha256,
                     artifactSha512,
                     pointerText: pointer.pointerText,
+                    lane: laneName,
                     ...(pinned === undefined ? {} : { pinned }),
                 });
                 if (!verdict.ok) return reject(verdict.reason);

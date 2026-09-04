@@ -436,6 +436,36 @@ async function confirmChangeAndOwnAddresses({
 }
 
 /**
+ * Second half of that preamble: harden the encoder opts for a device source.
+ *
+ * A device source needs each segwit input's FULL previous transaction in the
+ * PSBT. Ledger takes the outpoint it signs from those bytes rather than from
+ * the PSBT's own txid, so a witnessUtxo-only input - which is what the encoder
+ * builds by default, for the default address type - cannot be signed on
+ * hardware at all.
+ *
+ * Requested HERE, at the single compose, rather than hydrated later: §5.3's
+ * guarantee is that the PSBT the user previewed is the one that gets signed,
+ * and adding inputs' prev txs after the tamper check would mean signing bytes
+ * nobody checked. Software sources do not ask for it, so they keep today's
+ * PSBT size on a path that crosses the messaging boundary and now also lands
+ * in storage.session (§5.4).
+ *
+ * Shared rather than inlined, because inlined it was copied by two routes and
+ * forgotten by the three per-action clones of the preamble, which left a
+ * VOTE, MESSAGE or BET from a device address composing an unsignable PSBT.
+ *
+ * @param {any} req
+ * @param {Object} encoderOpts
+ * @returns {Object}
+ */
+function deviceHardenedEncoderOpts(req, encoderOpts) {
+    const kind = req?.from?.source;
+    if (kind === 'ledger' || kind === 'trezor') return { ...encoderOpts, attachPrevTx: true };
+    return encoderOpts;
+}
+
+/**
  * Look up the Address record a `action.*.hw` handler needs to resolve
  * the right SignerRecord. The request carries `from.addressId` (the
  * Address record's id, filled by the form) OR a plain `from` triple
@@ -2018,21 +2048,8 @@ export function createBackgroundHost(deps) {
             };
         }
 
-        // A device source needs each segwit input's FULL previous
-        // transaction in the PSBT. Ledger takes the outpoint it signs from
-        // those bytes rather than from the PSBT's own txid, so a
-        // witnessUtxo-only input - which is what the encoder builds by default,
-        // for the default address type - cannot be signed on hardware at all.
-        //
-        // Requested HERE, at the single compose, rather than hydrated later:
-        // §5.3's guarantee is that the PSBT the user previewed is the one that
-        // gets signed, and adding inputs' prev txs after the tamper check would
-        // mean signing bytes nobody checked. Software sources do not ask for
-        // it, so they keep today's PSBT size on a path that crosses the
-        // messaging boundary and now also lands in storage.session (§5.4).
-        if (req?.from?.source === 'ledger' || req?.from?.source === 'trezor') {
-            encoderOpts = { ...encoderOpts, attachPrevTx: true };
-        }
+        // Device hardening; the rationale lives on the helper.
+        encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
 
         const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
@@ -2075,9 +2092,7 @@ export function createBackgroundHost(deps) {
             ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req.rbf !== undefined && { rbf: req.rbf }),
         };
-        if (req?.from?.source === 'ledger' || req?.from?.source === 'trezor') {
-            encoderOpts = { ...encoderOpts, attachPrevTx: true };
-        }
+        encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
         const { change } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
@@ -2133,13 +2148,13 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
             chainId,
             actionData: { action: 'VOTE', params },
-            encoderOpts: {
+            encoderOpts: deviceHardenedEncoderOpts(req, {
                 pubkey: source.publicKey,
                 change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
-            },
+            }),
             source: source.address,
             ownAddresses,
         });
@@ -2202,8 +2217,14 @@ export function createBackgroundHost(deps) {
     // closure, because it has to cross the boundary; the name is allow-listed
     // on resume for the same reason `action.vote.composeForConfirm` allow-lists
     // its builder name.
+    // `supported` says whether this shell HAS the store, which is not the same
+    // answer as "nothing is stored". Without it a caller reads the same empty
+    // list from an extension with no pending confirms and from a desktop or web
+    // shell that can never hold one (`createConfirmActionSessionStorage`
+    // returns null off-extension), so the resume feature reads as present and
+    // inert. Additive: a caller that ignores the field behaves as before.
     host.register('action.confirmSession.put', async (req) => {
-        if (!confirmSessionStorage) return { stored: false };
+        if (!confirmSessionStorage) return { supported: false, stored: false };
         const id = req?.id;
         if (typeof id !== 'string' || !id) {
             throw new Error('action.confirmSession.put: id is required');
@@ -2216,13 +2237,13 @@ export function createBackgroundHost(deps) {
             dispatch: req.dispatch || null,
             createdAt: req.createdAt || null,
         });
-        return { stored: true };
+        return { supported: true, stored: true };
     });
 
     host.register('action.confirmSession.list', async () => {
-        if (!confirmSessionStorage) return { sessions: [] };
+        if (!confirmSessionStorage) return { supported: false, sessions: [] };
         const all = await confirmSessionStorage.loadSessions();
-        return { sessions: Object.values(all || {}) };
+        return { supported: true, sessions: Object.values(all || {}) };
     });
 
     // Called on EVERY terminal state (approved, rejected, errored). A session
@@ -2232,13 +2253,13 @@ export function createBackgroundHost(deps) {
     // path additionally runs the §4.6 input-liveness re-check, so a stale one
     // interrupts rather than signs - but clearing eagerly is the first line.
     host.register('action.confirmSession.clear', async (req) => {
-        if (!confirmSessionStorage) return { cleared: false };
+        if (!confirmSessionStorage) return { supported: false, cleared: false };
         const id = req?.id;
         if (typeof id !== 'string' || !id) {
             throw new Error('action.confirmSession.clear: id is required');
         }
         await confirmSessionStorage.removeSession(id);
-        return { cleared: true };
+        return { supported: true, cleared: true };
     });
 
     // Re-price a composed action's native-coin protocol fee at Approve
@@ -3363,13 +3384,13 @@ export function createBackgroundHost(deps) {
             // sets COIN and resolves their key).
             chainId: broadcastChainId,
             actionData: { action: 'MESSAGE', params },
-            encoderOpts: {
+            encoderOpts: deviceHardenedEncoderOpts(req, {
                 pubkey: source.publicKey,
                 change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
-            },
+            }),
             source: source.address,
             ownAddresses,
         });
@@ -3653,7 +3674,7 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
             chainId,
             actionData: { action: 'BET', params },
-            encoderOpts: {
+            encoderOpts: deviceHardenedEncoderOpts(req, {
                 pubkey: source.publicKey,
                 change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
@@ -3665,7 +3686,7 @@ export function createBackgroundHost(deps) {
                 // fee-bearing on create (v0) and place (v2), and on LTC/DOGE a
                 // native output is the ONLY way to pay it.
                 ...(req?.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: req.payFeeInNativeCoin }),
-            },
+            }),
             source: source.address,
             ownAddresses,
         });

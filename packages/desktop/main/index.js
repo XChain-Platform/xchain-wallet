@@ -44,7 +44,7 @@ import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, shell, Notific
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { registry as registryLib, sdk as sdkLib, flows as flowsLib } from '@xchain-wallet/core';
+import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import * as sdkModule from 'xchain-sdk';
 
@@ -55,6 +55,7 @@ import { FileStorageBackend, vaultPathFor } from './storage.js';
 import { FileMetaBackend, metaPathFor } from './meta.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
+import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import { isHttpUrl, shouldBlockNavigation, isTrustedSenderEvent } from './security.js';
 import { attachHidPermissions } from './permissions.js';
 import {
@@ -66,6 +67,7 @@ import { attachUpdater } from './updater.js';
 import { applyTorRouting } from './torRouting.js';
 import {
     createRuntime,
+    enforceLaunchAutoLock,
     ensureHost,
     handleIpcMessage,
     tearDownHost,
@@ -73,6 +75,24 @@ import {
 } from './runtime.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+// §9.3.2: the packaged renderer directory, and the whole definition of
+// "our own app" for the trust predicates below. Must stay the base of the
+// `win.loadFile(...)` target in createWindow: they are the same directory
+// said twice, and a drift between them locks the app out of its own IPC.
+const APP_ROOT = join(here, '..', 'renderer', 'dist');
+
+/**
+ * Sender-trust gate for the privileged IPC channels, bound to this app's
+ * renderer directory. Threaded rather than global so security.js stays
+ * pure; every privileged handler below calls THIS, never the raw import.
+ *
+ * @param {{ senderFrame?: { url?: string }, sender?: { getURL?: () => string } }} event
+ * @returns {boolean}
+ */
+function isTrustedSender(event) {
+    return isTrustedSenderEvent(event, APP_ROOT);
+}
 
 // §24.6 / G057: multi-window: instead of a singleton mainWindow, the
 // main process keeps a Set of every open BrowserWindow so File → New
@@ -94,6 +114,36 @@ let pendingDeepLink = null;
 /** @type {Promise<{ ok: boolean, descriptors?: object[], generatedAt?: string, reason?: string }> | null} */
 let chainRegistrySync = null;
 
+/**
+ * §9.7 / G007: refresh chain descriptors from the hub's signed public
+ * registry snapshot, once per launch. Same soft-enhancement contract as the
+ * web + extension shells: the signature must verify against the pinned
+ * federation key or nothing changes, and any failure (offline, tampered,
+ * unsigned) leaves the bundled descriptors serving. The main-realm
+ * defaultRegistry() singleton is the one buildRuntime() handed to the
+ * SDKRegistry, so a successful apply reaches the host side immediately;
+ * renderer realms pull the same verified batch via `xchain:chain-registry`.
+ * Never blocks boot.
+ *
+ * Called only once the egress policy is in force. Kicking it at whenReady
+ * sent the first request of every launch out on the direct dispatcher (real
+ * IP and a local DNS lookup) ahead of the SOCKS swap. A wallet that never
+ * unlocks therefore never syncs: the IPC handler below already answers
+ * "registry sync not started" and the bundled descriptors keep serving.
+ */
+function kickChainRegistrySync() {
+    if (chainRegistrySync) return;
+    try {
+        chainRegistrySync = registryLib
+            .syncChainRegistryFromHub({ registry: registryLib.defaultRegistry() })
+            .then((r) => {
+                if (!r.ok) console.info('[xchain] desktop: chain-registry sync skipped:', r.reason);
+                return r;
+            })
+            .catch((err) => ({ ok: false, reason: String(err?.message ?? err) }));
+    } catch { /* soft enhancement; bundled descriptors keep serving */ }
+}
+
 // §9.3.2 navigation lockdown. Every BrowserWindow loads the local
 // renderer with the preload attached, and the preload exposes the
 // privileged `xchainWalletBridge.sendMessage` (unlock / send / sign over
@@ -103,7 +153,8 @@ let chainRegistrySync = null;
 // the bridge in front of non-app content (the desktop analog of the
 // extension's BRIDGE-1 drain). This guard, applied to every webContents
 // the app ever creates, denies all `window.open` (routing http(s) links
-// to the OS browser), blocks any navigation away from the local app, and
+// to the OS browser), blocks any navigation outside APP_ROOT (the
+// packaged renderer directory, not merely the file:// scheme), and
 // refuses `<webview>` embedding. See security.js for the pure predicates.
 function hardenWebContents(contents) {
     if (!contents || typeof contents.setWindowOpenHandler !== 'function') return;
@@ -118,7 +169,7 @@ function hardenWebContents(contents) {
         return { action: 'deny' };
     });
     contents.on('will-navigate', (event, url) => {
-        if (shouldBlockNavigation(url)) {
+        if (shouldBlockNavigation(url, APP_ROOT)) {
             event.preventDefault();
             if (isHttpUrl(url)) {
                 shell.openExternal(url).catch(() => { /* best-effort */ });
@@ -207,14 +258,19 @@ function buildRuntime() {
         // enforces the same pre-KDF lockout the extension ships (persisted
         // under userData; survives restart so a relaunch can't reset it).
         unlockThrottleStore: new FileUnlockThrottleStore(unlockThrottlePathFor(userData)),
+        // §26: restart-surviving auto-lock record. The renderer arms it via
+        // `autolock.report`; enforceLaunchAutoLock below reads it before the
+        // boot auto-unlock, so the configured window bounds the cached key.
+        autoLockStore: new FileAutoLockStore(autoLockStatePathFor(userData)),
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
             sdkFactory: REAL_SDK_FACTORY,
         }),
-        // Tor routing has to take effect on the next request,
-        // not the next launch. The shared host calls this after any
-        // settings.update whose patch touches `privacy`.
+        // Apply the egress policy for the current settings. ensureHost calls
+        // this the moment the vault opens (boot or password unlock), and the
+        // shared host calls it after any settings.update touching `privacy`,
+        // so routing takes effect on the next request, not the next launch.
         onPrivacySettingsChanged: async (settings, { sdkRegistry }) => {
             await applyTorRouting({
                 settings,
@@ -222,6 +278,8 @@ function buildRuntime() {
                 session: session.defaultSession,
                 log: (m) => console.info(m),
             });
+            // Routing is now in force, so the first hub request may leave.
+            kickChainRegistrySync();
         },
         // §46: OS-notification adapter (main process owns the `electron`
         // import; the runtime stays Electron-free for unit testing).
@@ -287,7 +345,7 @@ function createWindow(opts = {}) {
     // `loadFile` points at; in dev the same path works because
     // `pnpm run start` runs vite first.
     const loadOpts = buildLoadOptions(opts);
-    win.loadFile(join(here, '..', 'renderer', 'dist', 'index.html'), loadOpts);
+    win.loadFile(join(APP_ROOT, 'index.html'), loadOpts);
     win.once('ready-to-show', () => {
         if (!win.isDestroyed()) win.show();
         // Replay any deep link that arrived before the first window
@@ -435,58 +493,35 @@ if (!deepLinkCtx.gotLock) {
 app.whenReady().then(async () => {
     runtime = buildRuntime();
 
-    // §9.7 / G007: refresh chain descriptors from the hub's signed public
-    // registry snapshot. Same soft-enhancement contract as the web +
-    // extension shells: the signature must verify against the pinned
-    // federation key or nothing changes, and any failure (offline,
-    // tampered, unsigned) leaves the bundled descriptors serving. The
-    // main-realm defaultRegistry() singleton is the one buildRuntime()
-    // handed to the SDKRegistry, so a successful apply reaches the host
-    // side immediately; renderer realms pull the same verified batch via
-    // `xchain:chain-registry` below. Never blocks boot.
-    try {
-        chainRegistrySync = registryLib
-            .syncChainRegistryFromHub({ registry: registryLib.defaultRegistry() })
-            .then((r) => {
-                if (!r.ok) console.info('[xchain] desktop: chain-registry sync skipped:', r.reason);
-                return r;
-            })
-            .catch((err) => ({ ok: false, reason: String(err?.message ?? err) }));
-    } catch { /* soft enhancement; bundled descriptors keep serving */ }
-
     // Best-effort auto-unlock. Failure here is logged but doesn't block
     // startup; the renderer will see `state: 'locked'` and prompt for
     // the password.
+    //
+    // ensureHost owns the egress policy: it applies routing and kicks the
+    // registry sync before it builds a host (a locked boot routes at unlock).
+    //
+    // §26: bound the cached key by the user's own auto-lock window FIRST.
+    // The keychain skip-the-prompt relaunch had no upper bound, so a
+    // 15-minute auto-lock and a quit still auto-unlocked weeks later. When
+    // the gate locks, it clears session.bin and the ensureHost below finds
+    // no key, which is the ordinary lock-screen path.
+    try {
+        const gate = await enforceLaunchAutoLock(runtime);
+        if (gate.locked) console.info(`[xchain] auto-lock: relaunch locked (${gate.reason})`);
+    } catch (err) {
+        console.error('[xchain] desktop auto-lock gate failed:', err);
+    }
     try {
         await ensureHost(runtime);
     } catch (err) {
         console.error('[xchain] desktop auto-unlock failed:', err);
     }
 
-    // Re-apply Tor routing as soon as settings are readable.
-    // Without this, a user who turned it on, quit, and relaunched would
-    // run direct until they happened to toggle it again, with the UI
-    // showing it on the whole time. That is the same lie in a new place.
-    // Settings live in the vault, so this only works once unlocked; a
-    // still-locked wallet has made no requests yet either.
-    try {
-        const settings = await flowsLib.getSettings(runtime.vault);
-        await applyTorRouting({
-            settings,
-            sdkRegistry: runtime.sdkRegistry,
-            session: session.defaultSession,
-            log: (m) => console.info(m),
-        });
-    } catch (err) {
-        console.info('[xchain] Tor routing not applied at boot (vault locked?):',
-            String(err?.message ?? err));
-    }
-
     // §40.12 / Step 18: allow WebHID access for Ledger + Trezor vendor
     // IDs so PairSignerForm can reach the device picker. Without these
     // handlers Electron returns an empty device list under
     // `contextIsolation: true`.
-    attachHidPermissions(session.defaultSession);
+    attachHidPermissions(session.defaultSession, { appRoot: APP_ROOT });
 
     // §40.12 Step 19: claim `xchain:` unconditionally. Tier-2 coin
     // schemes (bitcoin / litecoin / dogecoin) stay unclaimed until a
@@ -527,7 +562,7 @@ app.whenReady().then(async () => {
         // whether a version is on offer, which is not sensitive, but a
         // positively-remote frame has no business reading the app's state.
         ipcMain.handle('xchain:updater-state', async (event) => {
-            if (!isTrustedSenderEvent(event)) return null;
+            if (!isTrustedSender(event)) return null;
             return lastUpdaterEvent;
         });
 
@@ -541,7 +576,7 @@ app.whenReady().then(async () => {
         // channel below: an install is a quit-and-replace, so it must not
         // be reachable from a frame that is positively remote.
         ipcMain.handle('xchain:updater-install', async (event) => {
-            if (!isTrustedSenderEvent(event)) {
+            if (!isTrustedSender(event)) {
                 return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
             }
             return downloadAndInstall();
@@ -558,7 +593,7 @@ app.whenReady().then(async () => {
         // Sender trust boundary (belt-and-suspenders behind the navigation
         // lockdown): reject a call whose frame is a positively-remote
         // origin. A legitimate local renderer always passes.
-        if (!isTrustedSenderEvent(event)) {
+        if (!isTrustedSender(event)) {
             return {
                 ok: false,
                 error: { name: 'ForbiddenSenderError', message: 'desktop: message rejected from untrusted frame' },
@@ -580,7 +615,7 @@ app.whenReady().then(async () => {
     // search-string prefill. Validates shape so a misbehaving
     // renderer can't pass non-serializable junk.
     ipcMain.handle('xchain:open-window', async (event, args) => {
-        if (!isTrustedSenderEvent(event)) {
+        if (!isTrustedSender(event)) {
             return { ok: false, error: 'open-window: rejected from untrusted frame' };
         }
         const initialView = typeof args?.initialView === 'string' ? args.initialView : '';
@@ -606,7 +641,7 @@ app.whenReady().then(async () => {
     // they just destroyed. Same trusted-sender gate as every other
     // channel: a remote frame cannot nuke someone's wallet.
     ipcMain.handle('xchain:wipe-storage', async (event) => {
-        if (!isTrustedSenderEvent(event)) {
+        if (!isTrustedSender(event)) {
             return { ok: false, error: 'wipe-storage: rejected from untrusted frame' };
         }
         if (!runtime) {
@@ -632,7 +667,7 @@ app.whenReady().then(async () => {
     // and schema-validated here in main; the renderer still re-validates
     // inside applyRemoteDescriptors.
     ipcMain.handle('xchain:chain-registry', async (event) => {
-        if (!isTrustedSenderEvent(event)) {
+        if (!isTrustedSender(event)) {
             return { ok: false, reason: 'chain-registry: rejected from untrusted frame' };
         }
         if (!chainRegistrySync) return { ok: false, reason: 'registry sync not started' };
@@ -646,7 +681,7 @@ app.whenReady().then(async () => {
     // signers (paired via PairSignerForm) become reachable from the
     // main-process MessageHost. `action.*.hw` handlers consult the
     // same process-wide `signerBridge` registry this listener feeds.
-    attachSignerBridgeListener({ ipcMain, isTrustedSender: isTrustedSenderEvent });
+    attachSignerBridgeListener({ ipcMain, isTrustedSender });
 
     // §24.6 / G057: install the application menu (File → New Window)
     // before opening the primary window so the accelerator is live the

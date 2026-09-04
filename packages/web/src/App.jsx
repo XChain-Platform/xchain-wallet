@@ -2584,7 +2584,7 @@ function AppInner() {
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
                             walletName={activeWalletName}
-                            hasBtcAddress={hasBtcAddress}
+                            hasVmAddress={hasVmAddress}
                             hasDexSurface={DEX_SURFACE_ENABLED}
                             isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}
@@ -2597,7 +2597,7 @@ function AppInner() {
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
-                            hasBtcAddress={hasBtcAddress}
+                            hasVmAddress={hasVmAddress}
                             hasDexSurface={DEX_SURFACE_ENABLED}
                             isSignerMode={isSignerMode}
                             badges={{ messaging: messagingUnread, obligations: obligationsDue }}

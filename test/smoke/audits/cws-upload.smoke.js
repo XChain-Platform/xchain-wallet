@@ -226,6 +226,17 @@ function run(args, env = {}) {
         assert.equal(ok.signed, false);
         assert.equal(ok.release, TAG, 'the gate reports which release it anchored to');
 
+        // (c2) THE GATE HANDS BACK THE BYTES IT HASHED, which is the only
+        // thing that makes the upload the checked artifact rather than a
+        // second read of the same filename. Swapping the file on disk here
+        // plays the writer that the OAuth round trip in main() leaves room
+        // for; the buffer must not move with it.
+        writeFileSync(zip, 'a neighbour rebuilt this mid-upload');
+        assert.equal(createHash('sha256').update(ok.bytes).digest('hex'), good,
+            'FAIL: the gate did not hand back the bytes it hashed, so the upload can only re-read the '
+            + 'path and the K1-signed hash covers a different read than the one that ships.');
+        writeFileSync(zip, 'pretend release bytes');
+
         // (d) the artifact is not in the manifest
         writeFileSync(manifest, `# tag: v9.9.9\n${good}  some-other-artifact.zip\n`);
         await assert.rejects(

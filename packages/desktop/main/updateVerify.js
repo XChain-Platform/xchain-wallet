@@ -228,6 +228,31 @@ function normalizeName(name) {
 }
 
 /**
+ * Which RELEASE a manifest tag names, with any re-sign suffix stripped.
+ *
+ * A re-sign tag is `<release tag>-resign<N>`: the release tag's tree with
+ * the release TOOLING corrected and nothing else, cut because the gate
+ * that stamps a manifest header comes from the tag and cannot be fixed
+ * for a release already published. Its corrected manifest is republished
+ * under the release's own name (`RELEASE_HASHES/v0.336.0.txt`) while its
+ * header says `v0.336.0-resign1`, and electron-updater only ever reports
+ * the plain version - so a verbatim comparison here refuses every install
+ * of a release whose signature record was repaired.
+ *
+ * Two other spellings of this rule exist, `xr_release_tag_of` in
+ * `tools/release/lib.sh` and `releaseTagOf` in
+ * `tools/release/feed-sweep.mjs`; this one is local rather than imported
+ * because this file is bundled into the Electron main process and today
+ * imports only node builtins and openpgp.
+ *
+ * @param {string} tag
+ * @returns {string}
+ */
+export function releaseTagOf(tag) {
+    return String(tag).replace(/-resign\d+$/, '');
+}
+
+/**
  * The channel pointer THIS build fetches, by electron-builder's rule.
  *
  * `<channel><osSuffix><archSuffix>.yml`, where osSuffix is empty on
@@ -260,6 +285,26 @@ export function channelPointerName({ channel, platform, arch }) {
     if (arch === 'x64') return `${ch}-linux.yml`;
     if (!arch || !/^[a-z0-9]+$/.test(String(arch))) return null;
     return `${ch}-linux-${arch}.yml`;
+}
+
+/**
+ * The release LANE this install belongs to, in `shipped-lanes.txt`'s
+ * vocabulary, derived from `process.platform` alone.
+ *
+ * Same rule the pointer name already follows: never taken from anything
+ * the feed returned, because a lane the feed can choose is a lane an
+ * attacker can choose. Returns null for a platform that names no desktop
+ * lane, which the gate treats as "cannot answer" and refuses on.
+ *
+ * @param {Object} params
+ * @param {string} params.platform  a `process.platform` value
+ * @returns {string|null}
+ */
+export function platformLaneName({ platform }) {
+    if (platform === 'darwin') return 'mac';
+    if (platform === 'linux') return 'linux';
+    if (platform === 'win32') return 'windows';
+    return null;
 }
 
 /**
@@ -424,6 +469,7 @@ function normalizeSha512(value) {
  * @param {string} params.artifactSha256  its SHA-256, lowercase hex
  * @param {string} params.artifactSha512  its SHA-512, lowercase hex (the pointer's spelling)
  * @param {string} params.pointerText     the channel pointer exactly as served
+ * @param {string} params.lane            this install's release lane, from `platformLaneName`
  * @param {Object} [params.pinned]        { armoredKey, fingerprint } override, for tests
  * @returns {Promise<{ ok: boolean, reason?: string }>}
  */
@@ -435,10 +481,11 @@ export async function verifyDownloadedUpdate({
     artifactSha256,
     artifactSha512,
     pointerText,
+    lane,
     pinned,
 }) {
     const artifact = await verifyDownloadedArtifact({
-        manifestBytes, armoredSignature, expectedTag, artifactPath, artifactSha256, pinned,
+        manifestBytes, armoredSignature, expectedTag, artifactPath, artifactSha256, lane, pinned,
     });
     if (!artifact.ok) return { ok: false, reason: artifact.reason };
 
@@ -479,6 +526,7 @@ export async function verifyDownloadedArtifact({
     expectedTag,
     artifactPath,
     artifactSha256,
+    lane,
     pinned,
 }) {
     // Signature first. Nothing parsed out of an unauthenticated manifest
@@ -494,21 +542,38 @@ export async function verifyDownloadedArtifact({
     // perfectly, and a feed that serves the old binary alongside it
     // downgrades the user onto a version whose vulnerabilities are
     // public. A valid signature is not an answer to "which release".
+    // A re-signature answers a request for its release, and the relation
+    // is ONE-WAY (`tools/release/verify.sh` anchor block, `lib.sh`
+    // xr_release_tag_of): the superseded original must NOT answer a
+    // request for the re-signature, so only the HEADER tag is normalized.
     const tag = String(expectedTag ?? '').trim();
     if (!tag) return { ok: false, reason: 'no version to check the manifest against' };
-    if (parsed.header.tag !== tag) {
+    if (parsed.header.tag !== tag && releaseTagOf(parsed.header.tag) !== tag) {
         return { ok: false, reason: `manifest describes ${parsed.header.tag}, not ${tag}` };
     }
 
-    // A PARTIAL manifest is never an update authority. sign.sh
-    // --lane signs one lane's artifacts on their own, and such a manifest
-    // is legitimate - it just cannot speak for the desktop lane, which it
-    // was never gated against. The hash lookup below would refuse it
+    // A PARTIAL manifest speaks for the lanes it names, and for no
+    // others. `sign.sh --lane` gates one lane's artifacts on their own,
+    // so the question is coverage, not partiality: does `# lanes:` name
+    // the lane this install belongs to? Asking "is it partial" instead
+    // refused the desktop lanes themselves once they became nameable
+    // (`shipped-lanes.txt` flipped mac and linux to SHIPPED with an
+    // `updater` feed), which is every update those installs can be
+    // offered. The hash lookup below would refuse a wrong-lane manifest
     // anyway, but with `not covered by the signed manifest`, which reads
     // as a tampered release rather than as the wrong manifest. Refuse it
     // by name instead, before the reason gets confusing.
     if (parsed.header.lanes) {
-        return { ok: false, reason: `manifest covers only the ${parsed.header.lanes} lane, not a full release` };
+        const covered = String(parsed.header.lanes).trim().split(/\s+/).filter(Boolean);
+        const want = String(lane ?? '').trim();
+        // Fail SHUT on a caller that cannot name its lane. Falling
+        // through would hand a partial manifest the full-release path.
+        if (!want) {
+            return { ok: false, reason: `manifest covers the ${covered.join(' ')} lane(s), and this build cannot name its own` };
+        }
+        if (!covered.includes(want)) {
+            return { ok: false, reason: `manifest covers the ${covered.join(' ')} lane(s), not ${want}` };
+        }
     }
 
     // The gate that was skipped at signing time is not one to inherit.

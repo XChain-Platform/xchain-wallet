@@ -43,6 +43,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import {
     estimateNativeSendFee,
@@ -52,6 +53,9 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -136,6 +140,10 @@ export function BatchComposerForm({ walletId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // HwSignBlock reports `{ status, detail, refresh }`, so the raw setter
+    // stored the object and every `hwStatus === 'available'` gate stayed
+    // false. Unwrap it, the way every other signing form does.
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
         let cancelled = false;
@@ -183,6 +191,7 @@ export function BatchComposerForm({ walletId, onBack }) {
     const coinTicker = descriptor
         ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[descriptor.coin] || '')
         : '';
+    const hwSource = isHwSource(fromAddress);
 
     // Network fee: Low / Normal / Fast / Custom (mirrors BroadcastForm).
     const [feePick, setFeePick] = useState(
@@ -241,10 +250,56 @@ export function BatchComposerForm({ walletId, onBack }) {
         }
     }
 
+    // §5.6: a BATCH is the highest-leverage payload the wallet signs, N
+    // sub-actions under one signature, and the review list is a decode of
+    // what the host SAID it built. The confirm lane composes the one PSBT
+    // host-side and Approve signs those exact bytes. AdvancedActionsForm,
+    // the other caller of this same host method, is already on it.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = !isWatcherMode;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hwSource,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'advancedAction',
+        hardware: 'advancedActionHw',
+    });
+
+    async function openConfirmScreen(from, params) {
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'BATCH', params },
+                ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
+                onApprove: (prebuiltPsbt) => submitConfirmed({
+                    walletId, chainId, from, action: 'BATCH', params,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            // Was `err?.message`, i.e. the encoder's developer string on
+            // screen; every other migrated form maps through this helper.
+            setSubmitError(submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || 'Batch failed.',
+            }));
+            setStage('review');
+        }
+    }
+
     async function handleSign(event) {
         event.preventDefault();
         if (stage === 'submitting' || !composed) return;
-        const hw = isHwSource(fromAddress);
+        const hw = hwSource;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         setStage('submitting');
@@ -258,6 +313,7 @@ export function BatchComposerForm({ walletId, onBack }) {
             signerId: fromAddress.signerId,
         };
         const params = { VERSION: '0', COMMAND: composed.command };
+        if (singleEncode) { setStage('review'); openConfirmScreen(from, params); return; }
         try {
             let res;
             if (isWatcherMode) {
@@ -305,6 +361,31 @@ export function BatchComposerForm({ walletId, onBack }) {
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading wallet…</p>);
 
+    // Confirm page, rendered in place of the review stage; the queued rows
+    // stay intact behind it, so Reject lands back on the step list.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
@@ -315,6 +396,12 @@ export function BatchComposerForm({ walletId, onBack }) {
                     onDone={onBack}
                 />,
             );
+        }
+        // A queued result is SIGNED and not broadcast: the confirm lane
+        // resolves a transient broadcast failure that way, and "Batch
+        // broadcast" would report N sub-actions as sent when none are.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="batch" />);
         }
         return wrap(
             <>
@@ -381,7 +468,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                         chainId={chainId}
                         password={password}
                         onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
-                        onStatusChange={setHwStatus}
+                        onStatusChange={onHwStatusChange}
                         passwordRef={passwordRef}
                         submitError={submitError}
                         disabled={stage === 'submitting'}

@@ -20,6 +20,7 @@ import {
     exactSatsFromDecimalString,
     exactSatsBigIntFromDecimalString,
     decimalStringFromSats,
+    exactTokenMaxAmount,
 } from '../../../packages/core/src/shared/routes/Send.jsx';
 
 describe('exactSatsFromDecimalString (send-risk gate conversion)', () => {
@@ -92,5 +93,39 @@ describe('decimalStringFromSats (non-scientific amount formatter)', () => {
         const display = decimalStringFromSats(balance - fee);
         expect(display).toBe('123456789.87428321');
         expect(exactSatsBigIntFromDecimalString(display)).toBe(balance - fee);
+    });
+});
+
+// The sats helpers above are fixed at 8 dp, which is the NATIVE coin's scale. onMax ran
+// every Max press through them, tokens included, and ticks are issued up to
+// MAX_TOKEN_DECIMALS = 18 places. The amount it produces is what gets signed.
+describe('exactTokenMaxAmount (Max on a non-native tick)', () => {
+    const oldMaxPath = (balance) => {
+        const sats = exactSatsBigIntFromDecimalString(balance);
+        return sats == null || sats <= 0n ? null : decimalStringFromSats(sats);
+    };
+
+    it('keeps digits finer than a satoshi instead of stranding them', () => {
+        expect(oldMaxPath('1.000000000000000001')).toBe('1');        // documents the old bug
+        expect(exactTokenMaxAmount('1.000000000000000001')).toBe('1.000000000000000001');
+        expect(oldMaxPath('12.123456789')).toBe('12.12345678');      // documents the old bug
+        expect(exactTokenMaxAmount('12.123456789')).toBe('12.123456789');
+    });
+
+    it('sweeps a balance smaller than one satoshi instead of ignoring it', () => {
+        // exactSatsBigIntFromDecimalString returns 0n here, which onMax's `<= 0n` guard
+        // turned into a Max press that did nothing at all.
+        expect(oldMaxPath('0.000000000001')).toBe(null);
+        expect(exactTokenMaxAmount('0.000000000001')).toBe('0.000000000001');
+    });
+
+    it('passes an ordinary 8-dp balance through unchanged', () => {
+        expect(exactTokenMaxAmount('123456789.87654321')).toBe('123456789.87654321');
+        expect(exactTokenMaxAmount(' 42 ')).toBe('42');
+    });
+
+    it('refuses a zero or unusable balance rather than filling the field with junk', () => {
+        for (const bad of ['0', '0.000', '', '   ', '-1', '1e8', '.5', 'abc', null, undefined])
+            expect(exactTokenMaxAmount(bad), String(bad)).toBe(null);
     });
 });

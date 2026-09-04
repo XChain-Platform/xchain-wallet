@@ -115,8 +115,10 @@ export async function handleWalletUnlock(request, deps) {
     }
 
     // Authoritative unlock throttle (checked BEFORE the KDF so a locked-out
-    // attempt costs no CPU). Optional: shells that don't supply a store (e.g.
-    // desktop) keep their own gating. See unlockThrottle.js.
+    // attempt costs no CPU). Supplied by the extension (ChromeUnlockThrottleStore,
+    // sessionMeta.js) and by desktop (FileUnlockThrottleStore, main/index.js).
+    // Optional for web/mobile, which runs unlock in-page and gates on core's own
+    // lockout ladder instead. See unlockThrottle.js.
     const throttle = deps.unlockThrottleStore;
     if (throttle) {
         const state = await throttle.load().catch(() => null);

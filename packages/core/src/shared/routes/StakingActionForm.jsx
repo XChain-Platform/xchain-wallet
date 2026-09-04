@@ -15,6 +15,7 @@ import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { formatWithThousands, countNonCommaBefore, indexAfterNonCommaCount } from '../utils/amountFormat.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -383,7 +384,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || (verb + ' failed.'));
+            setFormError(submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
+            }));
         }
     }
 
@@ -501,7 +504,11 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
-                isBadPassword ? 'Incorrect password.' : err?.message || (verb + ' failed.'),
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : submitFailureMessage(err, {
+                        chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {

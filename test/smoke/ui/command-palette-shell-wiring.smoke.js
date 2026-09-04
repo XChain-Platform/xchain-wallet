@@ -200,4 +200,61 @@ assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.web)),
 assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.desktop)),
     'desktop App wires the LeftNav palette trigger');
 
-console.log('OK: command-palette shell wiring (§33 + §34: core module present; web + extension popup + desktop each import, install the Cmd/Ctrl+K hook gated on unlocked, build commands, and mount <CommandPalette>; entity search + settings deep-links + popup trigger wired per shell; rebinding overrides threaded; §34.2 context shortcuts mounted in History/Send/Home)');
+// --- destination parity: every navigate command lands somewhere ----------
+//
+// `buildCommands` emits its `go(view)` rows for every shell that mounts the
+// catalogue, while each shell decides on its own which views it renders, so a
+// destination no shell branch matches falls through to that shell's Home with
+// no message. Assert the intersection instead of trusting it.
+//
+// Route sources are listed per shell because the web shell keeps its DEX
+// routes in a swappable surface module (`surfaces/dex.jsx` when the DEX
+// surface is compiled in, which is the same build in which the palette emits
+// the DEX rows at all).
+const shellRouteSources = {
+    web: ['packages/web/src/App.jsx', 'packages/web/src/surfaces/dex.jsx'],
+    'extension popup': ['packages/extension/src/popup/App.jsx'],
+    desktop: ['packages/desktop/renderer/App.jsx'],
+};
+// Written exemptions only, one reason each. A destination added here is a
+// decision that the row should not exist for that shell, not a way to quiet
+// the check.
+const destinationExemptions = {
+    // Home is the fallthrough every shell renders when no branch matches, so
+    // it has no `unlockedView === 'home'` branch anywhere by construction.
+    home: 'the unmatched-view fallthrough in all three shells',
+};
+
+const paletteDestinations = [...new Set(
+    [...registrySrc.matchAll(/run:\s*go\(\s*'([a-z0-9-]+)'\s*\)/g)].map((m) => m[1]),
+)];
+assert.ok(paletteDestinations.length >= 40,
+    `buildCommands' go() destinations were extracted (${paletteDestinations.length} found)`);
+
+for (const [label, paths] of Object.entries(shellRouteSources)) {
+    const routeSrc = paths.map(read).join('\n');
+    for (const dest of paletteDestinations) {
+        if (destinationExemptions[dest]) continue;
+        assert.ok(
+            routeSrc.includes(`unlockedView === '${dest}'`),
+            `${label} routes the palette destination '${dest}' (an unrouted destination bounces the user to Home silently)`,
+        );
+    }
+}
+
+// The gate that hid the desktop dead-end: a palette-reachable route must not
+// be gated on a context ref the palette never sets. `controller-bind` carries
+// the ADDRESS-scoped half of the form, which has no token subject at all.
+for (const [label, paths] of Object.entries(shellRouteSources)) {
+    const routeSrc = paths.map(read).join('\n');
+    assert.ok(
+        /unlockedView === 'controller-bind' && activeWalletId\)/.test(routeSrc),
+        `${label} gates controller-bind on the wallet alone`,
+    );
+    assert.ok(
+        !/unlockedView === 'controller-bind'[^)]*&& tokenDetailRef/.test(routeSrc),
+        `${label} does not re-gate controller-bind on a token ref (D-153)`,
+    );
+}
+
+console.log('OK: command-palette shell wiring (§33 + §34: core module present; web + extension popup + desktop each import, install the Cmd/Ctrl+K hook gated on unlocked, build commands, and mount <CommandPalette>; entity search + settings deep-links + popup trigger wired per shell; rebinding overrides threaded; §34.2 context shortcuts mounted in History/Send/Home; every buildCommands go() destination routed by every shell, controller-bind ungated in all three)');

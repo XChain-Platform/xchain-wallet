@@ -43,7 +43,7 @@
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) {
@@ -393,7 +393,8 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
         setPermissionRequestHandler: (fn) => { permHandler = fn; },
         setDevicePermissionHandler: (fn) => { deviceHandler = fn; },
     };
-    attachHidPermissions(fakeSession);
+    const appRoot = join(desktop, 'renderer', 'dist');
+    attachHidPermissions(fakeSession, { appRoot });
     assert.equal(typeof permHandler, 'function', 'permission handler installed');
     assert.equal(typeof deviceHandler, 'function', 'device handler installed');
 
@@ -404,13 +405,16 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
     permHandler(null, 'geolocation', (ok) => { granted = ok; });
     assert.equal(granted, false, 'non-hid permission denied');
 
-    // A local file:// renderer is granted hid; a positively-remote frame
-    // (which behind the navigation lockdown should never hold the preload)
-    // is denied so it can never reach a paired Ledger/Trezor.
-    permHandler({ getURL: () => 'file:///app/renderer/dist/index.html' }, 'hid', (ok) => { granted = ok; });
-    assert.equal(granted, true, 'hid granted to local file:// renderer');
+    // The app's own renderer is granted hid; anything else is denied so it
+    // can never reach a paired Ledger/Trezor. "Anything else" now includes
+    // an arbitrary local HTML file, which the old scheme-only check let in.
+    const appIndex = pathToFileURL(join(appRoot, 'index.html')).href;
+    permHandler({ getURL: () => appIndex }, 'hid', (ok) => { granted = ok; });
+    assert.equal(granted, true, 'hid granted to the app renderer');
     permHandler({ getURL: () => 'https://evil.example/x' }, 'hid', (ok) => { granted = ok; });
     assert.equal(granted, false, 'hid denied to a remote https frame');
+    permHandler({ getURL: () => 'file:///tmp/evil.html' }, 'hid', (ok) => { granted = ok; });
+    assert.equal(granted, false, 'hid denied to a local file outside the app');
 
     // Device handler only allows whitelisted vendors.
     assert.equal(
@@ -451,12 +455,20 @@ assert.throws(
     /setPermissionRequestHandler/,
     'attachHidPermissions rejects session missing setPermissionRequestHandler',
 );
+assert.throws(
+    () => attachHidPermissions(
+        { setPermissionRequestHandler: () => {}, setDevicePermissionHandler: () => {} },
+        {},
+    ),
+    /appRoot/,
+    'attachHidPermissions refuses to wire the HID grant without an app root',
+);
 
 // Main-process index.js actually attaches the handlers on app ready.
 const mainIndex = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');
 assert.ok(
-    /attachHidPermissions\(session\.defaultSession\)/.test(mainIndex),
-    'main/index.js calls attachHidPermissions(session.defaultSession) on app.whenReady',
+    /attachHidPermissions\(session\.defaultSession, \{ appRoot: APP_ROOT \}\)/.test(mainIndex),
+    'main/index.js calls attachHidPermissions(session.defaultSession, { appRoot: APP_ROOT }) on app.whenReady',
 );
 
 console.log(

@@ -296,7 +296,17 @@ export async function handleWalletImportBackup(request, deps) {
     };
 }
 
-async function assertFreshVault(deps) {
+/**
+ * Refuse a create / import / fresh-restore onto an install that already holds
+ * a wallet. Exported because the web shell runs these three lanes in-page
+ * rather than through `dispatchPreHost`, and a second copy of the guard drifts
+ * on both halves that matter: the error NAME shared routes branch on, and the
+ * storage-blob arm (a meta-less blob is the state a route would otherwise meet
+ * as an opaque AEAD failure from `Vault.open`).
+ *
+ * @param {{ metaBackend: { load: () => Promise<any> }, storageBackend: { load: () => Promise<any> } }} deps
+ */
+export async function assertFreshVault(deps) {
     if (await deps.metaBackend.load()) {
         throw Object.assign(
             new Error('A wallet already exists. Unlock or reset first.'),

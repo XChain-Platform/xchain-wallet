@@ -32,6 +32,9 @@ import { externalIndexOf } from '../addressSelection.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -196,6 +199,94 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
+    // ORDER and DISPENSER ownership sales take the same fields; only the
+    // action name and the submit handler differ. GIVE_ESCROW is omitted (it
+    // must be empty for an ownership dispenser). Named once here so the
+    // confirm lane and the legacy watcher lane cannot drift apart.
+    const saleAction = mechanism === 'dispenser' ? 'DISPENSER' : 'ORDER';
+    const saleParams = useMemo(() => ({
+        VERSION: '0',
+        GIVE_COIN: coinTicker,
+        GIVE_TICK: tokenUpper,
+        GIVE_OWNERSHIP: '1',
+        GET_COIN: coinTicker,
+        ...(getMode === 'token' ? { GET_TICK: getTick.trim().toUpperCase() } : {}),
+        GET_AMOUNT: String(price).trim(),
+        ...(expiration.trim() ? { EXPIRATION: expiration.trim() } : {}),
+        ...(memo.trim() ? { MEMO: memo.trim() } : {}),
+    }), [coinTicker, tokenUpper, getMode, getTick, price, expiration, memo]);
+
+    // §5.6: the signing lanes compose ONE PSBT host-side and approve it on
+    // the shared confirm page; watcher keeps the legacy review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = !isWatcherMode;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    // Hardware signs the SAME prebuilt PSBT through the same host flow,
+    // with the device standing in for the password.
+    const submitOrder = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'orderAction',
+        hardware: 'orderActionHw',
+    });
+    const submitDispenser = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'dispenserAction',
+        hardware: 'dispenserActionHw',
+    });
+
+    // Compose, tamper-check and pre-flight run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const dispatch = mechanism === 'dispenser' ? submitDispenser : submitOrder;
+            const r = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: saleAction, params: saleParams },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                onApprove: (prebuiltPsbt) => dispatch({
+                    walletId,
+                    chainId,
+                    from,
+                    params: saleParams,
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(r);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(submitFailureMessage(err, {
+                chainId,
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Sign failed.',
+            }));
+        }
+    }
+
     // Validate form fields and advance to the review stage; real signing
     // happens only after the user confirms on the review screen.
     function handleReview(event) {
@@ -207,6 +298,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             return;
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -220,21 +312,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         setStage('submitting');
         setSubmitError(null);
         try {
-            // ORDER and DISPENSER ownership sales take the same fields; only
-            // the action name + submit handler differ. GIVE_ESCROW is omitted
-            // (must be empty for an ownership dispenser).
-            const action = mechanism === 'dispenser' ? 'DISPENSER' : 'ORDER';
-            const params = {
-                VERSION: '0',
-                GIVE_COIN: coinTicker,
-                GIVE_TICK: tokenUpper,
-                GIVE_OWNERSHIP: '1',
-                GET_COIN: coinTicker,
-                ...(getMode === 'token' ? { GET_TICK: getTick.trim().toUpperCase() } : {}),
-                GET_AMOUNT: String(price).trim(),
-                ...(expiration.trim() ? { EXPIRATION: expiration.trim() } : {}),
-                ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-            };
+            const action = saleAction;
+            const params = saleParams;
             const base = {
                 walletId,
                 chainId,
@@ -333,6 +412,13 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
             );
         }
+        // A queued result is SIGNED and not broadcast: the confirm lane
+        // resolves a transient broadcast failure that way, and "Name listed
+        // for sale" would tell the user an irreversible sale is open when it
+        // is not.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="ownership sale" />);
+        }
         return wrap(
             <>
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Name listed for sale</p>
@@ -423,6 +509,32 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     </Button>
                 </div>
             </form>,
+        );
+    }
+
+    // Confirm page, rendered in place of the form; form state stays intact
+    // behind it, exactly as the picker screens below do.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                hwSignerInfo={hwSignerInfo}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
         );
     }
 
@@ -576,9 +688,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!!validationError || !fromAddress || !priceReady || !getTickReady}
+                    loading={actionConfirm.composing}
+                    disabled={!!validationError || !fromAddress || !priceReady || !getTickReady
+                        || actionConfirm.composing}
                 >
-                    Review
+                    {singleEncode ? 'List name for sale' : 'Review'}
                 </Button>
             </div>
         </form>,

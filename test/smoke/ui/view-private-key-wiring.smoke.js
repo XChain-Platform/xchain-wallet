@@ -8,9 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7 / G027: ViewPrivateKey wired into both shells'
+// Smoke for §17.7 / G027: ViewPrivateKey wired into every shell's
 // App.jsx via the AddressList "Show key" affordance. Cluster E
 // Step 4 of 5.
+//
+// Desktop is in the loop because it drifted out of it: it shipped the
+// exportPrivateKey IPC with no UI consumer, so the shared Secret
+// button rendered permanently greyed there.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -22,6 +26,7 @@ const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
+const desktop = join(wsRoot, 'packages', 'desktop');
 const routes = join(core, 'src', 'shared', 'routes');
 
 // --- 1. AddressList exposes onShowPrivateKey + renders the button -------
@@ -35,12 +40,17 @@ assert.ok(/Secret/.test(al),
 // gating expression (canSecret) requires selected.record AND !selected.multisig.
 assert.ok(/onShowPrivateKey\s*&&\s*selected\.record\s*&&\s*!selected\.multisig/.test(al),
     'AddressList only enables the Secret button for non-multisig rows with a record');
+// A shell that wired no handler gets no button at all, rather than one
+// that can never activate (the onReceive gating rule in the same file).
+assert.ok(/\{onShowPrivateKey \? \([\s\S]{0,600}?<span>Secret<\/span>/.test(al),
+    'AddressList renders the Secret button only when a handler was supplied');
 
-// --- 2. Both shells import + render ViewPrivateKey ----------------------
+// --- 2. Every shell imports + renders ViewPrivateKey --------------------
 
 for (const [name, file] of [
     ['extension', join(ext, 'src', 'popup', 'App.jsx')],
     ['web', join(web, 'src', 'App.jsx')],
+    ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     assert.ok(existsSync(file), `${name} App.jsx exists`);
     const src = readFileSync(file, 'utf8');

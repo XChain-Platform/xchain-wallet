@@ -43,6 +43,7 @@ import {
 import { SIGNING_SECRET_SESSION_KEY } from './signingSecretSession.js';
 import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 import { ChromeUnlockThrottleStore } from './unlockThrottle.js';
+import { serializeError } from './MessageHost.js';
 
 /**
  * @typedef {Object} PreHostBackends
@@ -132,13 +133,12 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                 });
                 sendResponse({ ok: true, result });
             } catch (err) {
-                sendResponse({
-                    ok: false,
-                    error: {
-                        name: (err && err.name) || 'Error',
-                        message: (err && err.message) || String(err),
-                    },
-                });
+                // The same serializer the host lane uses. A hand-rolled
+                // { name, message } dropped `code` and the THROTTLED hints
+                // (retryAfterMs / burst / windowMs) that the renderer
+                // transports all rebuild, and `UnlockThrottledError` carries
+                // retryAfterMs on exactly this lane.
+                sendResponse(serializeError(err));
             }
         })();
         return true; // async response

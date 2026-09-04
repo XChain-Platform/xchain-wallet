@@ -143,6 +143,18 @@ export async function submitAction({
     const { encoderOpts: effectiveEncoderOpts, adsPlan, adsEnabledForChain } =
         applyAdsPlanToEncoderOpts(adsSettingsSnapshot, chainId, chainRegistry, encoderOpts);
 
+    // Which verdict the accounting books. On the prebuilt path the donation was
+    // decided and folded at COMPOSE time, and one background host serves every
+    // popup window, so the snapshot read a line above can have crossed the
+    // trigger since: booking from it resets the accumulator and credits
+    // lifetimeDonatedSats for a PSBT carrying no donation (or leaves the
+    // accumulator growing on top of one already paid). The bytes the user
+    // approved are the only description of what broadcasts. An envelope from an
+    // older composer carries no verdict and keeps today's behaviour.
+    const donationIncluded = typeof prebuiltPsbt?.adsDonation?.included === 'boolean'
+        ? prebuiltPsbt.adsDonation.included
+        : adsPlan.canSubmit;
+
     // If the caller supplied pendingTxMeta, set up lifecycle persistence.
     // The tracker mutates a mutable record and writes through to the vault
     // on every transition; it also observes onProgress phase events.
@@ -267,8 +279,8 @@ export async function submitAction({
                 // identically, so the ADS donation already folded into that
                 // PSBT at compose time is what broadcasts. The re-fold into
                 // effectiveEncoderOpts above is inert on this path (createTx
-                // never runs); the adsPlan it produced still drives the post-
-                // broadcast commitAdsStep below.
+                // never runs), and so is the plan's verdict: the post-broadcast
+                // commitAdsStep books the compose-time one the envelope carries.
                 encoderOpts: encoderOptsForSubmit,
                 prebuiltPsbt,
                 signer,
@@ -333,7 +345,7 @@ export async function submitAction({
                                 // accumulator (a queued tx is what donates,
                                 // not the failed immediate attempt). §5.3.4.
                                 adsCommit: adsEnabledForChain
-                                    ? { chainId, donationIncluded: adsPlan.canSubmit }
+                                    ? { chainId, donationIncluded }
                                     : null,
                             });
                         } catch (_inner) {
@@ -368,15 +380,14 @@ export async function submitAction({
     // §36.3: advance the ADS accumulator after a successful submit.
     // Only fire when ADS is actually enabled for this chain; otherwise
     // `stepAdsAccumulator` is identity but the extra vault write is
-    // wasted. `donationIncluded` mirrors `adsPlan.canSubmit` so the
-    // two code paths (injected + not-injected) advance the counters
-    // correctly.
+    // wasted. `donationIncluded` is the compose-time verdict on the prebuilt
+    // path and this snapshot's otherwise, resolved once up top.
     if (adsEnabledForChain) {
         try {
             await commitAdsStep({
                 vault,
                 chainId,
-                donationIncluded: adsPlan.canSubmit,
+                donationIncluded,
                 chainRegistry,
             });
         } catch (e) {

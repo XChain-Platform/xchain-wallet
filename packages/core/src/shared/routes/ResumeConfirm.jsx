@@ -109,6 +109,11 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                         version: built.version,
                         deferredFeeOutput: built.deferredFeeOutput || null,
                         deferredOutputs: built.deferredOutputs || [],
+                        // See useActionConfirmFlow. A resumed confirm is the
+                        // stalest envelope in the wallet, so it is the likeliest
+                        // of all to disagree with a submit-time re-resolution.
+                        revealOpts: built.revealOpts || null,
+                        adsDonation: { included: !!built.adsPlan?.canSubmit },
                     };
                     return messaging[method]({
                         ...base,

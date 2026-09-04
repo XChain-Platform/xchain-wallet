@@ -43,7 +43,7 @@ import styles from './BottomTabBar.module.css';
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
- * @param {boolean} [props.hasBtcAddress]
+ * @param {boolean} [props.hasVmAddress] gates the Contracts sheet row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the row is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops the Send tab and the Receive sheet row
  * @param {Record<string, number>} [props.badges]   per-view counts; a count > 0 badges that sheet row and surfaces a dot on the "More" tab (e.g. { messaging: 3 })
@@ -61,7 +61,7 @@ const SHEET_PRIMARY = [
     { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, group: ['receive'], spendable: true },
     { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, group: ['markets', 'market'], requiresDex: true },
     { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon, group: ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'] },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresBtc: true },
+    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresVm: true },
     { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon, group: ['messaging', 'compose-message'] },
     { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon, group: ['contacts'] },
     { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon, group: ['lists', 'list-detail', 'list-create', 'list-fork'] },
@@ -79,7 +79,7 @@ export function BottomTabBar({
     onLock,
     onOpenSettings,
     onOpenWalletPicker,
-    hasBtcAddress = false,
+    hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
     badges = {},
@@ -107,8 +107,9 @@ export function BottomTabBar({
     // `requiresDex` is a BUILD fact, not a wallet one: the store profile
     // compiles the DEX routes out, so the row would point at a view
     // that does not exist in this bundle.
+    // `requiresVm` is the registry gate Home and the palette use, not a BTC one.
     const sheetRows = SHEET_PRIMARY.filter(
-        (row) => (!row.requiresBtc || hasBtcAddress)
+        (row) => (!row.requiresVm || hasVmAddress)
             && (!row.requiresDex || hasDexSurface)
             && (!row.spendable || !isSignerMode),
     );

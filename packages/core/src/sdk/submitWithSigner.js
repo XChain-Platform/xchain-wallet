@@ -33,7 +33,9 @@ import { signerSupportsChunkReveal } from '../flows/signerCapability.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
-import { isBareNativePayment } from '../flows/nativePayment.js';
+import {
+    isBareNativePayment, withNativePaymentOutput, hasNativePaymentOutput,
+} from '../flows/nativePayment.js';
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 
 /**
@@ -125,6 +127,10 @@ export class HardwareChunkLaneError extends Error {
  * @property {string} encoding       the encoding composeForConfirm chose
  * @property {string} actionString   for the two-phase reveal + result
  * @property {number|string} [version]
+ * @property {{ address: string, value: string | number } | null} [deferredFeeOutput]
+ * @property {Array<{ address: string, value: string | number }>} [deferredOutputs]
+ * @property {{ change?: string | null, rawData?: string | null } | null} [revealOpts]  what the compose built the commit with, so the phase-2 reveal agrees
+ * @property {{ included: boolean } | null} [adsDonation]  whether THESE bytes carry the ADS donation
  */
 
 /**
@@ -215,6 +221,12 @@ export async function submitWithSigner({
     // on the commit, so an oracle usage fee, an ADS donation or a native payment output
     // was burned as miner fee when only the protocol fee was carried across.
     let deferredOutputs = [];
+    // What the COMMIT was built with, on the prebuilt path. The reveal is built
+    // fresh at submit time and was taking these from the submit flow's own opts,
+    // which never saw the change address the compose rotated onto - so the
+    // commit's change went to the fresh internal address and the reveal's
+    // surplus sweep went back to the spending address (D-9 rotation, defeated).
+    let revealOpts = null;
     if (prebuiltPsbt) {
         // Preserve the phase events submitAction's lifecycle tracker consumes,
         // but do NO rebuild: the PSBT is the one the user approved.
@@ -241,6 +253,9 @@ export async function submitWithSigner({
         deferredOutputs = Array.isArray(prebuiltPsbt.deferredOutputs) && prebuiltPsbt.deferredOutputs.length
             ? prebuiltPsbt.deferredOutputs
             : (deferredNativeFeeOutput ? [deferredNativeFeeOutput] : []);
+        // An envelope from an older composer carries none, and falls back to
+        // today's behaviour below rather than to a null change address.
+        revealOpts = prebuiltPsbt.revealOpts || null;
     } else {
         // Step 1: create action string (no network call, just formatting).
         onProgress('creating', { action: actionData.action });
@@ -296,6 +311,30 @@ export async function submitWithSigner({
         // and that reservation is what pays for it on the reveal. Withholding
         // it left the reveal unable to balance.
         const feeOutput = nativeFeeOutputOf(preflight.quote);
+
+        // Step 1e: pay the recipient. Suppressing the SEND action string and
+        // adding the destination output are ONE decision, and this path made
+        // only the first half: it relied on every caller having put the payment
+        // in `customOutputs`. `sendToken` and `buildSendPsbt` do; the generic
+        // `advancedAction` route forwards pubkey/sourceAddress/change/fee opts
+        // and nothing else, so a native SEND through the parallel composer built
+        // a transaction with no OP_RETURN and no payment. Idempotent, so the
+        // callers that pre-supply it keep their bytes.
+        if (bareNativePayment) {
+            effectiveEncoderOpts = withNativePaymentOutput({
+                actionData,
+                descriptor: chainRegistry?.get(chainId),
+                encoderOpts: effectiveEncoderOpts,
+            });
+            // Fail closed rather than sign a send that pays nobody. The fold
+            // above makes this unreachable today; it is here so the next route
+            // that skips it fails loudly instead of broadcasting.
+            if (!hasNativePaymentOutput(actionData, chainRegistry?.get(chainId), effectiveEncoderOpts)) {
+                throw new Error(
+                    'submitWithSigner: a native-coin send must carry its destination payment output',
+                );
+            }
+        }
 
         // Step 2: encode to PSBT via the encoder service.
         onProgress('encoding', { actionString: bareNativePayment ? null : createResult.actionString });
@@ -491,8 +530,16 @@ export async function submitWithSigner({
             // client skips it when absent) and carries gated-FILE / ECIES MESSAGE v2 payloads.
             data: createResult.actionString,
             encoding: encoded.encoding,
-            rawData: effectiveEncoderOpts.rawData,
-            change: effectiveEncoderOpts.change,
+            // Prefer what the COMMIT was built with; an absent carry (older
+            // composer, or the atomic path) falls back to today's behaviour.
+            rawData: revealOpts?.rawData ?? effectiveEncoderOpts.rawData,
+            // The reveal's surplus sweep / floor pad lands here. Taking it from
+            // the submit-side opts sent it to the spending address while the
+            // commit's change went to the rotated one. Renderer-supplied, like
+            // every other field of this envelope: it names no address the same
+            // envelope's `psbtHex` could not already name (§5.3's unbound
+            // prebuilt-submit seam is its own item).
+            change: revealOpts?.change ?? effectiveEncoderOpts.change,
             fee: effectiveEncoderOpts.fee,
             feePerKb: effectiveEncoderOpts.feePerKb,
             // The protocol fee rides the REVEAL, the transaction that
@@ -532,10 +579,13 @@ export async function submitWithSigner({
 
     /** @type {SubmitResult} */
     const result = {
+        // Null on the bare-payment path, where there is no action at all and
+        // `createResult` is null: composeForConfirm states the same contract,
+        // and reading through the null threw AFTER the broadcast.
         txid: finalTxid,
-        actionString: createResult.actionString,
-        action: createResult.action,
-        version: createResult.version,
+        actionString: createResult ? createResult.actionString : null,
+        action: createResult ? createResult.action : null,
+        version: createResult ? createResult.version : null,
         encoding: encoded.encoding,
         signed: finalSigned,
         indexed: null,

@@ -169,12 +169,17 @@ export async function composeForConfirm({
     // "address has no coin" failure actionable ("it needs about 20 DOGE"), and
     // this is the last frame that still has it. Stamp it on the way out so the
     // form's message can say the amount.
+    // Named rather than inlined so `revealOpts` below can state the change
+    // address the encoder was ACTUALLY given, defaults included.
+    const builtEncoderOpts = {
+        ...(source ? { sourceAddress: source, change: source } : {}),
+        ...finalEncoderOpts,
+    };
     let encoded;
     try {
         encoded = await sdk.encoder.createTx({
             ...(bareNativePayment ? {} : { data: createResult.actionString }),
-            ...(source ? { sourceAddress: source, change: source } : {}),
-            ...finalEncoderOpts,
+            ...builtEncoderOpts,
         });
     } catch (err) {
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
@@ -204,6 +209,18 @@ export async function composeForConfirm({
     const deferredOutputs = !bareNativePayment && isChunkEncoding(encoded.encoding)
         ? (Array.isArray(finalEncoderOpts.customOutputs) ? finalEncoderOpts.customOutputs.slice() : [])
         : [];
+
+    // The phase-2 REVEAL is built fresh by the submit path, from ITS OWN
+    // encoder opts - which on the prebuilt path are the submit flow's, not the
+    // ones that built these previewed bytes. So the commit's change went to the
+    // rotated internal address above and the reveal's surplus sweep (P2SH) or
+    // floor pad (P2WSH) went back to the spending address, defeating the
+    // rotation and reusing the address on chain. Carry what the reveal has to
+    // agree with, the same way the deferred outputs already ride along. Null off
+    // the chunk lane, where there is no reveal.
+    const revealOpts = isChunkEncoding(encoded.encoding)
+        ? { change: builtEncoderOpts.change ?? null, rawData: builtEncoderOpts.rawData ?? null }
+        : null;
 
     const adsOutput = adsPlan.canSubmit
         ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }
@@ -273,6 +290,9 @@ export async function composeForConfirm({
         // the submit path can emit them all on the reveal. Supersedes deferredFeeOutput,
         // which it contains; that field stays for callers built against alone.
         deferredOutputs,
+        // What the phase-2 reveal must be built with to agree with this
+        // commit. Null off the chunk lane.
+        revealOpts,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,

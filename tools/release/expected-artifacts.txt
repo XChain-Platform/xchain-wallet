@@ -184,7 +184,11 @@
 # row. The rehearsal is per-arch for the same reason the release is: a
 # rehearsal that exercised one arch would prove nothing about the other.
 #
-# Format:  <required|optional|staging-required|staging-optional>  <glob>  <profile>  <arches>  <signature class>
+# Format:  <required|optional|staging-<os>-required|staging-<os>-optional>  <glob>  <profile>  <arches>  <signature class>
+#          <os> is mac, windows or linux. `xr_set_for_status` in lib.sh
+#          enumerates those spellings and returns nothing for any other,
+#          which `xr_check_expected` turns into a hard failure - so a bare
+#          `staging-required` written from this line would fail at signing.
 
 # --- Web SPA ------------------------------------------------------------
 required  xchain-wallet-web-v*.tar.gz       default  -         none

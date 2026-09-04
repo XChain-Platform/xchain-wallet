@@ -39,19 +39,37 @@ for (const stage of ['compose', 'review-file', 'wait-index', 'review-link', 'don
     assert.ok(src.includes(`'${stage}'`), `form tracks stage "${stage}"`);
 }
 
-// Messaging surface: FILE submit, LINK submit, index polling, genesis
-// lookup for the ISSUE leg.
+// Messaging surface: index polling and the genesis lookup for the ISSUE leg.
 for (const call of [
     'messaging.getAddressesByChain',
     'messaging.getGenesisForToken',
     'messaging.getActionByTxid',
-    'messaging.fileAction',
-    'messaging.fileActionHw',
-    'messaging.linkAction',
-    'messaging.linkActionHw',
 ]) {
     assert.ok(src.includes(call), `AttachContentForm calls ${call}`);
 }
+
+// §5.6: every leg signs on the shared confirm lane, so the FILE / LINK /
+// ISSUE dispatches are named to useConfirmSubmit instead of being called by
+// hand from a review stage. The ISSUE leg mattered most: token administration
+// signed against a locally rendered summary, while every other ISSUE surface
+// in the wallet already composed through the tamper-checked confirm page.
+assert.ok(/useActionConfirmFlow/.test(src),
+    'AttachContentForm is on the shared confirm lane');
+for (const [software, hardware] of [
+    ['fileAction', 'fileActionHw'],
+    ['linkAction', 'linkActionHw'],
+    ['issueToken', 'issueTokenHw'],
+]) {
+    assert.ok(
+        new RegExp(`software: '${software}',\\s*\\n\\s*hardware: '${hardware}'`).test(src),
+        `AttachContentForm dispatches ${software}/${hardware} through useConfirmSubmit`,
+    );
+}
+// Four legs, four Approve dispatches, each signing the previewed bytes.
+assert.equal((src.match(/prebuiltPsbt,/g) || []).length, 4,
+    'all four AttachContentForm legs submit the previewed PSBT, never a rebuild');
+assert.ok(!/await messaging\.(fileAction|linkAction|issueToken)/.test(src),
+    'no AttachContentForm leg still broadcasts straight from its review stage');
 
 // The on-chain push ceiling is enforced in the picker, not after the
 // user signed.

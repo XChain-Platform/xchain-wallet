@@ -42,6 +42,22 @@ export function lockWallet() {
     return /** @type {any} */ (sendMessage('wallet.lock'));
 }
 
+/**
+ * §26 auto-lock: hand the main process the arm decision and the idle
+ * threshold, so the window the user configured survives a QUIT.
+ *
+ * The shared `useAutoLockPolicy` hook calls this on any shell that
+ * implements it; the foreground timer it also drives dies with the
+ * renderer, which is exactly the gap this closes. Desktop's record is
+ * file-backed (main/autoLockState.js) rather than session-scoped, because
+ * the question it answers is what happened across process life.
+ *
+ * @param {{ armed: boolean, idleMs: number }} signal
+ */
+export function reportAutoLock(signal) {
+    return /** @type {any} */ (sendMessage('session.autolock', signal));
+}
+
 /** @param {object} opts */
 export function createWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.create', opts));
@@ -289,18 +305,29 @@ export function requoteNativeFee(opts) {
 }
 
 /**
- * Persist the in-flight confirm so a popup CLOSE (which MV3 does
- * on every focus loss, including the one a hardware prompt causes) costs a tap
- * instead of re-entering the whole form. Stored in `chrome.storage.session`,
- * so it dies with the browser session; a no-op on shells without one.
+ * Persist the in-flight confirm so a window CLOSE costs a tap instead of
+ * re-entering the whole form.
+ *
+ * INERT ON THIS SHELL. The store behind it is `chrome.storage.session`
+ * (`createConfirmActionSessionStorage`), which resolves to null outside an
+ * extension, so the host answers `{ supported: false, stored: false }` here and
+ * no confirm is ever resumed on desktop. Kept for surface parity: shared routes
+ * call it by name on every shell.
  *
  * @param {{ id: string, request: object, composed: object, report: object|null, dispatch: object|null, createdAt: number }} opts
+ * @returns {Promise<{ supported: boolean, stored: boolean }>}
  */
 export function putConfirmSession(opts) {
     return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
 }
 
-/** The stored confirms, for the Home resume card. */
+/**
+ * The stored confirms, for the Home resume card. Always
+ * `{ supported: false, sessions: [] }` on this shell; `supported` is what
+ * separates "nothing stored" from "this shell cannot store confirms".
+ *
+ * @returns {Promise<{ supported: boolean, sessions: Array<object> }>}
+ */
 export function listConfirmSessions() {
     return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
 }

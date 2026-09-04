@@ -206,6 +206,42 @@ assert.ok(/getCoinpayObligationsForAddress/.test(homeSrc),
 assert.ok(/pending_coinpay/.test(homeSrc),
     'Home.jsx filters to pending_coinpay obligations');
 
+// --- 7b. the obligation-rebuild chokepoint -----------------------------
+//
+// CoinpayForm is the one action form whose payload is a direct native-coin
+// payment to an address, and it is NOT on the shared confirm lane, so no
+// output-set tamper check binds the payee the user read to the outputs that
+// get signed. What stands in for it is host-side: every COINPAY lane runs
+// prepareCoinpay, which re-reads the obligation FROM THE CHAIN and builds the
+// payment from `obligation.payee_address` rather than from the caller's copy.
+// That one chokepoint carries the whole payment-integrity argument and
+// nothing pinned it, so a refactor threading the caller's payee straight
+// through would have read like a tidy-up.
+const flowSrc = readFileSync(join(core, 'src', 'flows', 'coinpayAction.js'), 'utf8');
+
+assert.ok(/async function prepareCoinpay\(/.test(flowSrc),
+    'coinpayAction.js still funnels its lanes through prepareCoinpay');
+assert.ok(/await verifyCoinpayObligation\(/.test(flowSrc),
+    'prepareCoinpay re-derives the obligation from the chain');
+
+// Both exported entry points take that preamble: the signing lane, which the
+// `.hw` route also dispatches to, and the watcher encode-only lane.
+for (const fn of ['buildCoinpayPsbtRequest', 'coinpayAction']) {
+    assert.ok(new RegExp(`prepareCoinpay\\(opts, '${fn}'\\)`).test(flowSrc),
+        `${fn} runs the verified preamble rather than trusting its arguments`);
+}
+
+// And the payment output is built from the VERIFIED row: these names are
+// prepareCoinpay's returns, never `opts.*`. An output sourced from the
+// request is the defect this pin exists to catch.
+assert.ok(!/address: opts\.payeeAddress/.test(flowSrc),
+    'no COINPAY lane builds its native output from the caller-supplied payee');
+assert.equal(
+    (flowSrc.match(/\{ address: (?:prepared\.)?payeeAddress, value: (?:prepared\.)?coinAmount \}/g) || []).length,
+    2,
+    'both COINPAY lanes size their native output from the verified obligation',
+);
+
 // --- 8. SDK pin bump ---------------------------------------------------
 
 for (const [shell, pkgPath] of [

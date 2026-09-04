@@ -28,6 +28,11 @@
 // Unknown-origin / first-time requests must go through `bridge.connect`
 // which creates the ConnectedSite record; other handlers reject with
 // `NOT_CONNECTED` if no record exists.
+//
+// One exception, deliberate: `bridge.getSupportedChains` is the catalogue a
+// dApp reads BEFORE it can connect, so it takes assertOrigin +
+// assertNotBlocked and no site record. It is the only route that carries its
+// own blocklist check for that reason.
 
 import { flows, schemas } from '@xchain-wallet/core';
 import {
@@ -384,7 +389,12 @@ export function registerBridgeHandlers(host, opts = {}) {
         }));
     });
 
-    register('bridge.getSupportedChains', async (_req, deps) => {
+    register('bridge.getSupportedChains', async (req, deps) => {
+        // Gate without requiring a ConnectedSite (bridge-spec keeps this one
+        // pre-connect). The sibling reads get the blocklist free from
+        // requireSite; with no site record to evict, this one checks itself.
+        assertOrigin(req);
+        await assertNotBlocked(req, deps);
         return deps.chainRegistry.supportedChains().map((d) => ({
             id: d.id,
             coin: d.coin,

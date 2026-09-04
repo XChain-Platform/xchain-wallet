@@ -358,9 +358,13 @@ export function AddressList({
                 // `descriptor.defaultAddressType`, which is the chain
                 // default and not this wallet's.
                 addressType: effectiveWifAddressType || undefined,
+                // Withheld while the session signer can supply the master key:
+                // the host reaches for the pooled key only when `!req.password`
+                // (createBackgroundHost, wallet.importWif). A second literal
+                // `password` key below this line would override the spread
+                // and send the credential regardless.
                 ...(signerReady ? {} : { password: wifPassword }),
                 walletId,
-                password: wifPassword,
                 chainId: wifChainId,
                 wif: wifInput.trim(),
                 label: wifLabel.trim() || undefined,
@@ -894,15 +898,19 @@ export function AddressList({
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
                         <span>Use</span>
                     </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={() => onShowPrivateKey?.(selected.record)}
-                        disabled={!canSecret}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                        <span>Secret</span>
-                    </button>
+                    {/* Absent when the shell wired no handler, greyed only for
+                        rows that cannot reveal (same rule as onReceive below). */}
+                    {onShowPrivateKey ? (
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => onShowPrivateKey?.(selected.record)}
+                            disabled={!canSecret}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
+                            <span>Secret</span>
+                        </button>
+                    ) : null}
                     <button
                         type="button"
                         className={local.quickAction}

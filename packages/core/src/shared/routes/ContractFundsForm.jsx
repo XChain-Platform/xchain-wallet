@@ -17,6 +17,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -224,7 +225,9 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || (verb + ' failed.'));
+            setFormError(submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
+            }));
         }
     }
 
@@ -344,7 +347,9 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || (verb + ' failed.'),
+                    : submitFailureMessage(err, {
+                        chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {

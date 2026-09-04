@@ -29,6 +29,12 @@ export {
 export { ApprovalBroker } from './approvalBroker.js';
 export { resolveSdkFactory, createDevMockSdk } from './sdkFactory.js';
 export { attachSignerBridgeListener } from './signerBridgeListener.js';
+export {
+    WIPE_STORAGE_MESSAGE_TYPE,
+    WALLET_LOCAL_KEYS,
+    wipeExtensionStorage,
+    attachWipeStorageListener,
+} from './wipeExtensionStorage.js';
 export * as signerBridge from './signerBridge.js';
 export {
     LAYOUT_MODES,

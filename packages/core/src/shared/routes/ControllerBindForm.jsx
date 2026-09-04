@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -274,7 +275,9 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`);
+            setFormError(submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`,
+            }));
         }
     }
 
@@ -374,7 +377,11 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             setSubmitError(
                 isBadPassword
                     ? 'Incorrect password.'
-                    : err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`,
+                    : submitFailureMessage(err, {
+                        chainId,
+                        coinTicker,
+                        fallback: err?.message || `${unbind ? 'Unbind' : 'Bind'} failed.`,
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {

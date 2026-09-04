@@ -96,6 +96,23 @@ describe('publicSurface helpers', () => {
         expect(isTrustedExtensionSender(EXT_SENDER, undefined)).toBe(false);
     });
 
+    // A tripwire, not a contract we want forever. The predicate compares
+    // against `chrome-extension://<runtime.id>`, so on Gecko (where pages
+    // are `moz-extension://<uuid>` and runtime.id is the gecko id from
+    // manifest.json browser_specific_settings) it refuses the wallet's OWN
+    // popup. That is fail-closed and costs nothing while Chromium is the
+    // only target; enabling a Gecko build has to change the predicate AND
+    // this case together, rather than discovering it as a dead popup.
+    it('refuses a moz-extension sender: Chromium-only, by construction', () => {
+        const GECKO_UUID = '0f3d2ff4-1cbb-4e17-9c9e-2f0b0f4e51aa';
+        expect(isTrustedExtensionSender(
+            { origin: `moz-extension://${GECKO_UUID}` }, EXT_ID,
+        )).toBe(false);
+        expect(isTrustedExtensionSender(
+            { url: `moz-extension://${GECKO_UUID}/popup.html` }, EXT_ID,
+        )).toBe(false);
+    });
+
     it('gate: web senders confined to bridge.*, ext UI unrestricted', () => {
         expect(isMessageAllowedFromSender('action.send', WEB_SENDER, EXT_ID)).toBe(false);
         expect(isMessageAllowedFromSender('bridge.connect', WEB_SENDER, EXT_ID)).toBe(true);

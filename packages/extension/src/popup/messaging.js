@@ -455,15 +455,21 @@ export function requoteNativeFee(opts) {
  * Persist the in-flight confirm so a popup CLOSE (which MV3 does
  * on every focus loss, including the one a hardware prompt causes) costs a tap
  * instead of re-entering the whole form. Stored in `chrome.storage.session`,
- * so it dies with the browser session; a no-op on shells without one.
+ * so it dies with the browser session. This is the only shell that HAS that
+ * store, which is what `supported` in the answer reports.
  *
  * @param {{ id: string, request: object, composed: object, report: object|null, dispatch: object|null, createdAt: number }} opts
+ * @returns {Promise<{ supported: boolean, stored: boolean }>}
  */
 export function putConfirmSession(opts) {
     return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
 }
 
-/** The stored confirms, for the Home resume card. */
+/**
+ * The stored confirms, for the Home resume card.
+ *
+ * @returns {Promise<{ supported: boolean, sessions: Array<object> }>}
+ */
 export function listConfirmSessions() {
     return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
 }

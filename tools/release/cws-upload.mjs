@@ -316,9 +316,13 @@ export async function expectedSigner(readFileImpl = readFile, env = process.env)
  * release manifest describes, the manifest must carry a signature the release
  * key actually made, and the manifest must be THIS release's.
  *
+ * Returns the very buffer it hashed as `bytes`, so the shipment can be the
+ * checked artifact rather than a second read of the same filename.
+ *
  * @param {object} opts
- * @returns {Promise<{ sha256: string, manifestPath: string, signed: boolean,
- *                     signature: string, release: string, lanes: string }>}
+ * @returns {Promise<{ sha256: string, bytes: Buffer, manifestPath: string,
+ *                     signed: boolean, signature: string, release: string,
+ *                     lanes: string }>}
  */
 export async function checkProvenance({
     zipPath, manifestPath, tag = '', allowUnsigned,
@@ -469,7 +473,10 @@ export async function checkProvenance({
         );
     }
 
-    const actual = createHash('sha256').update(await readFileImpl(zipPath)).digest('hex');
+    // Keep the bytes we hashed, because the caller uploads THESE and never
+    // re-reads the path (a second read is a second artifact).
+    const bytes = await readFileImpl(zipPath);
+    const actual = createHash('sha256').update(bytes).digest('hex');
     if (actual !== expected) {
         throw new Refusal(
             `${basename(zipPath)} does not match the hash the release manifest records.\n`
@@ -480,7 +487,7 @@ export async function checkProvenance({
         );
     }
 
-    return { sha256: actual, manifestPath: manifest, signed, signature, release, lanes };
+    return { sha256: actual, bytes, manifestPath: manifest, signed, signature, release, lanes };
 }
 
 /**
@@ -593,8 +600,10 @@ async function main(argv, env, log = console.log) {
     }
 
     const token = await accessToken(env);
-    const zipBytes = await readFile(args.zip);
-    await uploadPackage({ itemId: args.itemId, zipBytes, token });
+    // Upload the buffer the gate hashed, never a fresh read of args.zip: the
+    // OAuth round trip above is a window a writer on the shared release
+    // worktree could use to swap the file under a passed check.
+    await uploadPackage({ itemId: args.itemId, zipBytes: prov.bytes, token });
     log(`uploaded to item ${args.itemId} as a DRAFT. Nothing is visible to users yet.`);
 
     if (args.publish) {

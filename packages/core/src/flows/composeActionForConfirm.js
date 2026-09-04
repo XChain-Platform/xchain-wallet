@@ -296,6 +296,11 @@ export async function composeActionForConfirm({
         // dispenser's oracle usage fee, an ADS donation, a native payment output).
         // Left out of the envelope they were burned as miner fee on the reveal.
         deferredOutputs: composed.deferredOutputs || [],
+        // The change (and rawData) the phase-2 reveal has to be built with to
+        // agree with this commit. The full `encoderOpts` is still dropped below;
+        // this is the one slice the submit path cannot re-derive, because it
+        // builds the reveal fresh from opts that never saw the rotated change.
+        revealOpts: composed.revealOpts || null,
         adsPlan: composed.adsPlan,
         expectedOutputs: composed.expectedOutputs,
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT

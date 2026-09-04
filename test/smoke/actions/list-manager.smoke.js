@@ -172,10 +172,15 @@ const commandRegistry = readFileSync(join(core, 'src', 'shared', 'commandPalette
 assert.ok(/nav-lists/.test(commandRegistry), 'Command palette has a nav-lists command');
 assert.ok(/create-list/.test(commandRegistry), 'Command palette has a create-list command');
 
-// --- App.jsx wiring (web + desktop; extension popup UI wiring is a follow-up) ---
+// --- App.jsx wiring (all three shells) ---
+//
+// The popup joined the loop when its list routes landed: it mounts the same
+// palette catalogue, so nav-lists and create-list dead-ended on Home while
+// this loop covered only web and desktop.
 
 for (const [shell, appPath] of [
     ['web', join(web, 'src', 'App.jsx')],
+    ['extension popup', join(ext, 'src', 'popup', 'App.jsx')],
     ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');

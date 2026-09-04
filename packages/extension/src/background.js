@@ -41,6 +41,7 @@ import {
     attachChromeRuntime,
     attachSessionMetaListener,
     attachSignerBridgeListener,
+    attachWipeStorageListener,
     createBackgroundHost,
     createConnectedTabRegistry,
     createDevMockSdk as createDevMockSdkImpl,
@@ -232,7 +233,20 @@ async function ensureHost() {
         backend: new ChromeStorageBackend(),
         masterKey,
     });
-    await vault.open();
+    // Guard vault.open() only: a later failure (a watcher, the panic-mode load)
+    // leaves the key valid, so force-locking there would cost a usable session.
+    try {
+        await vault.open();
+    } catch (err) {
+        // Lock rather than leave a half-rehydrated session: a key that cannot open
+        // the vault proves nothing and sits beside the signing-capable password.
+        try {
+            await lockWalletNow();
+        } catch (rollbackErr) {
+            console.error('[xchain] ensureHost rollback after vault.open failed:', rollbackErr);
+        }
+        throw err;
+    }
 
     // Re-populate the SignerPool after a service-worker restart. On the
     // normal unlock path the pre-host handler already filled the pool while
@@ -588,6 +602,14 @@ attachSessionMetaListener({
 // `signerBridge` so `action.send.hw` / `signer.status` handlers can
 // route sign requests to the renderer-hosted signer.
 attachSignerBridgeListener();
+
+// "Wipe wallet data": always on, and pre-host on purpose. The escapes that
+// reach it (Locked "Forgot password", the corrupt-vault WIPE, demo exit)
+// all run with the vault CLOSED, so it cannot live behind ensureHost. The
+// teardown is the second half of the wipe: clearing chrome.storage while
+// the worker still holds an open vault and a warm signer pool leaves the
+// wiped wallet serving.
+attachWipeStorageListener({ onWiped: () => tearDownHost() });
 
 // §46: MV3 keepalive. Chrome evicts an idle service worker after ~30s, which
 // would silently tear down the notification WebSocket. A periodic alarm wakes

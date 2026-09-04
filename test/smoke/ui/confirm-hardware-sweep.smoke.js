@@ -105,9 +105,14 @@ assert.equal(
     `these forms still send hardware down the legacy rebuild-on-Approve path:\n  ${offenders.join('\n  ')}`,
 );
 // A floor, so the sweep cannot pass by accident if the gate regex stops
-// matching anything at all.
-assert.ok(covered.length >= 20,
-    `expected the sweep to cover 20+ migrated forms, saw ${covered.length}`);
+// matching anything at all - and a ratchet, so a value-moving form cannot
+// leave the lane again. It sat at 20 while 22 forms were on the lane, which
+// is why the §5.6 tail (ORDER/DISPENSER ownership sales, cross-chain SWAP,
+// BATCH, LINK, FILE, the fork legs, the attach-content legs) could stay off
+// it without this sweep noticing. Raise it when forms join; a DROP is the
+// regression it exists to catch.
+assert.ok(covered.length >= 29,
+    `expected the sweep to cover 29+ migrated forms, saw ${covered.length}`);
 
 // --- 4. every swept form hands the confirm screen its device block ---
 //

@@ -54,11 +54,16 @@ const ALLOWED_VENDOR_IDS = new Set(Object.values(HID_VENDOR_ALLOWLIST));
  * Wire WebHID permission handlers onto an Electron session. Typical
  * caller is `packages/desktop/main/index.js`:
  *
- *     attachHidPermissions(session.defaultSession);
+ *     attachHidPermissions(session.defaultSession, { appRoot: APP_ROOT });
+ *
+ * `appRoot` is the packaged renderer directory and is validated here, at
+ * wiring time, so a caller that forgot it fails at boot rather than
+ * silently widening the HID grant to every local file.
  *
  * @param {import('electron').Session} session
+ * @param {{ appRoot: string }} opts
  */
-export function attachHidPermissions(session) {
+export function attachHidPermissions(session, opts) {
     if (!session) throw new Error('attachHidPermissions: session is required');
     if (typeof session.setPermissionRequestHandler !== 'function') {
         throw new Error('attachHidPermissions: session.setPermissionRequestHandler is missing');
@@ -66,17 +71,21 @@ export function attachHidPermissions(session) {
     if (typeof session.setDevicePermissionHandler !== 'function') {
         throw new Error('attachHidPermissions: session.setDevicePermissionHandler is missing');
     }
+    const appRoot = opts?.appRoot;
+    if (typeof appRoot !== 'string' || appRoot.length === 0) {
+        throw new Error('attachHidPermissions: opts.appRoot (packaged renderer dir) is required');
+    }
 
     session.setPermissionRequestHandler((webContents, permission, callback) => {
         // `hid` covers navigator.hid.*; grant it only to the app's own
-        // local renderer, and do the fine-grained vendor allowlist in the
-        // device permission handler below. A frame identified as a remote
-        // origin (which, behind the window navigation lockdown, should
-        // never hold the preload) is denied so it can never reach a paired
-        // Ledger/Trezor. Everything else stays default-deny.
+        // renderer directory, and do the fine-grained vendor allowlist in
+        // the device permission handler below. A frame identified as
+        // remote (any other origin, or a local file outside the app) is
+        // denied so it can never reach a paired Ledger/Trezor. Everything
+        // else stays default-deny.
         if (permission === 'hid') {
             const url = webContents?.getURL?.();
-            callback(!isRemoteFrameUrl(url));
+            callback(!isRemoteFrameUrl(url, appRoot));
             return;
         }
         callback(false);

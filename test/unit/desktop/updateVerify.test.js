@@ -49,6 +49,8 @@ import {
     fetchReleaseManifest,
     parseChannelPointer,
     parseManifest,
+    platformLaneName,
+    releaseTagOf,
     sha256File,
     sha512File,
     verifyChannelPointer,
@@ -163,6 +165,10 @@ async function good(overrides = {}) {
         artifactSha256: ARTIFACT_SHA,
         artifactSha512: ARTIFACT_SHA512,
         pointerText: pointerFor(),
+        // ARTIFACT is an AppImage, so the install running this gate is a
+        // linux one. Named rather than defaulted: the lane decides which
+        // partial manifests may install here.
+        lane: 'linux',
         pinned: PINNED,
         ...overrides,
     };
@@ -273,6 +279,37 @@ describe('manifest signature', () => {
     });
 });
 
+// --- lane and release-tag vocabulary ------------------------------------
+
+describe('platformLaneName', () => {
+    it('names the lane each desktop platform ships in', () => {
+        // The names are shipped-lanes.txt's, and a rename there without a
+        // rename here would silently refuse every partial release.
+        expect(platformLaneName({ platform: 'darwin' })).toBe('mac');
+        expect(platformLaneName({ platform: 'linux' })).toBe('linux');
+        expect(platformLaneName({ platform: 'win32' })).toBe('windows');
+    });
+
+    it('answers null for a platform that names no lane', () => {
+        for (const platform of ['aix', 'freebsd', '', null, undefined]) {
+            expect(platformLaneName({ platform })).toBeNull();
+        }
+    });
+});
+
+describe('releaseTagOf', () => {
+    it('strips a re-sign suffix and nothing else', () => {
+        // Same table the bash and feed-sweep spellings are driven over
+        // (test/smoke/audits/release-resign-tag.smoke.js).
+        expect(releaseTagOf('v0.336.0-resign1')).toBe('v0.336.0');
+        expect(releaseTagOf('v0.336.0-resign12')).toBe('v0.336.0');
+        expect(releaseTagOf('v0.336.0')).toBe('v0.336.0');
+        expect(releaseTagOf('v0.336.0-rc1')).toBe('v0.336.0-rc1');
+        expect(releaseTagOf('v0.336.0-resign')).toBe('v0.336.0-resign');
+        expect(releaseTagOf('v0.336.0-resign1-resign2')).toBe('v0.336.0-resign1');
+    });
+});
+
 // --- manifest parsing ---------------------------------------------------
 
 describe('manifest parsing', () => {
@@ -363,7 +400,7 @@ describe('verifyDownloadedUpdate', () => {
         expect(result.reason).toMatch(/dev-mock gate SKIPPED/);
     });
 
-    it('refuses a PARTIAL manifest, which never covered the desktop lane', async () => {
+    it('refuses a PARTIAL manifest that does not cover this install\'s lane', async () => {
         // sign.sh --lane signs one lane's artifacts on their own,
         // so an Android manifest can be perfectly signed, name the right
         // tag, and have been gated against the Android pair alone. It is
@@ -380,7 +417,83 @@ describe('verifyDownloadedUpdate', () => {
             armoredSignature: await signWith(partial),
         }));
         expect(result.ok).toBe(false);
-        expect(result.reason).toMatch(/covers only the android lane, not a full release/);
+        expect(result.reason).toMatch(/covers the android lane\(s\), not linux/);
+    });
+
+    it('accepts a PARTIAL manifest that names this install\'s lane', async () => {
+        // The shape every desktop release now has: windows is NOT-SHIPPED
+        // in shipped-lanes.txt, so a cut covering mac and linux is signed
+        // `--lane mac,linux` and carries `# lanes: mac linux`. Refusing it
+        // for being partial refused every update these installs can be
+        // offered.
+        const partial = manifestFor({ lanes: 'mac linux' });
+        const result = await verifyDownloadedUpdate(await good({
+            manifestBytes: partial,
+            armoredSignature: await signWith(partial),
+        }));
+        expect(result).toEqual({ ok: true });
+    });
+
+    it('refuses a PARTIAL manifest when the caller cannot name its lane', async () => {
+        // Fails SHUT rather than falling through to the full-release
+        // path: a build that cannot say which lane it is has no business
+        // deciding that a partial manifest covers it.
+        const partial = manifestFor({ lanes: 'mac linux' });
+        const result = await verifyDownloadedUpdate(await good({
+            manifestBytes: partial,
+            armoredSignature: await signWith(partial),
+            lane: null,
+        }));
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/cannot name its own/);
+    });
+
+    it('still accepts a FULL manifest whatever lane the caller names', async () => {
+        // A manifest with no `# lanes:` header covers everything, so the
+        // lane must not become a second thing that can refuse one.
+        expect(await verifyDownloadedUpdate(await good({ lane: null })))
+            .toEqual({ ok: true });
+    });
+
+    it('accepts a re-signed release manifest, and only in that direction', async () => {
+        // A re-sign corrects a release's signature record under the
+        // release's own filename, so the header says v9.9.9-resign1 while
+        // electron-updater still reports 9.9.9. Comparing verbatim
+        // refused every install of a release that had been repaired.
+        const resigned = manifestFor({ tag: 'v9.9.9-resign1' });
+        expect(await verifyDownloadedUpdate(await good({
+            manifestBytes: resigned,
+            armoredSignature: await signWith(resigned),
+            expectedTag: 'v9.9.9',
+        }))).toEqual({ ok: true });
+
+        // ONE-WAY. The superseded original must not answer a request for
+        // its own re-signature, or repairing a record would be undoable
+        // by serving the record that was repaired.
+        const original = manifestFor({ tag: 'v9.9.9' });
+        const back = await verifyDownloadedUpdate(await good({
+            manifestBytes: original,
+            armoredSignature: await signWith(original),
+            expectedTag: 'v9.9.9-resign1',
+        }));
+        expect(back.ok).toBe(false);
+        expect(back.reason).toMatch(/describes v9\.9\.9, not v9\.9\.9-resign1/);
+
+        // And it is a re-sign rule, not a suffix rule: another release's
+        // re-signature, and any other suffix, are still refused.
+        const other = manifestFor({ tag: 'v9.9.8-resign1' });
+        expect((await verifyDownloadedUpdate(await good({
+            manifestBytes: other,
+            armoredSignature: await signWith(other),
+            expectedTag: 'v9.9.9',
+        }))).ok).toBe(false);
+
+        const rc = manifestFor({ tag: 'v9.9.9-rc1' });
+        expect((await verifyDownloadedUpdate(await good({
+            manifestBytes: rc,
+            armoredSignature: await signWith(rc),
+            expectedTag: 'v9.9.9',
+        }))).ok).toBe(false);
     });
 
     it('refuses when there is no version to check against', async () => {
