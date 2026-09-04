@@ -291,6 +291,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Sleep (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'sleep').message,
@@ -337,6 +338,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Sleep failed.',
             }));
             setStage('review');

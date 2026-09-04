@@ -207,7 +207,7 @@ export function synthesizeMinimalPrevTx(vout, value, scriptPubKeyHex) {
  * back to a synthesized minimal tx when the PSBT only carries a
  * witnessUtxo (segwit lane).
  *
- * @param {import('./types.js').DecomposedPsbtInput} inp
+ * @param {import('../../core/src/signers/types.js').DecomposedPsbtInput} inp
  * @returns {string}
  */
 function prevTxHexForInput(inp) {
@@ -242,15 +242,29 @@ function prevTxHexForInput(inp) {
     );
 }
 
+// The input script types `createPaymentTransaction` can actually sign. The
+// API signs SINGLE-KEY inputs only; a multisig input needs the wallet-policy
+// registerWallet flow that LedgerSigner.signMultisigPsbt refuses outright, and
+// taproot is not expressible in this API at all. The sibling seam has always
+// declared this (trezorFormat.js INPUT_SCRIPT_TYPE); this one inferred it, so
+// a p2wsh / p2sh-p2wsh / p2sh / p2tr / unknown input was handed over as if it
+// were a single-key spend, with only the BIP44 purpose in `associatedKeysets`
+// telling the device otherwise. The witnessUtxo-only case happened to die in
+// prevTxHexForInput, but that is prev-tx availability, not a type check: a PSBT
+// carrying nonWitnessUtxo for such an input passed straight through.
+const SIGNABLE_INPUT_SCRIPT_TYPES = new Set(['p2pkh', 'p2wpkh', 'p2sh-p2wpkh']);
+
 /**
  * @param {string} scriptType
  * @returns {boolean}  whether the whole tx should sign as segwit for Ledger
+ *
+ * Only the signable types are answered: anything else is refused by
+ * SIGNABLE_INPUT_SCRIPT_TYPES before this is reached, and claiming a
+ * p2wsh / p2sh-p2wsh answer advertises a capability this seam lacks.
  */
 function isSegwitScriptType(scriptType) {
     return scriptType === 'p2wpkh'
-        || scriptType === 'p2sh-p2wpkh'
-        || scriptType === 'p2wsh'
-        || scriptType === 'p2sh-p2wsh';
+        || scriptType === 'p2sh-p2wpkh';
 }
 
 /**
@@ -259,7 +273,7 @@ function isSegwitScriptType(scriptType) {
  * `app.splitTransaction(...)` at call time.
  *
  * @param {Object} opts
- * @param {import('./types.js').DecomposedPsbt} opts.decomposed
+ * @param {import('../../core/src/signers/types.js').DecomposedPsbt} opts.decomposed
  * @param {string} opts.chainId
  * @param {Array<{inputIndex: number, path: string, sighashType?: number}>} opts.signingPaths
  * @param {number} [opts.lockTime]
@@ -308,7 +322,9 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
         // flag would be new device behaviour no wallet flow exercises. Every
         // signingPaths builder that reaches Ledger today (the auth.signPsbt.hw
         // handler and the core flows) sets only inputIndex and path, so this
-        // refuses nothing that is being asked for today.
+        // side refuses nothing that is being asked for today - which is also
+        // why it is only half the contract: the flag a PASTED PSBT declares
+        // per input is refused in the decomposed-input pass below.
         if (sp.sighashType !== undefined && sp.sighashType !== null
             && sp.sighashType !== SIGHASH_ALL) {
             throw new Error(
@@ -320,8 +336,34 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
         pathByIndex.set(sp.inputIndex, sp);
     }
 
+    // Validate every input BEFORE anything is derived from it. Both guards
+    // below key off the decomposed PSBT rather than the signingPaths entry,
+    // which is what the guard in the loop above could not see.
+    decomposed.inputs.forEach((inp, idx) => {
+        if (!SIGNABLE_INPUT_SCRIPT_TYPES.has(inp.scriptType)) {
+            throw new Error(
+                `toLedgerCreatePayment: unsupported input scriptType "${inp.scriptType}" at index ${idx}`,
+            );
+        }
+        // The PSBT carries its OWN per-input sighash (sdk.wallet.decomposePsbt
+        // emits it; types.js DecomposedPsbtInput.sighashType). The signingPaths
+        // refusal above never reads it, so a pasted PSBT asking for
+        // SIGHASH_SINGLE / ANYONECANPAY was signed under the device default and
+        // reported as success: exactly the silent wrong-sighash outcome that
+        // guard exists to prevent. auth.signPsbt.hw builds signingPaths as
+        // { inputIndex, path } only, so this is the only side that can fire there.
+        if (inp.sighashType !== undefined && inp.sighashType !== null
+            && inp.sighashType !== SIGHASH_ALL) {
+            throw new Error(
+                `toLedgerCreatePayment: PSBT input ${idx} requests sighashType ${inp.sighashType}; `
+                + `this signer supports only the default SIGHASH_ALL (${SIGHASH_ALL}). `
+                + 'Re-request the signature without a sighash override.',
+            );
+        }
+    });
+
     const segwit = decomposed.inputs.every((i) => isSegwitScriptType(i.scriptType));
-    const anyNative = decomposed.inputs.some((i) => i.scriptType === 'p2wpkh' || i.scriptType === 'p2wsh');
+    const anyNative = decomposed.inputs.some((i) => i.scriptType === 'p2wpkh');
     const additionals = anyNative ? ['bech32'] : [];
 
     const inputs = decomposed.inputs.map((inp, idx) => {

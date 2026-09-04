@@ -41,9 +41,17 @@
 /** Plugin name registered by XChainLinksPlugin.java. */
 export const LINKS_PLUGIN = 'XChainLinks';
 
-/** The link shapes this app claims in its manifest, and nothing else. */
+// The link shapes this app claims in its manifest, and nothing else.
+//
+// The prefix is `/wallet/link/`, NOT `/wallet`. The wider form claimed every
+// page under /wallet, including the `/wallet/privacy/` and `/wallet/support/`
+// URLs both store listings publish, and the narrowing was made in
+// AndroidManifest.xml and the association file (`/wallet/link/*`) while this
+// copy was left behind. Keep the three in step: the drift audit
+// (test/smoke/audits/universal-link-claim-drift.smoke.js) now asserts this
+// constant EQUALS the parser's WEB_LINK_PREFIX.
 const ALLOWED_HTTPS_ORIGIN = 'https://xchain.io';
-const ALLOWED_HTTPS_PREFIX = '/wallet';
+const ALLOWED_HTTPS_PREFIX = '/wallet/link/';
 const APP_SCHEME = 'xchain:';
 
 /**

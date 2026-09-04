@@ -206,6 +206,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: humanizeError(err, 'address preferences').message,

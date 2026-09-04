@@ -315,6 +315,12 @@ function makeMockSdkRegistry({ decomposed }) {
     };
 }
 
+// The transaction a Trezor returns for decomposedFixture: the same input
+// (aa…aa:1, sequence fdffffff) paying the same 90,000 sats to 0014cc…cc.
+// signPsbt compares the reply back to the approved PSBT before returning a
+// txid, so a placeholder would exercise the refusal path instead of this one.
+const DEVICE_TX = '0200000001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0100000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc00000000';
+
 const decomposedFixture = {
     txVersion: 2,
     locktime: 0,
@@ -352,7 +358,7 @@ const signConnect = makeMockConnect({
         capturedSignTxArgs = args;
         return {
             success: true,
-            payload: { serializedTx: '0200000001deadbeef', signatures: ['3045sig'] },
+            payload: { serializedTx: DEVICE_TX, signatures: ['3045sig'] },
         };
     },
 });
@@ -371,8 +377,8 @@ const signResult = await wiredSigner.signPsbt({
     signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/5" }],
 });
 
-assert.equal(signResult.txHex, '0200000001deadbeef', 'passes serializedTx through as txHex');
-assert.equal(signResult.txid, 'txid-of-0200000001deadbeef', 'routes through sdk.wallet.txidOf');
+assert.equal(signResult.txHex, DEVICE_TX, 'passes serializedTx through as txHex');
+assert.equal(signResult.txid, `txid-of-${DEVICE_TX}`, 'routes through sdk.wallet.txidOf');
 assert.equal(signResult.signedPsbtHex, '', 'Trezor does not return a signed PSBT');
 
 assert.ok(capturedSignTxArgs, 'signTransaction was called');
@@ -426,7 +432,7 @@ const legacySigner = new TrezorSigner({
     connect: makeMockConnect({
         async signTransaction(args) {
             legacyCaptured = args;
-            return { success: true, payload: { serializedTx: '01deadbeef', signatures: [] } };
+            return { success: true, payload: { serializedTx: DEVICE_TX, signatures: [] } };
         },
     }),
     sdkRegistry: makeMockSdkRegistry({ decomposed: legacyFixture }),

@@ -332,6 +332,7 @@ export function LinkForm({ walletId, onBack }) {
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId: submitChainId,
                 coinTicker: feeCoinTicker || '',
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Sign failed.',

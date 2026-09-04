@@ -56,3 +56,33 @@ export async function markPendingTxIndexed(vault, txid, opts = {}) {
     }
     return changed;
 }
+
+/**
+ * Stamp `mempoolSeenAt` on every PendingTx with this txid: the network has
+ * reported holding it (§4 M2.2). FIRST sighting wins, so a record that is
+ * already stamped is left alone. That idempotence is load-bearing rather than
+ * defensive: one transaction that pays two of our own addresses arrives once
+ * per address channel, and a re-stamped record would keep resetting the clock
+ * the "dropped or replaced?" reading is measured against.
+ *
+ * A record the indexer has already confirmed is skipped: a mempool sighting is
+ * pre-validation and cannot add anything to a transaction that is in a block.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} txid
+ * @param {{ now?: () => string }} [opts]  injectable ISO-timestamp source (tests)
+ * @returns {Promise<boolean>}  true if a record changed
+ */
+export async function markPendingTxMempoolSeen(vault, txid, opts = {}) {
+    if (!vault || !txid) return false;
+    const stamp = typeof opts.now === 'function' ? opts.now : () => new Date().toISOString();
+    const matches = await vault.pendingTxs.findBy('txid', txid);
+    let changed = false;
+    for (const rec of matches) {
+        if (rec.status === 'indexed') continue;
+        if (rec.mempoolSeenAt) continue;
+        await vault.pendingTxs.put({ ...rec, mempoolSeenAt: stamp() });
+        changed = true;
+    }
+    return changed;
+}

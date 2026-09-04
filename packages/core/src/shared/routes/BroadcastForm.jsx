@@ -374,6 +374,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         } catch (err) {
             if (isUserRejection(err)) return;
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Broadcast failed.',
             }));
         }
@@ -427,6 +428,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker: coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Broadcast failed.',

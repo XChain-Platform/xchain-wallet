@@ -136,7 +136,40 @@ describe('walletMigrations: v1 to v2', () => {
     });
 });
 
+describe('walletMigrations: v2 to v3', () => {
+    it('seeds encryptedPassphrase null and touches nothing else', () => {
+        const v2 = { schemaVersion: 2, id: 'w1', passphraseEnabled: true, multisigs: [], name: 'W' };
+        const r = walletMigrations[2](v2);
+        expect(r.schemaVersion).toBe(3);
+        expect(r.encryptedPassphrase).toBeNull();
+        expect(r.passphraseEnabled).toBe(true);
+        expect(r.id).toBe('w1');
+        expect(r.name).toBe('W');
+    });
+
+    it('distinguishes a migrated record from an unmigrated one (the point of the bump)', () => {
+        const v2 = { schemaVersion: 2, id: 'w1', passphraseEnabled: true, multisigs: [] };
+        expect('encryptedPassphrase' in v2).toBe(false);
+        expect('encryptedPassphrase' in walletMigrations[2](v2)).toBe(true);
+    });
+
+    it('returns a new object rather than mutating its input', () => {
+        const v2 = { schemaVersion: 2, id: 'w1', passphraseEnabled: false, multisigs: [] };
+        const r = walletMigrations[2](v2);
+        expect(r).not.toBe(v2);
+        expect(v2.schemaVersion).toBe(2);
+        expect(v2.encryptedPassphrase).toBeUndefined();
+    });
+});
+
 describe('migrateWallet', () => {
+    it('walks a v1 wallet all the way to v3 with encryptedPassphrase seeded', () => {
+        const migrated = migrateWallet(makeV1Wallet());
+        expect(migrated.schemaVersion).toBe(3);
+        expect(migrated.encryptedPassphrase).toBeNull();
+        expect(migrated.multisigs).toEqual([]);
+    });
+
     it('migrates a v1 wallet to current version', () => {
         const w = makeV1Wallet();
         const migrated = migrateWallet(w);
@@ -335,8 +368,8 @@ describe('empty migration maps (contact, connectedSite, pendingTx, etc.)', () =>
         expect(Object.keys(connectedSiteMigrations)).toHaveLength(0);
     });
 
-    it('pendingTxMigrations registers the v1 → v2 step', () => {
-        expect(Object.keys(pendingTxMigrations)).toEqual(['1']);
+    it('pendingTxMigrations registers the v1 → v2 and v2 → v3 steps', () => {
+        expect(Object.keys(pendingTxMigrations)).toEqual(['1', '2']);
     });
 
     it('multisigSigningSessionMigrations has no registered steps', () => {
@@ -385,21 +418,25 @@ describe('migrateConnectedSite (no-op)', () => {
     });
 });
 
-describe('migratePendingTx v1 → v2 (additive amount fields)', () => {
-    it('upgrades a v1 record to v2, seeding null amount fields', () => {
+// v1 → v2 seeded the structured amount fields; v3 (§4 M2.2) added
+// `mempoolSeenAt`. `migratePendingTx` always walks to the CURRENT version, so
+// a v1 record now arrives with both sets of fields seeded.
+describe('migratePendingTx (additive fields)', () => {
+    it('upgrades a v1 record to v3, seeding null amount fields', () => {
         const r = migratePendingTx({ schemaVersion: 1, action: 'SEND', txid: 'abc' });
-        expect(r.schemaVersion).toBe(2);
+        expect(r.schemaVersion).toBe(3);
         expect(r.tick).toBe(null);
         expect(r.amount).toBe(null);
         expect(r.params).toBe(null);
+        expect(r.mempoolSeenAt).toBe(null);
         // additive: existing fields survive untouched
         expect(r.action).toBe('SEND');
         expect(r.txid).toBe('abc');
     });
 
     it('passes through at current version', () => {
-        const r = migratePendingTx({ schemaVersion: 2, tick: 'JDOG', amount: '5' });
-        expect(r.schemaVersion).toBe(2);
+        const r = migratePendingTx({ schemaVersion: 3, tick: 'JDOG', amount: '5' });
+        expect(r.schemaVersion).toBe(3);
         expect(r.tick).toBe('JDOG');
     });
 });

@@ -64,7 +64,9 @@ import { createWallet, expect, gotoSection, test, unlockedShell } from '../../fi
 import {
     EXPLORER_URL,
     REGTEST_COIN,
+    explorerJson,
     fundAddress,
+    priceFamilyRefusal,
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
@@ -125,10 +127,13 @@ async function chainConfirmed(coin, address) {
  */
 async function venueCoinUsdPrice() {
     const pair = VENUE_PRICE[REGTEST_COIN].coinPair;
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/price_snapshots/FINALIZED/status?limit=25`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    const body = await res.json();
+    // Through the fixture reader, which THROWS on a refusal. The line under it
+    // read `Array.isArray(body?.data) ? body.data : []`, so this endpoint
+    // answering HTTP 500 in one millisecond produced "the venue publishes no
+    // finalized round" and sent two runs to look at seeding. On RLTC it is
+    // still 500ing: `No co-located hub DB configured for coin RLTC`, which is a
+    // venue configuration gap and answers fine on RDOGE.
+    const body = await explorerJson('price_snapshots/FINALIZED/status?limit=25');
     const rows = Array.isArray(body?.data) ? body.data : [];
     const row = rows.find((r) => r && r.coin_pair === pair);
     expect(row, `the venue publishes no finalized ${pair} round; global setup seeds one, so this is venue state`)
@@ -222,10 +227,36 @@ async function receiveAddressFor(page, chain) {
 }
 
 test.describe('Home balances against the chain', () => {
+    // The config's 420s default is not enough for what the hook below does, and
+    // the failure it produces is the least legible one this suite can produce.
+    // Every test here pays for a full onboarding (Argon2id), a network switch, a
+    // per-chain receive-address walk, a funding that waits on a real block, and a
+    // reload that re-derives the vault - and on a busy shared venue that measured
+    // 7 minutes on 2026-09-02, against a body that then took 22 seconds. Worse,
+    // the fiat test below is `test.fail()`: an assertion failure there is the
+    // expected outcome, but a TIMEOUT is not, so a slow venue turns the pinned
+    // defect into a red with a message about a hook. Sized like the rest of the
+    // chain-bound specs in this suite rather than to a measurement.
+    test.setTimeout(900_000);
+
     /** @type {string} */ let address;
     /** @type {number} */ let coinUsd;
 
     test.beforeEach(async ({ page }) => {
+        // This venue answers its whole oracle-price family with HTTP
+        // 500 (no co-located hub DB configured for this coin), so the finalized
+        // round every test here prices against cannot be read at all. The guard
+        // lives in the HOOK rather than in the bodies because `venueCoinUsdPrice`
+        // is called right below, so a body-level skip never got a turn. A
+        // conditional skip rather than a fixme: it runs itself again the day the
+        // checkpoint DB is configured.
+        //
+        // It takes the `test.fail()` fiat pin below with it, and that is the
+        // honest outcome rather than a loss: an expected-failure that "passes"
+        // because the venue will not serve a price proves nothing about the
+        // Home fiat defect it was written to pin.
+        const priceGap = await priceFamilyRefusal();
+        test.skip(!!priceGap, `the venue refuses the oracle-price family here. ${priceGap}`);
         // Read the venue's price BEFORE any UI work. The fiat test below is
         // pinned `test.fail()`, and an expected-failure absorbs a setup failure
         // silently; doing this here means a venue with no oracle round reds the

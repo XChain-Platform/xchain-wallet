@@ -345,6 +345,160 @@ describe('shared/utils/historyGrouping', () => {
         expect(out[0].kind).toBe('entry');
     });
 
+    it('collapses BATCH + its sub-actions via parent_batch_action_index', () => {
+        // The explorer publishes parent_batch_action_index on every
+        // history row (NULL on the envelope itself). DESC order, so the
+        // BATCH row is oldest and lands at the bottom of the expansion.
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 8, action: 'SEND', blockIndex: 700,
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 7, action: 'ISSUE', blockIndex: 700,
+                raw: { parent_batch_action_index: 5, tick: 'MYTOKEN', source: 'src1' },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 6, action: 'SEND', blockIndex: 700,
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 5, action: 'BATCH', blockIndex: 700,
+                raw: { parent_batch_action_index: null },
+            }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(1);
+        expect(out[0].kind).toBe('group');
+        expect(out[0].subkind).toBe('batch');
+        expect(out[0].leader.actionIndex).toBe('5');
+        expect(out[0].summary).toBe('Batch: 3 actions');
+        expect(out[0].members.map((m) => m.actionIndex)).toEqual(['8', '7', '6', '5']);
+    });
+
+    it('reads the uppercase PARENT_BATCH_ACTION_INDEX key too', () => {
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 7, action: 'SEND',
+                raw: { PARENT_BATCH_ACTION_INDEX: 5 },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 6, action: 'SEND',
+                raw: { PARENT_BATCH_ACTION_INDEX: 5 },
+            }),
+            entry({ chainId: BTC, actionIndex: 5, action: 'BATCH', raw: {} }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(1);
+        expect(out[0].subkind).toBe('batch');
+        expect(out[0].summary).toBe('Batch: 2 actions');
+    });
+
+    it('leaves a sub-action ungrouped when its BATCH parent is not visible', () => {
+        // Same orphan-free contract as the other subkinds: a filter that
+        // hides the envelope must not produce a headless card.
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 7, action: 'SEND',
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 6, action: 'SEND',
+                raw: { parent_batch_action_index: 5 },
+            }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(2);
+        expect(out.every((it) => it.kind === 'entry')).toBe(true);
+    });
+
+    it('does not group a sub-action under a BATCH on a different chain', () => {
+        const entries = [
+            entry({
+                chainId: LTC, actionIndex: 7, action: 'SEND',
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({
+                chainId: LTC, actionIndex: 6, action: 'SEND',
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({ chainId: BTC, actionIndex: 5, action: 'BATCH', raw: {} }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(3);
+        expect(out.every((it) => it.kind === 'entry')).toBe(true);
+    });
+
+    it('keeps a one-sub-action batch flat, like the other leader-plus-children rules', () => {
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 6, action: 'SEND',
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({ chainId: BTC, actionIndex: 5, action: 'BATCH', raw: {} }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(2);
+        expect(out.every((it) => it.kind === 'entry')).toBe(true);
+    });
+
+    it('claims a batched ISSUE for the batch card and never renders it twice', () => {
+        // The ISSUE sits inside the batch; two MINTs of the same tick sit
+        // outside it. Batch containment wins, so the MINTs stay flat
+        // rather than pulling the ISSUE into a second card.
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 30, action: 'MINT', blockIndex: 300,
+                raw: { tick: 'MYTOKEN', source: 'src1', amount: '100' },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 20, action: 'MINT', blockIndex: 200,
+                raw: { tick: 'MYTOKEN', source: 'src1', amount: '50' },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 7, action: 'SEND', blockIndex: 100,
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 6, action: 'ISSUE', blockIndex: 100,
+                source: 'src1',
+                raw: { parent_batch_action_index: 5, tick: 'MYTOKEN', source: 'src1' },
+            }),
+            entry({ chainId: BTC, actionIndex: 5, action: 'BATCH', blockIndex: 100, raw: {} }),
+        ];
+        const out = groupHistoryEntries(entries, 'grouped');
+        expect(out).toHaveLength(3);
+        expect(out[0].kind).toBe('entry');
+        expect(out[0].entry.actionIndex).toBe('30');
+        expect(out[1].kind).toBe('entry');
+        expect(out[1].entry.actionIndex).toBe('20');
+        expect(out[2].kind).toBe('group');
+        expect(out[2].subkind).toBe('batch');
+        expect(out[2].members.map((m) => m.actionIndex)).toEqual(['7', '6', '5']);
+        // Every action index appears exactly once across the render.
+        const rendered = out.flatMap((it) => (
+            it.kind === 'group' ? it.members.map((m) => m.actionIndex) : [it.entry.actionIndex]
+        ));
+        expect(new Set(rendered).size).toBe(rendered.length);
+    });
+
+    it('does not collapse a batch in flat mode', () => {
+        const entries = [
+            entry({
+                chainId: BTC, actionIndex: 7, action: 'SEND',
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({
+                chainId: BTC, actionIndex: 6, action: 'SEND',
+                raw: { parent_batch_action_index: 5 },
+            }),
+            entry({ chainId: BTC, actionIndex: 5, action: 'BATCH', raw: {} }),
+        ];
+        const out = groupHistoryEntries(entries, 'flat');
+        expect(out).toHaveLength(3);
+        expect(out.every((it) => it.kind === 'entry')).toBe(true);
+    });
+
     it('does not collapse link-pair in flat mode', () => {
         const entries = [
             entry({

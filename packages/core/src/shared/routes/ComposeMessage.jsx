@@ -38,14 +38,34 @@ const chainRegistry = registryLib.defaultRegistry();
 // estimate on the review screen.
 const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+/**
+ * The address a message is funded from on its delivery chain. The chain's
+ * active address wins when the wallet holds it (that is where the user keeps
+ * their funds, and where every other action form spends from); otherwise the
+ * first HD or imported-key address, which is what this screen always chose
+ * before the active address was consulted at all.
+ *
+ * @param {any[] | undefined} addrs   the wallet's addresses on the chain
+ * @param {any} [active]              getActiveAddresses()[chainId], if any
+ * @returns {any | null}
+ */
+function pickFundingAddress(addrs, active) {
+    const list = Array.isArray(addrs) ? addrs : [];
+    if (active?.id) {
+        const held = list.find((a) => a.id === active.id);
+        if (held) return held;
+    }
+    return list.find((a) => a.source === 'hd' || a.source === 'imported-wif') || null;
+}
+
 
 /**
  * §41.7.3 Compose encrypted message.
  *
  * Flow:
- *   1. User picks a source (chain + address, defaults to the first
- *      HD address on the first available chain, or pre-selected when
- *      opened from the Inbox / a Contact).
+ *   1. User picks a delivery network; the funding address is the chain's
+ *      active address (else its first HD address), or pre-selected when
+ *      opened from the Inbox / a Contact. See `pickFundingAddress`.
  *   2. Recipient address input. On blur / debounce, the wallet looks
  *      up the recipient's on-chain pubkey via
  *      `messaging.getRecipientPubkey`. Three states:
@@ -95,6 +115,17 @@ export function ComposeMessage({
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId]: the address the user has made the
+    // chain's operating one, which is where every other action form spends
+    // from (useActionForm Block 1b, Send). Loaded WITH the address list and
+    // held null until both settle, so the funding pick below never lands on
+    // the first-listed address and then swaps out under the user once the
+    // active map arrives. Before this the message was always funded from the
+    // first HD address on the chain, and a wallet whose first address was
+    // empty could not send a message at all, with no picker to change it.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
     const [fromAddressId, setFromAddressId] = useState(
@@ -127,6 +158,13 @@ export function ComposeMessage({
     // branch can confirm it without leaving the compose screen.
     const [handshakeBusy, setHandshakeBusy] = useState(false);
     const [handshakeSent, setHandshakeSent] = useState(false);
+    // The key request's OWN error, deliberately not `submitError`. It used to
+    // write into that one, which the form stage renders nowhere (only the
+    // review stage and the hardware branch do), so every failure of this button
+    // was invisible: pressing it did nothing, silently, with no way to learn
+    // why. Its own state also keeps a stale send failure from surfacing in the
+    // handshake box, and vice versa.
+    const [handshakeError, setHandshakeError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
@@ -138,10 +176,19 @@ export function ComposeMessage({
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        // The active map is best-effort: a host without `getActiveAddresses`,
+        // or one whose call fails, still yields a usable form (the pick then
+        // falls back to the first HD address, the pre-fix behaviour).
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 if (!byChain || Object.keys(byChain).length === 0) {
                     setLoadError('No addresses yet. Use Receive to generate one before sending.');
                     return;
@@ -161,10 +208,8 @@ export function ComposeMessage({
                     : (dogeChain || chainKeys[0]);
                 setChainId((cur) => cur || preferredChain);
                 if (!fromAddressId) {
-                    const hdAddr = (byChain[preferredChain] || []).find(
-                        (a) => a.source === 'hd' || a.source === 'imported-wif',
-                    );
-                    if (hdAddr) setFromAddressId(hdAddr.id);
+                    const picked = pickFundingAddress(byChain[preferredChain], active?.[preferredChain]);
+                    if (picked) setFromAddressId(picked.id);
                 }
             })
             .catch((err) => {
@@ -263,15 +308,18 @@ export function ComposeMessage({
         return opts;
     }, [hw]);
 
-    // Auto-pick the funding address (first HD/imported address) on the selected
-    // delivery network, so the form needs no separate "from address" field.
+    // Auto-pick the funding address on the selected delivery network, so the
+    // form needs no separate "from address" field: the chain's ACTIVE address
+    // when it has one, else the first HD/imported address. Waits for the
+    // active map (null until the load settles) for the reason given at its
+    // declaration.
     useEffect(() => {
-        if (!addressesByChain || !chainId) return;
+        if (!addressesByChain || !activeByChain || !chainId) return;
         const addrs = addressesByChain[chainId] || [];
         if (fromAddressId && addrs.some((a) => a.id === fromAddressId)) return;
-        const hd = addrs.find((a) => a.source === 'hd' || a.source === 'imported-wif');
-        setFromAddressId(hd ? hd.id : null);
-    }, [chainId, addressesByChain, fromAddressId]);
+        const picked = pickFundingAddress(addrs, activeByChain[chainId]);
+        setFromAddressId(picked ? picked.id : null);
+    }, [chainId, addressesByChain, activeByChain, fromAddressId]);
 
     // Network-fee tiers for the selected delivery network, plus the live
     // estimate for the current pick (a tier, or the custom rate). Drives the
@@ -503,6 +551,48 @@ export function ComposeMessage({
         }
     }
 
+    // WHY THERE IS NO READY SIGNER, in words the user can act on.
+    //
+    // Two different states reach the `!signerReady` branch below and they need
+    // DIFFERENT sentences, because one of them has a remedy and the other does
+    // not. A pool entry that was merely dropped (a worker restart that could
+    // not rehydrate it) comes back on the next unlock, so "unlock it again" is
+    // true. A 25th-word passphrase wallet that has already stored its
+    // passphrase (`passphraseStored`) unlocks on the password alone, so that
+    // same sentence is still true for it. Only a LEGACY record, one that has
+    // never captured its passphrase yet (`passphraseEnabled` true,
+    // `passphraseStored` false), needs the extra step named: the unlock
+    // screen is what captures it, once, and typing it here would do nothing
+    // (this stage has no passphrase field). Naming the wrong remedy sends the
+    // user round a loop that can never succeed - the same class of
+    // un-compliable instruction this whole error state exists to kill. The
+    // surrounding banner's plain-text option stays as the no-signer way out.
+    //
+    // The lookup happens HERE rather than on mount so the screen costs nothing
+    // extra in the common case; this branch is only reached by a press that
+    // would otherwise do nothing at all.
+    async function signerNotReadyReason() {
+        try {
+            if (typeof messaging.listWallets === 'function') {
+                const wallets = await messaging.listWallets();
+                const record = Array.isArray(wallets)
+                    ? wallets.find((w) => w?.id === walletId)
+                    : null;
+                if (record?.passphraseEnabled && !record?.passphraseStored) {
+                    return 'This wallet uses a 25th-word passphrase that has not been stored yet, so '
+                        + 'the key request cannot be signed. Lock the wallet; the unlock screen will '
+                        + 'capture it, or pick "Plain text" above to message them '
+                        + 'without encryption.';
+                }
+            }
+        } catch {
+            // A shell that cannot list wallets still gets an answer; the
+            // generic reason below is true of every not-ready signer.
+        }
+        return 'Your wallet is locked, so the key request cannot be signed. '
+            + 'Unlock it and press this again.';
+    }
+
     // Publish our pubkey to the recipient (MESSAGE format-0 handshake) so they
     // can derive the ECDH shared secret and message us, even before our address
     // has spent. Used when the recipient's key is unknown: it requests a session
@@ -510,12 +600,21 @@ export function ComposeMessage({
     async function handleRequestSession() {
         if (handshakeBusy || !fromAddress || !chainId || !toAddress.trim()) return;
         if (!hw && !signerReady && password.length === 0) {
-            setSubmitError('Enter your password to send the key request.');
+            // NAMES SOMETHING THE USER CAN ACTUALLY DO. This used to read
+            // "Enter your password to send the key request", and there is no
+            // password field on this stage to enter it into: the send path
+            // collects the password on the review screen, which a key request
+            // never reaches. See `signerNotReadyReason` for why one sentence
+            // could not be honest for both of the states that land here.
+            setHandshakeError(await signerNotReadyReason());
             return;
         }
-        if (hw && hwStatus !== 'available') return;
+        if (hw && hwStatus !== 'available') {
+            setHandshakeError('Connect and unlock your hardware wallet to send the key request.');
+            return;
+        }
         setHandshakeBusy(true);
-        setSubmitError(null);
+        setHandshakeError(null);
         try {
             const base = {
                 walletId,
@@ -536,7 +635,7 @@ export function ComposeMessage({
                 : messaging.sendHandshake({ ...base, password }));
             setHandshakeSent(true);
         } catch (err) {
-            setSubmitError(err?.message || 'Could not send the key request.');
+            setHandshakeError(err?.message || 'Could not send the key request.');
         } finally {
             setHandshakeBusy(false);
         }
@@ -726,7 +825,10 @@ export function ComposeMessage({
                 label="Address"
                 icon="contacts"
                 value={toAddress}
-                onChange={(e) => setToAddress(e.target.value)}
+                onChange={(e) => {
+                    setToAddress(e.target.value);
+                    if (submitError) setSubmitError(null);
+                }}
                 onIconClick={() => setContactsPickerOpen(true)}
                 placeholder="Recipient address"
                 error={addressError}
@@ -736,7 +838,10 @@ export function ComposeMessage({
             <Textarea
                 label="Message"
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) => {
+                    setMessage(e.target.value);
+                    if (submitError) setSubmitError(null);
+                }}
                 rows={isFull ? 6 : 4}
                 placeholder="Write your message…"
                 style={{ minHeight: isFull ? '6rem' : '4rem' }}
@@ -782,15 +887,30 @@ export function ComposeMessage({
                             message them encrypted.
                         </p>
                     ) : (
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            loading={handshakeBusy}
-                            onClick={handleRequestSession}
-                        >
-                            Request encrypted session (publish your key)
-                        </Button>
+                        <>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                loading={handshakeBusy}
+                                onClick={handleRequestSession}
+                            >
+                                Request encrypted session (publish your key)
+                            </Button>
+                            {/* The button's failures live HERE, beside it. This
+                                is the only stage it is reachable from, and
+                                nothing on this stage rendered an error before,
+                                so a refused or failed key request looked like a
+                                button that does nothing. */}
+                            {handshakeError ? (
+                                <p
+                                    role="alert"
+                                    style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.8rem' }}
+                                >
+                                    {handshakeError}
+                                </p>
+                            ) : null}
+                        </>
                     )}
                 </div>
             ) : null}
@@ -799,7 +919,11 @@ export function ComposeMessage({
             <IconSelect
                 label="Delivery network"
                 value={chainId || ''}
-                onChange={(v) => { setChainId(v); setFromAddressId(null); }}
+                onChange={(v) => {
+                    setChainId(v);
+                    setFromAddressId(null);
+                    if (submitError) setSubmitError(null);
+                }}
                 options={networkOptions}
             />
 
@@ -814,6 +938,18 @@ export function ComposeMessage({
                     onChange={setFeePick}
                     customEstimate={feePick.mode === 'custom' ? customEstimate : null}
                 />
+            ) : null}
+
+            {/* The send's own failure, on the stage the send is pressed from.
+                On the confirm-page path the host composes and pre-flights
+                BEFORE the confirm screen opens, and a failure there (no funds
+                on the funding address, encoder unreachable, a fee gate) rejects
+                back to this stage. Until this block existed that message had
+                nowhere to render: only the review stage read `submitError`, so
+                Send message looked like a button that does nothing. Cleared by
+                the next edit of the address, message or delivery network. */}
+            {submitError ? (
+                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
             ) : null}
 
             <div className={styles.actions} style={{ marginTop: '0.75rem' }}>

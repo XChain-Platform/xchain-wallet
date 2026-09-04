@@ -77,26 +77,36 @@ function wantsIntegrity(tag) {
  * guessed hash: a wrong integrity value breaks the page, and a silently-skipped
  * one is visible in the smoke check.
  *
+ * The two ways into `skipped` are NOT the same event, so they come back apart as
+ * well. An EXTERNAL url is correct behaviour: there are no bytes to hash, and a
+ * guessed integrity would fail the page closed. A LOCAL url the lookup could not
+ * resolve is a defect: those are bytes the page WILL execute, they should have
+ * been hashed, and nothing downstream could tell the two apart while both landed
+ * in one list that was only ever printed. `skipped` stays as the union so an
+ * existing caller keeps working.
+ *
  * @param {string} html
  * @param {(fileName: string) => (string | Uint8Array | undefined)} lookup
  *        resolves an asset path from the HTML (e.g. "/assets/main-a1b2.js") to its emitted bytes
- * @returns {{ html: string, hashed: string[], skipped: string[] }}
+ * @returns {{ html: string, hashed: string[], skipped: string[],
+ *            skippedExternal: string[], skippedLocal: string[] }}
  */
 export function addIntegrityAttributes(html, lookup) {
     const hashed = [];
-    const skipped = [];
+    const skippedExternal = [];
+    const skippedLocal = [];
 
     const out = html.replace(TAG, (tag, _tagName, url) => {
         if (!wantsIntegrity(tag)) return tag;
         if (!isLocal(url)) {
-            skipped.push(url);
+            skippedExternal.push(url);
             return tag;
         }
         if (/\sintegrity=/i.test(tag)) return tag;   // already carries one
 
         const source = lookup(url);
         if (source === undefined) {
-            skipped.push(url);
+            skippedLocal.push(url);
             return tag;
         }
 
@@ -113,7 +123,13 @@ export function addIntegrityAttributes(html, lookup) {
         );
     });
 
-    return { html: out, hashed, skipped };
+    return {
+        html: out,
+        hashed,
+        skipped: [...skippedExternal, ...skippedLocal],
+        skippedExternal,
+        skippedLocal,
+    };
 }
 
 /**
@@ -163,7 +179,7 @@ export function sriPlugin() {
                     return readFileSync(assetPath);
                 };
 
-                const { html, hashed, skipped } = addIntegrityAttributes(
+                const { html, hashed, skippedExternal, skippedLocal } = addIntegrityAttributes(
                     readFileSync(htmlPath, 'utf8'),
                     lookup,
                 );
@@ -174,8 +190,26 @@ export function sriPlugin() {
                 // worth being loud about.
                 logger.info(
                     `sri: ${htmlFile}: ${hashed.length} asset(s) hashed with ${SRI_ALGORITHM}`
-                    + (skipped.length ? `; ${skipped.length} skipped (${skipped.join(', ')})` : ''),
+                    + (skippedExternal.length
+                        ? `; ${skippedExternal.length} external (${skippedExternal.join(', ')})`
+                        : ''),
                 );
+                // A LOCAL url that could not be resolved on disk is not a skip,
+                // it is a same-origin subresource the page will execute with no
+                // integrity. The likeliest cause is ordering: a public-dir file
+                // (public/boot-check.js) not yet copied when this hook runs. Loud
+                // in EVERY build path, including release and mobile, which run no
+                // SRI smoke at all. Not a hard build error: this hook also walks
+                // any other HTML entry in the bundle, whose relative urls resolve
+                // against outDir rather than their own directory, so a throw here
+                // could brick a release on a path-resolution quirk rather than a
+                // real integrity hole. The CI gate is the smoke.
+                if (skippedLocal.length) {
+                    logger.warn(
+                        `sri: ${htmlFile}: ${skippedLocal.length} LOCAL asset(s) could not be hashed `
+                        + `(${skippedLocal.join(', ')}); the page executes them with no integrity`,
+                    );
+                }
                 if (hashed.length === 0) {
                     logger.warn(
                         `sri: ${htmlFile} carries no integrity attributes; nothing was hashed`,

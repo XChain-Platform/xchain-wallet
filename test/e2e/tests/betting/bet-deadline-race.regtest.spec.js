@@ -64,12 +64,14 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
     EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_COIN,
     fundAddress,
+    healVenueClock,
     minerRpc,
     mintXchain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -395,6 +397,16 @@ test.describe('BET deadline race', () => {
         });
 
         await test.step('open a market, as the oracle, whose deadline arrives in minutes', async () => {
+            // THE CHAIN'S CLOCK HAS TO BE RUNNING, and on a shared venue it is
+            // often frozen where a neighbour's `setmocktime` left it (§3.2 above
+            // says this spec needs a chain whose clock actually reaches the
+            // deadline; this is the line that makes it so rather than hoping).
+            // The deadline below is computed from the CHAIN's clock and validated
+            // by the form against the BROWSER's, so a node stamping blocks in the
+            // past refuses the create outright with "Betting must close in the
+            // future" - which arrives here as a confirm modal that never opens.
+            await healVenueClock();
+
             await useAddress(page, oracle);
 
             await gotoBettingHub(page);
@@ -466,11 +478,38 @@ test.describe('BET deadline race', () => {
             await warmBet(punter, feedIndex, true);
             await main.getByRole('button', { name: 'Review bet', exact: true }).click();
 
-            // The dry run must PASS here. A confirm that is already failing would
-            // make the degradation below unobservable.
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
-            await expect(page.getByTestId('preflight-panel'))
-                .toHaveAttribute('data-verdict', 'pass', { timeout: 60_000 });
+            // The dry run must not be REFUSING here. A confirm that is already
+            // failing would make the degradation below unobservable.
+            //
+            // NOT `pass`, and this file's own header says why without having
+            // noticed it applied here: the assertions are meant to be
+            // TIER-1-ONLY, and `data-verdict` is not a Tier-1 signal - it
+            // aggregates Tier-2 findings too. Off Bitcoin the panel always
+            // carries one, correctly: "This action charges a protocol fee. If
+            // the chain rejects the action, any attached native-coin fee output
+            // is forfeited", which exists because `isNativeFeeMandatory` makes
+            // the coin the only fee lane on every chain but Bitcoin. So on
+            // Litecoin the baseline verdict is `warn` with `data-dryrun`
+            // "approved", and demanding `pass` fails a spec whose subject is
+            // working perfectly.
+            //
+            // Measured in the first whole-suite Litecoin run, 2026-08-27:
+            // `data-verdict="warn" data-dryrun="approved"`, with the panel
+            // reading "The network checked this action and expects it to
+            // succeed." This is the same class the chain-pinning row recorded
+            // on `contracts/deploy-chunked-lane` - **a spec written on Bitcoin
+            // encodes Bitcoin's ABSENCES as well as its values** - one severity
+            // level up, and it is a spec bug rather than a wallet one.
+            //
+            // The transition this spec exists to catch is still a real one: the
+            // degradation below asserts `fail`, which neither `pass` nor `warn`
+            // is, and the Tier-1 check it actually depends on is the
+            // `data-dryrun="approved"` assertion immediately after this.
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('preflight-panel'),
+                'the confirm is already refusing before the deadline, so the degradation this spec '
+                + 'measures would not be a transition')
+                .toHaveAttribute('data-verdict', /^(pass|warn)$/, { timeout: 60_000 });
 
             // And it must pass because the NETWORK said so. `pass` alone cannot
             // tell that apart from a dry-run that never answered: DRYRUN_UNAVAILABLE
@@ -500,7 +539,7 @@ test.describe('BET deadline race', () => {
 
             // The confirm screen is untouched by any of that: the wallet has no
             // idea yet, which is the whole point of the race.
-            await expect(page.getByTestId('confirm-modal')).toBeVisible();
+            await expectConfirmModal(page, 'this action', 30_000);
         });
 
         await test.step('Approve is refused by the §4.6 re-check', async () => {

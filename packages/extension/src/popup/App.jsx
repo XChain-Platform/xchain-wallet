@@ -221,6 +221,13 @@ function AppInner() {
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
+    // M2.4: the entry the History route should open on, set when the user
+    // follows the send success card straight to their new transaction. It is
+    // a tx hash rather than an action index because nothing has indexed it
+    // yet, which is the whole reason the card offers the jump.
+    const [historyInitialFocus, setHistoryInitialFocus] = useState(
+        /** @type {{ chainId?: string, txHash?: string } | null} */ (null),
+    );
     // Coin family to scope History's chain filter to on entry (e.g.
     // arriving from the Bitcoin TokenDetail). Empty = no scoping; the
     // remembered chain-filter applies instead.
@@ -309,7 +316,7 @@ function AppInner() {
     // xchain:{COIN}/execute?...). Mirrors `sendPrefill`; consumed by the
     // 'contract-execute' route and cleared when the user backs out.
     const [executePrefill, setExecutePrefill] = useState(
-        /** @type {{ method?: string, paramsText?: string, gasLimit?: string } | null} */ (null),
+        /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
     // Which view Send should return to when the user hits Back. Defaults
     // to 'home'; SendPicker → Send sets it to 'send-picker' so backing
@@ -464,7 +471,6 @@ function AppInner() {
                 setExecutePrefill({
                     method: intent.method || '',
                     paramsText: intent.executeParams || '',
-                    gasLimit: intent.gasLimit || '',
                 });
                 setUnlockedView('contract-execute');
                 pendingUriView.current = 'contract-execute';
@@ -779,6 +785,11 @@ function AppInner() {
                 return (
                     <Send
                         walletId={activeWalletId}
+                        onViewHistory={(target) => {
+                            setHistoryInitialQuery('');
+                            setHistoryInitialFocus(target || null);
+                            setUnlockedView('history');
+                        }}
                         prefill={sendPrefill}
                         onBack={() => {
                             setSendPrefill(null);
@@ -1694,7 +1705,6 @@ function AppInner() {
                         contractActionIndex={contractRef.contractActionIndex}
                         initialMethod={executePrefill?.method}
                         initialParamsText={executePrefill?.paramsText}
-                        initialGasLimit={executePrefill?.gasLimit}
                         onBack={() => { setExecutePrefill(null); setUnlockedView('contract-detail'); }}
                     />
                 );
@@ -1876,6 +1886,7 @@ function AppInner() {
                         onBack={() => setUnlockedView(historyReturnTo)}
                         onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         initialSearchQuery={historyInitialQuery}
+                        initialFocus={historyInitialFocus}
                         initialChainCoin={historyInitialChainCoin}
                         onSelectEntry={(entry) => {
                             setSelectedHistoryEntry(entry);

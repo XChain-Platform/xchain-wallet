@@ -159,10 +159,27 @@ function classify(output) {
  * Drive sign.sh's preconditions and report how deep they got.
  * Never writes anything; `pin` is what records an observation.
  */
-export function probe({ repo, tag, input, lane, env = {}, timeoutMs = 120000 }) {
+export function probe({ repo, tag, input, lane, staging = false, env = {}, timeoutMs = 120000 }) {
     const signSh = join(WALLET_ROOT, 'tools', 'release', 'sign.sh');
     const args = ['--tag', tag, '--input', input, '--repo', repo];
     if (lane) args.unshift('--lane', lane);
+    // WITHOUT THIS A REHEARSAL CANNOT REACH THE MANIFEST AT ALL, and that is
+    // what the rehearsal drift turned out to be once it was chased past its first
+    // symptom. `sign.sh` points its dev-mock gate at the SHIPPED bytes and
+    // refuses a scan that covered nothing, so a tag whose own gate predates
+    // `--artifacts` "reports OK having read nothing" and is correctly refused -
+    // sign.sh's comment says so in as many words, and says it was measured
+    // against v0.336.0. Its answer is `--staging`, which runs the TOOL tree's
+    // gate against the last release's bytes, under the operator answer dq7
+    // (2026-08-07) and for exactly this reason: "a rehearsal exercises the
+    // CURRENT tooling against the LAST release's bytes."
+    //
+    // That mode existed in sign.sh and this tool had no way to ask for it, so
+    // every rehearsal against a published tag died two steps early. `enforced`
+    // stays honest either way: sign.sh's receipt check is untouched, so the
+    // word is still written only if a gate really opened staged bundles and
+    // said how many.
+    if (staging) args.push('--staging');
 
     const r = spawnSync('bash', [signSh, ...args], {
         encoding: 'utf8',
@@ -202,11 +219,11 @@ function firstRefusal(output) {
 function usage() {
     console.log(`usage: phase4-rehearsal.mjs <command> [args]
 
-  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>]
+  probe --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>] [--staging]
       Drive ceremony Phase 4's signing preconditions and report the
       deepest step reached. Writes nothing.
 
-  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>]
+  pin --repo <dir> --tag <vX.Y.Z> --input <dir> [--lane <name>] [--staging]
       Run probe, then record what it observed in
       docs/phase4-rehearsal-pin.json. Refuses to write a pin for a run
       it did not just watch.
@@ -228,6 +245,7 @@ function cmdPin(argv) {
     const tag = arg(argv, '--tag');
     const input = arg(argv, '--input');
     const lane = arg(argv, '--lane');
+    const staging = argv.includes('--staging');
     if (!repo || !tag || !input) { usage(); process.exit(2); }
 
     const dirty = dirtySigningPath();
@@ -240,7 +258,7 @@ function cmdPin(argv) {
         return 1;
     }
 
-    const result = probe({ repo, tag, input, lane });
+    const result = probe({ repo, tag, input, lane, staging });
     // The commit that last touched the SIGNING PATH, not bare HEAD.
     //
     // HEAD moves on every unrelated commit, so pinning it would make the ref
@@ -270,6 +288,10 @@ function cmdPin(argv) {
             + 'needs K1 at a pinentry and no automated run can supply it.',
         tag,
         lane: lane || null,
+        // Recorded because it changes WHICH copy of the dev-mock gate read the
+        // bytes, and a reader of this pin should not have to infer that from
+        // the blocker string.
+        releaseSet: staging ? 'staging' : 'release',
         reached: result.reached,
         reachedSignature: result.reached === 'signature',
         blocker: portable(result.blocker),
@@ -375,7 +397,8 @@ function main() {
         const tag = arg(argv, '--tag');
         const input = arg(argv, '--input');
         if (!repo || !tag || !input) { usage(); return 2; }
-        const r = probe({ repo, tag, input, lane: arg(argv, '--lane') });
+        const r = probe({ repo, tag, input, lane: arg(argv, '--lane'),
+            staging: argv.includes('--staging') });
         console.log(`[phase4-rehearsal] reached: ${r.reached} (exit ${r.exitCode})`);
         if (r.blocker) console.log(`[phase4-rehearsal] blocker: ${r.blocker}`);
         return r.reached === 'signature' ? 0 : 1;

@@ -362,7 +362,7 @@ function buildRuntimeFor(userData, safeStorage) {
             type: 'wallet.unlock',
             request: { password },
         });
-        assert.deepEqual(good, { ok: true, result: { unlocked: true } });
+        assert.deepEqual(good, { ok: true, result: { unlocked: true, passphraseCaptureNeeded: [] } });
         assert.ok(runtime.host, 'host rebuilt after unlock');
         assert.ok(
             existsSync(sessionKeyPathFor(tmp)),

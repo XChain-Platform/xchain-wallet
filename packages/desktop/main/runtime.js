@@ -174,6 +174,7 @@ export async function ensureHost(runtime) {
                 notify: runtime.notify,
                 getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
                 onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
+                onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
                 logger: console,
             });
             runtime.notificationService.start().catch((err) => {

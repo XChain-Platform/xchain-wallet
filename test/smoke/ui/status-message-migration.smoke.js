@@ -180,6 +180,30 @@ assert.ok(
     'StatusMessage grew a data-testid pass-through; carve-out (b) can now be swept',
 );
 
+// The banner owns its colours. Callers pass `className` for layout, and ten
+// route modules name that class `.error` with `color: var(--xc-danger)`; at
+// equal specificity the later rule in the bundle won, and on the Add
+// addresses page that painted danger-red text on the danger-red banner (a
+// public tester saw "a blank red bar", 2026-09-02). Compound selectors keep
+// the variant colours above any single-class caller override.
+const primitiveCss = readFileSync(join(root, 'packages/core/src/ui/StatusMessage.module.css'), 'utf8');
+for (const variant of ['status', 'error', 'success']) {
+    assert.match(
+        primitiveCss,
+        new RegExp(`^\\.row\\.${variant} \\{`, 'm'),
+        `StatusMessage.module.css paints the ${variant} variant through the compound .row.${variant} selector`,
+    );
+    assert.ok(
+        !new RegExp(`^\\.${variant} \\{`, 'm').test(primitiveCss),
+        `StatusMessage.module.css still carries a bare .${variant} rule that a caller's single class can override`,
+    );
+}
+assert.match(
+    primitiveCss,
+    /^\.row\.error \{[^}]*background: var\(--xc-danger\);[^}]*color: var\(--xc-on-danger\);/m,
+    'the error variant paints on-danger text over the danger background',
+);
+
 console.log(
     `OK: StatusMessage migration (Cluster K FOLLOWUP 1: ${elements.length} <StatusMessage> rows`
     + `across ${adopters.length} shell files; every residual role="alert" matches a declared carve-out)`,

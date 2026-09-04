@@ -451,11 +451,13 @@ export { unclaimedRewards, cooldownStatus, cooldownText, toBaseUnits, fromBaseUn
 export {
     addressBalances,
     addressHistory,
+    addressMempool,
     chainTipBlockTime,
     indexerWatermark,
     walletBalances,
     BALANCE_POLL_INTERVAL_MS,
 } from './balances.js';
+export { livePendingTxs } from './pendingTxFeed.js';
 export {
     verifyAddressBalance,
     verifyAddressAction,
@@ -504,10 +506,13 @@ export {
     buildLabelSyncPayload,
     applyLabelSyncPayload,
     publishLabelsNow,
+    fetchAndDecryptLabelSync,
+    selectLabelSyncCandidates,
     createLabelSyncScheduler,
     NoFundedAddressError,
     WifOnlyLabelSyncUnsupportedError,
     LABEL_SYNC_PAYLOAD_VERSION,
+    LABEL_SYNC_MAX_CANDIDATES,
     LABEL_SYNC_AUTO_DEBOUNCE_MS,
     LABEL_SYNC_AUTO_MAX_WAIT_MS,
 } from './labelSync.js';

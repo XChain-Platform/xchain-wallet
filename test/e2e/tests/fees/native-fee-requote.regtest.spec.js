@@ -44,12 +44,13 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    encoderRpc,
+    expectConfirmModal,
     EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_COIN,
     fundAddress,
     minerRpc,
-    encoderRpc,
+    REGTEST_ADDRESS_RE,
+    REGTEST_COIN,
     runInIndexer,
     switchToRegtest,
     unlockAfterReload,
@@ -190,7 +191,7 @@ test.describe('§11.5: the protocol fee moving while the confirm screen is open'
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 120_000 });
+            await expectConfirmModal(page, 'this action', 120_000);
             // Approve must be LIVE first: if it were already blocked, the refusal
             // below would prove nothing about the re-quote.
             await expect(page.getByTestId('confirm-approve'),

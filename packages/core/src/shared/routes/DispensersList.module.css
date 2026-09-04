@@ -169,9 +169,19 @@
     color: var(--xc-success, #22C55E);
 }
 
-.status_canceled {
+.status_canceled,
+.status_cancelled,
+.status_expired {
     background: rgba(220, 38, 38, 0.15);
     color: var(--xc-danger);
+}
+
+/* Drained or ran to completion: over, but not an owner-initiated teardown. */
+.status_complete,
+.status_closed,
+.status_empty {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
 }
 
 /* Circular header "+" button that opens the Create dispenser form

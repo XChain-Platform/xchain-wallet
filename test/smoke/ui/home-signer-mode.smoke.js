@@ -21,10 +21,11 @@
 //   - SignerHomeBody renders the explanatory banner + three CTAs (Sign
 //     a PSBT / Sign a message / Verify a signature), each disabled when
 //     its prop is undefined.
-//   - Extension popup + web App.jsx pass `onSignPsbt` / `onSignMessage`
-//     / `onVerifySignature` through to Home. Desktop intentionally does
-//     not wire those props yet because the routes aren't implemented on that
-//     shell, so the CTAs render disabled (tracked as Cluster W FOLLOWUP).
+//   - All three shells - extension popup, web and desktop App.jsx - pass
+//     `onSignPsbt` / `onSignMessage` / `onVerifySignature` through to Home,
+//     and all three own the routes those props navigate to. Desktop's
+//     landed with Cluster W FOLLOWUP 2 at v0.238.0, which section 7 below
+//     has asserted ever since; this note said the opposite until 2026-08-25.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';

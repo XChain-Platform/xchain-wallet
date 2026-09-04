@@ -39,13 +39,14 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
     EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_LABEL,
-    REGTEST_COIN,
     fundAddress,
     minerRpc,
     mintXchain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -158,7 +159,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await form.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status),
@@ -189,7 +190,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Memo (optional)').fill(`book ${STAMP}`);
 
             await main.getByRole('button', { name: /^Place order/ }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const order = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(order.action)).toBe('ORDER');
@@ -279,7 +280,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Ticker').fill(noMemoTick);
             await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status), 'the venue rejected the ISSUE').toBe('valid');
@@ -295,7 +296,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Amount', { exact: true }).last().fill(String(GET));
             // No memo: the field is never opened.
             await main.getByRole('button', { name: /^Place order/ }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const order = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(order.status), 'the chain rejected the order').toBe('valid');

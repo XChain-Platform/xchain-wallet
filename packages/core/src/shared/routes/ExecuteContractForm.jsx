@@ -57,10 +57,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * submit. The SDK validator expects PARAMS as an array, not a single
  * string, and enforces no-pipe-or-semicolon inside each element.
  *
- * Gas limit defaults to 50000 if the user leaves the field blank.
- * contracts.suggestGasLimit is a source-code heuristic, not available
- * from the contract row alone, so an execute-time estimate isn't
- * automatic. Users override freely.
+ * There is no gas-limit input: EXECUTE v0 carries no GAS_LIMIT slot on
+ * the wire (a top-level call runs at the protocol gas ceiling), so any
+ * such field would either be silently discarded or, under the SDK's
+ * leg-field guard, block the compose outright.
  *
  * The initial* props prefill the form from an xchain:{COIN}/execute deep
  * link (explorer Write-tab handoff); all optional.
@@ -71,10 +71,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.contractActionIndex
  * @param {string} [props.initialMethod]
  * @param {string} [props.initialParamsText]
- * @param {string} [props.initialGasLimit]
  * @param {() => void} props.onBack
  */
-export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, initialGasLimit, onBack }) {
+export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -88,7 +87,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [method, setMethod] = useState(initialMethod || '');
     const [paramsText, setParamsText] = useState(initialParamsText || '');
-    const [gasLimit, setGasLimit] = useState(initialGasLimit || '');
     const [password, setPassword] = useState('');
 
     // ABI lane state: the contract's self-declared method metadata (null =
@@ -290,6 +288,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         } catch (err) {
             if (isUserRejection(err)) return;
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Execute failed.',
@@ -354,11 +353,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             VERSION: '0',
             CONTRACT_ACTION_INDEX: String(contractActionIndex),
             METHOD: method.trim(),
-            GAS_LIMIT: String(gasLimit || '50000'),
         };
         if (paramsArray.length > 0) p.PARAMS = paramsArray;
         return p;
-    }, [contractActionIndex, method, gasLimit, paramsArray]);
+    }, [contractActionIndex, method, paramsArray]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -368,11 +366,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         }
         if (!method.trim()) {
             setFormError('Method name is required.');
-            return;
-        }
-        const gas = String(gasLimit).trim() || '50000';
-        if (Number.isNaN(Number(gas)) || Number(gas) <= 0) {
-            setFormError('Gas limit must be a positive number.');
             return;
         }
         // Validator forbids pipes/semicolons inside each PARAM, which
@@ -440,6 +433,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Contract call failed.',
@@ -544,8 +538,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             </dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>Gas limit</dt>
-                    <dd className={styles.detailsValue}>{actionParams.GAS_LIMIT}</dd>
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -746,15 +738,6 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     ) : null}
                 </>
             )}
-            <Input
-                label="Gas limit"
-                hint="The most this call is allowed to spend on computation. Leave blank for the default (50000)."
-                inputMode="numeric"
-                value={gasLimit}
-                onChange={(e) => setGasLimit(e.target.value)}
-                autoComplete="off"
-            />
-
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"

@@ -61,6 +61,7 @@ import { randomBytes } from 'node:crypto';
 import { expect } from '@playwright/test';
 import { openSettings, gotoSection, unlockedShell } from './wallet.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
+import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -96,6 +97,15 @@ const VENUES = {
     RBTC: {
         encoderPort: 3023, minerPort: 3025,
         chainId: 'bitcoin-regtest', chainLabel: 'Bitcoin',
+        // The NATIVE COIN'S TICKER as the wallet prints it on screen ("Send
+        // 0.001 BTC on Bitcoin", the confirm fee, the asset picker). Kept here
+        // beside chainLabel rather than derived at each call site, because a
+        // spec that hardcodes "BTC" does not fail when it runs on Litecoin -
+        // it fails several assertions later, reading like a product defect.
+        // Deliberately NOT computed as `REGTEST_COIN.replace(/^R/, '')`: that
+        // trick is correct for these three and silently wrong for the first
+        // venue whose coin code is not its explorer code with an R on it.
+        ticker: 'BTC',
         // The container `seedPrices()` runs its price seed inside. Named
         // here rather than derived from chainId because the stack's naming uses
         // the coin's full name where the wallet's chain id does too, but there is
@@ -108,18 +118,28 @@ const VENUES = {
         // chain's) fails on the address itself rather than several steps later
         // on a funding that never arrives.
         addressRe: /^(bcrt1|[mn2])/,
+        // See REGTEST_DESTINATION below. All three are the SAME witness
+        // program (hash160 d8eba5d7...cf25), re-encoded for each chain, so a
+        // spec that sends to "the throwaway destination" sends to the same
+        // nobody's-key on whichever chain it runs.
+        destination: 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f',
     },
     RLTC: {
         encoderPort: 3223, minerPort: 3225,
-        chainId: 'litecoin-regtest', chainLabel: 'Litecoin',
+        chainId: 'litecoin-regtest', chainLabel: 'Litecoin', ticker: 'LTC',
         indexerContainer: 'xchain-node-litecoin-regtest-xchain-indexer',
         addressRe: /^(rltc1|[mn2])/,
+        destination: 'rltc1qmr46t4ca5wh35k6mczdzrkepqw2d8ne92hnush',
     },
     RDOGE: {
         encoderPort: 3123, minerPort: 3125,
-        chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin',
+        chainId: 'dogecoin-regtest', chainLabel: 'Dogecoin', ticker: 'DOGE',
         indexerContainer: 'xchain-node-dogecoin-regtest-xchain-indexer',
         addressRe: /^[mn2]/,
+        // Dogecoin has no segwit, so this one is the P2PKH encoding of that
+        // same program under the regtest version byte (0x6f), not a bech32
+        // address with the HRP swapped.
+        destination: 'n1HvYayKZr8qW54uBoDgveVS7waeaUrBEy',
     },
 };
 
@@ -148,19 +168,53 @@ export const MINER_URL = `http://localhost:${VENUE.minerPort}`;
 export const REGTEST_CHAIN_ID = VENUE.chainId;
 export const REGTEST_CHAIN_LABEL = VENUE.chainLabel;
 
+/**
+ * The native coin's ticker on the chain this run drives ('BTC'/'LTC'/'DOGE').
+ *
+ * THE OTHER HALF OF MOVING A SPEC BETWEEN CHAINS, and the half that kept being
+ * missed. Selecting the chain in a form is not enough: a spec still asserting
+ * `Send 0.001 BTC on Bitcoin` or matching a fee with /([\d.]+)\s*BTC/ now
+ * FAILS on Litecoin, having correctly switched chains - which reads like the
+ * conversion broke the spec when it is the assertion that was never converted.
+ * Pair every `selectVenueChain()` with this and `REGTEST_CHAIN_LABEL`.
+ *
+ * `send/dust-and-max.regtest.spec.js` worked this out first and locally, and
+ * that is why its dust leg was one of only two specs already passing on
+ * Litecoin. Lifted here so the next spec inherits it instead of rediscovering
+ * it.
+ */
+export const REGTEST_TICKER = VENUE.ticker;
+
 /** Address shape this chain's regtest params produce. */
 export const REGTEST_ADDRESS_RE = VENUE.addressRe;
 
 /**
- * A deterministic, checksum-valid regtest P2WPKH destination.
+ * A deterministic, checksum-valid regtest destination FOR THE CHAIN THIS RUN
+ * DRIVES.
  *
  * Derived once from a fixed sha256 (`bitcoinjs-lib` p2wpkh over
- * hash160('xchain-wallet-e2e-regtest-destination')) and pinned as a
- * literal so specs assert on a stable string. Nothing holds its key:
- * anything sent here is intentionally unspendable-by-us, which is what
- * a throwaway e2e destination should be.
+ * hash160('xchain-wallet-e2e-regtest-destination')) and pinned as a literal so
+ * specs assert on a stable string. Nothing holds its key: anything sent here is
+ * intentionally unspendable-by-us, which is what a throwaway e2e destination
+ * should be.
+ *
+ * ONE LITERAL FOR ALL THREE CHAINS IS A SILENT TRAP, which is why this is a
+ * table. A Bitcoin `bcrt1` address is not a Litecoin address. A send to it is either refused by the form (the good
+ * case, a confusing failure) or composed against a chain that cannot spend it.
+ * The Bitcoin string is unchanged, so no existing Bitcoin spec's expectations
+ * move.
  */
-export const REGTEST_DESTINATION = 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f';
+export const REGTEST_DESTINATION = VENUE.destination;
+
+// A wrong-chain literal in the table above is invisible until a spec fails
+// several screens deep on it, so check it here, at import, where the message
+// can name the exact problem. This is the same class of bug the destination
+// itself just was.
+if (!VENUE.addressRe.test(REGTEST_DESTINATION)) {
+    throw new Error(
+        `The ${REGTEST_COIN} venue's destination ${REGTEST_DESTINATION} is not an address `
+        + `this chain accepts (${VENUE.addressRe}). One of the two is from another chain.`);
+}
 
 /** JSON-RPC 2.0 call against a venue service. Throws on RPC-level errors. */
 async function venueRpc(url, method, params = {}, timeoutMs = 30_000) {
@@ -220,13 +274,8 @@ export async function assertVenueReachable() {
     // A reachable-but-lagging chain produces confusing spec failures
     // (funds that never arrive), so check liveness, not just liveness of
     // the socket.
-    const lag = status?.chain_lag_blocks?.[REGTEST_COIN];
-    if (typeof lag !== 'number') {
-        throw new Error(`${hint}\n\nExplorer answered but reports no ${REGTEST_COIN} chain.`);
-    }
-    if (lag > 2) {
-        throw new Error(`Regtest ${REGTEST_COIN} indexer is ${lag} blocks behind; wait for it to catch up.`);
-    }
+    const unfit = venueVerdict(status, REGTEST_COIN);
+    if (unfit) throw new Error(`${hint}\n\n${unfit}`);
 
     let miner;
     try {
@@ -881,7 +930,12 @@ export async function assertNoActionRecorded(txid) {
 export async function waitForValidAction(txid, timeoutMs = 300_000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-        await minerRpc('generate_blocks', { count: 1 });
+        // `nudgeChain`, never a bare `generate_blocks`: this loop ran for up to
+        // five minutes mining on EVERY pass, which is the exact hazard
+        // `nudgeChain` was written for. Blocks only ever ADVANCE state; they
+        // cannot make an already-mined action index faster, so mining at a
+        // decoder that is already behind just puts it further behind.
+        await nudgeChain();
         // limit=100 because that is the explorer's REAL page cap: it silently
         // clamps anything larger, so asking for 200 bought imaginary headroom.
         // The list is newest-first, so one page is ample for an action just
@@ -945,8 +999,17 @@ function actionStatuses(detail) {
 /**
  * Points one of a form's chain pickers at the chain this run drives.
  *
- * A no-op on Bitcoin, which every form already defaults to, so specs written
- * before the venue table behave exactly as they did.
+ * NO EARLY RETURN ON BITCOIN, whatever the belief that every form already
+ * defaults to it. One form does not: `ComposeMessage` deliberately prefers a
+ * DOGECOIN address for its Delivery network picker, because a MESSAGE pays a
+ * native miner fee and DOGE is the cheapest supported chain. So on a Bitcoin
+ * run the early return left a messaging spec driving Dogecoin while the fixture
+ * read Bitcoin's explorer, encoder and miner - a wrong-chain run that reported
+ * itself green, which is the exact failure the assertion at the bottom of this
+ * function exists to prevent. Any form MAY default to a chain that is not this
+ * run's, so the picker is now read on every chain and corrected when it
+ * disagrees; the early return is gone rather than widened, because a second
+ * form with its own preference would silently reopen the same hole.
  *
  * `field` is the picker's own visible label, and it is REQUIRED to be specific
  * because several screens carry more than one: a form's is "Network", the
@@ -960,8 +1023,6 @@ function actionStatuses(detail) {
  * @param {string} [field]  the picker's visible label
  */
 export async function selectVenueChain(scope, field = 'Network') {
-    if (REGTEST_COIN === 'RBTC') return;
-
     const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
     await expect(trigger, `no "${field}" chain picker on this screen`)
         .toBeVisible({ timeout: 30_000 });
@@ -975,6 +1036,293 @@ export async function selectVenueChain(scope, field = 'Network') {
     // wrong-chain run - the exact failure this helper exists to prevent.
     await expect(trigger).toHaveAttribute('aria-label', new RegExp(REGTEST_CHAIN_LABEL),
         { timeout: 15_000 });
+}
+
+/**
+ * Puts the SEND screen on this run's chain by choosing its native coin.
+ *
+ * WHY SEND NEEDS ITS OWN HELPER, which cost this campaign several reverts to
+ * establish. `selectVenueChain()` drives a `ChainPicker`: a popover listbox of
+ * CHAINS whose items are `role="option"` named "Litecoin". Send has no such
+ * widget. It renders a `TokenField` (Send.jsx:2283) whose trigger is named
+ * `Token: BTC on Bitcoin` - close enough to a chain picker to fool a locator,
+ * and not one. Clicking it NAVIGATES to the SendPicker screen (`TokenPicker`
+ * with `purpose="send"`), which contains no `role="option"` element anywhere.
+ * So `selectVenueChain(main, 'Token')` finds the trigger, clicks it, and then
+ * waits for an option that cannot exist until the whole 420s budget is gone:
+ * a hang, not a failure, which is why it read as a slow venue rather than a
+ * wrong locator.
+ *
+ * Send also picks the ASSET and the CHAIN with one control - the coin IS the
+ * chain selection - so there is nothing to switch until an asset is chosen.
+ *
+ * Selection is by `data-balance-key`, which `BalanceList` writes as
+ * `${chainId}:${tick}`, rather than by the row's "Open LTC details" label:
+ * the label is a DISPLAY name and two chains can list the same tick (every
+ * chain has XCHAIN), so the label is ambiguous exactly where it matters and
+ * the key never is.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} [tick]  asset to select; defaults to this chain's native coin
+ */
+export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
+    const main = page.getByRole('main');
+    const trigger = main.getByRole('button', { name: /^Token: / }).first();
+    await expect(trigger, 'no Token field on this screen; is this the Send form?')
+        .toBeVisible({ timeout: 30_000 });
+
+    // Already showing this chain's asset: nothing to do. Anchored on " on
+    // <Chain>" so a tick that merely CONTAINS the chain name cannot satisfy it.
+    const selected = (await trigger.getAttribute('aria-label')) || '';
+    if (new RegExp(`^Token: ${tick} on ${REGTEST_CHAIN_LABEL}$`).test(selected)) return;
+
+    await trigger.click();
+
+    // The picker lists every chain's assets together, so filter first: the row
+    // wanted may otherwise be far down a list this venue keeps growing.
+    const search = page.getByLabel('Search coins or tokens');
+    await expect(search, 'the Token field did not open the asset picker')
+        .toBeVisible({ timeout: 30_000 });
+    await search.fill(tick);
+
+    const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
+    await expect(row, `the asset picker lists no ${tick} on ${REGTEST_CHAIN_LABEL}. A wallet carries `
+        + 'one address per chain from creation, so this usually means the venue chain is not the one '
+        + 'the wallet was created against')
+        .toBeVisible({ timeout: 30_000 });
+    await row.click();
+
+    // Assert the selection took. The picker closes on click either way, so an
+    // unasserted click is a silent wrong-chain run - the same hazard
+    // `selectVenueChain` guards, and the reason both helpers end this way.
+    await expect(main.getByRole('button', { name: /^Token: / }).first())
+        .toHaveAttribute('aria-label', `Token: ${tick} on ${REGTEST_CHAIN_LABEL}`, { timeout: 15_000 });
+}
+
+/**
+ * Reads a JSON endpoint off the venue explorer and REFUSES to turn a refusal
+ * into an empty list.
+ *
+ * The suite's own copies of this read `res.json()` and hand the body straight
+ * back, so every caller then writes `Array.isArray(body?.data) ? body.data : []`
+ * or `.catch(() => null)` - and a venue answering **HTTP 500** becomes "the
+ * venue publishes nothing". That is not a hypothetical: the whole-suite
+ * Litecoin run of 2026-08-27 failed four tests across two areas on messages
+ * that sent the reader to seeding and to the hub mirror, while
+ * `/RLTC/api/price_snapshots/FINALIZED/status` and `/RLTC/api/oracle_prices`
+ * were both answering 500 in ONE millisecond with the explorer's own log
+ * naming the cause exactly (`No co-located hub DB configured for coin RLTC`).
+ * The endpoints answer normally on RDOGE, so it is a per-coin venue gap and
+ * nothing about what the wallet published.
+ *
+ * Throwing here costs nothing on a healthy read and is the difference between
+ * a run that names its venue and a run that blames the product.
+ */
+export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_000, allowErrorBody = false } = {}) {
+    const url = `${EXPLORER_URL}/${coin}/api/${path}`;
+
+    // A 429 is WAITED OUT, not thrown, because almost every caller here
+    // sits in a poll loop that catches a failed read and immediately reads again.
+    // Throwing turns the venue's "slow down" into the busiest second of the run,
+    // and the spec then dies on a locator with the rate limit nowhere in sight.
+    // Bounded on purpose: two waits, so a genuinely saturated venue still fails
+    // inside a spec's budget and says why.
+    let res;
+    for (let attempt = 0; ; attempt += 1) {
+        res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+        const waitMs = rateLimitDelayMs(res.status, res.headers);
+        if (waitMs === null || attempt >= 2) break;
+        await new Promise((r) => setTimeout(r, waitMs));
+    }
+
+    const body = await res.json().catch(() => null);
+    // `allowErrorBody` is for the endpoints whose REFUSAL is the answer a spec
+    // came for. `/oraclefeequote` answers HTTP 200 with
+    // `{valid:false, error:'invalid: ORACLE_ADDRESS (no effective oracle price)'}`
+    // while a PRICE v1 publish is inside its 24-hour maturation window, and the
+    // oracle lock spec exists to assert exactly that string - so the blanket
+    // throw below turned its subject into a venue complaint. Off by default:
+    // treating a refusal as data is right for one caller and wrong for the two
+    // dozen poll loops this helper was hardened for.
+    if (!res.ok || (body && body.error && !allowErrorBody)) {
+        throw new Error(
+            `the venue REFUSED ${coin}/api/${path} with HTTP ${res.status}`
+            + (body?.code ? ` [${body.code}]` : '')
+            + (body?.error ? `: ${body.error}` : '')
+            + (res.status === 429
+                ? `. That is the shared explorer's rate limit, still refusing after two `
+                  + `waits: its policy header reads ${res.headers.get('ratelimit-policy') || '120;w=60'}`
+                  + ', and this suite polls it while the wallet is reading it too. Nothing about '
+                  + 'the wallet is broken here.'
+                : '. This is the venue answering, not the wallet publishing nothing - read the '
+                  + 'explorer container log for the query behind it before touching a spec.'),
+        );
+    }
+    return body;
+}
+
+/**
+ * `null` when this venue serves the oracle-price family, else the venue's own
+ * refusal, for a `test.skip(...)` that heals itself the day the venue is fixed.
+ *
+ * On RLTC every price route (`oracle_prices`, `price_snapshots`,
+ * `price_snapshots/FINALIZED/status`) answers HTTP 500 in about a millisecond,
+ * because the explorer has no co-located hub DB configured for that coin
+ * (`No co-located hub DB configured for coin RLTC`, from its own log; the
+ * throw is deliberate, db.js `_checkpointSource`, rather than a fallback to
+ * stale rows). The identical routes serve real data on RDOGE, so it is a
+ * per-coin configuration gap and nothing about the wallet.
+ *
+ * A conditional skip rather than a `test.fixme` on purpose, following the same
+ * reasoning as the ticker-grammar fee leg: a fixme never runs ANYWHERE, so it
+ * would leave these tests dead on the venue they were written for and dead
+ * again after somebody configures the checkpoint DB. This probes.
+ */
+export async function priceFamilyRefusal() {
+    try {
+        await explorerJson('price_snapshots/FINALIZED/status?limit=1');
+        return null;
+    } catch (err) {
+        return err?.message || String(err);
+    }
+}
+
+/**
+ * The venue's own answer about a PLANTED oracle feed, or null when the
+ * feed is really there and the lane can be driven.
+ *
+ * The Mode B dispenser lane settles against a PRICE v1 feed published by a
+ * specific address, and a PRICE v1 publish is inert for 24 hours
+ * (`PriceAggregator.js`, `effective_at = block_time + 86400`, unconditional).
+ * So the ten feeds those specs use were planted on 2026-07-30 and matured the
+ * next day, and the 2026-08-24 re-genesis removed them. **A spec cannot
+ * make itself a replacement inside a run**: the earliest a fresh publish could
+ * price anything is a day after it lands, which is why this is a venue-data
+ * gap and not a fixture that forgot to seed something.
+ *
+ * Probed rather than `test.fixme`d, for D35's reason and D41's: a fixme never
+ * runs ANYWHERE, so it would leave the lane dead on a venue that has been
+ * re-planted, while a probe heals itself the moment one is. It reads
+ * `bet_feeds/<address>/source`, which is healthy on RLTC, rather than
+ * `oracle_prices`, which is inside the venue's refused price family and would
+ * report a configuration gap as a missing feed.
+ *
+ * @param {string} oracleAddress the publisher the spec settles against
+ * @returns {Promise<string | null>} the reason to skip, or null to run
+ */
+export async function plantedOracleFeedRefusal(oracleAddress) {
+    let body;
+    try {
+        body = await explorerJson(`bet_feeds/${oracleAddress}/source`);
+    } catch (err) {
+        return `the venue would not answer for ${oracleAddress}: ${err?.message || String(err)}`;
+    }
+    if (Array.isArray(body?.data) && body.data.length > 0) return null;
+    return `the venue publishes no feed for ${oracleAddress} (${body?.total ?? 0} rows): the ten `
+        + 'feeds planted on 2026-07-30 were removed by the 2026-08-24 re-genesis, and a fresh '
+        + 'PRICE v1 publish is inert for 24h, so this lane cannot re-provision itself in a run';
+}
+
+/**
+ * The venue's own answer about whether a PUBLISHED PRICE v1 quote can
+ * ever mature here, or null when the maturation gate can really be driven.
+ *
+ * The explorer lists `oracle_prices` from the HUB MIRROR; the indexer's
+ * consensus lookup (`utility.requireEffectiveOraclePrice` ->
+ * `db.getOraclePrice`) reads the table of the same name in its OWN database.
+ * On mainnet/testnet those are the same rows, because xchain-node sets
+ * HUB_DB_NAME/HUB_DB_SYNC_ENABLED and HubDbSync mirrors the hub's rows back
+ * into the indexer DB. On REGTEST xchain-node deliberately does not (arming the
+ * mirror also arms the block-loop price barriers, and regtest blocks stamped at
+ * ~now can never satisfy the 600s frozen-price grace, which wedged the LTC
+ * block loop when it was tried) - so a regtest PRICE v1 publish reaches the hub,
+ * shows up on the explorer, and stays invisible to every consensus read forever.
+ *
+ * Measured by asking the quote about a time far past the row's own
+ * `effective_at`: the 24-hour lock cannot still be closed in ten years, so a
+ * refusal there is the mirror gap and nothing about this publish.
+ *
+ * A probe rather than a `test.fixme` for D41's reason: it heals itself the day
+ * the venue arms the mirror leg (HUB_DB_NAME + HUB_DB_USER +
+ * HUB_DB_SYNC_ENABLED with HUB_SYNC_PRICE_GRACE_S=0 and
+ * HUB_SYNC_ORACLE_GRACE_S=0, which hub_db_sync honours on regtest for exactly
+ * this), where a fixme would leave the lane dead on a venue that had.
+ *
+ * @param {{address: string, coin: string, tick: string, fiat: string,
+ *          effectiveAt: number|string}} row the publish to ask about
+ * @returns {Promise<string | null>} the reason to skip, or null to run
+ */
+export async function oracleMaturationUnreadable({ address, coin, tick, fiat, effectiveAt }) {
+    const farFuture = Number(effectiveAt) + 315_360_000; // ten years past the lock
+    const q = new URLSearchParams({
+        oracleAddress: address, giveCoin: coin, giveTick: tick, fiatCode: fiat,
+        getCoin: coin, giveEscrow: '1', blockTime: String(farFuture),
+    });
+    let body;
+    try {
+        body = await explorerJson(`oraclefeequote?${q.toString()}`, { allowErrorBody: true });
+    } catch (err) {
+        return `the venue would not quote ${address}: ${err?.message || String(err)}`;
+    }
+    if (!/no effective oracle price/.test(String(body?.error || ''))) return null;
+    return `ten years past its own effective_at (${effectiveAt}) the indexer still reads no `
+        + `effective oracle price for ${address} ${coin}/${tick}/${fiat}, while the explorer `
+        + 'lists the row: the hub mirror is not armed on this regtest venue, so no PRICE v1 '
+        + 'publish here can ever become effective';
+}
+
+/**
+ * Every visible refusal on the screen right now, as one string.
+ *
+ * A form that will not compose does not go quiet: it renders the reason in a
+ * `role="alert"`. Nothing in this suite was reading those, so a compose that
+ * REFUSED and a compose that never ran produced the identical failure - a bare
+ * `toBeVisible` timeout on some downstream locator - and three separate parts
+ * of three runs have now been spent chasing a wrong cause because of it
+ * (an absent field read as a verdict).
+ */
+async function readScreenRefusals(page) {
+    const said = [];
+    const alerts = page.getByRole('alert');
+    const count = await alerts.count().catch(() => 0);
+    for (let i = 0; i < Math.min(count, 6); i += 1) {
+        const one = alerts.nth(i);
+        if (!(await one.isVisible().catch(() => false))) continue;
+        const text = ((await one.innerText().catch(() => '')) || '').trim().replace(/\s+/g, ' ');
+        if (text && !said.includes(text)) said.push(text);
+    }
+    return said.join(' || ').slice(0, 700);
+}
+
+/**
+ * Waits for the confirm modal, and when it never opens, says what the SCREEN
+ * said instead of `element(s) not found`.
+ *
+ * The confirm modal is where every signing flow in this wallet goes, so its
+ * absence is the most common failure shape in the suite and the least
+ * informative one: `expect(getByTestId('confirm-modal')).toBeVisible()` reports
+ * that a locator did not resolve, which is true of a refused compose, a
+ * pre-flight that never answered, an unaffordable fee and a form that was never
+ * filled in. The whole-suite Litecoin run of 2026-08-27 failed three separate
+ * specs on ONE line of `mintXchain` this way, and none of the three failures
+ * carried a single word about why. Reading the alert costs one query on a path
+ * that is already failing.
+ */
+export async function expectConfirmModal(page, what = 'this action', timeoutMs = 60_000) {
+    const modal = page.getByTestId('confirm-modal');
+    try {
+        await expect(modal).toBeVisible({ timeout: timeoutMs });
+    } catch {
+        const said = await readScreenRefusals(page);
+        throw new Error(
+            `the confirm modal never opened for ${what}`
+            + (said
+                ? `, and the screen says: ${said}`
+                : ', and the screen carries no alert either, so the compose never got as far '
+                  + 'as refusing - look at the form itself rather than at the chain'),
+        );
+    }
+    return modal;
 }
 
 /**
@@ -1014,7 +1362,7 @@ export async function mintXchain(page, amount) {
     await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
     await page.getByRole('button', { name: 'Sign action' }).click();
 
-    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expectConfirmModal(page, `the MINT of ${amount} XCHAIN`);
     await page.getByTestId('confirm-approve').click();
     // The advanced-action flow has its own terminal screen; rather than
     // couple to it, wait on the thing that actually matters downstream - the
@@ -1036,10 +1384,16 @@ export async function mintXchain(page, amount) {
  * @returns {Promise<number>}
  */
 export async function tokenBalance(address, tick) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    const body = await res.json();
+    // Through `explorerJson`, not a bare fetch, and that is the whole point of
+    // this helper's existence being reconsidered: the raw read turned EVERY
+    // venue refusal into the number 0. A rate-limited read (HTTP 429)
+    // carries no `data`, so `row` is undefined and this returned "the address
+    // holds none", which is indistinguishable from a real zero and is asserted
+    // on as one. It cost a whole-suite run on 2026-09-02: `access-list-bind`
+    // failed with "the refused send still debited the sender, expected 990,
+    // received 0" over an address whose balance was untouched. `explorerJson`
+    // waits a 429 out twice and then names the venue.
+    const body = await explorerJson(`balances/${address}`);
     const row = (body?.data || []).find((b) => b.tick === tick);
     return row ? Number(row.amount) : 0;
 }
@@ -1070,6 +1424,94 @@ export async function nudgeChain() {
 }
 
 /**
+ * The timestamp this chain's tip actually carries.
+ *
+ * Walks back from the reported tip rather than reading `last_block_time`
+ * directly, because the indexer is routinely a block or two behind the node and
+ * `block/{tip}` is then simply absent. An older block time is the conservative
+ * answer for every caller here: it can only make a computed deadline further in
+ * the chain's future, never accidentally in its past.
+ *
+ * @returns {Promise<number>} unix seconds
+ */
+export async function chainTipTime() {
+    const status = await explorerJson('status');
+    const tip = Number(status?.chain_tip?.[REGTEST_COIN]);
+    if (Number.isFinite(tip) && tip > 0) {
+        for (let h = tip; h > tip - 10 && h > 0; h -= 1) {
+            const block = await explorerJson(`block/${h}`).catch(() => null);
+            const ts = Number(block?.timestamp);
+            if (Number.isFinite(ts) && ts > 0) return ts;
+        }
+    }
+    const reported = Number(status?.last_block_time?.[REGTEST_COIN]);
+    if (Number.isFinite(reported) && reported > 0) return reported;
+    throw new Error(`no ${REGTEST_COIN} block with a timestamp within 10 blocks of tip ${tip}`);
+}
+
+/**
+ * Leaves the shared node's clock somewhere the NEXT run can use it, and returns
+ * which way it went.
+ *
+ * THE BUG THIS EXISTS TO STOP IS A RATCHET, and it took the whole Litecoin
+ * venue out for a day before anyone read it as one. Three specs here jump
+ * mocktime to cross a deadline and "put it back" by pinning it to `tip + 5`.
+ * Pinning is not putting it back: a mock clock does not TICK, so every block
+ * after that teardown carries the same frozen instant while wall time keeps
+ * moving, and the next run pins tip+5 again from wherever the frozen chain now
+ * is. Measured 2026-09-02, RLTC's tip stamped 1788325709 against a wall clock
+ * of 1788344302 - five hours behind, after days of runs each leaving it a
+ * little further back.
+ *
+ * A chain that lags wall time cannot run this suite at all, and the failure is
+ * unrecognisable: `CreateBetFeedForm` validates the deadline against the
+ * BROWSER's clock (`nowSec`, wall time) while every spec computes it from the
+ * CHAIN's, so a market five hours in the chain's future is already in the
+ * browser's past and five betting specs die on "Betting must close in the
+ * future" with nothing on screen about a clock.
+ *
+ * RELEASING IS THE REPAIR, and pinning stays the fallback rather than the
+ * default. `set_mock_time 0` hands the node back its real clock, which is right
+ * whenever real time is AHEAD of the tip. It is only dangerous the other way:
+ * a chain a spec has jumped INTO THE FUTURE would, on release, find its own
+ * clock under median-time-past, where `generate_blocks` fails outright and
+ * every spec on the machine looks broken (the regtest-miner wedge this stack
+ * has hit before). So the direction is measured, never assumed.
+ *
+ * Never throws. A miner too old to carry `set_mock_time` (the image on one of
+ * these three chains was, until 2026-09) and a venue blip are both reported in
+ * the return value; a teardown that failed a run over a clock would be worse
+ * than the clock.
+ *
+ * @returns {Promise<{clock: 'released'|'pinned'|'unknown', tipTime?: number, wall?: number, reason?: string}>}
+ */
+export async function healVenueClock() {
+    const wall = Math.floor(Date.now() / 1000);
+    let tipTime;
+    try {
+        tipTime = await chainTipTime();
+    } catch (err) {
+        return { clock: 'unknown', wall, reason: err?.message || String(err) };
+    }
+
+    try {
+        if (wall > tipTime) {
+            // Real time is above the tip, so the node cannot land under
+            // median-time-past by taking its own clock back.
+            await minerRpc('set_mock_time', { timestamp: 0 });
+            return { clock: 'released', tipTime, wall };
+        }
+        // The chain sits in the future (a spec jumped it and has not finished,
+        // or this run is the one that jumped it): pin just above the tip, which
+        // keeps block production working without rewinding under MTP.
+        await minerRpc('set_mock_time', { timestamp: tipTime + 5 });
+        return { clock: 'pinned', tipTime, wall };
+    } catch (err) {
+        return { clock: 'unknown', tipTime, wall, reason: err?.message || String(err) };
+    }
+}
+
+/**
  * Polls the explorer until `address` holds at least `min` of `tick`.
  *
  * Mines on each pass for the same reason `fundAddress` does: the wallet and
@@ -1082,15 +1524,20 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_00
     let last = null;
     while (Date.now() < deadline) {
         try {
-            const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/balances/${address}`, {
-                signal: AbortSignal.timeout(15_000),
-            });
-            const body = await res.json();
+            // Same read as `tokenBalance`, and through the same guard: a poll
+            // loop may retry a refused read, but it must not mistake one for a
+            // balance of zero and keep waiting for a number that is already
+            // there.
+            const body = await explorerJson(`balances/${address}`);
             const row = (body?.data || []).find((b) => b.tick === tick);
             last = row ? row.amount : null;
             if (row && Number(row.amount) >= min) return row;
-        } catch { /* transient while a block lands */ }
-        await minerRpc('generate_blocks', { count: 1 });
+        } catch { /* transient while a block lands, or a venue refusal to wait out */ }
+        // See `nudgeChain`. Mining unconditionally every 1.5s for two minutes
+        // put ~80 empty blocks on Dogecoin regtest and wedged its indexer,
+        // which cost this campaign a whole coverage row: the symptom is a
+        // balance that never arrives, and the cause is the code asking for it.
+        await nudgeChain();
         await new Promise((r) => setTimeout(r, 1_500));
     }
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
@@ -1170,16 +1617,59 @@ export async function unlockAfterReload(page, password) {
 }
 
 /**
- * Reads the wallet's own regtest receive address off the Receive screen.
+ * Reads the wallet's own regtest receive address off the Receive screen, ON THE
+ * CHAIN THIS RUN DRIVES.
  *
  * This is the only way to learn it: addresses derive from a random seed
  * at wallet creation, so the spec cannot know it in advance.
+ *
+ * WHY THIS DRIVES A PICKER INSTEAD OF JUST READING A FIELD. Receive has no
+ * chain picker of its own for the address: `Receive.jsx` seeds `activeChainId`
+ * from `Object.keys(byChain)[0]`, the first chain the address map yields, and
+ * that is Bitcoin on every wallet. So on any other venue this screen opens on
+ * the WRONG chain, and `selectVenueChain` cannot help because there is no
+ * "Network" trigger here to point at. The one real UI path to a venue-chain
+ * address is the picker behind the field's own icon, and nothing in the fixture
+ * drove it, which is why this helper was structurally Bitcoin-pinned.
+ *
+ * That pin was INVISIBLE while Bitcoin was also the venue, because the wrong
+ * answer and the right answer were the same string. It only became a failure
+ * when a run moved to Litecoin, and it is worth stating plainly that the
+ * dangerous version of this bug is the silent one: a spec reading a Bitcoin
+ * address while the fixture funds Litecoin does not fail, it passes while
+ * testing a chain nobody asked for.
+ *
+ * The correction is conditional on the ADDRESS SHAPE rather than on the coin,
+ * deliberately. Keying it on `REGTEST_COIN === 'RBTC'` would be the same
+ * mistake `selectVenueChain` just had removed: a screen is allowed to open on
+ * whatever chain it likes, so the check has to be "is this the chain I need"
+ * and never "is this the chain I assume it defaulted to".
  */
 export async function readReceiveAddress(page) {
     await gotoSection(page, 'Receive');
 
     const field = page.getByLabel('Address', { exact: true });
     await expect(field).toBeVisible({ timeout: 30_000 });
-    await expect(field).toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
+
+    if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {
+        await page.getByRole('button', { name: 'Choose receive address' }).first().click();
+
+        const filter = page.getByRole('button', { name: 'Filter by network' });
+        await expect(filter, 'the address picker has no network filter').toBeVisible({ timeout: 30_000 });
+        await filter.click();
+        // The filter's options are coin FAMILIES ("Bitcoin" / "Litecoin" /
+        // "Dogecoin"), not network-qualified names, so a venue's chain label is
+        // already the exact option text and no mapping is needed.
+        await page.getByRole('option', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+
+        await page.getByRole('list', { name: 'Wallet addresses' })
+            .getByRole('button', { name: /^View address / }).first().click();
+    }
+
+    await expect(field,
+        `Receive never showed a ${REGTEST_CHAIN_LABEL} address. A wallet carries one per chain `
+        + `from creation, so an empty ${REGTEST_CHAIN_LABEL} filter means the address map itself `
+        + `is wrong, not that this run needs to generate an address first.`)
+        .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
     return field.inputValue();
 }

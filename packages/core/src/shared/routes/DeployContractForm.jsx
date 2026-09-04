@@ -11,7 +11,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { normalizeConstructorParams } from '../../flows/deployChunked.js';
+import { normalizeConstructorParams, indexedActionIndex } from '../../flows/deployChunked.js';
+import { recordDeployedContractName } from '../utils/contractNameMemory.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -81,7 +82,12 @@ function coinLabel(c) {
  *
  * Hex-encoding of the source happens inside the SDK validator chain;
  * callers pass raw UTF-8 as `params.CODE`. GAS_LIMIT is a decimal
- * string per the protocol. NAME + CONSTRUCTOR_PARAMS are optional.
+ * string per the protocol. CONSTRUCTOR_PARAMS is optional. The Name
+ * input is a LOCAL label and must never reach actionParams: no DEPLOY
+ * version carries a NAME slot, and the SDK's leg-field guard hard-rejects
+ * any action carrying a field its format cannot hold. On deploy success it
+ * is filed in contractNameMemory (keyed by chain + the contract's action
+ * index) so the contract list and detail page can show it back.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -265,7 +271,6 @@ export function DeployContractForm({ walletId, onBack }) {
             CODE: code,
             GAS_LIMIT: String(gasLimit || suggestedGas || ''),
         };
-        if (name.trim()) p.NAME = name.trim();
         // PC-38: CONSTRUCTOR_PARAMS is a REST field on the non-stakeable
         // formats (`...CONSTRUCTOR_PARAMS` on v0/v2), so the wire wants the
         // ARRAY and emits one segment per entry. Sending the raw pipe-delimited
@@ -285,7 +290,7 @@ export function DeployContractForm({ walletId, onBack }) {
             p.SLASH_DESTINATION = slashDestination.trim() || 'BURN';
         }
         return p;
-    }, [code, gasLimit, suggestedGas, name, constructorParams, cooldownBlocks, slashDestination]);
+    }, [code, gasLimit, suggestedGas, constructorParams, cooldownBlocks, slashDestination]);
 
     // PC-38: load the template list + any resumable run once the chain is known.
     useEffect(() => {
@@ -449,6 +454,22 @@ export function DeployContractForm({ walletId, onBack }) {
         hardware: 'deployActionHw',
     });
 
+    // File the Name the user typed against the contract it just
+    // deployed. The label is local (no DEPLOY version carries a NAME slot), and
+    // the contract's action_index is usually not knowable yet - the single-leg
+    // lane returns as soon as the transaction is broadcast - so the store takes
+    // whichever identity this result has and settles the rest later.
+    function rememberDeployedName(res) {
+        const label = name.trim();
+        if (!label || !chainId) return;
+        recordDeployedContractName({
+            chainId,
+            actionIndex: indexedActionIndex(res),
+            txid: res?.txid || res?.tx_hash || res?.broadcast?.txid || null,
+            name: label,
+        });
+    }
+
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
@@ -483,12 +504,14 @@ export function DeployContractForm({ walletId, onBack }) {
                     prebuiltPsbt,
                 }),
             });
+            rememberDeployedName(res);
             setResult(res);
             setPassword('');
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Deploy failed.',
@@ -572,6 +595,7 @@ export function DeployContractForm({ walletId, onBack }) {
             } else {
                 res = await messaging.deployAction({ ...base, password });
             }
+            rememberDeployedName(res);
             setResult(res);
             setPassword('');
             setStage('done');
@@ -581,6 +605,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Deploy failed.',
@@ -684,6 +709,12 @@ export function DeployContractForm({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
+                    {name.trim() ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Name (saved on this device)</dt>
+                            <dd className={styles.detailsValue}>{name.trim()}</dd>
+                        </>
+                    ) : null}
                 </dl>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -696,7 +727,7 @@ export function DeployContractForm({ walletId, onBack }) {
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Deploy contract {actionParams.NAME ? `"${actionParams.NAME}"` : ''} to{' '}
+                    Deploy contract {name.trim() ? `"${name.trim()}"` : ''} to{' '}
                     {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
                 </p>
                 <dl className={styles.detailsList}>
@@ -708,8 +739,8 @@ export function DeployContractForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{actionParams.NAME || '(unnamed)'}</dd>
+                    <dt className={styles.detailsLabel}>Name (saved on this device)</dt>
+                    <dd className={styles.detailsValue}>{name.trim() || '(unnamed)'}</dd>
                     <dt className={styles.detailsLabel}>Code</dt>
                     <dd className={styles.detailsValue}>
                         {sizeInfo ? `${sizeInfo.bytes} bytes` : `${new Blob([code]).size} bytes`}
@@ -893,14 +924,14 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Name (optional)"
-                // PC-38 §14 rule 3: the old hint promised this "Appears in My
-                // contracts and the detail page", which is false in both
-                // directions - DEPLOY carries no NAME field in any version
-                // (verified on chain: the wire string is
-                // DEPLOY|<ver>|<code|hash>|<gas>), and the explorer's contract
-                // rows have no name column, so ContractsList's row.name lookup
-                // always falls through to "(unnamed)".
-                hint="Not published on chain: the protocol has no name field for contracts, which are identified by their action index. This is a label for this screen only."
+                // PC-38 §14 rule 3: the hint says exactly what the
+                // name does, and no more. DEPLOY carries no NAME field in any
+                // version (the wire string is DEPLOY|<ver>|<code|hash>|<gas>)
+                // and the explorer's contract rows have no name column, so this
+                // label is stored on this device and merged into the contract
+                // list and detail page by contractNameMemory. Anyone else
+                // looking at the same contract sees only its number.
+                hint="Not published on chain: the protocol has no name field for contracts, which are identified by their number. Saved on this device so you see it in My contracts; you can change it later."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="off"

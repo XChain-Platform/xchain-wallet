@@ -13,6 +13,8 @@
 //     reuse a session-cached password instead of prompting.
 //   - createSignPasswordCache: the SW-memory password cache with TTL.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { shouldAutoApproveSign } from '../../../packages/core/src/shared/utils/originAutoApprove.js';
 import { createSignPasswordCache } from '../../../packages/extension/src/bridge/signPasswordCache.js';
@@ -82,9 +84,21 @@ describe('shouldAutoApproveSign: all gates must line up', () => {
 describe('createSignPasswordCache: remember / recall / expiry', () => {
     it('recalls a remembered credential within the TTL', () => {
         const cache = createSignPasswordCache();
-        cache.remember('wallet-1', { password: 'hunter2', bip39Passphrase: 'extra' }, AUTO_SIGN_LOCALHOST_5M);
-        expect(cache.recall('wallet-1')).toEqual({ password: 'hunter2', bip39Passphrase: 'extra' });
+        cache.remember('wallet-1', { password: 'hunter2' }, AUTO_SIGN_LOCALHOST_5M);
+        expect(cache.recall('wallet-1')).toEqual({ password: 'hunter2' });
         expect(cache.size).toBe(1);
+    });
+
+    // The cache is a PASSWORD cache. A passphrase wallet now
+    // carries its own encrypted 25th word on the record, so a caller handing
+    // one in must not get it back; `toEqual` ignores undefined-valued keys, so
+    // the key list is checked directly.
+    it('drops a bip39Passphrase handed to remember instead of round-tripping it', () => {
+        const cache = createSignPasswordCache();
+        cache.remember('wallet-1', { password: 'hunter2', bip39Passphrase: 'my 25th word' }, AUTO_SIGN_LOCALHOST_5M);
+        const recalled = cache.recall('wallet-1');
+        expect(Object.keys(recalled)).toEqual(['password']);
+        expect(JSON.stringify(recalled)).not.toContain('my 25th word');
     });
 
     it('returns null for an unknown wallet', () => {
@@ -97,7 +111,7 @@ describe('createSignPasswordCache: remember / recall / expiry', () => {
         const cache = createSignPasswordCache({ now: () => t });
         cache.remember('w', { password: 'pw' }, 5_000); // expiresAt = 6_000
         t = 5_999;
-        expect(cache.recall('w')).toEqual({ password: 'pw', bip39Passphrase: undefined });
+        expect(cache.recall('w')).toEqual({ password: 'pw' });
         t = 6_000; // exactly at expiry counts as expired
         expect(cache.recall('w')).toBe(null);
         // The expired entry was evicted, not just hidden.
@@ -111,7 +125,7 @@ describe('createSignPasswordCache: remember / recall / expiry', () => {
         t = 90;
         cache.remember('w', { password: 'b' }, 100); // expiresAt 190
         t = 150;
-        expect(cache.recall('w')).toEqual({ password: 'b', bip39Passphrase: undefined });
+        expect(cache.recall('w')).toEqual({ password: 'b' });
     });
 
     it('is a no-op for missing walletId / password / non-positive TTL', () => {
@@ -137,6 +151,31 @@ describe('createSignPasswordCache: remember / recall / expiry', () => {
         expect(cache.size).toBe(0);
         expect(cache.recall('b')).toBe(null);
     });
+});
+
+// No approval screen collects a BIP39 passphrase, so no bridge surface may
+// plumb one from an approval decision into the core sign flows.
+//
+// A source scan rather than a behavioural assertion, because what is pinned
+// is the ABSENCE of a plumbing line: such a field arrives undefined, and an
+// undefined value passed through changes no observable behaviour, so no
+// behavioural assertion would notice it coming back.
+describe('the bridge decision shapes carry no bip39Passphrase', () => {
+    const surfaces = [
+        'bridge/handlers.js',
+        'bridge/Approvals.js',
+        'bridge/signPasswordCache.js',
+        'approval/kinds/SignApproval.jsx',
+    ];
+
+    for (const rel of surfaces) {
+        it(`${rel} never mentions it`, () => {
+            // Workspace-root relative, the convention the other source-scanning
+            // unit tests here use (chainRegistrySync, docsSiblingGuard).
+            const src = readFileSync(join(process.cwd(), 'packages/extension/src', rel), 'utf8');
+            expect(src).not.toContain('bip39Passphrase');
+        });
+    }
 });
 
 describe('settings schema: autoSignLocalhostMs is v2-tolerant + option-bounded', () => {

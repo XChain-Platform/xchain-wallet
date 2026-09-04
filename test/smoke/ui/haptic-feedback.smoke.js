@@ -99,8 +99,14 @@ assert.ok(/setStage\('review'\);\s*\n\s*haptic\.error\(\);/.test(sendSrc),
 // 8. Locked.jsx wires success on unlock + error on bad password / biometric fail.
 assert.ok(/from '\.\.\/hooks\/useHaptic\.js'/.test(lockedSrc),
     'Locked.jsx imports useHaptic');
-assert.ok(/haptic\.success\(\);[\s\S]{0,200}onUnlocked\?\.\(\)/.test(lockedSrc),
-    'Locked.jsx fires haptic.success before invoking onUnlocked');
+// §15.6 split these into two functions: the shared unlock tail buzzes on a
+// successful password, and `finishUnlock` is the single place that unmounts
+// the screen, because a legacy wallet's capture step has to sit between the
+// two. Assert each half where it lives rather than that they are adjacent.
+assert.ok(/function afterUnlock\([\s\S]{0,600}?haptic\.success\(\);/.test(lockedSrc),
+    'Locked.jsx fires haptic.success in the shared unlock tail');
+assert.ok(/function finishUnlock\([\s\S]{0,600}?onUnlocked\?\.\(\);/.test(lockedSrc),
+    'Locked.jsx invokes onUnlocked from finishUnlock, the one place that unmounts');
 assert.ok((lockedSrc.match(/haptic\.error\(\)/g) || []).length >= 2,
     'Locked.jsx fires haptic.error on at least two failure branches (bad password + biometric / non-bad-password)');
 

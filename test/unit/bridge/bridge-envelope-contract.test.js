@@ -480,6 +480,34 @@ describe('the signing methods answer their published success shapes', () => {
             expect(flowMocks.signPsbtFlow).not.toHaveBeenCalled();
         });
 
+        // Wallet ownership is weaker than the connect grant: signPsbt cannot
+        // check only the former, so a site granted acct-primary could name any
+        // vault address on the chain and get it signed behind the prompt.
+        it('refuses an owned address whose account is outside the site grant', async () => {
+            const host = buildHost(makeVault({ site: connectedSite({ accounts: ['acct-second'] }) }));
+            for (const entry of [{ inputIndex: 0, address: FROM }, { inputIndex: 0, derivationPath: "m/84'/1'/0'/0/0" }]) {
+                const resp = await host.handle({
+                    type: 'bridge.signPsbt',
+                    request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: [entry] },
+                });
+                expect(resp.ok).toBe(false);
+                // ADDRESS_NOT_PERMITTED rides the wire as ADDRESS_NOT_AUTHORIZED,
+                // the same published code getBalances gives an out-of-scope address.
+                expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
+            }
+            expect(flowMocks.signPsbtFlow).not.toHaveBeenCalled();
+        });
+
+        it('keeps the §43.3 empty-accounts wildcard signing', async () => {
+            const host = buildHost(makeVault({ site: connectedSite({ accounts: [] }) }));
+            const { result } = await host.handle({
+                type: 'bridge.signPsbt',
+                request: { origin: ORIGIN, chainId: CHAIN, psbtHex: '70736274', signingPaths: [{ inputIndex: 0, address: FROM }] },
+            });
+            expect(result.ok).toBe(true);
+            expect(flowMocks.signPsbtFlow).toHaveBeenCalledTimes(1);
+        });
+
         it('rejects a malformed entry before prompting the user', async () => {
             const host = buildHost(makeVault({ site: connectedSite() }));
             for (const bad of [[], [{ inputIndex: 0 }], [{ inputIndex: 0, address: FROM, derivationPath: 'm/0' }], [{ inputIndex: -1, address: FROM }]]) {

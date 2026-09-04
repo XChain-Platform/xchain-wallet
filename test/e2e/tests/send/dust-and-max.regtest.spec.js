@@ -50,6 +50,7 @@ import {
     fundAddress,
     minerRpc,
     readReceiveAddress,
+    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
@@ -62,16 +63,17 @@ const COIN = REGTEST_COIN.replace(/^R/, '');
 const DUST_SATS = { BTC: 546, LTC: 5460, DOGE: 100_000 };
 
 /**
- * A throwaway destination, which the fixture already pins for Bitcoin.
+ * A throwaway destination, per chain.
  *
- * Off Bitcoin this needs a same-HRP address of its own: `REGTEST_DESTINATION` is
- * `bcrt1…`, and a cross-HRP address is refused by the form long before any of
- * this spec's subject matter is reached. A Litecoin one derived the same way (a
- * p2wpkh over `hash160('xchain-wallet-e2e-rltc-destination')` on
- * litecoin-regtest params) is `rltc1q94wew2dxt8psxdx670k2yc9620ljmd4w847rcl`,
- * checked with `litecoin-cli validateaddress` on that venue's own node before
- * being written down here. Moving the spec there also needs the Send form's
- * ASSET picked, since that is what selects the chain on this surface.
+ * THE NOTE THAT STOOD HERE IS OBSOLETE AND IS REMOVED RATHER THAN LEFT
+ * TO MISLEAD. It said `REGTEST_DESTINATION` was `bcrt1…` and that running off
+ * Bitcoin meant deriving and hardcoding a Litecoin address (it even carried
+ * one). `REGTEST_DESTINATION` is now PER-CHAIN in the fixture - the same
+ * witness program re-encoded for each chain, with an import-time self-check
+ * that it matches the venue's own address shape - so it is already correct on
+ * whichever chain this runs, and hardcoding one would re-pin the spec to a
+ * single chain. The other half of that old note was right and is now done by
+ * `selectVenueSendAsset`: the Send form picks its chain through the asset.
  */
 const DESTINATION = REGTEST_DESTINATION;
 
@@ -158,6 +160,9 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
             // chains, and far enough under it that no rounding argument applies.
             const dustAmount = (Math.floor(dustFloor / 5) / 1e8).toFixed(8);
             await gotoSection(page, 'Send');
+            // Send opens on its own Bitcoin default; without this the form spends
+            // a chain the funding above never reached.
+            await selectVenueSendAsset(page);
             await toField(page).fill(DESTINATION);
             await amountField(page).fill(dustAmount);
             await mainButton(page, 'Send').click();
@@ -237,6 +242,9 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
 
         await test.step('Max, measured against the chain', async () => {
             await gotoSection(page, 'Send');
+            // Send opens on its own Bitcoin default; without this the form spends
+            // a chain the funding above never reached.
+            await selectVenueSendAsset(page);
             await toField(page).fill(DESTINATION);
 
 

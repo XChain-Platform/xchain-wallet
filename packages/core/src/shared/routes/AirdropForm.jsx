@@ -393,21 +393,52 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         let cancelled = false;
         setHolderPreview((prev) => ({ ...prev, loading: true, error: null }));
         const handle = setTimeout(() => {
-            Promise.all(previewTicks.map((t) => messaging.getHoldersForToken({ chainId, tick: t })
-                .then((resp) => extractHolderRows(resp).length)
-                .catch(() => null)))
-                .then((counts) => {
+            // Retry once, and KEEP THE CAUSE. Both halves were missing, and a
+            // single transient read failure was therefore permanent AND
+            // unexplained: this effect only re-runs when the tick set or the
+            // chain changes, so one blip left "holder count unavailable" on
+            // screen for the rest of the form session with no way to ask
+            // again. The measured cause is the explorer answering 429 under
+            // load (RateLimit-Policy 120;w=60), which clears inside its own
+            // window. DividendForm's twin fetch has always reported `err
+            // .message`; discarding it here is what made a rate limit, a dead
+            // endpoint and an unknown tick read as one identical sentence.
+            const countHolders = async (t) => {
+                let lastErr = null;
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    if (attempt > 0) {
+                        await new Promise((resolve) => { setTimeout(resolve, 1200); });
+                        if (cancelled) return { count: null, error: null };
+                    }
+                    try {
+                        const resp = await messaging.getHoldersForToken({ chainId, tick: t });
+                        return { count: extractHolderRows(resp).length, error: null };
+                    } catch (err) {
+                        lastErr = err;
+                    }
+                }
+                return { count: null, error: lastErr?.message || 'unknown error' };
+            };
+            Promise.all(previewTicks.map(countHolders))
+                .then((results) => {
                     if (cancelled) return;
-                    const valid = counts.filter((c) => c !== null);
+                    const valid = results.filter((r) => r.count !== null);
+                    const firstError = results.find((r) => r.count === null)?.error || 'unknown error';
                     if (valid.length === 0) {
-                        setHolderPreview({ loading: false, total: null, error: 'Failed to load holder counts.' });
+                        setHolderPreview({
+                            loading: false,
+                            total: null,
+                            error: `Failed to load holder counts: ${firstError}`,
+                        });
                         return;
                     }
-                    const total = valid.reduce((a, b) => a + b, 0);
+                    const total = valid.reduce((sum, r) => sum + r.count, 0);
                     setHolderPreview({
                         loading: false,
                         total,
-                        error: valid.length < counts.length ? 'Some token holder counts failed to load.' : null,
+                        error: valid.length < results.length
+                            ? `Some token holder counts failed to load: ${firstError}`
+                            : null,
                     });
                 });
         }, 400);
@@ -901,6 +932,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         } catch (err) {
             if (isUserRejection(err)) return;
             setSubmitError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'LIST broadcast failed.',
             }));
         }
@@ -953,6 +985,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         } catch (err) {
             if (isUserRejection(err)) return;
             setSubmitError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'AIRDROP broadcast failed.',
             }));
         }
@@ -1009,6 +1042,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'LIST broadcast failed.',
@@ -1069,6 +1103,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'AIRDROP broadcast failed.',

@@ -35,6 +35,7 @@
 import { createWallet, gotoSection, mainButton } from '../../fixtures/wallet.js';
 import { expect, test } from '../../fixtures/extension.js';
 import {
+    expectConfirmModal,
     REGTEST_DESTINATION, fundAddress, readReceiveAddress, switchToRegtest, unlockAfterReload,
 } from '../../fixtures/regtest.js';
 
@@ -59,7 +60,7 @@ async function openConfirm(page) {
     await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_BTC);
     await mainButton(page, 'Send').click();
-    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expectConfirmModal(page, 'this action', 30_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled();
 }
 

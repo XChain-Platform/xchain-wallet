@@ -43,6 +43,12 @@ import styles from './Locked.module.css';
  * message and does NOT count against the user (those are bugs, not
  * bad guesses.
  *
+ * §15.6 step 2: the unlock reply names the legacy passphrase wallets the
+ * password just opened that hold no stored passphrase yet. While that
+ * queue is non-empty this screen withholds `onUnlocked` (which unmounts
+ * it in every shell) and asks for each wallet's passphrase once, so it
+ * can be stored under the wallet's own key and never asked for again.
+ *
  * @param {object} props
  * @param {() => void} [props.onUnlocked]
  */
@@ -59,16 +65,22 @@ export function Locked({ onUnlocked }) {
 
     const [password, setPassword] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    // §15.6 25th word. Collapsed by default: the vault is sealed until the
-    // password lands, so this screen cannot know whether any wallet inside
-    // was created with a passphrase, and most were not. Typed here, it
-    // rides along with the unlock so passphrase wallets join the signer pool
-    // like every other; left blank, they sit out and the confirm screen says
-    // so (PassphraseRequiredError) instead of failing on an internal name.
-    const [passphrase, setPassphrase] = useState('');
-    const [passphraseOpen, setPassphraseOpen] = useState(false);
-    const [passphraseError, setPassphraseError] = useState(/** @type {string | null} */ (null));
-    const passphraseRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // §15.6 step 2. The unlock reply, not this screen, decides whether a
+    // passphrase is ever asked for: the vault is sealed until the password
+    // lands, so only the host can tell which wallets are still awaiting the
+    // one-time capture. Non-empty queue means the unmount is withheld and
+    // the wallets are worked through one at a time.
+    const [captureQueue, setCaptureQueue] = useState(
+        /** @type {Array<{ id: string, name: string }>} */ ([]),
+    );
+    const [captureIndex, setCaptureIndex] = useState(0);
+    const [captureValue, setCaptureValue] = useState('');
+    const [captureError, setCaptureError] = useState(/** @type {string | null} */ (null));
+    // The password that opened the vault, kept for the capture request. On
+    // the biometric path this is the unwrapped password, which is why it
+    // lives in state rather than in that handler's local scope.
+    const [capturePassword, setCapturePassword] = useState('');
+    const captureRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const [busy, setBusy] = useState(false);
     const [lockout, setLockout] = useState(getLockoutState);
     const [remainingMs, setRemainingMs] = useState(() =>
@@ -222,10 +234,50 @@ export function Locked({ onUnlocked }) {
 
     const isLockedOut = remainingMs > 0;
 
-    // The unlock request's second argument: only ever a non-empty passphrase,
-    // so a wallet without one sends the exact request it always did.
-    function unlockOpts() {
-        return passphraseOpen && passphrase.length > 0 ? { bip39Passphrase: passphrase } : undefined;
+    const captureWallet = captureQueue[captureIndex] || null;
+    const inCaptureStep = captureWallet !== null;
+
+    // The one place `onUnlocked` is called from the password paths. It
+    // unmounts this screen in every shell, so the password is dropped here
+    // and nowhere earlier: step 2 needs it to encrypt the passphrase.
+    function finishUnlock() {
+        setPassword('');
+        setCapturePassword('');
+        setCaptureQueue([]);
+        setCaptureIndex(0);
+        setCaptureValue('');
+        setCaptureError(null);
+        onUnlocked?.();
+    }
+
+    /**
+     * Shared tail of both password paths. A capture queue holds the screen
+     * open on step 2; an empty one finishes the unlock as before.
+     *
+     * @param {any} reply       the host's unlock reply
+     * @param {string} opened   the password that opened the vault
+     */
+    function afterUnlock(reply, opened) {
+        recordLockoutSuccess();
+        setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
+        setRemainingMs(0);
+        haptic.success();
+        const queue = Array.isArray(reply?.passphraseCaptureNeeded)
+            ? reply.passphraseCaptureNeeded.filter((w) => w && typeof w.id === 'string')
+            : [];
+        // A shell whose messaging module predates the capture message has
+        // no way to answer step 2, so it proceeds as if the user had
+        // pressed "Not now" rather than showing a button that cannot work.
+        if (queue.length > 0 && typeof messaging?.capturePassphrase === 'function') {
+            setCapturePassword(opened);
+            setCaptureQueue(queue);
+            setCaptureIndex(0);
+            setCaptureValue('');
+            setCaptureError(null);
+            setBusy(false);
+            return;
+        }
+        finishUnlock();
     }
 
     async function handleSubmit(event) {
@@ -233,29 +285,10 @@ export function Locked({ onUnlocked }) {
         if (busy || password.length === 0 || isLockedOut) return;
         setBusy(true);
         setError(null);
-        setPassphraseError(null);
         try {
-            await messaging.unlockWallet(password, unlockOpts());
-            recordLockoutSuccess();
-            setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
-            setRemainingMs(0);
-            setPassword('');
-            setPassphrase('');
-            haptic.success();
-            onUnlocked?.();
+            const reply = await messaging.unlockWallet(password);
+            afterUnlock(reply, password);
         } catch (err) {
-            if (err?.name === 'PassphraseMismatchError') {
-                // The password was right (the vault opened); only the 25th
-                // word missed. Mark that field, leave the password in place,
-                // and count nothing against the lockout: this is not a guess
-                // at the password.
-                setPassphraseError(err.message);
-                haptic.error();
-                setBusy(false);
-                passphraseRef.current?.focus();
-                passphraseRef.current?.select();
-                return;
-            }
             const isBadPassword = err?.name === 'InvalidPasswordError';
             if (isBadPassword) {
                 // §26.5 / G068: silently arm panic mode if the entered
@@ -291,23 +324,11 @@ export function Locked({ onUnlocked }) {
         setError(null);
         try {
             const unwrapped = await unlockWithBiometric();
-            // A passphrase typed before pressing the biometric button rides
-            // along; biometrics unwrap the password, never the 25th word.
-            await messaging.unlockWallet(unwrapped, unlockOpts());
-            recordLockoutSuccess();
-            setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
-            setRemainingMs(0);
-            setPassphrase('');
-            haptic.success();
-            onUnlocked?.();
+            // Biometrics unwrap the password, never the passphrase, so this
+            // path reaches step 2 exactly like a typed unlock does.
+            const reply = await messaging.unlockWallet(unwrapped);
+            afterUnlock(reply, unwrapped);
         } catch (err) {
-            if (err?.name === 'PassphraseMismatchError') {
-                setPassphraseError(err.message);
-                haptic.error();
-                setBusy(false);
-                passphraseRef.current?.focus();
-                return;
-            }
             // Biometric failures (cancelled prompt, missing credential,
             // PRF failure) are surfaced raw: they are not bad-password
             // guesses and must NOT increment the lockout counter.
@@ -316,6 +337,55 @@ export function Locked({ onUnlocked }) {
             setBusy(false);
         }
     }
+
+    /**
+     * Step 2's `Continue`. Stores this wallet's passphrase, then either
+     * moves the queue on or, on the last wallet, releases the unmount.
+     */
+    async function handleCapture(event) {
+        event.preventDefault();
+        if (busy || captureValue.length === 0 || !captureWallet) return;
+        setBusy(true);
+        setCaptureError(null);
+        try {
+            await messaging.capturePassphrase({
+                walletId: captureWallet.id,
+                password: capturePassword,
+                bip39Passphrase: captureValue,
+            });
+            const next = captureIndex + 1;
+            if (next < captureQueue.length) {
+                setCaptureIndex(next);
+                setCaptureValue('');
+                setBusy(false);
+                return;
+            }
+            haptic.success();
+            finishUnlock();
+        } catch (err) {
+            // The password was right: the vault opened at step 1. Only the
+            // passphrase missed, so this marks the field and touches
+            // nothing on the lockout counter.
+            setCaptureError(err?.message || 'That passphrase does not match this wallet.');
+            haptic.error();
+            setBusy(false);
+            captureRef.current?.focus();
+            captureRef.current?.select();
+        }
+    }
+
+    // Step 2's `Not now`, and the same state a closed popup or a reload
+    // lands in: nothing is persisted, so the remaining wallets are offered
+    // again at the next unlock.
+    function handleCaptureSkip() {
+        if (busy) return;
+        finishUnlock();
+    }
+
+    // Put the cursor in the passphrase field as each queued wallet comes up.
+    useEffect(() => {
+        if (inCaptureStep) captureRef.current?.focus();
+    }, [inCaptureStep, captureIndex]);
 
     const hero = (
         <div className={isFull ? styles.heroFull : styles.heroPopup}>
@@ -359,39 +429,6 @@ export function Locked({ onUnlocked }) {
                 disabled={busy || isLockedOut}
                 error={error || undefined}
             />
-            {!passphraseOpen ? (
-                <div className={styles.passphraseToggle}>
-                    <button
-                        type="button"
-                        className={styles.forgotLink}
-                        onClick={() => {
-                            setPassphraseOpen(true);
-                            setTimeout(() => passphraseRef.current?.focus(), 0);
-                        }}
-                        aria-expanded="false"
-                        aria-controls="locked-passphrase-field"
-                        disabled={busy || isLockedOut}
-                    >
-                        Wallet has a 25th-word passphrase?
-                    </button>
-                </div>
-            ) : (
-                <Input
-                    id="locked-passphrase-field"
-                    ref={passphraseRef}
-                    type="password"
-                    label="25th-word passphrase"
-                    hint="Only for a wallet created with a passphrase. Leave blank otherwise."
-                    value={passphrase}
-                    onChange={(e) => {
-                        setPassphrase(e.target.value);
-                        if (passphraseError) setPassphraseError(null);
-                    }}
-                    autoComplete="off"
-                    disabled={busy || isLockedOut}
-                    error={passphraseError || undefined}
-                />
-            )}
             <Button
                 type="submit"
                 variant="primary"
@@ -494,17 +531,62 @@ export function Locked({ onUnlocked }) {
         </form>
     );
 
+    // §15.6 step 2, one wallet at a time. `Not now` on any of them
+    // abandons the rest of the queue: the next unlock offers them again.
+    const captureForm = captureWallet ? (
+        <form onSubmit={handleCapture} noValidate>
+            <p className={styles.captureCopy}>
+                <strong>{captureWallet.name} uses a passphrase.</strong>{' '}
+                Enter it once to finish setting up this device. It will be stored on this device, protected by your wallet password, so you are not asked again.
+            </p>
+            <Input
+                id="locked-capture-passphrase"
+                ref={captureRef}
+                type="password"
+                label="Passphrase"
+                value={captureValue}
+                onChange={(e) => {
+                    setCaptureValue(e.target.value);
+                    if (captureError) setCaptureError(null);
+                }}
+                autoComplete="off"
+                disabled={busy}
+                error={captureError || undefined}
+            />
+            <Button
+                type="submit"
+                variant="primary"
+                block
+                loading={busy}
+                disabled={captureValue.length === 0}
+            >
+                Continue
+            </Button>
+            <Button
+                type="button"
+                variant="secondary"
+                block
+                onClick={handleCaptureSkip}
+                disabled={busy}
+            >
+                Not now
+            </Button>
+        </form>
+    ) : null;
+
+    const body = captureForm || form;
+
     return (
         <Screen variant={variant}>
             {isFull ? (
                 <div className={styles.card}>
                     {hero}
-                    {form}
+                    {body}
                 </div>
             ) : (
                 <>
                     {hero}
-                    {form}
+                    {body}
                 </>
             )}
         </Screen>

@@ -132,4 +132,62 @@ describe('addIntegrityAttributes', () => {
         expect(html).toContain(`integrity="${sha384(shipped)}"`);
         expect(html).not.toContain(`integrity="${sha384(assets['/assets/app.js'])}"`);
     });
+
+    // Every fixture above lives under /assets/. The one executable tag in the
+    // shipped page that does NOT is the classic script copied out of
+    // packages/web/public, and it is the FIRST code the page runs - so nothing
+    // here exercised the tag most worth pinning.
+    describe('a public-root script (the pre-bundle boot check)', () => {
+        const BOOT = '<script src="/boot-check.js"></script>';
+
+        it('hashes it exactly like a bundled asset, type=module or not', () => {
+            const bytes = 'if(!window.Promise){document.write("old browser")}';
+            const { html, hashed, skippedLocal, skippedExternal } = addIntegrityAttributes(
+                BOOT,
+                (url) => (url === '/boot-check.js' ? bytes : undefined),
+            );
+            expect(hashed).toEqual(['/boot-check.js']);
+            expect(skippedLocal).toEqual([]);
+            expect(skippedExternal).toEqual([]);
+            expect(html).toContain(`integrity="${sha384(bytes)}"`);
+            expect(html).toContain('crossorigin');
+            // The tag must stay a CLASSIC script: type="module" would defer it
+            // past the bundle it exists to run ahead of.
+            expect(html).not.toContain('type="module"');
+        });
+
+        it('a local url it cannot resolve is a LOCAL skip, not an external one', () => {
+            // This is the distinction that decides whether a build is loud. An
+            // external url has no bytes to hash and is correct; a local one that
+            // went missing is a same-origin script the page will execute with no
+            // integrity, which is the shape a public-dir copy-ordering change
+            // would produce.
+            const { html, skippedLocal, skippedExternal } = addIntegrityAttributes(
+                BOOT,
+                () => undefined,
+            );
+            expect(skippedLocal).toEqual(['/boot-check.js']);
+            expect(skippedExternal).toEqual([]);
+            expect(html).not.toContain('integrity');
+        });
+
+        it('keeps external and local skips apart in one pass, and `skipped` as their union', () => {
+            const { skipped, skippedLocal, skippedExternal } = addIntegrityAttributes(
+                `${BOOT}<script src="https://connect.trezor.io/9/trezor-connect.js"></script>`,
+                () => undefined,
+            );
+            expect(skippedLocal).toEqual(['/boot-check.js']);
+            expect(skippedExternal).toEqual(['https://connect.trezor.io/9/trezor-connect.js']);
+            expect(skipped).toHaveLength(2);
+        });
+
+        it('a protocol-relative url is external, not a local miss', () => {
+            const { skippedLocal, skippedExternal } = addIntegrityAttributes(
+                '<script src="//cdn.example.com/x.js"></script>',
+                () => undefined,
+            );
+            expect(skippedLocal).toEqual([]);
+            expect(skippedExternal).toEqual(['//cdn.example.com/x.js']);
+        });
+    });
 });

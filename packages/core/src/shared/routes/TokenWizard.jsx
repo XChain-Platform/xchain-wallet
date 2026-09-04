@@ -31,6 +31,7 @@ import {
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { externalIndexOf } from '../addressSelection.js';
@@ -299,12 +300,12 @@ export function TokenWizard({ walletId, onBack }) {
 
     function handleDetailsSubmit(event) {
         event.preventDefault();
-        if (!name.trim()) {
-            setFormError('Token name is required.');
-            return;
-        }
-        if (!/^[A-Za-z0-9]+$/.test(name)) {
-            setFormError('Token name must be A–Z, 0–9.');
+        // The grammar is the chain's own allowlist minus the caret, and it
+        // lives in one module both authoring surfaces read: a plain
+        // `/^[A-Za-z0-9]+$/` here would refuse names the chain admits.
+        const nameError = tickerGrammarError(name, { noun: 'Token name' });
+        if (nameError) {
+            setFormError(nameError);
             return;
         }
         if (template === 'subtoken') {
@@ -320,9 +321,18 @@ export function TokenWizard({ walletId, onBack }) {
             // priced at the same discounted ISSUE_SUBTOKEN rate. Demanding a
             // single alphanumeric run made every grandchild uncreatable from the
             // only surface that can author a subtoken at all.
-            if (!/^[A-Za-z0-9]+(\.[A-Za-z0-9]+)*$/.test(parentToken.trim())) {
-                setFormError('Parent ticker must be A–Z, 0–9, with a dot between levels '
-                    + '(PARENT, or PARENT.CHILD for a deeper one).');
+            //
+            // This follows from the child field beside it: once a symbol-bearing
+            // or lowercase name can be COINED, it has to stay addressable as a
+            // parent, or the wallet hands out names it can never build on. Same
+            // grammar, same module, including the dot-structure rules the chain
+            // enforces.
+            const parentError = tickerGrammarError(parentToken, {
+                noun: 'Parent ticker',
+                allowDot: true,
+            });
+            if (parentError) {
+                setFormError(parentError);
                 return;
             }
         }
@@ -407,6 +417,7 @@ export function TokenWizard({ walletId, onBack }) {
             // pre-flight failed (dust): ..."). This is the path the confirm flow actually
             // takes, so leaving it unmapped showed that wording to every user.
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Issue failed.',
@@ -446,6 +457,7 @@ export function TokenWizard({ walletId, onBack }) {
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFeeMandatory,
                         fallback: err?.message || 'Sign failed.',
@@ -837,13 +849,16 @@ const TEMPLATE_COMPOSERS = {
 
     subtoken(form) {
         const p = baseParams(form);
-        // TICK already came in uppercased; compose parent.child if both
-        // are present. `parentToken` is the existing tick the user
-        // owns; the wizard's Subtoken form prompts for it separately
-        // and joins here.
+        // Compose parent.child if both are present. `parentToken` is the
+        // existing tick the user owns; the wizard's Subtoken form prompts for it
+        // separately and joins here.
+        //
+        // Neither half is upper-cased: the chain records a tick exactly as
+        // written, and coercing here would silently rewrite a lowercase
+        // parent into one the ledger does not hold.
         if (form.parentToken) {
-            const parent = String(form.parentToken).trim().toUpperCase();
-            const child = String(form.name).trim().toUpperCase();
+            const parent = String(form.parentToken).trim();
+            const child = String(form.name).trim();
             p.TICK = `${parent}.${child}`;
         }
         p.DECIMALS = form.divisible ? '8' : '0';
@@ -875,7 +890,11 @@ const TEMPLATE_COMPOSERS = {
 function baseParams(form) {
     return {
         VERSION: '0',
-        TICK: (form.name || '').toUpperCase(),
+        // Written through as typed: this is the second half of a two-part
+        // uppercase coercion (the input carries the first), so leaving this
+        // line alone while fixing only the input would leave the wire form
+        // upper-cased regardless.
+        TICK: String(form.name || '').trim(),
     };
 }
 
@@ -1078,8 +1097,8 @@ function renderDetailsStage({
                     hint={'An existing token you own, which can itself be a subtoken. '
                         + "The new token's full ticker will be PARENT.CHILD."}
                     value={parentToken}
-                    onChange={(e) => setParentToken(e.target.value.toUpperCase())}
-                    autoCapitalize="characters"
+                    onChange={(e) => setParentToken(e.target.value)}
+                    autoCapitalize="off"
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
@@ -1088,10 +1107,10 @@ function renderDetailsStage({
             {show.name ? (
                 <Input
                     label={resolved === 'subtoken' ? 'Subtoken name' : 'Token name (ticker)'}
-                    hint="A–Z, 0–9. Uppercase."
+                    hint={TICKER_HINT}
                     value={name}
-                    onChange={(e) => setName(e.target.value.toUpperCase())}
-                    autoCapitalize="characters"
+                    onChange={(e) => setName(e.target.value)}
+                    autoCapitalize="off"
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}

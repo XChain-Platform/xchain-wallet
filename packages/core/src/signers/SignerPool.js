@@ -29,20 +29,26 @@
 //     and stashes it by walletId; called once after `wallet.unlock`
 //   - `unlockOne(walletId, ...)` adds a single signer (used after
 //     adding a new wallet mid-session)
+//   - `captureOne(...)` stores a legacy wallet's passphrase after
+//     verifying it, then pools that wallet's signer
 //   - `get(walletId)` returns the cached signer, or null if absent
 //   - `lockAll()` zeros every signer's key material; called on
 //     `wallet.lock` and on tear-down
 
-import { unlockWalletRecord } from '../flows/unlockWallet.js';
+import { PassphraseMismatchError, unlockWalletRecord } from '../flows/unlockWallet.js';
+import { encryptWalletPassphrase } from '../crypto/walletBlob.js';
 
 /**
  * @typedef {Object} PopulateSummary
  * @property {string[]} pooled               wallet ids now holding a signer
- * @property {string[]} skipped              wallet ids left out (bad password for that record, or a
- *                                           passphrase wallet unlocked without its passphrase)
- * @property {string[]} passphraseMatched    passphrase wallets whose stored addresses the typed 25th word reproduced
- * @property {string[]} passphraseMismatch   passphrase wallets it did NOT reproduce (signer locked, not pooled)
+ * @property {string[]} skipped              wallet ids left out (bad password for that record, or any
+ *                                           other unlock failure)
+ * @property {string[]} passphraseMatched    legacy passphrase wallets whose stored addresses the typed 25th word reproduced
+ * @property {string[]} passphraseMismatch   legacy passphrase wallets it did NOT reproduce (signer locked, not pooled)
  * @property {string[]} passphraseMismatchNames  display names for the mismatch list, for the unlock screen's sentence
+ * @property {string[]} passphraseCaptureNeeded  legacy passphrase wallets the password opened but that hold no
+ *                                           stored passphrase yet, and none was supplied: the capture step's queue
+ * @property {string[]} passphraseCaptureNames   display names for the capture list, in the same order
  */
 
 /**
@@ -100,8 +106,8 @@ export class SignerPool {
      * @param {object} opts
      * @param {import('../storage/Vault.js').Vault} opts.vault
      * @param {string} opts.password
-     * @param {string} [opts.bip39Passphrase]   the §15.6 25th word, applied to every
-     *   passphrase-enabled wallet and checked against each one's stored addresses
+     * @param {string} [opts.bip39Passphrase]   the §15.6 25th word, applied only to wallets that
+     *   have none stored yet, and checked against each one's stored addresses
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
      * @returns {Promise<PopulateSummary>}
@@ -110,14 +116,26 @@ export class SignerPool {
         /** @type {PopulateSummary} */
         const summary = {
             pooled: [], skipped: [], passphraseMatched: [], passphraseMismatch: [], passphraseMismatchNames: [],
+            passphraseCaptureNeeded: [], passphraseCaptureNames: [],
         };
         const wallets = await vault.wallets.list();
         for (const w of wallets) {
-            // §15.6 25th-word passphrase wallets need the right secret
-            // here. Unlocked without it they stay out of the pool, and the
-            // per-op prompt then explains (PassphraseRequiredError) that
-            // the remedy is an unlock with the passphrase filled in.
-            if (w.passphraseEnabled && !bip39Passphrase) { summary.skipped.push(w.id); continue; }
+            // A stored passphrase (§15.6) makes the password the only secret this
+            // needs, so the wallets left out here are the legacy records that
+            // hold none yet. A passphrase supplied by the caller still pools one:
+            // that is the extension's marker-slot re-pool after a worker restart,
+            // and the only path that still hands a 25th word to an unlock.
+            const awaitingCapture = w.passphraseEnabled && w.encryptedPassphrase === null;
+            // A legacy §15.6 25th-word passphrase wallet (nothing captured
+            // yet) needs the right secret here. Left out of the pool without
+            // it, the per-op prompt then explains (PassphraseRequiredError)
+            // that the remedy is locking the wallet and letting the unlock
+            // screen capture it once.
+            if (awaitingCapture && !bip39Passphrase) {
+                summary.passphraseCaptureNeeded.push(w.id);
+                summary.passphraseCaptureNames.push(w.name || '');
+                continue;
+            }
             let signer;
             try {
                 signer = await unlockWalletRecord({
@@ -135,7 +153,12 @@ export class SignerPool {
                 summary.skipped.push(w.id);
                 continue;
             }
-            if (w.passphraseEnabled) {
+            // Only a TYPED passphrase is worth verifying. The ownership check
+            // exists to catch a typo the user just made, and a stored blob was
+            // already checked when it was captured; re-deriving here would cost
+            // an HD derivation on every unlock and could unpool a working
+            // wallet on a spurious miss.
+            if (awaitingCapture) {
                 const owns = await seedOwnsStoredAddresses(vault, w, signer);
                 if (owns === false) {
                     try { signer.lock(); } catch { /* best-effort */ }
@@ -153,6 +176,67 @@ export class SignerPool {
             summary.pooled.push(w.id);
         }
         return summary;
+    }
+
+    /**
+     * The one-time capture step for a legacy passphrase wallet (§3.4): take the
+     * passphrase the user just typed, prove it derives THIS wallet, store it on
+     * the record encrypted under the wallet's own master key, and pool the
+     * signer so the session continues without a second unlock.
+     *
+     * Refuses on `false` (a typo) and equally on `null` (nothing to compare
+     * against). Unlike a fresh create, the user is not choosing the string
+     * here, so an unverified capture would seal the WRONG passphrase onto the
+     * record forever, and the wallet would then be unopenable by any password.
+     * A shipped wallet always has an HD address to check against, so null costs
+     * nothing to refuse.
+     *
+     * @param {object} opts
+     * @param {import('../storage/Vault.js').Vault} opts.vault
+     * @param {import('../schemas/wallet.js').Wallet} opts.wallet   the legacy record, as read from the vault
+     * @param {string} opts.password
+     * @param {string} opts.bip39Passphrase   the typed 25th word; required here
+     * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
+     * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
+     * @returns {Promise<import('../schemas/wallet.js').Wallet>} the stored record
+     * @throws {PassphraseMismatchError} when the passphrase does not own the wallet's addresses
+     */
+    async captureOne({ vault, wallet, password, bip39Passphrase, chainRegistry, sdkRegistry }) {
+        if (!vault) throw new Error('SignerPool.captureOne: vault is required');
+        if (!wallet) throw new Error('SignerPool.captureOne: wallet is required');
+        if (typeof bip39Passphrase !== 'string' || bip39Passphrase.length === 0) {
+            throw new Error('SignerPool.captureOne: bip39Passphrase is required');
+        }
+        const signer = await unlockWalletRecord({
+            wallet,
+            password,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+        let record;
+        try {
+            const owns = await seedOwnsStoredAddresses(vault, wallet, signer);
+            if (owns !== true) throw new PassphraseMismatchError([wallet.name]);
+            // The signer owns this key and zeroes it at lock(); never clear it here.
+            const encryptedPassphrase = await encryptWalletPassphrase({
+                masterKey: signer.getMasterKey(),
+                passphrase: bip39Passphrase,
+            });
+            record = { ...wallet, encryptedPassphrase };
+            await vault.wallets.put(record);
+        } catch (e) {
+            // Nothing half-done leaves this method: a failed capture leaves no
+            // pooled signer and no live master key, whatever the reason.
+            try { signer.lock(); } catch { /* best-effort */ }
+            throw e;
+        }
+        const existing = this._signers.get(wallet.id);
+        if (existing) {
+            try { existing.lock(); } catch { /* best-effort */ }
+        }
+        this._signers.set(wallet.id, signer);
+        return record;
     }
 
     /**

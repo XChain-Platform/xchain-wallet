@@ -27,10 +27,8 @@
 //       await publishLabelsNow({ vault, walletId, password, chainId, ... });
 //
 // Typical restore (after `importMnemonic` has produced a new wallet):
-//   const body = await fetchAndDecryptLabelSync({
-//       sdk, chainId, commitmentKey,   // discoveryName derived inside
-//   });
-//   await applyLabelSyncPayload({ vault, walletId, payload: body });
+//   const body = await fetchAndDecryptLabelSync({ sdk, seed });
+//   if (body) await applyLabelSyncPayload({ vault, walletId, payload: body });
 //
 // `createLabelSyncScheduler` is the auto-sync half (§19.5.2 cadence
 // rules): it watches label/contact vault writes and collapses a burst
@@ -39,8 +37,10 @@
 // decision to the shell, which prompts the user exactly as the manual
 // "Publish now" button does.
 //
-// FOLLOWUPs (Cluster B FOLLOWUPS.md):
-//   2. Fetch + decrypt + apply on restore (the import-side wiring).
+// `fetchAndDecryptLabelSync` is the restore half (FOLLOWUP 2): it finds
+// the published ciphertext again by asking the explorer for FILE actions
+// whose `name` equals the discovery name, and hands the decrypted body
+// back for `applyLabelSyncPayload` to write into the fresh vault.
 
 import {
     computeLabelSyncCommitmentKey,
@@ -48,11 +48,12 @@ import {
     decodeLabelSyncPayload,
     encodeLabelSyncPayload,
 } from '../crypto/index.js';
-import { decryptWalletSeed } from '../crypto/walletBlob.js';
+import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { bip39MnemonicToSeed } from '../crypto/mnemonic.js';
 import { counterwalletMnemonicToSeedBytes } from '../crypto/counterwallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { submitAction } from './submitAction.js';
+import { ENVELOPE_MAX_PAYLOAD } from './fileSizeLimits.js';
 
 export const LABEL_SYNC_PAYLOAD_VERSION = 1;
 
@@ -325,9 +326,9 @@ export class WifOnlyLabelSyncUnsupportedError extends Error {
  * This flow powers both the manual "Publish now" button and the
  * auto-sync path: `createLabelSyncScheduler` decides WHEN a publish is
  * due, the shell prompts for the password, and the write lands here.
- * Fetch-on-restore is a separate FOLLOWUP. HW wallets are not
- * supported here because the commitment key is derived from the seed,
- * which only exists for software wallets.
+ * `fetchAndDecryptLabelSync` reads the result back on restore. HW
+ * wallets are not supported here because the commitment key is derived
+ * from the seed, which only exists for software wallets.
  *
  * @param {PublishLabelsNowOpts} opts
  * @returns {Promise<PublishLabelsNowResult>}
@@ -377,20 +378,42 @@ export async function publishLabelsNow({
 
     // Decrypt mnemonic, derive seed for the commitment key. Both buffers
     // are zeroed in the finally so they never outlive this scope.
+    // retainMasterKey hands back a fresh copy of the derived master key
+    // (ours to zero, unlike a signer's) so a stored passphrase (§15.6) can
+    // be opened without a second Argon2id round.
+    let sessionMasterKey = null;
     const plaintext = await decryptWalletSeed({
         password,
         encryptedSeed: wallet.encryptedSeed,
         kdfParams: wallet.kdfParams,
         aad: wallet.aad,
+        retainMasterKey: (k) => { sessionMasterKey = k; },
     });
     let seed;
+    let passphraseBytes = null;
     try {
         const mnemonic = new TextDecoder().decode(plaintext);
+        // The stored passphrase always wins. A non-null encryptedPassphrase
+        // means the 25th word was captured once at setup; deriving from a
+        // caller-supplied bip39Passphrase instead (the old typed-at-unlock
+        // path) would silently compute the WRONG commitment key and publish
+        // labels under the wrong address, so the stored value overrides
+        // whatever the caller passed, ignoring it entirely.
+        let effectivePassphrase = bip39Passphrase;
+        if (wallet.encryptedPassphrase != null) {
+            passphraseBytes = await decryptWalletPassphrase({
+                masterKey: sessionMasterKey,
+                encryptedPassphrase: wallet.encryptedPassphrase,
+            });
+            effectivePassphrase = new TextDecoder().decode(passphraseBytes);
+        }
         seed = format === 'counterwallet-legacy'
             ? counterwalletMnemonicToSeedBytes(mnemonic)
-            : await bip39MnemonicToSeed(mnemonic, bip39Passphrase);
+            : await bip39MnemonicToSeed(mnemonic, effectivePassphrase);
     } finally {
         plaintext.fill(0);
+        if (passphraseBytes) passphraseBytes.fill(0);
+        if (sessionMasterKey) sessionMasterKey.fill(0);
     }
 
     let payload;
@@ -493,6 +516,174 @@ function bytesToHex(bytes) {
         out += bytes[i].toString(16).padStart(2, '0');
     }
     return out;
+}
+
+// --- Fetch on restore (FOLLOWUP 2, §19.5.2 step 5) -----------------------
+//
+// The discovery name is SHA256 of the commitment key, and it goes on the
+// FILE action's `name` field precisely so a restoring wallet does not have
+// to download every FILE on the chain and try to decrypt each one. The
+// explorer gained the matching read on 2026-08-19: `getFiles(name, 'name')`
+// is an exact-match lookup on the plain `files.name` column, so the whole
+// discovery step is one indexed query.
+//
+// WHY THIS TRIES SEVERAL ROWS INSTEAD OF TRUSTING THE FIRST. The discovery
+// name is PUBLIC the moment the first payload is published, so anyone can
+// publish their own FILE under that same name - either to grief the restore
+// or by accident. The name therefore proves nothing; only a successful
+// AES-256-GCM authentication does, and that key is seed-derived. So the fetch
+// walks the matches newest-first and returns the first one that AUTHENTICATES,
+// treating a decrypt failure as "not ours" rather than as an error. The user's
+// own re-publishes land under the same name too, which is the ordinary reason
+// for more than one row: the newest of those is the one to restore.
+
+/** How many same-name FILE rows a single restore will try to decrypt. */
+export const LABEL_SYNC_MAX_CANDIDATES = 5;
+
+/**
+ * @typedef {Object} FetchAndDecryptLabelSyncOpts
+ * @property {import('../sdk/SDKRegistry.js').XChainSDKLike} sdk   SDK for the chain the labels were published on
+ * @property {Uint8Array} [seed]              caller holds the decrypted seed (ephemeral); one of seed / commitmentKey
+ * @property {Uint8Array} [commitmentKey]     32 bytes, when the caller already derived it
+ * @property {number} [maxCandidates]         default LABEL_SYNC_MAX_CANDIDATES
+ */
+
+/**
+ * Find this wallet's published labels payload on one chain and decrypt it.
+ *
+ * Returns the decrypted body, or `null` when nothing under the discovery
+ * name authenticates under this seed (never published, published on a
+ * different chain, or every match belongs to somebody else). Network and
+ * explorer failures throw, so a restore UI can tell "you have no published
+ * labels" apart from "the explorer is unreachable".
+ *
+ * A commitment key derived here is zeroed before returning; one passed in
+ * belongs to the caller and is left alone.
+ *
+ * @param {FetchAndDecryptLabelSyncOpts} opts
+ * @returns {Promise<import('../crypto/labelSync.js').LabelSyncBody | null>}
+ */
+export async function fetchAndDecryptLabelSync({
+    sdk,
+    seed,
+    commitmentKey,
+    maxCandidates = LABEL_SYNC_MAX_CANDIDATES,
+} = {}) {
+    if (!sdk || typeof sdk.getFiles !== 'function') {
+        throw new Error('fetchAndDecryptLabelSync: sdk with a getFiles() method is required');
+    }
+    if (typeof sdk.getGatedFileRaw !== 'function') {
+        throw new Error(
+            'fetchAndDecryptLabelSync: sdk must expose getGatedFileRaw() to read FILE bytes',
+        );
+    }
+    if (!Number.isFinite(maxCandidates) || maxCandidates < 1) {
+        throw new Error('fetchAndDecryptLabelSync: maxCandidates must be a positive number');
+    }
+
+    // Derive-or-borrow. Only a key we derived is ours to zero.
+    const derivedHere = commitmentKey === undefined || commitmentKey === null;
+    if (derivedHere && !(seed instanceof Uint8Array && seed.length > 0)) {
+        throw new Error(
+            'fetchAndDecryptLabelSync: pass either a non-empty seed or a 32-byte commitmentKey',
+        );
+    }
+    if (!derivedHere && !(commitmentKey instanceof Uint8Array && commitmentKey.length === 32)) {
+        throw new Error('fetchAndDecryptLabelSync: commitmentKey must be a 32-byte Uint8Array');
+    }
+    const key = derivedHere ? computeLabelSyncCommitmentKey(seed) : commitmentKey;
+
+    try {
+        const discoveryName = computeLabelSyncDiscoveryName(key);
+        const rows = await sdk.getFiles(discoveryName, 'name');
+        const candidates = selectLabelSyncCandidates(rows, discoveryName).slice(
+            0,
+            Math.floor(maxCandidates),
+        );
+
+        for (const row of candidates) {
+            let ciphertext;
+            try {
+                // Same endpoint serves gated and non-gated FILE bytes
+                // (/{COIN}/api/file/{index}/raw); the SDK method is named for
+                // its first caller. A label payload is never gated.
+                ciphertext = toBytes(await sdk.getGatedFileRaw(String(row.actionIndex)));
+            } catch {
+                // One unreadable row must not sink the restore: a later
+                // candidate may still be the wallet's own payload.
+                continue;
+            }
+            if (!ciphertext || ciphertext.length === 0) continue;
+            // Anyone can publish arbitrary bytes under this name. Refuse to
+            // spend AES work on anything larger than a payload could legally be.
+            if (ciphertext.length > ENVELOPE_MAX_PAYLOAD) continue;
+            try {
+                return await decodeLabelSyncPayload(key, ciphertext);
+            } catch {
+                // Failed GCM auth (or a foreign payload version) means the row
+                // is not ours. That is the expected miss, not an error.
+                continue;
+            }
+        }
+        return null;
+    } finally {
+        if (derivedHere) key.fill(0);
+    }
+}
+
+/**
+ * Normalize an explorer `getFiles` response into the rows worth trying,
+ * newest first. Exported for tests; the filtering is deliberately narrow
+ * so an explorer that adds columns cannot silently drop the payload.
+ *
+ * @param {unknown} rows                raw `getFiles` response (array, or { data: [...] })
+ * @param {string} discoveryName
+ * @returns {Array<{ actionIndex: string, blockIndex: number | null }>}
+ */
+export function selectLabelSyncCandidates(rows, discoveryName) {
+    const list = Array.isArray(rows)
+        ? rows
+        : (rows && Array.isArray(/** @type {any} */ (rows).data) ? /** @type {any} */ (rows).data : []);
+    const wanted = String(discoveryName).toLowerCase();
+    const out = [];
+    for (const row of list) {
+        if (!row || typeof row !== 'object') continue;
+        if (row.action_index === undefined || row.action_index === null) continue;
+        // The explorer's `name` mode is already an exact match; re-check it so
+        // a future fuzzy/prefix mode could never widen what we decrypt.
+        if (String(row.name ?? '').toLowerCase() !== wanted) continue;
+        // Token-gated FILEs are encrypted under a gate key, not this seed, so
+        // they can never authenticate. Skip the round trip.
+        if (row.gate_ticker) continue;
+        // Anything the indexer explicitly rejected is not a payload. 'valid'
+        // and 'unverified' both stay in; only an outright 'invalid' is dropped.
+        if (String(row.status ?? '').toLowerCase() === 'invalid') continue;
+        const blockIndex = Number(row.block_index);
+        out.push({
+            actionIndex: String(row.action_index),
+            blockIndex: Number.isFinite(blockIndex) ? blockIndex : null,
+        });
+    }
+    // Newest first: action_index is monotonic, so it orders re-publishes even
+    // when several land in one block. Sort defensively rather than trusting
+    // the explorer's default ordering to stay DESC.
+    out.sort((a, b) => Number(b.actionIndex) - Number(a.actionIndex));
+    return out;
+}
+
+/** Coerce whatever the SDK hands back for raw bytes into a plain Uint8Array. */
+function toBytes(value) {
+    if (value == null) return null;
+    if (value instanceof Uint8Array) {
+        // Buffer is a Uint8Array subclass; copy into a plain one so the noble
+        // ciphers see exactly the type they assert on.
+        return value.constructor === Uint8Array ? value : new Uint8Array(value);
+    }
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    if (ArrayBuffer.isView(value)) {
+        return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    }
+    return null;
 }
 
 // --- Auto-sync scheduler (§19.5.2 cadence rules) -------------------------

@@ -49,12 +49,13 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
     EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_COIN,
     fundAddress,
     minerRpc,
     mintXchain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -147,7 +148,7 @@ async function fillPasswordIfPresent(scope) {
 }
 
 async function approveConfirm(page) {
-    await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+    await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
     await page.getByTestId('confirm-approve').click();
 }

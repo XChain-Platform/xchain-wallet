@@ -17,8 +17,10 @@
 //
 // Security posture (§9.3.2):
 //   - Renderer runs with nodeIntegration=false, contextIsolation=true.
-//   - Preload is the only bridge; it exposes a single
-//     `sendMessage(message)` function via contextBridge.
+//   - Preload is the only bridge; the surface it exposes via contextBridge is
+//     exactly the worlds pinned in BRIDGE_WORLDS
+//     (test/integration/shells/desktop-preload-contract.test.js), all of them
+//     functions, headed by `xchainWalletBridge.sendMessage(message)`.
 //   - Vault + signers live in main; the master key never crosses IPC.
 //   - All IPC traffic returns structured `{ ok, result } | { ok, error }`
 //     envelopes; same shape the extension background uses, so shared

@@ -71,6 +71,7 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    expectConfirmModal as sharedConfirmModal,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -200,15 +201,24 @@ async function reloadToHome(page) {
     await unlockAfterReload(page, PASSWORD);
 }
 
+/**
+ * The shared reader, plus this lane's own price check.
+ *
+ * A narrower wait races the modal against the stale-price alert and NOTHING else,
+ * so every other refusal the screen carried read as the modal simply not being
+ * there. That is the swallowing idiom wearing the clothes of a helper, and it
+ * is why the shared explorer's 429 was reported as a bare locator timeout for
+ * five runs. `expectConfirmModal` reads every alert on the screen instead.
+ *
+ * The price assertion stays: it names ONE venue state early and by itself,
+ * which the general reader can only report as one sentence among several.
+ */
 async function expectConfirmScreen(page) {
-    const screen = page.getByTestId('confirm-modal');
-    const priceAlert = page.getByText(/fee price is temporarily unavailable/);
-    await screen.or(priceAlert).first().waitFor({ state: 'visible', timeout: 90_000 });
-    expect(await priceAlert.count(),
+    await sharedConfirmModal(page, 'this action', 90_000);
+    expect(await page.getByText(/fee price is temporarily unavailable/).count(),
         'the venue could not price this action: the price sentinel has gone stale mid-run. Venue '
         + 'state, not a wallet defect - re-seed (campaign §3.2) and re-run')
         .toBe(0);
-    await expect(screen).toBeVisible({ timeout: 60_000 });
 }
 
 async function approveAndGetTxid(page) {

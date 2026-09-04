@@ -267,6 +267,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Destroy (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'destroy').message,
@@ -340,6 +341,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Destroy failed.',

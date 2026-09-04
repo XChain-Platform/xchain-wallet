@@ -129,15 +129,22 @@ export const SIGNED_NOT_BROADCAST_MESSAGE =
  * @param {object} [opts]
  * @param {string} [opts.coinTicker]   native coin of the chain being submitted on (BTC/LTC/DOGE)
  * @param {boolean} [opts.mandatory]   chain has no XCHAIN fee lane (useNativeFee's `mandatory`)
+ * @param {string} [opts.chainId]      the chain being submitted on ('bitcoin-testnet'). Only the
+ *   network half is read, and only to say whether XCHAIN can be minted here; omitting it costs
+ *   that one sentence and nothing else.
+ * @param {string} [opts.networkKind]  'mainnet' | 'testnet' | 'regtest', for a caller holding the
+ *   descriptor rather than the id
  * @param {string|number} [opts.requiredNative]  native-coin protocol fee, when the caller holds
  * the quote; otherwise read off the error
  * @param {string} [opts.fallback]     the form's own copy for everything else
  * @returns {string}
  */
 export function submitFailureMessage(
-    err, { coinTicker, mandatory = false, requiredNative, fallback = '' } = {},
+    err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '' } = {},
 ) {
-    if (isNativeFeeForfeit(err)) return nativeFeeErrorMessage(err, { coinTicker, mandatory });
+    if (isNativeFeeForfeit(err)) {
+        return nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
+    }
     // Before every other classifier and before the fallback: the error already
     // carries the whole remedy, and nothing else here would recognise it.
     if (isWatcherChunkLane(err)) return String(/** @type {any} */ (err).message || '');

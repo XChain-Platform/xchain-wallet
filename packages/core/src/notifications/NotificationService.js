@@ -21,6 +21,11 @@
 // address to one callback, so one subscription per active address (well under
 // the explorer's 25-sub/connection cap) covers every notification kind.
 //
+// MEMPOOL_ACTION / MEMPOOL_REMOVED ride that SAME callback: M1.2 put them in
+// the SDK's ADDRESS_EVENT_TYPES roster, so `onAddress` already registers for
+// them. Calling `sdk.onMempoolAction` here as well would only add a second
+// holder of the identical subscription, and the cap is per connection.
+//
 // Direction matters for NEW_ACTION: source === our address means an action we
 // broadcast was indexed (→ tx confirmed); destination === our address means an
 // inbound transfer (→ incoming receipt). Using source/destination off the
@@ -58,6 +63,12 @@ export class NotificationService {
      * @param {(txid: string) => (void | Promise<void>)} [deps.onTxConfirmed]
      *   optional: called with a confirmed txid so the shell can flip its
      *   PendingTx record to 'indexed'
+     * @param {(txid: string) => (void | Promise<void>)} [deps.onMempoolSeen]
+     *   optional: called the first time the network reports holding one of our
+     *   broadcast txids, so the shell can stamp `mempoolSeenAt` on its PendingTx
+     *   record (§4 M2.2). Called at most once per frame; the shell's writer is
+     *   the thing that must be idempotent, since one transaction paying two of
+     *   our own addresses arrives once per address channel by design
      * @param {() => number} [deps.now]  injectable clock (dedup); defaults to Date.now
      * @param {{ debug: Function, warn: Function, error: Function }} [deps.logger]
      */
@@ -68,6 +79,7 @@ export class NotificationService {
         notify,
         getPendingTxids,
         onTxConfirmed,
+        onMempoolSeen,
         now,
         logger,
     } = {}) {
@@ -82,6 +94,7 @@ export class NotificationService {
         this._notify = notify;
         this._getPendingTxids = typeof getPendingTxids === 'function' ? getPendingTxids : null;
         this._onTxConfirmed = typeof onTxConfirmed === 'function' ? onTxConfirmed : null;
+        this._onMempoolSeen = typeof onMempoolSeen === 'function' ? onMempoolSeen : null;
         this._now = typeof now === 'function' ? now : () => Date.now();
         this._log = logger || NOOP_LOGGER;
 
@@ -197,6 +210,29 @@ export class NotificationService {
      */
     async _handle(addr, msg) {
         if (!msg || !msg.type) return;
+
+        // Recording that the network holds one of our transactions is an
+        // OBSERVATION, not a notification, so it runs ahead of both gates
+        // below. A replayed frame is still evidence a node had it, and the
+        // wallet must not be reduced to guessing at a transaction's state
+        // because the user turned a notification toggle off.
+        if (msg.type === 'MEMPOOL_ACTION') await this._recordMempoolSeen(msg);
+
+        // And retiring our own pending record once its transaction is INDEXED
+        // is the same kind of observation, so it has to run ahead of the same
+        // gates. It sits here rather than in the switch below because the
+        // switch is unreachable on a replay: a wallet that was closed when the
+        // block landed sees that confirmation only as `catch_up` on its next
+        // connect, which is the ordinary path for every send that did not wait
+        // inline for confirmation. Dropped there, the record stays at
+        // 'broadcast' forever and pendingDeltas keeps subtracting it from
+        // spendable balance.
+        //
+        // The return value is also the "is this ours" answer the notification
+        // below needs, so the pending-set lookup happens exactly once.
+        let confirmedOwnSend = false;
+        if (msg.type === 'NEW_ACTION') confirmedOwnSend = await this._recordConfirmedOwnSend(addr, msg);
+
         // catch_up events are historical replays sent on (re)connect, not a
         // live occurrence, so never notify on them.
         if (msg.catch_up) return;
@@ -220,16 +256,13 @@ export class NotificationService {
                 const destination = data.destination || null;
                 if (source && source === addr.address) {
                     // An action we broadcast has been indexed → tx confirmed.
+                    // The pending record was already retired above, ahead of
+                    // both the replay return and the toggle, because that write
+                    // is an observation rather than a notification. All that is
+                    // left here is whether to TELL the user.
+                    if (!confirmedOwnSend) break; // a stranger's transaction: never notify
                     if (!flags.txConfirmations) break;
-                    const txid = data.tx_hash || data.txid || null;
-                    if (this._getPendingTxids) {
-                        const pending = await this._safePendingTxids();
-                        if (!txid || !pending.has(txid)) break; // not one we're tracking
-                    }
                     plan = { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
-                    if (txid && this._onTxConfirmed) {
-                        try { await this._onTxConfirmed(txid); } catch (e) { this._log.warn('NotificationService: onTxConfirmed failed', e); }
-                    }
                 } else if (destination && destination === addr.address) {
                     // An inbound action landed at our address. A MESSAGE is its
                     // own notification kind (gated by its own flag); everything
@@ -300,6 +333,70 @@ export class NotificationService {
         } catch (e) {
             this._log.error('NotificationService: notify adapter threw', e);
         }
+    }
+
+    /**
+     * A MEMPOOL_ACTION frame names a transaction some node is holding. When it
+     * is one WE broadcast, that is the first hard evidence the network took it,
+     * and it is what promotes the tx-status timeline out of "Broadcast,
+     * awaiting network" (§4 M2.2).
+     *
+     * Requires the pending roster: without it we cannot tell our own send from
+     * a stranger's, and stamping a record we do not own is worse than staying
+     * quiet. Failure is logged, never thrown, because this rides the same
+     * handler as delivery and a storage hiccup must not cost the user a
+     * notification.
+     *
+     * @param {{ data?: any }} msg
+     */
+    async _recordMempoolSeen(msg) {
+        if (!this._onMempoolSeen || !this._getPendingTxids) return;
+        const data = msg.data || {};
+        const txid = data.tx_hash || data.txid || null;
+        if (!txid) return;
+        const pending = await this._safePendingTxids();
+        if (!pending.has(txid)) return;
+        try {
+            await this._onMempoolSeen(txid);
+        } catch (e) {
+            this._log.warn('NotificationService: onMempoolSeen failed', e);
+        }
+    }
+
+    /**
+     * Retire our own PendingTx once its transaction has been indexed.
+     *
+     * Deliberately mirrors `_recordMempoolSeen`: both are writes that record
+     * what the network did with a transaction we sent, and neither may be
+     * gated on a notification preference or skipped on a replay.
+     *
+     * Note the asymmetry with `_recordMempoolSeen`'s guard, which is
+     * inherited behavior rather than an oversight: with no `getPendingTxids`
+     * dependency wired, a source-matched action is treated as ours, because
+     * the frame already arrived on a subscription for this very address.
+     *
+     * @param {import('./getActiveAddresses.js').ActiveAddress} addr
+     * @param {{ data?: any }} msg
+     * @returns {Promise<boolean>} whether this frame confirms a send of ours,
+     *   which is also the only case a 'tx-confirmed' notification may follow.
+     */
+    async _recordConfirmedOwnSend(addr, msg) {
+        const data = msg.data || {};
+        const source = data.source || null;
+        if (!source || source !== addr.address) return false;
+
+        const txid = data.tx_hash || data.txid || null;
+        let ours = true;
+        if (this._getPendingTxids) {
+            const pending = await this._safePendingTxids();
+            ours = Boolean(txid) && pending.has(txid);
+        }
+        if (!ours) return false;
+
+        if (txid && this._onTxConfirmed) {
+            try { await this._onTxConfirmed(txid); } catch (e) { this._log.warn('NotificationService: onTxConfirmed failed', e); }
+        }
+        return true;
     }
 
     async _safePendingTxids() {

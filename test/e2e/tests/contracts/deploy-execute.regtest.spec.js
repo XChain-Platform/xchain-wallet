@@ -54,11 +54,14 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     fundAddress,
-    minerRpc,
+    healVenueClock,
     mintXchain,
     nudgeChain,
+    selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -87,7 +90,6 @@ const CONTRACT_SOURCE =
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
 const DEPLOY_GAS = '200000';
-const EXECUTE_GAS = '100000';
 
 /** Unique per run: the venue is shared and its contract list is cumulative. */
 const RUN_TAG = `e2e${Date.now()}`;
@@ -178,22 +180,26 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
 
     test.beforeAll(async () => {
         // Heal the shared node's clock before trusting it. Other suites on this
-        // venue jump mocktime to cross deadlines and put it back in teardown; a
-        // killed run never reaches that teardown, and the next suite then
-        // inherits a node whose clock sits under median-time-past, where
-        // `generate_blocks` fails outright and every spec on the machine looks
-        // broken. Pinning to tip+5 is the ops recipe's repair and costs nothing
-        // when the clock is already fine.
-        try {
-            const status = await explorerJson('status');
-            const tip = Number(status?.last_block_time?.[REGTEST_COIN]);
-            if (Number.isFinite(tip) && tip > 0) {
-                await minerRpc('set_mock_time', { timestamp: tip + 5 });
-                await minerRpc('set_default_mining_time', {});
-            }
-        } catch { /* the venue check in global setup reports unreachability */ }
+        // venue jump mocktime to cross deadlines, and a killed run never reaches
+        // the teardown that would undo it - so the next suite inherits whatever
+        // clock was left behind. `healVenueClock` releases the node back to real
+        // time when that is safe and only pins when the chain sits in the
+        // future; the old unconditional tip+5 pin here was itself the ratchet
+        // that walked this venue five hours behind wall time.
+        await healVenueClock();
     });
 
+    // This spec pinned two defects of one class - a form putting a field on
+    // the wire that the pinned action version has no slot for, which
+    // `xchain-sdk/formatSelector.js` correctly refuses. Both are fixed and
+    // this spec is their regression proof:
+    //
+    //   DEPLOY / NAME. The `Name (optional)` input rode into the action
+    //   params; it is a screen-local label and now never leaves the screen.
+    //   This spec fills it, so a reintroduction stops the deploy step cold.
+    //   EXECUTE / GAS_LIMIT. The form set GAS_LIMIT on every compose while
+    //   EXECUTE v0 has no gas slot at all (a top-level call runs at the
+    //   protocol gas ceiling); the form no longer carries the concept.
     test('a contract deployed from the wallet accepts a method call from the wallet', async ({ page }) => {
         let deployer;
         let contractIndex;
@@ -210,8 +216,17 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // address this spec never funded, which fails deep in the confirm
             // pipeline on "insufficient funds" and reads like a wallet bug.
             await gotoDeployForm(page);
-            deployer = await page.getByRole('main').getByLabel('From', { exact: true }).inputValue();
-            expect(deployer, 'the deploy form names a source address').toMatch(/^bcrt1/);
+            const deployMain = page.getByRole('main');
+            // Put the form on this run's chain BEFORE reading its source. The
+            // deploy form renders a `NetworkField`, so it carries a real
+            // "Network:" picker and defaults to Bitcoin; asserting the address
+            // SHAPE without switching first (the previous fix) can only turn a
+            // wrong-chain run into a 30s timeout, never into a right one.
+            await selectVenueChain(deployMain, 'Network');
+            const fromField = deployMain.getByLabel('From', { exact: true });
+            await expect(fromField, `the deploy form has no ${REGTEST_CHAIN_LABEL} source address`)
+                .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
+            deployer = await fromField.inputValue();
 
             await fundAddress(deployer, FUNDING_BTC);
 
@@ -236,6 +251,10 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // The address that will sign must still be the one that was funded:
             // the default is derived from wallet state, so assert it rather than
             // trust it across a mint and two reloads.
+            // Re-opened form, so it re-defaults to Bitcoin and has to be put back
+            // on the venue chain the same way; the equality check is what makes
+            // that a re-selection of the funded address rather than a new one.
+            await selectVenueChain(main, 'Network');
             expect(await main.getByLabel('From', { exact: true }).inputValue(),
                 'the form still signs with the funded address').toBe(deployer);
 
@@ -300,14 +319,27 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // Reach the contract the way a user does: find it in the list, open
             // it, and call a method from the detail page.
             //
-            // By ACTION INDEX, not by the name typed at deploy: contracts are
-            // identified on chain by their index and by nothing else, so every
-            // row in this list reads "(unnamed)" (see the deploy assertion
-            // above). `.first()` because the list renders the same contract
-            // twice on purpose - once under "My contracts (deployed by me)",
-            // once under "Browse all contracts" - and the first is the one that
-            // proves the wallet recognises the deploy as its own.
-            const row = page.getByRole('button', { name: `Contract ${contractIndex}`, exact: true });
+            // FILTERED TO THIS RUN'S CHAIN FIRST, with the list's own chain
+            // tabs. A contract's action index is per-CHAIN, and this list shows
+            // every chain at once, so "#376" alone can name a Litecoin contract
+            // and a Dogecoin one in the same screen - the same collision the
+            // dispenser browse hit on 2026-09-02. The filter is also the real
+            // user path, so nothing is being reached around here.
+            //
+            // FOUND BY THE NAME THIS RUN TYPED, which is also what the row is
+            // labelled with. The wallet labels a row `row.localName || ... ||
+            // 'Contract <n>'`, so a spec that fills the deploy form's Name
+            // field gets a row reading "Counter e2e<stamp>" rather than the
+            // bare `Contract <index>` an index-based locator looks for. The
+            // name carries RUN_TAG, so it is unique across runs and across
+            // chains, which the index by itself is not.
+            //
+            // `.first()` because the list renders the same contract twice on
+            // purpose - once under "My contracts (deployed by me)", once under
+            // "Browse all contracts" - and the first is the one that proves the
+            // wallet recognises the deploy as its own.
+            await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+            const row = page.getByRole('button', { name: contractName, exact: true });
             await expect(row.first()).toBeVisible({ timeout: 60_000 });
             expect(await row.count(),
                 'the wallet lists its own deploy under "My contracts", not only under browse-all')
@@ -323,7 +355,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // No ABI is declared, so the form is in its manual lane: a free-text
             // method name and pipe-delimited params. `inc` takes none.
             await main.getByLabel('Method', { exact: true }).fill('inc');
-            await main.getByLabel('Gas limit').fill(EXECUTE_GAS);
+            // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await main.getByRole('button', { name: 'Execute', exact: true }).click();
             await approveConfirm(page);
 
@@ -340,8 +372,6 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // Gas is metered, so a body that ran costs more than nothing. A zero
             // here would mean the action indexed without the VM executing it.
             expect(Number(action.gas_used), 'the VM charged for real work').toBeGreaterThan(0);
-            expect(Number(action.gas_used), 'within the limit the form sent')
-                .toBeLessThanOrEqual(Number(EXECUTE_GAS));
 
             // Venue fact 4: the state the method wrote. This is what separates a
             // round trip from a well-formed no-op.

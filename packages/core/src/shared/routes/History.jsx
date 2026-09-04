@@ -28,6 +28,15 @@ import { formatFiat } from '../components/BalanceList.jsx';
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import { normalizeHistoryRow } from '../utils/historyRow.js';
+import {
+    compareMergedEntries,
+    mempoolRowToEntry,
+    mergePendingEntries,
+    pendingDisplayState,
+    pendingTxToEntry,
+} from '../utils/pendingHistory.js';
+import { t } from '../../i18n/index.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
@@ -73,6 +82,223 @@ const COIN_TICKER_TO_NAME = {
     DOGE: 'dogecoin',
     LTC: 'litecoin',
 };
+
+/**
+ * M2.3: one copy table for every pending state, read by the row badge
+ * and by the detail panel that row opens. Two tables would eventually
+ * disagree, and a row reading "pending" above a panel saying the network
+ * never saw the transaction teaches the user to believe neither.
+ *
+ * `pendingDisplayState` decides which entry applies; nothing here reads
+ * the raw fields itself.
+ */
+const PENDING_COPY = {
+    'awaiting-network': {
+        row: 'pending.row.awaitingNetwork',
+        headline: 'pending.detail.awaitingNetwork',
+        help: 'pending.detail.awaitingNetworkHelp',
+    },
+    seen: {
+        row: 'pending.row.seen',
+        headline: 'pending.detail.seen',
+        help: 'pending.detail.seenHelp',
+    },
+    'not-seen': {
+        row: 'pending.row.notSeen',
+        headline: 'pending.detail.notSeen',
+        help: 'pending.detail.notSeenHelp',
+    },
+    dropped: {
+        row: 'pending.row.dropped',
+        headline: 'pending.detail.dropped',
+        help: 'pending.detail.droppedHelp',
+    },
+    replaced: {
+        row: 'pending.row.replaced',
+        headline: 'pending.detail.replaced',
+        help: 'pending.detail.replacedHelp',
+    },
+};
+
+/**
+ * The states where something has gone wrong enough that the user should
+ * pick the row out of a list without reading it (M2 acceptance test 3).
+ * Healthy pending and "nothing has ever reported this" must not look
+ * alike.
+ */
+const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped']);
+
+/**
+ * The pending state of an entry, or null when there is nothing to
+ * describe. A blockless row carrying no pending metadata (an older
+ * shell, a synthesized demo row) gets no state rather than a guessed
+ * one: every state is a claim about the network, and for those rows we
+ * hold no evidence for any of them.
+ *
+ * @param {{ pending?: object } | null | undefined} entry
+ */
+function pendingStateOf(entry) {
+    return entry?.pending ? pendingDisplayState(entry, Date.now()) : null;
+}
+
+/**
+ * The handle History keeps on the row the user opened, alongside its
+ * key. Lowercased because the pending side normalizes hashes and the
+ * confirmed feed does not.
+ *
+ * @param {{ chainId?: string, txHash?: string } | null | undefined} entry
+ */
+function rememberedSelection(entry) {
+    return {
+        chainId: String(entry?.chainId || ''),
+        txHash: String(entry?.txHash || '').toLowerCase(),
+    };
+}
+
+/**
+ * SEND wire layouts, mirrored from the SDK's `parseActionString`
+ * (`xchain-sdk/src/x402.js`). The wallet cannot import it: the SDK is a
+ * host-side dependency and `@xchain-wallet/core` ships without it.
+ *
+ * The exact segment count is part of the contract, not a shortcut. A
+ * memo containing a pipe shifts every field after it, so a layout that
+ * merely required "at least N segments" would pair one output's amount
+ * with another output's destination.
+ */
+const SEND_WIRE_LAYOUTS = {
+    0: { count: 6,  outputs: [{ tick: 2, amount: 3, destination: 4, memo: 5 }] },
+    1: { count: 8,  outputs: [{ tick: 2, amount: 3, destination: 4, memo: 7 },
+                              { tick: 2, amount: 5, destination: 6, memo: 7 }] },
+    2: { count: 9,  outputs: [{ tick: 2, amount: 3, destination: 4, memo: 8 },
+                              { tick: 5, amount: 6, destination: 7, memo: 8 }] },
+    3: { count: 10, outputs: [{ tick: 2, amount: 3, destination: 4, memo: 5 },
+                              { tick: 6, amount: 7, destination: 8, memo: 9 }] },
+};
+
+const ACTION_NAME_RE = /^[A-Z_]{2,32}$/;
+
+/**
+ * The SDK's `isPosNum` (`xchain-sdk/src/x402.js`), the gate every output
+ * of `parseActionString` passes: a bare decimal above zero, with no
+ * sign, no exponent and no surrounding whitespace. Another hand-copy for
+ * the same reason the layouts are, and it drifts as easily.
+ *
+ * The SDK settles "above zero" through a bignumber; the shape settles it
+ * here, since a string of digits is zero exactly when none of them is
+ * 1-9. Asking a JS number instead would answer in the wrong arithmetic
+ * and there is no third party to hand the parsed value to anyway.
+ *
+ * @param {unknown} v
+ */
+function isWireAmount(v) {
+    const s = String(v);
+    return /^\d+(\.\d+)?$/.test(s) && /[1-9]/.test(s);
+}
+
+/**
+ * What a pending transaction is about to do, read off its action data
+ * (I-9). SEND v0-v3 is the only layout anything on this platform can
+ * parse, so it is the only one this claims to understand. Every other
+ * action shows its raw segments under its own name; deriving per-output
+ * amounts for one would be inventing them.
+ *
+ * Amounts travel as the strings the wire carried. Nothing here does
+ * arithmetic on them, so there is no precision to lose.
+ *
+ * @param {{ pending?: { data?: string | null }, raw?: object, action?: string }} entry
+ * @returns {{ kind: 'send' | 'segments' | 'local' | 'none', action: string,
+ *             outputs: Array<{tick: string, amount: string, destination: string, memo: string}>,
+ *             segments: string[] }}
+ */
+function describePendingAction(entry) {
+    const none = { kind: /** @type {'none'} */ ('none'), action: '', outputs: [], segments: [] };
+    const data = entry?.pending?.data;
+    if (typeof data !== 'string' || data === '') {
+        // Nothing network-reported. Our own record of a send still knows
+        // what we asked for, and the panel labels it as ours.
+        const raw = entry?.raw || {};
+        const amount = raw.amount == null ? '' : String(raw.amount);
+        const tick = raw.tick ? String(raw.tick) : '';
+        if (!amount || !tick) return none;
+        return {
+            kind: /** @type {'local'} */ ('local'),
+            action: String(entry?.action || ''),
+            outputs: [{ tick, amount, destination: String(raw.destination || ''), memo: '' }],
+            segments: [],
+        };
+    }
+
+    const segments = data.normalize('NFC').split('|');
+    const wireAction = String(segments[0] || '').trim().toUpperCase();
+    const action = ACTION_NAME_RE.test(wireAction)
+        ? wireAction
+        : String(entry?.action || '').toUpperCase();
+    const asSegments = {
+        kind: /** @type {'segments'} */ ('segments'), action, outputs: [], segments,
+    };
+    if (wireAction !== 'SEND') return asSegments;
+
+    const layout = SEND_WIRE_LAYOUTS[Number(String(segments[1] || '').trim())];
+    if (!layout || segments.length !== layout.count) return asSegments;
+    const outputs = [];
+    for (const map of layout.outputs) {
+        const amount = String(segments[map.amount] || '');
+        // Matched the count but the amount position holds something that
+        // is not an amount: not a SEND we understand, and the segments
+        // are the honest answer. Whitespace is not trimmed away first
+        // because the SDK does not trim either, and this has to fail
+        // wherever the SDK fails or the two disagree about what the
+        // network will accept.
+        if (!isWireAmount(amount)) return asSegments;
+        outputs.push({
+            tick: String(segments[map.tick] || '').toUpperCase(),
+            amount,
+            destination: String(segments[map.destination] || ''),
+            memo: String(segments[map.memo] || '').trim(),
+        });
+    }
+    return { kind: /** @type {'send'} */ ('send'), action, outputs, segments };
+}
+
+/**
+ * M2.5: which verb the row annotation uses, keyed by the direction the
+ * merge already decided (I-9). A null direction is not in the table on
+ * purpose: it means neither party was identified as ours, and a plus or
+ * a minus there would put a sign on money the wallet cannot attribute.
+ */
+const PENDING_AMOUNT_COPY = {
+    out: 'pending.amount.sending',
+    in: 'pending.amount.receiving',
+};
+
+/**
+ * M2.5: what a pending transaction is about to move, or null when the
+ * wallet cannot say.
+ *
+ * Null is the answer for every action but SEND v0-v3 and our own record
+ * of a send. A MINT carries its supply at the same segment offset a SEND
+ * carries its amount, so reading it positionally would invent a figure
+ * rather than report one, which is the whole point of I-9. The decode
+ * comes from `describePendingAction`, which yields outputs for nothing
+ * else; the kind check below states that contract rather than enforcing
+ * it a second time.
+ *
+ * Amount strings are the wire's own, untouched: a value too large or too
+ * precise for a JS number reaches the screen intact because nothing here
+ * parses one.
+ *
+ * @param {any} entry
+ * @returns {{ direction: 'in' | 'out' | null,
+ *             outputs: Array<{ tick: string, amount: string }> } | null}
+ */
+function pendingAmountAnnotation(entry) {
+    if (!entry?.pending) return null;
+    const desc = describePendingAction(entry);
+    if (desc.kind !== 'send' && desc.kind !== 'local') return null;
+    const outputs = desc.outputs.filter((o) => o.amount !== '' && o.tick !== '');
+    if (outputs.length === 0) return null;
+    return { direction: entry.pending.direction ?? null, outputs };
+}
 
 /**
  * History route: §23 unified timeline + §23.5 cross-chain thread
@@ -171,6 +397,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [exportToDate, setExportToDate] = useState('');
     const [exportScope, setExportScope] = useState(/** @type {'filtered' | 'all'} */ ('filtered'));
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
+    // M2.3: the open row is remembered by TRANSACTION as well as by key.
+    // A pending entry is keyed on its hash and a confirmed one on its
+    // action index, so the key of the row the user is reading changes at
+    // the moment the transaction confirms, and changes again if a shallow
+    // reorg reassigns that index. Without a second handle the detail
+    // closes itself exactly when it finally has something new to say.
+    const selectedTxRef = useRef(/** @type {{ chainId: string, txHash: string } | null} */ (null));
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
     );
@@ -249,8 +482,55 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Step 2: fan out history + links per (chain, address). Merge
-    // results into a single sorted list.
+    // M2.1: pending rows have to keep the same timestamp between polls or
+    // they would jump around the list, so the moment WE first saw each one is
+    // remembered here rather than recomputed. It is only ever a fallback: a
+    // row the network has actually seen carries `first_seen` instead.
+    const observedAtRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+    // Read inside the fetch effect, which must not re-run when the list it
+    // produces changes, so the current list travels by ref rather than by dep.
+    const entriesRef = useRef(/** @type {HistoryEntry[]} */ ([]));
+    entriesRef.current = entries;
+    const rememberObservedAt = (chainId, txHash, nowMs) => {
+        const key = `${chainId}:${String(txHash || '').toLowerCase()}`;
+        const seen = observedAtRef.current.get(key);
+        if (seen != null) return seen;
+        observedAtRef.current.set(key, nowMs);
+        return nowMs;
+    };
+    // M2.2 needs to tell "the network never saw this" apart from "the network
+    // saw it and no longer does", and the difference is only visible ACROSS
+    // polls: once the mempool row is gone, the read that would have carried it
+    // is simply absent. So the last poll that did list each transaction is
+    // remembered here, and travels to the entry that outlives the row.
+    const lastMempoolSeenRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+
+    // M2.1: History had no cadence of its own; a confirmed row only ever
+    // appeared because the route remounted. Pending rows need one, so the
+    // fetch below re-runs on the same 20s beat Home already uses for
+    // balances, plus on focus, plus on mount. The tick is what re-triggers
+    // it; the fetch itself decides whether to show the loading state.
+    const [refreshTick, setRefreshTick] = useState(0);
+    useEffect(() => {
+        if (!addressesByChain) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        const bump = () => setRefreshTick((n) => n + 1);
+        const id = setInterval(() => {
+            // A hidden tab is not watching; polling it only burns the shared
+            // rate limit the explorer zone is sized against.
+            if (typeof document !== 'undefined' && document.hidden) return;
+            bump();
+        }, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        if (typeof window === 'undefined') return () => clearInterval(id);
+        window.addEventListener('focus', bump);
+        return () => {
+            clearInterval(id);
+            window.removeEventListener('focus', bump);
+        };
+    }, [addressesByChain, walletId]);
+
+    // Step 2: fan out history + links + unconfirmed rows + our own in-flight
+    // sends per (chain, address). Merge results into a single sorted list.
     useEffect(() => {
         if (!addressesByChain) return;
         const chainsToLoad = Object.entries(addressesByChain)
@@ -262,7 +542,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             return;
         }
         let cancelled = false;
-        setLoadingChains(new Set(chainsToLoad));
+        // A background refresh must not blank the list it is refreshing; the
+        // loading state belongs to the first load only.
+        if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
 
         // Cluster J FOLLOWUP 1: for the demo wallet, replace the SDK
         // fetch with synthesized fixture data so the History view
@@ -290,8 +572,23 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         messaging.getLinksForAddress({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r))
                             .catch(() => []),
-                    ]).then(([history, links]) => (
-                        { chainId: cid, address: a.address, history, links }
+                        // M2.1: both pending sources. Each degrades to [] on
+                        // its own, so an explorer without the unconfirmed
+                        // surface still shows our own broadcast sends, and a
+                        // shell whose messaging predates these channels shows
+                        // confirmed history exactly as it did before.
+                        typeof messaging.getAddressMempool === 'function'
+                            ? messaging.getAddressMempool({ chainId: cid, address: a.address })
+                                .then((r) => extractRows(r))
+                                .catch(() => [])
+                            : Promise.resolve([]),
+                        typeof messaging.getPendingTxsForAddress === 'function'
+                            ? messaging.getPendingTxsForAddress({ chainId: cid, address: a.address })
+                                .then((r) => extractRows(r))
+                                .catch(() => [])
+                            : Promise.resolve([]),
+                    ]).then(([history, links, mempool, pendingTxs]) => (
+                        { chainId: cid, address: a.address, history, links, mempool, pendingTxs }
                     )),
                 );
             }
@@ -322,34 +619,75 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 for (const row of r.history) {
                     const aIdx = String(row.action_index ?? row.actionIndex ?? '');
                     if (!aIdx) continue;
-                    const k = keyFor(r.chainId, aIdx);
-                    const link = linkMap.get(k) || null;
-                    all.push({
-                        key: `${k}:${r.address}`,
+                    // Normalized through the shared helper rather than inline,
+                    // so the standalone detail page can rebuild the SAME entry
+                    // from the same row when a pending action confirms under it.
+                    const entry = normalizeHistoryRow(row, {
                         chainId: r.chainId,
                         address: r.address,
-                        actionIndex: aIdx,
-                        action: String(row.action || row.ACTION || 'ACTION'),
-                        blockIndex: Number(row.block_index ?? row.blockIndex ?? 0),
-                        timestamp: Number(row.timestamp ?? row.block_time ?? 0),
-                        txHash: String(row.tx_hash ?? row.txHash ?? ''),
-                        source: String(row.source ?? row.SOURCE ?? ''),
-                        raw: row,
-                        link,
+                        link: linkMap.get(keyFor(r.chainId, aIdx)) || null,
                     });
+                    if (entry) all.push(entry);
                 }
             }
-            all.sort((a, b) => {
-                if (b.blockIndex !== a.blockIndex) return b.blockIndex - a.blockIndex;
-                return Number(b.actionIndex) - Number(a.actionIndex);
-            });
-            setEntries(all);
+            // M2.1: build the pending side, then reconcile it against the
+            // confirmed side by transaction hash. A hash present on both is
+            // the SAME transaction that has just confirmed, and the confirmed
+            // record replaces the pending one in place rather than joining it.
+            const ownAddresses = new Set();
+            for (const cid of Object.keys(addressesByChain || {})) {
+                for (const a of (addressesByChain[cid] || [])) {
+                    if (a && a.address) ownAddresses.add(String(a.address).toLowerCase());
+                }
+            }
+            const nowMs = Date.now();
+            /** @type {any[]} */
+            const pendingCandidates = [];
+            for (const r of perAddrResults) {
+                for (const row of (r.mempool || [])) {
+                    const hash = String(row?.tx_hash ?? row?.txHash ?? '');
+                    if (!hash) continue;
+                    lastMempoolSeenRef.current.set(`${r.chainId}:${hash.toLowerCase()}`, nowMs);
+                    pendingCandidates.push(mempoolRowToEntry({
+                        chainId: r.chainId,
+                        address: r.address,
+                        row,
+                        ownAddresses,
+                        observedAtMs: rememberObservedAt(r.chainId, hash, nowMs),
+                    }));
+                }
+                for (const record of (r.pendingTxs || [])) {
+                    if (!record?.txid) continue;
+                    const key = `${r.chainId}:${String(record.txid).toLowerCase()}`;
+                    pendingCandidates.push(pendingTxToEntry({
+                        chainId: r.chainId,
+                        address: r.address,
+                        pendingTx: record,
+                        ownAddresses,
+                        observedAtMs: rememberObservedAt(r.chainId, record.txid, nowMs),
+                        lastMempoolSeenMs: lastMempoolSeenRef.current.get(key) ?? null,
+                    }));
+                }
+            }
+            const merged = mergePendingEntries({ confirmed: all, pending: pendingCandidates });
+            // Forget the observation times of transactions that are no longer
+            // pending, so the map tracks the mempool rather than growing with
+            // every transaction the wallet has ever made.
+            const liveKeys = new Set(merged.pending.map((e) => `${e.chainId}:${e.txHash}`));
+            for (const key of [...observedAtRef.current.keys()]) {
+                if (!liveKeys.has(key)) observedAtRef.current.delete(key);
+            }
+            for (const key of [...lastMempoolSeenRef.current.keys()]) {
+                if (!liveKeys.has(key)) lastMempoolSeenRef.current.delete(key);
+            }
+            merged.entries.sort(compareMergedEntries);
+            setEntries(merged.entries);
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
         });
 
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging]);
+    }, [addressesByChain, messaging, refreshTick]);
 
     // Lowercase set of every wallet address across every chain. Used by
     // the action-type filter to discriminate Send (wallet is source)
@@ -429,10 +767,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             searchQuery,
             actionTypes: actionTypeFilter,
             statusSet: statusFilter,
-            dateFromMs: dateFrom ? Date.parse(dateFrom) : null,
+            dateFromMs: localDayStartMs(dateFrom),
             // dateTo is interpreted as end-of-day so a "to: 2026-04-27"
             // pick includes everything that happened that day.
-            dateToMs: dateTo ? Date.parse(dateTo) + 24 * 60 * 60 * 1000 - 1 : null,
+            dateToMs: localDayEndMs(dateTo),
             walletAddresses: walletAddressSet,
         });
     }, [
@@ -562,11 +900,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const match = entries.find((e) => {
             if (initialFocus.chainId && e.chainId !== initialFocus.chainId) return false;
             if (initialFocus.actionIndex && String(e.actionIndex) !== String(initialFocus.actionIndex)) return false;
-            if (initialFocus.txHash && e.txHash !== initialFocus.txHash) return false;
+            // Case-insensitive because the two sides are normalized
+            // differently by design: a merged pending entry carries a
+            // lowercased hash (it is the merge key), while a caller like the
+            // send success card hands us the txid exactly as the node
+            // returned it. An exact compare would fail silently, landing the
+            // user on an unfocused list with nothing to explain why.
+            if (initialFocus.txHash
+                && String(e.txHash).toLowerCase() !== String(initialFocus.txHash).toLowerCase()) {
+                return false;
+            }
             return true;
         });
         if (!match) return;
         initialFocusFiredRef.current = true;
+        selectedTxRef.current = rememberedSelection(match);
         setSelectedKey(match.key);
         // Defer scrollIntoView until after the row's <li> has rendered;
         // looking up the DOM node by `data-history-key` keeps the
@@ -582,6 +930,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             }, 0);
         }
     }, [entries, initialFocus]);
+
+    // M2.3 handoff: the open row's key has just stopped existing, which
+    // is what confirming looks like from here (the pending entry is
+    // dropped and the confirmed one arrives under a different key). Point
+    // the selection at the entry carrying the same transaction so the
+    // detail upgrades in place instead of closing. A shallow reorg that
+    // reassigns the action index lands here for the same reason, and gets
+    // the same answer, because the transaction hash is the one handle
+    // that survives both.
+    //
+    // A key that matches nothing at all is deliberately left alone: an
+    // empty poll must not close a card the user is reading.
+    useEffect(() => {
+        if (!selectedKey) return;
+        const tracked = selectedTxRef.current;
+        if (!tracked?.txHash) return;
+        if (entries.some((e) => e.key === selectedKey)) return;
+        const match = entries.find((e) => e.chainId === tracked.chainId
+            && String(e.txHash || '').toLowerCase() === tracked.txHash);
+        if (match) setSelectedKey(match.key);
+    }, [entries, selectedKey]);
 
     const toggleGroupExpanded = (groupKey) => {
         setExpandedGroups((prev) => {
@@ -615,7 +984,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             onSelectEntry(entry);
             return;
         }
-        setSelectedKey((cur) => (cur === entry.key ? null : entry.key));
+        const closing = selectedKey === entry.key;
+        selectedTxRef.current = closing ? null : rememberedSelection(entry);
+        setSelectedKey(closing ? null : entry.key);
         if (entry.link?.peerChainId && entry.link.peerActionIndex) {
             const pKey = peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex);
             if (!peerCache[pKey]) {
@@ -848,8 +1219,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         const sourceEntries = exportScope === 'all' ? entries : visibleEntries;
                         const ranged = (exportFromDate || exportToDate)
                             ? flowsLib.filterEntriesByDateRange(sourceEntries, {
-                                fromTs: exportFromDate ? Math.floor(Date.parse(exportFromDate) / 1000) : null,
-                                toTs: exportToDate ? Math.floor((Date.parse(exportToDate) + 24 * 60 * 60 * 1000 - 1) / 1000) : null,
+                                // Same local-day reading as the filter bar, so an
+                                // export of "today" contains what the list showed.
+                                fromTs: exportFromDate ? Math.floor(localDayStartMs(exportFromDate) / 1000) : null,
+                                toTs: exportToDate ? Math.floor(localDayEndMs(exportToDate) / 1000) : null,
                             })
                             : sourceEntries;
                         runExport({
@@ -1049,7 +1422,12 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         };
     }, [moreOpen]);
 
-    const isLinked = Boolean(entry.link);
+    // M2.3: a pending entry has no block, so the LINK pairing it would
+    // render has not been indexed either. Suppressed outright rather
+    // than left to render an empty peer block that reads like a failed
+    // fetch. It comes back on its own when the confirmed entry replaces
+    // this one, because that entry carries the link record.
+    const isLinked = Boolean(entry.link) && Number(entry.blockIndex) > 0;
     const peerKey = entry.link?.peerChainId && entry.link?.peerActionIndex
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
         : null;
@@ -1130,7 +1508,12 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             },
         });
     }
-    if (replaceable.ok) {
+    // A transaction we have already replaced still satisfies the field
+    // contract `isEntryReplaceable` checks (it has a hash, no block, and
+    // an allowlisted action), so the offer has to be withdrawn here.
+    // Replacing a replacement bumps the fee on a transaction the network
+    // has already dropped, spends a fee, and moves nothing.
+    if (replaceable.ok && !entry.pending?.replaced) {
         moreOptions.push({
             id: 'rbf-speedup',
             label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
@@ -1190,6 +1573,15 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
 
     return (
         <div className={styles.detailContainer} role="region" aria-label="Action detail">
+            {/* M2.3: the pending branch. First, because on a pending
+                entry the thing the user came to find out is what is
+                happening to it, and because the warning states have to
+                be impossible to scroll past. Disappears of its own
+                accord when the confirmed entry replaces this one. */}
+            {isPending ? (
+                <PendingDetailPanel entry={entry} balancesHidden={balancesHidden} />
+            ) : null}
+
             {/* Basic details hero: concise summary at the top of the
                 page. Flush variant: zero card padding so the table's
                 row-divider lines run all the way to the card edges,
@@ -1213,8 +1605,15 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 as contact, Speed up, Cancel). The More button always
                 renders so users get a consistent place to look across
                 every action type; when no actions apply, the menu
-                surfaces a placeholder message instead. */}
-            {explorerButtons.length > 0 ? (
+                surfaces a placeholder message instead.
+
+                The row also renders with no explorer links at all, which
+                is the normal case for a pending entry: it has no action
+                index for the XChain link and regtest has no third-party
+                explorer, and gating the whole row on those links took
+                Speed up and Cancel away from exactly the transactions
+                they exist for. */}
+            {explorerButtons.length > 0 || moreOptions.length > 0 ? (
                 <div className={styles.detailActions} role="group" aria-label="Action options">
                     {explorerButtons.map((link) => (
                         <a
@@ -1457,6 +1856,102 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 </Button>
             ) : null}
         </div>
+    );
+}
+
+/**
+ * M2.3 pending branch of the detail card. Everything a user can be told
+ * honestly about a transaction that has been sent and not yet indexed:
+ * which of the five states it is in, when the network first reported it,
+ * what it is about to do, and the one sentence that has to survive every
+ * rewrite of this panel, that nothing has validated it yet.
+ *
+ * Deliberately absent: any SPV or LINK section. Both need an indexed
+ * action, and rendering them empty reads as a fetch that failed rather
+ * than as a stage that has not happened.
+ *
+ * @param {{ entry: any, balancesHidden?: boolean }} props
+ */
+function PendingDetailPanel({ entry, balancesHidden = false }) {
+    const state = pendingStateOf(entry);
+    const copy = state ? PENDING_COPY[state] : null;
+    const warning = state != null && PENDING_WARNING_STATES.has(state);
+    const meta = entry?.pending || null;
+    const desc = describePendingAction(entry);
+    const amountOf = (value) => (balancesHidden ? '•••••' : value);
+
+    return (
+        <section
+            className={`${styles.pendingPanel} ${warning ? styles.pendingPanelWarning : ''}`}
+            aria-label={t('pending.detail.sectionLabel')}
+        >
+            {copy ? (
+                <>
+                    <p className={styles.pendingHeadline}>{t(copy.headline)}</p>
+                    <p className={styles.pendingHelp}>{t(copy.help)}</p>
+                </>
+            ) : null}
+            {/* The honesty line (§7). A mempool sighting is not
+                acceptance: the indexer can still reject this action when
+                the block lands, so it renders in every pending state. */}
+            <p className={styles.pendingNotValidated}>{t('pending.detail.notValidated')}</p>
+
+            {meta?.firstSeenMs ? (
+                <p className={styles.pendingTiming}>
+                    {t('pending.detail.firstSeen', { when: formatRelativeTime(meta.firstSeenMs) })}
+                </p>
+            ) : null}
+            {meta?.broadcastAtMs ? (
+                <p className={styles.pendingTiming}>
+                    {t('pending.detail.broadcastAt', { when: formatRelativeTime(meta.broadcastAtMs) })}
+                </p>
+            ) : null}
+            {meta?.replaced && meta.replacementTxHash ? (
+                <p className={styles.pendingTiming}>
+                    {t('pending.detail.replacementTx', {
+                        txHash: shortenAddress(meta.replacementTxHash),
+                    })}
+                </p>
+            ) : null}
+
+            <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+            {desc.kind === 'send' || desc.kind === 'local' ? (
+                <ul className={styles.pendingOutputs}>
+                    {desc.outputs.map((o, i) => (
+                        <li key={`${o.destination}:${i}`}>
+                            {t('pending.detail.sendOutput', {
+                                amount: amountOf(o.amount),
+                                tick: o.tick,
+                                destination: o.destination,
+                            })}
+                            {o.memo ? (
+                                <span className={styles.pendingMemo}>
+                                    {' '}{t('pending.detail.memo', { memo: o.memo })}
+                                </span>
+                            ) : null}
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
+            {desc.kind === 'local' ? (
+                <p className={styles.pendingHelp}>{t('pending.detail.localRecordNote')}</p>
+            ) : null}
+            {desc.kind === 'segments' ? (
+                <>
+                    <p className={styles.pendingHelp}>
+                        {t('pending.detail.undecodable', { action: desc.action })}
+                    </p>
+                    <ul className={styles.pendingSegments}>
+                        {desc.segments.map((seg, i) => (
+                            <li key={`${i}:${seg}`}><code>{seg}</code></li>
+                        ))}
+                    </ul>
+                </>
+            ) : null}
+            {desc.kind === 'none' ? (
+                <p className={styles.pendingHelp}>{t('pending.detail.noData')}</p>
+            ) : null}
+        </section>
     );
 }
 
@@ -1729,26 +2224,21 @@ function xchainCoinForChainId(chainId) {
 
 /**
  * Build a full XChain explorer action URL from the chain descriptor.
- * Mainnet/testnet descriptors embed the coin path in `defaultUrl`
- * (e.g. `https://explorer.xchain.io/BTC`), so we append just
- * `/action/<index>`. For non-standard ports (regtest localhost) the
- * descriptor carries only the host, so we append the coin ticker path
- * and the port before `/action/<index>`.
+ * The explorer base URL is bare on EVERY network (see the note on
+ * `explorerCoinCode` in registry/coinTicker.js), so the coin segment is
+ * always ours to append: `<base>[:port]/<COIN>/action/<index>`. Only the
+ * port differs, and a standard 80/443 is left implicit.
  * Returns null when the descriptor or coin ticker is unavailable.
  */
 function xchainActionUrl(chainId, actionIndex) {
     const desc = chainRegistry.get(chainId);
     const ex = desc?.explorer;
     if (!ex || !actionIndex) return null;
-    const standardPort = ex.defaultPort === 80 || ex.defaultPort === 443;
-    if (standardPort) {
-        // defaultUrl already includes the coin path.
-        return `${ex.defaultUrl}/action/${actionIndex}`;
-    }
-    // Non-standard port: descriptor URL is just the host; append coin path.
     const coin = xchainCoinForChainId(chainId);
     if (!coin) return null;
-    return `${ex.defaultUrl}:${ex.defaultPort}/${coin}/action/${actionIndex}`;
+    const standardPort = ex.defaultPort === 80 || ex.defaultPort === 443;
+    const origin = standardPort ? ex.defaultUrl : `${ex.defaultUrl}:${ex.defaultPort}`;
+    return `${origin}/${coin}/action/${actionIndex}`;
 }
 
 /**
@@ -2145,6 +2635,78 @@ function nativeAmountFieldOf(entry) {
 }
 
 /**
+ * M2.3: the meta-line label for a row with no block. It used to be the
+ * flat word "unconfirmed", which was the wrong vocabulary (§7 fixes
+ * "pending" for anything a user reads) and, worse, was the same word for
+ * a healthy send and for one no node has ever reported.
+ *
+ * The warning treatment is the list-level half of M2 acceptance test 3:
+ * a transaction the network has not seen has to be findable in a long
+ * list without opening it.
+ *
+ * @param {{ entry: any }} props
+ */
+function PendingRowLabel({ entry }) {
+    const state = pendingStateOf(entry);
+    const warning = state != null && PENDING_WARNING_STATES.has(state);
+    const label = state ? t(PENDING_COPY[state].row) : t('pending.row.generic');
+    return (
+        <span
+            className={`${styles.pendingLabel} ${warning ? styles.pendingLabelWarning : ''}`}
+            data-pending-state={state || 'pending'}
+        >
+            {warning ? <span aria-hidden="true">⚠</span> : null}
+            {label}
+        </span>
+    );
+}
+
+/**
+ * M2.5: what the pending row moves, on the row itself. Until now a
+ * pending entry named its action, its state and its counterparty and
+ * said nothing about the value at stake, so the list gave the user no
+ * way to tell a dust send from their rent without opening every row.
+ *
+ * Renders nothing rather than a placeholder when no amount can be stood
+ * behind. A blank says the wallet does not know; a zero would say the
+ * transaction moves nothing, which is a different and false claim.
+ *
+ * The phrasing is a verb still in progress, and the accessible name
+ * carries the pre-validation caveat for a reader who never sees the
+ * styling. Neither is decoration: this figure sits inches from settled
+ * amounts in the same list, and the indexer can still reject the action
+ * when its block lands.
+ *
+ * @param {{ entry: any }} props
+ */
+function PendingAmountLabel({ entry }) {
+    const [balancesHidden] = useBalancesHidden();
+    const annotation = pendingAmountAnnotation(entry);
+    if (!annotation) return null;
+    const amounts = annotation.outputs
+        .map((o) => t('pending.amount.entry', {
+            amount: balancesHidden ? '•••••' : o.amount,
+            tick: o.tick,
+        }))
+        .join(t('pending.amount.separator'));
+    const summary = t(
+        PENDING_AMOUNT_COPY[annotation.direction] || 'pending.amount.moving',
+        { amounts },
+    );
+    const caveat = t('pending.amount.caveat', { summary });
+    return (
+        <span
+            className={styles.pendingAmount}
+            data-pending-amount={annotation.direction || 'unknown'}
+            aria-label={caveat}
+            title={caveat}
+        >
+            {summary}
+        </span>
+    );
+}
+
+/**
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
@@ -2199,7 +2761,12 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                                 </span>
                             ) : null}
                         </>
-                    ) : <span>unconfirmed</span>}
+                    ) : (
+                        <>
+                            <PendingRowLabel entry={entry} />
+                            <PendingAmountLabel entry={entry} />
+                        </>
+                    )}
                     {entry.timestamp ? (
                         <span className={styles.rowRelativeTime}>
                             {formatRelativeTime(entry.timestamp)}
@@ -2299,6 +2866,7 @@ function groupBadgeLabel(subkind) {
     if (subkind === 'dispenser-dispense') return actionDisplayLabel('DISPENSER');
     if (subkind === 'order-fills') return actionDisplayLabel('ORDER');
     if (subkind === 'link-pair') return actionDisplayLabel('LINK');
+    if (subkind === 'batch') return actionDisplayLabel('BATCH');
     return 'Group';
 }
 
@@ -2677,6 +3245,42 @@ function DoubleChevron({ direction = 'down' }) {
 
 /** Format a date N days ago in local time as YYYY-MM-DD for the
  *  native <input type="date"> control. */
+/**
+ * The date inputs speak in the user's own days. `isoDateDaysAgo` builds its
+ * string from LOCAL calendar components and `<input type="date">` shows the
+ * user a local day, but `Date.parse('2026-08-27')` is UTC midnight by spec.
+ * Reading the two the same way is the whole point of these helpers.
+ *
+ * The asymmetry was not cosmetic. West of UTC, "today" as a UTC-parsed day
+ * ends BEFORE the current moment for as long as the local date lags the UTC
+ * date: in US Pacific that is every evening from 17:00 until midnight, and
+ * for those seven hours the default 30-day window silently hid everything
+ * that had just happened, which is exactly the moment a pending transaction
+ * needs to be visible.
+ *
+ * @param {string} iso  `YYYY-MM-DD`, or empty for no bound
+ * @returns {number | null}
+ */
+function localDayStartMs(iso) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!parts) return null;
+    return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), 0, 0, 0, 0).getTime();
+}
+
+/**
+ * End of the local day named by `iso`, inclusive.
+ *
+ * @param {string} iso
+ * @returns {number | null}
+ */
+function localDayEndMs(iso) {
+    const start = localDayStartMs(iso);
+    if (start == null) return null;
+    const d = new Date(start);
+    d.setDate(d.getDate() + 1);
+    return d.getTime() - 1;
+}
+
 function isoDateDaysAgo(days) {
     const d = new Date();
     d.setDate(d.getDate() - days);

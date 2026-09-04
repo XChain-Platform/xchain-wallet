@@ -168,20 +168,31 @@ assert.ok(
     'neither side claims the canonical link, so the comparison above proved nothing',
 );
 
-// The JS intake gate in front of the parser (nativeDeepLinks.js) may be wider
-// than the claim - the OS is the narrower filter and the parser is the stricter
-// one - but it must never be NARROWER, because a link the OS delivers and this
-// gate drops never reaches the parser at all, and that is the silent nothing
-// this whole file exists to prevent.
+// The JS intake gate in front of the parser (nativeDeepLinks.js) is the fifth
+// copy of the claim, and it must be the SAME range - neither narrower nor
+// wider.
+//
+// Narrower is the loud half: a link the OS delivers and this gate drops never
+// reaches the parser at all, which is the silent nothing this whole file
+// exists to prevent. Wider was allowed here on the reasoning that the
+// OS is the narrower filter anyway, and that tolerance is exactly what let the
+// gate sit at `/wallet` for the whole life of the narrowing - claiming
+// `/wallet/privacy/` and `/wallet/support/` in a file whose own docstring says
+// it accepts "the link shapes this app claims in its manifest, and nothing
+// else". The OS is not the only way in either: an Android intent can be fired
+// at the activity directly by any app on the device, and the Java and Swift
+// plugins check the HOST only, so this constant is the path filter on that
+// route.
 const deepLinkSource = readFileSync(
     join(root, 'packages', 'web', 'src', 'deeplinks', 'nativeDeepLinks.js'), 'utf8',
 );
 const gatePrefix = /ALLOWED_HTTPS_PREFIX\s*=\s*'([^']+)'/.exec(deepLinkSource)?.[1];
 assert.ok(gatePrefix, 'nativeDeepLinks.js no longer states its accepted https path prefix');
-assert.ok(
-    parserPrefix.startsWith(gatePrefix),
-    `the native intake gate accepts only ${gatePrefix} while the association hands over ${claimed}; links inside `
-    + 'the claim would be dropped before the parser ever sees them',
+assert.equal(
+    gatePrefix, parserPrefix,
+    `the native intake gate accepts ${gatePrefix} while the association hands over ${claimed} and the parser `
+    + `unwraps ${parserPrefix}. A narrower gate drops links inside the claim before the parser ever sees them; a `
+    + 'wider one admits paths neither platform claims, which is how this constant went stale unnoticed.',
 );
 
 // --- 4. The half that runs when the app is ABSENT -----------------------
@@ -219,7 +230,7 @@ console.log(
     `OK: universal-link claim drift (the association's ${claimed} and the SPA's ${parserPrefix} cover the`
     + ' same URLs, checked by Apple\'s own wildcard rule against the real parser and not by comparing strings; the'
     + ' Android manifest claims the same range; the store listings\' privacy, support and download URLs are'
-    + ' claimed by neither side; the native intake gate is not narrower than the claim; the claimed path has a'
+    + ' claimed by neither side; the native intake gate claims exactly the same range; the claimed path has a'
     + ' landing page in the websites docroot for devices without the app; and the association is generated into'
     + ` the docroot of ${entitlementDomain}, the host the entitlement associates)`,
 );

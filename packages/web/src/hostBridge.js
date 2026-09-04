@@ -67,6 +67,11 @@ import {
     fakeSubassetsFor,
     fakeNativeFiatRates,
 } from './devFakeBalances.js';
+import {
+    createDevMockEventBus,
+    seedDefaultFixtures,
+    installDevMockConsole,
+} from './devMockEvents.js';
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -149,6 +154,26 @@ if (!import.meta.env?.PROD) {
         },
     });
 }
+
+// M1.3: one shared event bus across every per-chain mock SDK instance (the
+// factory below is called once per chain), so a developer scripting from the
+// console doesn't need to know or care which chain's SDK object currently
+// holds the subscription - addresses are unique strings regardless. Seeded
+// with a couple of fixtures so the dev shell shows pending activity with no
+// scripting required (I-36); the `!PROD` gate matches the mock SDK's own so
+// this dead-code-eliminates from production the same way.
+let devMockEvents = null;
+if (!import.meta.env?.PROD) {
+    devMockEvents = createDevMockEventBus();
+    seedDefaultFixtures(devMockEvents);
+    installDevMockConsole(devMockEvents);
+}
+
+// The "on-chain-revealed" public key the dev-mock venue serves for an address
+// it has seen. A valid compressed-key SHAPE (33 bytes, 02 prefix) so callers
+// that measure or parse it behave as they would on chain; it is not derived
+// from anything and nothing can sign with it.
+const MOCK_RECIPIENT_PUBKEY = `02${'ab'.repeat(32)}`;
 
 const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     // Each per-chain SDK instance carries its own `network` (chainId)
@@ -406,15 +431,46 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             verifyMessage() { return false; },
             generateChallenge() { return ''; },
         },
-        // §46: no-op WebSocket surface so the notification watcher can
-        // "connect" against the dev mock without a real explorer WS. It
-        // never emits, so no notifications fire in dev-mock mode.
+        // §46: WebSocket surface so the notification watcher can "connect"
+        // against the dev mock without a real explorer WS.
         connectWs() { return Promise.resolve(); },
         disconnectWs() {},
-        onAddress() { return () => {}; },
+        // M1.3: onAddress/onMempoolAction now actually deliver frames, via
+        // the shared devMockEvents bus, scriptable from the console (I-36).
+        // Everything else on this WS surface stays inert - out of this row.
+        onAddress(address, callback) {
+            return devMockEvents ? devMockEvents.onAddress(address, callback) : () => {};
+        },
+        onMempoolAction(address, callback) {
+            return devMockEvents ? devMockEvents.onMempoolAction(address, callback) : () => {};
+        },
         onOrderMatch() { return () => {}; },
         onDispenser() { return () => {}; },
         onCoinpayRequired() { return () => {}; },
+        // getUnconfirmed(address): explorer field names verbatim, served
+        // from the fixtures store (I-10). Explicit on `sdk` (not the
+        // readStub's generic get*() -> [] fallback) so it can honor a limit
+        // and filter by source/destinations rather than always returning [].
+        getUnconfirmed(address, opts) {
+            return Promise.resolve(devMockEvents ? devMockEvents.getUnconfirmed(address, opts) : []);
+        },
+        // getPublicKey(address): has the chain ever seen this address SPEND?
+        //
+        // Explicit here because the readStub's generic `get*() -> []` fallback
+        // is actively wrong for this one call. An empty array is not a public
+        // key, but it IS truthy, so every caller read it as "found": compose
+        // reported "✓ Recipient public key found." for every address ever
+        // typed, and the first-contact surface behind the missing-key banner -
+        // the plaintext fallback and the "Request encrypted session" handshake -
+        // could not be reached in the dev shell at all.
+        //
+        // The rule mirrors the chain's: a key exists only for an address the
+        // wallet itself derived (dev-mock shape, so it has "spent" as far as
+        // this venue is concerned). Any real address is one this venue has
+        // never seen, which is what first contact means.
+        getPublicKey(address) {
+            return Promise.resolve(sdkLib.isDevMockAddress(address) ? MOCK_RECIPIENT_PUBKEY : null);
+        },
     };
     // Compose: explicit fields (wallet/auth) win; everything else falls
     // through to the read stub so any sdk.getXxx() call resolves to [].
@@ -489,6 +545,23 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk 
         throw err;
     });
 
+// Every path that binds a signer pool and a host awaits this first. Those
+// two capture the `sdkRegistry` VALUE at bind time, so a wallet unlocked
+// before the real factory swapped in kept the boot placeholder for the
+// whole session: on a slow link a quick password after the network-switch
+// reload beat the 1.9 MB SDK chunk, and every derive, balance and
+// notification call then failed with "xchain-sdk is not loaded yet" until
+// the user locked and unlocked again. A failed load is NOT swallowed here:
+// the registry stays on the placeholder, which throws per call by design,
+// and `sdkResolved` itself still rejects for anyone who reads it.
+async function sdkBound() {
+    try {
+        await sdkResolved;
+    } catch (_err) {
+        /* already logged by sdkResolved's own catch */
+    }
+}
+
 /** Default active chains for onboarding. Users can change later via Settings. */
 export const DEFAULT_ACTIVE_CHAIN_IDS = [
     'bitcoin-mainnet',
@@ -537,6 +610,7 @@ function startNotifications() {
         notify: createWebNotifyAdapter(),
         getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
         onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
+        onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
         logger: console,
     });
     notificationService.start().catch((err) => {
@@ -814,6 +888,7 @@ export async function createWalletLocal(req) {
         });
         await v.save();
         vault = v;
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         await signerPool.populate({
             vault,
@@ -897,6 +972,7 @@ export async function importMnemonicLocal(req) {
         });
         await v.save();
         vault = v;
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         await signerPool.populate({
             vault,
@@ -994,6 +1070,7 @@ export async function importBackupLocal(req) {
             : await flowsNs.importBackupFile({ ...common, fileContent: req.fileContent });
         await v.save();
         vault = v;
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         // The restored seal now opens under `password`, which is exactly why
         // the re-key had to happen first: populate would otherwise skip the
@@ -1042,7 +1119,10 @@ async function getFlows() {
  *   §15.6 25th word; supplied, it unlocks every passphrase-enabled wallet into the pool
  *   and is checked against each one's stored addresses (a wrong one is refused, not
  *   silently accepted as a different seed)
- * @returns {Promise<{ unlocked: true }>}
+ * @returns {Promise<{ unlocked: true, passphraseCaptureNeeded: Array<{ id: string, name: string }> }>}
+ *   `passphraseCaptureNeeded` lists the legacy wallets the password opened but that hold no
+ *   stored passphrase yet; the unlock screen asks for each one's 25th word once and sends it
+ *   to `wallet.passphrase.capture` (§3.4)
  */
 export async function unlockWalletLocal(req) {
     const password = req?.password;
@@ -1071,6 +1151,7 @@ export async function unlockWalletLocal(req) {
         // subsequent HD-derive ops (account.create, receive.getAddress
         // for software signers) reuse pre-unlocked signers without
         // re-prompting. Pool is cleared in lockWalletLocal.
+        await sdkBound();
         signerPool = new signersLib.SignerPool();
         const pooled = await signerPool.populate({
             vault,
@@ -1102,7 +1183,17 @@ export async function unlockWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
         });
         startNotifications();
-        return { unlocked: true };
+        // Legacy passphrase wallets the password opened but that hold no
+        // stored 25th word yet. The pool reports them as two parallel arrays;
+        // zip them here so the caller cannot pair the wrong name with the
+        // wrong wallet.
+        return {
+            unlocked: true,
+            passphraseCaptureNeeded: pooled.passphraseCaptureNeeded.map((id, i) => ({
+                id,
+                name: pooled.passphraseCaptureNames[i] || '',
+            })),
+        };
     } finally {
         masterKey.fill(0);
     }

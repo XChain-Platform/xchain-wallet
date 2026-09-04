@@ -14,7 +14,7 @@
 // Address encoding, PSBT signing, and message signing are delegated to
 // `xchain-sdk` and stay stubbed until SDKRegistry lands (§10.2).
 
-import { decryptWalletSeed } from '../crypto/walletBlob.js';
+import { decryptWalletPassphrase, decryptWalletSeed } from '../crypto/walletBlob.js';
 import { decrypt } from '../crypto/aead.js';
 import { base64ToBytes, deriveMasterKey } from '../crypto/kdf.js';
 import {
@@ -41,7 +41,8 @@ import { logConsole } from '../shared/utils/logConsole.js';
  * @property {string} encryptedSeed                         base64 ciphertext from Wallet.encryptedSeed; empty string legal when format='wif-only'
  * @property {import('../crypto/kdf.js').KdfParams} kdfParams
  * @property {Uint8Array} [aad]                             extra authenticated data passed at encrypt time
- * @property {boolean} [passphraseEnabled]                  §15.6: BIP39 passphrase required at unlock (BIP39 only)
+ * @property {boolean} [passphraseEnabled]                  §15.6: the wallet's seed derivation includes a BIP39 passphrase (BIP39 only)
+ * @property {string|null} [encryptedPassphrase]            §15.6: base64 passphrase blob sealed under this wallet's own master key; null on a legacy record awaiting capture
  * @property {'bip39' | 'counterwallet-legacy' | 'wif-only'} [format]    Wallet.format; defaults to 'bip39'
  * @property {Array<{ encryptedWif: string }>} [importedKeys]            §15.4: wif-only unlock validates password by decrypting the first entry
  */
@@ -101,7 +102,10 @@ export class SoftwareSigner extends Signer {
      * `walletEncryption.format`:
      *
      *   - `'bip39'` (default): PBKDF2-stretched 64-byte seed via
-     *     BIP39, with the optional 25th-word passphrase (§15.6).
+     *     BIP39, with the optional 25th-word passphrase (§15.6). That
+     *     passphrase comes from the wallet's own stored blob whenever it
+     *     has one, and only from the caller's `bip39Passphrase` when it
+     *     does not (a legacy record, mid-capture).
      *   - `'counterwallet-legacy'`: 16-byte raw seed via §15.2. No
      *     passphrase concept; BIP39 passphrase must be omitted.
      *
@@ -110,7 +114,7 @@ export class SoftwareSigner extends Signer {
      *
      * @param {Object} opts
      * @param {string} opts.password
-     * @param {string} [opts.bip39Passphrase]   required iff format='bip39' and passphraseEnabled
+     * @param {string} [opts.bip39Passphrase]   required iff format='bip39', passphraseEnabled, and no passphrase is stored yet; ignored when one is
      */
     async unlock({ password, bip39Passphrase = '' }) {
         if (typeof password !== 'string' || password.length === 0) {
@@ -118,7 +122,14 @@ export class SoftwareSigner extends Signer {
         }
         const enc = this._walletEncryption;
         const format = enc.format ?? 'bip39';
-        if (format === 'bip39' && enc.passphraseEnabled && bip39Passphrase.length === 0) {
+        // The stored blob always wins, so a caller only has to supply a
+        // passphrase for a legacy record that has none yet.
+        const storedPassphrase = typeof enc.encryptedPassphrase === 'string'
+            && enc.encryptedPassphrase.length > 0
+            ? enc.encryptedPassphrase
+            : null;
+        if (format === 'bip39' && enc.passphraseEnabled
+            && storedPassphrase === null && bip39Passphrase.length === 0) {
             throw new Error('SoftwareSigner.unlock: bip39Passphrase is required');
         }
         if (format === 'counterwallet-legacy' && bip39Passphrase.length > 0) {
@@ -183,7 +194,39 @@ export class SoftwareSigner extends Signer {
                 plaintext.fill(0);
                 throw new Error('SoftwareSigner.unlock: decrypted blob is not a valid BIP39 mnemonic');
             }
-            seed = await bip39MnemonicToSeed(mnemonic, bip39Passphrase);
+            // The stored passphrase is opened here and nowhere else: this is
+            // the one moment the master key and the mnemonic are both in
+            // hand. When the wallet has one, the caller's `bip39Passphrase`
+            // is ignored outright rather than preferred or compared, so a
+            // stale string from any of the flows that still accept the option
+            // cannot silently derive a different seed.
+            let passphraseBytes = null;
+            try {
+                let effectivePassphrase = bip39Passphrase;
+                if (storedPassphrase !== null) {
+                    if (!sessionMasterKey) {
+                        throw new Error(
+                            'SoftwareSigner.unlock: the stored passphrase needs the session master key, which this unlock did not retain',
+                        );
+                    }
+                    passphraseBytes = await decryptWalletPassphrase({
+                        masterKey: sessionMasterKey,
+                        encryptedPassphrase: storedPassphrase,
+                    });
+                    // Decoding is unavoidable: bip39MnemonicToSeed takes a
+                    // string, and a JS string cannot be zeroed (§17.7.3, the
+                    // same caveat the mnemonic carries). The bytes below can
+                    // be, and are.
+                    effectivePassphrase = new TextDecoder().decode(passphraseBytes);
+                }
+                seed = await bip39MnemonicToSeed(mnemonic, effectivePassphrase);
+            } catch (e) {
+                plaintext.fill(0);
+                if (sessionMasterKey) sessionMasterKey.fill(0);
+                throw e;
+            } finally {
+                if (passphraseBytes) passphraseBytes.fill(0);
+            }
         } else if (format === 'counterwallet-legacy') {
             if (!isValidCounterwalletMnemonic(mnemonic)) {
                 plaintext.fill(0);

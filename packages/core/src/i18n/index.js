@@ -218,6 +218,61 @@ export function t(key, vars) {
 
 // --- formatjs message formatting -------------------------------------
 
+// `Intl` rejects a structurally invalid BCP-47 tag with a RangeError,
+// and every Intl call on the render path sits inside a catch that
+// degrades to legacyFormat, so an unusable locale code silently
+// disables formatjs for the whole dictionary. `pseudo-rtl` is exactly
+// that shape: `pseudo` is a legal language subtag but the following
+// `rtl` is 3 alpha, which is neither a script (4), a region (2 alpha /
+// 3 digit) nor a variant (5-8 alphanum). Resolving the code once, here,
+// keeps the dictionary key, `getLocale()` and `getDirection()` on the
+// original string while the formatting boundary sees a tag Intl accepts.
+const FORMAT_LOCALE_CACHE = new Map();
+
+/** True when `Intl` accepts `code` as a structurally valid tag. */
+function isUsableTag(code) {
+    try {
+        new Intl.NumberFormat(code);
+        return true;
+    } catch (_err) {
+        return false;
+    }
+}
+
+/**
+ * Map a locale code to the nearest tag `Intl` accepts: the code itself
+ * when it is structurally valid (so every real locale is untouched),
+ * else its base subtag when that names a locale Intl actually knows,
+ * else 'en'. A structurally valid but unknown base is NOT used: Intl
+ * silently resolves it to the host default, so 'pseudo' would render
+ * English copy under whatever plural rules the user's device carries.
+ *
+ * @param {string} code
+ * @returns {string}
+ */
+function resolveFormatLocale(code) {
+    const key = String(code);
+    const cached = FORMAT_LOCALE_CACHE.get(key);
+    if (cached !== undefined) return cached;
+    let resolved = 'en';
+    if (isUsableTag(key)) {
+        resolved = key;
+    } else {
+        const base = key.split('-')[0];
+        if (base !== key && isUsableTag(base)
+            && Intl.NumberFormat.supportedLocalesOf(base).length > 0) {
+            resolved = base;
+        }
+    }
+    if (resolved !== key && typeof console !== 'undefined') {
+        console.warn(
+            `i18n: locale "${key}" is not a tag Intl accepts; formatting as "${resolved}"`,
+        );
+    }
+    FORMAT_LOCALE_CACHE.set(key, resolved);
+    return resolved;
+}
+
 // Compiled IntlMessageFormat instances are immutable and reusable, so
 // memoise per (locale, template). Bounded to keep long-running shells
 // from growing the cache without limit.
@@ -285,8 +340,11 @@ export function format(template, vars, locale = 'en') {
     const values = vars || {};
     // Fast path: no ICU markup at all.
     if (!template.includes('{')) return template;
+    // Resolve once for the whole render: the compile below, the plural
+    // rules inside legacyFormat, and the MF_CACHE key all have to agree.
+    const fmtLocale = resolveFormatLocale(locale);
     try {
-        const mf = messageFormatFor(template, locale);
+        const mf = messageFormatFor(template, fmtLocale);
         // Pre-fill any referenced-but-missing arg with its bare token so
         // formatjs doesn't throw on a missing value; translators still
         // see the untranslated placeholder in the rendered output.
@@ -294,12 +352,12 @@ export function format(template, vars, locale = 'en') {
         // A missing plural / number / date arg cannot be pre-filled: the
         // token would render as NaN, so the legacy path renders the
         // whole template with bare tokens instead.
-        if (filled === null) return legacyFormat(template, values, locale);
+        if (filled === null) return legacyFormat(template, values, fmtLocale);
         return String(mf.format(filled));
     } catch (_err) {
         // Malformed ICU (or an unsupported construct): never throw at
         // render; fall back to the legacy substitution.
-        return legacyFormat(template, values, locale);
+        return legacyFormat(template, values, fmtLocale);
     }
 }
 

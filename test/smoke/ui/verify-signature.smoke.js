@@ -43,6 +43,10 @@ const popupAppSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
+const desktopAppSrc = readFileSync(
+    join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
+    'utf8',
+);
 
 // --- form structure ---------------------------------------------------
 
@@ -101,9 +105,12 @@ for (const [src, name] of [
 
 // --- App wiring -------------------------------------------------------
 
+// All three shells: desktop routes verify-signature and offers it on Home,
+// so an Actions menu that omits it is drift, not a capability difference.
 for (const [src, name] of [
     [webAppSrc, 'web'],
     [popupAppSrc, 'popup'],
+    [desktopAppSrc, 'desktop'],
 ]) {
     assert.match(
         src,

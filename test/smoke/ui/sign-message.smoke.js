@@ -43,6 +43,10 @@ const popupAppSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
+const desktopAppSrc = readFileSync(
+    join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
+    'utf8',
+);
 
 // --- form structure ---------------------------------------------------
 
@@ -112,9 +116,13 @@ for (const [src, name] of [
 
 // --- App wiring -------------------------------------------------------
 
+// All three shells, not two. The desktop renderer had the route and the
+// Home button since v0.238.0 but never armed the Actions-menu handler, and
+// this loop covering only [web, popup] is why no run could say so.
 for (const [src, name] of [
     [webAppSrc, 'web'],
     [popupAppSrc, 'popup'],
+    [desktopAppSrc, 'desktop'],
 ]) {
     assert.match(
         src,

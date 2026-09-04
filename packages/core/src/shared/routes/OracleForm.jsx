@@ -326,6 +326,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publishing the price failed.',
             }));
             setStage('review');

@@ -39,6 +39,7 @@ import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
@@ -211,8 +212,15 @@ function destinationAddressError(address, descriptor) {
  *        Receives the currently-entered To address and amount so the caller can
  *        carry them back into the prefill (changing the asset must not wipe the
  *        destination or amount). Omit to leave the hero non-interactive.
+ * @param {(target: { chainId?: string, txHash?: string }) => void} [props.onViewHistory]
+ *        M2.4: tapped from the success card's "View in history" action.
+ *        The payload matches History's `initialFocus` shape (chainId +
+ *        txHash) so the caller can pass it straight through unchanged.
+ *        The merged entry exists immediately (built from this wallet's own
+ *        pending record) even though the network has not sighted it yet;
+ *        the card's copy says as much. Omit to hide the action.
  */
-export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
+export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHistory }) {
     const { messaging, shell } = useMessaging();
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
@@ -1932,8 +1940,27 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset }) {
                             ) : null}
                         </div>
                     ) : null}
+                    {onViewHistory && txid ? (
+                        // M2.4: honest expectation-setting for the merged entry
+                        // this button opens. It exists right away (the wallet's
+                        // own pending record), but the decoder polls its node on
+                        // a 60s cadence with caches behind that, so the network
+                        // side of the row can lag broadcast by up to ~85s with
+                        // nothing wrong. Saying so here means a still-"awaiting
+                        // network" row does not read as a bug the moment History
+                        // opens.
+                        <p className={styles.successHint}>{t('send.success.viewInHistoryHint')}</p>
+                    ) : null}
                 </div>
                 <div className={styles.actions}>
+                    {onViewHistory && txid ? (
+                        <Button
+                            variant="secondary"
+                            onClick={() => onViewHistory({ chainId, txHash: txid })}
+                        >
+                            {t('send.success.viewInHistory')}
+                        </Button>
+                    ) : null}
                     <Button variant="secondary" onClick={sendAnother}>
                         Send another
                     </Button>

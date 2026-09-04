@@ -43,7 +43,7 @@
 // The exact figure still arrives at the confirm screen, which quotes for real
 // (protocolFeeDisclosure / the native pre-flight).
 
-import { NATIVE_FEE_UNVERIFIED_NOTICE } from '../sdk/nativeFeePreflight.js';
+import { NATIVE_FEE_UNVERIFIED_NOTICE, nativeFeeToggleLabel } from '../sdk/nativeFeePreflight.js';
 
 /**
  * @typedef {Object} NormalizedProtocolFee
@@ -148,7 +148,10 @@ export function protocolFeeRowCopy({
 
     return {
         variant: 'toggle',
-        label: `Pay protocol fee in ${coinTicker} instead of XCHAIN`,
+        // Shared with the refusal copy: nativeFeeErrorMessage tells the user to untick
+        // this control BY NAME, and a second copy of the words is a second thing to
+        // forget.
+        label: nativeFeeToggleLabel(coinTicker),
         hint: `${amountSentence}${forfeit}${unverifiedNotice}`,
     };
 }

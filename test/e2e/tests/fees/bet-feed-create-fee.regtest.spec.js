@@ -50,14 +50,15 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
-    EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_LABEL,
-    REGTEST_COIN,
     encoderRpc,
+    expectConfirmModal,
+    EXPLORER_URL,
     fundAddress,
     minerRpc,
     mintXchain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -215,7 +216,7 @@ async function composeMarket(page, { label, daysOut }) {
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     await main.getByRole('button', { name: 'Review market', exact: true }).click();
 
-    await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+    await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
     return quoteText;
 }

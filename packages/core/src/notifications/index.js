@@ -20,4 +20,8 @@ export { DeadlineWatcher, describeWindow } from './DeadlineWatcher.js';
 export { DispenserEscrowWatcher } from './DispenserEscrowWatcher.js';
 export { CoinpayAutopayWatcher, pendingTxReferencesMatch } from './CoinpayAutopayWatcher.js';
 export { getActiveAddresses } from './getActiveAddresses.js';
-export { getBroadcastTxids, markPendingTxIndexed } from './pendingTxBridge.js';
+export {
+    getBroadcastTxids,
+    markPendingTxIndexed,
+    markPendingTxMempoolSeen,
+} from './pendingTxBridge.js';

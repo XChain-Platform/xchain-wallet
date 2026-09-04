@@ -137,7 +137,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!shouldAutoApproveSign({ origin, settings })) return;
         signPasswordCache.remember(
             walletId,
-            { password: decision.password, bip39Passphrase: decision.bip39Passphrase },
+            { password: decision.password },
             settings.autoSignLocalhostMs,
         );
     };
@@ -447,7 +447,6 @@ export function registerBridgeHandlers(host, opts = {}) {
                     ...req,
                     walletId,
                     password: cached.password,
-                    bip39Passphrase: cached.bip39Passphrase,
                 }));
             }
         }
@@ -474,7 +473,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             ...req,
             walletId: signWalletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
         });
         if (!site.permissions.canSignMessage && decision.savePermanent) {
             await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
@@ -508,9 +506,9 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         assertNotThrottled(signThrottle, req);
-        // Shape first (pure, before the user is prompted); ownership after the
-        // approval, like sign-in and signMessage, so USER_REJECTED still
-        // precedes ADDRESS_NOT_FOUND.
+        // Shape first (pure, before the user is prompted); ownership AND the
+        // per-account grant scope after the approval, like sign-in and
+        // signMessage, so USER_REJECTED still precedes ADDRESS_NOT_FOUND.
         assertBridgeSigningPathsShape(req.signingPaths);
         const decision = await approvals.signPsbt({
             origin: req.origin,
@@ -520,12 +518,11 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        const signingPaths = await resolveBridgeSigningPaths(deps, req.chainId, req.signingPaths);
+        const signingPaths = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
         const signed = await signPsbtFlow({
             vault: deps.vault,
             walletId: decision.walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
@@ -585,7 +582,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             sdkRegistry: deps.sdkRegistry,
             accountId: account.id,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             request: {
                 psbt: req.psbtHex,
                 agentPublicNonce: req.agentPublicNonce,
@@ -756,7 +752,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             vault: deps.vault,
             walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId,
@@ -887,7 +882,6 @@ async function executeSignAction(req, deps, ctx) {
                 approved: true,
                 walletId,
                 password: cached.password,
-                bip39Passphrase: cached.bip39Passphrase,
             };
             fromCache = true;
         }
@@ -985,7 +979,6 @@ async function executeSignAction(req, deps, ctx) {
             vault: deps.vault,
             walletId: decision.walletId ?? walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
@@ -1005,7 +998,6 @@ async function executeSignAction(req, deps, ctx) {
             vault: deps.vault,
             walletId: decision.walletId ?? walletId,
             password: decision.password,
-            bip39Passphrase: decision.bip39Passphrase,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             trackPendingTx: true,
@@ -1435,18 +1427,30 @@ function assertBridgeSigningPathsShape(entries) {
 // name a path the wallet already holds, or a page could steer the signer at an
 // arbitrary BIP32 path behind the approval modal. Unowned -> ADDRESS_NOT_FOUND,
 // the same verdict sign-in and signMessage give an unknown address.
-async function resolveBridgeSigningPaths(deps, chainId, entries) {
+//
+// Wallet ownership is the WEAKER of the two invariants: it lets a site sign for
+// an account its connect grant never named. So the resolved record is judged
+// against `site.permissions.accounts` with the same predicate getAddresses,
+// getBalances and assertAddressPermitted use, an empty list still meaning
+// "all permitted" (§43.3). Both entry shapes are judged here rather than at the
+// handler because only the resolved record carries an accountId, so a
+// page-supplied `derivationPath` is scoped too.
+async function resolveBridgeSigningPaths(deps, site, chainId, entries) {
     const descriptor = deps.chainRegistry.get(chainId);
     const all = await deps.vault.addresses.list();
     const onChain = descriptor
         ? all.filter((a) => a.chain === descriptor.coin && a.network === descriptor.networkKind)
         : [];
+    const accountIds = new Set(site?.permissions?.accounts ?? []);
     return entries.map((entry) => {
         const addr = typeof entry.address === 'string' && entry.address.length > 0
             ? onChain.find((a) => a.address === entry.address) ?? null
             : onChain.find((a) => a.derivationPath === entry.derivationPath) ?? null;
         if (!addr) {
             throw bridgeError('ADDRESS_NOT_FOUND', entry.address ?? entry.derivationPath ?? '');
+        }
+        if (accountIds.size > 0 && !(addr.accountId && accountIds.has(addr.accountId))) {
+            throw bridgeError('ADDRESS_NOT_PERMITTED', entry.address ?? entry.derivationPath ?? '');
         }
         return {
             inputIndex: entry.inputIndex,
@@ -1465,7 +1469,6 @@ async function invokeSignMessage(deps, req) {
         vault: deps.vault,
         walletId: req.walletId,
         password: req.password,
-        bip39Passphrase: req.bip39Passphrase,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         chainId: req.chainId,

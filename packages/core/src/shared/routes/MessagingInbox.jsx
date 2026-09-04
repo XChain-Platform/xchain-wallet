@@ -494,7 +494,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // dedicated screen. The header's back arrow returns to the list; a composer
     // docked in the footer sends a reply to the same counterparty.
     if (selectedCounterparty) {
-        const cpName = contactsByAddress[selectedCounterparty];
+        // Both endpoints ours: name the thread rather than showing the user
+        // their own address as if it were someone else's.
+        const cpName = ownerSet.has(selectedCounterparty)
+            ? 'You'
+            : contactsByAddress[selectedCounterparty];
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
@@ -676,7 +680,15 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                                         ? `${local.convName} ${local.convNameUnread}`
                                                         : local.convName}
                                                 >
-                                                    {contactsByAddress[c.counterparty]
+                                                    {ownerSet.has(c.counterparty) ? (
+                                                        // A thread with ourselves: keep the address
+                                                        // alongside the label, since an account can
+                                                        // hold more than one such conversation.
+                                                        <Fragment>
+                                                            You&nbsp;·&nbsp;
+                                                            <AddressText address={c.counterparty} />
+                                                        </Fragment>
+                                                    ) : contactsByAddress[c.counterparty]
                                                         ? contactsByAddress[c.counterparty]
                                                         : <AddressText address={c.counterparty} truncate={false} />}
                                                 </span>
@@ -848,10 +860,17 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
     );
 }
 
+// The conversation key for a message: whichever endpoint is not ours.
+// A message between two of the account's OWN addresses has no such endpoint;
+// it is keyed on the receiving address so it still reaches a thread. Returning
+// null there (the old behaviour) dropped it from every bucket, so a message
+// that confirmed on-chain and came back from the sweep still rendered the
+// empty inbox, with no error and nothing in the console to explain it.
 function counterpartyOf(msg, ownerSet) {
     if (!msg || !ownerSet) return null;
     if (msg.from && !ownerSet.has(msg.from)) return msg.from;
     if (msg.to && !ownerSet.has(msg.to)) return msg.to;
+    if (msg.from && msg.to) return msg.to;
     return null;
 }
 

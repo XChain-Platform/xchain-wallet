@@ -26,8 +26,9 @@
 // `sendMessage`), so a drift on either side of the boundary fails here.
 //
 // The invariants that matter, in order:
-//   1. The exposed surface stays narrow. Anything beyond these four worlds, or
-//      any non-function value, is a hole in the renderer sandbox.
+//   1. The exposed surface stays narrow. Anything beyond the worlds declared in
+//      BRIDGE_WORLDS below, or any non-function value, is a hole in the
+//      renderer sandbox.
 //   2. Every channel the preload talks on is a channel main answers on. A typo
 //      either side is a dead feature that looks fine in review.
 //   3. `wipeStorage` stays argument-free, so a compromised renderer cannot aim
@@ -173,6 +174,24 @@ describe('desktop preload: the renderer sandbox surface', () => {
     it('exposes exactly the declared bridge worlds and nothing else', () => {
         const pre = runPreload();
         expect([...pre.worlds.keys()].sort()).toEqual([...BRIDGE_WORLDS].sort());
+    });
+
+    // The header of preload.cjs is the human-readable statement of this
+    // boundary, and it is what a reviewer reads before waving through a
+    // five-line addition. It said "exactly three narrow APIs" and enumerated
+    // four while the file exposed five, because a count and a prose list drift
+    // silently and nothing read them. So the header is pinned the way the
+    // surface is: every world in BRIDGE_WORLDS must be named in it, and no
+    // count of worlds may be written down (the list is the count).
+    it('documents every exposed world in its own header, and states no count', () => {
+        const header = readFileSync(PRELOAD_PATH, 'utf8').split(/^const /m)[0];
+        for (const world of BRIDGE_WORLDS) {
+            expect(header, `preload.cjs header must describe ${world}`).toContain(world);
+        }
+        expect(
+            header.match(/\b(one|two|three|four|five|six|seven|eight|\d+)\s+(narrow\s+)?(APIs?|worlds?|bridges?)\b/i),
+            'state the worlds by name; BRIDGE_WORLDS is the count',
+        ).toBe(null);
     });
 
     // The update world is asserted by SHAPE rather than merely counted,

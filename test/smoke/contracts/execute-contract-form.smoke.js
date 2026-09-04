@@ -129,12 +129,19 @@ for (const [shell, appPath] of [
 // --- Deep-link prefill props + ABI lane (Contract_ABI.md FOLLOWUP 2) ----
 
 assert.ok(
-    /initialMethod, initialParamsText, initialGasLimit/.test(formSrc),
-    'ExecuteContractForm accepts the three deep-link prefill props',
+    /initialMethod, initialParamsText/.test(formSrc),
+    'ExecuteContractForm accepts the deep-link prefill props',
 );
 assert.ok(
-    /useState\(initialMethod \|\| ''\)[\s\S]*?useState\(initialParamsText \|\| ''\)[\s\S]*?useState\(initialGasLimit \|\| ''\)/.test(formSrc),
-    'prefill props seed the method/paramsText/gasLimit state initializers',
+    /useState\(initialMethod \|\| ''\)[\s\S]*?useState\(initialParamsText \|\| ''\)/.test(formSrc),
+    'prefill props seed the method/paramsText state initializers',
+);
+// EXECUTE v0 has no GAS_LIMIT slot; the form must neither offer the field
+// nor put the key on the wire (the SDK's leg-field guard would refuse the
+// whole compose).
+assert.ok(
+    !/GAS_LIMIT\s*:/.test(formSrc) && !/initialGasLimit|setGasLimit|getByLabelText\(.Gas/.test(formSrc),
+    'ExecuteContractForm carries no gas-limit concept anywhere (a comment may explain why, code may not reintroduce it)',
 );
 assert.ok(
     /messaging\.getContractByActionIndex\(\{ chainId, contractActionIndex \}\)/.test(formSrc),

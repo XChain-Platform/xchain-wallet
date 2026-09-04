@@ -56,6 +56,13 @@ describe('coinTypeFor vs chain descriptor coin-type parity', () => {
     });
 });
 
+// What a Ledger returns for the PSBT decomposition SIGNPSBT_DECOMPOSED below
+// describes: one input spending aaaa…:0, one 900-sat p2wpkh output. A real
+// device's reply is a real transaction, and signPsbt now compares it back to
+// the approved PSBT, so a placeholder string here would only be testing the
+// refusal path by accident.
+const DEVICE_REPLY = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffff018403000000000000160014cccccccccccccccccccccccccccccccccccccccc0228304502212222222222222222222222222222222222222222222222222222222222222222222222012102999999999999999999999999999999999999999999999999999999999999999900000000';
+
 function makeApp(overrides = {}) {
     // Only methods the real hw-app-btc `Btc` class ships. The device's
     // app name/version is NOT one of them, it is read off the transport
@@ -67,7 +74,7 @@ function makeApp(overrides = {}) {
             chainCode: 'c'.repeat(64),
         }),
         signMessage: vi.fn().mockResolvedValue({ v: 0, r: 'a'.repeat(64), s: 'b'.repeat(64) }),
-        createPaymentTransaction: vi.fn().mockResolvedValue('signedtxhex'),
+        createPaymentTransaction: vi.fn().mockResolvedValue(DEVICE_REPLY),
         splitTransaction: vi.fn().mockReturnValue({ mockSplit: true }),
         ...overrides,
     };
@@ -318,37 +325,67 @@ describe('LedgerSigner.signPsbt', () => {
     // call shifted `false` into additionals and dropped the real array,
     // which blew up inside the library as `additionals.includes is not a
     // function` on the first real signing attempt.
+    const PREV_TX_HEX = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
+        + '00000000160014' + 'bb'.repeat(20) + '00000000';
+
+    /** The PSBT the user approved, as decomposePsbt reports it. */
+    const signPsbtSdk = () => ({
+        wallet: {
+            decomposePsbt: vi.fn().mockReturnValue({
+                inputs: [{
+                    scriptType: 'p2wpkh',
+                    prevTxHash: 'a'.repeat(64),
+                    prevTxIndex: 0,
+                    value: 1000,
+                    sequence: 0xffffffff,
+                    witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+                    nonWitnessUtxoHex: PREV_TX_HEX,
+                    redeemScriptHex: null,
+                }],
+                outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
+                locktime: 0,
+            }),
+            txidOf: vi.fn().mockReturnValue('deadbeef'),
+        },
+    });
+
+    const signIt = (s) => s.signPsbt({
+        psbtHex: 'cafe',
+        chainId: 'bitcoin-mainnet',
+        signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
+    });
+
     it('calls splitTransaction with the v10 four-argument signature', async () => {
-        const prevTxHex = '0100000001' + '00'.repeat(32) + 'ffffffff00ffffffff01e8030000'
-            + '00000000160014' + 'bb'.repeat(20) + '00000000';
-        const mockSdk = {
-            wallet: {
-                decomposePsbt: vi.fn().mockReturnValue({
-                    inputs: [{
-                        scriptType: 'p2wpkh',
-                        prevTxHash: 'a'.repeat(64),
-                        prevTxIndex: 0,
-                        value: 1000,
-                        sequence: 0xffffffff,
-                        witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
-                        nonWitnessUtxoHex: prevTxHex,
-                        redeemScriptHex: null,
-                    }],
-                    outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
-                    locktime: 0,
-                }),
-                txidOf: vi.fn().mockReturnValue('deadbeef'),
-            },
-        };
+        const mockSdk = signPsbtSdk();
         const app = makeApp();
         const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
-        await s.signPsbt({
-            psbtHex: 'cafe',
-            chainId: 'bitcoin-mainnet',
-            signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
-        });
-        expect(app.splitTransaction).toHaveBeenCalledWith(prevTxHex, true, false, ['bech32']);
+        await signIt(s);
+        expect(app.splitTransaction).toHaveBeenCalledWith(PREV_TX_HEX, true, false, ['bech32']);
         expect(app.splitTransaction.mock.calls[0]).toHaveLength(4);
+    });
+
+    // The device signs the transaction ledgerFormat REBUILT, not the PSBT, so
+    // the confirm-time output checks never covered these bytes. A converter (or
+    // firmware) that pays somewhere else has to be refused here, before the txid
+    // is handed back and something broadcasts it.
+    it('refuses a device reply that pays a different output than the PSBT', async () => {
+        const mockSdk = signPsbtSdk();
+        const tampered = DEVICE_REPLY.replace('cc'.repeat(20), 'dd'.repeat(20));
+        expect(tampered).not.toBe(DEVICE_REPLY);
+        const app = makeApp({ createPaymentTransaction: vi.fn().mockResolvedValue(tampered) });
+        const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
+        await expect(signIt(s)).rejects.toThrow(/does not match the approved PSBT/);
+        expect(mockSdk.wallet.txidOf).not.toHaveBeenCalled();
+    });
+
+    it('refuses a device reply whose output value has moved by one satoshi', async () => {
+        const mockSdk = signPsbtSdk();
+        // 900 sats (0x0384) -> 901 (0x0385), in the 8-byte little-endian value.
+        const tampered = DEVICE_REPLY.replace('018403000000000000', '018503000000000000');
+        expect(tampered).not.toBe(DEVICE_REPLY);
+        const app = makeApp({ createPaymentTransaction: vi.fn().mockResolvedValue(tampered) });
+        const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
+        await expect(signIt(s)).rejects.toThrow(/output 0 pays 901 sat, the PSBT paid 900 sat/);
     });
 });
 

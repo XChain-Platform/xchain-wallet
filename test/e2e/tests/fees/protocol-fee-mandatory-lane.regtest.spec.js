@@ -51,13 +51,14 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    encoderRpc,
+    expectConfirmModal,
     EXPLORER_URL,
+    fundAddress,
+    minerRpc,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
-    encoderRpc,
-    fundAddress,
-    minerRpc,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
@@ -236,7 +237,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
 
             // No XCHAIN line: the fee is already a coin debit here, and stating
@@ -299,7 +300,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Broadcast', exact: true }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
 
             await expect(page.getByTestId('confirm-protocol-fee'),

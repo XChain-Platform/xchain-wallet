@@ -19,6 +19,16 @@ import { encryptWalletSeed, decryptWalletSeed } from '../../../packages/core/src
 const SEED = new Uint8Array(64);
 for (let i = 0; i < 64; i += 1) SEED[i] = i;
 
+// Argon2id is synchronous, so each calibrated derivation blocks the worker for
+// seconds and a worker that stops answering vitest's RPC ends an otherwise
+// green run on `[vitest-worker]: Timeout calling "onTaskUpdate"`. The two cases
+// below derive TWICE each, which is what pushed this file to 27s on a hosted
+// runner. They are about a fresh salt per call and about a mismatched salt
+// failing, not about what the KDF costs, so they run at demo grade and stay
+// freshly salted. The calibrated defaults keep their end-to-end proof in the
+// first two cases, and their tuning belongs to test/unit/crypto/kdf.test.js.
+const FAST_KDF = { iterations: 1, memory: 8 * 1024 };
+
 describe('integration/crypto/kdf-aead-walletblob', () => {
     it('end-to-end: encrypt → decrypt with fresh KDF params', async () => {
         const { encryptedSeed, kdfParams } = await encryptWalletSeed({
@@ -43,15 +53,15 @@ describe('integration/crypto/kdf-aead-walletblob', () => {
     });
 
     it('two encrypts of the same seed produce different blobs (random salt + IV)', async () => {
-        const a = await encryptWalletSeed({ password: 'p', seed: SEED });
-        const b = await encryptWalletSeed({ password: 'p', seed: SEED });
+        const a = await encryptWalletSeed({ password: 'p', seed: SEED, kdfParams: makeFreshKdfParams(FAST_KDF) });
+        const b = await encryptWalletSeed({ password: 'p', seed: SEED, kdfParams: makeFreshKdfParams(FAST_KDF) });
         expect(a.encryptedSeed).not.toBe(b.encryptedSeed);
         expect(a.kdfParams.salt).not.toBe(b.kdfParams.salt);
     });
 
     it('decrypt with correct password but mismatched kdfParams.salt fails', async () => {
-        const a = await encryptWalletSeed({ password: 'p', seed: SEED });
-        const b = await encryptWalletSeed({ password: 'p', seed: SEED });
+        const a = await encryptWalletSeed({ password: 'p', seed: SEED, kdfParams: makeFreshKdfParams(FAST_KDF) });
+        const b = await encryptWalletSeed({ password: 'p', seed: SEED, kdfParams: makeFreshKdfParams(FAST_KDF) });
         // Same password, but b.kdfParams has a different salt → master
         // key differs → decrypt fails.
         await expect(decryptWalletSeed({

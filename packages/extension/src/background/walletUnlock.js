@@ -76,11 +76,31 @@ export class NoVaultError extends Error {
  */
 
 /**
+ * Turn the populate summary's two parallel arrays into the `{ id, name }` rows
+ * the unlock screen renders. Parallel arrays are the pool's internal shape;
+ * a caller that has to keep two lists in step is one edit away from pairing
+ * the wrong name with the wrong wallet.
+ *
+ * @param {{ passphraseCaptureNeeded?: string[], passphraseCaptureNames?: string[] } | null} summary
+ * @returns {Array<{ id: string, name: string }>}
+ */
+function captureRows(summary) {
+    const ids = summary?.passphraseCaptureNeeded;
+    if (!Array.isArray(ids)) return [];
+    const names = Array.isArray(summary.passphraseCaptureNames) ? summary.passphraseCaptureNames : [];
+    return ids.map((id, i) => ({ id, name: names[i] || '' }));
+}
+
+/**
  * @param {unknown} request  Expected shape: `{ password: string, bip39Passphrase?: string }`;
  *   the optional §15.6 25th word unlocks passphrase-enabled wallets into the pool and is
  *   verified against their stored addresses
  * @param {WalletUnlockDeps} deps
- * @returns {Promise<{ unlocked: true }>}
+ * @returns {Promise<{ unlocked: true, passphraseCaptureNeeded: Array<{ id: string, name: string }>, poolUnavailable?: true }>}
+ *   `passphraseCaptureNeeded` lists the legacy wallets the password opened but that hold no
+ *   stored passphrase yet; the unlock screen asks for each one's 25th word once and sends it
+ *   to `wallet.passphrase.capture`. `poolUnavailable` marks the populate-failed path, where
+ *   the list is empty because nothing was inspected rather than because nothing needs capture.
  */
 export async function handleWalletUnlock(request, deps) {
     const password = /** @type {any} */ (request)?.password;
@@ -105,6 +125,10 @@ export async function handleWalletUnlock(request, deps) {
             throw new UnlockThrottledError(gate.retryAfterMs);
         }
     }
+
+    /** @type {Array<{ id: string, name: string }>} */
+    let passphraseCaptureNeeded = [];
+    let poolUnavailable = false;
 
     const masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
     try {
@@ -134,6 +158,16 @@ export async function handleWalletUnlock(request, deps) {
                     // Best-effort: a pool populate failure shouldn't
                     // block unlock. The per-op password prompt remains
                     // as a fallback for any wallet not in the pool.
+                }
+                // An empty capture list means two different things, and the
+                // unlock screen must not read them the same way: either no
+                // wallet needs its passphrase, or populate never got far
+                // enough to say. Mark the second case so a legacy wallet is
+                // not silently dropped from the queue by a failed populate.
+                if (pooled) {
+                    passphraseCaptureNeeded = captureRows(pooled);
+                } else {
+                    poolUnavailable = true;
                 }
                 // A typed 25th word that reproduced none of the passphrase
                 // wallets' addresses is a mistype. Refuse the unlock (the
@@ -168,11 +202,12 @@ export async function handleWalletUnlock(request, deps) {
         // backend (that's what `ensureHost()` reads to build the host).
         if (throttle) await throttle.clear().catch(() => { /* best-effort */ });
         await deps.sessionBackend.save(masterKey);
-        // Cache the password (and the 25th word, when one was typed) so the
-        // SignerPool can be rebuilt after a service-worker restart (the
-        // master key can't decrypt seeds, and the password alone cannot
-        // re-pool a passphrase wallet).
-        await saveSigningSecret(deps.signingSecretBackend, password, bip39Passphrase);
+        // Cache the password so the SignerPool can be rebuilt after a
+        // service-worker restart; the master key can't decrypt seeds. The
+        // password is now the whole secret: a passphrase wallet carries its
+        // own encrypted 25th word on the record, so a typed one has nothing
+        // left to unlock and is deliberately NOT written to the slot.
+        await saveSigningSecret(deps.signingSecretBackend, password);
     } finally {
         masterKey.fill(0);
     }
@@ -180,7 +215,9 @@ export async function handleWalletUnlock(request, deps) {
     if (typeof deps.onUnlocked === 'function') {
         await deps.onUnlocked();
     }
-    return { unlocked: true };
+    return poolUnavailable
+        ? { unlocked: true, passphraseCaptureNeeded, poolUnavailable: true }
+        : { unlocked: true, passphraseCaptureNeeded };
 }
 
 function isAeadAuthFailure(err) {

@@ -456,6 +456,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // Bitcoin, where there is no XCHAIN lane to fall back to.
     function nativeFeeAwareMessage(err) {
         return submitFailureMessage(err, {
+            chainId,
             coinTicker,
             mandatory: nativeFee.mandatory,
             fallback: err?.message,
@@ -510,6 +511,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker: coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Dividend failed.',

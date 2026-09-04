@@ -31,7 +31,7 @@
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -255,6 +255,128 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
 
 });
 
+// A BATCH is answered at TWO levels and the outer one is not a verdict on the
+// inner ones: `valid:true` means the transaction is accepted and its commands
+// run, not that any of them succeed. The panel's DRYRUN_VALID copy was a fixed
+// string written when that code carried one state, so it overwrote the sentence
+// the SDK had begun varying per outcome - and a batch the network explicitly
+// declined to judge rendered "expects it to succeed" under a "Looks good" chip.
+//
+// The fixtures below are copied from what applyTier1 / pushSubCommandFindings
+// actually push (xchain-sdk src/preflight/index.js), messages included, because
+// the defect was precisely that the panel stopped reading them.
+describe('PreflightPanel BATCH sub-command verdicts (§4.2)', () => {
+
+    const batchValid = (subCommandCount, accepted) => ({
+        code: 'DRYRUN_VALID',
+        severity: 'info',
+        source: 'dryrun',
+        message: accepted === subCommandCount
+            ? `The network dry-run accepted this batch and all ${subCommandCount} of its commands.`
+            : 'The network dry-run accepted this batch transaction, but NOT every command in it'
+              + ` (${accepted} of ${subCommandCount} accepted); see the per-command findings.`,
+        data: { subCommandCount, accepted },
+    });
+
+    const unjudged = (position, action) => ({
+        code: 'DRYRUN_SUBCOMMAND_UNJUDGED',
+        severity: 'info',
+        source: 'dryrun',
+        message: `The network did not judge batch command ${position + 1} (${action})`
+            + ' (the read-only pre-flight cannot evaluate this command);'
+            + ' relying on client checks for it.',
+        data: { commandIndex: position, action, refused: null },
+    });
+
+    it('keeps the approval chip when the network accepted every command', () => {
+        mount(reportWith('pass', [batchValid(3, 3)]));
+        expect(chip().textContent).toBe('Looks good');
+        expect(panel().getAttribute('data-dryrun')).toBe('approved');
+        expect(screen.getByTestId('preflight-notice-DRYRUN_VALID').textContent)
+            .toMatch(/expects it to succeed/i);
+    });
+
+    // THE regression, one level down from the unreached one above: an outer
+    // acceptance is not an approval of what is inside it.
+    it('does NOT say a partly-accepted batch is expected to succeed', () => {
+        mount(reportWith('pass', [batchValid(3, 2)]));
+        const notice = screen.getByTestId('preflight-notice-DRYRUN_VALID');
+        expect(notice.textContent).not.toMatch(/expects it to succeed/i);
+        expect(notice.textContent).toMatch(/did NOT confirm every command/i);
+        expect(notice.textContent).toMatch(/2 of 3/);
+    });
+
+    it('does not wear the approval chip or signal for a partly-accepted batch', () => {
+        mount(reportWith('pass', [batchValid(3, 2)]));
+        expect(chip().textContent).not.toContain('Looks good');
+        expect(chip().textContent).toMatch(/partly checked/i);
+        expect(panel().getAttribute('data-dryrun')).toBe('partial');
+        // Severity is never colour-only, and a partial answer must not wear the
+        // success palette any more than an unreached one does.
+        expect(chip().className).toMatch(/chip_unreached/);
+    });
+
+    // The measured shape (BTC regtest 2026-08-13): a settlement leg inside a
+    // BATCH answers with no status at all, so the network judged NOTHING while
+    // still accepting the transaction. Every finding is `info`, so the verdict
+    // is 'pass' and nothing else on the screen contradicts the chip.
+    it('does not call an unjudged-only batch approved', () => {
+        mount(reportWith('pass', [unjudged(0, 'COINPAY'), batchValid(1, 0)]));
+        expect(chip().textContent).not.toContain('Looks good');
+        expect(panel().getAttribute('data-dryrun')).toBe('partial');
+        expect(screen.getByTestId('preflight-notice-DRYRUN_SUBCOMMAND_UNJUDGED').textContent)
+            .toMatch(/did not judge/i);
+    });
+
+    // The SDK's own sentence carries WHICH command and why; the headline says
+    // what the silence means. Losing either half loses the point.
+    it('renders the producer sentence beneath the headline, not instead of it', () => {
+        mount(reportWith('pass', [unjudged(2, 'COINPAY'), batchValid(3, 2)]));
+        const valid = screen.getByTestId('preflight-notice-DRYRUN_VALID').textContent;
+        expect(valid).toMatch(/did NOT confirm every command/i);   // panel headline
+        expect(valid).toMatch(/see the per-command findings/i);    // SDK detail
+        const note = screen.getByTestId('preflight-notice-DRYRUN_SUBCOMMAND_UNJUDGED').textContent;
+        expect(note).toMatch(/not a network approval of it/i);     // panel headline
+        expect(note).toMatch(/batch command 3 \(COINPAY\)/);       // SDK detail
+    });
+
+    // A probe carries no outputs, so the arbiter DISCLOSES oracle fees instead
+    // of judging them. Its wording ("Size those outputs yourself") addresses
+    // whoever composes the transaction, not whoever is about to sign it.
+    it('gives the oracle-fee disclosure a signer-facing headline', () => {
+        mount(reportWith('pass', [batchValid(2, 2), {
+            code: 'DRYRUN_ORACLE_FEES_OWED',
+            severity: 'info',
+            source: 'dryrun',
+            message: 'This batch owes oracle usage fees the pre-flight discloses rather than checks: '
+                + '5000 to bc1qoracle. Size those outputs yourself; the dry-run has no outputs to check them against.',
+            data: { oracleFeesOwed: { bc1qoracle: 5000 } },
+        }]));
+        const notice = screen.getByTestId('preflight-notice-DRYRUN_ORACLE_FEES_OWED').textContent;
+        expect(notice).toMatch(/cannot check are covered/i);
+        expect(notice).toMatch(/5000 to bc1qoracle/);
+    });
+
+    // A producer this panel knows nothing about must not have approval copy put
+    // in its mouth. The dev shell (packages/web/src/hostBridge.js) stamps
+    // DRYRUN_VALID with no `data` over a message saying the opposite.
+    it('lets an unknown producer speak for itself', () => {
+        mount(reportWith('pass', [{
+            code: 'DRYRUN_VALID',
+            severity: 'info',
+            source: 'client',
+            overridable: false,
+            message: 'Dev mock: no on-chain dry-run.',
+        }]));
+        const notice = screen.getByTestId('preflight-notice-DRYRUN_VALID').textContent;
+        expect(notice).toContain('Dev mock: no on-chain dry-run.');
+        expect(notice).not.toMatch(/expects it to succeed/i);
+        // ...and it is said ONCE, not as a headline contradicted by its detail.
+        expect(notice.match(/Dev mock/g)).toHaveLength(1);
+    });
+
+});
+
 // Everything the panel hand-copies from the SDK, pinned against the SDK. The
 // panel imports nothing from it at runtime (extension bundle), so these literals
 // are the whole contract and nothing but a test can hold them to it.
@@ -294,11 +416,57 @@ describe('PreflightPanel <-> xchain-sdk contract', () => {
             .toBe(preflightConstants.FINDING_CODES.DRYRUN_VALID);
         expect(TIER1_NOTICE_CODES.DRYRUN_UNAVAILABLE)
             .toBe(preflightConstants.FINDING_CODES.DRYRUN_UNAVAILABLE);
+        expect(TIER1_NOTICE_CODES.DRYRUN_SUBCOMMAND_UNJUDGED)
+            .toBe(preflightConstants.FINDING_CODES.DRYRUN_SUBCOMMAND_UNJUDGED);
+        expect(TIER1_NOTICE_CODES.DRYRUN_ORACLE_FEES_OWED)
+            .toBe(preflightConstants.FINDING_CODES.DRYRUN_ORACLE_FEES_OWED);
         // Every pinned code must still exist in the registry, so a deletion is
         // caught rather than read as undefined matching undefined.
         const registry = Object.values(preflightConstants.FINDING_CODES);
         for (const code of Object.values(TIER1_NOTICE_CODES)) {
             expect(registry).toContain(code);
+        }
+    });
+
+    // The assertion above only checks pinned ⊆ registry, so it catches a rename
+    // or a deletion and is structurally blind to an ADDITION - which is exactly
+    // how the panel's list fell three codes behind. This is the other direction.
+    //
+    // The two codes named below are deliberately NOT pinned: they arrive at
+    // severity 'error' and render generically in the errors list, so the panel
+    // never keys on their names and a rename cannot break it. Naming them here
+    // rather than pinning them keeps the panel's copy map free of entries with
+    // no consumer, while still forcing a NEW Tier-1 code to fail this test and
+    // reach a human, which is the recurrence class.
+    //
+    // Family membership is read off the `DRYRUN_` prefix, which is what the
+    // registry's own "Tier-1 headlines" block uses today. A Tier-1 code landing
+    // under some other prefix would slip past; the durable fix for that is a
+    // machine-readable group exported by the SDK beside TIER2_ERROR_CAPABLE,
+    // which is an SDK-side change this repo cannot make.
+    const RENDERED_BY_SEVERITY_NOT_BY_CODE = new Set([
+        'DRYRUN_INVALID',
+        'DRYRUN_SUBCOMMAND_INVALID',
+    ]);
+
+    it('accounts for every Tier-1 headline code the SDK registers', () => {
+        const tier1 = Object.values(preflightConstants.FINDING_CODES)
+            .filter((code) => code.startsWith('DRYRUN_'));
+        // An empty family would make the loop below pass by iterating nothing,
+        // which is the same reassuring green a real pass gives.
+        expect(tier1.length).toBeGreaterThanOrEqual(6);
+
+        const pinned = new Set(Object.values(TIER1_NOTICE_CODES));
+        const unaccounted = tier1.filter(
+            (code) => !pinned.has(code) && !RENDERED_BY_SEVERITY_NOT_BY_CODE.has(code),
+        );
+        expect(unaccounted).toEqual([]);
+
+        // And the exemption list may not outlive its codes either: a name left
+        // here after the registry dropped it is a stale exemption that would
+        // silently excuse a future code reusing it.
+        for (const code of RENDERED_BY_SEVERITY_NOT_BY_CODE) {
+            expect(tier1).toContain(code);
         }
     });
 
@@ -318,5 +486,40 @@ describe('PreflightPanel <-> xchain-sdk contract', () => {
     // fixtures above stopped describing reality, so assert the two agree.
     it('renders fixtures stamped with the supported schema version', () => {
         expect(reportWith('pass').schemaVersion).toBe(SUPPORTED_SCHEMA_VERSION);
+    });
+
+    // The SDK is not the only producer of this report. The wallet authors two
+    // of its own - the dispenser buy panel's funding-only `restricted` report,
+    // and the dev shell's mock preflight - and `findings[].code` is the identity
+    // every code-keyed consumer matches on: the override key, the Approve gate,
+    // the panel's ack test id, the notice copy map. A code invented at a call
+    // site renders (the panel falls back to `f.message`) while matching nothing,
+    // which is why the dispenser panel shipped `insufficient_funds` where the
+    // registry defines BALANCE_INSUFFICIENT and no test noticed.
+    //
+    // Scanned at source rather than by rendering, because these findings are
+    // built inside route/bridge modules that a unit test cannot reach without
+    // standing up the whole route. The scan is narrow on purpose: two files,
+    // both of which produce nothing but pre-flight findings, so there is no
+    // allowlist to keep and nothing unrelated to filter out.
+    const WALLET_REPORT_PRODUCERS = [
+        ['packages', 'core', 'src', 'shared', 'routes', 'DispenserDetail.jsx'],
+        ['packages', 'web', 'src', 'hostBridge.js'],
+    ];
+
+    it('keeps wallet-authored finding codes inside the SDK registry', () => {
+        const registry = new Set(Object.values(preflightConstants.FINDING_CODES));
+        const found = [];
+        for (const parts of WALLET_REPORT_PRODUCERS) {
+            const path = join(here, '..', '..', '..', ...parts);
+            const src = readFileSync(path, 'utf8');
+            for (const m of src.matchAll(/\bcode:\s*'([A-Za-z0-9_]+)'/g)) {
+                found.push([parts.join('/'), m[1]]);
+            }
+        }
+        // A producer that stopped emitting codes, or a regex that stopped
+        // matching, would leave this loop iterating nothing and passing.
+        expect(found.length).toBeGreaterThanOrEqual(3);
+        expect(found.filter(([, code]) => !registry.has(code))).toEqual([]);
     });
 });

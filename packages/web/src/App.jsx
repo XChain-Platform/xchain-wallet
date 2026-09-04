@@ -251,6 +251,13 @@ function AppInner() {
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
     );
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
+    // M2.4: the entry the History route should open on, set when the user
+    // follows the send success card straight to their new transaction. It is
+    // a tx hash rather than an action index because nothing has indexed it
+    // yet, which is the whole reason the card offers the jump.
+    const [historyInitialFocus, setHistoryInitialFocus] = useState(
+        /** @type {{ chainId?: string, txHash?: string } | null} */ (null),
+    );
     // When set, the next action form's back handler returns to this
     // view instead of the default 'actions' (Token Actions) catch-all.
     // ManageToken sets this to 'manage-token' before opening a per-
@@ -527,7 +534,7 @@ function AppInner() {
     // xchain:{COIN}/execute?...). Mirrors `sendPrefill`; consumed by the
     // 'contract-execute' route and cleared when the user backs out.
     const [executePrefill, setExecutePrefill] = useState(
-        /** @type {{ method?: string, paramsText?: string, gasLimit?: string } | null} */ (null),
+        /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
     // Deep-link view that must survive the unlock cycle. The `?uri=` boot
     // handler routes immediately, but `refresh()` (fired by Locked's
@@ -621,7 +628,6 @@ function AppInner() {
                 setExecutePrefill({
                     method: intent.method || '',
                     paramsText: intent.executeParams || '',
-                    gasLimit: intent.gasLimit || '',
                 });
                 setUnlockedView('contract-execute');
                 pendingUriView.current = 'contract-execute';
@@ -924,6 +930,11 @@ function AppInner() {
                 return (
                     <Send
                         walletId={activeWalletId}
+                        onViewHistory={(target) => {
+                            setHistoryInitialQuery('');
+                            setHistoryInitialFocus(target || null);
+                            setUnlockedView('history');
+                        }}
                         onBack={() => {
                             setSendPrefill(null);
                             setUnlockedView(sendBackTo);
@@ -1864,7 +1875,6 @@ function AppInner() {
                         contractActionIndex={contractRef.contractActionIndex}
                         initialMethod={executePrefill?.method}
                         initialParamsText={executePrefill?.paramsText}
-                        initialGasLimit={executePrefill?.gasLimit}
                         onBack={() => { setExecutePrefill(null); setUnlockedView('contract-detail'); }}
                     />
                 );
@@ -2046,6 +2056,7 @@ function AppInner() {
                         onBack={() => setUnlockedView(historyReturnTo)}
                         onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         initialSearchQuery={historyInitialQuery}
+                        initialFocus={historyInitialFocus}
                         initialChainCoin={historyInitialChainCoin}
                         onSelectEntry={(entry) => {
                             setSelectedHistoryEntry(entry);

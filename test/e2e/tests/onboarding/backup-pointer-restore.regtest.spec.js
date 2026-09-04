@@ -71,7 +71,8 @@ import {
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
     fundAddress,
-    selectVenueChain,
+    readReceiveAddress,
+    selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
@@ -232,27 +233,24 @@ async function openFreshRestoreScreen(page) {
 }
 
 /**
- * Reads the wallet's receive address, and refuses one from the wrong chain.
+ * Reads the wallet's receive address ON THE VENUE'S CHAIN.
  *
- * DELIBERATELY NOT `selectVenueChain` HERE. The Receive screen carries no
- * "Network" picker at all - it follows the wallet's active chain, and its only
- * chain-ish control is the address picker - so calling the venue helper on it
- * throws "no Network chain picker on this screen". That is why the campaign's
- * other multi-chain specs read an address off a FORM (which does have a
- * picker) rather than off Receive. The regex is the guard that keeps this
- * honest: on a venue whose chain Receive is not showing, the address comes back
- * belonging to another chain and this fails HERE, naming the shape it wanted,
- * instead of stranding the funding step until its budget runs out.
+ * STILL NOT `selectVenueChain`: the Receive screen carries no "Network" picker
+ * at all - it follows the wallet's active chain - so the venue helper throws
+ * "no Network chain picker on this screen" here. An earlier reading concluded
+ * from that, and what was wrong, is that the spec was therefore stuck on
+ * whichever chain the wallet opens on: it refused a Litecoin run at this line
+ * while the Litecoin address sat two clicks away behind the field's own picker.
+ * `readReceiveAddress` drives that picker (filter by network, first address of
+ * that chain), which is the path a user takes, and still fails naming the shape
+ * it wanted if the address map really has no address for this chain.
  */
 async function readVenueReceiveAddress(page) {
-    await gotoSection(page, 'Receive');
-    const field = page.getByLabel('Address', { exact: true });
-    await expect(field).toBeVisible({ timeout: 30_000 });
-    await expect(field,
-        `Receive is not showing a ${REGTEST_COIN} address. Receive follows the ACTIVE chain and has `
-        + 'no network picker, so this spec runs on whichever chain the wallet opens on (Bitcoin).')
-        .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 30_000 });
-    return field.inputValue();
+    const address = await readReceiveAddress(page);
+    expect(address,
+        `Receive never reached a ${REGTEST_COIN} address even through its own picker`)
+        .toMatch(REGTEST_ADDRESS_RE);
+    return address;
 }
 
 test.describe('backup-pointer restore (§15.4)', () => {
@@ -495,7 +493,16 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 await test.step('AND IT CAN SIGN: a real transaction, confirmed by the chain', async () => {
                     await gotoSection(two, 'Send');
                     const main = two.getByRole('main');
-                    await selectVenueChain(main);
+                    // NOT `selectVenueChain`: Send has no "Network" picker
+                    // either. It renders a `TokenField` whose trigger reads
+                    // "Token: <TICK> on <Chain>" and whose click NAVIGATES to a
+                    // picker SCREEN with no listbox on it, so the chain helper
+                    // throws "no Network chain picker on this screen" - which is
+                    // exactly how this line failed in the second whole-suite
+                    // run. The campaign's widget map (frontier row 57) already
+                    // records Send as the one form in that third bucket, and
+                    // `selectVenueSendAsset` is the tool it names.
+                    await selectVenueSendAsset(two);
 
                     // Sent to its OWN address on purpose. The destination is
                     // irrelevant to what this proves - that the restored seal
@@ -589,11 +596,37 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     .toBeVisible({ timeout: 180_000 });
                 // Says which one. "Wrong password" would be true and useless:
                 // the file password WAS right, and the envelope did open.
-                await expect(alert,
-                    'the refusal does not tell the user WHICH of the three passwords was wrong, '
-                    + 'which is the whole reason BackupSeedPasswordError exists')
-                    .toContainText(/backed-up wallet's password/i);
-                await expect(alert).toContainText(/device it was backed up from/i);
+                //
+                // THE CLAIM IS THE DISTINCTION, NOT A PHRASE, and that is a
+                // correction made 2026-08-27 on the second whole-suite run. This
+                // asserted the literal string "backed-up wallet's password",
+                // which the copy has never used, and reported the miss as "the
+                // refusal does not tell the user WHICH password was wrong" - a
+                // product defect that does not exist. What the wallet actually
+                // says is better than what was demanded: it confirms the file
+                // opened, names the field that is wrong, and rules out the other
+                // two passwords by name. Same family as the `fees/` article
+                // mismatch (D42): a spec asking for words rather than for
+                // meaning accuses the product of a gap it does not have.
+                await expect(alert, 'the refusal does not say the backup FILE opened, so the user '
+                    + 'cannot tell which of the three passwords to change')
+                    .toContainText(/backup file opened/i);
+                await expect(alert, 'the refusal does not name the wallet-in-the-backup password as '
+                    + 'the wrong one, which is the whole reason BackupSeedPasswordError exists')
+                    .toContainText(/password of the wallet/i);
+                await expect(alert, 'the refusal does not rule OUT the other two passwords, so a '
+                    + 'user who mixed them up learns nothing')
+                    .toContainText(/not this file's password and not the password for this device/i);
+                // A SECOND wrong-phrase assertion, and it was invisible until the
+                // one above it was fixed: the copy says "the device you backed it
+                // up from", never "the device it was backed up from". It has
+                // therefore never passed, and nobody could see it because the
+                // assertion in front of it failed first. Kept rather than
+                // deleted, because the claim is real and distinct - it is what
+                // tells the user WHERE the password they need was set.
+                await expect(alert, 'the refusal does not say WHICH device the wanted password '
+                    + 'was set on, so a user with several backups cannot tell which one to try')
+                    .toContainText(/device you backed it up from/i);
 
                 // Still fresh: Welcome, not an unlock screen. An unlock screen
                 // here would mean a vault was written for a restore that never

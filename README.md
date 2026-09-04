@@ -5,7 +5,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.339.0-blue" alt="Version">
-  <img src="https://img.shields.io/badge/tests-470%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-471%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node">
   <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="License">
 </p>
@@ -138,7 +138,7 @@ cd packages/mobile/android && ./gradlew bundleRelease
 ### Run the smoke suite
 
 ```bash
-pnpm test:smoke                                    # 470 smoke tests (plain Node: UI surfaces, signers, bridge, audits)
+pnpm test:smoke                                    # 471 smoke tests (plain Node: UI surfaces, signers, bridge, audits)
 pnpm --filter @xchain-wallet/e2e test              # Playwright E2E against the web shell
 ```
 
@@ -183,7 +183,7 @@ Root scripts run across all packages via `pnpm -r`:
 
 | Command | Description |
 |---|---|
-| `pnpm test` | Run every package's tests (vitest smokes + audits) |
+| `pnpm test` | Run every package's tests (vitest smokes + audits, 6,369 tests) |
 | `pnpm build` | Build every shell's production artifact |
 | `pnpm typecheck` | Run package-level typecheck where defined |
 | `pnpm lint` | Run package-level lint where defined |
@@ -217,7 +217,7 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 | Smoke - audits | 110 | a11y, extension-manifest, repro-build, release-gate, chain-registry-refresh, and other CI-gating checks |
 | Smoke - actions | 38 | Per-ACTION composer forms: issue, mint, destroy, dispenser, dividend, airdrop, swap, cross-chain, token wizard, gated content, oracle price, and more |
 | Smoke - core | 27 | Fee estimation, price lookup, i18n, RBF, settings flow, lockout tracking, panic mode, biometric unlock, action decoder |
-| Smoke - shells | 21 | Desktop keychain / packaging / hardening, mobile clipboard / shell / vault, popup / web / extension-sidepanel shells |
+| Smoke - shells | 22 | Desktop keychain / packaging / hardening, mobile clipboard / shell / vault, popup / web / extension-sidepanel shells |
 | Smoke - markets | 14 | Order placement, orderbook, trade history, market view/list, swaps, obligations center |
 | Smoke - bridge | 12 | `window.xchain` dApp bridge, approval broker/screens, origin allow/blocklist, PSBT-QR, sign-throttle |
 | Smoke - signers | 12 | Software, Trezor, Ledger, Remote, Multisig signer wiring, firmware manifest, hw-sign-e2e |
@@ -231,7 +231,7 @@ Per-package scripts (run with `pnpm --filter <pkg> <script>`):
 | Smoke - messaging | 3 | Compose, contacts, inbox |
 | Smoke - governance | 3 | Binding-poll detection, deadline watcher, VOTE flow |
 | Smoke - desktop / docs / wallet | 3 | Pending-tx detach on window close, glossary appendix check, add-wallet backup mode |
-| **Smoke total** | **470** | All run on every commit; CI fails on any regression |
+| **Smoke total** | **471** | All run on every commit; CI fails on any regression |
 | Playwright E2E - web (default) | 12 specs | Onboarding, add-wallet activation, license gate, send-form review, command palette, a11y scans, responsive viewports, keyboard shortcuts |
 | Playwright E2E - regtest | 69 specs | Betting, fees, contracts, dispensers, oracle, DEX, tokens, addresses, send, a11y against a live regtest chain |
 | Playwright E2E - extension | 4 specs | Cosigner approval, confirm-resume, reservation-race, service-worker kill/rehydration |

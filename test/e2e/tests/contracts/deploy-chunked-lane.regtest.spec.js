@@ -44,6 +44,7 @@ import {
     REGTEST_COIN,
     fundAddress,
     minerRpc,
+    selectVenueChain,
     mintXchain,
     nudgeChain,
     switchToRegtest,
@@ -73,7 +74,6 @@ const COUNTER_BODY =
     "module.exports = { inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
-const EXECUTE_GAS = '100000';
 /** A chunked DEPLOY assembles a bigger body, so it is metered above the inline lane's 200000. */
 const CHUNKED_DEPLOY_GAS = '300000';
 
@@ -178,6 +178,11 @@ async function openDeployForm(page) {
     await deploy.click();
     await expect(main.getByLabel('Gas limit'), 'the deploy form did not open')
         .toBeVisible({ timeout: 30_000 });
+    // DeployContractForm picks its chain with a NetworkField, and re-opening the
+    // form re-defaults it to Bitcoin - so this belongs here, in the opener, not
+    // once per test. Without it the form composes on a chain the funding never
+    // reached. Same conversion `contracts/deploy-execute` already carries.
+    await selectVenueChain(main, 'Network');
     return main;
 }
 
@@ -196,7 +201,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
     test('a full-mode wallet does not silently single-shot a plan it says needs two transactions', async ({ page }) => {
         let main;
 
-        await test.step('onboard and fund on Bitcoin', async () => {
+        await test.step('onboard and fund on the venue chain', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Deploy Lane Wallet' });
             await switchToRegtest(page, PASSWORD);
 
@@ -428,7 +433,16 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 // none. Budgeted for three sequential confirm-and-index waits on
                 // a shared venue.
                 const done = page.getByText(/Contract deployed/i);
-                const failed = page.getByRole('alert').filter({ hasText: /\S/ });
+                // Counting ANY non-empty alert as a failure is too
+                // broad off Bitcoin: where the native fee is MANDATORY the
+                // confirm screen carries a correct informational disclosure
+                // ("You are paying the network protocol fee in the native
+                // coin..."), and this locator read it as the deploy having
+                // failed. Excluded by its own wording rather than by test id,
+                // because it is the only benign alert on this screen and a
+                // genuine error must still trip this.
+                const failed = page.getByRole('alert').filter({ hasText: /\S/ })
+                    .filter({ hasNotText: /paying the network protocol fee in the native coin/ });
                 await expect(done.or(failed).first(),
                     'the chunked run neither finished nor reported a failure')
                     .toBeVisible({ timeout: 900_000 });
@@ -535,6 +549,13 @@ test.describe('§11.3: the chunked deploy lane', () => {
     // The VM state write is the assertion that cannot be faked: a reassembled
     // body that does not compile cannot increment a counter, and a `gas_used` of
     // zero would mean the action indexed without the VM running at all.
+    // This spec pinned the EXECUTE / GAS_LIMIT defect: the form put GAS_LIMIT
+    // into every EXECUTE's params while EXECUTE v0's wire format
+    // (`VERSION|CONTRACT_ACTION_INDEX|METHOD|...PARAMS`) has no gas slot, so
+    // the SDK's leg-field guard correctly refused every compose and no
+    // contract method could be called from the wallet on any chain. The form
+    // no longer carries a gas-limit concept (a top-level EXECUTE runs at the
+    // protocol gas ceiling); this EXECUTE leg is the fix's regression proof.
     test('a contract assembled from chunks compiles and runs', async ({ page }) => {
         const runTag = `s29x-${Date.now()}`;
         const source = chunkedCounterSource(runTag);
@@ -582,7 +603,16 @@ test.describe('§11.3: the chunked deploy lane', () => {
             try {
                 await go.click();
                 const done = page.getByText(/Contract deployed/i);
-                const failed = page.getByRole('alert').filter({ hasText: /\S/ });
+                // Counting ANY non-empty alert as a failure is too
+                // broad off Bitcoin: where the native fee is MANDATORY the
+                // confirm screen carries a correct informational disclosure
+                // ("You are paying the network protocol fee in the native
+                // coin..."), and this locator read it as the deploy having
+                // failed. Excluded by its own wording rather than by test id,
+                // because it is the only benign alert on this screen and a
+                // genuine error must still trip this.
+                const failed = page.getByRole('alert').filter({ hasText: /\S/ })
+                    .filter({ hasNotText: /paying the network protocol fee in the native coin/ });
                 await expect(done.or(failed).first()).toBeVisible({ timeout: 900_000 });
                 const alertText = await failed.first().textContent().catch(() => null);
                 expect(alertText || '', 'the chunked deploy failed').toBe('');
@@ -639,8 +669,14 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await expect(page.getByText(`Contract #${contractIndex}`).first())
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('button', { name: 'Call method', exact: true }).click();
+            // ExecuteContractForm is a SECOND NetworkField, separate from the
+            // deploy form's, and it defaults to Bitcoin like every other one -
+            // so a contract this run deployed on the venue chain would be
+            // executed against Bitcoin, and the compose never opens a confirm
+            // modal. Converting the deploy form alone left this failing here.
+            await selectVenueChain(scope, 'Network');
             await scope.getByLabel('Method', { exact: true }).fill('inc');
-            await scope.getByLabel('Gas limit').fill(EXECUTE_GAS);
+            // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await scope.getByRole('button', { name: 'Execute', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
@@ -833,7 +869,16 @@ test.describe('§11.3: the chunked deploy lane', () => {
             try {
                 await go.click();
                 const done = page.getByText(/Contract deployed/i);
-                const failed = page.getByRole('alert').filter({ hasText: /\S/ });
+                // Counting ANY non-empty alert as a failure is too
+                // broad off Bitcoin: where the native fee is MANDATORY the
+                // confirm screen carries a correct informational disclosure
+                // ("You are paying the network protocol fee in the native
+                // coin..."), and this locator read it as the deploy having
+                // failed. Excluded by its own wording rather than by test id,
+                // because it is the only benign alert on this screen and a
+                // genuine error must still trip this.
+                const failed = page.getByRole('alert').filter({ hasText: /\S/ })
+                    .filter({ hasNotText: /paying the network protocol fee in the native coin/ });
                 await expect(done.or(failed).first()).toBeVisible({ timeout: 900_000 });
                 const alertText = await failed.first().textContent().catch(() => null);
                 expect(alertText || '', 'the resumed run failed').toBe('');

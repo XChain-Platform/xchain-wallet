@@ -27,8 +27,8 @@ import {
 const KDF_PARAMS = {
     algorithm: 'argon2id',
     salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
-    iterations: 3,
-    memory: 65536,
+    iterations: 1,
+    memory: 8192,
     parallelism: 1,
 };
 

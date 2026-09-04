@@ -340,6 +340,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) return;
             console.error('Mint (confirm) failed:', err); // eslint-disable-line no-console
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
                 fallback: humanizeError(err, 'mint').message,
@@ -426,6 +427,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFeeMandatory,
                         fallback: err?.message || 'Mint failed.',

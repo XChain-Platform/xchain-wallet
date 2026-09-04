@@ -15,6 +15,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DetailCard } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
 import styles from './History.module.css';
@@ -29,9 +30,60 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {number} [props.indexerWatermark]   latest indexed block on the entry's chain (drives the Indexed stage)
  * @param {() => void} props.onBack
  */
-export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBack }) {
+export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+
+    // M2.3: the shells hand this page a SNAPSHOT of the row the user clicked
+    // and never revisit it, which is harmless for a confirmed action and wrong
+    // for a pending one: the whole point of showing a transaction early is that
+    // it is going to change while the user is looking at it. So the page
+    // refreshes itself while it is displaying something unconfirmed, on the
+    // same 20s beat as the list, and swaps in the confirmed row the moment the
+    // explorer has one for the same transaction. The SPV and LINK sections
+    // come back with it, because they key off the block this row now has.
+    const [confirmed, setConfirmed] = useState(/** @type {any} */ (null));
+    const entry = confirmed || entryProp;
+    const pendingTxHash = (!(Number(entryProp?.blockIndex) > 0) && entryProp?.txHash)
+        ? String(entryProp.txHash).toLowerCase()
+        : '';
+    useEffect(() => {
+        setConfirmed(null);
+    }, [entryProp?.key]);
+    useEffect(() => {
+        if (!pendingTxHash || confirmed) return undefined;
+        if (!entryProp?.chainId || !entryProp?.address) return undefined;
+        if (typeof messaging.getAddressHistory !== 'function') return undefined;
+        const { chainId, address } = entryProp;
+        let cancelled = false;
+        const look = () => {
+            messaging.getAddressHistory({ chainId, address })
+                .then((resp) => {
+                    if (cancelled) return;
+                    const rows = Array.isArray(resp) ? resp : (resp?.data || resp?.rows || []);
+                    const hit = rows.find((row) => String(row?.tx_hash ?? row?.txHash ?? '')
+                        .toLowerCase() === pendingTxHash);
+                    if (!hit) return;
+                    const built = normalizeHistoryRow(hit, {
+                        chainId,
+                        address,
+                        link: entryProp.link || null,
+                    });
+                    // Only an actually-confirmed row is an upgrade. The
+                    // explorer can carry the transaction before it has a
+                    // block, and swapping to that would lose the pending
+                    // detail for nothing.
+                    if (built && Number(built.blockIndex) > 0) setConfirmed(built);
+                })
+                .catch(() => { /* transient; the next tick tries again */ });
+        };
+        look();
+        const id = setInterval(() => {
+            if (typeof document !== 'undefined' && document.hidden) return;
+            look();
+        }, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        return () => { cancelled = true; clearInterval(id); };
+    }, [pendingTxHash, confirmed, entryProp, messaging]);
 
     // Local peer cache: fetched once on mount when the entry is one
     // side of a cross-chain LINK pair. DetailCard handles loading +
@@ -39,7 +91,16 @@ export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBa
     // expansion.
     const [peerCache, setPeerCache] = useState({});
 
+    // M2.3: an entry with no block has not been indexed, so every part of
+    // this page keyed to a block is not merely empty but meaningless -
+    // there is no action index to name in the title, no checkpoint to
+    // verify against, and no LINK peer to fetch. Each is suppressed
+    // deliberately below. They used to no-op by accident, which held only
+    // for as long as nobody changed the conditions they leaned on.
+    const isPending = !(Number(entry?.blockIndex) > 0);
+
     useEffect(() => {
+        if (isPending) return undefined;
         if (!entry?.link?.peerChainId || !entry?.link?.peerActionIndex) return undefined;
         const peerChainId = entry.link.peerChainId;
         const peerActionIndex = String(entry.link.peerActionIndex);
@@ -62,7 +123,7 @@ export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBa
                 });
             });
         return () => { cancelled = true; };
-    }, [entry, messaging]);
+    }, [entry, messaging, isPending]);
 
     // PC-50: the same SPV verdict the History list badges, on the detail view
     // the item names. Only a confirmed action with a numeric index is
@@ -72,10 +133,10 @@ export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBa
     const verifyEnabled = proofSettings.settings?.verifyProofs !== false
         && !flowsLib.isDemoWallet(walletId);
     const verifyItems = useMemo(() => {
-        if (!entry || !(Number(entry.blockIndex) > 0)) return [];
+        if (!entry || isPending) return [];
         if (entry.actionIndex == null || entry.actionIndex === '') return [];
         return [{ key: 'detail', chainId: entry.chainId, actionIndex: entry.actionIndex }];
-    }, [entry]);
+    }, [entry, isPending]);
     const verifyMap = useActionProofVerification({
         messaging, items: verifyItems, enabled: verifyEnabled,
     });
@@ -97,7 +158,12 @@ export function ActionDetail({ entry, walletId, chainTip, indexerWatermark, onBa
         <PageHeader
             onBack={onBack}
             backLabel="Back to history"
-            title={`${actionDisplayLabel(entry.action)} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
+            title={isPending
+                // A pending action has no index, and the fallback here
+                // rendered it as "#0", an index that belongs to a real
+                // action on every chain.
+                ? actionDisplayLabel(entry.action)
+                : `${actionDisplayLabel(entry.action)} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
             titleIcon={iconUrl ? (
                 <img
                     src={iconUrl}

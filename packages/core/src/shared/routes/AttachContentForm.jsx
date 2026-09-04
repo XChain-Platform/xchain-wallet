@@ -412,6 +412,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'File upload failed.',
@@ -466,6 +467,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'LINK broadcast failed.',
@@ -546,6 +548,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Token-info upload failed.',
@@ -602,6 +605,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || 'Description update failed.',

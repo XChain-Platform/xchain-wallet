@@ -271,10 +271,26 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * onboarding walk itself is identical, and keeping one copy of it is the
  * reason this fixture exists at all.
  *
+ * Pass `bip39Passphrase` to take the "Add a BIP39 passphrase (advanced)"
+ * branch. That produces an ORDINARY wallet: the passphrase typed here is
+ * sealed onto the record under the wallet's own master key, and every later
+ * unlock pools a signer from the password alone. It is no longer a way to reach
+ * a wallet with `signerReady` false.
+ *
+ * The state that HAS no signer is now the legacy one - `passphraseEnabled` true
+ * with nothing stored - and no create walk can produce it, because create
+ * always stores what it was given. A browser reaches it only by restoring the
+ * pre-spec backup envelope in `test/e2e/fixtures/`; see
+ * `tests/wallet/passphrase-stored.regtest.spec.js`, which drives it, and the
+ * generator beside the envelope, which builds it.
+ *
  * @returns {Promise<string[]>} the generated recovery phrase
  */
 export async function createWallet(page, options = {}) {
-    const { password = DEFAULT_PASSWORD, name, ads = 'decline', navigate = true } = options;
+    const {
+        password = DEFAULT_PASSWORD, name, ads = 'decline', navigate = true,
+        bip39Passphrase = null,
+    } = options;
 
     if (navigate) await page.goto('/');
     await dismissIntroCarousel(page);
@@ -285,8 +301,32 @@ export async function createWallet(page, options = {}) {
     // The shells label this field differently: the web app says "Confirm
     // password", the extension popup shortens it to "Confirm" for its narrow
     // width. Match both rather than forking the walk.
+    // Anchored so it cannot capture "Confirm passphrase", which the branch
+    // below reveals directly underneath it.
     await page.getByLabel(/^Confirm( password)?$/).fill(password);
-    await page.getByRole('button', { name: 'Next' }).click();
+    if (bip39Passphrase !== null) {
+        await page.getByLabel(/^Add a BIP39 passphrase/).check();
+        await page.getByLabel('BIP39 passphrase', { exact: true }).fill(bip39Passphrase);
+        await page.getByLabel('Confirm passphrase', { exact: true }).fill(bip39Passphrase);
+    }
+    // WAIT FOR `Next` TO BE ENABLED, AND RE-TYPE ONCE IF IT IS NOT. The button
+    // is disabled until both password fields hold a matching, valid value, and
+    // twice on 2026-09-02 a whole-suite run lost 420 seconds to it sitting
+    // disabled forever: Playwright's click retries a disabled button until the
+    // TEST budget runs out, so the failure surfaces as "Test timeout exceeded"
+    // pointing at a click, with nothing about which field did not take. One
+    // re-type is enough for the race it is (a fill that lands while the form is
+    // still binding), and a form that is genuinely refusing the password now
+    // fails in seconds saying so instead of hanging the run.
+    const next = page.getByRole('button', { name: 'Next' });
+    if (!(await next.isEnabled().catch(() => false))) {
+        await page.getByLabel('Password', { exact: true }).fill(password);
+        await page.getByLabel(/^Confirm( password)?$/).fill(password);
+    }
+    await expect(next, 'the password step will not advance: Next is still disabled after both '
+        + 'fields were filled twice, so the form is refusing this password rather than racing')
+        .toBeEnabled({ timeout: 30_000 });
+    await next.click();
 
     const words = await readRecoveryPhrase(page);
     // Wording differs per shell again: the web app says "I have written

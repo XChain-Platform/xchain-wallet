@@ -15,6 +15,7 @@ import {
     parseFreeformCommands,
     COMMAND_CATEGORIES,
 } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
+import { BITCOIN_ACTIONS } from '../../../packages/core/src/registry/actions.js';
 
 const findById = (list, id) => list.find((c) => c.id === id);
 
@@ -175,6 +176,48 @@ describe('parseFreeformCommands (§33.3)', () => {
 
     it("'Suggested' is a declared category so it groups correctly", () => {
         expect(COMMAND_CATEGORIES).toContain('Suggested');
+    });
+});
+
+// The palette is a user-facing surface, so its rendered copy carries house
+// voice, never protocol wire vocabulary. `subtitle: 'Pending COINPAY
+// obligations'` was the one row that leaked an opcode, sitting next to a
+// 'trade-coinpay' row that describes the same flow as 'Settle a matched
+// order'. `keywords` are exempt and must STAY exempt: they are search-only,
+// never rendered, and 'coinpay' living there is what keeps the opcode findable.
+describe('palette copy carries no raw protocol opcodes', () => {
+    const everyRow = () => [
+        ...buildCommands({ navigate() {} }),
+        ...buildCommands({
+            navigate() {},
+            hasBtcAddress: true,
+            hasGovernanceAddress: true,
+            hasDexSurface: true,
+        }),
+        ...buildCommands({ navigate() {}, isSignerMode: true, hasDexSurface: false }),
+    ];
+
+    it('no title or subtitle renders an uppercase action opcode', () => {
+        const offenders = [];
+        for (const c of everyRow()) {
+            for (const field of ['title', 'subtitle']) {
+                const text = typeof c[field] === 'string' ? c[field] : '';
+                for (const op of BITCOIN_ACTIONS) {
+                    // Case-SENSITIVE with word boundaries: 'Coin payment' and
+                    // 'My Lists' pass, a bare 'COINPAY' / 'LIST' does not.
+                    if (new RegExp(`\\b${op}\\b`).test(text)) {
+                        offenders.push(`${c.id}.${field}: ${JSON.stringify(text)} contains ${op}`);
+                    }
+                }
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
+
+    it('the obligations row keeps opcode findability in keywords', () => {
+        const row = findById(buildCommands({ navigate() {} }), 'nav-obligations');
+        expect(row.keywords).toContain('coinpay');
+        expect(row.subtitle).not.toMatch(/COINPAY/);
     });
 });
 

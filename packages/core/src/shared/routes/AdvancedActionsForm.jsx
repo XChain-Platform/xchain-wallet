@@ -407,6 +407,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Action failed.',
@@ -470,6 +471,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFeeMandatory,
                         fallback: err?.message || 'Action failed.',

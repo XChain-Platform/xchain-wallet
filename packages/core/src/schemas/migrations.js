@@ -68,6 +68,14 @@ export const walletMigrations = {
         }
         return next;
     },
+    // v2 → v3: §15.6. The BIP39 passphrase is stored with the wallet, so
+    // the record gains `encryptedPassphrase`. Seeding it null is the whole
+    // step, and the reason the version bump exists at all: without it an
+    // unmigrated record reads `undefined`, which is falsy exactly like the
+    // null this migration writes, and "wallet has no passphrase" would be
+    // indistinguishable from "wallet predates the change and still owes us
+    // its passphrase once". Those two states take opposite unlock paths.
+    2: (r) => ({ ...r, schemaVersion: 3, encryptedPassphrase: null }),
 };
 /** @type {MigrationMap} */
 export const accountMigrations = {
@@ -196,6 +204,17 @@ export const pendingTxMigrations = {
         tick: r.tick === undefined ? null : r.tick,
         amount: r.amount === undefined ? null : r.amount,
         params: r.params === undefined ? null : r.params,
+    }),
+    // v2 → v3: `mempoolSeenAt`, the network's own sighting of a transaction we
+    // broadcast (§4 M2.2). Seed null, never a guess: a v2 record carries no
+    // evidence that any mempool ever reported it, and back-dating one would
+    // make the timeline claim a sighting the wallet never had. An in-flight
+    // v2 record re-earns the stamp from the next mempool frame or poll; a
+    // long-settled one keeps null and nothing reads it. Purely additive.
+    2: (r) => ({
+        ...r,
+        schemaVersion: 3,
+        mempoolSeenAt: r.mempoolSeenAt === undefined ? null : r.mempoolSeenAt,
     }),
 };
 /** @type {MigrationMap} */

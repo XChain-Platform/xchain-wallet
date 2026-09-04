@@ -223,6 +223,8 @@ const {
     walletBalances,
     addressBalances,
     addressHistory,
+    addressMempool,
+    livePendingTxs,
     chainTipBlockTime,
     indexerWatermark,
     verifyAddressBalance,
@@ -631,6 +633,11 @@ function toSafeWallet(w) {
         origin: w.origin,
         format: w.format,
         passphraseEnabled: w.passphraseEnabled,
+        // Derived, never the ciphertext itself: lets the UI tell "stored"
+        // (unlock needs nothing) apart from "needs its passphrase once"
+        // (passphraseEnabled but not yet captured) without ever seeing
+        // encryptedPassphrase.
+        passphraseStored: typeof w.encryptedPassphrase === 'string' && w.encryptedPassphrase.length > 0,
         multisigs: Array.isArray(w.multisigs) ? w.multisigs : [],
     };
 }
@@ -982,6 +989,46 @@ export function createBackgroundHost(deps) {
             account: r.account,
             addresses: r.addresses,
         };
+    });
+
+    // §3.4: the one-time capture of a legacy wallet's 25th word. A
+    // wallet created before the passphrase was stored opens only when the user
+    // supplies it, so the unlock screen asks once, sends it here, and the
+    // record carries an encrypted copy from then on.
+    //
+    // Registered here rather than per shell because this is the one host every
+    // shell runs: the web bridge imports `createBackgroundHost` instead of
+    // reimplementing it, so a second copy would only be a second thing to
+    // drift. The vault this reads is the host's own, opened for the session,
+    // not the short-lived one the pre-host unlock handler closes.
+    host.register('wallet.passphrase.capture', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const walletId = req?.walletId;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('wallet.passphrase.capture: walletId is required');
+        }
+        if (!signerPool) {
+            throw new Error('wallet.passphrase.capture: this session has no signer pool');
+        }
+        const wallet = await vault.wallets.get(walletId);
+        if (!wallet) {
+            throw new Error(`wallet.passphrase.capture: wallet "${walletId}" not found`);
+        }
+        // captureOne verifies the passphrase against the wallet's stored
+        // addresses before writing anything, and throws PassphraseMismatchError
+        // when it does not own them. Let that reach the caller unchanged: the
+        // unlock screen branches on it to mark the field.
+        const record = await signerPool.captureOne({
+            vault,
+            wallet,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+        // The safe projection carries `passphraseStored: true`, which is the
+        // whole answer the UI needs: this wallet no longer asks for anything
+        // but the password.
+        return { wallet: toSafeWallet(record) };
     });
 
     host.register('wallet.rename', async (req, { vault }) => {
@@ -4070,6 +4117,20 @@ export function createBackgroundHost(deps) {
 
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
+    });
+
+    // M2.1: the unconfirmed half of the same read. Kept as its own channel
+    // rather than folded into 'history.address' so a mempool outage degrades
+    // to "no pending rows" instead of taking the confirmed history with it.
+    host.register('mempool.address', async (req, { sdkRegistry }) => {
+        return addressMempool({ ...req, sdkRegistry });
+    });
+
+    // M2.1: this wallet's own in-flight sends, the only record of a
+    // transaction that exists between our broadcast and the network's first
+    // sighting of it. Summaries only; the psbt/tx hex never leaves the host.
+    host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry }) => {
+        return livePendingTxs({ ...req, vault, chainRegistry });
     });
 
     // §28.3 "Indexed" timeline stage: latest block the indexer has

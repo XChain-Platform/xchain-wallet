@@ -34,10 +34,11 @@
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import { scan } from '../../fixtures/a11y.js';
 import {
-    REGTEST_DESTINATION,
+    expectConfirmModal,
     fundAddress,
     mintXchain,
     readReceiveAddress,
+    REGTEST_DESTINATION,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
@@ -71,7 +72,7 @@ async function composeTokenSend(page, amount) {
     await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(amount);
     await mainButton(page, 'Send').click();
-    await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expectConfirmModal(page, 'this action', 30_000);
 }
 
 async function fundedWallet(page) {

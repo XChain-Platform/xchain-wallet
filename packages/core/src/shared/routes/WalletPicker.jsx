@@ -101,7 +101,11 @@ export function WalletPicker({
                                 {w.format ? (
                                     <span className={styles.entryDescription}>
                                         {w.format === 'counterwallet-legacy' ? 'FreeWallet (legacy)' : 'BIP39'}
-                                        {w.passphraseEnabled ? ' · 25th-word passphrase' : ''}
+                                        {/* A stored passphrase (passphraseStored) unlocks on the
+                                            password alone, so it earns no badge here; only a legacy
+                                            record still owed its one-time capture does, and the badge
+                                            names the unlock screen as where that happens. */}
+                                        {w.passphraseEnabled && !w.passphraseStored ? ' · needs its passphrase at unlock' : ''}
                                     </span>
                                 ) : null}
                             </button>

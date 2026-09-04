@@ -640,8 +640,83 @@ const PKG = 'io.xchain.wallet.android';
         'a missing Chrome id must say the direct lane did not run either');
 }
 
+// ------------------------------- which BANNER an alert is reported under
+//
+// judgeDirect being right is half the lane. The other half is run() filing
+// its verdict under the right heading, and nothing exercised that in either
+// direction: the Chrome bucket was `key !== 'play'`, a catch-all, so every
+// direct alert mailed under "a live Chrome Web Store version has no matching
+// row in the publish log" with a live-version= column, the CWS console and
+// INCIDENT-RUNBOOK §14 - and the direct lane's own remediation, which is the
+// part an operator would act on, never printed at all. The deployed cron runs
+// --no-chrome, so on that host every direct alert was misfiled by
+// construction. Both directions are asserted here, because a fix that moved
+// the misfiling to the Chrome lane would look identical from one side.
+{
+    const APK = 'xchain-wallet-v0.336.0.apk';
+    const signed = Buffer.from('the bytes that were actually signed');
+    const digest = createHash('sha256').update(signed).digest('hex');
+    const served = Buffer.from('a DIFFERENT binary at the same URL');
+    const base = 'https://downloads.example.invalid/wallet';
+    const bodies = new Map([
+        [`${base}/android/latest.json`, JSON.stringify({ version: '0.336.0' })],
+        [`${base}/RELEASE_HASHES/v0.336.0.txt`, [
+            '# XChain Wallet release manifest',
+            '# tag: v0.336.0',
+            `${digest}  ./${APK}`,
+        ].join('\n')],
+    ]);
+    const directFetch = async (url) => {
+        if (url === `${base}/android/${APK}`) {
+            return { ok: true, status: 200, arrayBuffer: async () => served };
+        }
+        const body = bodies.get(url);
+        if (body === undefined) throw new Error(`fakeFetch: no stub for ${url}`);
+        return ok(body);
+    };
+
+    const direct = await run({
+        argv: ['--no-chrome', '--no-play', '--direct-base', base], env: {}, fetchImpl: directFetch,
+    });
+    assert.equal(direct.exitCode, 1, 'a served APK that is not the signed one is an alert run');
+    assert.match(direct.stderr, /DIRECT APK INCIDENT SIGNAL/,
+        'the direct lane gets its OWN banner naming the self-hosted download lane');
+    assert.match(direct.stderr, /is NOT the one that was signed/,
+        'and the finding itself is carried through to stderr');
+    assert.match(direct.stderr, /feed-version=0\.336\.0/,
+        'with the column this lane actually has - the version comes from the update feed');
+    assert.match(direct.stderr, /INCIDENT-RUNBOOK\.md §15/,
+        'and points at the Android section, which is the one that covers this lane');
+    assert.match(direct.stderr, /NO staged-rollout halt and NO rollback/,
+        'the remediation §15 gives for this lane is what has to print, or the operator is '
+        + 'told to reach for levers that do not exist here');
+    assert.doesNotMatch(direct.stderr, /ROGUE-PUBLISH/,
+        'and it is NOT filed as a Chrome Web Store rogue publish - that was the defect');
+    assert.doesNotMatch(direct.stderr, /Chrome Web Store/,
+        'nor does any part of the Chrome banner ride along');
+    assert.doesNotMatch(direct.stderr, /INCIDENT-RUNBOOK\.md §14/,
+        'and the Chrome runbook section is not cited for an Android artifact');
+
+    // The other direction, on the same reporter: a Chrome alert must not
+    // acquire the direct banner now that the buckets are named.
+    const chrome = await run({
+        argv: ['--no-play', '--no-direct'],
+        env: { CWS_MAIN_ITEM_ID: 'aaaa', PUBLISH_LOG_PATH: logPath },
+        fetchImpl: fakeFetch({ 'chromewebstore.google.com': () => ok(listingHtml('9.9.9')) }),
+    });
+    assert.equal(chrome.exitCode, 1, 'an unlogged live Chrome version is still an alert');
+    assert.match(chrome.stderr, /ROGUE-PUBLISH INCIDENT SIGNAL/,
+        'the Chrome banner is unchanged by the split');
+    assert.match(chrome.stderr, /live-version=9\.9\.9/);
+    assert.match(chrome.stderr, /INCIDENT-RUNBOOK\.md §14/);
+    assert.doesNotMatch(chrome.stderr, /DIRECT APK INCIDENT SIGNAL/,
+        'and the fix must not misfile in the opposite direction');
+    assert.doesNotMatch(chrome.stderr, /UNCLASSIFIED ALERT/,
+        'a known lane must never fall through to the residual bucket');
+}
+
 rmSync(dir, { recursive: true, force: true });
 console.log('store-version-monitor.smoke.js: ok (including the parser against the real publish-log.md, '
     + 'the Play absence latch, and the row 130 direct lane: a served APK that does not '
     + 'match its signed manifest is an ALERT, and absence needs no latch here because this lane '
-    + 'is already published)');
+    + 'is already published, reported under its OWN banner and §15 rather than the Chrome one)');

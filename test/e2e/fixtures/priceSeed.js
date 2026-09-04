@@ -107,17 +107,21 @@ export const XCHAIN_USD_PRICE = '2.00000000';
 /**
  * The coin pair and price this fixture puts on each regtest chain.
  *
- * The prices are not arbitrary and are not interchangeable; each is the value a
- * campaign session measured a working flow at.
+ * The prices are not arbitrary and are not interchangeable. Each one is a point
+ * inside a BAND with a floor and a ceiling, and both ends are computed from the
+ * suite's own numbers by `priceBand()` below rather than asserted in prose. The
+ * band is what a reader needs, because the constant on its own invites exactly
+ * the wrong repair: "an action priced under dust, therefore re-tune the seed".
  *
- *   BTC   100000  matches the platform's own native-fee fixtures.
- *   LTC       30  MEASURED FLOOR, not a preference. At a "realistic" $100 a
- *                 place-bet's protocol fee prices at 2000 sats against
- *                 Litecoin's 5460-sat dust floor and is refused outright, so
- *                 betting is unusable on LTC; $30 puts the fee at 6667 sats and
- *                 the same bet indexes valid (break-even is ~$36.6). The verify
- * case for is a Litecoin bet, so this number is what
- *                 makes it pass.
+ *   BTC   100000  matches the platform's own native-fee fixtures. Bitcoin is
+ *                 the only chain with an XCHAIN fee lane, so it never meets the
+ *                 dust wall at all and its ceiling is not load-bearing.
+ *   LTC       30  sits under a $36.63 ceiling set by the CHEAPEST fee the suite
+ *                 drives (100 gas: a one-recipient AIRDROP or DIVIDEND, one bet
+ *                 credit) against Litecoin's 5460-sat dust floor, and above an
+ *                 $8 floor set by the DEAREST (ISSUE, 100000 gas) against
+ *                 `fundAddress`'s one-coin default. At a "realistic" $100 the
+ *                 cheap fee prices at 2000 sats and is refused outright.
  *   DOGE     0.1  a realistic price leaves ~20x of headroom, because a
  *                 USD-denominated fee buys more sats per cent on a cheap coin.
  */
@@ -126,6 +130,166 @@ export const VENUE_PRICE = Object.freeze({
     RLTC:  Object.freeze({ coinPair: 'LTC/USD',  price: '30.00000000' }),
     RDOGE: Object.freeze({ coinPair: 'DOGE/USD', price: '0.10000000' }),
 });
+
+/**
+ * XCHAIN per gas unit, mirrored from `GAS_PRICE` in the coin bundles
+ * (`xchain-indexer/src/coins/{BTC,LTC,DOGE}.js`, all three identical).
+ *
+ * Restated rather than imported for the same reason the anchor rule above is:
+ * the registry lives in another repo and this tree carries no dependency on it.
+ * The unit suite is the pin - if a coin bundle ever moves this, the band checks
+ * go red here in milliseconds instead of on a shared chain.
+ */
+export const GAS_PRICE_XCHAIN = '0.00001';
+
+/**
+ * Each venue chain's dust floor, from `dustThreshold` in the same coin bundles
+ * and matching the copy `tests/send/dust-and-max.regtest.spec.js` already keeps.
+ *
+ * This is the number that makes a protocol fee UNPAYABLE rather than merely
+ * cheap. Off Bitcoin the fee must be a native-coin output and there is no
+ * XCHAIN-balance lane to fall back to, so a fee that prices below the floor
+ * cannot be created and the action cannot be submitted at all.
+ */
+export const VENUE_DUST_SATS = Object.freeze({ RBTC: 546, RLTC: 5460, RDOGE: 100_000 });
+
+/**
+ * The venues where the dust floor is actually load-bearing.
+ *
+ * Bitcoin is deliberately absent. `detectFeePaymentMode` keeps an XCHAIN-balance
+ * lane there and rejects a missing fee output only off Bitcoin, so a
+ * below-dust quote on RBTC is paid from the balance instead of refused - which
+ * is why the seeded $100000 prices the cheapest fee at 2 sats and nothing
+ * breaks. Litecoin and Dogecoin have no such lane, and there the same 2 sats
+ * would be an output that cannot be created.
+ */
+export const NATIVE_FEE_ONLY = Object.freeze(['RLTC', 'RDOGE']);
+
+/**
+ * The extremes of the gas schedule this suite actually drives, which are the
+ * two ends the seeded price has to satisfy at once.
+ *
+ * `cheapest` is 100 gas and it is a floor of the schedule, not of one spec:
+ * AIRDROP_PER_RECIPIENT, DIVIDEND_PER_RECIPIENT and BET_PER_CREDIT are all 100,
+ * and every other key the suite reaches is larger (the next ones up are
+ * EXPIRATION_PER_DAY / BET_FEED_PER_DAY at 550 and VM_EXECUTE_BASE at 1000).
+ * `tests/tokens/airdrop.regtest.spec.js` drives the one-recipient case and
+ * asserts the 100 directly, so this is measured, not assumed.
+ *
+ * `dearest` is ISSUE at 100000 gas, driven by the fee specs and the token specs
+ * on an address `fundAddress` gives ONE coin.
+ */
+export const SUITE_GAS = Object.freeze({ cheapest: 100, dearest: 100_000 });
+
+/**
+ * The share of a one-coin funding an action's protocol fee may take before the
+ * band is called closed.
+ *
+ * A quarter, so a spec can pay its fee, its miner fee, and still compose a
+ * second action without re-funding. Nothing measures a hard failure at any
+ * particular share; the value exists to make "ISSUE loses its headroom" an
+ * arithmetic statement instead of a judgement call.
+ */
+export const MAX_FEE_SHARE_OF_FUNDING = 0.25;
+
+/**
+ * A protocol fee in the CHAIN's own satoshis, the way a native-fee chain has to
+ * pay it: gas is XCHAIN-denominated, so the amount converts through BOTH seeded
+ * prices and the coin price is the only one this fixture is free to move.
+ *
+ *   sats = gas * GAS_PRICE * XCHAIN_USD / COIN_USD * 1e8
+ */
+export function feeSats({ gas, coinUsd, xchainUsd = XCHAIN_USD_PRICE, gasPrice = GAS_PRICE_XCHAIN }) {
+    const feeUsd = Number(gas) * Number(gasPrice) * Number(xchainUsd);
+    return (feeUsd / Number(coinUsd)) * 1e8;
+}
+
+/**
+ * The band a venue's seeded coin price has to sit inside, with both ends
+ * derived rather than remembered.
+ *
+ * WHY THIS IS A FUNCTION AND NOT A COMMENT. A campaign session read one
+ * under-dust refusal on Litecoin, concluded "the seed is too high, every
+ * cheaper action falls under the floor", and the next session was sent to
+ * re-tune this constant. Measured, the band says otherwise, and says it in a
+ * form a test can check: the seeded $30 already clears the cheapest fee the
+ * suite drives, and the actions that DO price under dust there (SWEEP and
+ * CALLBACK, the only two still on the legacy flat per-DB-hit charge) have an
+ * EMPTY band - no coin price satisfies both ends at once, so no reseed can fix
+ * them and the repair is a protocol one. `emptyBand` states that outright.
+ *
+ * `ceilingUsd`  the highest coin price at which the CHEAPEST fee still buys an
+ *               above-dust output. Above it the cheap action is unsubmittable.
+ * `floorUsd`    the lowest coin price at which the DEAREST fee still fits
+ *               inside `MAX_FEE_SHARE_OF_FUNDING` of a `fundingCoins` funding.
+ *               Below it the expensive action eats the wallet.
+ *
+ * @param {{regtestCoin: string, cheapestGas?: number, dearestGas?: number,
+ *          fundingCoins?: number, xchainUsd?: string}} args
+ */
+export function priceBand({
+    regtestCoin,
+    cheapestGas = SUITE_GAS.cheapest,
+    dearestGas = SUITE_GAS.dearest,
+    fundingCoins = 1,
+    xchainUsd = XCHAIN_USD_PRICE,
+} = {}) {
+    const venue = VENUE_PRICE[regtestCoin];
+    const dustSats = VENUE_DUST_SATS[regtestCoin];
+    if (!venue || !dustSats) {
+        throw new Error(`priceBand: ${regtestCoin} is not a regtest chain this fixture prices; `
+            + `expected one of ${Object.keys(VENUE_PRICE).join(', ')}`);
+    }
+    const gasPrice = Number(GAS_PRICE_XCHAIN);
+    const cheapestUsd = Number(cheapestGas) * gasPrice * Number(xchainUsd);
+    const dearestUsd = Number(dearestGas) * gasPrice * Number(xchainUsd);
+
+    const ceilingUsd = (cheapestUsd * 1e8) / dustSats;
+    const floorUsd = dearestUsd / (fundingCoins * MAX_FEE_SHARE_OF_FUNDING);
+    const seededUsd = Number(venue.price);
+
+    return {
+        coinPair: venue.coinPair,
+        seededUsd,
+        dustSats,
+        ceilingUsd,
+        floorUsd,
+        emptyBand: ceilingUsd < floorUsd,
+        cheapestFeeSats: feeSats({ gas: cheapestGas, coinUsd: seededUsd, xchainUsd }),
+        dearestFeeSats: feeSats({ gas: dearestGas, coinUsd: seededUsd, xchainUsd }),
+        // How much room the seed has before the cheap action goes under dust,
+        // and how much before it went under the funding floor. Both are
+        // multiples of the seeded price, so "1.0" means sitting on the edge.
+        dustHeadroom: ceilingUsd / seededUsd,
+        fundingHeadroom: seededUsd / floorUsd,
+        // Read the other way round: how many coins a spec has to fund an
+        // address with before the dearest fee is still under
+        // MAX_FEE_SHARE_OF_FUNDING of it. `fundAddress` defaults to one coin,
+        // so anything above 1 here is a venue whose specs must pass an amount.
+        minFundingCoins: dearestUsd / (seededUsd * MAX_FEE_SHARE_OF_FUNDING),
+    };
+}
+
+/**
+ * The LEGACY per-DB-hit charge, restated in gas units so it can be fed to
+ * `priceBand()` alongside every unified price.
+ *
+ * SWEEP and CALLBACK are the only two actions still on it: a flat 1000
+ * satoshis of XCHAIN per database hit, with no base term and no floor. 1000
+ * XCHAIN-satoshis is 0.00001 XCHAIN, which is exactly one gas unit at
+ * `GAS_PRICE_XCHAIN`, so one DB hit converts to one gas unit and the two
+ * schedules become directly comparable.
+ *
+ * Nine hits is what a real Litecoin SWEEP measured on this venue: 9 gas is
+ * 0.00009 XCHAIN, $0.00018 at the seeded XCHAIN price, and 600 litoshi at the
+ * seeded $30 - against a 5460-satoshi floor, which is the refusal.
+ *
+ * Kept here ONLY so the empty-band claim can be executed rather than argued. It
+ * is not a price this fixture seeds against, and the repair for it is a
+ * protocol one (a BASE term that puts a floor under the fee), not a reseed.
+ */
+export const LEGACY_DB_HIT_GAS = 1;
+export const MEASURED_LEGACY_SWEEP_DB_HITS = 9;
 
 /**
  * The round numbers this fixture writes: the platform's OWN native-fee
@@ -502,6 +666,18 @@ export function unusablePriceMessage({ regtestCoin, reason, seeded, state }) {
             'not be reached over SSH), so the venue was left with whatever it already had.',
             'Unset XC_REGTEST_NO_PRICE_SEED / XCHAIN_E2E_NO_PRICE_SEED, or check that',
             '`ssh ' + sshHostHint() + '` works from this machine.',
+            '',
+            // The remedy that cost 2026-08-27 a run: the default ssh host is
+            // `jdog@localhost`, which only resolves on a machine that either IS
+            // the venue or forwards port 22 to it. From a dev box that reaches
+            // the venue as a named host, `ssh jdog@localhost` fails with "Host
+            // key verification failed" and the message above sends the reader
+            // off to debug ssh - when the fix is one environment variable that
+            // nothing here named.
+            'IF THAT SSH TARGET IS SIMPLY THE WRONG ONE, set XC_REGTEST_SSH_HOST to the host',
+            'that runs the venue containers, as your ssh config already names it, and re-run.',
+            'The seed shells out to `ssh <host> docker exec <indexer>`, so it needs the name',
+            'your ssh config already uses, not a tunnel.',
         );
     }
     if (state) {

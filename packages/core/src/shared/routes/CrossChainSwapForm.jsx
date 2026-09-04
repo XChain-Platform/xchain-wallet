@@ -389,6 +389,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             // can act on. Now that this form has a native-fee lane it
             // needs the same mapping every other swept form uses.
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId: giveChainId,
                 coinTicker: giveTicker || '',
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Sign failed.',

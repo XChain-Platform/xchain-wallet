@@ -55,6 +55,7 @@ import {
     fundAddress,
     minerRpc,
     mintXchain,
+    nudgeChain,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -98,7 +99,13 @@ async function mempoolSize() {
 
 async function mineIfPending() {
     try {
-        if (await mempoolSize() > 0) await minerRpc('generate_blocks', { count: 1 });
+        // `nudgeChain`, not a bare `generate_blocks`: this venue's mempool is
+        // never reliably empty (see `mempoolBefore` below - stuck sub-minimum-fee
+        // bodies sit in it indefinitely), so the size check alone would mine on
+        // every pass of a five-minute poll and put a hundred blocks in front of a
+        // decoder that is already behind. `nudgeChain` skips the mine while the
+        // pipeline is catching up, which is the only case where mining hurts.
+        if (await mempoolSize() > 0) await nudgeChain();
     } catch { /* transient while a block lands */ }
 }
 
@@ -185,6 +192,19 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
     test('every bad market is refused for the stated reason and nothing is signed', async ({ page }) => {
         let oracle;
         let satsBefore;
+        /**
+         * The venue mempool's size before the refusals, not zero.
+         *
+         * This leg asked for an EMPTY mempool until 2026-09-02, which is a claim
+         * about the whole shared chain rather than about this wallet. The RLTC
+         * venue carries permanently stuck transactions - 11kB chunked-deploy
+         * bodies paying 0.49 sat/vB, under the node's block-assembly minimum, so
+         * no block will ever include them - and the spec failed on "a refused
+         * market reached the mempool" with three of them sitting there from
+         * another suite days earlier. The honest measurement is the DELTA: a
+         * refusal that secretly signed something would raise this count.
+         */
+        let mempoolBefore;
 
         await test.step('onboard, fund, and hold the wager token', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Market Refusal Wallet' });
@@ -209,6 +229,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await unlockAfterReload(page, PASSWORD);
 
             satsBefore = await coinBalanceSats(oracle);
+            mempoolBefore = await mempoolSize();
         });
 
         await test.step('no title', async () => {
@@ -271,8 +292,9 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // The measurement, not the impression. Six refusals, one payer, and
             // the chain must show no trace of any of them.
             expect(await mempoolSize(),
-                'a refused market reached the mempool, so the wallet signed something it had refused')
-                .toBe(0);
+                'the venue mempool GREW across six refusals, so the wallet signed and sent '
+                + 'something it had refused')
+                .toBeLessThanOrEqual(mempoolBefore);
             expect(await coinBalanceSats(oracle),
                 'the payer coin balance moved across six refusals, so one of them paid a miner fee')
                 .toBe(satsBefore);

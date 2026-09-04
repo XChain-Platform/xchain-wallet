@@ -92,7 +92,7 @@ assert.ok(
 assert.ok(/const \[executePrefill, setExecutePrefill\] = useState/.test(popup),
     'popup declares an executePrefill state slot');
 assert.ok(
-    /initialMethod=\{executePrefill\?\.method\}[\s\S]*?initialParamsText=\{executePrefill\?\.paramsText\}[\s\S]*?initialGasLimit=\{executePrefill\?\.gasLimit\}/.test(popup),
+    /initialMethod=\{executePrefill\?\.method\}[\s\S]*?initialParamsText=\{executePrefill\?\.paramsText\}/.test(popup),
     'popup contract-execute route passes the executePrefill fields into ExecuteContractForm',
 );
 

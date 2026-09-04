@@ -292,6 +292,77 @@ describe('TrezorSigner.signPsbt', () => {
         await expect(s.signPsbt({ psbtHex: '', chainId: 'bitcoin-mainnet', signingPaths: [] }))
             .rejects.toThrow(/psbtHex is required/);
     });
+
+    // Connect is handed a REBUILT transaction (PAYTOADDRESS / PAYTOOPRETURN),
+    // never the PSBT, so the confirm-time output checks do not cover the
+    // serializedTx that comes back. These three pin the comparison that does.
+    //
+    // SERIALIZED_TX pays 900 sats to 0014cc…cc from aaaa…:0, which is exactly
+    // what the decomposition below describes.
+    const SERIALIZED_TX = '02000000000101aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffff018403000000000000160014cccccccccccccccccccccccccccccccccccccccc0228304502212222222222222222222222222222222222222222222222222222222222222222222222012102999999999999999999999999999999999999999999999999999999999999999900000000';
+
+    const signPsbtSdk = () => ({
+        wallet: {
+            decomposePsbt: vi.fn().mockReturnValue({
+                inputs: [{
+                    scriptType: 'p2wpkh',
+                    prevTxHash: 'a'.repeat(64),
+                    prevTxIndex: 0,
+                    value: 1000,
+                    sequence: 0xffffffff,
+                    witnessUtxoScriptHex: '0014' + 'bb'.repeat(20),
+                    sighashType: null,
+                    redeemScriptHex: null,
+                }],
+                outputs: [{
+                    address: 'bc1qmockdestination',
+                    scriptPubKeyHex: '0014' + 'cc'.repeat(20),
+                    scriptType: 'p2wpkh',
+                    value: 900,
+                }],
+                locktime: 0,
+            }),
+            txidOf: vi.fn().mockReturnValue('deadbeef'),
+        },
+    });
+
+    const signIt = (s) => s.signPsbt({
+        psbtHex: 'cafe',
+        chainId: 'bitcoin-mainnet',
+        signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
+    });
+
+    it('accepts a serializedTx that pays what the PSBT paid', async () => {
+        const mockSdk = signPsbtSdk();
+        const connect = {
+            signTransaction: vi.fn().mockResolvedValue({ success: true, payload: { serializedTx: SERIALIZED_TX } }),
+        };
+        const s = makeSigner(connect, { sdkRegistry: { get: () => mockSdk } });
+        await expect(signIt(s)).resolves.toMatchObject({ txHex: SERIALIZED_TX, txid: 'deadbeef' });
+    });
+
+    it('refuses a serializedTx that pays a different output', async () => {
+        const mockSdk = signPsbtSdk();
+        const tampered = SERIALIZED_TX.replace('cc'.repeat(20), 'dd'.repeat(20));
+        expect(tampered).not.toBe(SERIALIZED_TX);
+        const connect = {
+            signTransaction: vi.fn().mockResolvedValue({ success: true, payload: { serializedTx: tampered } }),
+        };
+        const s = makeSigner(connect, { sdkRegistry: { get: () => mockSdk } });
+        await expect(signIt(s)).rejects.toThrow(/does not match the approved PSBT/);
+        expect(mockSdk.wallet.txidOf).not.toHaveBeenCalled();
+    });
+
+    it('refuses a serializedTx that spends a different outpoint', async () => {
+        const mockSdk = signPsbtSdk();
+        const tampered = SERIALIZED_TX.replace('a'.repeat(64), 'e'.repeat(64));
+        expect(tampered).not.toBe(SERIALIZED_TX);
+        const connect = {
+            signTransaction: vi.fn().mockResolvedValue({ success: true, payload: { serializedTx: tampered } }),
+        };
+        const s = makeSigner(connect, { sdkRegistry: { get: () => mockSdk } });
+        await expect(signIt(s)).rejects.toThrow(/input 0 spends/);
+    });
 });
 
 describe('TrezorSigner multisig stubs', () => {

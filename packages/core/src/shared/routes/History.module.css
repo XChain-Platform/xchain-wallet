@@ -1332,3 +1332,104 @@
     justify-content: flex-end;
     margin-bottom: 0.5rem;
 }
+
+/* M2.3: pending state label on a row's meta line. Replaces the flat
+   "unconfirmed" word. Healthy pending stays quiet and muted like the
+   block number it sits in place of; the two states that mean something
+   has gone wrong get a pill loud enough to find while scrolling, which
+   is the list-level half of the "distinct from healthy pending"
+   requirement. */
+.pendingLabel {
+    text-transform: none;
+}
+
+.pendingLabelWarning {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: color-mix(in srgb, var(--xc-danger, #d93838) 18%, transparent);
+    color: var(--xc-danger, #d93838);
+    font-weight: 700;
+}
+
+/* M2.3: the pending branch of the detail card. Sits above the hero
+   table, banded on its leading edge so it reads as a state notice
+   rather than as another field group. */
+.pendingPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-inline-start: 3px solid var(--xc-warning, #d99000);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+}
+
+.pendingPanelWarning {
+    border-inline-start-color: var(--xc-danger, #d93838);
+    background: color-mix(in srgb, var(--xc-danger, #d93838) 8%, var(--xc-surface));
+}
+
+.pendingHeadline {
+    margin: 0;
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: var(--xc-text);
+}
+
+.pendingHelp {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+/* The pre-validation honesty line. Never muted: it is the sentence the
+   user has to read before treating a pending row as money moved. */
+.pendingNotValidated {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
+.pendingTiming {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.pendingOutputs,
+.pendingSegments {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--xc-text-sm);
+    word-break: break-all;
+}
+
+.pendingSegments {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.pendingMemo {
+    color: var(--xc-text-muted);
+}
+
+/* M2.5: the amount annotation on a pending row's meta line. Styled
+   deliberately unlike every settled figure in the same list, because it
+   is a pre-validation claim sitting inches from confirmed ones: italic,
+   muted, and never given the weight or the alignment that the confirmed
+   rows' numbers get. */
+.pendingAmount {
+    font-style: italic;
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}

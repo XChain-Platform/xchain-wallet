@@ -162,7 +162,16 @@ assert.ok(/messaging\.refreshChainRegistry\(\)/.test(sectionSrc),
     'row triggers refresh via the messaging shim');
 assert.ok(/Last refreshed \$\{formatRelative/.test(sectionSrc),
     'row formats the last-refreshed timestamp');
-assert.ok(/bundled descriptors active/.test(sectionSrc),
+assert.ok(/networks bundled with this wallet are active/.test(sectionSrc),
     'row honestly states the bundled-only fallback when no refresh has happened');
+// The panel is an ordinary Settings section, not developer-gated, so its copy
+// may not name the ChainDescriptor type. `descriptorCount` itself is a wire
+// field spanning core, the background host and the hub response and stays.
+assert.ok(!/\$\{status\.descriptorCount\} descriptors/.test(sectionSrc),
+    'the refresh count reads "networks", not the ChainDescriptor type name');
+assert.ok(!/bundled descriptors/.test(sectionSrc),
+    'the bundled-only fallback reads "networks", not the ChainDescriptor type name');
+assert.ok(/network\$\{status\.descriptorCount === 1 \? '' : 's'\}/.test(sectionSrc),
+    'the refresh count guards its singular');
 
 console.log('OK: chain-registry refresh flow + host + 3 shims + Settings UI smoke');

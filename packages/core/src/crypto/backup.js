@@ -35,6 +35,14 @@
 // (§19.4). A fresh KDF params is calibrated / generated at export time;
 // the export's KdfParams lands in the envelope so import can reproduce
 // the same master key.
+//
+// Opening the envelope is therefore not the same as opening the wallet
+// inside it. The payload's wallet record still holds `encryptedSeed`,
+// `importedKeys[].encryptedWif` and the §15.6 `encryptedPassphrase` sealed
+// under the WALLET's own master key, which this password never derives; the
+// restore re-keys all three onto the importing device's password
+// (`flows/backupFile.js`). A reader who takes "the envelope decrypted" for
+// "the secrets are in the clear" is wrong about every one of them.
 
 import { decrypt as aeadDecrypt, encrypt as aeadEncrypt } from './aead.js';
 import { base64ToBytes, bytesToBase64, deriveMasterKey, makeFreshKdfParams } from './kdf.js';

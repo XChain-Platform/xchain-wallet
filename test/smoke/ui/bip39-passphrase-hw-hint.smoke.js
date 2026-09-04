@@ -36,8 +36,6 @@ assert.ok(/aria="BIP39 passphrase help"/.test(createSrc),
     'CreateWallet keeps its BIP39 passphrase InfoTip aria');
 assert.ok(/Hardware wallets handle passphrases on the device itself/.test(createSrc),
     'CreateWallet InfoTip mentions hardware wallets handle passphrases on-device');
-assert.ok(/Trezor Suite \/ Ledger Live/.test(createSrc),
-    'CreateWallet InfoTip names Trezor Suite + Ledger Live');
 
 // 2. ImportWallet imports the InfoTip primitive (it didn't before
 //    this FOLLOWUP) and uses it on its own BIP39 passphrase

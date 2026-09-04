@@ -45,10 +45,12 @@
 
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
+    REGTEST_CHAIN_LABEL,
     fundAddress,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
+    selectVenueSendAsset,
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
@@ -62,17 +64,26 @@ const FUNDING_BTC = 1;
 const MINT_XCHAIN = 1000;
 
 /**
- * Three deterministic, checksum-valid regtest P2WPKH destinations, derived
- * once (`p2wpkh` over `hash160` of the label below) and pinned as literals so
- * a failure names a stable address. Nothing holds their keys, which is what a
- * throwaway e2e destination should be.
+ * Three deterministic, checksum-valid regtest destinations, pinned as literals
+ * so a failure names a stable address. Nothing holds their keys, which is what
+ * a throwaway e2e destination should be.
+ *
+ * THESE WERE `bcrt1…` P2WPKH LITERALS UNTIL 2026-08-27, and that quietly made
+ * this spec Bitcoin-only: a Bitcoin regtest bech32 address is not an address on
+ * Litecoin or Dogecoin, so the moment the campaign moved off Bitcoin the send
+ * had nowhere to go. They are now the P2PKH encodings of the SAME three
+ * hash160s (`4b6eaaa7…`, `a1c678ac…`, `2cd31678…`) under the regtest version
+ * byte 0x6f, which every one of the three regtest chains shares. So the keys
+ * are unchanged, the addresses are stable, and the spec runs on whichever chain
+ * `XC_REGTEST_COIN` names. Address TYPE is not what this spec is about: it is
+ * about three legs crediting exactly once each.
  *
  * Unequal amounts, on purpose: see (2) in the header.
  */
 const RECIPIENTS = [
-    { address: 'bcrt1qfdh24fmqxd23pax659t92hul2c5spj7jwele5q', amount: '7' },
-    { address: 'bcrt1q58r83tq8r0mjsam2q45pvfqwk2d3krqk7fx5yp', amount: '3' },
-    { address: 'bcrt1q9nf3v7qk5nf80lw9pwd262uta4xd4dx0yh8s28', amount: '1' },
+    { address: 'mnPoYh8DCRVHz6HuTFm3G66fpU9a9BTBpz', amount: '7' },
+    { address: 'mvGLqyJjP6BjFYHtbgxibVZGRtsD8JSwAH', amount: '3' },
+    { address: 'mjbxu8VMhfNRgazS2FCkR3qsEA3JV8bWAD', amount: '1' },
 ];
 const TOTAL_SENT = 11;
 
@@ -205,9 +216,10 @@ test.describe('multi-recipient SEND on regtest', () => {
             // first is therefore part of the flow, not setup.
             await expect(page.getByRole('button', { name: '+ Add recipient' })).toHaveCount(0);
 
-            await page.getByRole('button', { name: /Change asset/ }).click();
-            await page.getByLabel('Search coins or tokens').fill('XCHAIN');
-            await page.getByLabel(/Open XCHAIN details/i).click();
+            // Was three lines that searched for XCHAIN and clicked the first
+            // "Open XCHAIN details" row - which is CHAIN-BLIND: every chain
+            // lists an XCHAIN, so on Litecoin it picked Bitcoin's.
+            await selectVenueSendAsset(page, 'XCHAIN');
 
             await toField(page).fill(RECIPIENTS[0].address);
             await amountField(page).fill(RECIPIENTS[0].amount);
@@ -238,7 +250,7 @@ test.describe('multi-recipient SEND on regtest', () => {
             // states the total, the chain and the count, and every leg is
             // itemised below it.
             const intent = page.getByTestId('action-intent');
-            await expect(intent).toContainText(`Send ${TOTAL_SENT} XCHAIN on Bitcoin to 3 recipients`);
+            await expect(intent).toContainText(`Send ${TOTAL_SENT} XCHAIN on ${REGTEST_CHAIN_LABEL} to 3 recipients`);
             for (let i = 0; i < RECIPIENTS.length; i++) {
                 await expect(intent).toContainText(`Recipient ${i + 1}`);
                 await expect(intent)

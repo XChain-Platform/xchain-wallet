@@ -60,10 +60,13 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     // indexer still returns for an address. The vendored action manifest
     // marks all eight indexerHandled + explorerRender, so History does
     // render them; unmapped they degrade to recased opcodes ("Xcall",
-    // "Nodeproof", "Cross settle").
+    // "Nodeproof", "Cross settle", "Rollcall").
     ANCHOR: 'Network checkpoint',
     ATTEST: 'Validator attestation',
     NODEPROOF: 'Node proof',
+    // ROLLCALL closes a liveness epoch: one on-chain record of which
+    // validators were present and which were absent. A holder only ever sees
+    // it because a validator address they watch published or was named in it.
     ROLLCALL: 'Validator roll call',
     SLASH: 'Validator penalty',
     XCALL: 'Cross-chain call',
@@ -75,13 +78,24 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     // beside the base action. Unmapped they recase into protocol coinage
     // the map already refuses for the base verb ("Coinpay expire" next to
     // "Coin payment").
+    // The cancel/edit half of the same family arrives differently: the user
+    // DID author these, and the indexer rewrites the stored name on the row
+    // the wallet itself composed (ORDER -> ORDER_CANCEL in xchain-indexer
+    // actions/order.js, and the dispenser/swap equivalents), so an owner who
+    // cancels their own order reads the result in their own History.
     BET: 'Bet',
     BET_EXPIRE: 'Bet expired',
     COINPAY_EXPIRE: 'Coin payment expired',
+    DISPENSER_CANCEL: 'Dispenser cancelled',
     DISPENSER_CLOSE: 'Dispenser closed',
+    DISPENSER_EDIT: 'Dispenser updated',
     DISPENSER_EXPIRE: 'Dispenser expired',
+    ORDER_CANCEL: 'Order cancelled',
+    ORDER_EDIT: 'Order updated',
     ORDER_EXPIRE: 'Order expired',
     ORDER_MATCH: 'Order matched',
+    SWAP_CANCEL: 'Swap cancelled',
+    SWAP_EDIT: 'Swap updated',
     SWAP_EXPIRE: 'Swap expired',
     SWAP_MATCH: 'Swap matched',
 });
@@ -102,4 +116,19 @@ export function actionDisplayLabel(name) {
     // Fallback: "FOO_BAR" → "Foo bar".
     const words = String(name).trim().toLowerCase().replace(/[_-]+/g, ' ');
     return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Whether an action name has a curated label rather than the Title Case
+ * fallback. Exposed so a completeness guard can join the action manifest's
+ * explorerRender slice against this map WITHOUT exporting the map itself:
+ * the map stays module-private and unmutable by a consumer, and the answer
+ * is read off the same lookup actionDisplayLabel() performs.
+ *
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function hasActionDisplayLabel(name) {
+    if (!name) return false;
+    return Boolean(DISPLAY_MAP[String(name).trim().toUpperCase()]);
 }

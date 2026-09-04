@@ -83,7 +83,11 @@ const KIND_TITLE = {
  * password input, always-allow toggle, footer buttons) is shared.
  *
  * Result envelope matches SignApprovalResult:
- *   `{ approved: true, walletId, password, bip39Passphrase?, savePermanent? }`
+ *   `{ approved: true, walletId, password, savePermanent? }`
+ *
+ * The password is the whole secret this screen collects. It never asked for a
+ * BIP39 passphrase, and a passphrase wallet now carries its own encrypted 25th
+ * word on the record, so there is nothing further to gather here.
  *
  * Wrong-password detection happens server-side; the bridge handler
  * passes the password to the signer flow, and if decryption fails the

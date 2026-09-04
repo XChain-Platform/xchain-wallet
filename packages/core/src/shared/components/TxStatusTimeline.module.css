@@ -65,6 +65,20 @@
     font-weight: 500;
 }
 
+/* A stage that is not merely waiting but has something to tell the user
+   (nothing on the network has reported this transaction, or it stopped
+   reporting it). Overrides .rowPending's muting, which is what makes the
+   warning read as different in kind from an ordinary not-yet-reached stage
+   rather than just further down the same list. */
+.rowWarn .dot {
+    color: var(--xc-warning, #F59E0B);
+}
+
+.rowWarn .label {
+    color: var(--xc-warning, #F59E0B);
+    font-weight: 600;
+}
+
 .sub {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);

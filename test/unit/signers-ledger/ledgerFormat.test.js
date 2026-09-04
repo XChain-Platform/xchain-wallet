@@ -254,16 +254,96 @@ describe('toLedgerCreatePayment', () => {
         })).toThrow(/different outpoint than this PSBT names/);
     });
 
+    // createPaymentTransaction signs SINGLE-KEY inputs only. Reading `scriptType`
+    // for the transaction-level flags without checking it is one this seam can
+    // sign hands the device a p2wsh multisig input paired with an 84' path as a
+    // single-key p2wpkh spend. The sibling seam refuses these
+    // (trezorFormat.js INPUT_SCRIPT_TYPE).
+    for (const unsignable of ['p2wsh', 'p2sh-p2wsh', 'p2sh', 'p2tr', 'unknown']) {
+        it(`refuses an input this seam cannot sign: ${unsignable}`, () => {
+            expect(() => toLedgerCreatePayment({
+                decomposed: makeDecomposed(unsignable),
+                chainId: 'bitcoin-mainnet',
+                signingPaths,
+            })).toThrow(new RegExp(`unsupported input scriptType "${unsignable}"`));
+        });
+    }
+
+    // The refusal must be a TYPE check, not a side effect of prev-tx
+    // availability. Most such inputs happen to die in prevTxHexForInput
+    // because they carry only a witnessUtxo; one carrying nonWitnessUtxo
+    // passed straight through, which is the case that actually reached a
+    // device.
+    it('refuses an unsignable input even when it carries a real prev tx', () => {
+        const d = makeDecomposed('p2wsh');
+        d.inputs[0].nonWitnessUtxoHex = PREV_TX_HEX;
+        d.inputs[0].witnessUtxoScriptHex = undefined;
+        expect(() => toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toThrow(/unsupported input scriptType "p2wsh"/);
+    });
+
+    it('names the input index of the unsignable script type', () => {
+        expect(() => toLedgerCreatePayment({
+            decomposed: makeDecomposed('p2tr'),
+            chainId: 'bitcoin-mainnet',
+            signingPaths,
+        })).toThrow(/at index 0/);
+    });
+
+    // The PSBT declares its own per-input sighash and the signingPaths guard
+    // below never reads it, so a pasted PSBT asking for SIGHASH_SINGLE /
+    // ANYONECANPAY was signed under the device default and reported as
+    // success. auth.signPsbt.hw builds signingPaths as { inputIndex, path }
+    // only, so on that lane this is the ONLY side that can fire.
+    it('refuses a non-default sighashType carried by the PSBT input itself', () => {
+        const d = makeDecomposed('p2wpkh');
+        d.inputs[0].sighashType = 0x83;
+        expect(() => toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toThrow(/PSBT input 0 requests sighashType 131/);
+    });
+
+    it('refuses SIGHASH_SINGLE on the PSBT input even when the signing path is silent', () => {
+        const d = makeDecomposed('p2wpkh');
+        d.inputs[0].sighashType = 3;
+        expect(() => toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toThrow(/requests sighashType 3/);
+    });
+
+    // An explicit SIGHASH_ALL on the signing path must not license a
+    // non-default flag on the corresponding PSBT input: either side being
+    // non-default refuses.
+    it('an explicit SIGHASH_ALL signing path cannot suppress the PSBT input flag', () => {
+        const d = makeDecomposed('p2wpkh');
+        d.inputs[0].sighashType = 0x81;
+        expect(() => toLedgerCreatePayment({
+            decomposed: d,
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0", sighashType: 1 }],
+        })).toThrow(/PSBT input 0 requests sighashType 129/);
+    });
+
+    it('accepts a PSBT input carrying SIGHASH_ALL or no flag at all', () => {
+        const explicit = makeDecomposed('p2wpkh');
+        explicit.inputs[0].sighashType = 1;
+        const nulled = makeDecomposed('p2wpkh');
+        nulled.inputs[0].sighashType = null;
+        const absent = makeDecomposed('p2wpkh');
+        const base = toLedgerCreatePayment({ decomposed: absent, chainId: 'bitcoin-mainnet', signingPaths });
+        expect(toLedgerCreatePayment({ decomposed: explicit, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toEqual(base);
+        expect(toLedgerCreatePayment({ decomposed: nulled, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toEqual(base);
+    });
+
     // The shared signing contract (Signer.js SigningPathEntry, bridge-spec
-    // PsbtSigningPath) carries an optional per-input sighash override that
-    // trezorFormat.js honours. Were this seam to read only inputIndex and
-    // path, so the same PSBT + signingPaths signed under the requested
-    // sighash on Trezor and under SIGHASH_ALL on Ledger with nothing
-    // surfaced: a signature over a different sighash than the caller asked
-    // for. hw-app-btc takes only a transaction-level sigHashType and this
-    // signer returns a serialized tx rather than a PSBT, so the refusal is
-    // the honest answer, and forwarding the flag would be new device
-    // behaviour no wallet flow exercises.
+    // PsbtSigningPath) carries an optional per-input sighash override, which
+    // trezorFormat.js refuses identically. Were this seam to read only
+    // inputIndex and path, the same PSBT + signingPaths would sign under
+    // SIGHASH_ALL with nothing surfaced: a signature over a different sighash
+    // than the caller asked for. hw-app-btc takes only a transaction-level
+    // sigHashType and this signer returns a serialized tx rather than a PSBT,
+    // so the refusal is the honest answer, and forwarding the flag would be
+    // new device behaviour no wallet flow exercises.
     it('refuses a non-default sighashType rather than silently signing SIGHASH_ALL', () => {
         expect(() => toLedgerCreatePayment({
             decomposed: makeDecomposed('p2wpkh'),

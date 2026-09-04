@@ -29,11 +29,22 @@
 //                        single dual-chain card. Leader = the entry
 //                        that appears first (newest) in the visible
 //                        feed, members = the peer side(s).
+//   - batch:             BATCH leader + every sub-action that names it
+//                        via parent_batch_action_index.
 //
-// BATCH grouping is intentionally skipped. XChain's BATCH parent
-// reference is not exposed on history-row payloads we currently consume,
-// so a heuristic would risk false collapses. Tracked in FOLLOWUPS.md
-// under §28.
+// The batch reference is authoritative, not a heuristic. The indexer
+// stores no parent column (every sub-command is its own root action);
+// xchain-explorer derives parenthood in getHistoryData and publishes it
+// as `parent_batch_action_index` on each row, NULL on the BATCH envelope
+// itself and on every row that is not batched. Grouping on a shared txid
+// instead (the only option before that field existed, which is why this
+// rule waited) would have merged unrelated rows that share nothing but a
+// transaction envelope.
+//
+// Batch containment is EXCLUSIVE and resolved first: a row inside a
+// batch cannot also be claimed by issue-mint / dispenser-dispense /
+// order-fills / link-pair, because a row that renders inside two cards
+// renders twice. The batch envelope is the outer container, so it wins.
 
 /**
  * @typedef {{
@@ -53,7 +64,7 @@
 
 /**
  * @typedef {{ kind: 'entry', entry: HistoryEntry }
- *         | { kind: 'group', subkind: 'issue-mint' | 'dispenser-dispense' | 'order-fills' | 'link-pair',
+ *         | { kind: 'group', subkind: 'issue-mint' | 'dispenser-dispense' | 'order-fills' | 'link-pair' | 'batch',
  *             leader: HistoryEntry, members: HistoryEntry[],
  *             summary: string, key: string }} GroupedItem
  */
@@ -72,6 +83,8 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
     const issueLeaders = new Map();
     const dispenserLeaders = new Map();
     const orderLeaders = new Map();
+    /** @type {Map<string, HistoryEntry>} BATCH envelopes by `chainId|actionIndex`. */
+    const batchLeaders = new Map();
     /**
      * Cross-chain LINK pair tracker: the OLDEST entry seen for a given
      * linkActionIndex becomes the pair's leader, mirroring the
@@ -93,6 +106,8 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
             dispenserLeaders.set(`${e.chainId}|${e.actionIndex}`, e);
         } else if (a === 'ORDER') {
             orderLeaders.set(`${e.chainId}|${e.actionIndex}`, e);
+        } else if (a === 'BATCH') {
+            batchLeaders.set(`${e.chainId}|${e.actionIndex}`, e);
         }
         const lai = e.link?.linkActionIndex;
         if (lai) {
@@ -109,9 +124,17 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
     /** @type {Map<string, { subkind: string, leader: HistoryEntry, members: HistoryEntry[] }>} */
     const groups = new Map();
 
+    /**
+     * Returns null when the would-be leader is already claimed by
+     * another card (it sits inside a BATCH envelope, or it is already
+     * a member of a pair). Stealing it would leave it in two members
+     * lists and render the row twice; the caller falls back to flat
+     * rows for the children instead.
+     */
     const ensureGroup = (groupKey, subkind, leader) => {
         let g = groups.get(groupKey);
         if (!g) {
+            if (memberGroup.has(leader.key)) return null;
             g = { subkind, leader, members: [] };
             groups.set(groupKey, g);
             memberGroup.set(leader.key, groupKey);
@@ -119,7 +142,30 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
         return g;
     };
 
+    // Batch containment first, so a sub-action is claimed by its
+    // envelope before any other rule can take it (see header note).
     for (const e of entries) {
+        const parentIdx = pickField(e.raw, [
+            'parent_batch_action_index', 'PARENT_BATCH_ACTION_INDEX',
+            'parentBatchActionIndex',
+        ]);
+        if (parentIdx == null) continue;
+        const parentKey = `${e.chainId}|${String(parentIdx)}`;
+        const leader = batchLeaders.get(parentKey);
+        // A parent outside the visible window (filtered out, or on the
+        // previous page) leaves its children as plain rows, the same
+        // orphan-free contract the other subkinds keep.
+        if (!leader || leader.key === e.key) continue;
+        const groupKey = `batch:${parentKey}`;
+        const g = ensureGroup(groupKey, 'batch', leader);
+        if (!g) continue;
+        g.members.push(e);
+        memberGroup.set(e.key, groupKey);
+    }
+
+    for (const e of entries) {
+        // Already inside a batch card: no second claim.
+        if (String(memberGroup.get(e.key) || '').startsWith('batch:')) continue;
         const a = upper(e.action);
         if (a === 'MINT') {
             const tick = upper(pickField(e.raw, ['tick', 'TICK', 'tick', 'ASSET']));
@@ -130,6 +176,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
             if (!leader) continue;
             const groupKey = `issue-mint:${k}`;
             const g = ensureGroup(groupKey, 'issue-mint', leader);
+            if (!g) continue;
             g.members.push(e);
             memberGroup.set(e.key, groupKey);
         } else if (a === 'DISPENSE') {
@@ -144,6 +191,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
             if (!leader) continue;
             const groupKey = `dispenser-dispense:${parentKey}`;
             const g = ensureGroup(groupKey, 'dispenser-dispense', leader);
+            if (!g) continue;
             g.members.push(e);
             memberGroup.set(e.key, groupKey);
         } else if (a === 'ORDER_MATCH' || a === 'ORDERFILL' || a === 'ORDER_FILL') {
@@ -159,6 +207,7 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
             if (!leader) continue;
             const groupKey = `order-fills:${parentKey}`;
             const g = ensureGroup(groupKey, 'order-fills', leader);
+            if (!g) continue;
             g.members.push(e);
             memberGroup.set(e.key, groupKey);
         }
@@ -175,8 +224,10 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
             if (leader && leader.key !== e.key) {
                 const groupKey = `link-pair:${lai}`;
                 const g = ensureGroup(groupKey, 'link-pair', leader);
-                g.members.push(e);
-                memberGroup.set(e.key, groupKey);
+                if (g) {
+                    g.members.push(e);
+                    memberGroup.set(e.key, groupKey);
+                }
             }
         }
     }
@@ -250,6 +301,13 @@ function summarizeGroup(subkind, leader, members) {
     if (subkind === 'order-fills') {
         const noun = members.length === 1 ? 'fill' : 'fills';
         return `Limit order: ${members.length} ${noun}`;
+    }
+    if (subkind === 'batch') {
+        // Count the sub-actions, not the envelope: "Batch: 3 actions"
+        // is the number of things that happened, and the BATCH row
+        // itself is only the wrapper they arrived in.
+        const noun = members.length === 1 ? 'action' : 'actions';
+        return `Batch: ${members.length} ${noun}`;
     }
     if (subkind === 'link-pair') {
         // Leader is the older side; members[0] is the newer (peer that

@@ -664,6 +664,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         } catch (err) {
             if (isUserRejection(err)) return;
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Update failed.',
             }));
         }
@@ -717,6 +718,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
+                        chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
                         fallback: err?.message || `${MODE_LABEL[mode] || 'Action'} failed.`,

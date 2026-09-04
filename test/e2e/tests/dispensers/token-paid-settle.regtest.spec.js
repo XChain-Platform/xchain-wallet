@@ -32,13 +32,14 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_LABEL,
-    REGTEST_COIN,
     fundAddress,
     minerRpc,
     mintXchain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -140,15 +141,22 @@ async function gotoPalette(page, title) {
  * presents as a confirm screen that never opens, which reads exactly like a
  * wallet regression and cost this spec its first run.
  */
+/**
+ * The shared reader, plus this lane's own checks.
+ *
+ * A narrower wait races the modal against the stale-price alert and nothing
+ * else, so every OTHER refusal the screen carried read as the modal simply
+ * not being there - which is how the shared explorer's 429 was reported as a
+ * locator timeout for four runs. `expectConfirmModal` reads every alert on
+ * the screen instead. The price check stays because it names one venue state
+ * early and by itself.
+ */
 async function expectConfirmModal(page) {
-    const modal = page.getByTestId('confirm-modal');
-    const priceAlert = page.getByText(/fee price is temporarily unavailable/);
-    await modal.or(priceAlert).first().waitFor({ state: 'visible', timeout: 60_000 });
-    expect(await priceAlert.count(),
-        'the venue could not price this action: the price sentinel has gone stale mid-run. Venue '
-        + 'state, not a wallet defect - re-seed (campaign 3.2) and re-run')
+    const modal = await sharedConfirmModal(page, 'this action', 60_000);
+    expect(await page.getByText(/fee price is temporarily unavailable/).count(),
+        'the venue could not price this action: the price sentinel has gone stale mid-run. '
+        + 'Venue state, not a wallet defect - re-seed (campaign §3.2) and re-run')
         .toBe(0);
-    await expect(modal).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
 }
 
@@ -288,7 +296,21 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // An explorer result row reads "<TICK> @ <addr> · <rate>" with
             // "#<index> · status open" underneath - not the "Open … dispenser
             // #N" aria-label the OWNER's list uses.
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
+            //
+            // MATCHED ON THE SELLER'S ADDRESS AS WELL AS THE INDEX, because a
+            // dispenser index is per-CHAIN and this search is not. Dogecoin's
+            // #343 and Litecoin's #343 are different dispensers with equal
+            // standing in one result list, and the index alone resolved to both
+            // on 2026-09-02 - a strict-mode violation reported as "the buyer
+            // cannot find it", which is the opposite of what happened. The
+            // address is the only part of the row that is unique across chains.
+            //
+            // Read off the ACCESSIBLE NAME rather than the row's text: the
+            // rendered address is truncated for width, so a `hasText` on the
+            // full string matches nothing at all - which fails identically to a
+            // dispenser that never landed.
+            const row = main.getByRole('button', { name: new RegExp(`@\\s*${seller}\\b`) })
+                .filter({ hasText: `#${dispenserIndex} ` });
             await expect(row,
                 `the seller's dispenser #${dispenserIndex} is on chain but the buyer cannot find it by `
                 + 'searching the token it sells')

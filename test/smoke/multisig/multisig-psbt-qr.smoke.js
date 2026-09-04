@@ -249,7 +249,7 @@ const routeCopy = route
 assert.ok(!/Round 1 nonce from/.test(routeCopy),
     'paste-inbox results say "Round 1 reply", not "Round 1 nonce" (#3879)');
 assert.ok(!/aggregated Schnorr signature/.test(routeCopy),
-    'round-2 progress hint reads " (aggregated)" like round 1, with no scheme name (#3880)');
+    'round-2 progress hint reads " (combined)" like round 1, with no scheme name (#3880)');
 assert.ok(!/\{'? ?·'? ?'\}\{(?:s|active)\.status\}|\{' · status: '\}/.test(route),
     'session status renders through statusLabel(), never as the raw enum token (#3881)');
 assert.ok(/const STATUS_LABELS = \{([\s\S]*?)\};/.test(route),
@@ -259,6 +259,53 @@ for (const status of MULTISIG_SESSION_STATUSES) {
     assert.ok(statusLabelMap.includes(`'${status}'`),
         `STATUS_LABELS covers the "${status}" session status (#3881)`);
 }
+
+// The same pass, one layer out: `collector` and `envelope` are the names of
+// CODE objects (createXcwCollector, encodeMultisigEnvelope), and the screen
+// teaches the user neither. "chunk" and "frame" are exempt on purpose - the
+// copy defines them in place ("paste each XCW chunk on its own line") and the
+// pasted lines literally begin with XCW:, so they name what the user is
+// holding rather than an object only the source knows about.
+const INTERNAL_OBJECT_NAMES = /\b(collector|envelope)s?\b/i;
+
+for (const [, accessibleName] of route.matchAll(/(?:aria-label|alt)="([^"]*)"/g)) {
+    assert.ok(!INTERNAL_OBJECT_NAMES.test(accessibleName),
+        `accessible name "${accessibleName}" names an internal object; screen-reader ` +
+        'users get the same copy pass as everyone else');
+}
+for (const label of ['Reset collector', 'Export envelope', 'broadcast envelope']) {
+    assert.ok(!route.includes(label),
+        `sign-screen copy no longer reads "${label}" (internal object name)`);
+}
+
+// The same rule applied to the protocol's own verbs and algorithm names
+// (#6214/#6215): "aggregate", the raw envelope kind and "ECDSA" are MuSig2 /
+// transport vocabulary, and the screen that humanizes its status enum must
+// not reintroduce them one line down. Each entry is a string this screen
+// renders; the code identifiers (handleAggregate,
+// aggregateMultisigSession, decodeMultisigEnvelope) stay untouched.
+for (const label of [
+    'Aggregate the round',
+    'Aggregate the current round',
+    'Aggregate failed.',
+    "'Aggregate'",
+    "'Aggregating…'",
+    'ECDSA signature from',
+    'partial sig from',
+    'envelope kind "',
+    'Envelope kind "',
+]) {
+    assert.ok(!route.includes(label),
+        `sign-screen copy no longer reads "${label}" (protocol vocabulary, #6214/#6215)`);
+}
+// The wrong-kind branches still have to say something, and the wire tag has
+// to survive for support: it belongs in console.error, not in the message.
+assert.ok(
+    (route.match(/console\.error\('Multisig (?:scan|paste): unsupported reply kind:', envelope\.kind\)/g) || []).length === 2,
+    'both wrong-kind branches log the raw envelope kind to the console (#6215)',
+);
+assert.ok((route.match(/is not a cosigner reply for this session\./g) || []).length === 2,
+    'both wrong-kind branches show the user actionable copy instead of the wire tag (#6215)');
 
 // ─── AnimatedQrFrames is exported from core/ui ──────────────────
 

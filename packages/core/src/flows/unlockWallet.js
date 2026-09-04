@@ -29,20 +29,25 @@ export class WalletNotFoundError extends Error {
 }
 
 /**
- * A §15.6 25th-word wallet reached a signing path with only its password.
+ * A §15.6 passphrase wallet that has not yet stored its passphrase reached a
+ * signing path with only its password.
+ *
+ * Only a legacy record can raise this now: once the passphrase is captured
+ * and stored (§3.4), the password alone opens the wallet. The remedy is
+ * therefore the one-time capture step, which the unlock screen runs, and not
+ * a passphrase field the user fills in on every unlock.
  *
  * The message is written for the user, not the developer, because this is
  * the error a confirm screen shows verbatim: SoftwareSigner's own
  * "bip39Passphrase is required" crossed the messaging boundary untouched
  * and was the first thing a testnet user with a passphrase wallet saw when
- * they tried to sign anything. The remedy it names (unlock again with the
- * passphrase) is the one the unlock screen now offers.
+ * they tried to sign anything.
  */
 export class PassphraseRequiredError extends Error {
     constructor(walletName) {
         const who = walletName ? `The wallet "${walletName}"` : 'This wallet';
-        super(`${who} uses a 25th-word passphrase, so its password alone cannot sign. ` +
-              'Lock the wallet, then unlock it again with the passphrase filled in.');
+        super(`${who} needs its passphrase entered once more. ` +
+              'Lock the wallet; the unlock screen will ask for it.');
         this.name = 'PassphraseRequiredError';
         this.code = 'PASSPHRASE_REQUIRED';
     }
@@ -72,7 +77,7 @@ export class PassphraseMismatchError extends Error {
  * @typedef {Object} UnlockRecordOpts
  * @property {import('../schemas/wallet.js').Wallet} wallet
  * @property {string} password
- * @property {string} [bip39Passphrase]
+ * @property {string} [bip39Passphrase]   honoured ONLY for a legacy record (§15.6 capture); a stored `encryptedPassphrase` always wins
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  */
@@ -97,9 +102,15 @@ export async function unlockWalletRecord({
         throw new Error('unlockWalletRecord: password is required');
     }
     if (!chainRegistry) throw new Error('unlockWalletRecord: chainRegistry is required');
-    // Caught here, before the KDF runs, so the user-facing sentence is what
-    // reaches the screen instead of the signer's internal precondition.
-    if (wallet.passphraseEnabled && (typeof bip39Passphrase !== 'string' || bip39Passphrase.length === 0)) {
+    // A stored passphrase makes the password the only secret the unlock needs,
+    // so only a legacy record (passphrase enabled, nothing captured yet) with
+    // nothing typed can fail here. Caught before the KDF runs, so the
+    // user-facing sentence is what reaches the screen instead of the signer's
+    // internal precondition.
+    const hasStoredPassphrase = typeof wallet.encryptedPassphrase === 'string'
+        && wallet.encryptedPassphrase.length > 0;
+    if (wallet.passphraseEnabled && !hasStoredPassphrase
+        && (typeof bip39Passphrase !== 'string' || bip39Passphrase.length === 0)) {
         throw new PassphraseRequiredError(wallet.name);
     }
 
@@ -112,6 +123,10 @@ export async function unlockWalletRecord({
             encryptedSeed: wallet.encryptedSeed,
             kdfParams: wallet.kdfParams,
             passphraseEnabled: wallet.passphraseEnabled,
+            // The signer opens this itself, with the master key its own seed
+            // decrypt retains: that is the one instant where the key and the
+            // mnemonic are both in hand.
+            encryptedPassphrase: wallet.encryptedPassphrase ?? null,
             format: wallet.format,
             importedKeys: wallet.importedKeys,
         },

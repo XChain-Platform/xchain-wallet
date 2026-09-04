@@ -66,11 +66,20 @@ supportedArchitectures:
 overrides:
   tar: ^7.5.7
   ws: ^8.20.1
-  brace-expansion@1: ^1.1.15
-  # 2.1.2 closes GHSA/CVE-2026-13149 (exponential-time expansion of
-  # consecutive non-expanding {} groups, a DoS in dev tooling paths).
-  brace-expansion@2: ^2.1.2
-  brace-expansion@5: ^5.0.6
+  # Three major lines are resident, so brace-expansion is pinned per major.
+  # Two advisories stack here, and the SECOND one supersedes the first on
+  # every line:
+  #   GHSA-3jxr-9vmj-r5cp / CVE-2026-13149 - exponential-time expansion of
+  #     consecutive non-expanding {} groups. Patched in 1.1.16 / 2.1.2 / 5.0.7.
+  #   GHSA-rgw5-rvv9-x895 / CVE-2026-69152 - the 5.0.8 maxLength mitigation is
+  #     incomplete: the arrays feeding combine() stay unbounded, so ~25 KB of
+  #     input kills the process with an UNCATCHABLE out-of-memory error.
+  #     Patched in 1.1.18 / 2.1.4 / 5.0.9.
+  # Floor every line at the later of the two, not the first patch that
+  # happened to clear the alert that was open at the time.
+  brace-expansion@1: ^1.1.18
+  brace-expansion@2: ^2.1.4
+  brace-expansion@5: ^5.0.9
   vite: '>=6.4.3 <7'
   protobufjs: ^7.5.8
   form-data: ^4.0.6
@@ -97,6 +106,15 @@ overrides:
   # Connection-header passthrough in the proxy helper, memo() retaining SSR
   # output across requests). Floor at the first patched version.
   hono: ^4.12.34
+  # @xmldom/xmldom arrives under plist, which app-builder-lib, native-run and
+  # simple-plist all use to read and write Apple property lists while the
+  # desktop and mobile apps are packaged. <=0.8.14 serialises an invalid
+  # EntityReference nodeName without rejecting it (GHSA-6gmq-8vp8-gcm6), so a
+  # crafted plist can inject XML fragments into the file that comes back out.
+  # The plists in this pipeline are our own, so the reachable path is build
+  # time rather than anything a user's wallet parses; floored anyway because
+  # the fix is a patch release and plist asks for ^0.8.8, which it satisfies.
+  '@xmldom/xmldom': ^0.8.15
 
 # "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall
@@ -149,3 +167,11 @@ allowBuilds:
   secp256k1: false
   sharp: true
   tiny-secp256k1: true
+
+# No release-age exclusions. The list is deliberately absent rather than
+# empty: the one entry it ever held (`@dankest-llc/xchain-sdk@0.10.0`) only
+# appeared to work because that version had already aged past the threshold,
+# so it was never the thing letting the pin land. The SDK repin is sequenced
+# AFTER the age gate instead (release-management.md section 6, amendment v11):
+# publish, wait out the gate, then repin. Do not reintroduce an exclusion to
+# rush a fresh publish into the lockfile.

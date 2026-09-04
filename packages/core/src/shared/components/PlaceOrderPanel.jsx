@@ -35,8 +35,7 @@ import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isHwSource, SignCredentials } from './SignCredentials.jsx';
-import { buildBalanceRows } from './BalanceList.jsx';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { buildBalanceRows, formatAmount } from './BalanceList.jsx';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
@@ -332,6 +331,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
             setFormError(submitFailureMessage(err, {
+                chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Order placement failed.',
@@ -419,6 +419,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 errorMessage = 'Incorrect password.';
             } else {
                 errorMessage = submitFailureMessage(err, {
+                    chainId,
                     coinTicker,
                     mandatory: nativeFeeMandatory,
                     fallback: err?.message || 'Order placement failed.',
@@ -917,24 +918,22 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     );
 }
 
-// Render a balance value with thousand separators and a sensible
-// number of decimals. Caps at `divisibility` digits when supplied
-// (defaults to 8, the native-coin precision); trailing zeros after
-// the decimal point are trimmed so "1.00000000" reads as "1".
+// Render a balance value with thousand separators. `quantity` comes from
+// buildBalanceRows, so it is raw atomic units at `divisibility` scale
+// (issue #4: treating it as already-human overstated native balances 1e8x).
+// formatAmount does the exact string division; trailing zeros after the
+// decimal point are trimmed here so "1.00000000" reads as "1".
 function formatQuantity(quantity, divisibility) {
     if (quantity == null || quantity === '') return '-';
     const raw = String(quantity).trim();
     if (!raw) return '-';
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return raw;
-    const maxFractionDigits = Number.isFinite(divisibility) && divisibility >= 0
+    if (!/^-?\d+$/.test(raw)) return raw;
+    const div = Number.isFinite(divisibility) && divisibility >= 0
         ? Math.min(20, Math.floor(divisibility))
         : 8;
-    // Use toFixed to enforce a cap, then strip trailing zeros and a
-    // dangling decimal point so whole amounts read cleanly.
-    let str = n.toFixed(maxFractionDigits);
+    let str = formatAmount(raw, div);
     if (str.includes('.')) {
         str = str.replace(/0+$/, '').replace(/\.$/, '');
     }
-    return formatWithThousands(str);
+    return str;
 }

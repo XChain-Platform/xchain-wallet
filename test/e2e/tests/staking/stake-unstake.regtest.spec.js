@@ -60,7 +60,7 @@ import {
     REGTEST_COIN,
     failBroadcast,
     fundAddress,
-    minerRpc,
+    healVenueClock,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
@@ -190,22 +190,30 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
     // above the DEPLOY+EXECUTE spec's 25 minutes for the extra round trips.
     test.setTimeout(1_800_000);
 
+    // BITCOIN BY DESIGN, IN THE PRODUCT, NOT JUST IN THIS SPEC. Staking is
+    // BTC-only at launch: `flows/stakingQueries.js` says so in its own comment
+    // and its callers resolve a BTC chain through `useBtcAddressesPresent`
+    // before querying, and `flows/stakeAction.js` carries the same note. So on
+    // Litecoin there is no staking surface to drive and a red here would be a
+    // defect report against the wallet for honouring its own launch scope.
+    // Skipped rather than converted or `fixme`d. Row 32 drove this green on
+    // Bitcoin; it stays the record, and this guard is what keeps that record
+    // from reading as a failure on every other chain.
+    test.beforeEach(() => {
+        test.skip(REGTEST_COIN !== 'RBTC',
+            `staking is BTC-only at launch (flows/stakingQueries.js); ${REGTEST_COIN} has no staking surface `
+            + 'to drive');
+    });
+
     test.beforeAll(async () => {
         // Heal the shared node's clock before trusting it. Other suites on this
-        // venue jump mocktime to cross deadlines and put it back in teardown; a
-        // killed run never reaches that teardown, and the next suite then
-        // inherits a node whose clock sits under median-time-past, where
-        // `generate_blocks` fails outright and every spec on the machine looks
-        // broken. Pinning to tip+5 is the ops recipe's repair and costs nothing
-        // when the clock is already fine.
-        try {
-            const status = await explorerJson('status');
-            const tip = Number(status?.last_block_time?.[REGTEST_COIN]);
-            if (Number.isFinite(tip) && tip > 0) {
-                await minerRpc('set_mock_time', { timestamp: tip + 5 });
-                await minerRpc('set_default_mining_time', {});
-            }
-        } catch { /* the venue check in global setup reports unreachability */ }
+        // venue jump mocktime to cross deadlines, and a killed run never reaches
+        // the teardown that would undo it - so the next suite inherits whatever
+        // clock was left behind. `healVenueClock` releases the node back to real
+        // time when that is safe and only pins when the chain sits in the
+        // future; the old unconditional tip+5 pin here was itself the ratchet
+        // that walked this venue five hours behind wall time.
+        await healVenueClock();
     });
 
     test('a stake activates, a partial UNSTAKE broadcasts valid, and a same-key top-up broadcasts as VERSION 2', async ({ page }) => {

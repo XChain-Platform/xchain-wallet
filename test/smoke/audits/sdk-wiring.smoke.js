@@ -507,6 +507,30 @@ if (existsSync(bgDist)) {
     console.log('  (skip: packages/extension/dist not built; worker-bundle checks not run)');
 }
 
+// The web shell binds the signer pool and host to the `sdkRegistry` VALUE it
+// holds at that moment. Before this guard a wallet unlocked ahead of the SDK
+// chunk kept the throwing placeholder for the whole session (a public tester
+// hit it on 2026-09-02: Generate failed until lock + unlock). Every bind site
+// must wait for the swap first, and the wait must not swallow a failed load
+// into a working-looking wallet.
+assert.ok(
+    /async function sdkBound\(\)\s*\{[\s\S]*?await sdkResolved;/.test(hostBridge),
+    'hostBridge defines sdkBound(), which awaits sdkResolved',
+);
+const bindSites = hostBridge.match(/signerPool = new signersLib\.SignerPool\(\);/g) || [];
+const guardedBindSites = hostBridge.match(/await sdkBound\(\);\n\s*signerPool = new signersLib\.SignerPool\(\);/g) || [];
+assert.ok(bindSites.length >= 4, `expected the four signer-pool bind sites, found ${bindSites.length}`);
+assert.equal(
+    guardedBindSites.length,
+    bindSites.length,
+    'every signer-pool bind site in hostBridge awaits sdkBound() first (create, import, restore, unlock)',
+);
+assert.ok(
+    /async function sdkBound\(\)\s*\{[\s\S]*?catch \(_err\) \{/.test(hostBridge)
+        && !/async function sdkBound\(\)[\s\S]*?resolveSdkFactory/.test(hostBridge.slice(hostBridge.indexOf('async function sdkBound()'), hostBridge.indexOf('async function sdkBound()') + 600)),
+    'sdkBound() tolerates a failed load without re-resolving or swapping in a fallback factory',
+);
+
 console.log(
-    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, venue chosen from the env + warn once + no silent fallback, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK, static worker SDK)',
+    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, every web bind site awaits the SDK, venue chosen from the env + warn once + no silent fallback, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK, static worker SDK)',
 );

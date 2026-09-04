@@ -115,6 +115,12 @@ function makeMockConnect({ serializedTx }) {
     };
 }
 
+// The transaction the mock Trezor returns for decomposedFixture: the same
+// input (ab…ab:0, sequence fdffffff) paying the same 90,000 sats to
+// 0014cc…cc. TrezorSigner.signPsbt compares the device reply back to the
+// approved PSBT, so a placeholder would never reach the transport at all.
+const DEVICE_TX = '0200000001abababababababababababababababababababababababababababababababab0000000000fdffffff01905f010000000000160014cccccccccccccccccccccccccccccccccccccccc00000000';
+
 const decomposedFixture = {
     txVersion: 2,
     locktime: 0,
@@ -145,7 +151,7 @@ const decomposedFixture = {
 // Build a real TrezorSigner (the renderer-side signer) wired to a
 // mock Connect + mock sdkRegistry. RemoteSigner on the background
 // side forwards to this.
-const mockConnect = makeMockConnect({ serializedTx: '02000000faceb00c' });
+const mockConnect = makeMockConnect({ serializedTx: DEVICE_TX });
 const rendererTrezor = new TrezorSigner({
     id: 'sig-trezor-1',
     displayName: 'My Trezor (T2T1)',
@@ -369,8 +375,8 @@ const signedResult = await remote.signPsbt({
     signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/5" }],
 });
 
-assert.equal(signedResult.txHex, '02000000faceb00c');
-assert.equal(signedResult.txid, 'txid-of-02000000');
+assert.equal(signedResult.txHex, DEVICE_TX);
+assert.equal(signedResult.txid, `txid-of-${DEVICE_TX.slice(0, 8)}`);
 assert.equal(signedResult.signedPsbtHex, '');
 
 // Confirm the transport received the signPsbt op with signerId.

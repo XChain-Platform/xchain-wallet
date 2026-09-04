@@ -43,8 +43,11 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
+    REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
+    healVenueClock,
+    selectVenueChain,
     minerRpc,
     mintXchain,
     switchToRegtest,
@@ -149,6 +152,45 @@ async function fillPasswordIfPresent(scope) {
  * pipeline being in step, and blocks are only ever needed to advance state, not
  * to make an already-mined action visible.
  */
+/**
+ * Whether THIS chain's regtest miner can move the node's clock.
+ *
+ * Measured 2026-08-27, and it is a venue fact rather than a protocol one: the
+ * three miner containers on this stack run three different images (litecoin
+ * 2026-07-11, bitcoin 2026-07-23, dogecoin 2026-08-09), and the litecoin one
+ * predates `set_mock_time` entirely - `grep -c set_mock_time api.js` is 0 there
+ * and 1 on the other two. So a spec that jumps the clock to cross a deadline
+ * works on two of the three chains and dies on the third with
+ * `Method not found`, which reads as a wallet or protocol failure and is
+ * neither, and the gap is tracked.
+ *
+ * Probed rather than keyed off REGTEST_COIN, because the answer is about which
+ * IMAGE a container happens to be running and will change the moment somebody
+ * redeploys it - a coin list would then be wrong in the safe-looking direction
+ * (falling back to a slow wall-clock wait forever on a venue that no longer
+ * needs it). The probe is the same tip+5 pin `beforeAll` already does, so it
+ * costs nothing and cannot leave the clock anywhere new.
+ *
+ * @returns {Promise<boolean>}
+ */
+let mockTimeSupport = null;
+async function supportsMockTime() {
+    if (mockTimeSupport !== null) return mockTimeSupport;
+    const tip = await chainTime();
+    try {
+        await minerRpc('set_mock_time', { timestamp: tip + 5 });
+        mockTimeSupport = true;
+    } catch (err) {
+        // Only the missing METHOD is a capability answer. Anything else (the
+        // miner down, a bad timestamp) is a real failure and has to keep
+        // travelling, or this helper would quietly turn every venue outage
+        // into "no mocktime here" and the slow path would hide it.
+        if (!/Method not found/i.test(String(err?.message || err))) throw err;
+        mockTimeSupport = false;
+    }
+    return mockTimeSupport;
+}
+
 async function nudgeChain() {
     let lag = 0;
     try {
@@ -216,10 +258,30 @@ async function gotoPalette(page, title) {
     await page.keyboard.press('Enter');
 }
 
+/**
+ * Opens the Create-market form ON THIS RUN'S CHAIN.
+ *
+ * CreateBetFeedForm selects its chain with a NetworkField, which re-defaults to
+ * Bitcoin every time the form is opened - so the pick belongs here, beside the
+ * open, rather than once per test. Without it the market is authored on a chain
+ * the funding never reached and the compose fails for want of funds, which
+ * looks like a betting defect and is not one.
+ */
+async function openCreateMarket(page) {
+    await gotoBettingHub(page);
+    await page.getByRole('button', { name: 'Create market', exact: true }).click();
+    await selectVenueChain(page.getByRole('main'), 'Network');
+}
+
 async function gotoBettingHub(page) {
     await gotoPalette(page, 'Betting');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
+    // The HUB has a NetworkField of its own (BetFeedsList), separate from the
+    // create form's, and it defaults to Bitcoin - so a market created on the
+    // venue chain is simply not in the list this lists, and finding it by
+    // "#<index>" waits out its budget looking at the wrong chain.
+    await selectVenueChain(page.getByRole('main'), 'Network');
 }
 
 test.describe('BET round trip on regtest', () => {
@@ -231,39 +293,40 @@ test.describe('BET round trip on regtest', () => {
     // 30-minute blind one.
     test.use({ actionTimeout: 30_000 });
 
-    // Onboarding, two funded addresses, four signed actions and a clock jump,
-    // each waiting on real blocks. The chain is the long pole throughout, and
-    // this venue is shared: when another suite is also driving it the decode and
-    // index pipeline runs minutes behind the node, so the per-step waits and this
-    // budget are sized for a busy stack rather than an idle one.
-    test.setTimeout(1_800_000);
+    // Onboarding, two funded addresses, four signed actions and a deadline to
+    // cross, each waiting on real blocks. The chain is the long pole throughout,
+    // and this venue is shared: when another suite is also driving it the decode
+    // and index pipeline runs minutes behind the node, so the per-step waits and
+    // this budget are sized for a busy stack rather than an idle one. The budget
+    // also has to cover the WALL-CLOCK deadline wait below, which is what this
+    // spec falls back to on a miner that cannot jump the clock.
+    test.setTimeout(2_700_000);
 
     test.beforeAll(async () => {
         // Heal the shared node's clock BEFORE trusting it. This spec pins mocktime
         // to cross a deadline, and the afterAll below puts it back - but a killed
         // run (Ctrl-C, a lost preview server, a contended port) never reaches that
-        // teardown, and the next suite then inherits a node whose clock sits under
-        // median-time-past, where `generate_blocks` fails outright with "Error
-        // generating to address" and every spec on the machine looks broken.
-        // Pinning to tip+5 here is the same repair the ops recipe prescribes, and
-        // it costs nothing when the clock is already fine.
-        try {
-            const tip = await chainTime();
-            await minerRpc('set_mock_time', { timestamp: tip + 5 });
-            await minerRpc('set_default_mining_time', {});
-        } catch { /* the venue check in global setup reports unreachability */ }
+        // teardown, and the next suite then inherits whatever clock was left
+        // behind. `healVenueClock` hands the node back its real clock when real
+        // time is above the tip and only pins when the chain sits in the future,
+        // which is the half that matters here: the deadline below is computed
+        // from the CHAIN's clock and validated by the form against the BROWSER's,
+        // so a chain left frozen in the past refuses every create with "Betting
+        // must close in the future" and says nothing about a clock.
+        await healVenueClock();
     });
 
     test.afterAll(async () => {
-        // Leave the shared node's clock where the next suite can mine: pinned
-        // just above the tip rather than released to 0, which would put the
-        // node clock BELOW median-time-past and wedge block production for
-        // everyone (the regtest-miner wedge this stack has hit before).
-        try {
-            const tip = await chainTime();
-            await minerRpc('set_mock_time', { timestamp: tip + 5 });
-            await minerRpc('set_default_mining_time', {});
-        } catch { /* best effort: never fail a run in teardown */ }
+        // Leave the shared node's clock where the next suite can mine AND where it
+        // can still track wall time. Pinning tip+5 unconditionally was the old
+        // teardown, and it is what walked this venue five hours behind: a mock
+        // clock does not tick, so every later block carried the frozen instant and
+        // the next run pinned again from there. `healVenueClock` releases whenever
+        // real time is above the tip, and keeps the pin only for the case it was
+        // written for - a chain this spec has jumped into the future, where
+        // releasing would drop the node under median-time-past and wedge block
+        // production for everyone.
+        await healVenueClock();
     });
 
     test('a market authored in the wallet takes a bet and pays it out', async ({ page }) => {
@@ -283,10 +346,12 @@ test.describe('BET round trip on regtest', () => {
             // address this spec had never funded, which only worked at all because
             // a previous run had left coins on it, and would fail on a clean chain.
             // Fund the address the form will actually sign with.
-            await gotoBettingHub(page);
-            await page.getByRole('button', { name: 'Create market', exact: true }).click();
+            await openCreateMarket(page);
             oracle = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
-            expect(oracle, 'the create form names an oracle address').toMatch(/^(bcrt1|[mn2])/);
+            // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
+            // alternative passes on Litecoin only because `[mn2]` also matches
+            // there, and fails outright on a chain whose bech32 HRP differs.
+            expect(oracle, 'the create form names an oracle address').toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(oracle, FUNDING_BTC);
 
@@ -312,8 +377,7 @@ test.describe('BET round trip on regtest', () => {
         });
 
         await test.step('create the market', async () => {
-            await gotoBettingHub(page);
-            await page.getByRole('button', { name: 'Create market', exact: true }).click();
+            await openCreateMarket(page);
 
             const main = page.getByRole('main');
             // The address that will sign must still be the one that was funded: the
@@ -341,7 +405,14 @@ test.describe('BET round trip on regtest', () => {
             // below lands while the market is still open, short enough that the
             // jump to close it does not need to be large.
             const now = await chainTime();
-            deadlineSec = now + 1_800;
+            // How far out the deadline goes depends on how it will be CROSSED.
+            // With a clock the miner can jump, a long lead is free and keeps the
+            // bet comfortably inside the open window. Without one the remainder
+            // is paid in wall time, so the lead is the whole cost of the close
+            // step and is sized to be just longer than the bet takes to place
+            // (funding, a mint, two remounts and a signed action: ~5 minutes on
+            // this venue) rather than to be generous.
+            deadlineSec = now + (await supportsMockTime() ? 1_800 : 900);
             await main.getByLabel('Betting closes').fill(toLocalDateTimeInput(deadlineSec));
 
             await main.getByLabel('Your fee (optional)').fill(FEE_PCT);
@@ -385,6 +456,14 @@ test.describe('BET round trip on regtest', () => {
             await gotoPalette(page, 'Addresses');
             await page.getByRole('button', { name: 'Add or import address' }).click();
             await page.getByRole('menuitem', { name: 'Add address' }).click();
+            // Generate on THIS RUN'S chain. AddAddressModal carries its own
+            // ChainPicker, labelled "Coin" rather than "Network", and it
+            // defaults to Bitcoin like every other one - so without this the
+            // wallet generates a BITCOIN address, "Use" makes that the active
+            // one, and the create-market form (which is on the venue chain)
+            // goes on resolving the original oracle address. The bet then
+            // never changes hands and the failure reads as a wallet defect.
+            await selectVenueChain(page.getByRole('main'), 'Coin');
             await page.getByRole('button', { name: /^Generate/ }).click();
 
             // Pick the row that is neither the oracle nor already active, open it,
@@ -395,12 +474,21 @@ test.describe('BET round trip on regtest', () => {
             const generated = (await rows.all().then((all) =>
                 Promise.all(all.map((r) => r.getAttribute('aria-label')))))
                 .map((l) => String(l).replace('View address ', ''))
-                .filter((a) => a && a !== oracle);
+                // Venue chain only: the Addresses list shows EVERY chain's
+                // addresses, so "not the oracle" alone can hand back a Bitcoin
+                // one on a Litecoin run.
+                .filter((a) => a && a !== oracle && REGTEST_ADDRESS_RE.test(a));
             expect(generated.length, 'a second address exists to bet from').toBeGreaterThan(0);
 
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
+            // Same in-flight-write race as the one documented at the bettor
+            // activation below: Use awaits the write before navigating, so
+            // anything that navigates on its own before then gets overridden.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
 
             // Read the bettor address back off a FORM rather than trusting the row
             // that was clicked. Forms resolve their source through the wallet's
@@ -409,9 +497,35 @@ test.describe('BET round trip on regtest', () => {
             // the assertions then measured a balance nobody had credited, while the
             // settlement itself was perfectly correct. Read the same value the bet
             // will use, from the same place the oracle address was read.
-            await gotoBettingHub(page);
-            await page.getByRole('button', { name: 'Create market', exact: true }).click();
+            await openCreateMarket(page);
+            // Choose the bettor THROUGH THE FORM'S OWN PICKER rather than
+            // relying on the address list's "Use" affordance. Measured
+            // 2026-08-27: after Use, this form still resolved the original
+            // oracle, because CreateBetFeedForm:172 picks its source with
+            // preferredSourceId(byChain[chainId], active[chainId]) and Use was
+            // not moving that per-chain active address. The form exposes an
+            // explicit picker (AddressField iconLabel "Choose oracle address"
+            // -> OwnAddressPickerScreen, already filtered to this chain), and
+            // driving that is both the honest test of "the bet composes from
+            // the address the user chose" and independent of how Use behaves.
+            await page.getByRole('button', { name: 'Choose oracle address' }).click();
+            // Choose from the PICKER'S OWN list, which OwnAddressPickerScreen
+            // already filters to this chain, rather than from the global
+            // Addresses list read above. REGTEST_ADDRESS_RE cannot do this job:
+            // for Litecoin it is /^(rltc1|[mn2])/ and BITCOIN regtest legacy
+            // addresses also start [mn2], so filtering the global list by shape
+            // still hands back a Bitcoin address - which then is not in this
+            // chain-filtered picker at all, and the click waits out its budget.
+            const pickable = page.getByRole('button', { name: /^View address / });
+            await expect(pickable.first(), 'the oracle-address picker listed nothing').toBeVisible({ timeout: 30_000 });
+            const onThisChain = (await pickable.all().then((all) =>
+                Promise.all(all.map((r) => r.getAttribute('aria-label')))))
+                .map((l) => String(l).replace('View address ', ''))
+                .filter((a) => a && a !== oracle);
+            expect(onThisChain.length, 'a second address ON THIS CHAIN exists to bet from').toBeGreaterThan(0);
+            await page.getByRole('button', { name: `View address ${onThisChain[0]}` }).click();
             const willSignAs = await page.getByRole('main').getByLabel('Your oracle address').inputValue();
+            expect(willSignAs, 'the form did not take the oracle address just chosen').toBe(onThisChain[0]);
             expect(willSignAs, 'the wallet now signs as some other address').not.toBe(oracle);
             punter = willSignAs;
 
@@ -426,14 +540,69 @@ test.describe('BET round trip on regtest', () => {
             await unlockAfterReload(page, PASSWORD);
         });
 
+        // ACTIVATE THE BETTOR LAST, AND PROVE IT TOOK, because the market screen
+        // will not let anything else choose.
+        //
+        // Measured 2026-08-27: with the activation left where the address was
+        // generated (before two reloads and a mint), the market screen rendered
+        // "You run this market, so you cannot bet on it" and no place-bet form at
+        // all. BetFeedDetail:207 resolves its bettor with
+        // preferredSourceId(byChain[chainId], active[chainId]) and exposes NO
+        // picker of its own, so the only address it will ever stake from is the
+        // chain's active one - and when that is still the feed's own source, the
+        // §6-format-2 self-bet rule hides the form. The failure reads as "the
+        // place-bet surface did not open", which names the symptom and not this.
+        //
+        // So the activation moves to the last thing before the bet, and the
+        // "Active" badge on the address's own screen is asserted rather than
+        // assumed: that badge is the same activeAddresses map the market screen
+        // reads, so it is the honest precondition check. If a future change makes
+        // the badge disagree with what the market screen then does, the defect is
+        // in the wallet and this step is where it shows.
+        await test.step('make the bettor the active address, and check it took', async () => {
+            await gotoPalette(page, 'Addresses');
+            await page.getByRole('button', { name: `View address ${punter}` }).click();
+            await page.getByRole('group', { name: 'Address actions' })
+                .getByRole('button', { name: 'Use' }).click();
+
+            // WAIT FOR USE TO FINISH BEFORE NAVIGATING, and this is a race that
+            // really bit: `setAsActive` (AddressList.jsx:820) AWAITS the write
+            // and only then calls `onBack()`, so pressing Use and walking
+            // straight back to Addresses lands there and is knocked to Home by
+            // the late navigation. The click below then waits out its budget on
+            // a screen with no addresses on it. Measured in the whole-suite run
+            // 2026-08-27: this spec passed standalone and failed here, with the
+            // failure screenshot showing HOME, which is the whole tell.
+            // Leaving the detail screen IS the write having completed, so that
+            // is what gets waited on rather than a timeout.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
+
+            // Use navigates back to Home on success, so the badge has to be read
+            // by walking in again - the same §5 screen fact the WIF-import spec
+            // recorded about this control.
+            await gotoPalette(page, 'Addresses');
+            await page.getByRole('button', { name: `View address ${punter}` }).click();
+            await expect(page.getByRole('main').getByText('Active', { exact: true }),
+                'the bettor did not become the active address, so the market screen will '
+                + 'refuse the bet as a self-bet').toBeVisible({ timeout: 15_000 });
+        });
+
         await test.step('place a bet from the second address', async () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).click();
 
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });
+            // Anchored on a CONTROL, not on the page title: PageHeader renders
+            // its title as a plain <span> outside main, so
+            // getByRole("heading", { name: "Place a bet" }) matches nothing and
+            // waits out the whole budget. This is the §3.10 screen fact the
+            // SWEEP spec recorded, hit again here.
+            const yes = main.getByRole('button', { name: 'Yes', exact: true });
+            await expect(yes, 'the place-bet surface did not open').toBeVisible({ timeout: 30_000 });
 
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
+            await yes.click();
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Review bet', exact: true }).click();
@@ -470,9 +639,26 @@ test.describe('BET round trip on regtest', () => {
 
         await test.step('cross the deadline and let the chain latch the market closed', async () => {
             // The latch is written by the end-of-block pass, so it needs blocks
-            // stamped past DEADLINE, not merely a clock that has moved.
-            await minerRpc('set_mining_time', { max_time: 3_600_000, tx_added_time: 3_600_000 });
-            await minerRpc('set_mock_time', { timestamp: deadlineSec + 120 });
+            // stamped past DEADLINE, not merely a clock that has moved. Two ways
+            // to get one, and which is available is a property of this chain's
+            // miner image rather than of the chain (see supportsMockTime).
+            if (await supportsMockTime()) {
+                await minerRpc('set_mining_time', { max_time: 3_600_000, tx_added_time: 3_600_000 });
+                await minerRpc('set_mock_time', { timestamp: deadlineSec + 120 });
+            } else {
+                // No clock to jump, so the deadline is crossed the way a user's
+                // would be: in real time. A block generated with no mocktime in
+                // force is stamped at the node's wall clock, and this venue's
+                // chain clock tracks it (measured: tip timestamp 78s behind
+                // wall, which is just the age of the last block), so waiting
+                // past DEADLINE and then mining is what stamps a block over it.
+                // Polled rather than slept in one go so a run that is already
+                // past the deadline - the common case, since placing the bet
+                // eats most of the lead - pays nothing.
+                while (Math.floor(Date.now() / 1000) <= deadlineSec + 30) {
+                    await new Promise((r) => setTimeout(r, 5_000));
+                }
+            }
             await minerRpc('generate_blocks', { count: 2 });
 
             const feed = await waitForFeed(feedIndex, (f) => f?.feed_status === 'closed', 'closed');
@@ -485,6 +671,13 @@ test.describe('BET round trip on regtest', () => {
             await page.getByRole('button', { name: `View address ${oracle}` }).click();
             await page.getByRole('group', { name: 'Address actions' })
                 .getByRole('button', { name: 'Use' }).click();
+            // Third site of the same in-flight-write race, and the most costly
+            // if it fires: "My markets" lists by the ACTIVE address, so an
+            // unfinished switch shows the oracle's console empty and the
+            // failure reads as the market having vanished.
+            await expect(page.getByRole('group', { name: 'Address actions' }),
+                'Use never completed, so the active-address write is still in flight')
+                .toBeHidden({ timeout: 30_000 });
 
             await gotoPalette(page, 'My markets');
 
@@ -525,11 +718,39 @@ test.describe('BET round trip on regtest', () => {
             expect(credits.reduce((n, c) => n + Number(c.amount), 0),
                 'everything escrowed left again').toBe(Number(STAKE));
 
-            // Pools are summed over open bets only, so a settled market shows none:
-            // every row it summed left `open` in the same action.
-            const settled = await explorerJson(`bet_feed/${feedIndex}`);
-            const settledFeed = Array.isArray(settled) ? settled[0] : settled;
-            expect((settledFeed.pools || []).length, 'no bet is still open after settlement').toBe(0);
+            // NO BET IS STILL OPEN - ASKED OF THE BET ROWS, WHICH IS THE ONLY
+            // PLACE THAT ANSWERS IT.
+            //
+            // Reading `feed.pools` and requiring it to be
+            // EMPTY, on the premise that "pools are summed over open bets only".
+            // That premise is false, and the explorer says so in the query's own
+            // header: `getBetFeedPools` excludes `invalid` rows and NOTHING
+            // else, under a comment reading "This is a display aggregation, NOT
+            // the settlement predicate (which counts open rows alone)". A
+            // settled market therefore keeps its figure on purpose - measured
+            // across six resolved feeds on this venue, every one of them still
+            // carrying its pool long after payout.
+            //
+            // WHY IT NEVERTHELESS WENT GREEN, WHICH IS THE PART WORTH KEEPING:
+            // that aggregation LEFT JOINs the status table, and `NULL <>
+            // 'invalid'` is NULL, so a bet whose status row is not yet
+            // resolvable is dropped from the sum. The old assertion passed only
+            // inside the window where the data was still inconsistent, and
+            // failed once it settled - a green bought from a race, which is
+            // worse than a red because it looks like proof. Adding a poll (the
+            // reflex, when a chain read disagrees) would have hidden that.
+            //
+            // The bet rows carry the real answer, and they are already this
+            // spec's source of truth for who staked what.
+            const settledBets = (await explorerJson(`bets/${feedIndex}/feed`))?.data || [];
+            expect(settledBets.length, 'the bet is still on the chain after settlement').toBe(1);
+            for (const b of settledBets) {
+                expect(['won', 'lost'], `bet ${b.action_index} is still open after settlement `
+                    + `(bet_status "${b.bet_status}")`).toContain(String(b.bet_status));
+                expect(Number(b.settled_block),
+                    `bet ${b.action_index} carries no settled block, so nothing closed it`)
+                    .toBeGreaterThan(0);
+            }
         });
     });
 });

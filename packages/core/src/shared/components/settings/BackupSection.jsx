@@ -68,6 +68,8 @@ export function BackupSection({ activeWallet }) {
     const [revealError, setRevealError] = useState(/** @type {string | null} */ (null));
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicHidden, setMnemonicHidden] = useState(true);
+    const [revealPassphraseEnabled, setRevealPassphraseEnabled] = useState(false);
+    const [revealPassphrase, setRevealPassphrase] = useState(/** @type {string | null} */ (null));
 
     // §19.6 dry-run restore state.
     const [dryRunStage, setDryRunStage] = useState(
@@ -155,6 +157,8 @@ export function BackupSection({ activeWallet }) {
                 password,
             });
             setMnemonic(r?.mnemonic || '');
+            setRevealPassphraseEnabled(Boolean(r?.passphraseEnabled));
+            setRevealPassphrase(typeof r?.bip39Passphrase === 'string' ? r.bip39Passphrase : null);
             setRevealStage('shown');
             setMnemonicHidden(true);
         } catch (err) {
@@ -170,6 +174,8 @@ export function BackupSection({ activeWallet }) {
 
     function handleHideMnemonic() {
         setMnemonic('');
+        setRevealPassphraseEnabled(false);
+        setRevealPassphrase(null);
         setMnemonicHidden(true);
         setRevealStage('idle');
         setRevealError(null);
@@ -278,6 +284,8 @@ export function BackupSection({ activeWallet }) {
                 <RevealedMnemonic
                     mnemonic={mnemonic}
                     hidden={mnemonicHidden}
+                    passphraseEnabled={revealPassphraseEnabled}
+                    passphrase={revealPassphrase}
                     onToggle={() => setMnemonicHidden((h) => !h)}
                     onDone={handleHideMnemonic}
                 />
@@ -483,8 +491,18 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
  * filter when hidden, so the layout is stable but the text isn't
  * legible without an explicit user action. Window-blur privacy
  * (§26 / G069) layers on top via `usePrivacyBlur`.
+ *
+ * §15.6: a wallet with a stored 25th-word passphrase shows it under the
+ * words, behind the same tap-to-reveal blur and the same password gate
+ * as the seed itself. There is no separate reveal toggle and no copy
+ * control for it, matching the seed row above (see the "never paste it
+ * into anything else" hint), since a clipboard write here would
+ * contradict that same sentence. A wallet without `passphraseEnabled`
+ * renders nothing extra; a legacy wallet that has not captured its
+ * passphrase yet (`passphraseEnabled` true, nothing stored) gets one
+ * line saying so instead of a blank row.
  */
-function RevealedMnemonic({ mnemonic, hidden, onToggle, onDone }) {
+function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onToggle, onDone }) {
     return (
         <div style={{
             display: 'flex',
@@ -526,6 +544,41 @@ function RevealedMnemonic({ mnemonic, hidden, onToggle, onDone }) {
             >
                 {mnemonic || ' '}
             </button>
+            {passphraseEnabled && typeof passphrase === 'string' ? (
+                <>
+                    <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                        Passphrase (25th word)
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onToggle}
+                        aria-label={hidden ? 'Reveal passphrase' : 'Hide passphrase'}
+                        style={{
+                            background: 'var(--xc-bg)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-md)',
+                            padding: 'var(--xc-space-3)',
+                            fontFamily: 'var(--xc-font-mono)',
+                            fontSize: 'var(--xc-text-sm)',
+                            color: 'var(--xc-text)',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            filter: hidden ? 'blur(8px)' : 'none',
+                            transition: 'filter 200ms',
+                            minHeight: 60,
+                            wordBreak: 'break-word',
+                            whiteSpace: 'pre-wrap',
+                        }}
+                    >
+                        {passphrase || ' '}
+                    </button>
+                </>
+            ) : passphraseEnabled ? (
+                <div style={ROW_HINT}>
+                    This wallet uses a 25th-word passphrase, but it has not been
+                    stored on this device yet.
+                </div>
+            ) : null}
             <div style={{
                 color: 'var(--xc-text-muted)',
                 fontSize: 'var(--xc-text-xs)',

@@ -28,7 +28,7 @@ const historySrc = read('packages/core/src/shared/routes/History.jsx');
 
 // 1. The component declares chainTip + indexerWatermark in its prop list
 //    and JSDoc.
-assert.ok(/export function TxStatusTimeline\(\{ entry, chainTip, indexerWatermark \}\)/.test(timelineSrc),
+assert.ok(/export function TxStatusTimeline\(\{\s*entry, chainTip, indexerWatermark[,\s}]/.test(timelineSrc),
     'TxStatusTimeline accepts chainTip + indexerWatermark props');
 assert.ok(/@param \{number\} \[props\.chainTip\]/.test(timelineSrc),
     'TxStatusTimeline JSDoc documents the chainTip prop');

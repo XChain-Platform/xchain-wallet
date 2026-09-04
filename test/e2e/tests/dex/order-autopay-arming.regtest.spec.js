@@ -31,12 +31,13 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    expectConfirmModal,
     EXPLORER_URL,
+    fundAddress,
+    minerRpc,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
-    fundAddress,
-    minerRpc,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -144,7 +145,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await form.getByLabel('Ticker').fill(TICK);
             await form.getByLabel('Supply', { exact: true }).fill(SUPPLY);
             await form.getByRole('button', { name: 'Issue token', exact: true }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status),
@@ -191,7 +192,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
             await main.getByRole('button', { name: /^Place order/ }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const txid = await approveAndGetTxid(page);
 

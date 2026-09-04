@@ -72,14 +72,16 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
-    EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_LABEL,
-    REGTEST_COIN,
     encoderRpc,
+    expectConfirmModal as sharedConfirmModal,
+    EXPLORER_URL,
     fundAddress,
     minerRpc,
     mintXchain,
+    plantedOracleFeedRefusal,
+    REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
     runInIndexer,
     seedPrices,
     selectVenueChain,
@@ -215,15 +217,22 @@ async function gotoPalette(page, title) {
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
+/**
+ * The shared reader, plus this lane's own checks.
+ *
+ * A narrower wait races the modal against the stale-price alert and nothing
+ * else, so every OTHER refusal the screen carried read as the modal simply
+ * not being there - which is how the shared explorer's 429 was reported as a
+ * locator timeout for four runs. `expectConfirmModal` reads every alert on
+ * the screen instead. The price check stays because it names one venue state
+ * early and by itself.
+ */
 async function expectConfirmModal(page) {
-    const modal = page.getByTestId('confirm-modal');
-    const priceAlert = page.getByText(/fee price is temporarily unavailable/);
-    await modal.or(priceAlert).first().waitFor({ state: 'visible', timeout: 60_000 });
-    expect(await priceAlert.count(),
-        'the venue could not price this action: the price sentinel has gone stale mid-run. Venue '
-        + 'state, not a wallet defect - re-seed (campaign §3.2) and re-run')
+    const modal = await sharedConfirmModal(page, 'this action', 60_000);
+    expect(await page.getByText(/fee price is temporarily unavailable/).count(),
+        'the venue could not price this action: the price sentinel has gone stale mid-run. '
+        + 'Venue state, not a wallet defect - re-seed (campaign §3.2) and re-run')
         .toBe(0);
-    await expect(modal).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
 }
 
@@ -240,6 +249,14 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
     test.setTimeout(2_400_000);
 
     test('a dispenser priced by a user oracle pays that oracle, then settles at its quote', async ({ page }) => {
+        // The same venue-data gap oracle-priced-fill carries: the PRICE
+        // v1 quote this lane settles against was published from ORACLE.address by
+        // Session 33 and removed by the 2026-08-24 re-genesis. Ask the venue
+        // first, so a missing feed says so instead of surfacing as a wrong
+        // number many screens later. Heals the day a feed is re-planted.
+        const feedGap = await plantedOracleFeedRefusal(ORACLE.address);
+        test.skip(!!feedGap, `the venue has no planted oracle feed: ${feedGap}`);
+
         let seller;
         let buyer;
         let dispenserIndex;
@@ -452,7 +469,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             await page.getByLabel('To', { exact: true }).fill(seller);
             await page.getByRole('textbox', { name: /^Amount/ }).fill(PAY_COIN);
             await main.getByRole('button', { name: 'Send', exact: true }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await page.getByTestId('confirm-approve').click();
             await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
                 .toBeVisible({ timeout: 180_000 });

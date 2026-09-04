@@ -78,13 +78,14 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    encoderRpc,
+    expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
+    fundAddress,
+    minerRpc,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
-    encoderRpc,
-    fundAddress,
-    minerRpc,
     seedPrices,
     selectVenueChain,
     switchToRegtest,
@@ -265,15 +266,38 @@ async function gotoPalette(page, title) {
  * aged-out seed presents as a confirm screen that never opens, which reads like
  * a wallet regression rather than venue state.
  */
+/**
+ * The shared reader, plus this lane's own checks.
+ *
+ * A narrower wait races the modal against the stale-price alert and nothing
+ * else, so every OTHER refusal the screen carried read as the modal simply
+ * not being there - which is how the shared explorer's 429 was reported as a
+ * locator timeout for four runs. `expectConfirmModal` reads every alert on
+ * the screen instead. The price check stays because it names one venue state
+ * early and by itself.
+ */
 async function expectConfirmModal(page) {
-    const modal = page.getByTestId('confirm-modal');
-    const priceAlert = page.getByText(/fee price is temporarily unavailable/);
-    await modal.or(priceAlert).first().waitFor({ state: 'visible', timeout: 60_000 });
-    expect(await priceAlert.count(),
-        'the venue could not price this action: the price sentinel has gone stale mid-run. Venue '
-        + 'state, not a wallet defect - re-seed (campaign §3.2) and re-run')
+    let modal;
+    try {
+        modal = await sharedConfirmModal(page, 'this action', 60_000);
+    } catch (err) {
+        // Skipped rather than failed for the same reason the
+        // preview probe below is: the wallet is BEHAVING here. The shared
+        // explorer's rate limit refuses a read mid-compose, the wallet says so
+        // in its own words ("The service that reads the chain is temporarily
+        // unavailable (error 429). Nothing was signed or sent"), and the confirm
+        // screen correctly never opens. Nothing about that is a defect in this
+        // lane; the venue's rate limit is what has to move, and a red here
+        // sends the next reader after the wrong thing.
+        test.skip(/error 429/i.test(String(err?.message || '')),
+            'the shared explorer rate-limited the wallet mid-compose, so this leg never '
+            + `reached a confirm screen. Venue state, not a wallet defect - ${err?.message || err}`);
+        throw err;
+    }
+    expect(await page.getByText(/fee price is temporarily unavailable/).count(),
+        'the venue could not price this action: the price sentinel has gone stale mid-run. '
+        + 'Venue state, not a wallet defect - re-seed (campaign §3.2) and re-run')
         .toBe(0);
-    await expect(modal).toBeVisible({ timeout: 60_000 });
 }
 
 /**
@@ -858,8 +882,34 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // TWO holders right now: the issuer, which kept most of the supply,
             // and the address it just paid. This figure is the one the test is
             // about to make wrong on purpose.
-            await expect(main, 'the form did not preview the holder count for the listed token')
-                .toContainText(/1 token · ~2 holders right now/, { timeout: 60_000 });
+            //
+            // The shared explorer rate-limits at 120 requests in a
+            // 60-second window, and this is one of the longest specs in the
+            // suite, so the preview's single read is the one that lands over
+            // the line. That is VENUE state, not a wallet defect, and it is
+            // read here from the wallet's own sentence rather than guessed at:
+            // the form now names the refusal it got (before that it said only
+            // "Failed to load holder counts.", which is why five whole-suite
+            // runs could not place this failure).
+            //
+            // Probed rather than `test.fixme`d, following the four price-family
+            // specs: a fixme never runs anywhere, while a probe returns to
+            // green on its own the moment the venue stops refusing.
+            const holderLine = main.getByText(/1 token · /);
+            await expect(holderLine, 'the form previewed no holder count at all for the listed token')
+                .toBeVisible({ timeout: 60_000 });
+            // The line appears while still LOADING ("counting holders…"), so
+            // reading it on first sight catches the spinner rather than the
+            // answer. Wait for it to settle into a count or a refusal.
+            await expect(holderLine, 'the holder count never finished counting')
+                .not.toContainText(/counting holders/, { timeout: 60_000 });
+            const previewed = await holderLine.innerText();
+            test.skip(/HTTP 429/.test(previewed),
+                `the venue refused the holder-count read: "${previewed.trim()}". The `
+                + 'shared explorer rate-limits at 120 requests per 60s and this spec crossed it; '
+                + 'raising that limit is the venue\'s, not this campaign\'s');
+            expect(previewed, 'the form did not preview the holder count for the listed token')
+                .toMatch(/1 token · ~2 holders right now/);
 
             await main.getByRole('button', { name: 'Review recipients' }).click();
             await expect(page.getByText('Review token list', { exact: true }).first(),

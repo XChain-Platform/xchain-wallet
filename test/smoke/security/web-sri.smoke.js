@@ -80,13 +80,31 @@ for (const tag of tags) {
     const url = (tag.match(/\s(?:src|href)="([^"]+)"/) ?? [])[1];
     if (!url) continue;
 
-    const isLocalAsset = url.startsWith('/assets/');
-    if (!isLocalAsset) continue;
+    // Locality, not a `/assets/` prefix. The one executable tag in the shipped
+    // page that does NOT live under /assets/ is `<script src="/boot-check.js">`,
+    // copied verbatim out of packages/web/public - and it is the FIRST code the
+    // page runs, ahead of the module bundle, so it is precisely what SRI is for.
+    // The prefix filter exempted it, and the plugin treats an asset it cannot
+    // find on disk as advisory (sri.js: a miss lands in `skipped`, which is only
+    // printed), so an unhashed boot-check.js would have shipped green - the
+    // build succeeded, this smoke passed on the /assets/ tags, and the script
+    // that runs before the hashed bundle carried no integrity at all. Anything
+    // not absolute (http:, https:, //host) and not a data: URI is ours to check.
+    const isExternal = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(url) || /^data:/i.test(url);
+    if (isExternal) continue;
+    // ...and the tag must want integrity at all: a <link rel="icon"> is not
+    // executable and the plugin deliberately leaves it alone (sri.js
+    // wantsIntegrity). Asserting on a favicon would fail the build for no gain.
+    const wantsIntegrity = /^<script/i.test(tag)
+        || /rel="(?:stylesheet|modulepreload)"/i.test(tag);
+    if (!wantsIntegrity) continue;
 
     assert.ok(integrity, `built asset ${url} carries no integrity attribute`);
     assert.match(tag, /\scrossorigin/, `built asset ${url} carries integrity but no crossorigin`);
 
-    const file = join(webDir, 'dist', url.replace(/^\/+/, ''));
+    // Resolved exactly as the plugin's lookup resolves it, so a tag that gains a
+    // query string ("?v=2") is still verified rather than quietly missing.
+    const file = join(webDir, 'dist', url.replace(/^\/+/, '').split(/[?#]/)[0]);
     assert.ok(existsSync(file), `integrity points at a missing file: ${url}`);
     const want = `sha384-${createHash('sha384').update(readFileSync(file)).digest('base64')}`;
     assert.equal(
@@ -98,4 +116,15 @@ for (const tag of tags) {
 }
 
 assert.ok(checked > 0, 'dist/index.html loads no local assets with integrity: SRI did not run');
+// The public-root script is the one an /assets/ filter exempts, so name it: a
+// `checked > 0` satisfied by the bundle tags alone is exactly how its absence
+// stays invisible.
+assert.ok(
+    tags.some((t) => /^<script/i.test(t) && /\ssrc="\/boot-check\.js"/.test(t) && /\sintegrity="sha384-/.test(t)),
+    'dist/index.html does not carry an sha384 integrity on <script src="/boot-check.js">, the '
+    + 'pre-bundle capability floor and the first code the page runs. If it is missing from the '
+    + 'page entirely, this assertion is what needs updating; if the tag is there without an '
+    + 'integrity attribute, the public-dir file was not on disk when sriPlugin ran and the wallet '
+    + 'is shipping an unhashed same-origin script.',
+);
 console.log(`web-sri smoke OK (${checked} built asset(s) hash-verified against dist/)`);

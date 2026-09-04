@@ -129,7 +129,6 @@ function normalizeFeePriority(raw) {
  * @property {string} [contractActionIndex]         execute: the deployed contract's action_index
  * @property {string} [method]                      execute: contract method name to invoke
  * @property {string} [executeParams]               execute: raw pipe-delimited positional params string
- * @property {string} [gasLimit]                    execute: gas limit override
  * @property {string} [chainId]                     resolved chainId for coin-code or legacy path-style URIs
  * @property {string} [tick]                       'BTC' / 'XCP' / '^TICK_ID' / etc.
  * @property {string} [address]                     destination (send) or wallet address (receive)
@@ -305,7 +304,8 @@ function parseCoinCodeStyle(raw, chainRegistry) {
         if (params.contract && NUMERIC_RE.test(params.contract)) intent.contractActionIndex = params.contract;
         if (params.method) intent.method = params.method;
         if (params.params) intent.executeParams = params.params;
-        if (params.gas && NUMERIC_RE.test(params.gas)) intent.gasLimit = params.gas;
+        // No `gas` passthrough: EXECUTE v0 has no GAS_LIMIT slot on the wire,
+        // so a link-supplied gas value has nothing to prefill.
     } else {
         if (params.tick) intent.tick = params.tick;
         if (params.to) intent.address = params.to;

@@ -30,9 +30,14 @@ import { renderHook, render, screen, waitFor, act } from '@testing-library/react
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useReachability } from '../../../packages/core/src/shared/hooks/useReachability.js';
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const BTC = 'bitcoin-regtest';
 const LTC = 'litecoin-regtest';
+// The chain-id memo-key separator, built rather than typed so this file
+// never carries a raw NUL byte either (see the chain-id memo key block below).
+const NUL = String.fromCharCode(0);
 
 /** The settings record a regtest wallet has once the vault is readable. */
 function unlockedSettings() {
@@ -60,6 +65,22 @@ function allDown(chainIds) {
             chainId,
             mode: 'offline',
             services: { encoder: 'unreachable', hub: 'unreachable', explorer: 'unreachable' },
+        })),
+    };
+}
+
+/**
+ * One service slow, the rest fine: the shape a distant client produces when a
+ * single 3s probe budget runs out behind a CORS preflight while every backend
+ * is healthy. This is what used to paint the banner off one sample.
+ */
+function oneServiceDown(chainIds) {
+    return {
+        overall: 'degraded',
+        perChain: chainIds.map((chainId) => ({
+            chainId,
+            mode: 'degraded',
+            services: { encoder: 'reachable', hub: 'unreachable', explorer: 'reachable' },
         })),
     };
 }
@@ -141,14 +162,81 @@ describe('useReachability', () => {
     it('reports a genuine outage, with the per-chain evidence behind it', async () => {
         const check = vi.fn(async ({ chainIds }) => allDown(chainIds));
         const messaging = lockedThenUnlockedMessaging(check);
-        const { result } = renderHook(() => useReachability({ intervalMs: 0 }), {
-            wrapper: wrapperFor(messaging),
-        });
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 }),
+            { wrapper: wrapperFor(messaging) },
+        );
         await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
         messaging.unlock();
 
         await waitFor(() => expect(result.current.overall).toBe('offline'));
         expect(result.current.perChain).toHaveLength(2);
+        // It took a corroborating probe to get there: a real outage still
+        // surfaces, it just is not published off a single sample.
+        expect(check.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('does not publish a degraded verdict off one probe, so a lone slow probe never paints the banner', async () => {
+        // The 2026-09-02 report in one test. Each service has its own 3s
+        // budget and they fire together behind CORS preflights, so a distant
+        // client times ONE of them out while every backend is healthy. That
+        // used to be a full-width bar over a working wallet.
+        const check = vi.fn()
+            .mockImplementationOnce(async ({ chainIds }) => oneServiceDown(chainIds))
+            .mockImplementation(async ({ chainIds }) => healthy(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+
+        const seen = [];
+        const { result } = renderHook(
+            () => {
+                const state = useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 });
+                seen.push(state.overall);
+                return state;
+            },
+            { wrapper: wrapperFor(messaging) },
+        );
+
+        await waitFor(() => expect(result.current.overall).toBe('normal'));
+        // Not for one paint. The flake never reached the screen at all.
+        expect(seen).not.toContain('degraded');
+        expect(check.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('stays silent about a degraded chain while the wallet is still starting up', async () => {
+        // Cold start is when TLS, DNS, the shell host and every preflight are
+        // cold at once, and it is exactly when a first-time user decides
+        // whether this thing works.
+        const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 60_000 }),
+            { wrapper: wrapperFor(messaging) },
+        );
+
+        await waitFor(() => expect(check).toHaveBeenCalled());
+        // Probed, answered "degraded", and still says nothing: inside the
+        // grace window the verdict is held rather than shown.
+        expect(result.current.overall).not.toBe('degraded');
+        expect(result.current.overall).not.toBe('offline');
+    });
+
+    it('publishes a recovery immediately, without waiting for corroboration', async () => {
+        // Confirmation is asymmetric on purpose: clearing a banner early is
+        // always safe, so a chain that comes back stops nagging at once.
+        const check = vi.fn(async ({ chainIds }) => allDown(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 }),
+            { wrapper: wrapperFor(messaging) },
+        );
+        await waitFor(() => expect(result.current.overall).toBe('offline'));
+
+        check.mockImplementation(async ({ chainIds }) => healthy(chainIds));
+        const before = check.mock.calls.length;
+        await act(async () => { result.current.refresh(); });
+        await waitFor(() => expect(result.current.overall).toBe('normal'));
+        expect(check.mock.calls.length).toBe(before + 1);
     });
 
     it('never lets a slower older probe overwrite the current verdict', async () => {
@@ -241,10 +329,56 @@ describe('ReachabilityBanner', () => {
         const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
         render(
             <MessagingContext.Provider value={{ shell: 'web', messaging }}>
-                <ReachabilityBanner intervalMs={0} />
+                <ReachabilityBanner intervalMs={0} confirmMs={5} startupGraceMs={0} />
             </MessagingContext.Provider>,
         );
 
         await waitFor(() => expect(screen.getByText(/You're offline/)).toBeTruthy());
+    });
+
+    it('names what the user actually loses, not which of our services fell over', async () => {
+        // "some features may not work" is what a first-time user was told on
+        // 2026-09-02 while the thing blocking them was the fee price.
+        const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+        render(
+            <MessagingContext.Provider value={{ shell: 'web', messaging }}>
+                <ReachabilityBanner intervalMs={0} confirmMs={5} startupGraceMs={0} />
+            </MessagingContext.Provider>,
+        );
+
+        await waitFor(() => expect(screen.getByText(/fee prices are unavailable/)).toBeTruthy());
+        // Our vocabulary stays ours: no service names, no raw chain ids.
+        expect(screen.queryByText(/hub|encoder|explorer/i)).toBeNull();
+        expect(screen.queryByText(/bitcoin-regtest|litecoin-regtest/)).toBeNull();
+    });
+});
+
+describe('the chain-id memo key', () => {
+    // The memo key that joins the probed chain ids is separated by
+    // NUL, which is right: no chain id can contain one, so no id can forge a
+    // key boundary. Embedding it as a RAW byte, though, made git classify the
+    // whole hook as binary, so every change to it landed with no readable
+    // diff (git show --numstat printed a pair of dashes). The \u0000 escape
+    // is the identical string value in plain text. These two assertions are a
+    // pair: one keeps the file readable, the other keeps the separator
+    // unforgeable, so nobody "fixes" the first by swapping in a printable
+    // character.
+    // vitest anchors its root to the wallet repo, so cwd is the repo root.
+    const HOOK = join(process.cwd(), 'packages', 'core', 'src', 'shared', 'hooks', 'useReachability.js');
+
+    it('is written as an escape, so the hook stays a text file git can diff', () => {
+        expect(readFileSync(HOOK, 'utf8').includes(NUL)).toBe(false);
+    });
+
+    it('still splits on NUL, so ids survive the round trip whole', async () => {
+        const seen = [];
+        const check = vi.fn(async ({ chainIds }) => { seen.push(chainIds); return healthy(chainIds); });
+        const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
+        renderHook(() => useReachability({ intervalMs: 0, confirmMs: 5, startupGraceMs: 0 }), { wrapper: wrapperFor(messaging) });
+
+        await waitFor(() => expect(seen.length).toBeGreaterThan(0));
+        expect(seen[0]).toEqual([BTC, LTC]);
+        expect([BTC, LTC].join(NUL).split(NUL)).toEqual([BTC, LTC]);
     });
 });

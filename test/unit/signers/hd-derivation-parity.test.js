@@ -103,4 +103,32 @@ describe('HD derivation parity: hardware signers vs the descriptor anchor', () =
         await expect(makeTrezor().getAddresses({ chainId: 'bitcoin-testnet', addressType: 'p2wpkh', ...TUPLE }))
             .rejects.toThrow(/software wallet/);
     });
+
+    // The descriptor lists p2tr as a first-class bitcoin type at m/86', but
+    // neither hardware seam can derive or sign it. Falling through to the
+    // segwit-v0 default returns a bc1q address on an 84' path that the caller
+    // records as p2tr - a mislabeled record that also collides in
+    // receiveAddress's per-type index space, since a later p2wpkh request
+    // re-issues that same m/84'/.../0 address under a second label.
+    for (const addressType of ['p2tr', 'p2wsh']) {
+        it(`LedgerSigner refuses ${addressType} instead of substituting the 84' default`, async () => {
+            await expect(makeLedger().getAddresses({ chainId: 'bitcoin-mainnet', addressType, ...TUPLE }))
+                .rejects.toThrow(/can't derive/);
+        });
+
+        it(`TrezorSigner refuses ${addressType} instead of substituting the 84' default`, async () => {
+            await expect(makeTrezor().getAddresses({ chainId: 'bitcoin-mainnet', addressType, ...TUPLE }))
+                .rejects.toThrow(/can't derive/);
+        });
+    }
+
+    // An OMITTED addressType is not an unsupported one: every caller that
+    // relies on the per-chain default (the LTC/DOGE lanes, the smoke suites)
+    // must keep deriving byte-identically.
+    it('an omitted addressType still takes the per-chain default on both signers', async () => {
+        const [ledgerRow] = await makeLedger().getAddresses({ chainId: 'litecoin-mainnet', ...TUPLE });
+        const [trezorRow] = await makeTrezor().getAddresses({ chainId: 'litecoin-mainnet', ...TUPLE });
+        expect(ledgerRow.path).toBe("m/44'/2'/1'/0/5");
+        expect(trezorRow.path).toBe("m/44'/2'/1'/0/5");
+    });
 });

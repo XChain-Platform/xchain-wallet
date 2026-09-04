@@ -123,6 +123,24 @@ export function addImportedWallet(opts) {
 }
 
 /**
+ * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
+ * A wallet created before the passphrase was stored is opened by the password
+ * plus a typed 25th word; this seals that word onto the record, encrypted under
+ * the wallet's own master key, so later unlocks need the password alone.
+ *
+ * Rejects with PassphraseMismatchError when the passphrase does not own the
+ * wallet's addresses, and stores nothing in that case.
+ *
+ * @param {object} opts
+ * @param {string} opts.walletId
+ * @param {string} opts.password
+ * @param {string} opts.bip39Passphrase
+ */
+export function capturePassphrase(opts) {
+    return /** @type {any} */ (sendMessage('wallet.passphrase.capture', opts));
+}
+
+/**
  * Rename a wallet.
  * @param {object} opts
  * @param {string} opts.walletId
@@ -1598,6 +1616,30 @@ export function getBroadcastsForAddress(req) {
  */
 export function getAddressHistory(req) {
     return /** @type {any} */ (sendMessage('history.address', req));
+}
+
+/**
+ * Unconfirmed (mempool) actions touching `address` as either party, in the
+ * explorer's own vocabulary: `{tx_hash, source, action, data, first_seen,
+ * destinations[]}`. Resolves `[]` rather than rejecting when the chain's
+ * explorer or SDK predates the unconfirmed surface.
+ *
+ * @param {{ chainId: string, address: string, opts?: object }} req
+ */
+export function getAddressMempool(req) {
+    return /** @type {any} */ (sendMessage('mempool.address', req));
+}
+
+/**
+ * This wallet's own in-flight sends for a chain (broadcast but not yet
+ * confirmed), as summaries. History merges them with the mempool rows so a
+ * freshly broadcast transaction is visible immediately, before the network
+ * has been polled.
+ *
+ * @param {{ chainId: string, address?: string }} req
+ */
+export function getPendingTxsForAddress(req) {
+    return /** @type {any} */ (sendMessage('pendingTxs.forAddress', req));
 }
 
 /**

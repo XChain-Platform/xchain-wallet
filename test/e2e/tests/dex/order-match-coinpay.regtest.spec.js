@@ -37,14 +37,15 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
-    EXPLORER_URL,
-    REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_LABEL,
-    REGTEST_COIN,
     encoderRpc,
+    expectConfirmModal,
+    EXPLORER_URL,
     fundAddress,
     minerRpc,
     mintXchain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
     selectVenueChain,
     switchToRegtest,
     tokenBalance,
@@ -237,7 +238,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel(`Amount (${COIN})`).fill(ASK);
             await main.getByRole('button', { name: /^Place order/ }).click();
 
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(action.status), 'the chain rejected the maker order').toBe('valid');
@@ -303,7 +304,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await autopay.uncheck();
 
             await main.getByRole('button', { name: /^Place order/ }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(action.status), 'the chain rejected the taker order').toBe('valid');
@@ -443,7 +444,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
             await main.getByLabel(`Amount (${COIN})`).fill(ASK);
             await main.getByRole('button', { name: /^Place order/ }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(action.status), 'the chain rejected the maker order').toBe('valid');
@@ -478,7 +479,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('checkbox', { name: /only auto-pays while it is open/ }).check();
 
             await main.getByRole('button', { name: /^Place order/ }).click();
-            await expect(page.getByTestId('confirm-modal')).toBeVisible({ timeout: 60_000 });
+            await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(action.status), 'the chain rejected the taker order').toBe('valid');

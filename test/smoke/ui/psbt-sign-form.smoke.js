@@ -118,4 +118,20 @@ assert.ok(/onSignPsbt:\s*\(\)\s*=>\s*setUnlockedView\(\s*['"]sign-psbt['"]\s*\)/
 assert.ok(surfacesEntry(webApp, 'sign-psbt', 'Sign transaction'),
     'web action menu has a sign-psbt entry');
 
+// Desktop too. It has routed sign-psbt and offered it on Home since
+// v0.238.0; only the Actions-menu handler lagged, and a section that read
+// two shells could not see the third.
+const desktopApp = readFileSync(
+    join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
+    'utf8',
+);
+assert.ok(/from ['"]@xchain-wallet\/core\/shared\/routes\/PsbtSignForm\.jsx['"]/.test(desktopApp),
+    'desktop App imports PsbtSignForm');
+assert.ok(/unlockedView === ['"]sign-psbt['"]/.test(desktopApp),
+    'desktop App routes unlockedView "sign-psbt" to PsbtSignForm');
+assert.ok(/onSignPsbt:\s*\(\)\s*=>\s*setUnlockedView\(\s*['"]sign-psbt['"]\s*\)/.test(desktopApp),
+    'desktop App wires onSignPsbt → setUnlockedView("sign-psbt")');
+assert.ok(surfacesEntry(desktopApp, 'sign-psbt', 'Sign transaction'),
+    'desktop action menu has a sign-psbt entry');
+
 console.log('psbt-sign-form smoke OK');

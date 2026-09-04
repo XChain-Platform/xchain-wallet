@@ -240,6 +240,8 @@ const requiredKeys = [
     'uri.intent.receiveAssetAt',
     'uri.intent.receiveAmount',
     'uri.intent.receiveAmountAt',
+    'uri.intent.execute',
+    'uri.intent.executeMethod',
     'uri.intent.unknown',
 ];
 for (const key of requiredKeys) {
@@ -249,6 +251,72 @@ for (const key of requiredKeys) {
     );
 }
 
+// --- 10. Contract-execute variants --------------------------------------
+//
+// The only uri.intent keys no assertion above ever renders, and they are
+// the confirmation copy for explorer Write-tab deep links.
+
+assert.equal(
+    describeXchainIntent({ kind: 'execute', contractActionIndex: 42 }, { i18n }),
+    'Call contract #42',
+);
+assert.equal(
+    describeXchainIntent(
+        { kind: 'execute', contractActionIndex: 42, method: 'transfer' },
+        { i18n },
+    ),
+    'Call transfer on contract #42',
+);
+// A contract intent with no index is unroutable, so it reads as unknown.
+assert.equal(
+    describeXchainIntent({ kind: 'execute' }, { i18n }),
+    'Unrecognized link',
+);
+
+// --- 11. No rendered label leaks an unsubstituted placeholder -----------
+//
+// The template arg names and the vars object describeXchainIntent builds
+// are maintained in two files. Renaming `{tick}` to `{asset}` in the
+// dictionary while xchainUri.js keeps setting `vars.tick` leaves the
+// user looking at a literal "{asset}", and every exact-string assertion
+// above only covers the variant it names. This walks every branch of the
+// helper through the real call path and asserts nothing brace-shaped
+// survives, so a rename on EITHER side fails here.
+
+const ADDR = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
+const everyBranch = [
+    { kind: 'send' },
+    { kind: 'send', address: ADDR },
+    { kind: 'send', tick: 'XCP' },
+    { kind: 'send', tick: 'XCP', address: ADDR },
+    { kind: 'send', amount: '0.5', tick: 'BTC' },
+    { kind: 'send', amount: '0.5', tick: 'BTC', address: ADDR },
+    { kind: 'receive' },
+    { kind: 'receive', address: ADDR },
+    { kind: 'receive', tick: 'XCP' },
+    { kind: 'receive', tick: 'XCP', address: ADDR },
+    { kind: 'receive', amount: '100', tick: 'XCP' },
+    { kind: 'receive', amount: '100', tick: 'XCP', address: ADDR },
+    { kind: 'execute', contractActionIndex: 42 },
+    { kind: 'execute', contractActionIndex: 42, method: 'transfer' },
+    { kind: 'execute' },
+    { kind: 'unknown' },
+    null,
+];
+for (const intent of everyBranch) {
+    const out = describeXchainIntent(intent, { i18n });
+    assert.ok(
+        typeof out === 'string' && out.length > 0,
+        `intent ${JSON.stringify(intent)} renders a non-empty label`,
+    );
+    assert.ok(
+        !/[{}]/.test(out),
+        `intent ${JSON.stringify(intent)} leaves no placeholder: ${JSON.stringify(out)}`,
+    );
+}
+// An empty table would pass the loop above exactly like a full one.
+assert.equal(everyBranch.length, 17, 'every describeXchainIntent branch is in the table');
+
 console.log(
-    "OK: xchain-uri-describe smoke (Cluster L FOLLOWUP 5: describeXchainIntent renders 13 send/receive variants based on intent fields; address middle-truncated head6/tail4 over 14 chars; locale switch picks up translated copy with en fallback; deps.i18n.t required; round-trips through parseXchainUri for path-style + BIP21 + garbage)",
+    "OK: xchain-uri-describe smoke (Cluster L FOLLOWUP 5: describeXchainIntent renders 13 send/receive variants plus 3 contract-execute variants based on intent fields; address middle-truncated head6/tail4 over 14 chars; locale switch picks up translated copy with en fallback; deps.i18n.t required; round-trips through parseXchainUri for path-style + BIP21 + garbage; no branch leaves an unsubstituted placeholder)",
 );
