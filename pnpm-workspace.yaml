@@ -106,6 +106,15 @@ overrides:
   # Connection-header passthrough in the proxy helper, memo() retaining SSR
   # output across requests). Floor at the first patched version.
   hono: ^4.12.34
+  # @xmldom/xmldom arrives under plist, which app-builder-lib, native-run and
+  # simple-plist all use to read and write Apple property lists while the
+  # desktop and mobile apps are packaged. <=0.8.14 serialises an invalid
+  # EntityReference nodeName without rejecting it (GHSA-6gmq-8vp8-gcm6), so a
+  # crafted plist can inject XML fragments into the file that comes back out.
+  # The plists in this pipeline are our own, so the reachable path is build
+  # time rather than anything a user's wallet parses; floored anyway because
+  # the fix is a patch release and plist asks for ^0.8.8, which it satisfies.
+  '@xmldom/xmldom': ^0.8.15
 
 # "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall
