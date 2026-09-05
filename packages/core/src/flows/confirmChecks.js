@@ -136,8 +136,8 @@ export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput =
  * @param {string} args.psbtHex
  * @param {ReturnType<typeof buildExpectedOutputs>} args.expected
  * @param {string[]} args.ownAddresses            wallet-owned addresses (change is allowed here)
- * @param {(psbtHex: string) => { outputs: Array<{ address: string|null, scriptPubKeyHex: string, scriptType: string, value: number }> }} args.decomposePsbt
- * @returns {{ ok: boolean, unexpected: Array<{ index: number, address: string|null, value: number, scriptType: string }> }}
+ * @param {(psbtHex: string) => { outputs: Array<{ address: string|null, scriptPubKeyHex: string, scriptType: string, value: number|string }> }} args.decomposePsbt
+ * @returns {{ ok: boolean, unexpected: Array<{ index: number, address: string|null, value: number|string, scriptType: string }> }}
  */
 export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt }) {
     const own = new Set((ownAddresses || []).map(String));

@@ -40,7 +40,7 @@ export function contractBalanceRows(balances) {
     return [];
 }
 
-export function normalizeContractBalance(row) {
+function normalizeContractBalance(row) {
     return {
         tick: row.tick || row.TICK || row.ticker || '?',
         quantity: row.quantity ?? row.amount ?? row.AMOUNT ?? '?',

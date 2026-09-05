@@ -153,7 +153,7 @@ describe('ActionDetail on a pending entry', () => {
     it('carries the pending branch onto the page', async () => {
         renderDetail(pendingEntry());
         const panel = await screen.findByRole('region', { name: 'Pending transaction' });
-        expect(within(panel).getByText('Pending, not yet validated by the indexer.')).toBeTruthy();
+        expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
     });
 });
 

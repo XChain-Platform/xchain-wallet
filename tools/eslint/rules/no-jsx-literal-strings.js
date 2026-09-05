@@ -13,10 +13,16 @@
 // Flags raw string literals that render in JSX so translators have a
 // single index of user-facing copy in `i18n/locales/<bcp47>/index.js`.
 // Wire the wallet's ESLint config to load this rule via the matching
-// plugin in `tools/eslint/plugin.js`:
+// plugin in `tools/eslint/plugin.js`, from a flat config (that file's
+// header carries the full runnable example):
 //
-//   plugins: ['@xchain'],
+//   import xchain from './tools/eslint/plugin.js';
+//   plugins: { '@xchain': xchain },
 //   rules: { '@xchain/no-jsx-literal-strings': 'warn' }
+//
+// The plugin object has to be registered under the key; an eslintrc
+// `plugins: ['@xchain']` shortname resolves to an uninstalled npm
+// package instead of to this file.
 //
 // What the rule checks:
 //
@@ -27,11 +33,12 @@
 //     title, placeholder, label, hint, caption, tooltip, heading,
 //     emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
-//     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel
+//     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
+//     copyLabel, balanceText, submitLabel
 //     (the USER_FACING_ATTRS set below is the authority; keep this list
-//     in step with it). The last eighteen are component props rather than
-//     DOM attributes: shipping components render copy through them, so
-//     a DOM-only set left that copy out of the translator index.
+//     in step with it). The last twenty-one are component props rather
+//     than DOM attributes: shipping components render copy through them,
+//     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
 //     when the property KEY is one of those same names and the default
 //     is a non-trivial string or template. Copy shipped as a default
@@ -75,7 +82,10 @@
 //
 // The rule is designed to ship in the repo without enforcement
 // (per project memory "no CI during wallet build phase"). Developers
-// can run `eslint --rule …` locally to spot violations.
+// spot violations by writing the flat config from the plugin header
+// locally and pointing eslint at it; `eslint --rule …` cannot load it,
+// because the `@xchain` namespace only exists once a config registers
+// the imported plugin object.
 
 const USER_FACING_ATTRS = new Set([
     'aria-label',
@@ -142,6 +152,24 @@ const USER_FACING_ATTRS = new Set([
     'emptyBody',
     'confirmLabel',
     'cancelLabel',
+    // Three more written one hop earlier than the sink prop that renders
+    // them. PsbtSignForm's ArtifactBlock forwards `copyLabel` to
+    // CopyButton, which renders it as the button text AND as the
+    // accessible name, so covering the sink prop `label` never saw the
+    // English ("Copy signed PSBT", "Copy signed transaction");
+    // AmountField renders `balanceText` verbatim into the amount footer
+    // and its call sites write "… available" as a template; TokenWizard
+    // ships `submitLabel = 'Preview'` as a prop default rendered as the
+    // submit button's text, which is the prop-default branch's shape.
+    // Each was checked across packages/*/src for a technical use (a
+    // lookup key, an id, an enum) and has none: `copyLabel` occurs only
+    // at its declaration and its two literal call sites, `balanceText`
+    // only as AmountField's footer prop, and `submitLabel` only in
+    // TokenWizard. CopyButton still takes its clipboard payload as
+    // `value`, which stays out of the set.
+    'copyLabel',
+    'balanceText',
+    'submitLabel',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

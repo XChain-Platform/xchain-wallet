@@ -147,6 +147,24 @@ const DERIVATION_TEMPLATE_RE = /^m\/\d+'\/\d+'\/A'\/C\/I$/;
 // descriptors are CI-tested against; unknown families stay unconstrained.
 export const FAMILY_MAINNET_COIN_TYPE_SLOT = { bitcoin: "0'", litecoin: "2'", dogecoin: "3'" };
 
+// BIP44 purpose slot per address type, the sibling pin to the coin-type slot
+// above. Purpose is a FORMAT SELECTOR the rest of the wallet reads back out,
+// not free-form metadata: SoftwareSigner.signMessageOptsFromPath picks the
+// message-signing opts from the path's purpose while getAddresses encodes
+// from the requested {type}, and bip44PurposeFor in both hardware signers
+// hardcodes the same values. So a descriptor filing a legacy path under a
+// segwit address type installs cleanly with the coin-type pin satisfied, then
+// splits one seed into two address sets on the same chain and signs bech32
+// addresses with p2pkh opts the backend verifier rejects. Known families and
+// registered address types only; unknown families and unregistered address
+// types stay unconstrained, exactly as the coin-type pin behaves.
+export const ADDRESS_TYPE_BIP44_PURPOSE_SLOT = {
+    p2pkh: "44'",
+    'p2sh-p2wpkh': "49'",
+    p2wpkh: "84'",
+    p2tr: "86'",
+};
+
 // WIF version byte per known chain family and network. Like the coin-type
 // slot above, wifVersionByte is a hand-maintained copy of an xchain-sdk
 // registry value (SoftwareSigner WIF-encodes with descriptor.wifVersionByte,
@@ -217,13 +235,24 @@ export function validateChainDescriptor(record) {
     const familySlot = FAMILY_MAINNET_COIN_TYPE_SLOT[r.coin];
     if (familySlot && isPlainObject(r.derivationPaths)) {
         for (const [addressType, template] of Object.entries(r.derivationPaths)) {
-            const m = typeof template === 'string' ? template.match(/^m\/\d+'\/(\d+')\//) : null;
+            const m = typeof template === 'string' ? template.match(/^m\/(\d+')\/(\d+')\//) : null;
             check(
                 errors,
                 `derivationPaths.${addressType}`,
-                Boolean(m) && m[1] === familySlot,
+                Boolean(m) && m[2] === familySlot,
                 `coin-type slot must be ${familySlot} for the ${r.coin} family`,
             );
+            // Sibling pin on segment 1. An unregistered address type stays
+            // unconstrained so a future type can ship before the map knows it.
+            const purposeSlot = ADDRESS_TYPE_BIP44_PURPOSE_SLOT[addressType];
+            if (purposeSlot) {
+                check(
+                    errors,
+                    `derivationPaths.${addressType}`,
+                    Boolean(m) && m[1] === purposeSlot,
+                    `purpose slot must be ${purposeSlot} for address type "${addressType}"`,
+                );
+            }
         }
     }
     checkEach(errors, 'addressTypes', r.addressTypes, isNonEmptyString, 'must be a non-empty string');

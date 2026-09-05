@@ -624,7 +624,7 @@ export class CoinpayAutopayWatcher {
                 return `A match on ${orderRef} is close to its payment deadline and auto-pay has stood down. Pay${amount ? ` ${amount}` : ''} manually from Payments due now.`;
             case 'amounts-unavailable':
             case 'match-unavailable':
-                return `A match on ${orderRef} could not be verified against the indexer. Review and pay manually from Payments due.`;
+                return `A match on ${orderRef} could not be verified with the service. Review and pay manually from Payments due.`;
             default:
                 return `A match on ${orderRef} needs a manual payment. Open Payments due to review it.`;
         }

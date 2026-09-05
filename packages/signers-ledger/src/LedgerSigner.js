@@ -54,6 +54,9 @@ import {
     Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
+// Imported from validate.js rather than the registry barrel so this package
+// does not pull the bundled descriptors in behind it.
+import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
 import {
     addressTypeFromPath,
     composeBitcoinCompactSignature,
@@ -91,7 +94,11 @@ import { readLedgerAppInfo } from './appInfo.js';
  * app forces SLIP-44 coin-type 1', which diverges from the wallet's
  * 0'-anchored derivation, so the network is hardware-unsupported.
  */
-const LEDGER_APP_NAME_FOR_CHAIN = {
+// Exported so the cross-signer parity suite can DERIVE its coverage set from
+// the chains this seam actually supports. Hand-listing that set is how a newly
+// supported family ships with no parity case at all: a silent no-op, not a
+// visible gap.
+export const LEDGER_APP_NAME_FOR_CHAIN = {
     'bitcoin-mainnet': 'Bitcoin',
     'litecoin-mainnet': 'Litecoin',
     'dogecoin-mainnet': 'Dogecoin',
@@ -534,17 +541,32 @@ function formatBip44Path({ purpose, chainId, accountIndex, change, index }) {
 // derive it at 0', so a 1' hardware derivation yields different addresses for
 // the same seed (funds appear missing). Since the Ledger firmware cannot honor
 // 0' on its testnet app, the network throws as hardware-unsupported instead.
+//
+// The slot VALUES are read from the registry's FAMILY_MAINNET_COIN_TYPE_SLOT,
+// the one copy the cross-repo parity test binds to the SDK's FAMILY_SLIP44.
+// A hand-copied literal here would be a second copy bound to nothing, free to
+// drift from the descriptors the software signer derives against.
+//
+// ORDER IS LOAD BEARING. The unsupported-network throws must come BEFORE the
+// family lookup: bitcoin-testnet splits to family `bitcoin` and would
+// otherwise resolve to 0' and hand the device a derivation its firmware
+// cannot honour. Membership is decided by LEDGER_APP_NAME_FOR_CHAIN, never by
+// the family prefix, so support stays fail-closed by absence.
 export function coinTypeFor(chainId) {
-    switch (chainId) {
-        case 'bitcoin-mainnet': return "0'";
-        case 'litecoin-mainnet': return "2'";
-        case 'dogecoin-mainnet': return "3'";
-        case 'bitcoin-testnet':
-        case 'bitcoin-regtest':
-            throw unsupportedBitcoinNetworkError(chainId);
-        default:
-            throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
+    if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') {
+        throw unsupportedBitcoinNetworkError(chainId);
     }
+    if (!Object.prototype.hasOwnProperty.call(LEDGER_APP_NAME_FOR_CHAIN, chainId)) {
+        throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
+    }
+    const family = String(chainId).split('-')[0];
+    const slot = FAMILY_MAINNET_COIN_TYPE_SLOT[family];
+    if (!slot) {
+        throw new Error(
+            `LedgerSigner: no mainnet coin-type slot registered for chain family "${family}"`,
+        );
+    }
+    return slot;
 }
 
 /**

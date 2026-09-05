@@ -194,7 +194,7 @@ describe('History annotates what a pending transaction moves', () => {
     it('carries the pre-validation caveat as the figure accessible name', async () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        const caveat = 'Pending, not yet validated by the indexer: receiving 100 XCHAIN';
+        const caveat = 'Pending, not yet validated by the service: receiving 100 XCHAIN';
         expect(annotation(view).getAttribute('aria-label')).toBe(caveat);
         expect(annotation(view).getAttribute('title')).toBe(caveat);
     });

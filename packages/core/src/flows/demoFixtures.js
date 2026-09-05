@@ -985,7 +985,7 @@ const DEMO_CONTACTS = [
 
 // Non-contact demo counterparties for the inbox, kept distinct from the seeded
 // contacts so those rows render as truncated addresses, not names.
-export const DEMO_MESSAGE_ADDRESSES = {
+const DEMO_MESSAGE_ADDRESSES = {
     alice: 'demo1alicexchaincounterpartyaddr00000000001',
     bob: 'demo1bobxchaincounterpartyaddr0000000000002',
     carol: 'demo1carolxchaincounterpartyaddr00000000003',

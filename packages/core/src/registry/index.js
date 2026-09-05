@@ -254,7 +254,12 @@ let _defaultRegistry = null;
 export const defaultRegistry = () => (_defaultRegistry ??= new ChainRegistry());
 
 export { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
-export { validateChainDescriptor, FAMILY_MAINNET_COIN_TYPE_SLOT, FAMILY_NETWORK_WIF_BYTE } from './validate.js';
+export {
+    validateChainDescriptor,
+    ADDRESS_TYPE_BIP44_PURPOSE_SLOT,
+    FAMILY_MAINNET_COIN_TYPE_SLOT,
+    FAMILY_NETWORK_WIF_BYTE,
+} from './validate.js';
 export {
     COMMON_ACTIONS,
     BTC_EXCLUSIVE_ACTIONS,
@@ -270,6 +275,7 @@ export {
     isDonationAddressConfigured,
 } from './validate.js';
 export { filterChainsForUser, isChainVisibleToUser } from './visibility.js';
+export { hydrateCustomChainsFromSettings } from './hydrateCustomChains.js';
 export {
     verifyChainRegistry,
     syncChainRegistryFromHub,

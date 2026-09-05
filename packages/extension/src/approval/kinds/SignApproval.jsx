@@ -138,6 +138,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
         let cancelled = false;
         getSettings()
             .then((s) => {
+                // This realm's registry learns user-added chains from the
+                // settings record (§9.7 Developer Mode); the boot-time read
+                // in main.jsx fails while the vault is locked, and a sign
+                // prompt always runs unlocked, so this read is the one that
+                // lands. Idempotent under the registry has() guard.
+                try { registryLib.hydrateCustomChainsFromSettings(chainRegistry, s); } catch { /* bundled descriptors keep serving */ }
                 if (cancelled) return;
                 setDeveloperMode(Boolean(s?.developerMode));
             })

@@ -38,7 +38,7 @@ for (const field of ['permissions.chains', 'permissions.accounts', 'permissions.
 }
 
 // Empty state copy
-assert.match(src, /No dApps connected/, 'empty-state copy present');
+assert.match(src, /No sites connected yet/, 'empty-state copy present');
 
 // Host wiring
 const hostSrc = readFileSync(hostPath, 'utf8');

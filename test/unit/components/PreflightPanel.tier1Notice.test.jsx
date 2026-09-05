@@ -52,19 +52,39 @@ import { PreflightPanel, TIER1_NOTICE_CODES, SUPPORTED_SCHEMA_VERSION }
 // Resolved at runtime instead, through the same `xchain-sdk` alias the shells
 // import, which reads the SDK the wallet actually SHIPS. A sibling checkout is
 // still honoured when one is present so working across both repos locally keeps
-// behaving as before. This is verbatim the pattern
-// test/integration/hd/wallet-sdk-derivation-parity.test.js already uses, down to
-// the XCHAIN_REQUIRE_SIBLINGS escape below; the path depth is identical.
+// behaving as before.
+//
+// The anchor is the SHELLS, and it used to be packages/core. Anchoring at core
+// is wrong: core declares no `xchain-sdk` alias in any dependency block and
+// documents that it deliberately does not consume the package at all
+// (packages/core/src/sdk/SDKRegistry.js), so that anchor resolved only because
+// the workspace flat-hoists for an unrelated vite-shim reason
+// (`shamefully-hoist=true` in .npmrc, mirrored as `shamefullyHoist: true` in
+// pnpm-workspace.yaml). Narrowing that flag would have turned this parity block
+// into the silent skip below rather than into a real failure. Each of
+// web/extension/desktop declares the alias itself and carries its own
+// node_modules/xchain-sdk link under either layout, so anchoring there makes
+// the resolution match what this comment claims. The probe walks all
+// three only so a partially-installed shell falls through instead of failing
+// the run; they pin the identical alias spec, so the order is arbitrary. Same
+// correction, same reasoning, as
+// test/integration/hd/wallet-sdk-derivation-parity.test.js:65-99, whose
+// XCHAIN_REQUIRE_SIBLINGS escape the gate below still mirrors.
 const here = dirname(fileURLToPath(import.meta.url));
-const requireFromCore = createRequire(join(here, '..', '..', '..', 'packages', 'core', 'package.json'));
+const SDK_ANCHOR_SHELLS = ['web', 'extension', 'desktop'];
+const shellRequires = SDK_ANCHOR_SHELLS.map((shell) =>
+    createRequire(join(here, '..', '..', '..', 'packages', shell, 'package.json')));
 const sdkFile = (...parts) => {
     const spec = `xchain-sdk/${parts.join('/')}`;
-    try {
-        return requireFromCore.resolve(spec);
-    } catch {
-        const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
-        return existsSync(sibling) ? sibling : null;
+    for (const requireFromShell of shellRequires) {
+        try {
+            return requireFromShell.resolve(spec);
+        } catch {
+            // Next shell; the sibling fallback below is the last resort.
+        }
     }
+    const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
+    return existsSync(sibling) ? sibling : null;
 };
 const constantsPath = sdkFile('src', 'preflight', 'constants.js');
 const preflightConstants = constantsPath === null ? null : createRequire(import.meta.url)(constantsPath);

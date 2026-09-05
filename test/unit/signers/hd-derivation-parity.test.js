@@ -21,9 +21,17 @@
 //      deriving m/84'/1'/... addresses the rest of the wallet cannot see.
 
 import { describe, it, expect, vi } from 'vitest';
-import { LedgerSigner } from '../../../packages/signers-ledger/src/LedgerSigner.js';
-import { TrezorSigner } from '../../../packages/signers-trezor/src/TrezorSigner.js';
-import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import {
+    LedgerSigner,
+    LEDGER_APP_NAME_FOR_CHAIN,
+    coinTypeFor as ledgerCoinTypeFor,
+} from '../../../packages/signers-ledger/src/LedgerSigner.js';
+import {
+    TrezorSigner,
+    coinTypeFor as trezorCoinTypeFor,
+} from '../../../packages/signers-trezor/src/TrezorSigner.js';
+import { CHAIN_ID_TO_TREZOR_COIN } from '../../../packages/signers-trezor/src/trezorFormat.js';
+import { defaultRegistry, FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../../packages/core/src/registry/index.js';
 
 function makeLedger() {
     return new LedgerSigner({
@@ -62,19 +70,62 @@ function makeTrezor() {
 
 const TUPLE = { accountIndex: 1, change: 0, startIndex: 5, count: 1 };
 
-// (chainId, addressType) pairs both hardware signers support. LTC/DOGE use the
-// legacy p2pkh purpose on hardware, matching their descriptor templates.
-const SUPPORTED = [
-    ['bitcoin-mainnet', 'p2wpkh'],
-    ['litecoin-mainnet', 'p2pkh'],
-    ['dogecoin-mainnet', 'p2pkh'],
-];
+// The address type each chain is exercised at on hardware. LTC/DOGE use the
+// legacy p2pkh purpose on hardware, which is why this map is NOT derived from
+// the descriptors' defaultAddressType: litecoin declares p2wpkh there while
+// hardware derives it at the legacy 44' purpose, so a descriptor-derived type
+// would fail for the wrong reason.
+const HARDWARE_ADDRESS_TYPE = {
+    'bitcoin-mainnet': 'p2wpkh',
+    'litecoin-mainnet': 'p2pkh',
+    'dogecoin-mainnet': 'p2pkh',
+};
+
+// The CHAINS are derived, not hand-listed: the intersection of the two
+// signers' own support maps. Hand-listing them is the silent no-op this
+// suite exists to prevent, since a family added to LEDGER_APP_NAME_FOR_CHAIN
+// and CHAIN_ID_TO_TREZOR_COIN would emit ZERO parity cases and leave a green
+// run. Derived, the same addition either gains cases or reddens the
+// completeness check below by name.
+const HARDWARE_CHAIN_IDS = Object.keys(LEDGER_APP_NAME_FOR_CHAIN)
+    .filter((chainId) => Object.prototype.hasOwnProperty.call(CHAIN_ID_TO_TREZOR_COIN, chainId));
+
+const SUPPORTED = HARDWARE_CHAIN_IDS
+    .filter((chainId) => HARDWARE_ADDRESS_TYPE[chainId])
+    .map((chainId) => [chainId, HARDWARE_ADDRESS_TYPE[chainId]]);
 
 describe('HD derivation parity: hardware signers vs the descriptor anchor', () => {
     it('descriptor anchor pins bitcoin-testnet at the mainnet coin-type 0\' (the parity contract)', () => {
         expect(defaultRegistry().derivationPathFor('bitcoin-testnet', 'p2wpkh', 0, 0, 0))
             .toBe("m/84'/0'/0'/0/0");
     });
+
+    // The point of deriving the chain set: an addition to either signer's
+    // support map must fail HERE, by name, rather than quietly producing no
+    // parity cases at all.
+    it('every hardware-supported chain has an address type and a registered slot', () => {
+        expect(HARDWARE_CHAIN_IDS.length).toBeGreaterThan(0);
+        for (const chainId of HARDWARE_CHAIN_IDS) {
+            expect(
+                HARDWARE_ADDRESS_TYPE[chainId],
+                `hardware-supported "${chainId}" has no HARDWARE_ADDRESS_TYPE entry, so it emits no parity case`,
+            ).toBeTruthy();
+            expect(
+                FAMILY_MAINNET_COIN_TYPE_SLOT[chainId.split('-')[0]],
+                `hardware-supported "${chainId}" has no FAMILY_MAINNET_COIN_TYPE_SLOT entry`,
+            ).toBeTruthy();
+        }
+    });
+
+    // Both signers now READ the registry slot rather than copying it, so this
+    // asserts the lookup resolves rather than that three literals agree.
+    for (const chainId of HARDWARE_CHAIN_IDS) {
+        it(`both signers resolve ${chainId} to the registry coin-type slot`, () => {
+            const slot = FAMILY_MAINNET_COIN_TYPE_SLOT[chainId.split('-')[0]];
+            expect(ledgerCoinTypeFor(chainId)).toBe(slot);
+            expect(trezorCoinTypeFor(CHAIN_ID_TO_TREZOR_COIN[chainId])).toBe(slot);
+        });
+    }
 
     for (const [chainId, addressType] of SUPPORTED) {
         it(`LedgerSigner derives ${chainId} at the exact descriptor path`, async () => {

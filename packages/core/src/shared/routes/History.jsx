@@ -1955,7 +1955,7 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
             {desc.kind === 'segments' ? (
                 <>
                     <p className={styles.pendingHelp}>
-                        {t('pending.detail.undecodable', { action: desc.action })}
+                        {t('pending.detail.undecodable', { action: actionDisplayLabel(desc.action) })}
                     </p>
                     <ul className={styles.pendingSegments}>
                         {desc.segments.map((seg, i) => (

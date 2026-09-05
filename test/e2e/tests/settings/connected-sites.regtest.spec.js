@@ -166,7 +166,7 @@ test.describe('Settings: connected sites', () => {
                 await expect(main.getByText(/not wired in this shell yet/),
                     'the connected-sites host route is missing in this shell')
                     .toHaveCount(0);
-                await expect(main.getByText(/^No dApps connected/),
+                await expect(main.getByText(/^No sites connected yet/),
                     'the panel neither listed connections nor reported that there are none')
                     .toBeVisible({ timeout: 30_000 });
 

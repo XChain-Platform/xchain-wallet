@@ -212,7 +212,14 @@ export function onLocaleChange(fn) {
 export function t(key, vars) {
     const dict = DICTIONARIES[currentLocale] ?? DICTIONARIES.en;
     const raw = dict[key] ?? DICTIONARIES.en[key] ?? key;
-    if (!vars) return raw;
+    // Every lookup goes through format(), vars or not. An `if (!vars)
+    // return raw` shortcut here made t(k) and t(k, {}) two different
+    // functions for an ICU plural/select key: the vars-less call handed
+    // the dictionary's own SOURCE text to the UI while the `{}` call
+    // rendered legacyFormat's bare tokens. format() already normalises a
+    // missing args object and already fast-paths a template with no `{`,
+    // so the equivalence holds by construction rather than by a second
+    // brace check here that could drift from the one in format().
     return format(raw, vars, currentLocale);
 }
 

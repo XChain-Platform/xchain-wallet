@@ -797,30 +797,46 @@ export function createBackgroundHost(deps) {
     // registry is module-scoped in the shell entry (extension/web/
     // desktop) and survives host teardown across lock/unlock cycles,
     // so we only seed once per registry instance: re-installing a
-    // descriptor would throw on the duplicate id.
+    // descriptor would throw on the duplicate id. Only a COMPLETED read
+    // latches: the popup's first settings.get lands while the vault is
+    // still locked, and a read that fails there leaves the registry
+    // unseeded so the next settings.get retries. Concurrent callers share
+    // the in-flight promise, which keeps the pass single-flight.
     let customChainsSeeded = false;
+    /** @type {Promise<void> | null} */
+    let customChainsSeedPromise = null;
     async function seedCustomChainsFromVault(vault, chainRegistry) {
         if (customChainsSeeded) return;
-        customChainsSeeded = true;
+        if (customChainsSeedPromise) return customChainsSeedPromise;
         if (!vault || !chainRegistry) return;
-        try {
-            const settings = await vault.settings.get();
-            const list = Array.isArray(settings?.customChains) ? settings.customChains : [];
-            for (const descriptor of list) {
-                try {
-                    if (!descriptor || typeof descriptor !== 'object') continue;
-                    if (typeof descriptor.id !== 'string') continue;
-                    if (chainRegistry.has(descriptor.id)) continue;
-                    chainRegistry.addCustom(descriptor);
-                } catch {
-                    // Per-descriptor failures (corrupt persisted record,
-                    // descriptor invalid against the current validator)
-                    // are skipped silently: the boot path must not crash
-                    // on a single bad row.
+        customChainsSeedPromise = (async () => {
+            try {
+                const settings = await vault.settings.get();
+                const list = Array.isArray(settings?.customChains) ? settings.customChains : [];
+                for (const descriptor of list) {
+                    try {
+                        if (!descriptor || typeof descriptor !== 'object') continue;
+                        if (typeof descriptor.id !== 'string') continue;
+                        if (chainRegistry.has(descriptor.id)) continue;
+                        chainRegistry.addCustom(descriptor);
+                    } catch {
+                        // Per-descriptor failures (corrupt persisted record,
+                        // descriptor invalid against the current validator)
+                        // are skipped silently: the boot path must not crash
+                        // on a single bad row.
+                    }
                 }
+                // Last statement in the try, so a throwing read never latches.
+                customChainsSeeded = true;
+            } catch {
+                // Vault not open / read failed: boot continues and the next
+                // settings.get runs the pass again.
             }
-        } catch {
-            // Vault not open / read failed: boot continues.
+        })();
+        try {
+            await customChainsSeedPromise;
+        } finally {
+            customChainsSeedPromise = null;
         }
     }
     // Settings -> Network & Endpoints is the surface an operator
@@ -1176,17 +1192,25 @@ export function createBackgroundHost(deps) {
             throttleVault = vault;
             void refreshThrottleLimitsFromVault();
         }
-        // Cluster Q FOLLOWUP 2: opportunistic custom-chain re-seed.
+        // Cluster Q FOLLOWUP 2: opportunistic custom-chain re-seed,
+        // followed by the same opportunistic trigger for custom endpoints.
         // Single-flight per host instance via the customChainsSeeded
         // guard. Settings.get is the natural trigger because the popup
         // calls it shortly after unlock, before any chain-aware UI
-        // mounts.
-        void seedCustomChainsFromVault(vault, chainRegistry);
-        // Same opportunistic trigger for custom endpoints. Covers
-        // the web shell, where the module-scoped SDKRegistry is replaced
-        // once the real SDK factory resolves and the fresh instance would
-        // otherwise start with an empty override map.
-        void applyEndpointOverridesFromVault(vault, sdkRegistry);
+        // mounts. The endpoint pass covers the web shell, where the
+        // module-scoped SDKRegistry is replaced once the real SDK factory
+        // resolves and the fresh instance would otherwise start with an
+        // empty override map.
+        //
+        // The two run in sequence rather than side by side: the SDK
+        // registry drops overrides for chain ids the chain registry does
+        // not know, and REPLACES the whole override map instead of merging
+        // it, so an endpoint pass that reaches the vault first discards a
+        // user-added chain's endpoints for the rest of the session.
+        void (async () => {
+            await seedCustomChainsFromVault(vault, chainRegistry);
+            await applyEndpointOverridesFromVault(vault, sdkRegistry);
+        })();
         return getSettings(vault);
     });
 
@@ -2484,7 +2508,7 @@ export function createBackgroundHost(deps) {
     // (Cluster G FOLLOWUP 2). The in-memory map remains the live source
     // of truth for the running process; storage rehydrates at first
     // queue access and writes back on every mutation.
-    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string }>>} */
+    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }>>} */
     const queuedBroadcasts = new Map();
     let queueLoaded = false;
     let queueLoadPromise = /** @type {Promise<void> | null} */ (null);
@@ -2549,12 +2573,19 @@ export function createBackgroundHost(deps) {
      * and by the renderer's `enqueueBroadcastRequest` shim for callers
      * that want to enqueue directly (e.g. PsbtSignForm's broadcast leg).
      *
+     * The entry submitAction hands over also names the PendingTx record it
+     * stamped 'queued' (`pendingTxId`) and the ADS verdict the signed bytes
+     * carry (`adsCommit`); both ride on the stored record so the broadcast
+     * and discard routes can settle the durable half and book the donation
+     * once the bytes actually land. Renderer enqueues carry neither.
+     *
      * @param {string} walletId
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string }} entry
-     * @returns {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string }}
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * @returns {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }}
      */
     function pushQueueEntry(walletId, entry) {
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const adsCommit = entry.adsCommit;
         const stored = {
             id,
             chainId: entry.chainId,
@@ -2564,6 +2595,15 @@ export function createBackgroundHost(deps) {
                 : `Broadcast pending on ${entry.chainId}`,
             signedAt: typeof entry.signedAt === 'number' ? entry.signedAt : Date.now(),
             ...(entry.txid ? { txid: entry.txid } : {}),
+            ...(typeof entry.pendingTxId === 'string' && entry.pendingTxId
+                ? { pendingTxId: entry.pendingTxId }
+                : {}),
+            ...(adsCommit
+                && typeof adsCommit === 'object'
+                && typeof adsCommit.chainId === 'string'
+                && typeof adsCommit.donationIncluded === 'boolean'
+                ? { adsCommit: { chainId: adsCommit.chainId, donationIncluded: adsCommit.donationIncluded } }
+                : {}),
         };
         getQueue(walletId).push(stored);
         // Fire-and-forget: onBroadcastFailure callers (action.send /
@@ -2602,61 +2642,155 @@ export function createBackgroundHost(deps) {
             txid: req?.txid,
         });
     });
-    host.register('broadcast.queue.broadcast', async (req, { sdkRegistry }) => {
-        await ensureQueueLoaded();
-        const q = getQueue(req?.walletId);
-        const id = req?.id;
-        const idx = q.findIndex((entry) => entry.id === id);
-        if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
-        const entry = q[idx];
-        const sdk = sdkRegistry.get(entry.chainId);
-        // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
-        // encoder as a second argument and refuses without it ("Encoder client
-        // is required for broadcasting"), so calling it one-argument here meant
-        // every "Broadcast now" failed with an SDK developer message and the
-        // signed transaction stayed queued forever. Measured on an Android
-        // emulator against the LTC regtest venue, SSC-6. Same call the
-        // core queue drain and `broadcast.signedTx` below already make.
-        if (typeof sdk?.encoder?.broadcastTx !== 'function') {
-            throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks encoder.broadcastTx`);
-        }
-        // Panic-mode freeze. Broadcasting an already-signed tx invokes no signer,
-        // so without this it sails straight through an active freeze - the exact
-        // irreversible-effector gap the freeze exists to close. This host route
-        // maintains its own queue and bypasses core drainQueuedBroadcast (which
-        // already gates), so the same assertion is applied here at the new call site.
-        flows.assertSigningAllowed();
-        let result;
+    /**
+     * Settle the PendingTx half of a queued broadcast once the host queue has
+     * settled its own. submitAction stamps its record 'queued' and names it on
+     * the entry as `pendingTxId`; the two surfaces otherwise never reconcile,
+     * and a record left 'queued' after the bytes landed keeps netting the spend
+     * out of the balance, never subscribes for its confirmation, and stays
+     * eligible for a re-broadcast the node would reject as already known.
+     * Only a record still 'queued' is written (same precondition core's drain
+     * and discard apply), and a missing record or a locked vault never turns a
+     * settled broadcast into a route error. Renderer enqueues carry no id.
+     *
+     * @param {any} vault
+     * @param {{ pendingTxId?: string }} entry
+     * @param {object} patch
+     * @returns {Promise<boolean>}  true when a record was written
+     */
+    async function settleQueuedPendingTx(vault, entry, patch) {
+        const pendingTxId = entry?.pendingTxId;
+        if (typeof pendingTxId !== 'string' || !pendingTxId) return false;
         try {
-            result = await sdk.encoder.broadcastTx(entry.signedTxHex);
-        } catch (err) {
-            // The same permanence split the core queue applies,
-            // applied here too - this queue retries on demand and had no way to
-            // stop. A signed transaction whose inputs are gone can never
-            // confirm, so leaving it on the list invites the user to press
-            // "Broadcast now" forever on something already dead. Drop it from
-            // the queue and say why; the recovery is a fresh compose, not
-            // another attempt at these bytes. Transient failures stay queued,
-            // which is what the surface is for.
-            if (flows.classifyBroadcastFailure(err) === 'permanent') {
-                q.splice(idx, 1);
-                await persistQueue();
-            }
-            throw err;
+            const existing = await vault?.pendingTxs?.get(pendingTxId);
+            if (!existing || existing.status !== 'queued') return false;
+            await vault.pendingTxs.put({ ...existing, ...patch });
+            return true;
+        } catch (_e) {
+            return false;
         }
-        q.splice(idx, 1);
-        await persistQueue();
-        // Encoder result shape varies by chain, same as `broadcast.signedTx`
-        // below: normalize so the caller always sees { txid }.
-        const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
-        return { ...(result && typeof result === 'object' ? result : {}), txid };
+    }
+    // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
+    // `broadcastTx` is an irreversible effector, so a second call for the same
+    // entry (double-click, popup and expanded tab racing) must fail before it
+    // reaches the network. The claim is taken synchronously, before the
+    // handler's first await, so two calls in the same tick cannot both pass
+    // the check; core drainQueuedBroadcast keeps the same guard for its lane.
+    const inFlightQueueBroadcasts = new Set();
+    host.register('broadcast.queue.broadcast', async (req, { sdkRegistry, vault, chainRegistry }) => {
+        const walletId = req?.walletId;
+        const id = req?.id;
+        const claim = `${walletId}:${id}`;
+        if (inFlightQueueBroadcasts.has(claim)) {
+            throw new Error(`broadcast.queue: entry "${id}" is already being broadcast`);
+        }
+        inFlightQueueBroadcasts.add(claim);
+        try {
+            await ensureQueueLoaded();
+            const q = getQueue(walletId);
+            const idx = q.findIndex((entry) => entry.id === id);
+            if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
+            const entry = q[idx];
+            const sdk = sdkRegistry.get(entry.chainId);
+            // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
+            // encoder as a second argument and refuses without it ("Encoder client
+            // is required for broadcasting"), so calling it one-argument here meant
+            // every "Broadcast now" failed with an SDK developer message and the
+            // signed transaction stayed queued forever. Measured on an Android
+            // emulator against the LTC regtest venue, SSC-6. Same call the
+            // core queue drain and `broadcast.signedTx` below already make.
+            if (typeof sdk?.encoder?.broadcastTx !== 'function') {
+                throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks encoder.broadcastTx`);
+            }
+            // Panic-mode freeze. Broadcasting an already-signed tx invokes no signer,
+            // so without this it sails straight through an active freeze - the exact
+            // irreversible-effector gap the freeze exists to close. This host route
+            // maintains its own queue and bypasses core drainQueuedBroadcast (which
+            // already gates), so the same assertion is applied here at the new call site.
+            flows.assertSigningAllowed();
+            // `q` is the live array the queue Map holds and every renderer context
+            // mutates it through this one host, so a discard of a lower entry or
+            // another broadcast can shift it while this handler waits on the
+            // network. Removal after the await therefore re-resolves the entry by
+            // id rather than trusting the index captured above; the stale index
+            // would delete a different, still-valid signed transaction.
+            let result;
+            try {
+                result = await sdk.encoder.broadcastTx(entry.signedTxHex);
+            } catch (err) {
+                // The same permanence split the core queue applies,
+                // applied here too - this queue retries on demand and had no way to
+                // stop. A signed transaction whose inputs are gone can never
+                // confirm, so leaving it on the list invites the user to press
+                // "Broadcast now" forever on something already dead. Drop it from
+                // the queue and say why; the recovery is a fresh compose, not
+                // another attempt at these bytes. Transient failures stay queued,
+                // which is what the surface is for.
+                if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                    const cur = q.findIndex((e) => e.id === id);
+                    if (cur >= 0) q.splice(cur, 1);
+                    await persistQueue();
+                    // Same transition core's drain records for a permanent
+                    // rejection: the record stops netting and offers a re-compose.
+                    await settleQueuedPendingTx(vault, entry, {
+                        status: 'failed',
+                        error: err && err.message ? String(err.message) : String(err),
+                    });
+                }
+                throw err;
+            }
+            const cur = q.findIndex((e) => e.id === id);
+            if (cur >= 0) q.splice(cur, 1);
+            await persistQueue();
+            // Encoder result shape varies by chain, same as `broadcast.signedTx`
+            // below: normalize so the caller always sees { txid }.
+            const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
+            await settleQueuedPendingTx(vault, entry, {
+                status: 'broadcast',
+                broadcastAt: new Date().toISOString(),
+                txid: txid ?? entry.txid ?? null,
+                error: null,
+            });
+            // §36.3 / §5.3.4: the queued tx is what donates, so its ADS verdict is
+            // booked here, after the bytes landed and after the entry left the
+            // queue (a retry cannot reach it, so nothing books twice).
+            // `donationIncluded` is the verdict submitAction resolved for these
+            // exact bytes; it is carried, never re-derived from today's settings.
+            // Accounting is non-critical: a settings-write failure must not turn a
+            // landed broadcast into an error for the caller.
+            if (entry.adsCommit) {
+                try {
+                    await flows.commitAdsStep({
+                        vault,
+                        chainId: entry.adsCommit.chainId || entry.chainId,
+                        donationIncluded: entry.adsCommit.donationIncluded,
+                        chainRegistry,
+                    });
+                } catch (e) {
+                    console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
+                }
+            }
+            return { ...(result && typeof result === 'object' ? result : {}), txid };
+        } finally {
+            inFlightQueueBroadcasts.delete(claim);
+        }
     });
-    host.register('broadcast.queue.discard', async (req) => {
+    host.register('broadcast.queue.discard', async (req, { vault }) => {
         await ensureQueueLoaded();
         const q = getQueue(req?.walletId);
         const idx = q.findIndex((entry) => entry.id === req?.id);
+        const entry = idx >= 0 ? q[idx] : null;
         if (idx >= 0) q.splice(idx, 1);
         await persistQueue();
+        // Retire the PendingTx half too, through the same idempotent helper the
+        // core lane's Discard uses (it deletes only a record still 'queued').
+        if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+            try {
+                await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
+            } catch (_e) {
+                // Locked vault or missing record: the queue half is already gone.
+            }
+        }
         return { discarded: idx >= 0 };
     });
 

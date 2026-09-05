@@ -90,13 +90,13 @@ export function AdsSection() {
         <div style={STACK}>
             <ToggleRow
                 label="Automatic Donation System"
-                hint="Adds a small donation to outgoing transactions when the per-chain accumulator crosses your threshold."
+                hint="Sets aside a small amount on each outgoing transaction and sends it as one donation once it reaches the amount you choose below."
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}
             />
 
             {chainIds.length === 0 ? (
-                <Status text="No chain ADS profiles yet. They're seeded automatically when a chain is activated." />
+                <Status text="No chains set up for donations yet. Each one is added automatically when you activate that chain." />
             ) : null}
 
             {chainIds.map((chainId) => {
@@ -155,7 +155,7 @@ export function AdsSection() {
                                 {triggerIsDefault ? ' · default' : ' · custom'}
                                 <InfoTip
                                     aria="Trigger threshold help"
-                                    label="The wallet keeps a running per-chain donation accumulator and sends a single donation transaction once it reaches this amount. Higher thresholds amortise the network fee across more donations; too high and the donation never fires before you stop using the wallet. 'default' follows this release's recommended amount (future releases may retune it); clear the field to go back to it."
+                                    label="The wallet sets aside a small amount per chain and sends it as one donation transaction once it reaches this amount. Waiting for a bigger amount means one network fee covers a bigger donation; set it too high and the donation never fires before you stop using the wallet. 'default' follows this release's recommended amount (future releases may retune it); clear the field to go back to it."
                                 />
                             </span>
                             <input
@@ -184,7 +184,7 @@ export function AdsSection() {
                             <div style={ROW_HINT}>Donation address</div>
                             {isPlaceholder ? (
                                 <div style={{ ...ADDRESS_BOX, fontStyle: 'italic', color: 'var(--xc-text-muted)' }}>
-                                    Pending: real {displayName} donation address ships before mainnet GA.
+                                    Not set yet. A donation address for {displayName} arrives in a future release; until then nothing is sent on this chain.
                                 </div>
                             ) : (
                                 <div style={ADDRESS_BOX} aria-label={`${displayName} donation address`}>

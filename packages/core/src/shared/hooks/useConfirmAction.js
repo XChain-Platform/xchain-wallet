@@ -538,7 +538,14 @@ export function isCredentialFailure(err) {
  * carries one error per rejected sub-command under a single shared code, and a
  * code-scoped set let one "Sign anyway" clear all of them at once.
  *
- * @param {import('xchain-sdk').PreflightReport | null} report
+ * The type is the PANEL's accepted input rather than the SDK's return, for the
+ * same reason this function is shared: both surfaces are handed whatever their
+ * caller renders, including the funding-only reports DispenserDetail authors.
+ * It also cannot name the SDK - @xchain-wallet/core declares no dependency on
+ * xchain-sdk in any block, so `import('xchain-sdk').X` resolves to nothing from
+ * here whatever the SDK exports. See the typedef in components/PreflightPanel.jsx.
+ *
+ * @param {import('../components/PreflightPanel.jsx').PreflightReport | null} report
  * @param {Set<string>} acknowledged
  * @returns {boolean}
  */

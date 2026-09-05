@@ -52,9 +52,24 @@
 // really run, and the two answers are compared per URL. Constants are compared
 // too, because that is the failure message a person can act on.
 //
-// The sibling websites checkout is present in a full monorepo working tree and
-// absent from an isolated single-repo CI checkout, so a missing sibling SKIPS
-// loudly (never silently passes) the way _docs-repo.js does for the docs.
+// WHERE THIS RUNS, AND WHERE IT DOES NOT. The sibling websites checkout is
+// present in a full monorepo working tree and absent from an isolated
+// single-repo checkout, so this file skips there. That skip is a printed
+// message and an exit 0, which the smoke runner scores as a PASS, and
+// xchain-websites is not declared in .ci-siblings and is cloned by no workflow
+// under .github/, so this file has never executed on a wallet CI run. Read the
+// skip as "nothing was compared", never as coverage.
+//
+// It cannot simply be armed the way _docs-repo.js is: xchain-documentation is a
+// public repo an anonymous checkout resolves, and xchain-websites is private, so
+// declaring it in .ci-siblings without a working clone would only convert this
+// silence into a hard failure of the whole gate.
+//
+// The CI-ENFORCED copy of this comparison therefore lives on the other side of
+// the seam, in xchain-websites/test/apple-app-site-association.test.js, whose
+// venue does clone THIS repo and sets XCHAIN_REQUIRE_SIBLINGS=1 so the check
+// fails rather than skips. This file stays as the local platform-tree gate and
+// as the behavioural half, which imports the real parser; keep the two in step.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -71,9 +86,10 @@ const WEBSITES_ROOT = process.env.XCHAIN_WEBSITES_ROOT || join(root, '..', 'xcha
 const AASA_BUILD = join(WEBSITES_ROOT, 'xchain.io', 'build', 'aasa.build.js');
 
 if (!existsSync(AASA_BUILD)) {
-    console.log('SKIP: universal-link-claim-drift smoke - the association generator is not in this checkout. '
-        + `It lives in the sibling xchain-websites repo (expected at ${AASA_BUILD}); clone it beside this one, `
-        + 'or set XCHAIN_WEBSITES_ROOT, to run this gate.');
+    console.log('SKIP: universal-link-claim-drift smoke - NOTHING WAS COMPARED. The association generator is '
+        + `not in this checkout; it lives in the sibling xchain-websites repo (expected at ${AASA_BUILD}). `
+        + 'Clone it beside this one, or set XCHAIN_WEBSITES_ROOT, to run this gate. The claim-parity half is '
+        + 'gated in CI from the other side, by xchain-websites/test/apple-app-site-association.test.js.');
     process.exit(0);
 }
 

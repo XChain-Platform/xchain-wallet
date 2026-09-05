@@ -162,6 +162,11 @@ export const en = {
     // pre-validation: the indexer can still reject the action when the
     // block lands, and copy that promises otherwise is a lie the wallet
     // has no way to take back.
+    // Backend component names ("indexer", "decoder", "utxo-tracker") stay
+    // out of the strings: say "the service" for a backend that is behind or
+    // cannot answer, matching humanizeError's backend_behind copy, and keep
+    // "the network" for the chain and the mempool, which is what the sibling
+    // pending strings above already mean by it.
     'pending.row.awaitingNetwork': 'awaiting network',
     'pending.row.seen': 'pending',
     'pending.row.notSeen': 'not seen by network',
@@ -185,7 +190,7 @@ export const en = {
         'A node reported this transaction earlier and no longer does, and no block carries it yet.',
     'pending.detail.replacedHelp':
         'This wallet replaced this transaction with a newer one. Follow the replacement instead.',
-    'pending.detail.notValidated': 'Pending, not yet validated by the indexer.',
+    'pending.detail.notValidated': 'Pending, not yet validated by the service.',
     'pending.detail.firstSeen': 'First seen by the network {when}',
     'pending.detail.broadcastAt': 'Broadcast from this wallet {when}',
     'pending.detail.replacementTx': 'Replacement transaction: {txHash}',
@@ -210,7 +215,7 @@ export const en = {
     'pending.amount.sending': 'sending {amounts}',
     'pending.amount.receiving': 'receiving {amounts}',
     'pending.amount.moving': 'moves {amounts}',
-    'pending.amount.caveat': 'Pending, not yet validated by the indexer: {summary}',
+    'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
 
     // --- errors ---------------------------------------------------
     'error.vaultClosed': 'Wallet is locked. Unlock to continue.',

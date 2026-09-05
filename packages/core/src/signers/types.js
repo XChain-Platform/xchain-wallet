@@ -15,6 +15,14 @@
 // Mirror of the normalized PSBT decomposition returned by
 // `xchain-sdk`'s `WalletUtils.decomposePsbt(psbtHex)`. Keep this in
 // sync with `xchain-sdk/src/wallet.js`'s JSDoc.
+//
+// Satoshi amounts are NOT plain numbers. The producer emits a Number only
+// when the amount is exactly representable and an exact decimal STRING
+// above 2^53-1, and an input amount is null when neither witnessUtxo nor
+// nonWitnessUtxo resolves one. Declaring these `number` is what would
+// license Number arithmetic on a string amount, which is the >2^53 collapse
+// the string form exists to avoid, so the widened types below are load
+// bearing rather than pedantic.
 
 /**
  * @typedef {'p2wpkh'|'p2wsh'|'p2pkh'|'p2sh-p2wpkh'|'p2sh-p2wsh'|'p2sh'|'p2tr'|'unknown'} ScriptType
@@ -34,7 +42,7 @@
  * @property {string} prevTxHash                             display-order hex
  * @property {number} prevTxIndex
  * @property {number} sequence
- * @property {number} value                                  satoshis
+ * @property {number|string|null} value                      satoshis; exact decimal string above 2^53-1, null when unresolved
  * @property {string} scriptPubKeyHex
  * @property {ScriptType} scriptType
  * @property {number|null} sighashType
@@ -51,7 +59,7 @@
  * @property {string|null} address
  * @property {string} scriptPubKeyHex
  * @property {ScriptType} scriptType
- * @property {number} value                                  satoshis
+ * @property {number|string} value                           satoshis; exact decimal string above 2^53-1
  */
 
 /**

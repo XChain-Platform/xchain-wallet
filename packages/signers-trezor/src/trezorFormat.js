@@ -253,8 +253,13 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
 // yields addresses the rest of the wallet cannot see (funds appear missing),
 // so both networks are hardware-unsupported instead. Do not "fix" this by
 // restoring 'test'/'regtest' unless the firmware can be driven at 0'.
+//
+// Exported so TrezorSigner.coinTypeFor can resolve a coin short name back to
+// its chain family, and so the cross-signer parity suite can derive its
+// coverage set from the chains this seam actually supports instead of a
+// hand-listed copy that a new family would silently miss.
 /** @type {Record<string, string>} */
-const CHAIN_ID_TO_TREZOR_COIN = {
+export const CHAIN_ID_TO_TREZOR_COIN = {
     'bitcoin-mainnet': 'btc',
     'litecoin-mainnet': 'ltc',
     'dogecoin-mainnet': 'doge',

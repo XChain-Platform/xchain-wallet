@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last eighteen are component props: copy shipped through them
+// The last twenty-one are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -68,6 +68,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
+    'copyLabel', 'balanceText', 'submitLabel',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -233,6 +234,21 @@ for (const [attr, copy] of [
     assert.strictEqual(v.length, 1, `flags an ${attr} literal`);
     assert.match(v[0].message, new RegExp(attr));
 }
+// 18d. The same one-hop-earlier shape on three more props. PsbtSignForm's
+// ArtifactBlock forwards `copyLabel` to CopyButton, which renders it as the
+// button text AND as the accessible name, so the sink prop `label` never
+// sees the English. AmountField renders `balanceText` verbatim into the
+// amount footer, and its shipping call sites write the copy as a template
+// ("… available"). TokenWizard ships `submitLabel` as a prop default that
+// renders as button text (item 19b). None of the three names is used for a
+// technical payload anywhere in packages/*/src.
+v = findViolations(jsxAttr('copyLabel', literal('Copy signed PSBT')));
+assert.strictEqual(v.length, 1, 'flags a copyLabel literal');
+assert.match(v[0].message, /copyLabel/);
+v = findViolations(jsxAttr('balanceText', jsxExpr(template('', ' BTC available'))));
+assert.strictEqual(v.length, 1, 'flags template copy in a balanceText prop');
+assert.match(v[0].message, /balanceText/);
+
 // 18c. Toggle copy in a ternary attribute value. Both attribute paths
 // enumerated three value shapes (Literal, container Literal, container
 // TemplateLiteral); a ConditionalExpression matched none, and the generic
@@ -287,6 +303,14 @@ v = findViolations(fn([objectPattern(plainProp('value'), defaulted('label', lite
 assert.strictEqual(v.length, 1, 'flags a label = "Copy" prop default');
 assert.match(v[0].message, /label/);
 assert.strictEqual(v[0].node.type, 'Literal', 'reports the default value node');
+
+// 19b. TokenWizard's `submitLabel = 'Preview'` is the same shape: the copy
+// is a prop default that renders as the wizard's submit-button text, so no
+// JSX visitor could ever see the English.
+v = findViolations(fn([objectPattern(defaulted('submitLabel', literal('Preview')))]));
+assert.strictEqual(v.length, 1, 'flags a submitLabel = "Preview" prop default');
+assert.match(v[0].message, /submitLabel/);
+assert.strictEqual(v[0].node.type, 'Literal', 'reports the submitLabel default value node');
 v = findViolations(fn([objectPattern(defaulted('label', literal('Copy'), 'lbl'))]));
 assert.strictEqual(v.length, 1, 'judges the property key, not the local binding');
 v = findViolations(fn([objectPattern(defaulted('title', template('Copy ', ' items')))]));
@@ -426,5 +450,33 @@ const ruleSrc = read('tools/eslint/rules/no-jsx-literal-strings.js');
 assert.match(ruleSrc, /§54.*G172/, 'rule header references §54 / G172');
 assert.match(ruleSrc, /eslint-disable-next-line @xchain\/no-jsx-literal-strings/,
     'rule documents the per-line disable comment');
+
+// The wiring recipe has to be the flat-config one, and this is the only
+// thing standing between the prose and a fourth drift back. Both headers
+// once documented an eslintrc `plugins: ['@xchain']`, which was measured
+// to fail with "ESLint couldn't find the plugin \"@xchain/eslint-plugin\"":
+// that shortname names an INSTALLED npm package, never a repo-relative
+// file, and an eslintrc could not require() this ESM plugin anyway. The
+// `eslint --rule` fallback failed the same way ("Definition for rule …
+// was not found"). Only a config that imports the module and registers it
+// as an object loads the rule.
+const pluginSrc = read('tools/eslint/plugin.js');
+for (const [name, src] of [['plugin.js', pluginSrc], ['no-jsx-literal-strings.js', ruleSrc]]) {
+    assert.match(src, /import xchain from '\.\/tools\/eslint\/plugin\.js'/,
+        `${name} documents importing the plugin module`);
+    assert.match(src, /plugins: \{ '@xchain': xchain \}/,
+        `${name} documents registering the plugin object, not the eslintrc shortname`);
+    // Only the RECIPE line is forbidden: both headers still name the
+    // eslintrc form in prose, to say why it does not work.
+    assert.doesNotMatch(src, /^\/\/\s+plugins: \['@xchain'\]/m,
+        `${name} no longer offers the unresolvable eslintrc shortname as a recipe line`);
+}
+// `ecmaFeatures.jsx` is load-bearing in the runnable example: without it
+// every .jsx file dies on "Parsing error: Unexpected token <" before the
+// rule is ever consulted, so a recipe that omits it is still unrunnable.
+assert.match(pluginSrc, /ecmaFeatures: \{ jsx: true \}/,
+    'plugin.js documents the jsx parser option its example needs to parse .jsx at all');
+assert.doesNotMatch(pluginSrc, /^\/\/\s+(npx )?eslint --rule/m,
+    'plugin.js no longer offers the --rule CLI fallback as a runnable line; it cannot resolve the namespace');
 
 console.log('OK — no-jsx-literal-strings rule + plugin + filename filter smoke');

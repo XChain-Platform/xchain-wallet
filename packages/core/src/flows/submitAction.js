@@ -83,7 +83,7 @@ export function sendDeltaFromAction(actionData) {
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
  */
 
 /**
@@ -340,6 +340,11 @@ export async function submitAction({
                                 summary: pendingTxMeta?.actionSummary
                                     || `${actionData.action} on ${chainId}`,
                                 error: err.message,
+                                // Name the PendingTx stamped 'queued' above so
+                                // the queue's broadcast and discard handlers
+                                // can settle the durable half; without the id
+                                // the record stays 'queued' after the bytes land.
+                                pendingTxId: pending?.id ?? null,
                                 // Carry the ADS-commit intent so the queue's
                                 // eventual-success handler advances the
                                 // accumulator (a queued tx is what donates,

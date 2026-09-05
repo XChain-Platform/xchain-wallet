@@ -43,5 +43,4 @@ for (const [key, value] of Object.entries(en)) {
     dict[key] = pseudo(value);
 }
 
-export const pseudoRtl = dict;
 export default dict;

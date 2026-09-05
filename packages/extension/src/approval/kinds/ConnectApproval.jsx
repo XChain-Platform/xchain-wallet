@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { resolveApproval } from '../messaging.js';
+import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
+import { getSettings, resolveApproval } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './ConnectApproval.module.css';
 
@@ -38,21 +39,56 @@ const chainRegistry = registryLib.defaultRegistry();
 export function ConnectApproval({ id, payload, onReject }) {
     const origin = payload?.origin || '';
     const appName = payload?.appName || origin;
-    const requestedChains = Array.isArray(payload?.requestedChains)
-        ? payload.requestedChains
-        : [];
+    const requestedChains = useMemo(
+        () => (Array.isArray(payload?.requestedChains) ? payload.requestedChains : []),
+        [payload],
+    );
     const requestedAccounts = Array.isArray(payload?.requestedAccounts)
         ? payload.requestedAccounts
         : [];
 
-    const supported = chainRegistry.supportedChains();
-    const initialChains = requestedChains.length > 0
-        ? supported
-            .filter((d) => requestedChains.includes(d.id))
-            .map((d) => d.id)
-        : [];
+    // §9.7 Developer Mode: user-added chains live in settings.customChains
+    // and the background host seeds only ITS registry instance, so this
+    // realm installs them itself, the same way SignApproval does. The boot
+    // read in main.jsx races this window's own request fetch and returns
+    // nothing at all against a locked vault, so the connect prompt asks
+    // again on mount. Idempotent under the registry has() guard.
+    useEffect(() => {
+        getSettings()
+            .then((s) => {
+                try { registryLib.hydrateCustomChainsFromSettings(chainRegistry, s); } catch { /* bundled descriptors keep serving */ }
+            })
+            .catch(() => { /* locked vault or read failure; bundled descriptors keep serving */ });
+    }, []);
 
-    const [approvedChains, setApprovedChains] = useState(initialChains);
+    // Live descriptor list. Hydration lands after this component mounts, so
+    // a body-level supportedChains() read offers bundled chains only for the
+    // life of the window; the hook re-renders on the registry's version bump.
+    const supported = useSupportedChains(chainRegistry);
+
+    // Pre-select each requested chain the first time the registry knows it,
+    // tracked per id so a chain the user unchecks stays unchecked while a
+    // chain that arrives with hydration still starts ticked.
+    const preSelected = useRef(/** @type {Set<string> | null} */ (null));
+    if (preSelected.current === null) {
+        preSelected.current = new Set(
+            chainRegistry.supportedChains()
+                .filter((d) => requestedChains.includes(d.id))
+                .map((d) => d.id),
+        );
+    }
+
+    const [approvedChains, setApprovedChains] = useState(
+        /** @type {() => string[]} */ (() => Array.from(preSelected.current)),
+    );
+    useEffect(() => {
+        const fresh = supported
+            .map((d) => d.id)
+            .filter((id) => requestedChains.includes(id) && !preSelected.current.has(id));
+        if (fresh.length === 0) return;
+        for (const id of fresh) preSelected.current.add(id);
+        setApprovedChains((prev) => [...prev, ...fresh.filter((id) => !prev.includes(id))]);
+    }, [supported, requestedChains]);
     const [canSignMessage, setCanSignMessage] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));

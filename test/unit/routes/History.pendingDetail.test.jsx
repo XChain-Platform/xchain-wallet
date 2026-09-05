@@ -174,7 +174,7 @@ describe('History pending detail branch', () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
         const panel = panelIn(region);
-        expect(within(panel).getByText('Pending, not yet validated by the indexer.')).toBeTruthy();
+        expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
         expect(within(panel).getByText('In the mempool, waiting for a block')).toBeTruthy();
         // Nothing on the page may claim acceptance before an indexer has
         // seen the block: a mempool row is pre-validation.
@@ -196,7 +196,7 @@ describe('History pending detail branch', () => {
             mempool: [mempoolRow({ action: 'MINT', data: 'MINT|0|XCHAIN|100|^397' })],
         });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(/does not read MINT data/)).toBeTruthy();
+        expect(within(region).getByText(/does not read Mint data/)).toBeTruthy();
         expect(within(region).getByText('^397')).toBeTruthy();
         expect(region.textContent).not.toContain('100 XCHAIN to');
     });
@@ -221,14 +221,14 @@ describe('History pending detail branch', () => {
         // the user is reading changes key underneath them.
         const { messaging, view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText('Pending, not yet validated by the indexer.')).toBeTruthy();
+        expect(within(region).getByText('Pending, not yet validated by the service.')).toBeTruthy();
 
         messaging.getAddressMempool.mockResolvedValue([]);
         messaging.getAddressHistory.mockResolvedValue([confirmedRow(SEEN_HASH)]);
         window.dispatchEvent(new Event('focus'));
 
         await waitFor(() => {
-            expect(screen.queryByText('Pending, not yet validated by the indexer.')).toBeNull();
+            expect(screen.queryByText('Pending, not yet validated by the service.')).toBeNull();
         });
         // Same view, still open, now showing the confirmed form.
         const upgraded = screen.getByRole('region', { name: 'Action detail' });

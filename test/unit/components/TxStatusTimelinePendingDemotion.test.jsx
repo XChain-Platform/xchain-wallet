@@ -201,7 +201,7 @@ describe('TxStatusTimeline: confirmed rows are untouched', () => {
         />);
         expect(screen.getByText('Confirmed at block 812,345')).toBeTruthy();
         expect(screen.getByText(/3 confirmations/)).toBeTruthy();
-        expect(screen.getByText(/indexer at block 812,347/)).toBeTruthy();
+        expect(screen.getByText(/the service has reached block 812,347/)).toBeTruthy();
     });
 
     it('a confirmed entry that STILL carries stale pending metadata reads as confirmed', () => {

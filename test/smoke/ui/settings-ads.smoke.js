@@ -59,7 +59,7 @@ for (const field of ['lifetimeDonatedSats', 'lifetimeTxCount', 'accumulatedSats'
 
 // Donation address: placeholder vs real
 assert.match(src, /isPlaceholder\b/, 'placeholder branch present');
-assert.match(src, /Pending[: ].*real /, 'placeholder copy present');
+assert.match(src, /Not set yet\. A donation address for /, 'placeholder copy present');
 
 // Inputs disable when ADS is off so the user can't poke them
 assert.match(src, /disabled=\{!settings\.ads\.enabled\}/, 'inputs disable when ADS is off');

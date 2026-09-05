@@ -17,6 +17,7 @@ import { createRoot } from 'react-dom/client';
 import { flows, registry } from '@xchain-wallet/core';
 import '@xchain-wallet/core/ui/tokens.css';
 import { Router } from './Router.jsx';
+import { getSettings } from './messaging.js';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
 import { installExtensionWipeHook } from '../storage/wipeHook.js';
 
@@ -44,6 +45,18 @@ try {
             if (!r.ok) console.info('[xchain] approval chain-registry sync skipped:', r.reason);
         })
         .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
+} catch { /* never block approval boot */ }
+
+// §9.7 Developer Mode: user-added chains live in settings.customChains and
+// the background host seeds only ITS registry instance, so this realm
+// installs them itself from the settings record, the same way useSettings
+// does for the popup and desktop renderer. The approval window sits outside
+// MessagingProvider, hence the direct shim call. Vault locked or read
+// failed: bundled descriptors keep serving. Never blocks boot.
+try {
+    getSettings()
+        .then((s) => { registry.hydrateCustomChainsFromSettings(registry.defaultRegistry(), s); })
+        .catch(() => { /* locked vault or read failure; bundled descriptors keep serving */ });
 } catch { /* never block approval boot */ }
 
 const container = document.getElementById('xchain-approval-root');

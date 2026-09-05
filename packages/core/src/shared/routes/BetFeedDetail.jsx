@@ -52,7 +52,7 @@ export function isLiveFeedStatus(status) {
  * Written so a row with no status at all still counts. An older explorer that
  * omits the field must not silently empty every split.
  */
-export function isAcceptedBet(b) {
+function isAcceptedBet(b) {
     if (b?.bet_status === 'invalid') return false;
     if (typeof b?.status === 'string' && /^invalid/i.test(b.status)) return false;
     return true;

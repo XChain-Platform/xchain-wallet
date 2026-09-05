@@ -92,11 +92,3 @@ export function useContractManifest({ chainId, contractActionIndex, skip = false
 
     return manifest;
 }
-
-/**
- * Test helper. Clears the module-level manifest cache between spec
- * runs so a stale mock doesn't leak across cases.
- */
-export function __clearContractManifestCache() {
-    cache.clear();
-}

@@ -28,7 +28,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { versionPropertiesFor, versionXcconfigFor } from './version.js';
-import { PROFILE_STAMP_FILE, parseProfileStamp } from '../../web/buildProfile.js';
+import { BUILD_PROFILES, PROFILE_STAMP_FILE, parseProfileStamp } from '../../web/buildProfile.js';
 
 // The staged-bundle stamp. The same literal appears in
 // `android/app/src/main/../build.gradle`, which cannot import this file;
@@ -92,11 +92,18 @@ const stagedProfile = existsSync(stampPath)
 // somebody asked for. Allowing store-or-default instead would have
 // re-opened the exact hole the guard exists to close: a `default` bundle
 // wrapped in an artifact the manifest labels `store`.
+//
+// WHICH NAMES ARE VALID is not a decision this file makes. The membership
+// test reads BUILD_PROFILES, the same list parseProfileStamp filters the
+// staged side against, so both halves of the mismatch check below mean the
+// same thing by "a build profile". A private copy here would keep accepting
+// a name csp.js retired, and would reject a name csp.js added with a
+// message claiming it is unknown, which would be false.
 const releaseProfile = process.env.XCHAIN_MOBILE_RELEASE_PROFILE || 'store';
-if (!['store', 'default'].includes(releaseProfile)) {
+if (!BUILD_PROFILES.includes(releaseProfile)) {
     console.error(
         `@xchain-wallet/mobile: XCHAIN_MOBILE_RELEASE_PROFILE='${releaseProfile}' is not a`
-        + ' known build profile. Expected `store` or `default`.',
+        + ` known build profile. Expected one of ${BUILD_PROFILES.join(', ')}.`,
     );
     process.exit(1);
 }

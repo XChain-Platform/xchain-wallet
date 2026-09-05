@@ -247,7 +247,7 @@ export function Settings({
         {
             id: 'ads',
             title: 'Automatic Donation System',
-            description: 'Toggle ADS, per-chain amounts and thresholds, lifetime stats.',
+            description: 'Turn automatic donations on or off, set per-chain amounts and thresholds, and view lifetime totals.',
             keywords: 'donation ads automatic per chain amount threshold lifetime',
             kind: 'internal-drill',
             Component: AdsSection,
