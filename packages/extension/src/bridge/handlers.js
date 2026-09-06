@@ -840,6 +840,10 @@ async function executeSignAction(req, deps, ctx) {
     // (`to`, `tick`, `amount`) stay as fallbacks; nothing in the repo sends
     // both.
     const params = req.params ?? {};
+    // Shape first, BEFORE the prompt (the same order bridge.signPsbt uses): a
+    // request carrying a signing-divergence key must never reach the user, because
+    // the screen it would render is the wrong description of what would be signed.
+    assertNoSigningDivergenceParams(params);
     const toAddress = params.toAddress ?? params.to;
     const sendTick = params.asset ?? params.tick;
     // One of the published gaps is a UNIT gap, not a name gap: `amountRaw` is
@@ -981,7 +985,7 @@ async function executeSignAction(req, deps, ctx) {
     fromSource = fromSource ?? await requireSourceRecord(deps, req.chainId, spendFromAddress);
     if (actionName === 'SEND') {
         const submitted = await sendToken({
-            ...params,
+            ...pickFlowParams(actionName, params),
             from: fromSource,
             to: toAddress,
             tick: sendTick,
@@ -1002,7 +1006,7 @@ async function executeSignAction(req, deps, ctx) {
         // not per-asset. Mapping from/to restores the action; per-asset sweep
         // needs a core change and is deliberately left unwired here.
         const submitted = await sweepToken({
-            ...params,
+            ...pickFlowParams(actionName, params),
             from: fromSource,
             to: toAddress,
             vault: deps.vault,
@@ -1016,6 +1020,69 @@ async function executeSignAction(req, deps, ctx) {
         return signActionSuccess(req.chainId, submitted);
     }
     throw bridgeError('UNREACHABLE', 'supported action fell through');
+}
+
+// Page params that may reach the flow call, per action. The list is the
+// approval payload's own vocabulary and nothing else: approvalPayload renders
+// SEND as TICK / AMOUNT / DESTINATION / MEMO and SWEEP as DESTINATION plus the
+// five category flags, so every key here is a value the user was SHOWN.
+// `from` / `to` / `tick` / `amount` are absent on purpose: they are assigned
+// from the trusted, pre-approval values right after the spread, and a page key
+// under the same name would be overwritten anyway.
+//
+// Everything else the page sent is dropped. The published shapes
+// (bridge-spec SendActionParams / SweepActionParams) carry only
+// fromAddress / toAddress / asset / amountRaw / memo, so nothing spec-compliant
+// is lost, while `fee` / `feePerKb` / `rbf` (which sendToken and sweepToken DO
+// honour, and which no approval screen renders) can no longer be chosen by the
+// page.
+// `memo` is on BOTH entries, and that is load-bearing rather than tidy:
+// approvalPayload puts MEMO in `common`, which the SWEEP branch spreads, so the
+// approval screen renders a memo for a sweep and sweepToken then signs it
+// (flows/sweepToken.js sets params.MEMO from opts.memo). Allowing it for SEND
+// alone stripped it from a SWEEP after the screen had already shown it, which
+// is exactly the shown-but-not-signed divergence this allowlist exists to stop.
+const FLOW_PARAM_ALLOWLIST = {
+    SEND: ['memo'],
+    SWEEP: ['memo', 'balances', 'ownerships', 'orders', 'swaps', 'dispensers'],
+};
+
+// Options that REPLACE what gets signed while the approval payload keeps
+// describing the top-level to/tick/amount, so the screen and the signature can
+// never be reconciled after the fact:
+//   - `legs`: normalizeSendLegs (core/src/flows/sendLegs.js) takes opts.legs in
+//     preference to to/tick/amount, so a page-supplied array redirects the
+//     recipient and the value of a send the user approved at other numbers.
+//   - `prebuiltPsbt`: sendToken/sweepToken hand these bytes to submitWithSigner,
+//     which signs them verbatim and deliberately does NO rebuild, on the
+//     assumption the confirm pipeline composed and previewed them. The bridge
+//     never composes them, so that assumption does not hold here.
+// Rejected rather than dropped: a page that asks for either is asking for
+// something the wallet cannot honestly display, and a silent drop would turn a
+// deliberate attack into a confusing partial success.
+const FORBIDDEN_FLOW_PARAMS = ['legs', 'prebuiltPsbt'];
+
+function assertNoSigningDivergenceParams(params) {
+    for (const key of FORBIDDEN_FLOW_PARAMS) {
+        if (params?.[key] !== undefined) {
+            throw bridgeError(
+                'INVALID_PARAMS',
+                `${key} is not accepted over the bridge: it changes what is signed without `
+                + 'changing what the approval screen shows',
+            );
+        }
+    }
+}
+
+// The allowlisted subset of a page's params for `actionName`. Absent keys stay
+// absent (rather than becoming an explicit undefined) so the flows' own
+// defaults still apply.
+function pickFlowParams(actionName, params) {
+    const picked = {};
+    for (const key of FLOW_PARAM_ALLOWLIST[actionName] ?? []) {
+        if (params?.[key] !== undefined) picked[key] = params[key];
+    }
+    return picked;
 }
 
 // The vault's own record for a spending address, or ADDRESS_NOT_FOUND. The

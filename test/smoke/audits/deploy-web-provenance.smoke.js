@@ -34,7 +34,9 @@
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -203,6 +205,33 @@ try {
         nothingDeployed('UNLISTED ARTIFACT', webroot, r);
     }
 
+    // --- 5b. A headerless manifest cannot answer for a release ----------
+    //
+    // The bypass this closes: strip the `# ` header off a manifest and the
+    // hash rows still cover the tarball perfectly, so until 2026-09-05
+    // verify.sh's headerless branch warned and exited 0 under --no-sig
+    // with --tag never read. Deployment forwards --tag on every call and
+    // deploy-web.sh's own header promises that under --no-sig "the hash
+    // and the anchor are still checked", so the anchor half of that
+    // promise was false on the one effector that flips a live site: a
+    // checksum-only manifest built for another release passed preflight.
+    //
+    // The hashes here are CORRECT for this tarball, which is the point. A
+    // refusal on the hash would prove nothing about the anchor.
+    {
+        const bareDir = join(work, 'headerless');
+        mkdirSync(bareDir);
+        const bare = buildTarball(bareDir, GENUINE_MARKER);
+        const bareManifest = join(bareDir, 'RELEASE_HASHES.txt');
+        const sha = createHash('sha256').update(readFileSync(bare)).digest('hex');
+        writeFileSync(bareManifest, `${sha}  ./${TARBALL_NAME}\n`);
+        const webroot = freshWebroot();
+        const r = deploy({ tarball: bare, manifest: bareManifest, webroot, extra: ['--no-sig'] });
+        nothingDeployed('HEADERLESS MANIFEST', webroot, r);
+        check('HEADERLESS MANIFEST: says the manifest cannot be anchored to the tag',
+            /has no release header/.test(r.stderr) && r.stderr.includes(TAG), r.stderr);
+    }
+
     // --- 6. There is no way to deploy without a manifest ----------------
     //
     // The refusal has to be the ABSENCE of a bypass, not a flag nobody is
@@ -222,6 +251,75 @@ try {
         check('there is no flag that skips the manifest check',
             !/--(skip|no)-verify|--force\b/.test(src),
             'deploy-web.sh grew a bypass flag; the manifest check is the whole step');
+    }
+
+    // --- 6b. The bytes that were HASHED are the bytes that are UNPACKED --
+    //
+    // Verifying before extracting is not the same property as extracting
+    // what was verified. Until 2026-09-05 the script handed verify.sh the
+    // tarball's own directory and then re-opened that path with tar, so a
+    // writer who replaced the file between the two reads had the gate pass
+    // on the release and the site serve the replacement - and every case
+    // above stayed green, because each of them tampers BEFORE the check.
+    //
+    // Driven, not grepped, and driven WITHOUT a sleep: the script is run
+    // from a scratch directory whose verify.sh is a stand-in that runs the
+    // real one and then performs the swap, which puts the writer exactly in
+    // the window rather than near it. `HERE` is how deploy-web.sh finds
+    // verify.sh and is the only thing it takes from its own directory.
+    {
+        const raceDir = join(work, 'race');
+        mkdirSync(raceDir, { recursive: true });
+        const victim = buildTarball(raceDir, GENUINE_MARKER);
+        const raceManifest = writeManifest(raceDir, victim);
+
+        const attackerDir = join(work, 'race-replacement');
+        mkdirSync(attackerDir, { recursive: true });
+        const replacement = buildTarball(attackerDir, ATTACKER_MARKER);
+
+        const harness = join(work, 'race-harness');
+        mkdirSync(harness, { recursive: true });
+        copyFileSync(DEPLOY, join(harness, 'deploy-web.sh'));
+        writeFileSync(join(harness, 'verify.sh'), [
+            '#!/usr/bin/env bash',
+            '# A stand-in for verify.sh that runs the real one and then plays',
+            '# the concurrent writer, replacing the caller-named tarball the',
+            '# instant the check has passed. Deterministic where a sleep is',
+            '# not: the swap lands inside the window rather than near it.',
+            'bash "$RACE_REAL_VERIFY" "$@"',
+            'rc=$?',
+            'cp "$RACE_REPLACEMENT" "$RACE_VICTIM"',
+            'exit $rc',
+            '',
+        ].join('\n'));
+
+        const webroot = freshWebroot();
+        const r = spawnSync('bash', [join(harness, 'deploy-web.sh'), '--tarball', victim,
+            '--manifest', raceManifest, '--tag', TAG, '--webroot', webroot, '--no-sig'], {
+            encoding: 'utf8',
+            env: {
+                ...process.env,
+                RACE_REAL_VERIFY: join(root, 'tools', 'release', 'verify.sh'),
+                RACE_REPLACEMENT: replacement,
+                RACE_VICTIM: victim,
+            },
+        });
+
+        // The harness has to have actually raced, or the three checks below
+        // are a green that never had anything to catch.
+        check('RACE: the stand-in really did replace the tarball after the check',
+            readFileSync(victim).equals(readFileSync(replacement)),
+            'the swap never happened, so this case proves nothing');
+
+        check('RACE: the deploy still succeeds on the release it verified',
+            r.status === 0, `status=${r.status}\n${r.stderr}`);
+        const served = join(webroot, 'current', 'index.html');
+        check('RACE: and it is the VERIFIED bytes that are live, not the replacement',
+            existsSync(served) && readFileSync(served, 'utf8').includes(GENUINE_MARKER),
+            existsSync(served) ? readFileSync(served, 'utf8') : 'current/index.html absent');
+        const hits = spawnSync('grep', ['-rl', 'ATTACKER REBUILD', webroot], { encoding: 'utf8' });
+        check('RACE: the replacement marker reached nothing under the webroot',
+            !(hits.stdout || '').trim(), hits.stdout || '');
     }
 
     // --- 7. The signature path, where gpg is available ------------------

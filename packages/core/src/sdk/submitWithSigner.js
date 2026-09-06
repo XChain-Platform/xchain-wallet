@@ -273,14 +273,21 @@ export async function submitWithSigner({
             sdk,
             actionData,
             encoderOpts,
-            // `change` is the address the spender gets its leftovers back on and
-            // `sourceAddress` is the address the SDK funds FROM; they are the same
-            // address on every flow that sets them, and either one answers "who is
-            // spending" for the quote. Reading only `change` meant a flow that set
-            // one and not the other quoted with NO source, and an indexer dry run
-            // that needs a source answers `valid:false` - which the wallet reports
-            // as an unavailable price feed (D-146).
-            source: encoderOpts.change || encoderOpts.sourceAddress,
+            // Who is SPENDING, which the dry run behind this quote resolves the
+            // holder and the balance from. `sourceAddress` is the address the SDK
+            // funds from and is that spender on every flow that sets it; `change`
+            // is only where the leftovers land, and it stays as the fallback
+            // because a flow that sets one and not the other must still quote
+            // with a source rather than none (D-146).
+            //
+            // Precedence, not equivalence. The two WERE the same address when
+            // D-146 landed, and change rotation then broke that: submitAction
+            // rotates the self-change default onto a fresh internal address and
+            // leaves `sourceAddress` alone, so reading `change` first quoted the
+            // rotated address - unfunded, holding none of the token - and the
+            // indexer's `valid:false` surfaced as a NativeFeeForfeitError on a
+            // transaction that was perfectly fundable.
+            source: encoderOpts.sourceAddress || encoderOpts.change,
             onProgress,
         });
         // Step 1c: PRICE v1 oracle usage fee. A Mode B dispenser must pay its oracle

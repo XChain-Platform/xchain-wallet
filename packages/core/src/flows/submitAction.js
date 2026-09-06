@@ -290,6 +290,29 @@ export async function submitAction({
                 onProgress: composedOnProgress,
             });
         } catch (err) {
+            // Record the outcome on the PendingTx without letting the vault
+            // write BECOME the outcome. Two things depend on this block
+            // finishing: the classified broadcast error the caller switches on
+            // (re-compose vs queued retry), and the independent second
+            // durability half the host keeps through `onBroadcastFailure`. An
+            // un-guarded write let a rejecting `pendingTxs.put` exit the catch,
+            // which substituted a storage error for the classified one AND
+            // skipped the enqueue, losing the signed bytes with healthy queue
+            // storage. The failure rides on the error for diagnostics; `name`,
+            // `message` and type are untouched because the messaging envelope
+            // carries only those.
+            const stampPending = async (patch) => {
+                if (!pending) return;
+                try {
+                    await writePending(patch);
+                } catch (writeErr) {
+                    if (err && typeof err === 'object') {
+                        err.pendingTxWriteError = writeErr && writeErr.message
+                            ? String(writeErr.message)
+                            : String(writeErr);
+                    }
+                }
+            };
             // Cluster G FOLLOWUP 1: broadcast leg failed after a clean
             // sign. Stamp the PendingTx as `queued` (with the signed
             // txHex) so the §49.5 queue can drain it later, then fire
@@ -311,25 +334,21 @@ export async function submitAction({
                     ? BROADCAST_FAILED_PERMANENT_NAME
                     : BROADCAST_FAILED_TRANSIENT_NAME;
                 if (permanence === 'permanent') {
-                    if (pending) {
-                        await writePending({
-                            status: 'failed',
-                            txid: err.txid,
-                            txHex: err.signedTxHex,
-                            error: err && err.message ? String(err.message) : String(err),
-                        });
-                    }
+                    await stampPending({
+                        status: 'failed',
+                        txid: err.txid,
+                        txHex: err.signedTxHex,
+                        error: err && err.message ? String(err.message) : String(err),
+                    });
                     // Do NOT invoke onBroadcastFailure: there is nothing to
                     // queue. The caller sees the thrown error and re-composes.
                 } else {
-                    if (pending) {
-                        await writePending({
-                            status: 'queued',
-                            txid: err.txid,
-                            txHex: err.signedTxHex,
-                            error: err && err.message ? String(err.message) : String(err),
-                        });
-                    }
+                    await stampPending({
+                        status: 'queued',
+                        txid: err.txid,
+                        txHex: err.signedTxHex,
+                        error: err && err.message ? String(err.message) : String(err),
+                    });
                     if (typeof onBroadcastFailure === 'function') {
                         try {
                             await onBroadcastFailure({

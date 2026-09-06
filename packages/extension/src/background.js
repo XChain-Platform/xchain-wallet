@@ -229,10 +229,19 @@ async function ensureHost() {
         // No unlocked session. The popup must unlock + re-init the host.
         return null;
     }
-    vault = new storageLib.Vault({
-        backend: new ChromeStorageBackend(),
-        masterKey,
-    });
+    // Zero the loaded buffer once the Vault has taken its private copy; the
+    // constructor copies, and `vault.close()` only clears that copy. Leaving
+    // this one to the collector keeps plaintext key bytes in worker heap for
+    // the whole unlocked session, against the fill(0) convention every other
+    // key-loading path here follows.
+    try {
+        vault = new storageLib.Vault({
+            backend: new ChromeStorageBackend(),
+            masterKey,
+        });
+    } finally {
+        masterKey.fill(0);
+    }
     // Guard vault.open() only: a later failure (a watcher, the panic-mode load)
     // leaves the key valid, so force-locking there would cost a usable session.
     try {
@@ -549,17 +558,34 @@ function noteAutoLockActivity() {
     stampAutoLockActivity(now).catch(() => { /* best-effort */ });
 }
 
+// Set when a lock attempt failed to clear a secret. It keeps the idle
+// backstop alive across such a lock: teardown has already nulled host/vault,
+// so `maybeAutoLock`'s "already locked" guard would otherwise refuse the very
+// retry the retained auto-lock record exists to drive.
+let lockCleanupPending = false;
+
 async function lockWalletNow() {
+    // Clear the auto-lock record only once the lock is confirmed. Clearing it
+    // first meant a lock that threw part-way took the retry state with it, so
+    // no later alarm re-attempted while a session secret was still live.
+    try {
+        await handleWalletLock(null, {
+            sessionBackend: new ChromeSessionBackend(),
+            signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
+            onLocked: () => tearDownHost(),
+        });
+    } catch (err) {
+        lockCleanupPending = true;
+        throw err;
+    }
+    lockCleanupPending = false;
     await clearAutoLockState();
-    await handleWalletLock(null, {
-        sessionBackend: new ChromeSessionBackend(),
-        signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
-        onLocked: () => tearDownHost(),
-    });
 }
 
 async function maybeAutoLock() {
-    if (!host || !vault) return;  // already locked; nothing to do
+    // already locked; nothing to do, unless a previous lock left a secret
+    // behind and is waiting on this alarm to retry the clear.
+    if ((!host || !vault) && !lockCleanupPending) return;
     let state;
     try { state = await readAutoLockState(); } catch { return; }
     if (!shouldAutoLock(state, Date.now())) return;
@@ -586,12 +612,22 @@ attachSessionMetaListener({
         // backstop (with the correct idleMs + demo-skip) once Home mounts.
         clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
+        // A session is legitimately live again, so any secret a previous
+        // failed lock left behind is no longer something to chase.
+        lockCleanupPending = false;
         return ensureHost().catch((err) => {
             console.error('[xchain] ensureHost after unlock failed:', err);
         });
     },
-    onLocked: () => {
-        clearAutoLockState().catch(() => { /* best-effort */ });
+    onLocked: (result) => {
+        // Keep the auto-lock record when a secret survived the clear: it is
+        // the only thing that brings the idle alarm back to finish the job.
+        if (result?.secretsCleared === false) {
+            lockCleanupPending = true;
+        } else {
+            lockCleanupPending = false;
+            clearAutoLockState().catch(() => { /* best-effort */ });
+        }
         tearDownHost();
     },
 });

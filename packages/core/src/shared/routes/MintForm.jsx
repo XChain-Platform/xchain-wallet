@@ -329,6 +329,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                             encoding: composed.encoding,
                             actionString: composed.actionString,
                             version: composed.version,
+                            // On the chunk lane compose deliberately left these outputs
+                            // OFF the previewed PSBT because they ride the reveal the
+                            // submit path builds, so dropping them here burns the value
+                            // the commit reserved for them (see useActionConfirmFlow).
+                            deferredFeeOutput: composed.deferredFeeOutput || null,
+                            deferredOutputs: composed.deferredOutputs || [],
+                            // ...and the change the reveal must be built with, or its
+                            // surplus sweep lands on the un-rotated spending address.
+                            revealOpts: composed.revealOpts || null,
                             // The donation verdict these bytes actually carry, so the submit
                             // path books from compose time rather than a fresh snapshot.
                             adsDonation: { included: !!composed.adsPlan?.canSubmit },

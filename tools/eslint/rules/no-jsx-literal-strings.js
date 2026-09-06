@@ -34,9 +34,9 @@
 //     emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
-//     copyLabel, balanceText, submitLabel
+//     copyLabel, balanceText, submitLabel, what, prefix, noun
 //     (the USER_FACING_ATTRS set below is the authority; keep this list
-//     in step with it). The last twenty-one are component props rather
+//     in step with it). The last twenty-four are component props rather
 //     than DOM attributes: shipping components render copy through them,
 //     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -49,10 +49,17 @@
 //     English in an interpolated aria-label as invisible, so that copy
 //     never reached the translator index. Pure-interpolation templates
 //     like {`${a}/${b}`} stay silent: every static chunk is trivial.
-//   - JSXExpressionContainer holding a Literal, in JSX content:
-//                              <span>{'literal'}</span>    → flagged.
+//   - JSXExpressionContainer in JSX content, holding a Literal, a
+//     template or a ternary / `||` fallback:
+//                              <span>{'literal'}</span>          → flagged
+//                              <span>{`+${n} more`}</span>       → flagged
+//                              {side === 'buy' ? 'Buy' : 'Sell'} → flagged.
+//     The same three value shapes the attribute paths judge; a
+//     Literal-only test here read child ternary and template copy as
+//     invisible, so that English never reached the translator index.
 //     An attribute's container is covered by the JSXAttribute case, so
-//     the content visitor skips it rather than reporting twice.
+//     the content visitor skips it rather than reporting twice, which is
+//     also what keeps className={cond ? 'btn' : 'btn--ghost'} silent.
 //
 // What the rule allows:
 //
@@ -170,6 +177,28 @@ const USER_FACING_ATTRS = new Set([
     'copyLabel',
     'balanceText',
     'submitLabel',
+    // Three copy props the set still had no name for. QueuedResultPanel
+    // interpolates `what` into `Your ${what}` and renders it in the queued
+    // hint, and nineteen routes pass it as a literal ("cross-chain swap",
+    // "dispenser", "sweep"); StalenessLabel ships `prefix = 'Last synced'`
+    // as a destructured default and renders it into `${prefix} … ago`,
+    // mounted from History; tickerGrammarError defaults `{ noun = 'Ticker' }`
+    // and interpolates it into the validation line the user reads. Checked
+    // across packages/*/src for a technical use: the only same-named one is
+    // nativeVault.decodeReadReply's `what = 'vault'`, a plain parameter
+    // default rather than a JSX attribute or an ObjectPattern key, so it is
+    // out of both gates' reach. `value` still stays out of the set, because
+    // CopyButton takes its clipboard payload under that name.
+    //
+    // The style guide's `kicker` and `note` are deliberately NOT here: both
+    // occur only under packages/web/src/style-guide, a developer surface no
+    // route outside that directory mounts, so their prose documents
+    // components rather than addressing a wallet user. If that surface is
+    // ever meant to be in scope, the lever is the set AND a decision about
+    // translating developer documentation, not one without the other.
+    'what',
+    'prefix',
+    'noun',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -409,6 +438,34 @@ export function findViolations(node, options = {}) {
             });
             // Don't descend further; the literal is terminal.
             return;
+        } else if (n.type === 'JSXExpressionContainer') {
+            // Content copy written as a template or a ternary / `||`
+            // fallback, e.g. {`+${n} more`} or {side === 'buy' ? 'Buy' :
+            // 'Sell'}. The attribute paths above already judge these two
+            // shapes; a Literal-only test here read the same English as
+            // invisible, so child copy never reached the translator index.
+            // An attribute's container never arrives here: the JSXAttribute
+            // branch returns after stepping into its `expression`, which is
+            // what keeps className={cond ? 'btn' : 'btn--ghost'} silent.
+            const fromTemplate = templateCopy(n.expression, allow, minLength);
+            if (fromTemplate !== null) {
+                out.push({
+                    node: n.expression,
+                    message: `Inline JSX expression \`${truncate(fromTemplate)}\` should use t('key') with placeholders.`,
+                });
+            } else {
+                const fromBranch = branchCopy(n.expression, allow, minLength);
+                if (fromBranch !== null) {
+                    out.push({
+                        node: n.expression,
+                        message: `Inline JSX branch copy "${truncate(fromBranch)}" should use t('key').`,
+                    });
+                }
+            }
+            // Fall through to the generic recursion rather than returning:
+            // a branch can hold JSX of its own, e.g. {cond ? <p>Hi</p> :
+            // 'Dismiss'}, and nothing below reports a bare Literal or a
+            // bare TemplateLiteral, so no shape is counted twice.
         }
 
         // Generic recursion through the AST.
@@ -505,6 +562,18 @@ function create(context) {
             if (expr?.type === 'Literal' && typeof expr.value === 'string'
                 && !isTrivialString(expr.value, allow, minLength)) {
                 context.report({ node: expr, message: 'Inline JSX expression string should be moved to the i18n dictionary' });
+                return;
+            }
+            // Template and ternary / `||` copy rendered as a child, e.g.
+            // {`+${n} more`} or {side === 'buy' ? 'Buy' : 'Sell'}. Mirrors
+            // the two attribute branches above; the paths must stay in step,
+            // and a Literal-only test here let child copy ship untranslated.
+            if (templateCopy(expr, allow, minLength) !== null) {
+                context.report({ node: expr, message: "Inline JSX expression template copy should use t('key') with placeholders" });
+                return;
+            }
+            if (branchCopy(expr, allow, minLength) !== null) {
+                context.report({ node: expr, message: "Inline JSX branch copy should use t('key')" });
             }
         },
         ObjectPattern(node) {

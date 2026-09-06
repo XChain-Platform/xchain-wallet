@@ -1261,13 +1261,10 @@ export function __resetForTests() {
     host = null;
 }
 
+// Only a GCM tag mismatch is a wrong password. Matching error TEXT instead
+// turned any backend message containing "auth" (or "tag" inside a word such
+// as "staging") into an invalid-password error; core's aead now types the
+// tag mismatch, so storage and format faults surface as themselves.
 function isAeadAuthFailure(err) {
-    if (!err) return false;
-    const name = err.name || '';
-    const msg = err.message || String(err);
-    return (
-        name === 'OperationError' ||
-        name === 'InvalidAccessError' ||
-        /operation[- ]?error|auth|tag/i.test(msg)
-    );
+    return /** @type {any} */ (err)?.name === 'AeadAuthError';
 }

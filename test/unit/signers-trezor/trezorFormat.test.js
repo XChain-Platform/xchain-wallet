@@ -144,6 +144,24 @@ describe('toTrezorSignTransaction', () => {
             .toThrow(/non-empty/);
     });
 
+    it('refuses a nonzero locktime rather than dropping it from the payload', () => {
+        // The Connect payload has no locktime key, so forwarding is impossible
+        // and silence would return an immediately spendable transaction while
+        // reporting success under the requested timelock.
+        const d = makeDecomposed();
+        d.locktime = 900000;
+        expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
+            .toThrow(/locktime 900000.*only locktime 0/s);
+    });
+
+    it('builds an unchanged payload for locktime 0 and for an absent locktime', () => {
+        const zero = makeDecomposed();
+        zero.locktime = 0;
+        const base = toTrezorSignTransaction({ decomposed: makeDecomposed(), coin: 'btc', signingPaths });
+        expect(toTrezorSignTransaction({ decomposed: zero, coin: 'btc', signingPaths })).toEqual(base);
+        expect('locktime' in base).toBe(false);
+    });
+
     it('throws on signingPaths entry missing path', () => {
         expect(() => toTrezorSignTransaction({
             decomposed: makeDecomposed(),

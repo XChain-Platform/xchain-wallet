@@ -118,5 +118,3 @@ export function useInertBackground(modalRootRef, { active } = {}) {
         };
     }, [active, modalRootRef]);
 }
-
-export { FOCUSABLE_SELECTOR, focusableWithin };

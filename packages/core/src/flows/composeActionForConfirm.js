@@ -49,12 +49,49 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
  */
 
 /**
- * @typedef {import('./composeForConfirm.js').ComposedAction & { tamperVerified: true }} VerifiedComposedAction
+ * What actually crosses the host boundary, which is NOT `ComposedAction`.
+ *
+ * `ComposedAction` is the INTERNAL shape composeForConfirm returns; the
+ * envelope below drops two of its fields (`encoderOpts`, `carrierScripts` -
+ * host-side build material the popup neither needs nor can act on) and adds
+ * twelve the compose step never had (the fee lane, the deferred reveal set,
+ * the exact fees, the projection, the decoded intent). Declaring it as
+ * `ComposedAction & { tamperVerified: true }` was wrong in both directions at
+ * once, and the three shells each restated a nine-field subset of it whose
+ * types also denied the nullability the bare-payment lane relies on. There is
+ * no typecheck on these packages, so this typedef is the only contract there
+ * is, and JSDoc alone cannot fail a build here. The key-set assertions in
+ * `test/unit/flows/composeActionForConfirm.test.js` are what enforce it: they
+ * read the @property names below back out of this file and compare them to the
+ * keys the function actually returns, so a field added to one and not the
+ * other is a red test rather than a fourth stale declaration.
+ *
+ * @typedef {Object} HostComposeEnvelope
+ * @property {string|null} actionString      the composed action string; NULL on a bare native payment
+ * @property {string|null} action            action name; NULL on a bare native payment
+ * @property {number|string|null} version    action version; NULL on a bare native payment
+ * @property {boolean} bareNativePayment     true when there is no XChain action, only a coin payment
+ * @property {string} chainId                the chain these bytes were built for
+ * @property {string} psbt                   the exact PSBT hex the modal previews and the signer signs
+ * @property {string|null} encoding          the encoder's chosen encoding; NULL on a bare native payment
+ * @property {object|null} quote             native-fee quote, when native-fee mode was active
+ * @property {boolean} payFeeInNativeCoin    which lane pays the protocol fee
+ * @property {{ address: string, value: number|string }|null} deferredFeeOutput  protocol-fee output the reveal emits
+ * @property {Array<{ address: string, value: number|string }>} deferredOutputs  every output the reveal emits
+ * @property {{ change: string|null, rawData: string|null }|null} revealOpts     what the reveal must be built with
+ * @property {object} adsPlan                resolved ADS plan
+ * @property {ReturnType<typeof import('./confirmChecks.js').buildExpectedOutputs>} expectedOutputs
+ * @property {number|null} networkFeeSats    exact miner fee of the built bytes; NULL when not derivable
+ * @property {number|null} protocolFeeSats   protocol fee in the native coin; NULL in XCHAIN-fee mode
+ * @property {string|null} xchainFee         protocol fee in XCHAIN; NULL in native mode / unquotable
+ * @property {{ deltas: object[], sideEffects: object[], notes: string[] }|null} simulation  NULL when uncomputable
+ * @property {object|null} decoded           the intent described from the action string; NULL when undescribable
+ * @property {true} tamperVerified           reaching the caller at all means the checks passed
  */
 
 /**
  * @param {ComposeActionForConfirmOpts} opts
- * @returns {Promise<VerifiedComposedAction>}
+ * @returns {Promise<HostComposeEnvelope>}
  */
 export async function composeActionForConfirm({
     vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts, source, ownAddresses, signal,
@@ -124,13 +161,27 @@ export async function composeActionForConfirm({
     // knowable here and belongs in the number the user is asked to approve.
     // Off the chunk lanes the two functions agree exactly.
     const decomposed = sdk.wallet.decomposePsbt(composed.psbt);
+    // Everything the reveal re-emits as a real output, which is the WHOLE
+    // deferred set and not the protocol fee alone: a Mode B dispenser's oracle
+    // usage fee, an ADS donation and a native payment output all ride the reveal
+    // too. Subtracting only the fee reported the rest of the carrier value as
+    // miner fee, and the confirm screen presents that number as the exact
+    // network fee - so a 1,000-sat commit fee carrying 6,000 sats of reveal
+    // payments in an 8,000-sat carrier read as 8,000 instead of 3,000.
+    //
+    // Same precedence submitWithSigner applies when it BUILDS the reveal (the
+    // whole set, else the fee alone, else nothing), so the number on screen and
+    // the outputs on chain cannot come from different rules. The quote is the
+    // last fallback, for an envelope from a composer that carries neither field.
+    const revealOutputs = Array.isArray(composed.deferredOutputs) && composed.deferredOutputs.length
+        ? composed.deferredOutputs
+        : (composed.deferredFeeOutput ? [composed.deferredFeeOutput] : []);
     const networkFeeSats = totalNetworkFeeSats(decomposed, {
         carrierScripts: composed.carrierScripts,
         ownAddresses: own,
-        // The reveal re-emits the native-coin protocol fee as a real output, so
-        // that slice of the carrier value is not miner fee. It is the protocol
-        // fee's job to surface it, not this number's.
-        revealOutputSats: Number(composed.quote?.requiredFeeSats) || 0,
+        revealOutputSats: revealOutputs.length
+            ? revealOutputs.reduce((sum, o) => sum + (Number(o?.value) || 0), 0)
+            : Number(composed.quote?.requiredFeeSats) || 0,
     });
     assertNoTamper({
         psbtHex: composed.psbt,
@@ -249,9 +300,17 @@ export async function composeActionForConfirm({
                 action: parsed.action,
                 params: parsed.params,
                 balances: balancesFromSdk(sdkBalances),
+                // NULL, not '0'. `networkFeeSats` is null exactly when the fee
+                // could not be read from the built bytes (a PSBT missing an
+                // input value, a carrier count that does not match the scripts),
+                // and '0' told the simulator the transaction was free: a 1 BTC
+                // send from 10 BTC then projected a flat 10 -> 9 with the charge
+                // nowhere on the screen and nothing saying it was missing. The
+                // same rule as the catch below, one step earlier: a number the
+                // wallet cannot compute is absent, never a zero.
                 feeEstimate: Number.isFinite(networkFeeSats)
                     ? satsToCoinDecimal(networkFeeSats)
-                    : '0',
+                    : null,
                 protocolFee,
                 chainId,
                 chainRegistry,

@@ -31,12 +31,16 @@
 // WHAT IS COMPARED, and why not more. The output set (count, order,
 // scriptPubKey, value) and the input outpoints (txid:vout, in order) are the
 // whole of "where the money goes and what is spent", and they are the fields
-// both converters carry across. Version and locktime are deliberately NOT
-// compared: toLedgerCreatePayment passes no version at all (hw-app-btc picks
-// one) and the Trezor payload carries neither version nor locktime, so
-// comparing either would refuse every legitimate hardware send rather than
-// catch a tampered one. Witness and scriptSig data are not compared either -
-// they are the signature, which is exactly what the device is there to add.
+// both converters carry across. The locktime is compared too, because a reply
+// that dropped it is spendable now rather than at the height the user
+// approved: toLedgerCreatePayment forwards lockTime (ledgerFormat.js) and
+// toTrezorSignTransaction refuses a nonzero one pre-device (its payload cannot
+// carry the field), so neither lane can legitimately return a locktime other
+// than the one the PSBT asked for. Version is still deliberately NOT compared:
+// toLedgerCreatePayment passes none at all and hw-app-btc picks one, so
+// comparing it would refuse every legitimate hardware send rather than catch a
+// tampered one. Witness and scriptSig data are not compared either - they are
+// the signature, which is exactly what the device is there to add.
 
 import { SignerStatusError } from './Signer.js';
 
@@ -213,5 +217,19 @@ export function assertSignedTxMatchesPsbt({ txHex, decomposed, signerId }) {
         if (wantPoint !== gotPoint) {
             throw refusal(`input ${i} spends ${gotPoint}, the PSBT spent ${wantPoint}`);
         }
+    }
+
+    // Compare the timelock too: a reply that dropped it is spendable NOW,
+    // which is the opposite of what the user approved, and no other check
+    // here would notice. Both lanes can carry the field honestly now - Ledger
+    // forwards lockTime into createPaymentTransaction, and the Trezor
+    // converter refuses a nonzero one before the device sees it - so a
+    // mismatch is a real divergence rather than a converter that never had it.
+    const wantLocktime = Number(decomposed.locktime || 0);
+    if (!Number.isFinite(wantLocktime)) {
+        throw refusal(`the PSBT's locktime ${String(decomposed.locktime)} is not a number`);
+    }
+    if (tx.locktime !== wantLocktime) {
+        throw refusal(`it has locktime ${tx.locktime}, the PSBT asked for ${wantLocktime}`);
     }
 }

@@ -834,6 +834,33 @@ try {
         check('verify.sh catches a tampered artifact', tampered.status === 1,
             `${tampered.stdout}${tampered.stderr}`);
 
+        // A HEADERLESS MANIFEST CANNOT ANSWER FOR A RELEASE, and until
+        // 2026-09-05 it was allowed to. Strip the `# ` lines and the hash
+        // rows still cover the artifacts perfectly, so --no-sig printed a
+        // warning and exited 0 with --tag never consulted: a checksum-only
+        // manifest for another release satisfied a request for this one, on
+        // the path deploy-web.sh runs before it flips a live site. Both
+        // halves are pinned here, because the fix has to keep the genuinely
+        // unanchored hash-only mode the warning exists to serve.
+        const bare = stage();
+        const barePath = join(bare, 'RELEASE_HASHES.txt');
+        const bareWrite = sh([VERIFY, '--input', bare, '--recompute'], { env });
+        check('fixture: --recompute writes the manifest to strip',
+            bareWrite.status === 0, bareWrite.stderr);
+        writeFileSync(barePath,
+            readFileSync(barePath, 'utf8').split('\n').filter((l) => !l.startsWith('#')).join('\n'));
+        const anchored = sh([VERIFY, '--input', bare, '--tag', TAG, '--no-sig'], { env });
+        check('verify.sh refuses a headerless manifest when a tag was asked for',
+            anchored.status === 1, `${anchored.stdout}${anchored.stderr}`);
+        check('and says the missing header is why it cannot answer for that tag',
+            /has no release header/.test(anchored.stderr) && anchored.stderr.includes(TAG),
+            anchored.stderr);
+        const unasked = sh([VERIFY, '--input', bare, '--no-sig'], { env });
+        check('but a bare hash check with no anchor requested still passes',
+            unasked.status === 0, `${unasked.stdout}${unasked.stderr}`);
+        check('and still says out loud that the manifest has no header',
+            /no header/.test(unasked.stderr), unasked.stderr);
+
         // verify.sh must be able to read what verify.sh writes. Found
         // 2026-08-02: `--recompute` wrote a manifest verify.sh then refused on
         // any tag, because the profile check keyed on a header line a recompute

@@ -58,6 +58,7 @@ import {
     HID_VENDOR_ALLOWLIST,
     attachHidPermissions,
     isAllowedHidVendor,
+    isRemoteHidOrigin,
 } from '../../../packages/desktop/main/permissions.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -442,7 +443,59 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
         false,
         'missing vendorId rejected',
     );
+
+    // The requesting FRAME decides, not its embedder. Electron's
+    // PermissionRequest carries `requestingUrl`; before it was consulted a
+    // connect.trezor.io subframe was judged by the app page hosting it.
+    permHandler(
+        { getURL: () => appIndex },
+        'hid',
+        (ok) => { granted = ok; },
+        { isMainFrame: false, requestingUrl: 'https://connect.trezor.io/9/popup.html' },
+    );
+    assert.equal(granted, false, 'hid denied to a remote subframe inside the app window');
+    permHandler(
+        { getURL: () => appIndex },
+        'hid',
+        (ok) => { granted = ok; },
+        { isMainFrame: true, requestingUrl: appIndex },
+    );
+    assert.equal(granted, true, 'hid still granted when the requesting frame is the app');
+
+    // Device grants are origin-gated too. Electron can serve a STORED
+    // device permission without re-running the request handler, so an
+    // allow-listed vendor from a remote origin has to be refused here.
+    assert.equal(
+        deviceHandler({
+            deviceType: 'hid',
+            origin: 'https://connect.trezor.io',
+            device: { vendorId: 0x2C97 },
+        }),
+        false,
+        'Ledger device refused to a remote https origin',
+    );
+    assert.equal(
+        deviceHandler({ deviceType: 'hid', origin: 'file://', device: { vendorId: 0x2C97 } }),
+        true,
+        'Ledger device allowed to the app file origin',
+    );
+    assert.equal(
+        deviceHandler({ deviceType: 'hid', origin: 'null', device: { vendorId: 0x2C97 } }),
+        true,
+        'Ledger device allowed when Chromium reports an opaque origin',
+    );
 }
+
+// isRemoteHidOrigin is one-sided on purpose: it rejects what is provably
+// remote and never guesses about an origin it cannot read. Both `file://`
+// and `null` are spellings Chromium uses for the app's own renderer, so
+// denying either would deny the app's own device picker.
+assert.equal(isRemoteHidOrigin('https://connect.trezor.io'), true, 'https origin is remote');
+assert.equal(isRemoteHidOrigin('http://localhost:5173'), true, 'http origin is remote');
+assert.equal(isRemoteHidOrigin('chrome-extension://abc'), true, 'extension origin is remote');
+assert.equal(isRemoteHidOrigin('file://'), false, 'the file origin is not remote');
+assert.equal(isRemoteHidOrigin('null'), false, 'an opaque origin is not treated as remote');
+assert.equal(isRemoteHidOrigin(undefined), false, 'an absent origin is not treated as remote');
 
 // attachHidPermissions rejects invalid sessions.
 assert.throws(

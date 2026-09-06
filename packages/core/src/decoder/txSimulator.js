@@ -51,6 +51,10 @@
  * @property {string} [feeAmount]  set on isFee rows; the raw fee amount as a decimal string
  * @property {string} [feeLabel]   set on isFee rows the UI must not label "Network fee"
  * @property {boolean} [isProtocolFee] true on the protocol-fee row
+ * @property {boolean} [afterUnknown]  `after` is not projectable; `before` still holds. Renderers
+ *                                     must say so rather than printing an empty post-state.
+ * @property {boolean} [feeUnknown]    set on an isFee row whose amount could not be determined;
+ *                                     the row carries no `feeAmount`.
  */
 
 /**
@@ -107,7 +111,12 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} opts.action
  * @param {Record<string, unknown>} [opts.params]
  * @param {BalanceLookup[]} [opts.balances]   current balances at the source address (token rows + a coin row)
- * @param {string} [opts.feeEstimate]         coin-denominated MINER fee, decimal string
+ * @param {string|null} [opts.feeEstimate]    coin-denominated MINER fee, decimal string. Three
+ *                                            distinct values: a decimal string is the fee;
+ *                                            `undefined` means the caller is not projecting one
+ *                                            (no fee row); explicit `null` means the fee is
+ *                                            UNKNOWN, which is not the same claim as `'0'` and
+ *                                            must not be projected as if it were.
  * @param {ProtocolFee} [opts.protocolFee]    the action's own protocol fee, when the caller knows it
  * @param {string} [opts.chainId]
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
@@ -134,6 +143,13 @@ export function simulateAction({
     // whatever coin row that projection produced (a coin SEND folds its own
     // principal in first), and so a new action type gets it for free.
     applyProtocolFee(result, balMap, coinTick, protocolFee);
+    // Say WHY the coin post-state is absent. Without this the row reads as a
+    // rendering gap rather than as a fact about the transaction, and the token
+    // rows beside it (which are still exact) lose their credibility with it.
+    if (feeEstimate === null && coinTick && Array.isArray(result?.notes)) {
+        result.notes.push(
+            `The network fee could not be read from this transaction, so the projected ${coinTick} balance is not shown.`);
+    }
     return result;
 }
 
@@ -579,8 +595,36 @@ function deltaRow(tick, balMap, signedDelta, isCoin) {
     return { tick, before, after, isCoin: !!isCoin, isFee: false };
 }
 
+// An UNKNOWN miner fee, which `'0'` cannot express: `'0'` claims the fee is
+// free. Nothing here can be projected, since the coin post-state is `before`
+// minus an amount nobody knows, so the honest row keeps `before`, drops
+// `after`, and says the fee is unknown. Token rows, side effects and the
+// IRREVERSIBLE notes stay untouched, because those are exact and are the
+// reason not to suppress the whole simulation.
+function pushUnknownFeeRow(deltas, balMap, coinTick) {
+    const existingCoin = deltas.find((d) => d.isCoin && !d.isFee);
+    if (existingCoin) {
+        existingCoin.after = '';
+        existingCoin.afterUnknown = true;
+        deltas.push({ tick: coinTick, before: '', after: '', isCoin: true, isFee: true, feeUnknown: true });
+        return;
+    }
+    deltas.push({
+        tick: coinTick,
+        before: balMap.get(coinTick) || '0',
+        after: '',
+        isCoin: true,
+        isFee: true,
+        feeUnknown: true,
+        afterUnknown: true,
+    });
+}
+
 function pushFeeRow(deltas, balMap, coinTick, feeEstimate) {
     if (!coinTick) return;
+    // Explicit null only. `undefined` still means "this caller projects no fee
+    // row at all", which is what most callers pass and must not change.
+    if (feeEstimate === null) { pushUnknownFeeRow(deltas, balMap, coinTick); return; }
     const fee = str(feeEstimate);
     if (!fee || Number(fee) === 0) return;
     // If the coin was already debited (coin send), fold the fee into
@@ -647,7 +691,14 @@ function applyProtocolFee(result, balMap, coinTick, protocolFee) {
         feeLabel: 'Protocol fee',
         feeAmount: amount,
     };
-    if (carrier) {
+    if (carrier && carrier.afterUnknown) {
+        // The row it would fold into has no post-state to fold into: the miner
+        // fee on it is unknown. Subtracting from `''` would print a post-balance
+        // that silently excludes the miner fee, which is the exact conflation
+        // the unknown marker exists to stop, and taking the else-branch below
+        // would do the same from the raw balance. The fee is still NAMED and
+        // priced on this label row; only the post-state stays absent.
+    } else if (carrier) {
         carrier.after = addStr(carrier.after, neg(amount));
     } else {
         // Nothing else touches this tick (a zero miner fee, or the XCHAIN

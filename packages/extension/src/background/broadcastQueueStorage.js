@@ -41,8 +41,17 @@ const STORAGE_KEY = 'xchain.broadcastQueue';
  */
 
 /**
+ * `load` separates "storage is unreadable" from "storage is empty": a real
+ * read failure resolves `null`, an absent or empty key resolves `{}`. The
+ * host cannot fail closed on a read it cannot tell apart from an empty
+ * queue, and a snapshot written back from a state that was never read
+ * erases every entry the failed read did not deliver, including other
+ * wallets'. A stored blob that parses to nothing usable is still `{}`:
+ * there is nothing recoverable behind it, so refusing to persist over it
+ * would strand the queue for good.
+ *
  * @typedef {Object} BroadcastQueueStorage
- * @property {() => Promise<QueueSnapshot>} load
+ * @property {() => Promise<QueueSnapshot | null>} load
  * @property {(snapshot: QueueSnapshot) => Promise<void>} save
  * @property {() => Promise<void>} clear
  */
@@ -77,11 +86,19 @@ function chromeLocalAdapter() {
             return new Promise((resolve) => {
                 try {
                     chrome.storage.local.get(STORAGE_KEY, (items) => {
-                        const v = items?.[STORAGE_KEY];
-                        resolve(coerceSnapshot(v));
+                        // MV3 reports a failed read through `lastError` rather
+                        // than by throwing, so a get that never touched the
+                        // store still arrives here with `items` undefined.
+                        // Reading it as an empty queue is what lets the next
+                        // save wipe the persisted entries.
+                        if (chrome.runtime?.lastError || !items) {
+                            resolve(null);
+                            return;
+                        }
+                        resolve(coerceSnapshot(items[STORAGE_KEY]));
                     });
                 } catch (_e) {
-                    resolve({});
+                    resolve(null);
                 }
             });
         },
@@ -109,11 +126,21 @@ function chromeLocalAdapter() {
 function localStorageAdapter() {
     return {
         async load() {
+            let raw;
             try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (typeof raw !== 'string' || !raw) return {};
+                raw = localStorage.getItem(STORAGE_KEY);
+            } catch (_e) {
+                // The store itself is unreachable (privacy mode, sandboxed
+                // iframe, disabled site data). Entries may well be sitting
+                // in it, so report the failure instead of an empty queue.
+                return null;
+            }
+            if (typeof raw !== 'string' || !raw) return {};
+            try {
                 return coerceSnapshot(JSON.parse(raw));
             } catch (_e) {
+                // Unparseable blob: nothing behind it is recoverable, so
+                // treat it as empty and let the next save replace it.
                 return {};
             }
         },

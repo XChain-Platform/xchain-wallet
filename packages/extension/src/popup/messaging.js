@@ -370,11 +370,16 @@ export function buildSendPsbtRequest(opts) {
  * ONE PSBT the ConfirmActionModal previews and the signer signs, resolves
  * fee + ADS, and runs the tamper check host-side (decomposePsbt +
  * decodeActionFromPsbt live in the background). Resolves with a
- * serializable, already-tamper-verified ComposedAction; rejects on tamper /
- * compose failure so the form renders the error and no modal opens.
+ * serializable, already-tamper-verified HostComposeEnvelope; rejects on tamper
+ * / compose failure so the form renders the error and no modal opens.
+ *
+ * The envelope is declared ONCE, beside the return that builds it. This
+ * restated a nine-field subset of a twenty-field return and typed the action
+ * fields non-null, which the bare-payment lane contradicts, so point at the
+ * producer rather than keeping a fourth copy in sync.
  *
  * @param {object} opts   SEND base shape or { actionData, encoderOpts, from }
- * @returns {Promise<{ actionString: string, action: string, version: number|string, psbt: string, encoding: string, quote: object|null, adsPlan: object, expectedOutputs: object, tamperVerified: true }>}
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope>}
  */
 export function composeForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.composeForConfirm', opts));

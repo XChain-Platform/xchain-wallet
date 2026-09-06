@@ -1820,17 +1820,22 @@ export function createBackgroundHost(deps) {
         const descriptors = await listCustomChains({ vault });
         return { descriptors };
     });
-    host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry }) => {
+    // Both mutators take `sdkRegistry` so the chain's cached SDK client is
+    // dropped along with its descriptor. Without it, removing a chain and
+    // re-adding the same id with different endpoints kept every request,
+    // signed submissions included, pointed at the ORIGINAL node for the
+    // rest of the session.
+    host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || !req.descriptor) {
             throw new Error('chainRegistry.addCustomChain: descriptor required');
         }
-        return addCustomChain({ vault, chainRegistry, descriptor: req.descriptor });
+        return addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: req.descriptor });
     });
-    host.register('chainRegistry.removeCustomChain', async (req, { vault, chainRegistry }) => {
+    host.register('chainRegistry.removeCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || typeof req.chainId !== 'string') {
             throw new Error('chainRegistry.removeCustomChain: chainId required');
         }
-        return removeCustomChain({ vault, chainRegistry, chainId: req.chainId });
+        return removeCustomChain({ vault, chainRegistry, sdkRegistry, chainId: req.chainId });
     });
 
     // §31.4 / Cluster O FOLLOWUP 2: recipient resolution for DIVIDEND
@@ -2511,7 +2516,36 @@ export function createBackgroundHost(deps) {
     /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }>>} */
     const queuedBroadcasts = new Map();
     let queueLoaded = false;
-    let queueLoadPromise = /** @type {Promise<void> | null} */ (null);
+    let queueLoadPromise = /** @type {Promise<boolean> | null} */ (null);
+    // Fold a persisted snapshot into the live map instead of replacing it. A
+    // retried rehydrate can land after this process already queued entries of
+    // its own, and `getQueue` hands the routes the live array they splice, so
+    // the array identity has to survive the merge.
+    //
+    // No tombstone set is needed to stop the merge resurrecting a removed
+    // entry: a merge only runs while `queueLoaded` is false, and in that window
+    // the map holds nothing but entries `pushQueueEntry` added, which
+    // persistQueue has refused to write. An entry that is both in memory and in
+    // the snapshot implies a load that already succeeded, and that latches
+    // `queueLoaded` so no further merge happens.
+    function mergeQueueSnapshot(snapshot) {
+        for (const walletId of Object.keys(snapshot)) {
+            const arr = snapshot[walletId];
+            if (!Array.isArray(arr) || arr.length === 0) continue;
+            const restorable = arr.filter((e) => e && typeof e === 'object');
+            if (restorable.length === 0) continue;
+            const live = queuedBroadcasts.get(walletId);
+            if (!live) {
+                queuedBroadcasts.set(walletId, restorable);
+                continue;
+            }
+            const held = new Set(live.map((e) => e.id));
+            // Persisted entries were signed before anything this process
+            // queued, so they go in front to keep the list oldest-first.
+            const missing = restorable.filter((e) => !held.has(e.id));
+            if (missing.length > 0) live.unshift(...missing);
+        }
+    }
     async function ensureQueueLoaded() {
         if (queueLoaded || !broadcastQueueStorage) {
             queueLoaded = true;
@@ -2519,25 +2553,37 @@ export function createBackgroundHost(deps) {
         }
         if (!queueLoadPromise) {
             queueLoadPromise = (async () => {
+                let snapshot = null;
                 try {
-                    const snapshot = await broadcastQueueStorage.load();
-                    for (const walletId of Object.keys(snapshot || {})) {
-                        const arr = snapshot[walletId];
-                        if (Array.isArray(arr) && arr.length > 0) {
-                            queuedBroadcasts.set(walletId, [...arr]);
-                        }
-                    }
+                    snapshot = await broadcastQueueStorage.load();
                 } catch (_e) {
-                    // Tolerate storage failures: start fresh in-memory.
-                } finally {
-                    queueLoaded = true;
+                    snapshot = null;
                 }
+                // Fail closed. `load` resolves null only for a read that did
+                // not reach the store; an empty queue is still an object.
+                // Latching `queueLoaded` on a failed read lets the next persist
+                // write the half-empty map over every wallet's persisted
+                // entries.
+                if (!snapshot || typeof snapshot !== 'object') return false;
+                mergeQueueSnapshot(snapshot);
+                queueLoaded = true;
+                return true;
             })();
         }
-        await queueLoadPromise;
+        const loaded = await queueLoadPromise;
+        // Drop the single-flight latch on failure so the next access retries
+        // rather than resolving forever against the same dead read.
+        if (!loaded) queueLoadPromise = null;
     }
     async function persistQueue() {
         if (!broadcastQueueStorage) return;
+        if (!queueLoaded) {
+            await ensureQueueLoaded();
+            // Storage is still unreadable, so the map is known-incomplete.
+            // Keep it as the live truth for this process and leave what is on
+            // disk alone; writing it back is the erasure this guards against.
+            if (!queueLoaded) return;
+        }
         /** @type {Record<string, any[]>} */
         const snapshot = {};
         for (const [walletId, entries] of queuedBroadcasts.entries()) {

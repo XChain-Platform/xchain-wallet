@@ -38,6 +38,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,6 +91,9 @@ function stagedRelease(dir) {
 /** A stand-in for gpg that answers with one canned status stream. */
 const gpgSaying = (stdout, status = 0) => () => ({ status, stdout, stderr: '' });
 
+/** The document under verification, whatever any file on disk says. */
+const MANIFEST_BYTES = '# XChain Wallet release manifest\n# tag: v9.9.9\n';
+
 try {
     // --- 1. The verdicts, read off gpg's status stream ------------------
     const cases = [
@@ -116,7 +120,8 @@ try {
     for (const [label, want, stdout, status] of cases) {
         const fingerprint = label.includes('subkey') && want === 'ok' ? K1_SUBKEY : K1_PRIMARY;
         const verdict = attributeSignature({
-            manifestPath: join(work, 'RELEASE_HASHES.txt'), fingerprint, runImpl: gpgSaying(stdout, status),
+            manifestPath: join(work, 'RELEASE_HASHES.txt'), manifestText: MANIFEST_BYTES,
+            fingerprint, runImpl: gpgSaying(stdout, status),
         });
         check(`attributeSignature reports '${want}' for ${label}`, verdict === want,
             `got '${verdict}'`);
@@ -125,9 +130,48 @@ try {
     // gpg absent is not a pass. A check that cannot run has not run.
     check('attributeSignature reports no-gpg rather than ok when gpg is missing',
         attributeSignature({
-            manifestPath: join(work, 'RELEASE_HASHES.txt'), fingerprint: K1_PRIMARY,
+            manifestPath: join(work, 'RELEASE_HASHES.txt'), manifestText: MANIFEST_BYTES,
+            fingerprint: K1_PRIMARY,
             runImpl: () => ({ error: Object.assign(new Error('spawn gpg ENOENT'), { code: 'ENOENT' }) }),
         }) === 'no-gpg');
+
+    // --- 1b. The verdict is about BYTES, not about a filename -----------
+    //
+    // A verdict reached by naming the manifest path is a verdict about
+    // whatever that path held when gpg opened it, which is not necessarily
+    // what the caller parsed. Read the invocation rather than trusting the
+    // verdict: the document argument must be stdin and the caller's bytes
+    // must be what is fed to it.
+    {
+        let seen = null;
+        const spy = (cmd, args, opts) => {
+            seen = { cmd, args, opts };
+            return { status: 0, stderr: '',
+                stdout: `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n` };
+        };
+        const manifestPath = join(work, 'RELEASE_HASHES.txt');
+        attributeSignature({ manifestPath, manifestText: MANIFEST_BYTES,
+            fingerprint: K1_PRIMARY, runImpl: spy });
+        check('gpg is given the document on stdin, not the manifest path',
+            seen && seen.args[seen.args.length - 1] === '-'
+            && !seen.args.slice(1).includes(manifestPath),
+            JSON.stringify(seen && seen.args));
+        check('and the bytes on stdin are the ones the caller holds',
+            seen && seen.opts && seen.opts.input === MANIFEST_BYTES,
+            JSON.stringify(seen && seen.opts));
+        check('the detached signature is still located beside the manifest',
+            seen && seen.args.includes(`${manifestPath}.asc`), JSON.stringify(seen && seen.args));
+    }
+
+    // No document is no verification. Handing gpg an empty stdin instead
+    // would ask it about nothing and read the answer as if it were about
+    // the manifest.
+    check('attributeSignature refuses when it is given no bytes to verify',
+        attributeSignature({
+            manifestPath: join(work, 'RELEASE_HASHES.txt'), fingerprint: K1_PRIMARY,
+            runImpl: gpgSaying(
+                `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`),
+        }) === 'bad');
 
     // --- 2. The gate acts on the verdict --------------------------------
     //
@@ -271,6 +315,72 @@ try {
             const junk = run();
             check('REAL GPG: an .asc that is not a signature over these bytes is refused',
                 junk.status === 1, `status=${junk.status}\n${junk.stdout}\n${junk.stderr}`);
+
+            // (e) THE SWAP, driven against real gpg. The gate reads the
+            //     manifest once and acts on what it read; if the signature is
+            //     checked by PATH, a writer who replaces the file between the
+            //     two reads gets a verdict about bytes the gate never parsed.
+            //     The injected reader IS that writer: it hands the gate a
+            //     manifest the release key never signed while a genuinely
+            //     signed one sits at the path. Pre-fix this returned
+            //     signed=true over the unsigned digest table; the fix makes it
+            //     a refusal, because gpg is asked about the bytes in hand.
+            {
+                const race = stagedRelease(join(work, 'race'));
+                gpg('--yes', '--local-user', K1.primary, '--armor', '--detach-sign',
+                    '--output', `${race.manifest}.asc`, race.manifest);
+                const onDisk = readFileSync(race.manifest, 'utf8');
+                // Same tag, same hash row, so only the SIGNATURE can object:
+                // one header line the .asc does not cover.
+                const substituted = `${onDisk}# lanes: default\n`;
+                check('the substituted manifest is not the signed one', substituted !== onDisk);
+                const readerThatSwaps = async (p, enc) => (
+                    p === race.manifest && enc === 'utf8' ? substituted : readFile(p, enc));
+                const realGpg = (cmd, args, opts) => spawnSync(cmd, args, { ...opts, env: gpgEnv });
+                const previousKey = process.env.XCHAIN_VERIFY_KEY;
+                process.env.XCHAIN_VERIFY_KEY = K1.primary;
+                let raceOut = null;
+                let raceErr = null;
+                try {
+                    raceOut = await checkProvenance({
+                        zipPath: race.zip, manifestPath: race.manifest, tag: 'v9.9.9',
+                        readFileImpl: readerThatSwaps, runImpl: realGpg,
+                    });
+                } catch (err) {
+                    raceErr = err;
+                } finally {
+                    if (previousKey === undefined) delete process.env.XCHAIN_VERIFY_KEY;
+                    else process.env.XCHAIN_VERIFY_KEY = previousKey;
+                }
+                check('REAL GPG: a manifest swapped between the parse read and the signature '
+                    + 'check is NOT reported as signed',
+                    raceErr instanceof Refusal,
+                    raceOut ? `it returned signed=${raceOut.signed} (${raceOut.signature})`
+                        : String(raceErr));
+                check('REAL GPG: and the refusal says the signature did not verify',
+                    raceErr instanceof Refusal && /did not verify/.test(raceErr.message),
+                    raceErr ? raceErr.message : 'no refusal');
+
+                // CONTROL for the control: the same call with the bytes that
+                // WERE signed still passes, so the refusal above is the swap
+                // being caught and not the stdin plumbing being broken.
+                const previousKey2 = process.env.XCHAIN_VERIFY_KEY;
+                process.env.XCHAIN_VERIFY_KEY = K1.primary;
+                try {
+                    const clean = await checkProvenance({
+                        zipPath: race.zip, manifestPath: race.manifest, tag: 'v9.9.9',
+                        runImpl: realGpg,
+                    });
+                    check('REAL GPG: the unswapped manifest still verifies over stdin',
+                        clean.signed === true, clean.signature);
+                } catch (err) {
+                    check('REAL GPG: the unswapped manifest still verifies over stdin', false,
+                        String(err));
+                } finally {
+                    if (previousKey2 === undefined) delete process.env.XCHAIN_VERIFY_KEY;
+                    else process.env.XCHAIN_VERIFY_KEY = previousKey2;
+                }
+            }
         } finally {
             spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: gpgEnv });
         }

@@ -18,6 +18,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { humanizeError } from '../utils/humanizeError.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -108,6 +109,16 @@ function fmtTime(unix) {
     return new Date(n * 1000).toLocaleString();
 }
 
+// Why not err.message on the two market loads below: betFeed forwards the SDK
+// explorer's own wording, which is written for a log and names the HTTP status
+// and the request URL ("Explorer returned HTTP 502 for /RBTC/api/..."), and
+// that string went straight into the error banner. humanizeError routes an
+// explorer failure through explorerReadFailure, which is the READ voice: it
+// says which service is not answering and whether waiting helps, and it leaves
+// out the "nothing was signed or sent" line that belongs to a submit the user
+// never started.
+const loadFailed = (err) => humanizeError(err, 'load this market').message;
+
 /**
  * One betting market: its terms, the current pool split, and its status history.
  *
@@ -148,7 +159,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         setError(null);
         messaging.betFeed({ chainId, feedIndex })
             .then((resp) => setFeed(unwrap(resp)))
-            .catch((err) => setError(err?.message || 'Failed to load the market.'));
+            .catch((err) => setError(loadFailed(err)));
     }, [chainId, feedIndex, messaging]);
 
     useEffect(() => {
@@ -157,7 +168,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         setError(null);
         messaging.betFeed({ chainId, feedIndex })
             .then((resp) => { if (!cancelled) setFeed(unwrap(resp)); })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load the market.'); });
+            .catch((err) => { if (!cancelled) setError(loadFailed(err)); });
         return () => { cancelled = true; };
     }, [chainId, feedIndex, messaging]);
 

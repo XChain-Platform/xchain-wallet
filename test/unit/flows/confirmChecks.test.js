@@ -55,6 +55,43 @@ describe('confirmChecks', () => {
             expect(res.ok).toBe(false);
         });
 
+        // The other half of the same invariant, and the one that was
+        // fail-OPEN: a response that DROPS a required output leaves a
+        // transaction of nothing but own-change, which satisfies every
+        // "is this output allowed" rule. A bare native payment composed this
+        // way still described the payment on the confirm screen and reported
+        // itself verified while paying nobody.
+        it('a required addressed output the PSBT never emits is tamper', () => {
+            const psbt = 'dropped';
+            const expected = buildExpectedOutputs({
+                customOutputs: [{ address: 'bcrt1qdest', value: '100000' }], encoding: null,
+            });
+            const res = checkOutputSet({
+                psbtHex: psbt, expected, ownAddresses: OWN,
+                // Only the sender's own change came back. Nothing is unexpected.
+                decomposePsbt: decomposerFor({ [psbt]: [CHANGE] }),
+            });
+            expect(res.ok).toBe(false);
+            expect(res.unexpected).toEqual([]);
+            expect(res.missing).toEqual([{ address: 'bcrt1qdest', value: '100000', isAds: false }]);
+        });
+
+        it('the same expected set passes when the recipient output IS present', () => {
+            const psbt = 'paid';
+            const expected = buildExpectedOutputs({
+                customOutputs: [{ address: 'bcrt1qdest', value: '100000' }], encoding: null,
+            });
+            const res = checkOutputSet({
+                psbtHex: psbt, expected, ownAddresses: OWN,
+                decomposePsbt: decomposerFor({ [psbt]: [
+                    { address: 'bcrt1qdest', scriptType: 'p2wpkh', scriptPubKeyHex: '0014dd', value: '100000' },
+                    CHANGE,
+                ] }),
+            });
+            expect(res.ok).toBe(true);
+            expect(res.missing).toEqual([]);
+        });
+
         // Exact satoshi comparison. DOGE clears 2^53 koinu at ~90M DOGE, and
         // `s.value === Number(out.value)` collapsed 9007199254740992 and ...993 onto the
         // same double, so a one-koinu mutation still matched its expected slot.
@@ -126,7 +163,7 @@ describe('confirmChecks', () => {
         });
 
         it('P2SH: a SECOND unexpected P2SH output is tamper when the action fits one chunk', () => {
-            // No actionByteLen supplied -> single-carrier default (a small,
+            // No payloadByteLen supplied -> single-carrier default (a small,
             // single-chunk payload). The second P2SH output is unexpected.
             const psbt = 'p2sh2';
             const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH' });
@@ -147,8 +184,8 @@ describe('confirmChecks', () => {
         // carriers pass, while an EXTRA carrier beyond the count is still tamper.
         it('multi-chunk P2SH: allows the N carriers a large payload legitimately needs', () => {
             const psbt = 'p2shN';
-            // actionByteLen 900 -> ceil((900+16)/476)+1 = 2+1 = 3 carriers.
-            const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH', actionByteLen: 900 });
+            // payloadByteLen 900 -> ceil((900+16)/476)+1 = 2+1 = 3 carriers.
+            const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH', payloadByteLen: 900 });
             expect(expected.carrierAllowance).toBe(3);
             const carrier = (v) => ({ address: 'chunk', scriptType: 'p2sh', scriptPubKeyHex: 'a914', value: v });
             const res = checkOutputSet({
@@ -161,7 +198,7 @@ describe('confirmChecks', () => {
 
         it('multi-chunk P2SH: a carrier BEYOND the size-derived count is still tamper', () => {
             const psbt = 'p2shExtra';
-            const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH', actionByteLen: 900 });
+            const expected = buildExpectedOutputs({ customOutputs: [], encoding: 'P2SH', payloadByteLen: 900 });
             expect(expected.carrierAllowance).toBe(3);
             const carrier = (v) => ({ address: 'chunk', scriptType: 'p2sh', scriptPubKeyHex: 'a914', value: v });
             const res = checkOutputSet({
@@ -174,7 +211,7 @@ describe('confirmChecks', () => {
         });
 
         it('OP_RETURN carrier allowance is exactly one regardless of action size', () => {
-            expect(buildExpectedOutputs({ customOutputs: [], encoding: 'OP_RETURN', actionByteLen: 5000 }).carrierAllowance).toBe(1);
+            expect(buildExpectedOutputs({ customOutputs: [], encoding: 'OP_RETURN', payloadByteLen: 5000 }).carrierAllowance).toBe(1);
         });
     });
 
@@ -230,6 +267,29 @@ describe('confirmChecks', () => {
                 actionString: 'SEND|0|JDOG|1|addr',
                 decodeActionFromPsbt: () => ({ ok: true, actionString: 'SEND|0|JDOG|1|addr' }),
             })).toThrow(TamperDetectedError);
+        });
+
+        // The blocking half of the dropped-output case: the compose path only
+        // sets tamperVerified because this call did not throw, so a missing
+        // requirement has to reach the caller as an error rather than as a
+        // result nobody re-reads.
+        it('throws TamperDetectedError when an approved output is missing', () => {
+            const psbt = 'dropped';
+            const expected = buildExpectedOutputs({
+                customOutputs: [{ address: 'bcrt1qdest', value: '100000' }], encoding: null,
+            });
+            let thrown = null;
+            try {
+                assertNoTamper({
+                    psbtHex: psbt, expected, ownAddresses: OWN,
+                    decomposePsbt: decomposerFor({ [psbt]: [CHANGE] }),
+                    actionString: null,
+                    decodeActionFromPsbt: () => { throw new Error('should not be reached'); },
+                });
+            } catch (err) { thrown = err; }
+            expect(thrown).toBeInstanceOf(TamperDetectedError);
+            expect(thrown.message).toMatch(/missing 1 output/);
+            expect(thrown.details.missing).toHaveLength(1);
         });
 
         it('throws on an action-byte mismatch even when outputs are clean', () => {

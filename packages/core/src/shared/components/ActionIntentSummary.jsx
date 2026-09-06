@@ -56,12 +56,35 @@ export function ActionIntentSummary({ decoded, simulation }) {
                         // arrow.: the protocol fee is still named and
                         // priced, because the balance row folds it in with the
                         // miner fee and this is the only place it is stated.
+                        // A fee the wallet could not read is stated as unknown
+                        // rather than dropped: the balance row beside it has no
+                        // post-state for the same reason, and a missing fee line
+                        // would leave that absence unexplained.
+                        if (d.isFee && d.feeUnknown && d.before === '') {
+                            return (
+                                <div key={`${d.tick}-${i}`} className={styles.delta} data-fee-unknown="true">
+                                    <span className={styles.deltaTick}>{d.feeLabel || 'Network fee'}</span>
+                                    <span className={styles.deltaValues}>unknown</span>
+                                </div>
+                            );
+                        }
                         if (d.before === '' && d.after === '') {
                             if (!d.isProtocolFee) return null;
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta}>
                                     <span className={styles.deltaTick}>{d.feeLabel || 'Protocol fee'}</span>
                                     <span className={styles.deltaValues}>{d.tick} {d.feeAmount}</span>
+                                </div>
+                            );
+                        }
+                        // `after` is absent BECAUSE it is unprojectable, so name
+                        // that. Printing `d.after` here would render "10 → " and
+                        // read as a truncated number rather than a missing one.
+                        if (d.afterUnknown) {
+                            return (
+                                <div key={`${d.tick}-${i}`} className={styles.delta} data-after-unknown="true">
+                                    <span className={styles.deltaTick}>{d.tick}</span>
+                                    <span className={styles.deltaValues}>{d.before} → unknown</span>
                                 </div>
                             );
                         }

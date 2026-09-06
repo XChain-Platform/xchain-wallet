@@ -91,6 +91,19 @@ function captureRows(summary) {
     return ids.map((id, i) => ({ id, name: names[i] || '' }));
 }
 
+// One throttled unlock at a time per shell. The failure counter is a
+// persisted read-modify-write (load -> recordFailure -> save) spanning an
+// awaited vault open, so concurrent attempts all read the same pre-state and
+// each save failCount 1: a burst of wrong passwords never advances the
+// backoff ladder. Holding the pre-KDF gate inside the same section is the
+// other half, since otherwise a burst passes it together on a stale count.
+//
+// Module state, not a per-store lock: every shell builds a FRESH throttle
+// store object per message (sessionMeta.js dispatchPreHost), so a lock keyed
+// on the store instance would never see the same key twice and serialize
+// nothing.
+let unlockChain = Promise.resolve();
+
 /**
  * @param {unknown} request  Expected shape: `{ password: string, bip39Passphrase?: string }`;
  *   the optional §15.6 25th word unlocks passphrase-enabled wallets into the pool and is
@@ -102,7 +115,19 @@ function captureRows(summary) {
  *   to `wallet.passphrase.capture`. `poolUnavailable` marks the populate-failed path, where
  *   the list is empty because nothing was inspected rather than because nothing needs capture.
  */
-export async function handleWalletUnlock(request, deps) {
+export function handleWalletUnlock(request, deps) {
+    // No throttle store means this shell gates elsewhere; nothing here to
+    // serialize, so keep the pass-through behaviour it has today.
+    if (!deps?.unlockThrottleStore) return performWalletUnlock(request, deps);
+    const attempt = unlockChain.then(() => performWalletUnlock(request, deps));
+    // Tail swallows: a rejected attempt must not wedge every later unlock,
+    // and must not surface as an unhandled rejection on the chain copy.
+    unlockChain = attempt.then(() => { }, () => { });
+    return attempt;
+}
+
+/** @type {(request: unknown, deps: WalletUnlockDeps) => Promise<any>} */
+async function performWalletUnlock(request, deps) {
     const password = /** @type {any} */ (request)?.password;
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.unlock: password is required');
@@ -141,7 +166,24 @@ export async function handleWalletUnlock(request, deps) {
             masterKey,
         });
         try {
-            await vault.open();
+            // The auth catch wraps `vault.open()` and nothing else. Spanning
+            // the whole block below reads a PassphraseMismatchError (whose
+            // message quotes user-chosen wallet names) or any populate fault
+            // as a wrong password and charges it to the throttle.
+            try {
+                await vault.open();
+            } catch (err) {
+                if (isAeadAuthFailure(err)) {
+                    // Wrong password: count it against the throttle so repeated
+                    // attempts escalate into a backoff.
+                    if (throttle) {
+                        const prev = await throttle.load().catch(() => null);
+                        await throttle.save(recordFailure(prev, Date.now())).catch(() => { /* best-effort */ });
+                    }
+                    throw new InvalidPasswordError();
+                }
+                throw err;
+            }
 
             // Populate the SignerPool while the vault is open AND the
             // password is in scope. Pool entries outlive this block;
@@ -183,17 +225,6 @@ export async function handleWalletUnlock(request, deps) {
                     throw new flowsLib.PassphraseMismatchError(pooled.passphraseMismatchNames);
                 }
             }
-        } catch (err) {
-            if (isAeadAuthFailure(err)) {
-                // Wrong password: count it against the throttle so repeated
-                // attempts escalate into a backoff.
-                if (throttle) {
-                    const prev = await throttle.load().catch(() => null);
-                    await throttle.save(recordFailure(prev, Date.now())).catch(() => { /* best-effort */ });
-                }
-                throw new InvalidPasswordError();
-            }
-            throw err;
         } finally {
             // Vault kept its own copy of the key; close zeros that copy.
             vault.close();
@@ -222,16 +253,12 @@ export async function handleWalletUnlock(request, deps) {
         : { unlocked: true, passphraseCaptureNeeded };
 }
 
+// Only a GCM tag mismatch is a wrong password. The old heuristic matched
+// error TEXT (/operation[- ]?error|auth|tag/i), which any backend message
+// containing "auth" satisfies, as does "tag" inside an ordinary word such as
+// "staging"; its Web Crypto name branches were dead, since core's aead is
+// @noble/ciphers. Storage and format faults now propagate as themselves and
+// cost the user no failed attempt.
 function isAeadAuthFailure(err) {
-    if (!err) return false;
-    const name = err.name || '';
-    const msg = err.message || String(err);
-    // Web Crypto surfaces AES-GCM auth failures as DOMException
-    // "OperationError". Node's Web Crypto matches. Also accept generic
-    // wrappers that mention "auth" just in case.
-    return (
-        name === 'OperationError' ||
-        name === 'InvalidAccessError' ||
-        /operation[- ]?error|auth|tag/i.test(msg)
-    );
+    return /** @type {any} */ (err)?.name === 'AeadAuthError';
 }

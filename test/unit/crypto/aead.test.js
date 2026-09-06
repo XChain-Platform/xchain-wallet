@@ -13,7 +13,7 @@
 // blob-format guarantees, and refusal paths for malformed input.
 
 import { describe, it, expect } from 'vitest';
-import { encrypt, decrypt } from '../../../packages/core/src/crypto/aead.js';
+import { encrypt, decrypt, AeadAuthError } from '../../../packages/core/src/crypto/aead.js';
 
 const KEY_32 = new Uint8Array(32).fill(7);
 const PLAINTEXT = new TextEncoder().encode('hello xchain');
@@ -69,6 +69,30 @@ describe('crypto/aead', () => {
             const mangled = ct.slice();
             mangled[mangled.length - 1] ^= 0xff;
             await expect(decrypt(KEY_32, mangled)).rejects.toThrow();
+        });
+
+        // Callers decide "wrong password" on the TYPE, not on error text: a
+        // message heuristic also matched storage and application faults, and
+        // unlock charged those to its lockout ladder.
+        it('types a tag mismatch as AeadAuthError', async () => {
+            const ct = await encrypt(KEY_32, PLAINTEXT);
+            const otherKey = new Uint8Array(32).fill(8);
+            const err = await decrypt(otherKey, ct).catch((e) => e);
+            expect(err).toBeInstanceOf(AeadAuthError);
+            expect(err.name).toBe('AeadAuthError');
+            expect(err).toBeInstanceOf(Error);
+            // The library's own wording is preserved for anything still
+            // reading the message.
+            expect(err.message).toMatch(/tag/i);
+        });
+
+        it('leaves format and key faults as plain errors, not auth failures', async () => {
+            const short = await decrypt(KEY_32, new Uint8Array(20)).catch((e) => e);
+            expect(short.name).not.toBe('AeadAuthError');
+
+            const ct = await encrypt(KEY_32, PLAINTEXT);
+            const badKey = await decrypt(new Uint8Array(16), ct).catch((e) => e);
+            expect(badKey.name).not.toBe('AeadAuthError');
         });
     });
 

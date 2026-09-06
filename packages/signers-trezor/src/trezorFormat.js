@@ -126,6 +126,25 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
         throw new Error('toTrezorSignTransaction: signingPaths must be a non-empty array');
     }
 
+    // REFUSE a nonzero locktime; never drop one silently. The payload built
+    // below is `{ coin, inputs, outputs }` and carries no locktime, so a PSBT
+    // asking for a timelock comes back from the device spendable immediately
+    // while the signer reports success under the requested timelock. Forwarding
+    // it instead is not verifiable from this repo: @trezor/connect is T-RSL and
+    // is not installed here, so neither the signTransaction envelope's locktime
+    // key nor the firmware's input-sequence requirement when one is set can be
+    // checked. Refusing mirrors the sighash and scriptType posture this same
+    // function already takes: carry a field faithfully or refuse it. No wallet
+    // send flow sets a nonzero locktime, so only a pasted or cosigner PSBT can
+    // reach this.
+    if (typeof decomposed.locktime === 'number' && decomposed.locktime !== 0) {
+        throw new Error(
+            `toTrezorSignTransaction: PSBT requests locktime ${decomposed.locktime}; `
+            + 'this signer supports only locktime 0. '
+            + 'Re-request the signature without a timelock.',
+        );
+    }
+
     /** @type {Map<number, { path: string, sighashType?: number }>} */
     const pathByIndex = new Map();
     for (const sp of signingPaths) {

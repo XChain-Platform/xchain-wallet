@@ -48,7 +48,7 @@
 export class TamperDetectedError extends Error {
     /**
      * @param {string} message
-     * @param {{ outputs?: unknown[], expected?: unknown[], decoded?: unknown }} [details]
+     * @param {{ outputs?: unknown[], missing?: unknown[], expected?: unknown[], decoded?: unknown }} [details]
      */
     constructor(message, details = {}) {
         super(message);
@@ -112,9 +112,10 @@ export function sameSats(a, b) {
  * @param {Array<{ address: string, value: number|string }>} [args.customOutputs]
  * @param {string} args.encoding   'OP_RETURN' | 'P2SH' | 'P2WSH' | 'MULTISIGN'
  * @param {{ address: string|null, value: number|string }|null} [args.adsOutput]   the resolved ADS donation, when present (hidden from display)
+ * @param {number} [args.payloadByteLen]   byte length of the compiled action+rawData push, which decides the carrier allowance
  * @returns {{ addressed: Array<{ address: string, value: number|string, isAds: boolean }>, encoding: string }}
  */
-export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null, actionByteLen }) {
+export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null, payloadByteLen }) {
     // Values are carried through UNCOERCED: pre-rounding the expected side with Number()
     // reintroduced the >2^53 collapse sameSats exists to close.
     const addressed = (Array.isArray(customOutputs) ? customOutputs : []).map((o) => ({
@@ -125,19 +126,27 @@ export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput =
             sameSats(o.value, adsOutput.value)),
     }));
     const enc = String(encoding || '').toUpperCase();
-    return { addressed, encoding: enc, carrierAllowance: expectedCarrierAllowance(enc, actionByteLen) };
+    return { addressed, encoding: enc, carrierAllowance: expectedCarrierAllowance(enc, payloadByteLen) };
 }
 
 /**
  * Assert that every output in the built PSBT is expected, own-change, or
- * the action carrier. Advisory: returns a result; the caller throws.
+ * the action carrier, AND that every expected addressed output is actually
+ * there. Advisory: returns a result; the caller throws.
+ *
+ * Both halves are load-bearing. Checking only for outputs that should not be
+ * present leaves the check fail-OPEN on the one an encoder response DROPS: a
+ * bare native payment whose recipient output is missing decomposes to nothing
+ * but the sender's own change, which clears every rule below, while the
+ * confirm screen still describes the payment from the intent it was handed.
+ * An absent output is exactly as much a tamper as an injected one.
  *
  * @param {Object} args
  * @param {string} args.psbtHex
  * @param {ReturnType<typeof buildExpectedOutputs>} args.expected
  * @param {string[]} args.ownAddresses            wallet-owned addresses (change is allowed here)
  * @param {(psbtHex: string) => { outputs: Array<{ address: string|null, scriptPubKeyHex: string, scriptType: string, value: number|string }> }} args.decomposePsbt
- * @returns {{ ok: boolean, unexpected: Array<{ index: number, address: string|null, value: number|string, scriptType: string }> }}
+ * @returns {{ ok: boolean, unexpected: Array<{ index: number, address: string|null, value: number|string, scriptType: string }>, missing: Array<{ address: string, value: number|string, isAds: boolean }> }}
  */
 export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt }) {
     const own = new Set((ownAddresses || []).map(String));
@@ -178,7 +187,14 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
         unexpected.push({ index: i, address: out.address, value: out.value, scriptType: out.scriptType });
     }
 
-    return { ok: unexpected.length === 0, unexpected };
+    // 5. Every requirement the PSBT never satisfied. Reported uncoerced for the
+    // same >2^53 reason as `unexpected`: this names the amount the user approved
+    // and was not going to be paid.
+    const missing = addressed
+        .filter((s) => !s.consumed)
+        .map((s) => ({ address: s.address, value: s.value, isAds: !!s.isAds }));
+
+    return { ok: unexpected.length === 0 && missing.length === 0, unexpected, missing };
 }
 
 function carrierAllowanceFor(encoding) {
@@ -201,8 +217,15 @@ function carrierAllowanceFor(encoding) {
 const CHUNK_PAYLOAD_BYTES = { P2SH: 476, P2WSH: 476, MULTISIGN: 60 };
 
 /**
- * How many carrier outputs the chosen encoding legitimately emits for an
- * action of `actionByteLen` bytes.
+ * How many carrier outputs the chosen encoding legitimately emits for a
+ * COMPILED payload of `payloadByteLen` bytes.
+ *
+ * The compiled payload, not the action string: the encoder chunks
+ * script.compile([actionString, rawData]), so a FILE upload, artwork/TIS
+ * attach, gated publish or label sync spreads its rawData across the same
+ * carriers. Sizing off the action alone allowed two carriers where a 2 KB file
+ * needs five, and the surplus three were reported to the user as outputs they
+ * did not approve.
  *
  * D-24: the encoder splits a P2SH/P2WSH/MULTISIGN payload that exceeds
  * one on-chain chunk across MULTIPLE data-carrier outputs (one per chunk), but
@@ -218,21 +241,21 @@ const CHUNK_PAYLOAD_BYTES = { P2SH: 476, P2WSH: 476, MULTISIGN: 60 };
  * inflated carrier.
  *
  * @param {string} encoding   normalized ('OP_RETURN' | 'P2SH' | 'P2WSH' | 'MULTISIGN')
- * @param {number} [actionByteLen]   UTF-8 byte length of the composed action string
+ * @param {number} [payloadByteLen]   byte length of the compiled action+rawData push
  * @returns {number}
  */
-function expectedCarrierAllowance(encoding, actionByteLen) {
+function expectedCarrierAllowance(encoding, payloadByteLen) {
     const enc = String(encoding || '').toUpperCase();
     if (!enc) return 0;
     if (enc === 'OP_RETURN') return 1; // single zero-value nulldata leg
     const per = CHUNK_PAYLOAD_BYTES[enc];
     if (!per) return 0;
     // Unknown size (legacy call sites/tests): keep the single-leg default.
-    if (!Number.isFinite(actionByteLen)) return 1;
+    if (!Number.isFinite(payloadByteLen)) return 1;
     // +16 covers the magic word + compiled push prefix; the trailing +1 is a
     // rounding margin so a legitimate deploy is NEVER rejected (over-allowing at
     // a chunk boundary is safe - see CHUNK_PAYLOAD_BYTES).
-    const len = Math.max(0, Number(actionByteLen));
+    const len = Math.max(0, Number(payloadByteLen));
     return Math.ceil((len + 16) / per) + 1;
 }
 
@@ -329,10 +352,18 @@ export function checkCarrierScripts({ psbt, carrierScripts, encoding, actionStri
 export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt, actionString, decodeActionFromPsbt,
                                  psbt, carrierScripts, network, verifyCarrierScripts }) {
     const outputSet = checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt });
-    if (!outputSet.ok) {
+    // Injected outputs first: when a response both adds and drops one, the
+    // added output is the thing the user is being asked to pay, so it is the
+    // one the message should name.
+    if (outputSet.unexpected.length) {
         throw new TamperDetectedError(
             `The transaction contains ${outputSet.unexpected.length} output(s) you did not approve.`,
             { outputs: outputSet.unexpected, expected: expected.addressed });
+    }
+    if (outputSet.missing.length) {
+        throw new TamperDetectedError(
+            `The transaction is missing ${outputSet.missing.length} output(s) you approved.`,
+            { missing: outputSet.missing, expected: expected.addressed });
     }
     const actionBytes = checkActionByteMatch({ psbtHex, actionString, encoding: expected.encoding, decodeActionFromPsbt });
     if (!actionBytes.ok) {

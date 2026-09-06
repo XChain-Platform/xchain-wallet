@@ -258,7 +258,7 @@ export function resolvePointerName({
  * @param {Object} [opts]
  * @returns {string|null}
  */
-export function resolveLaneName({ platform = process.platform } = {}) {
+function resolveLaneName({ platform = process.platform } = {}) {
     return platformLaneName({ platform });
 }
 

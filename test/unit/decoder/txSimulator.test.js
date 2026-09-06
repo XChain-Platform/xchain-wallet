@@ -645,4 +645,103 @@ describe('simulateAction', () => {
             expect(r.deltas.some((d) => d.isFee)).toBe(false);
         });
     });
+
+    // `'0'` carries exactly one claim, "the fee is zero", and must never stand
+    // in for "the fee is unknown": a caller that cannot read the fee off the
+    // built bytes would get a concrete post-balance with the charge silently
+    // excluded. `null` is the second claim, spelled apart.
+    describe('unknown miner fee (feeEstimate: null)', () => {
+        it('leaves the coin post-state unprojected and says why', () => {
+            const r = simulateAction({
+                action: 'SEND',
+                params: { TICK: 'BTC', AMOUNT: '1', DESTINATION: 'x' },
+                balances: balances('BTC', '10'),
+                feeEstimate: null,
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const coinRow = r.deltas.find((d) => d.isCoin && !d.isFee);
+            expect(coinRow.before).toBe('10');
+            expect(coinRow.afterUnknown).toBe(true);
+            expect(coinRow.after).toBe('');
+            // The reported defect, exactly: 10 -> 9 with the fee nowhere.
+            expect(coinRow.after).not.toBe('9');
+            const feeRow = r.deltas.find((d) => d.isFee);
+            expect(feeRow.feeUnknown).toBe(true);
+            expect(feeRow.feeAmount).toBeUndefined();
+            expect(r.notes.some((n) => /network fee could not be read/i.test(n))).toBe(true);
+        });
+
+        it('keeps the token rows and side effects, which are still exact', () => {
+            const r = simulateAction({
+                action: 'DESTROY',
+                params: { TICK: 'XCP', AMOUNT: '5' },
+                balances: balances('BTC', '10', [['XCP', '100']]),
+                feeEstimate: null,
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const token = r.deltas.find((d) => d.tick === 'XCP');
+            expect(token.before).toBe('100');
+            expect(token.after).toBe('95');
+            expect(token.afterUnknown).toBeUndefined();
+            expect(r.sideEffects.length).toBeGreaterThan(0);
+        });
+
+        it("'0' still means a genuinely zero fee, unchanged", () => {
+            const r = simulateAction({
+                action: 'SEND',
+                params: { TICK: 'BTC', AMOUNT: '1', DESTINATION: 'x' },
+                balances: balances('BTC', '10'),
+                feeEstimate: '0',
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const coinRow = r.deltas.find((d) => d.isCoin && !d.isFee);
+            expect(coinRow.after).toBe('9');
+            expect(coinRow.afterUnknown).toBeUndefined();
+            expect(r.deltas.some((d) => d.isFee)).toBe(false);
+            expect(r.notes.some((n) => /could not be read/i.test(n))).toBe(false);
+        });
+
+        // The protocol fee folds into the coin row's post-state. With the miner
+        // fee unknown there IS no post-state to fold into, and subtracting from
+        // it would print a balance that quietly omits the miner fee: the same
+        // wrong number by another route.
+        it('a protocol fee does not resurrect a concrete post-balance', () => {
+            const r = simulateAction({
+                action: 'SEND',
+                params: { TICK: 'BTC', AMOUNT: '1', DESTINATION: 'x' },
+                balances: balances('BTC', '10'),
+                feeEstimate: null,
+                protocolFee: { amount: '0.00002', tick: 'BTC' },
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const coinRow = r.deltas.find((d) => d.isCoin && !d.isFee);
+            expect(coinRow.afterUnknown).toBe(true);
+            expect(coinRow.after).toBe('');
+            // Still NAMED and priced, just not folded into a post-state.
+            const protocolRow = r.deltas.find((d) => d.isProtocolFee);
+            expect(protocolRow.feeAmount).toBe('0.00002');
+        });
+
+        // BATCH sub-calls pass '0' of their own, so the unknown marker cannot
+        // leak into the aggregation that reads before/after arithmetically.
+        it('does not leak into BATCH sub-call projections', () => {
+            const r = simulateAction({
+                action: 'BATCH',
+                params: { COMMANDS: [
+                    { action: 'SEND', params: { TICK: 'XCP', AMOUNT: '3', DESTINATION: 'x' } },
+                ] },
+                balances: balances('BTC', '10', [['XCP', '100']]),
+                feeEstimate: null,
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const token = r.deltas.find((d) => d.tick === 'XCP');
+            expect(token.before).toBe('100');
+            expect(token.after).toBe('97');
+        });
+    });
 });

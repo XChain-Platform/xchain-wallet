@@ -49,7 +49,7 @@ import { base32 } from '@scure/base';
 import pako from 'pako';
 const { inflate: pakoInflate, inflateRaw: pakoInflateRaw } = pako;
 
-export const BBQR_PREFIX = 'B$';
+const BBQR_PREFIX = 'B$';
 const BBQR_HEADER_LEN = 8;  // "B$EFNNXX"
 const BBQR_BASE36_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -60,9 +60,9 @@ export class BbqrError extends Error {
     }
 }
 
-export const BBQR_ENCODINGS = /** @type {const} */ (['H', 'B', 'Z']);
-export const BBQR_FILE_TYPES = /** @type {const} */ (['P', 'T', 'R', 'C', 'U', 'J', 'X']);
-export const BBQR_FILE_TYPE_PSBT = 'P';
+const BBQR_ENCODINGS = /** @type {const} */ (['H', 'B', 'Z']);
+const BBQR_FILE_TYPES = /** @type {const} */ (['P', 'T', 'R', 'C', 'U', 'J', 'X']);
+const BBQR_FILE_TYPE_PSBT = 'P';
 
 /**
  * @typedef {Object} BbqrFrame
@@ -78,7 +78,7 @@ export const BBQR_FILE_TYPE_PSBT = 'P';
 // header = 408 chars. Comfortably below the ~480-char alphanumeric QR
 // ceiling at error-correction level M for version 27, a size most
 // hardware-wallet cameras and phone cameras can read reliably.
-export const DEFAULT_BBQR_PAYLOAD_BYTES = 200;
+const DEFAULT_BBQR_PAYLOAD_BYTES = 200;
 const BBQR_MAX_FRAMES = 1295;  // 36^2 - 1 because base36 NN goes 00..ZZ
 
 /**

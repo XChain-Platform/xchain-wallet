@@ -39,9 +39,11 @@
 //   0  current    nothing to do
 //   1  behind     actionable: a patch, a major, or the support window
 //   2  config     the pin could not be read
-//   3  inconclusive  registry unreachable. NEVER folded into "current":
-//                    a wallet's CVE clock must not read green because a
-//                    network call failed.
+//   3  inconclusive  the registry was unreachable, OR the document it
+//                    returned did not carry the evidence the verdict rests
+//                    on. NEVER folded into "current": a wallet's CVE clock
+//                    must not read green because a network call failed or
+//                    because the answer came back empty.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -86,6 +88,24 @@ export function readPinnedVersion({
 /**
  * Compare the pin against what upstream currently offers.
  *
+ * A MISSING FIELD IS NOT A CLEAN COMPARISON. The two `|| {}` defaults below
+ * are what a caller needs to survive a document that is merely sparse, and
+ * until 2026-09-05 they were also the whole verdict for one that is EMPTY:
+ * `latest` undefined made `latestMajor` NaN, every comparison against NaN is
+ * false, `problems` stayed empty, and `assess('43.2.0', {})` returned
+ * `ok: true` - exit 0, CURRENT - against a document containing nothing at
+ * all. That is the header's own rule broken by the function it governs: a
+ * CVE clock must not read green because the data was bad, and a structurally
+ * incomplete 200 from a mirror or a stale `--offline` capture is bad data
+ * that arrives without an exception to catch.
+ *
+ * So the evidence each verdict rests on is REQUIRED rather than defaulted,
+ * and anything absent lands in `missing` and makes the state inconclusive.
+ * The precedence runs the other way round, though, and deliberately: what we
+ * DID detect is true regardless of what we could not read, so a real patch,
+ * major or support-window violation still reports `behind` even with gaps.
+ * Silence is the only thing an incomplete document is not allowed to buy.
+ *
  * @param {string} version   the version we ship
  * @param {Object} packument registry document (dist-tags + time)
  */
@@ -98,6 +118,22 @@ export function assess(version, packument) {
     const newestOnOurMajor = tags[`${ourMajor}-x-y`] ?? null;
 
     const problems = [];
+    const missing = [];
+
+    // The support-window arithmetic and every major comparison below is
+    // driven by this one value, so without it the tool has no verdict to
+    // give - it merely has no findings, which is a different thing.
+    if (!latest || !Number.isFinite(latestMajor)) {
+        missing.push("dist-tags.latest (no newest stable version to compare against)");
+    }
+    // Without our own major's channel tag the `patch` check cannot fire,
+    // so "we are on the newest patch of our major" would be assumed rather
+    // than checked. It is legitimately absent once our major falls out of
+    // upstream's window, which the `unsupported` problem reports on its
+    // own - and that problem outranks this gap in the precedence below.
+    if (!newestOnOurMajor) {
+        missing.push(`dist-tags.${ourMajor}-x-y (nothing to compare our patch level against)`);
+    }
 
     if (newestOnOurMajor && newestOnOurMajor !== version) {
         problems.push({
@@ -126,6 +162,13 @@ export function assess(version, packument) {
             ? Math.floor((Date.parse(packument._now ?? new Date().toISOString())
                 - Date.parse(released)) / 86400000)
             : null;
+        if (released == null) {
+            // The quiet half of the same defect: no timestamp means no
+            // clock, and no clock produced no problem at all. §9's grace
+            // window simply never fired for that major, silently.
+            missing.push(`time["${firstStable}"] (no release date, so §9's `
+                + `${POLICY.MAJOR_GRACE_DAYS}-day clock for Electron ${major} cannot run)`);
+        }
         if (ageDays != null && ageDays > POLICY.MAJOR_GRACE_DAYS) {
             problems.push({
                 kind: 'major',
@@ -154,6 +197,18 @@ export function assess(version, packument) {
         });
     }
 
+    // PRECEDENCE, STATED RATHER THAN INFERRED. A violation we actually
+    // detected outranks evidence we could not read: a patch, a major or a
+    // support-window breach is true whatever else the document was missing,
+    // and downgrading it to "inconclusive" would lose a real finding to a
+    // bookkeeping gap. Only when nothing was detected does a gap decide the
+    // verdict, and then it decides it against silence. `about-to-be-
+    // unsupported` alone stays a warning, exactly as before.
+    const detected = problems.some((p) => p.kind !== 'about-to-be-unsupported');
+    let state = 'ok';
+    if (detected) state = 'behind';
+    else if (missing.length) state = 'inconclusive';
+
     return {
         version,
         major: ourMajor,
@@ -162,8 +217,11 @@ export function assess(version, packument) {
         latestMajor,
         supportWindow: [oldestSupported, latestMajor],
         problems,
-        // `about-to-be-unsupported` alone is a warning, not a failure.
-        ok: problems.every((p) => p.kind === 'about-to-be-unsupported'),
+        state,
+        missing,
+        // Kept and DERIVED, so every existing --json reader keeps parsing
+        // and now fails closed: an inconclusive run is not ok.
+        ok: state === 'ok',
     };
 }
 
@@ -195,9 +253,11 @@ Exit codes (house convention, verify-privacy-url.mjs):
   0  current       nothing to do
   1  behind        actionable: a patch, a major, or the support window
   2  config        the pin could not be read
-  3  inconclusive  registry unreachable. NEVER folded into "current": a
-                   wallet's CVE clock must not read green because a network
-                   call failed.
+  3  inconclusive  the registry was unreachable, or the document it returned
+                   did not carry the evidence the verdict rests on (it names
+                   what was missing). NEVER folded into "current": a wallet's
+                   CVE clock must not read green because a network call
+                   failed or because the answer came back empty.
 `;
 
 async function main(argv) {
@@ -233,6 +293,14 @@ async function main(argv) {
 
     if (asJson) {
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else if (result.state === 'inconclusive') {
+        // The table is deliberately NOT printed here. Its rows read
+        // `newest stable: undefined` and `supported: NaN-NaN` off the very
+        // fields that were missing, which is a comparison dressed up as a
+        // reading. The stderr block below says what was absent instead.
+        process.stdout.write(`shipped:       ${result.version} (lockfile)\n`);
+        process.stdout.write(`declared:      ${result.declaredRange} in package.json - `
+            + 'not the pin; every release lane installs --frozen-lockfile\n');
     } else {
         process.stdout.write(`shipped:       ${result.version} (lockfile)\n`);
         process.stdout.write(`declared:      ${result.declaredRange} in package.json - `
@@ -244,6 +312,18 @@ async function main(argv) {
             process.stdout.write(`  [${p.kind}] ${p.detail}\n`);
         }
         if (result.ok && !result.problems.length) process.stdout.write('CURRENT\n');
+    }
+
+    // The document arrived and parsed, but did not carry what the verdict
+    // rests on. Same voice and same exit code as an unreachable registry,
+    // because it is the same failure: no answer, reported as one.
+    if (result.state === 'inconclusive') {
+        process.stderr.write('electron-cadence: INCONCLUSIVE - the registry document did not '
+            + 'carry the evidence this verdict needs:\n');
+        for (const item of result.missing) process.stderr.write(`    ${item}\n`);
+        process.stderr.write('  The CVE clock is not green just because the registry data '
+            + 'was incomplete.\n');
+        return 3;
     }
     return result.ok ? 0 : 1;
 }

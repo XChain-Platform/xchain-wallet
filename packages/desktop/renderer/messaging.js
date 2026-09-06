@@ -230,8 +230,14 @@ export function buildSendPsbtRequest(opts) {
  * Host half of the single-encode pipeline. Compose the ONE
  * PSBT the ConfirmActionModal previews and signs, resolve fee + ADS, and
  * run the tamper check host-side. Resolves with a serializable, tamper-
- * verified ComposedAction; rejects on tamper / compose failure.
+ * verified HostComposeEnvelope; rejects on tamper / compose failure.
+ *
+ * The envelope is declared ONCE, beside the return that builds it. This
+ * declared no return type at all, which is how the same route ended up
+ * described three different ways across three shells.
+ *
  * @param {object} opts   SEND base shape or { actionData, encoderOpts, from }
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope>}
  */
 export function composeForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.composeForConfirm', opts));

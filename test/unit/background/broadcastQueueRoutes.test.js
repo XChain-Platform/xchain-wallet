@@ -306,6 +306,111 @@ describe('the host queue settles the PendingTx half it was handed', () => {
     });
 });
 
+describe('a failed rehydrate never lets the next mutation erase the persisted queue', () => {
+    /**
+     * Host over a storage double that can be switched between "unreadable"
+     * and "readable", backed by a single mutable snapshot both the load and
+     * the save see. Two wallets, because the erasure guarded against here is
+     * cross-wallet: a failed read of A followed by an enqueue for B must never
+     * write a snapshot in which A never existed.
+     */
+    function makeTwoWalletHost() {
+        let readable = false;
+        let backing = { w1: [entry('A1')] };
+        const saves = [];
+        const storage = {
+            load: async () => {
+                if (!readable) throw new Error('storage unreadable');
+                return JSON.parse(JSON.stringify(backing));
+            },
+            save: async (snapshot) => {
+                backing = JSON.parse(JSON.stringify(snapshot));
+                saves.push(JSON.parse(JSON.stringify(snapshot)));
+            },
+            clear: async () => { backing = {}; },
+        };
+        const sdk = { encoder: { broadcastTx: vi.fn() } };
+        const host = createBackgroundHost({
+            vault: {
+                pendingTxs: memCollection(),
+                wallets: { list: async () => [{ id: 'w1' }, { id: 'w2' }] },
+                settings: { get: async () => adsSettings(), put: async () => {} },
+            },
+            chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }), list: () => [] },
+            sdkRegistry: { get: () => sdk, for: () => sdk },
+            signerPool: { get: () => null, has: () => false },
+            approvals: { request: async () => ({ approved: true }) },
+            bridgeEvents: { emit() {} },
+            getDiagnosticContext: () => ({}),
+            broadcastQueueStorage: storage,
+            signThrottleStorage: null,
+            logConsoleStorage: null,
+        });
+        const call = async (type, request) => host.handle({ type, request });
+        // pushQueueEntry persists fire-and-forget, so let the microtask and
+        // timer queues drain before asserting on what storage received.
+        const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
+        return {
+            call,
+            settle,
+            saves,
+            backing: () => backing,
+            recover: () => { readable = true; },
+        };
+    }
+
+    it('skips the save while the read is failing, so wallet A survives an enqueue for wallet B', async () => {
+        const h = makeTwoWalletHost();
+        await h.settle();
+
+        const res = await h.call('broadcast.queue.enqueue', {
+            walletId: 'w2', chainId: CHAIN, signedTxHex: 'hex-B1', summary: 'B1',
+        });
+        expect(res.ok).toBe(true);
+        await h.settle();
+
+        // The mutation is live in this process...
+        expect((await h.call('broadcast.queue.list', { walletId: 'w2' })).result).toHaveLength(1);
+        // ...but nothing was written over the snapshot the failed read never
+        // delivered. Before the fix the queue latched as "loaded" anyway and
+        // this save landed as { w2: [B1] }, deleting wallet A's signed txs.
+        expect(h.saves).toEqual([]);
+        expect(h.backing()).toEqual({ w1: [entry('A1')] });
+    });
+
+    it('merges the recovered snapshot with the entries queued while degraded', async () => {
+        const h = makeTwoWalletHost();
+        await h.settle();
+        await h.call('broadcast.queue.enqueue', {
+            walletId: 'w2', chainId: CHAIN, signedTxHex: 'hex-B1', summary: 'B1',
+        });
+        await h.settle();
+
+        h.recover();
+        const w1 = (await h.call('broadcast.queue.list', { walletId: 'w1' })).result;
+        expect(w1.map((e) => e.id)).toEqual(['A1']);
+
+        // The next mutation now writes a snapshot holding BOTH wallets.
+        await h.call('broadcast.queue.enqueue', {
+            walletId: 'w2', chainId: CHAIN, signedTxHex: 'hex-B2', summary: 'B2',
+        });
+        await h.settle();
+        expect(h.saves.length).toBeGreaterThan(0);
+        const last = h.saves[h.saves.length - 1];
+        expect(last.w1).toEqual([entry('A1')]);
+        expect(last.w2.map((e) => e.signedTxHex)).toEqual(['hex-B1', 'hex-B2']);
+    });
+
+    it('retries the load on the next access instead of latching the dead read', async () => {
+        const h = makeTwoWalletHost();
+        await h.settle();
+        expect((await h.call('broadcast.queue.list', { walletId: 'w1' })).result).toEqual([]);
+        h.recover();
+        expect((await h.call('broadcast.queue.list', { walletId: 'w1' })).result.map((e) => e.id))
+            .toEqual(['A1']);
+    });
+});
+
 describe('submitAction hands the queue what it needs to settle both halves', () => {
     it('names the PendingTx it stamped queued and carries the ADS verdict of the signed bytes', async () => {
         let settings = adsSettings();
@@ -352,5 +457,81 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
         expect(payload.adsCommit).toEqual({ chainId: CHAIN, donationIncluded: true });
         // Nothing books on the failed attempt: the queued tx is what donates.
         expect(vault.settings.put).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The PendingTx record and the host queue are INDEPENDENT durability
+     * halves. A failing vault write must not abort the catch block before the
+     * enqueue runs: a broken vault would take the healthy half down with it
+     * and hand the caller a storage error where the classified broadcast error
+     * belongs.
+     */
+    function broadcastFailingSubmit({ putFails, broadcastError }) {
+        const puts = [];
+        const vault = {
+            pendingTxs: {
+                ...memCollection(),
+                put: vi.fn(async (rec) => {
+                    puts.push(JSON.parse(JSON.stringify(rec)));
+                    if (putFails(rec)) throw new Error('VaultWriteError: disk full');
+                }),
+            },
+            settings: { get: async () => adsSettings(), put: vi.fn(async () => {}) },
+        };
+        const sdk = {
+            encoder: { createTx: vi.fn(), broadcastTx: vi.fn(async () => { throw broadcastError; }) },
+            actions: { createAction: vi.fn() },
+            wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+        };
+        const onBroadcastFailure = vi.fn(async () => {});
+        const run = () => submitAction({
+            vault,
+            walletId: W,
+            chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }) },
+            sdkRegistry: { get: () => sdk },
+            chainId: CHAIN,
+            actionData: { action: 'ISSUE', params: { TICK: 'JDOG' } },
+            encoderOpts: { pubkey: 'pub' },
+            prebuiltPsbt: {
+                psbtHex: 'PSBT', encoding: 'OP_RETURN', actionString: 'ISSUE|0|JDOG', version: 0,
+                deferredFeeOutput: null, deferredOutputs: [], adsDonation: null,
+            },
+            pendingTxMeta: { fromAddress: 'from', toAddress: 'to', actionSummary: 'Issue JDOG' },
+            signer: {
+                kind: 'software',
+                signPsbt: vi.fn(async ({ psbtHex }) => ({ txHex: `TX(${psbtHex})`, txid: 'txid-1' })),
+            },
+            signingPaths: [{ inputIndex: 0, path: 'm/0' }],
+            onBroadcastFailure,
+        });
+        return { run, onBroadcastFailure, puts };
+    }
+
+    it('still enqueues the signed bytes when the queued PendingTx write rejects', async () => {
+        const h = broadcastFailingSubmit({
+            putFails: (rec) => rec.status === 'queued',
+            broadcastError: new Error('ECONNREFUSED'),
+        });
+        const err = await h.run().then(() => null, (e) => e);
+
+        // The classified broadcast error is what the caller switches on; a
+        // storage error here sends it down the re-compose branch instead.
+        expect(err?.name).toBe('BroadcastFailedTransientError');
+        expect(err.pendingTxWriteError).toMatch(/VaultWriteError/);
+        // The independent half still ran, carrying the signed bytes.
+        expect(h.onBroadcastFailure).toHaveBeenCalledTimes(1);
+        expect(h.onBroadcastFailure.mock.calls[0][0].signedTxHex).toBe('TX(PSBT)');
+    });
+
+    it('keeps the permanent classification when the failed PendingTx write rejects', async () => {
+        const h = broadcastFailingSubmit({
+            putFails: (rec) => rec.status === 'failed',
+            broadcastError: new Error('bad-txns-inputs-missingorspent'),
+        });
+        const err = await h.run().then(() => null, (e) => e);
+
+        expect(err?.name).toBe('BroadcastFailedPermanentError');
+        // A permanent rejection has nothing to queue, and that must not change.
+        expect(h.onBroadcastFailure).not.toHaveBeenCalled();
     });
 });

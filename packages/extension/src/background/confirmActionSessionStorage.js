@@ -94,5 +94,3 @@ export function reservationStoreFrom(storage) {
         save: (entries) => storage.saveReservations(entries),
     };
 }
-
-export { REQUEST_KEY, RESERVATION_KEY };

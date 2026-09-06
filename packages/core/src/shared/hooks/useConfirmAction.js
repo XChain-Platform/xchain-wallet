@@ -140,12 +140,19 @@ export function useConfirmAction() {
     /**
      * All SDK access is HOST-side (the React tree only talks to the host over
      * `messaging`): `compose` runs composeForConfirm AND the tamper check in
-     * the background and resolves with an already-verified ComposedAction (a
-     * tamper failure rejects here, so it lands in the compose-failure path and
-     * the modal never opens); `preflight` runs sdk.preflight in the background.
+     * the background and resolves with an already-verified HostComposeEnvelope
+     * (a tamper failure rejects here, so it lands in the compose-failure path
+     * and the modal never opens); `preflight` runs sdk.preflight in the
+     * background.
+     *
+     * The hook receives the ENVELOPE, not composeForConfirm's internal
+     * `ComposedAction`: `encoderOpts` and `carrierScripts` are host-side build
+     * material and never cross the boundary, while the fee lane, the deferred
+     * reveal set, the exact fees, the projection and the decoded intent only
+     * exist on this side of it.
      *
      * @param {Object} args
-     * @param {() => Promise<import('../../flows/composeForConfirm.js').ComposedAction>} args.compose   host compose + tamper (messaging.composeForConfirm)
+     * @param {() => Promise<import('../../flows/composeActionForConfirm.js').HostComposeEnvelope>} args.compose   host compose + tamper (messaging.composeForConfirm)
      * @param {(credentials: object, composed: object) => Promise<any>} args.onApprove
      * @param {string} args.chainId
      * @param {(reqOpts: { actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: string }) => Promise<object>} [args.preflight]   host preflight (messaging.preflight); omit to skip pre-flight

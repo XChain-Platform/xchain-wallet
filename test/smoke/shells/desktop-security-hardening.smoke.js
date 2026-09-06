@@ -47,6 +47,7 @@ import { createRuntime, handleIpcMessage } from '../../../packages/desktop/main/
 import {
     attachSignerBridgeListener,
     MAX_SIGNER_IDS_PER_MESSAGE,
+    MAX_SIGNER_IDS_PER_SENDER,
 } from '../../../packages/desktop/main/signerBridgeListener.js';
 // Imported by the SAME specifier `signerBridgeListener.js` uses, never by a
 // relative path to the same file. The registry is a process-wide
@@ -262,6 +263,54 @@ bgSignerBridge.clearAll();
     assert.equal(typeof bgSignerBridge.getTransport('from-trusted'), 'function', 'trusted sender registers');
     detach();
 }
+
+// 4d. Cumulative per-sender quota: the per-message cap bounds ONE message,
+// so without this a trusted renderer looping valid 64-id batches retains
+// 64*N transports forever. Ten batches of 4 is the shape of that loop.
+bgSignerBridge.clearAll();
+{
+    const ipc = fakeIpcMain();
+    const detach = attachSignerBridgeListener({ ipcMain: ipc, maxSignerIdsPerSender: 8 });
+    const wc = fakeWc(4);
+    for (let batch = 0; batch < 10; batch += 1) {
+        const ids = Array.from({ length: 4 }, (_, i) => `grow-${batch}-${i}`);
+        ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ids });
+    }
+    assert.equal(
+        bgSignerBridge.registeredIds().length,
+        8,
+        'repeated valid batches stop at the cumulative quota instead of growing',
+    );
+    // Re-registering ids already owned is free: it re-points, never spends quota.
+    ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ['grow-0-0', 'grow-0-1'] });
+    assert.equal(bgSignerBridge.registeredIds().length, 8, 're-registering owned ids costs no quota');
+    // Unregister returns capacity, so a legitimate re-pair still succeeds.
+    ipc._emit(CH, { sender: wc }, { kind: 'unregister', signerIds: ['grow-0-0', 'grow-0-1'] });
+    assert.equal(bgSignerBridge.registeredIds().length, 6, 'unregister frees the ids');
+    ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ['fresh-a', 'fresh-b'] });
+    assert.equal(
+        typeof bgSignerBridge.getTransport('fresh-a'),
+        'function',
+        'capacity recovers after unregister',
+    );
+    // Over-quota messages are dropped whole, matching the per-message cap.
+    ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ['over-a', 'over-b', 'over-c'] });
+    assert.equal(bgSignerBridge.getTransport('over-a'), null, 'an over-quota batch registers nothing');
+    // The quota is per sender: a second window is never starved by the first.
+    const wc2 = fakeWc(5);
+    ipc._emit(CH, { sender: wc2 }, { kind: 'register', signerIds: ['other-window'] });
+    assert.equal(
+        typeof bgSignerBridge.getTransport('other-window'),
+        'function',
+        'a second webContents has its own quota',
+    );
+    detach();
+}
+assert.equal(
+    MAX_SIGNER_IDS_PER_SENDER,
+    MAX_SIGNER_IDS_PER_MESSAGE,
+    'the shipped cumulative quota matches the per-message cap',
+);
 bgSignerBridge.clearAll();
 
 // --- 5. index.js wires the lockdown (source scan) ---------------------

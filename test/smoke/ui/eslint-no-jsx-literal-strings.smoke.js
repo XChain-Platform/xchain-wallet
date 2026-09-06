@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last twenty-one are component props: copy shipped through them
+// The last twenty-four are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -69,6 +69,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
+    'what', 'prefix', 'noun',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -285,6 +286,35 @@ v = findViolations(jsxAttr('aria-label', jsxExpr(conditional(literal('Hide filte
     { allow: ['Hide filters', 'Show filters'] });
 assert.strictEqual(v.length, 0, 'allowlist suppresses ternary branch copy');
 
+// 18e. JSX CHILD copy written as a template or a ternary. Both content
+// paths tested `expr.type === 'Literal'` only, so the shipping shapes
+// RecentTradesPanel `{summary.side === 'buy' ? 'Buy' : 'Sell'}` and
+// ToastHost ``{`+${hiddenCount} more`}`` reported nothing at all while
+// the attribute paths judged the identical value shapes.
+v = findViolations(jsxElement([jsxExpr(conditional(literal('Buy'), literal('Sell')))]));
+assert.strictEqual(v.length, 1, 'flags ternary copy in JSX content');
+assert.match(v[0].message, /Buy/);
+assert.strictEqual(v[0].node.type, 'ConditionalExpression', 'reports the whole ternary node');
+v = findViolations(jsxElement([jsxExpr(template('+', ' more'))]));
+assert.strictEqual(v.length, 1, 'flags template copy in JSX content');
+assert.match(v[0].message, /more/);
+v = findViolations(jsxElement([jsxExpr(logical(identifier('custom'), literal('Pin to top')))]));
+assert.strictEqual(v.length, 1, 'flags `||` fallback copy in JSX content');
+
+// The must-stay-silent shapes, in the same position.
+v = findViolations(jsxElement([jsxExpr(template('', '/', ''))]));
+assert.strictEqual(v.length, 0, 'a pure-interpolation template child stays silent');
+v = findViolations(jsxElement([jsxExpr(conditional(identifier('a'), identifier('b')))]));
+assert.strictEqual(v.length, 0, 'a child ternary with no static copy stays silent');
+v = findViolations(jsxElement([jsxExpr(conditional(literal('Buy'), literal('Sell')))]),
+    { allow: ['Buy', 'Sell'] });
+assert.strictEqual(v.length, 0, 'allowlist suppresses child branch copy');
+
+// A branch can hold JSX of its own, so the content path reports and then
+// keeps walking rather than returning the way the Literal case does.
+v = findViolations(jsxElement([jsxExpr(conditional(jsxElement([jsxText('Nested copy')]), literal('Dismiss')))]));
+assert.strictEqual(v.length, 2, 'reports the branch copy AND the JSX nested in a branch');
+
 // 19. Copy shipped as a destructured prop default never reaches a JSX
 // node, so `function C({ label = 'Copy' })` was invisible to the rule.
 // The key decides, not the local binding, and the set keeps technical
@@ -340,6 +370,28 @@ for (const [name, copy] of [
     assert.strictEqual(v.length, 1, `flags a ${name} = "${copy}" prop default`);
     assert.match(v[0].message, new RegExp(name));
 }
+
+// 19c. The three names admitted for copy the set had no word for.
+// QueuedResultPanel interpolates `what` into `Your ${what}` and nineteen
+// routes pass it as a literal; StalenessLabel ships `prefix = 'Last synced'`
+// as a default and renders it into `${prefix} … ago`; tickerGrammarError
+// defaults `{ noun = 'Ticker' }` into the validation line the user reads.
+v = findViolations(jsxAttr('what', literal('cross-chain swap')));
+assert.strictEqual(v.length, 1, 'flags a what literal');
+assert.match(v[0].message, /what/);
+for (const [name, copy] of [['prefix', 'Last synced'], ['noun', 'Ticker']]) {
+    v = findViolations(fn([objectPattern(defaulted(name, literal(copy)))]));
+    assert.strictEqual(v.length, 1, `flags a ${name} = "${copy}" prop default`);
+    assert.match(v[0].message, new RegExp(name));
+}
+// The style guide passes `what={<>…</>}`, a JSX element rather than copy;
+// and CopyButton's clipboard payload rides `value`, which stays out of the
+// set. Neither may start reporting.
+v = findViolations(jsxAttr('what', jsxExpr(jsxElement([jsxText('A named wrapper over ChainPicker')]))));
+assert.strictEqual(v.length, 1, 'a JSX-element `what` reports only the text inside it');
+assert.match(v[0].message, /Inline JSX text/, 'and reports it as JSX text, not as what= copy');
+v = findViolations(jsxAttr('value', literal('bc1qexampleaddress')));
+assert.strictEqual(v.length, 0, 'value stays out of the set (CopyButton clipboard payload)');
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -433,6 +485,46 @@ visitors.ObjectPattern(objectPattern(plainProp('value'), defaulted('label', lite
 assert.strictEqual(reports.length, 15, 'create() flags a label = "Copy" prop default');
 visitors.ObjectPattern(objectPattern(defaulted('size', literal('md'))));
 assert.strictEqual(reports.length, 15, 'create() ignores a technical prop default');
+
+// The shipping content visitor is the second implementation of the JSX-child
+// path, and it carried the same Literal-only gate findViolations did, so pin
+// the template and ternary shapes on this side too.
+visitors.JSXExpressionContainer({
+    ...jsxExpr(conditional(literal('Buy'), literal('Sell'))),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(reports.length, 16, 'create() flags ternary copy in JSX content');
+visitors.JSXExpressionContainer({
+    ...jsxExpr(template('+', ' more')),
+    parent: { type: 'JSXFragment' },
+});
+assert.strictEqual(reports.length, 17, 'create() flags template copy in JSX content');
+visitors.JSXExpressionContainer({
+    ...jsxExpr(template('', '/', '')),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(reports.length, 17, 'create() ignores a pure-interpolation template child');
+visitors.JSXExpressionContainer({
+    ...jsxExpr(conditional(identifier('a'), identifier('b'))),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(reports.length, 17, 'create() ignores a child ternary with no static copy');
+// An attribute's ternary container still belongs to the JSXAttribute
+// visitor: reporting it here would newly flag style={{ color: x ? … }}.
+visitors.JSXExpressionContainer({
+    ...jsxExpr(conditional(literal('Buy'), literal('Sell'))),
+    parent: { type: 'JSXAttribute' },
+});
+assert.strictEqual(reports.length, 17, 'create() leaves an attribute ternary container alone');
+
+// The three copy props the set gained, on the shipping side.
+visitors.JSXAttribute(jsxAttr('what', literal('cross-chain swap')));
+assert.strictEqual(reports.length, 18, 'create() flags a what literal');
+visitors.JSXAttribute(jsxAttr('value', literal('bc1qexampleaddress')));
+assert.strictEqual(reports.length, 18, 'create() leaves value out of the set');
+visitors.ObjectPattern(objectPattern(defaulted('prefix', literal('Last synced'))));
+visitors.ObjectPattern(objectPattern(defaulted('noun', literal('Ticker'))));
+assert.strictEqual(reports.length, 20, 'create() flags the prefix and noun prop defaults');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

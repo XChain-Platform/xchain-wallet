@@ -34,7 +34,7 @@
 
 // Every public bridge handler name starts with this namespace. Anything
 // outside it is privileged and must never be invoked by a web origin.
-export const PUBLIC_BRIDGE_PREFIX = 'bridge.';
+const PUBLIC_BRIDGE_PREFIX = 'bridge.';
 
 /**
  * True when `type` is a public, web-reachable bridge message type.

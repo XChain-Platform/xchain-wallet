@@ -126,6 +126,34 @@ describe('assertSignedTxMatchesPsbt', () => {
         expect(() => verify(LEGACY_TX, d)).not.toThrow();
     });
 
+    it('refuses a reply that dropped the timelock the PSBT asked for', () => {
+        // The Trezor payload carried no locktime at all, so a time-locked PSBT
+        // came back spendable NOW while every other comparison here passed.
+        const d = legacyDecomposed();
+        d.locktime = 900000;
+        expect(() => verify(LEGACY_TX, d))
+            .toThrow(/it has locktime 0, the PSBT asked for 900000/);
+    });
+
+    it('refuses a reply that ADDED a timelock the PSBT did not ask for', () => {
+        expect(() => verify(SEGWIT, {
+            txVersion: 2,
+            locktime: 0,
+            inputs: [{ prevTxHash: A, prevTxIndex: 0 }, { prevTxHash: B, prevTxIndex: 7 }],
+            outputs: [
+                { scriptPubKeyHex: '0014' + '66'.repeat(20), value: 5000000000 },
+                { scriptPubKeyHex: '5120' + '77'.repeat(32), value: 546 },
+                { scriptPubKeyHex: 'a914' + '88'.repeat(20) + '87', value: 999 },
+            ],
+        })).toThrow(/it has locktime 800000, the PSBT asked for 0/);
+    });
+
+    it('treats an absent locktime on the approved PSBT as 0', () => {
+        const d = legacyDecomposed();
+        delete d.locktime;
+        expect(() => verify(LEGACY_TX, d)).not.toThrow();
+    });
+
     it('refuses a reordered output set', () => {
         const d = legacyDecomposed();
         d.outputs.reverse();
