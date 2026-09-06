@@ -10,10 +10,9 @@
 
 // Per-list chain-filter memory: §23.5 / G052. Persists the user's last
 // chain-filter choice to localStorage so navigating away and back
-// restores the same view. Each list (history, balances) owns its own
-// key so filters don't bleed across surfaces with different semantics
-// (history filters a Set of full chainIds; the balance tabs filter
-// a single coin family or 'all').
+// restores the same view. Each list owns its own key so filters don't
+// bleed across surfaces with different semantics; the history list is
+// the only reader today and stores a Set of full chainIds.
 //
 // Defensive reads: missing / corrupt / empty values resolve to null
 // (caller falls back to its own default). Defensive writes: failures
