@@ -28,9 +28,14 @@
 //      a permanent rejection to 'failed', and Discard retires it. A record
 //      left 'queued' after the bytes landed keeps netting the spend out of
 //      the balance and never subscribes for its confirmation.
+//   4. A settlement a closed vault refuses is journaled under the queue's own
+//      storage key and replayed against the next vault that takes it. Removal
+//      from the queue is what would otherwise strand the record for good, and
+//      a second key would outlive the wipe, which clears by enumerated key.
 
 import { describe, it, expect, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 
 const CHAIN = 'bitcoin-regtest';
@@ -75,10 +80,12 @@ function deferred() {
  * entries, which is the same path a persisted queue takes on rehydrate and
  * the only way to seed the queue with the fields submitAction supplies.
  */
-function makeHost({ entries = [], broadcastTx, settings = adsSettings() } = {}) {
+function makeHost({
+    entries = [], broadcastTx, settings = adsSettings(), storage: injected, pendingTxs,
+} = {}) {
     let current = JSON.parse(JSON.stringify(settings));
     const vault = {
-        pendingTxs: memCollection(),
+        pendingTxs: pendingTxs ?? memCollection(),
         wallets: { list: async () => [{ id: W, name: 'Main' }] },
         settings: {
             get: vi.fn(async () => JSON.parse(JSON.stringify(current))),
@@ -86,7 +93,7 @@ function makeHost({ entries = [], broadcastTx, settings = adsSettings() } = {}) 
         },
     };
     const saved = [];
-    const storage = {
+    const storage = injected ?? {
         load: async () => ({ [W]: entries }),
         save: async (snapshot) => { saved.push(JSON.parse(JSON.stringify(snapshot))); },
         clear: async () => {},
@@ -303,6 +310,130 @@ describe('the host queue settles the PendingTx half it was handed', () => {
         const res = await locked.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
         expect(res.ok).toBe(true);
         expect(await locked.list()).toEqual([]);
+    });
+});
+
+describe('a settlement the vault refused survives the entry that owed it', () => {
+    const queuedRecord = (id) => ({
+        id, chain: 'bitcoin', network: 'regtest', status: 'queued', txHex: `hex-${id}`, txid: null, error: 'offline',
+    });
+    const KEY = 'xchain.broadcastQueue';
+
+    /** chrome.storage.local double, callback-shaped like the real one. */
+    function fakeChrome() {
+        const store = {};
+        return {
+            store,
+            api: {
+                runtime: {},
+                storage: {
+                    local: {
+                        get: (key, cb) => cb({ [key]: store[key] }),
+                        set: (obj, cb) => { Object.assign(store, JSON.parse(JSON.stringify(obj))); cb(); },
+                        remove: (key, cb) => { delete store[key]; cb(); },
+                    },
+                },
+            },
+        };
+    }
+
+    it('a vault that will not take the write settles the record on the next list', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(async () => 'tx-A'),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        const open = h.vault.pendingTxs.get;
+        h.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+
+        // The bytes land and the entry leaves the queue, so nothing but the
+        // journal still names the record the broadcast settles.
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        expect(await h.list()).toEqual([]);
+
+        h.vault.pendingTxs.get = open;
+        await h.list();
+        const rec = await h.vault.pendingTxs.get('p1');
+        expect(rec.status).toBe('broadcast');
+        expect(rec.txid).toBe('tx-A');
+        expect(rec.error).toBeNull();
+    });
+
+    it('a permanent rejection the vault refused reaches the record too', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(async () => { throw new Error('bad-txns-inputs-missingorspent'); }),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        const open = h.vault.pendingTxs.get;
+        h.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+
+        await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        h.vault.pendingTxs.get = open;
+        await h.list();
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({
+            status: 'failed', error: 'bad-txns-inputs-missingorspent',
+        });
+    });
+
+    it('a discard the vault refused still retires the record', async () => {
+        const h = makeHost({ entries: [entry('A', { pendingTxId: 'p1' })], broadcastTx: vi.fn() });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+        const open = h.vault.pendingTxs.get;
+        h.vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+
+        expect((await h.call('broadcast.queue.discard', { walletId: W, id: 'A' })).result)
+            .toEqual({ discarded: true });
+
+        h.vault.pendingTxs.get = open;
+        await h.list();
+        expect(await h.vault.pendingTxs.get('p1')).toBeNull();
+    });
+
+    it('the owed write survives a worker restart, under the queue key alone', async () => {
+        const fake = fakeChrome();
+        const prior = globalThis.chrome;
+        globalThis.chrome = fake.api;
+        try {
+            fake.store[KEY] = { queues: { [W]: [entry('A', { pendingTxId: 'p1' })] } };
+            const records = memCollection();
+            await records.put(queuedRecord('p1'));
+
+            const locked = makeHost({
+                storage: createBroadcastQueueStorage(),
+                pendingTxs: {
+                    ...records,
+                    get: async () => { throw new Error('VaultStateError: vault is closed'); },
+                },
+                broadcastTx: vi.fn(async () => 'tx-A'),
+            });
+            expect((await locked.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+            await new Promise((r) => setTimeout(r, 0));
+
+            // The wallet wipe clears the local store by enumerated key, so the
+            // journal has to share the key the queue already registers.
+            expect(Object.keys(fake.store)).toEqual([KEY]);
+            expect((await records.get('p1')).status).toBe('queued');
+
+            // A fresh worker over the same store: the queue is empty, and the
+            // journal is the only thing that still knows what the bytes did.
+            const broadcastTx = vi.fn(async () => 'tx-A');
+            const reopened = makeHost({
+                storage: createBroadcastQueueStorage(),
+                pendingTxs: records,
+                broadcastTx,
+            });
+            expect(await reopened.list()).toEqual([]);
+            expect(broadcastTx).not.toHaveBeenCalled();
+            expect(await records.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
+
+            // The drained journal leaves nothing behind for the next boot.
+            await new Promise((r) => setTimeout(r, 0));
+            expect(fake.store[KEY].settlements).toEqual([]);
+        } finally {
+            if (prior === undefined) delete globalThis.chrome;
+            else globalThis.chrome = prior;
+        }
     });
 });
 

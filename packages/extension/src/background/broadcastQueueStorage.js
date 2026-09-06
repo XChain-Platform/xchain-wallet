@@ -36,8 +36,14 @@ const STORAGE_KEY = 'xchain.broadcastQueue';
  */
 
 /**
- * Snapshot shape persisted to storage.
+ * Snapshot shape the host hands `save` and gets back from `load`.
  * @typedef {Record<string, QueueEntry[]>} QueueSnapshot
+ */
+
+/**
+ * One PendingTx write the vault refused, held until a vault that accepts it.
+ * Carries the record's id and the write to apply, never signed bytes.
+ * @typedef {{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt?: number }} OwedSettlement
  */
 
 /**
@@ -50,9 +56,18 @@ const STORAGE_KEY = 'xchain.broadcastQueue';
  * there is nothing recoverable behind it, so refusing to persist over it
  * would strand the queue for good.
  *
+ * Both halves ride ONE storage key. The wallet wipe clears the local store by
+ * enumerated key, so a second key would need registering there to be erased
+ * and would otherwise outlive the wallet holding records that name its
+ * transactions. `loadSettlements` reports the journal the last successful
+ * `load` read, and either save writes the pair, so neither half can erase the
+ * other.
+ *
  * @typedef {Object} BroadcastQueueStorage
  * @property {() => Promise<QueueSnapshot | null>} load
  * @property {(snapshot: QueueSnapshot) => Promise<void>} save
+ * @property {() => Promise<OwedSettlement[]>} loadSettlements
+ * @property {(owed: OwedSettlement[]) => Promise<void>} saveSettlements
  * @property {() => Promise<void>} clear
  */
 
@@ -80,9 +95,54 @@ export function createBroadcastQueueStorage() {
     return null;
 }
 
-function chromeLocalAdapter() {
+/**
+ * Wrap a shell's raw key IO in the two-half envelope.
+ *
+ * `read` reports `{ ok: false }` for a store it could not reach and
+ * `{ ok: true, blob }` otherwise, which is what keeps "unreadable" and "empty"
+ * apart all the way up to the host.
+ *
+ * @param {{ read: () => Promise<{ ok: boolean, blob?: unknown }>,
+ *           write: (blob: unknown) => Promise<void>,
+ *           remove: () => Promise<void> }} io
+ * @returns {BroadcastQueueStorage}
+ */
+function envelopeAdapter(io) {
+    // Last successfully read state of the key. This adapter is its process's
+    // only writer, so saving one half alongside the cached other half keeps
+    // the pair consistent with no read-modify-write race between them.
+    let cached = { queues: /** @type {QueueSnapshot} */ ({}), settlements: /** @type {OwedSettlement[]} */ ([]) };
+    async function persist() {
+        await io.write({ queues: cached.queues, settlements: cached.settlements });
+    }
     return {
         async load() {
+            const read = await io.read();
+            if (!read.ok) return null;
+            cached = splitBlob(read.blob);
+            return cached.queues;
+        },
+        async loadSettlements() {
+            return cached.settlements.map((s) => ({ ...s }));
+        },
+        async save(snapshot) {
+            cached.queues = snapshot;
+            await persist();
+        },
+        async saveSettlements(owed) {
+            cached.settlements = Array.isArray(owed) ? owed : [];
+            await persist();
+        },
+        async clear() {
+            cached = { queues: {}, settlements: [] };
+            await io.remove();
+        },
+    };
+}
+
+function chromeLocalAdapter() {
+    return envelopeAdapter({
+        read() {
             return new Promise((resolve) => {
                 try {
                     chrome.storage.local.get(STORAGE_KEY, (items) => {
@@ -92,26 +152,26 @@ function chromeLocalAdapter() {
                         // Reading it as an empty queue is what lets the next
                         // save wipe the persisted entries.
                         if (chrome.runtime?.lastError || !items) {
-                            resolve(null);
+                            resolve({ ok: false });
                             return;
                         }
-                        resolve(coerceSnapshot(items[STORAGE_KEY]));
+                        resolve({ ok: true, blob: items[STORAGE_KEY] });
                     });
                 } catch (_e) {
-                    resolve(null);
+                    resolve({ ok: false });
                 }
             });
         },
-        async save(snapshot) {
+        write(blob) {
             return new Promise((resolve) => {
                 try {
-                    chrome.storage.local.set({ [STORAGE_KEY]: snapshot }, () => resolve());
+                    chrome.storage.local.set({ [STORAGE_KEY]: blob }, () => resolve());
                 } catch (_e) {
                     resolve();
                 }
             });
         },
-        async clear() {
+        remove() {
             return new Promise((resolve) => {
                 try {
                     chrome.storage.local.remove(STORAGE_KEY, () => resolve());
@@ -120,12 +180,12 @@ function chromeLocalAdapter() {
                 }
             });
         },
-    };
+    });
 }
 
 function localStorageAdapter() {
-    return {
-        async load() {
+    return envelopeAdapter({
+        async read() {
             let raw;
             try {
                 raw = localStorage.getItem(STORAGE_KEY);
@@ -133,29 +193,66 @@ function localStorageAdapter() {
                 // The store itself is unreachable (privacy mode, sandboxed
                 // iframe, disabled site data). Entries may well be sitting
                 // in it, so report the failure instead of an empty queue.
-                return null;
+                return { ok: false };
             }
-            if (typeof raw !== 'string' || !raw) return {};
+            if (typeof raw !== 'string' || !raw) return { ok: true, blob: {} };
             try {
-                return coerceSnapshot(JSON.parse(raw));
+                return { ok: true, blob: JSON.parse(raw) };
             } catch (_e) {
                 // Unparseable blob: nothing behind it is recoverable, so
                 // treat it as empty and let the next save replace it.
-                return {};
+                return { ok: true, blob: {} };
             }
         },
-        async save(snapshot) {
+        async write(blob) {
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
             } catch (_e) {
                 // Quota errors / privacy modes: tolerate so the queue
                 // mutation itself still succeeds.
             }
         },
-        async clear() {
+        async remove() {
             try { localStorage.removeItem(STORAGE_KEY); } catch (_e) { /* ignore */ }
         },
-    };
+    });
+}
+
+/**
+ * Split a stored blob into its two halves. A blob written before the journal
+ * existed carries the wallet queues at the top level, so anything without an
+ * envelope `queues` object reads as queues alone.
+ *
+ * @param {unknown} blob
+ * @returns {{ queues: QueueSnapshot, settlements: OwedSettlement[] }}
+ */
+function splitBlob(blob) {
+    const isEnvelope = !!blob
+        && typeof blob === 'object'
+        && !Array.isArray(blob)
+        && !!(/** @type {any} */ (blob).queues)
+        && typeof (/** @type {any} */ (blob).queues) === 'object'
+        && !Array.isArray(/** @type {any} */ (blob).queues);
+    if (!isEnvelope) return { queues: coerceSnapshot(blob), settlements: [] };
+    const env = /** @type {any} */ (blob);
+    return { queues: coerceSnapshot(env.queues), settlements: coerceSettlements(env.settlements) };
+}
+
+/**
+ * Defensive parse for the journal. A record without the id it names or without
+ * a write to apply cannot be replayed, so it is dropped rather than kept as a
+ * permanent resident of the blob.
+ */
+function coerceSettlements(v) {
+    if (!Array.isArray(v)) return [];
+    return v.filter((s) => (
+        s
+        && typeof s === 'object'
+        && typeof s.id === 'string'
+        && typeof s.pendingTxId === 'string'
+        && s.pendingTxId
+        && (s.op === 'discard' || (s.op === 'patch' && !!s.patch && typeof s.patch === 'object'))
+    ));
 }
 
 /**

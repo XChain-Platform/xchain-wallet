@@ -2566,6 +2566,14 @@ export function createBackgroundHost(deps) {
                 // entries.
                 if (!snapshot || typeof snapshot !== 'object') return false;
                 mergeQueueSnapshot(snapshot);
+                if (typeof broadcastQueueStorage.loadSettlements === 'function') {
+                    try {
+                        mergeOwedSettlements(await broadcastQueueStorage.loadSettlements());
+                    } catch (_e) {
+                        // An unreadable journal costs the replay of writes owed
+                        // before this boot, never the queue itself.
+                    }
+                }
                 queueLoaded = true;
                 return true;
             })();
@@ -2594,6 +2602,93 @@ export function createBackgroundHost(deps) {
         } catch (_e) {
             // Same tolerance as load: never block a queue mutation on
             // a storage failure.
+        }
+    }
+    // Hold a PendingTx write the vault refused until a vault takes it. Leaving
+    // the queue is what makes an entry unretriable, and a record left 'queued'
+    // after its bytes landed keeps netting the spend out of the balance.
+    const OWED_SETTLEMENT_LIMIT = 50;
+    /** @type {Array<{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt: number }>} */
+    let owedSettlements = [];
+    function mergeOwedSettlements(persisted) {
+        if (!Array.isArray(persisted) || persisted.length === 0) return;
+        const held = new Set(owedSettlements.map((s) => s.pendingTxId));
+        for (const owed of persisted) {
+            if (!owed || typeof owed !== 'object') continue;
+            if (typeof owed.pendingTxId !== 'string' || !owed.pendingTxId) continue;
+            if (held.has(owed.pendingTxId)) continue;
+            held.add(owed.pendingTxId);
+            owedSettlements.push({ ...owed });
+        }
+    }
+    // Write the journal to the queue's own storage key. The wallet wipe clears
+    // the local store by enumerated key, so a key of its own would outlive the
+    // wallet whose transactions the journal names.
+    async function persistOwedSettlements() {
+        if (!queueLoaded) return;
+        if (typeof broadcastQueueStorage?.saveSettlements !== 'function') return;
+        try {
+            await broadcastQueueStorage.saveSettlements(owedSettlements.map((s) => ({ ...s })));
+        } catch (_e) {
+            // Same tolerance the queue save takes: a storage failure never
+            // blocks the route that recorded the write.
+        }
+    }
+    // Record what the replay needs and nothing else: a journal record names a
+    // PendingTx and the write to apply, never signed bytes, and never enters
+    // `queuedBroadcasts`, so no route can list or broadcast one.
+    function recordOwedSettlement(walletId, pendingTxId, op, patch) {
+        if (typeof pendingTxId !== 'string' || !pendingTxId) return;
+        // One record per PendingTx, holding the latest write owed to it.
+        owedSettlements = owedSettlements.filter((s) => s.pendingTxId !== pendingTxId);
+        owedSettlements.push({
+            id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            ...(typeof walletId === 'string' && walletId ? { walletId } : {}),
+            pendingTxId,
+            op,
+            ...(patch ? { patch } : {}),
+            recordedAt: Date.now(),
+        });
+        // Cap the journal so a vault that never reopens cannot grow the stored
+        // blob without bound; the oldest owed write goes first.
+        if (owedSettlements.length > OWED_SETTLEMENT_LIMIT) {
+            owedSettlements = owedSettlements.slice(-OWED_SETTLEMENT_LIMIT);
+        }
+        void persistOwedSettlements();
+    }
+    /**
+     * Replay every owed write against an open vault. Each record is applied,
+     * dropped because the PendingTx it names already left 'queued', or kept for
+     * the next attempt while the vault stays unreachable. Never throws: the
+     * routes that call it must not turn a settled broadcast into a route error.
+     *
+     * @param {any} vault
+     */
+    async function flushOwedSettlements(vault) {
+        if (owedSettlements.length === 0) return;
+        try {
+            const kept = [];
+            let changed = false;
+            for (const owed of owedSettlements) {
+                let verdict;
+                if (owed.op === 'discard') {
+                    try {
+                        await flows.discardQueuedBroadcast({ vault, pendingTxId: owed.pendingTxId });
+                        verdict = 'settled';
+                    } catch (_e) {
+                        verdict = 'unreachable';
+                    }
+                } else {
+                    verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
+                }
+                if (verdict === 'unreachable') kept.push(owed);
+                else changed = true;
+            }
+            if (!changed) return;
+            owedSettlements = kept;
+            await persistOwedSettlements();
+        } catch (_e) {
+            // A journal that cannot drain stays as it is for the next route.
         }
     }
     function getQueue(walletId) {
@@ -2659,8 +2754,11 @@ export function createBackgroundHost(deps) {
         void persistQueue();
         return stored;
     }
-    host.register('broadcast.queue.list', async (req) => {
+    host.register('broadcast.queue.list', async (req, { vault }) => {
         await ensureQueueLoaded();
+        // The queued-broadcast banner lists on mount, which is the first moment
+        // after an unlock at which an owed write has a vault to land in.
+        await flushOwedSettlements(vault);
         return [...getQueue(req?.walletId)];
     });
     // Cluster G FOLLOWUP 1: explicit enqueue endpoint. Renderer-side
@@ -2699,22 +2797,44 @@ export function createBackgroundHost(deps) {
      * and discard apply), and a missing record or a locked vault never turns a
      * settled broadcast into a route error. Renderer enqueues carry no id.
      *
+     * The three outcomes are kept apart because only one of them owes a retry:
+     * 'settled' wrote the record, 'closed' found nothing to write (no id, no
+     * record, or a record that already left 'queued'), and 'unreachable' means
+     * the vault refused the read or the write and the caller journals it.
+     *
      * @param {any} vault
      * @param {{ pendingTxId?: string }} entry
      * @param {object} patch
-     * @returns {Promise<boolean>}  true when a record was written
+     * @returns {Promise<'settled' | 'closed' | 'unreachable'>}
      */
     async function settleQueuedPendingTx(vault, entry, patch) {
         const pendingTxId = entry?.pendingTxId;
-        if (typeof pendingTxId !== 'string' || !pendingTxId) return false;
+        if (typeof pendingTxId !== 'string' || !pendingTxId) return 'closed';
+        return applyPendingTxPatch(vault, pendingTxId, patch);
+    }
+    /**
+     * Apply one patch to a PendingTx still 'queued', reporting which of the
+     * three outcomes above happened.
+     *
+     * @param {any} vault
+     * @param {string} pendingTxId
+     * @param {object} patch
+     * @returns {Promise<'settled' | 'closed' | 'unreachable'>}
+     */
+    async function applyPendingTxPatch(vault, pendingTxId, patch) {
+        let existing;
         try {
-            const existing = await vault?.pendingTxs?.get(pendingTxId);
-            if (!existing || existing.status !== 'queued') return false;
-            await vault.pendingTxs.put({ ...existing, ...patch });
-            return true;
+            existing = await vault?.pendingTxs?.get(pendingTxId);
         } catch (_e) {
-            return false;
+            return 'unreachable';
         }
+        if (!existing || existing.status !== 'queued') return 'closed';
+        try {
+            await vault.pendingTxs.put({ ...existing, ...patch });
+        } catch (_e) {
+            return 'unreachable';
+        }
+        return 'settled';
     }
     // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
     // `broadcastTx` is an irreversible effector, so a second call for the same
@@ -2778,10 +2898,13 @@ export function createBackgroundHost(deps) {
                     await persistQueue();
                     // Same transition core's drain records for a permanent
                     // rejection: the record stops netting and offers a re-compose.
-                    await settleQueuedPendingTx(vault, entry, {
+                    const failedPatch = {
                         status: 'failed',
                         error: err && err.message ? String(err.message) : String(err),
-                    });
+                    };
+                    if (await settleQueuedPendingTx(vault, entry, failedPatch) === 'unreachable') {
+                        recordOwedSettlement(walletId, entry.pendingTxId, 'patch', failedPatch);
+                    }
                 }
                 throw err;
             }
@@ -2791,12 +2914,16 @@ export function createBackgroundHost(deps) {
             // Encoder result shape varies by chain, same as `broadcast.signedTx`
             // below: normalize so the caller always sees { txid }.
             const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
-            await settleQueuedPendingTx(vault, entry, {
+            const landedPatch = {
                 status: 'broadcast',
                 broadcastAt: new Date().toISOString(),
                 txid: txid ?? entry.txid ?? null,
                 error: null,
-            });
+            };
+            if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
+                recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
+            }
+            await flushOwedSettlements(vault);
             // §36.3 / §5.3.4: the queued tx is what donates, so its ADS verdict is
             // booked here, after the bytes landed and after the entry left the
             // queue (a retry cannot reach it, so nothing books twice).
@@ -2834,9 +2961,12 @@ export function createBackgroundHost(deps) {
             try {
                 await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
             } catch (_e) {
-                // Locked vault or missing record: the queue half is already gone.
+                // The vault refused the delete. The queue half is already gone,
+                // so the journal is the only route left back to the record.
+                recordOwedSettlement(req?.walletId, entry.pendingTxId, 'discard');
             }
         }
+        await flushOwedSettlements(vault);
         return { discarded: idx >= 0 };
     });
 
