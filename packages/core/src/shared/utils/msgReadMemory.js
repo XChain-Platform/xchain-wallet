@@ -47,13 +47,6 @@ function safeSet(key, value) {
     } catch { /* noop */ }
 }
 
-function safeRemove(key) {
-    try {
-        if (typeof localStorage === 'undefined') return;
-        localStorage.removeItem(NS + key);
-    } catch { /* noop */ }
-}
-
 /**
  * Read the seen-txid map for a wallet + account. Returns an empty object when
  * nothing is stored or the persisted value is unparseable, so callers can treat
@@ -97,17 +90,6 @@ export function writeMsgRead(walletId, accountId, map) {
     if (typeof walletId !== 'string' || !walletId) return;
     if (!map || typeof map !== 'object') return;
     safeSet(scopeKey(walletId, accountId), JSON.stringify(map));
-}
-
-/**
- * Drop all read marks for a wallet + account (e.g., on remove-wallet).
- *
- * @param {string | null | undefined} walletId
- * @param {string | null | undefined} accountId
- */
-export function clearMsgRead(walletId, accountId) {
-    if (typeof walletId !== 'string' || !walletId) return;
-    safeRemove(scopeKey(walletId, accountId));
 }
 
 // --- Unread-count snapshot --------------------------------------------------

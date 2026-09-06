@@ -40,60 +40,9 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = [
  * @property {() => Promise<void> | void} [onUnlocked]
  */
 
-export async function handleWalletCreate(request, deps) {
-    const password = /** @type {any} */ (request)?.password;
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('wallet.create: password is required');
-    }
-    await assertFreshVault(deps);
-    const {
-        name = 'Main Wallet',
-        strengthBits = 128,
-        bip39Passphrase = '',
-        activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
-    } = /** @type {any} */ (request);
-
-    const kdfParams = cryptoLib.makeFreshKdfParams();
-    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
-    try {
-        const vault = new storageLib.Vault({
-            backend: deps.storageBackend,
-            masterKey,
-        });
-        await vault.open();
-        const result = await flows.createWallet({
-            password,
-            vault,
-            chainRegistry: deps.chainRegistry,
-            sdkRegistry: deps.sdkRegistry,
-            activeChainIds,
-            name,
-            strengthBits,
-            bip39Passphrase,
-            kdfParams,
-        });
-        await vault.save();
-        vault.close();
-
-        await deps.metaBackend.save({ kdfParams });
-        await deps.sessionBackend.save(masterKey);
-        await saveSigningSecret(deps.signingSecretBackend, password);
-    } finally {
-        masterKey.fill(0);
-    }
-
-    if (typeof deps.onUnlocked === 'function') {
-        await deps.onUnlocked();
-    }
-    // Re-run create to fetch the mnemonic? No: createWallet already
-    // returned it above. Need to capture it before this final step.
-    return { created: true };
-}
-
 /**
- * Two-phase version: returns the mnemonic. Popups that want the
- * §19.2 seed-phrase display ceremony call this instead and show the
- * mnemonic before the success transition.
+ * Returns the mnemonic so a popup running the §19.2 seed-phrase display
+ * ceremony can show it before the success transition.
  */
 export async function handleWalletCreateWithMnemonic(request, deps) {
     const password = /** @type {any} */ (request)?.password;

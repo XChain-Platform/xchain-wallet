@@ -93,33 +93,6 @@ export function writeChainSet(key, value) {
 }
 
 /**
- * Read a single string filter value (e.g. 'all' or a coin family
- * name). Returns null when missing or empty.
- *
- * @param {string} key
- * @returns {string | null}
- */
-export function readChainString(key) {
-    const v = safeGet(key);
-    return typeof v === 'string' && v.length > 0 ? v : null;
-}
-
-/**
- * Write a single string filter value. 'all' is removed (the natural
- * default) so a stale entry doesn't confuse a future format change.
- *
- * @param {string} key
- * @param {string | null | undefined} value
- */
-export function writeChainString(key, value) {
-    if (!value || value === 'all') {
-        safeRemove(key);
-        return;
-    }
-    safeSet(key, value);
-}
-
-/**
  * Cluster O FOLLOWUP 3: wipe every persisted chain-filter entry. Used
  * by Settings → Display's "Reset list preferences" button so a user
  * who finds a list filtered unexpectedly can return every list to its
