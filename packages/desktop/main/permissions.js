@@ -19,7 +19,7 @@
 // `TransportWebHID.create()` would spin indefinitely waiting for a
 // device the OS sees but Electron refuses to surface.
 //
-// Two handlers are needed:
+// Three handlers are needed:
 //
 //   1. `setPermissionRequestHandler`: when the renderer calls a
 //      permission-gated API (like requestDevice), Electron asks us
@@ -32,6 +32,15 @@
 //      vendor IDs so unrelated HID peripherals (keyboards, mice,
 //      gamepads) don't clutter the picker.
 //
+//   3. `setPermissionCheckHandler`: Chromium asks whether a frame ALREADY
+//      holds a permission before it asks to be granted one, and in
+//      Electron 43 `hid` is check-only: it is a member of the check
+//      handler's permission union and is ABSENT from the request
+//      handler's (electron.d.ts, `setPermissionCheckHandler` vs
+//      `setPermissionRequestHandler`). The check handler is therefore the
+//      one the shipped product consults for WebHID, and handler 1 is the
+//      belt to its braces rather than the reverse.
+//
 // Vendor IDs sourced from the public USB-IF database:
 //   - Ledger:    0x2C97
 //   - Trezor T:  0x1209 (InterBiometrics, used by Trezor Model T)
@@ -40,7 +49,7 @@
 // The allowlist is exported so the `desktop-hw.smoke.js` smoke can
 // verify coverage without duplicating the constants.
 //
-// Both handlers are origin-gated, not only vendor-gated. The renderer CSP
+// The handlers are origin-gated, not only vendor-gated. The renderer CSP
 // allow-lists `https://connect.trezor.io` in `script-src` AND `frame-src`,
 // so remote third-party content really does run inside the HID-granted
 // session; a vendor-only device handler would hand that frame a paired
@@ -48,14 +57,54 @@
 // permission without re-running the request handler, so the request path
 // cannot cover the device path.
 //
-// The two handlers get different predicates because Electron gives them
-// different evidence (electron.d.ts, v43):
-//   - `PermissionRequest` carries `requestingUrl`, the requesting FRAME's
-//     last URL, so the request path can use the full appRoot path check.
-//   - `DevicePermissionHandlerHandlerDetails` carries `deviceType`,
-//     `origin` and `device` and NOTHING else: no frame, no URL. An origin
-//     is not a path, so `isAppUrl` cannot be applied to it - see
-//     `isRemoteHidOrigin` for what the device path can actually decide.
+// WHAT EACH HANDLER CAN ACTUALLY SEE. Measured against Electron 43.3.0,
+// driving a real session: a `file://` window hosting (i) an
+// `http://127.0.0.1` subframe and (ii) a `sandbox="allow-scripts"`
+// srcdoc subframe, each carrying `allow="hid"`, with all three frames
+// calling `navigator.hid`. The four callbacks are NOT interchangeable and
+// only one of them names the requesting frame:
+//
+//   - `setPermissionRequestHandler` never fires for `hid` at all. `hid` is
+//     a member of the CHECK handler's permission union and is absent from
+//     the request handler's (electron.d.ts, v43), and the live run
+//     confirms the type: a WebHID call reaches the check handler and the
+//     request handler stays silent. The `hid` arm below is inert in the
+//     shipped product and is kept as a belt for other Electron builds.
+//   - `setPermissionCheckHandler` reports the EMBEDDER, not the caller.
+//     All three frames produce the byte-identical payload
+//     `requestingOrigin: 'file:///'`, `details: { isMainFrame: false,
+//     securityOrigin: 'file:///' }` - no `requestingUrl`, no
+//     `embeddingOrigin`, and `isMainFrame: false` even for the window's
+//     own top-level frame. So this handler can judge the WINDOW's origin
+//     and nothing finer, and reading `isMainFrame` as a subframe signal
+//     denies the app its own device picker. See `isAppHidCheck`.
+//   - `setDevicePermissionHandler` reports the embedder too:
+//     `getDevices()` called from either hostile subframe invokes it with
+//     `origin: 'file://'`, the same value the app's own frame produces.
+//     `isRemoteHidOrigin` therefore stops a remote TOP-LEVEL window and
+//     structurally cannot see a subframe.
+//   - `select-hid-device` is the only callback that names the caller:
+//     `details.frame.url` reads `http://127.0.0.1:<port>/frame.html` and
+//     `about:srcdoc` for the two hostile frames against the packaged
+//     renderer path for the app's own, and `details.frame.origin` splits
+//     them as `http://127.0.0.1:<port>` / `null` / `file://`. The frame
+//     check lives there because that is where the evidence is.
+//
+// The residual this module cannot close: a subframe inside the app window
+// calling `getDevices()` inherits the app's own origin at every handler
+// Electron offers, so an allow-listed Ledger stays reachable from one. The
+// defence for that is to keep such a frame out of the HID-granted session
+// (the `connect.trezor.io` `frame-src`/`script-src` allowance, or a
+// separate partition for Trezor Connect), which is a renderer-side trust
+// boundary rather than a permission callback.
+//
+// The check handler narrows `hid` alone and leaves every other permission
+// at the session default. The shared UI it hosts reads and writes the
+// clipboard, offers a camera QR scanner and asks for notification
+// permission, so a blanket default-deny across the check handler takes
+// working features out of the shipped wallet. A wider permission posture
+// is its own change with its own coverage, not a side effect of the
+// WebHID gate.
 
 import { isRemoteFrameUrl } from './security.js';
 
@@ -92,18 +141,23 @@ export function attachHidPermissions(session, opts) {
     if (typeof appRoot !== 'string' || appRoot.length === 0) {
         throw new Error('attachHidPermissions: opts.appRoot (packaged renderer dir) is required');
     }
+    if (typeof session.setPermissionCheckHandler !== 'function') {
+        throw new Error('attachHidPermissions: session.setPermissionCheckHandler is missing');
+    }
+    if (typeof session.on !== 'function') {
+        throw new Error('attachHidPermissions: session.on (select-hid-device) is missing');
+    }
 
     session.setPermissionRequestHandler((webContents, permission, callback, details) => {
-        // `hid` covers navigator.hid.*; grant it only to the app's own
-        // renderer directory, and do the fine-grained vendor allowlist in
-        // the device permission handler below. A frame identified as
-        // remote (any other origin, or a local file outside the app) is
-        // denied so it can never reach a paired Ledger/Trezor. Everything
-        // else stays default-deny.
+        // Electron 43 never routes `hid` here (see the handler census in
+        // the header), so this arm decides nothing in the shipped app and
+        // is kept for builds whose request handler does carry `hid`. The
+        // live gates are the check handler and `select-hid-device` below.
         //
         // Judge the REQUESTING FRAME, not its embedder: `getURL()` reports the
         // top-level window, which would let a connect.trezor.io subframe
         // asking for `hid` inherit the verdict of the app page hosting it.
+        // Every other permission stays default-deny.
         if (permission === 'hid') {
             const url = requestingFrameUrl(webContents, details);
             callback(!isRemoteFrameUrl(url, appRoot));
@@ -112,12 +166,32 @@ export function attachHidPermissions(session, opts) {
         callback(false);
     });
 
+    session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+        // `hid` is the one permission this module owns. Everything else
+        // keeps the session default so the clipboard, the QR scanner and
+        // the notification prompt keep working.
+        if (permission !== 'hid') return true;
+        return isAppHidCheck(details, requestingOrigin, appRoot);
+    });
+
     session.setDevicePermissionHandler((details) => {
         if (details.deviceType !== 'hid') return false;
         if (isRemoteHidOrigin(details.origin)) return false;
         const vendorId = details.device?.vendorId;
         if (typeof vendorId !== 'number') return false;
         return ALLOWED_VENDOR_IDS.has(vendorId);
+    });
+
+    session.on('select-hid-device', (event, details, callback) => {
+        // Refuse a frame that is not the app's, explicitly. The app's own
+        // frame is left to the session default, which grants no device
+        // until a picker exists to choose one; a device picker built on
+        // this event therefore inherits the frame check rather than having
+        // to remember it.
+        if (!isAppHidSelect(details, appRoot)) {
+            event.preventDefault();
+            callback(null);
+        }
     });
 }
 
@@ -135,6 +209,56 @@ function requestingFrameUrl(webContents, details) {
     const frameUrl = details?.requestingUrl;
     if (typeof frameUrl === 'string' && frameUrl.length > 0) return frameUrl;
     return webContents?.getURL?.();
+}
+
+/**
+ * Decide a `hid` permission CHECK, the callback Electron 43 actually
+ * consults for WebHID. Rejects a window whose origin is POSITIVELY
+ * something other than this app, in the same one-sided posture as
+ * `isRemoteFrameUrl`.
+ *
+ * The scope is a WINDOW, not a frame, and that is a measured limit rather
+ * than a choice: a live Electron 43.3.0 session hands this callback the
+ * embedder's origin for every frame in the window, so an `http://` or
+ * opaque subframe arrives spelled exactly like the app's own top-level
+ * frame. Nothing here can tell them apart. `select-hid-device` is where
+ * the frame is named, and where the frame check therefore lives.
+ *
+ * `isMainFrame` is deliberately not read. Electron reports it as `false`
+ * for the app's own top-level frame on the `hid` check, so a subframe
+ * rule built on it denies the app its own device picker.
+ *
+ * `requestingUrl` is absent on the `hid` check and is honoured when
+ * present, since other permissions and other Electron builds do supply it.
+ * An absent signal never denies.
+ *
+ * @param {{ requestingUrl?: string, embeddingOrigin?: string, securityOrigin?: string } | undefined} details
+ * @param {unknown} requestingOrigin   the origin argument Electron passes in
+ * @param {string} appRoot             packaged renderer dir
+ * @returns {boolean}                  true means allow the check
+ */
+export function isAppHidCheck(details, requestingOrigin, appRoot) {
+    if (isRemoteHidOrigin(requestingOrigin)) return false;
+    if (isRemoteHidOrigin(details?.securityOrigin)) return false;
+    if (isRemoteHidOrigin(details?.embeddingOrigin)) return false;
+    const url = details?.requestingUrl;
+    if (typeof url === 'string' && url.length > 0) return !isRemoteFrameUrl(url, appRoot);
+    return true;
+}
+
+/**
+ * Decide a `select-hid-device` request: the ONE callback that names the
+ * requesting frame. `details.frame` is a WebFrameMain carrying that
+ * frame's own url and origin, where the permission check and the device
+ * grant both report the embedder's, so a subframe is visible here and
+ * nowhere else.
+ *
+ * @param {{ frame?: { url?: string } } | undefined} details
+ * @param {string} appRoot   packaged renderer dir
+ * @returns {boolean}        true means the frame may reach the picker
+ */
+export function isAppHidSelect(details, appRoot) {
+    return !isRemoteFrameUrl(details?.frame?.url, appRoot);
 }
 
 /**
