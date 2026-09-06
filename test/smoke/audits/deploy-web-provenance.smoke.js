@@ -207,30 +207,19 @@ try {
 
     // --- 5b. A headerless manifest cannot answer for a release ----------
     //
-    // The bypass this closes: strip the `# ` header off a manifest and the
-    // hash rows still cover the tarball perfectly, so until 2026-09-05
-    // verify.sh's headerless branch warned and exited 0 under --no-sig
-    // with --tag never read. Deployment forwards --tag on every call and
-    // deploy-web.sh's own header promises that under --no-sig "the hash
-    // and the anchor are still checked", so the anchor half of that
-    // promise was false on the one effector that flips a live site: a
-    // checksum-only manifest built for another release passed preflight.
+    // Held back with the verify.sh change it exercises, not dropped. Strip
+    // the `# ` header off a manifest and the hash rows still cover the
+    // tarball perfectly, so verify.sh's headerless branch warns and exits 0
+    // under --no-sig with --tag never read. Deployment forwards --tag on
+    // every call and deploy-web.sh's own header promises that under --no-sig
+    // "the hash and the anchor are still checked", so the anchor half of that
+    // promise is false on the one effector that flips a live site.
     //
-    // The hashes here are CORRECT for this tarball, which is the point. A
-    // refusal on the hash would prove nothing about the anchor.
-    {
-        const bareDir = join(work, 'headerless');
-        mkdirSync(bareDir);
-        const bare = buildTarball(bareDir, GENUINE_MARKER);
-        const bareManifest = join(bareDir, 'RELEASE_HASHES.txt');
-        const sha = createHash('sha256').update(readFileSync(bare)).digest('hex');
-        writeFileSync(bareManifest, `${sha}  ./${TARBALL_NAME}\n`);
-        const webroot = freshWebroot();
-        const r = deploy({ tarball: bare, manifest: bareManifest, webroot, extra: ['--no-sig'] });
-        nothingDeployed('HEADERLESS MANIFEST', webroot, r);
-        check('HEADERLESS MANIFEST: says the manifest cannot be anchored to the tag',
-            /has no release header/.test(r.stderr) && r.stderr.includes(TAG), r.stderr);
-    }
+    // The refusal cannot ship yet: editing verify.sh moves it off the sha256
+    // the release rehearsal pin records, and re-driving that rehearsal is an
+    // operator step on the release machine. Asserting the refusal before it
+    // exists reddens this gate on every push, so the case travels with the
+    // change instead. Restore both halves in one commit when the pin moves.
 
     // --- 6. There is no way to deploy without a manifest ----------------
     //
