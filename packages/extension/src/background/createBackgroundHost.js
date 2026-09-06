@@ -2707,6 +2707,112 @@ export function createBackgroundHost(deps) {
     // but starting the load at host construction means the queue is
     // typically warm by the time the renderer mounts the banner.
     void ensureQueueLoaded();
+    // Wallets whose durable records this process has already reconciled. The
+    // scan reads four collections, and one pass per wallet per process covers
+    // it: every later enqueue goes through `pushQueueEntry`.
+    const recoveredWallets = new Set();
+    /**
+     * Address strings this wallet spends from: its accounts' addresses plus the
+     * imported keys the wallet record links, which carry `accountId: null` and
+     * are therefore missed by the account walk alone (§11.3.3). Same join
+     * `removeWallet` applies when it decides which PendingTx rows die with the
+     * wallet. Throws rather than narrowing when a collection is unreadable, so
+     * the caller can refuse instead of attributing records by a partial answer.
+     *
+     * @param {any} vault
+     * @param {string} walletId
+     * @returns {Promise<Set<string>>}
+     */
+    async function ownedAddressesFor(vault, walletId) {
+        const accounts = await vault.accounts.findBy('walletId', walletId);
+        const accountIds = new Set(
+            (Array.isArray(accounts) ? accounts : []).map((a) => a?.id).filter(Boolean),
+        );
+        const importedIds = await importedAddressIdsFor(vault, walletId);
+        const all = await vault.addresses.list();
+        /** @type {Set<string>} */
+        const owned = new Set();
+        for (const addr of Array.isArray(all) ? all : []) {
+            if (!addr || typeof addr.address !== 'string' || !addr.address) continue;
+            if ((addr.accountId && accountIds.has(addr.accountId)) || importedIds.has(addr.id)) {
+                owned.add(addr.address);
+            }
+        }
+        return owned;
+    }
+    /**
+     * Rebuild queue entries from the durable half for signed transactions the
+     * local store no longer holds. The two halves are not equally durable: the
+     * signing flow writes the PendingTx as 'queued' into the vault and only
+     * then asks this host to queue the bytes, and the queue's own blob is
+     * best-effort (a quota refusal, a private window, or a shell with no
+     * storage API at all leaves it empty while the vault keeps the record).
+     * Nothing else reads a 'queued' record, so without this the signed bytes
+     * are unreachable from every surface the user has.
+     *
+     * Three conditions bound what comes back, and each is a refusal:
+     *   - the record's `fromAddress` belongs to THIS wallet. An unreadable
+     *     table or an empty address set restores nothing rather than guessing,
+     *     because a wrong join would list one wallet's signed bytes under
+     *     another.
+     *   - the record still reads 'queued'. The broadcast route claims its
+     *     record as 'broadcasting' before the bytes go out, so a transaction
+     *     that reached a node cannot come back as a fresh queue entry and be
+     *     offered for a second broadcast.
+     *   - no owed settlement names it. A journaled write belongs to an entry
+     *     whose broadcast or discard already happened.
+     *
+     * @param {any} vault
+     * @param {any} chainRegistry
+     * @param {string} walletId
+     */
+    async function restoreQueueFromVault(vault, chainRegistry, walletId) {
+        if (!queueLoaded || recoveredWallets.has(walletId)) return;
+        let owned;
+        let queued;
+        try {
+            owned = await ownedAddressesFor(vault, walletId);
+            if (owned.size === 0) return;
+            queued = await vault.pendingTxs.findBy('status', 'queued');
+        } catch (_e) {
+            // A vault that cannot answer leaves the reconcile un-latched, so
+            // the next list retries it against an open one.
+            return;
+        }
+        recoveredWallets.add(walletId);
+        if (!Array.isArray(queued) || queued.length === 0) return;
+        const live = getQueue(walletId);
+        const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
+        for (const owed of owedSettlements) held.add(owed.pendingTxId);
+        const restorable = queued
+            .filter((r) => r
+                && typeof r.txHex === 'string' && r.txHex
+                && typeof r.id === 'string' && !held.has(r.id)
+                && owned.has(r.fromAddress))
+            .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+        for (const record of restorable) {
+            // Entries name a registry chain id; records name coin plus network.
+            // A record whose chain this build cannot resolve has no SDK to
+            // broadcast through, so listing it would only offer a button that
+            // throws.
+            const chainId = chainRegistry?.chainIdFor?.(record.chain, record.network);
+            if (typeof chainId !== 'string' || !chainId) continue;
+            held.add(record.id);
+            pushQueueEntry(walletId, {
+                chainId,
+                signedTxHex: record.txHex,
+                summary: record.actionSummary,
+                signedAt: Date.parse(record.createdAt) || Date.now(),
+                txid: record.txid,
+                pendingTxId: record.id,
+                // No ADS verdict: it rode the entry, never the record, so the
+                // donation this transaction may carry is not re-derivable here.
+                // Booking nothing under-counts the accumulator; booking a guess
+                // credits a donation that was never paid.
+                adsCommit: null,
+            });
+        }
+    }
     /**
      * Push a signed-but-unbroadcast tx onto the per-walletId queue.
      * Cluster G FOLLOWUP 1: used both by the action.* handlers' auto-
@@ -2754,11 +2860,14 @@ export function createBackgroundHost(deps) {
         void persistQueue();
         return stored;
     }
-    host.register('broadcast.queue.list', async (req, { vault }) => {
+    host.register('broadcast.queue.list', async (req, { vault, chainRegistry }) => {
         await ensureQueueLoaded();
         // The queued-broadcast banner lists on mount, which is the first moment
         // after an unlock at which an owed write has a vault to land in.
         await flushOwedSettlements(vault);
+        if (typeof req?.walletId === 'string' && req.walletId) {
+            await restoreQueueFromVault(vault, chainRegistry, req.walletId);
+        }
         return [...getQueue(req?.walletId)];
     });
     // Cluster G FOLLOWUP 1: explicit enqueue endpoint. Renderer-side
@@ -2793,14 +2902,16 @@ export function createBackgroundHost(deps) {
      * and a record left 'queued' after the bytes landed keeps netting the spend
      * out of the balance, never subscribes for its confirmation, and stays
      * eligible for a re-broadcast the node would reject as already known.
-     * Only a record still 'queued' is written (same precondition core's drain
-     * and discard apply), and a missing record or a locked vault never turns a
-     * settled broadcast into a route error. Renderer enqueues carry no id.
+     * Only a record the queue still owns is written (the same precondition
+     * core's drain and discard apply), and a missing record or a locked vault
+     * never turns a settled broadcast into a route error. Renderer enqueues
+     * carry no id.
      *
      * The three outcomes are kept apart because only one of them owes a retry:
      * 'settled' wrote the record, 'closed' found nothing to write (no id, no
-     * record, or a record that already left 'queued'), and 'unreachable' means
-     * the vault refused the read or the write and the caller journals it.
+     * record, or a record that already reached a terminal status), and
+     * 'unreachable' means the vault refused the read or the write and the
+     * caller journals it.
      *
      * @param {any} vault
      * @param {{ pendingTxId?: string }} entry
@@ -2813,8 +2924,14 @@ export function createBackgroundHost(deps) {
         return applyPendingTxPatch(vault, pendingTxId, patch);
     }
     /**
-     * Apply one patch to a PendingTx still 'queued', reporting which of the
-     * three outcomes above happened.
+     * Apply one patch to a PendingTx the queue still owns, reporting which of
+     * the three outcomes above happened.
+     *
+     * Two statuses are writable. 'queued' is the record as the signing flow
+     * left it; 'broadcasting' is the claim the broadcast route stamps before
+     * the bytes go out, the same transition core's drain writes at the same
+     * point. Every other status is terminal and belongs to whatever moved the
+     * record there.
      *
      * @param {any} vault
      * @param {string} pendingTxId
@@ -2828,7 +2945,8 @@ export function createBackgroundHost(deps) {
         } catch (_e) {
             return 'unreachable';
         }
-        if (!existing || existing.status !== 'queued') return 'closed';
+        if (!existing) return 'closed';
+        if (existing.status !== 'queued' && existing.status !== 'broadcasting') return 'closed';
         try {
             await vault.pendingTxs.put({ ...existing, ...patch });
         } catch (_e) {
@@ -2874,6 +2992,15 @@ export function createBackgroundHost(deps) {
             // maintains its own queue and bypasses core drainQueuedBroadcast (which
             // already gates), so the same assertion is applied here at the new call site.
             flows.assertSigningAllowed();
+            // Claim the durable half before the bytes go out, the same write
+            // core's drain makes at the same point. A record reading 'queued'
+            // is what the reload recovery treats as proof that its transaction
+            // never reached a node, so a record left at 'queued' across the
+            // network call is what would let a later boot rebuild a landed
+            // transaction as a fresh queue entry and offer it for a second
+            // broadcast. A vault that refuses the claim does not block the
+            // broadcast: the settlement journal below is the route back.
+            await settleQueuedPendingTx(vault, entry, { status: 'broadcasting', error: null });
             // `q` is the live array the queue Map holds and every renderer context
             // mutates it through this one host, so a discard of a lower entry or
             // another broadcast can shift it while this handler waits on the
@@ -2892,19 +3019,21 @@ export function createBackgroundHost(deps) {
                 // the queue and say why; the recovery is a fresh compose, not
                 // another attempt at these bytes. Transient failures stay queued,
                 // which is what the surface is for.
+                const failure = err && err.message ? String(err.message) : String(err);
+                // Release the claim either way, the two transitions core's drain
+                // records: a permanent rejection retires the record so it stops
+                // netting and offers a re-compose, and a transient one returns it
+                // to 'queued', the status both this surface and the reload
+                // recovery read as "signed, never sent".
+                let releasePatch = { status: 'queued', error: failure };
                 if (flows.classifyBroadcastFailure(err) === 'permanent') {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
-                    // Same transition core's drain records for a permanent
-                    // rejection: the record stops netting and offers a re-compose.
-                    const failedPatch = {
-                        status: 'failed',
-                        error: err && err.message ? String(err.message) : String(err),
-                    };
-                    if (await settleQueuedPendingTx(vault, entry, failedPatch) === 'unreachable') {
-                        recordOwedSettlement(walletId, entry.pendingTxId, 'patch', failedPatch);
-                    }
+                    releasePatch = { status: 'failed', error: failure };
+                }
+                if (await settleQueuedPendingTx(vault, entry, releasePatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', releasePatch);
                 }
                 throw err;
             }

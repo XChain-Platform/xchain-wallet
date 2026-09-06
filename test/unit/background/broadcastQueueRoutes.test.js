@@ -32,6 +32,10 @@
 //      storage key and replayed against the next vault that takes it. Removal
 //      from the queue is what would otherwise strand the record for good, and
 //      a second key would outlive the wipe, which clears by enumerated key.
+//   5. A boot whose local store lost the queue rebuilds it from the durable
+//      PendingTx records the signing flow stamped 'queued', bounded by an
+//      ownership join so no wallet sees another's signed bytes, and by the
+//      'broadcasting' claim so nothing that reached a node comes back.
 
 import { describe, it, expect, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
@@ -82,11 +86,17 @@ function deferred() {
  */
 function makeHost({
     entries = [], broadcastTx, settings = adsSettings(), storage: injected, pendingTxs,
+    accounts, addresses, wallets,
 } = {}) {
     let current = JSON.parse(JSON.stringify(settings));
     const vault = {
         pendingTxs: pendingTxs ?? memCollection(),
-        wallets: { list: async () => [{ id: W, name: 'Main' }] },
+        // A vault double without accounts/addresses is a vault the reload
+        // recovery cannot attribute a record to, so it restores nothing: that
+        // is the fail-closed default every test below the recovery block wants.
+        ...(accounts ? { accounts } : {}),
+        ...(addresses ? { addresses } : {}),
+        wallets: wallets ?? { list: async () => [{ id: W, name: 'Main' }] },
         settings: {
             get: vi.fn(async () => JSON.parse(JSON.stringify(current))),
             put: vi.fn(async (r) => { current = JSON.parse(JSON.stringify(r)); }),
@@ -101,7 +111,11 @@ function makeHost({
     const sdk = { encoder: { broadcastTx } };
     const host = createBackgroundHost({
         vault,
-        chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }), list: () => [] },
+        chainRegistry: {
+            get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }),
+            list: () => [],
+            chainIdFor: (coin, network) => (coin === 'bitcoin' && network === 'regtest' ? CHAIN : null),
+        },
         sdkRegistry: { get: () => sdk, for: () => sdk },
         signerPool: { get: () => null, has: () => false },
         approvals: { request: async () => ({ approved: true }) },
@@ -664,5 +678,209 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
         expect(err?.name).toBe('BroadcastFailedPermanentError');
         // A permanent rejection has nothing to queue, and that must not change.
         expect(h.onBroadcastFailure).not.toHaveBeenCalled();
+    });
+});
+
+describe('a reload rebuilds the queue from the durable PendingTx half', () => {
+    const A_ADDR = 'bcrt1qwallet-a';
+    const B_ADDR = 'bcrt1qwallet-b';
+    const W2 = 'w2';
+
+    const queuedRecord = (id, fromAddress, extra = {}) => ({
+        id,
+        chain: 'bitcoin',
+        network: 'regtest',
+        fromAddress,
+        toAddress: 'bcrt1qdest',
+        action: 'SEND',
+        actionSummary: `Send from ${fromAddress}`,
+        status: 'queued',
+        txHex: `hex-${id}`,
+        txid: null,
+        error: 'ECONNREFUSED',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        ...extra,
+    });
+
+    /** Two wallets, one account and one address each: the ownership join's input. */
+    const tables = () => ({
+        wallets: {
+            list: async () => [{ id: W }, { id: W2 }],
+            get: async (id) => ({ id, importedKeys: [] }),
+        },
+        accounts: {
+            findBy: async (key, value) => (key === 'walletId' ? [{ id: `acct-${value}`, walletId: value }] : []),
+        },
+        addresses: {
+            list: async () => ([
+                { id: 'addr-a', accountId: `acct-${W}`, address: A_ADDR },
+                { id: 'addr-b', accountId: `acct-${W2}`, address: B_ADDR },
+            ]),
+        },
+    });
+
+    const withRecords = async (records) => {
+        const store = memCollection();
+        for (const r of records) await store.put(r);
+        return store;
+    };
+
+    it('lists a signed transaction whose queue entry the local store never kept', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx: vi.fn(), ...tables() });
+
+        const listed = await h.list();
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).toMatchObject({
+            chainId: CHAIN,
+            signedTxHex: 'hex-p1',
+            pendingTxId: 'p1',
+            summary: `Send from ${A_ADDR}`,
+        });
+    });
+
+    it('rebuilds only the records the asking wallet owns', async () => {
+        const records = await withRecords([
+            queuedRecord('p1', A_ADDR),
+            queuedRecord('p2', B_ADDR),
+        ]);
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx: vi.fn(), ...tables() });
+
+        const mine = await h.list();
+        expect(mine.map((e) => e.pendingTxId)).toEqual(['p1']);
+        expect(mine.map((e) => e.signedTxHex)).toEqual(['hex-p1']);
+
+        const theirs = (await h.call('broadcast.queue.list', { walletId: W2 })).result;
+        expect(theirs.map((e) => e.pendingTxId)).toEqual(['p2']);
+        expect(theirs.map((e) => e.signedTxHex)).toEqual(['hex-p2']);
+    });
+
+    it('restores nothing from a vault whose address tables it cannot read', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const t = tables();
+        const h = makeHost({
+            entries: [],
+            pendingTxs: records,
+            broadcastTx: vi.fn(),
+            ...t,
+            addresses: { list: async () => { throw new Error('VaultStateError: vault is closed'); } },
+        });
+
+        expect(await h.list()).toEqual([]);
+        // Un-latched, so the reconcile runs again once the table answers.
+        h.vault.addresses.list = t.addresses.list;
+        expect((await h.list()).map((e) => e.pendingTxId)).toEqual(['p1']);
+    });
+
+    it('does not rebuild an entry for bytes that already reached a node', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        // The claim before the network lands; the settlement after it does not,
+        // which is the shape that leaves a broadcast transaction unsettled.
+        const refusesAfterClaim = {
+            ...records,
+            put: async (rec) => {
+                if (rec.status !== 'broadcasting') throw new Error('VaultStateError: vault is closed');
+                return records.put(rec);
+            },
+        };
+        const first = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            pendingTxs: refusesAfterClaim,
+            broadcastTx: vi.fn(async () => 'tx-A'),
+            ...tables(),
+        });
+        expect((await first.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        expect((await records.get('p1')).status).toBe('broadcasting');
+
+        // A fresh worker over an empty local store and the same vault.
+        const broadcastTx = vi.fn(async () => 'tx-A');
+        const reopened = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
+        expect(await reopened.list()).toEqual([]);
+        expect(broadcastTx).not.toHaveBeenCalled();
+    });
+
+    it('does not rebuild an entry the settlement journal still owes a write to', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const h = makeHost({
+            pendingTxs: {
+                ...records,
+                put: async () => { throw new Error('VaultStateError: vault is closed'); },
+            },
+            broadcastTx: vi.fn(),
+            storage: {
+                load: async () => ({}),
+                save: async () => {},
+                loadSettlements: async () => ([{
+                    id: 's1', pendingTxId: 'p1', op: 'patch', patch: { status: 'broadcast', txid: 'tx-A' },
+                }]),
+                saveSettlements: async () => {},
+                clear: async () => {},
+            },
+            ...tables(),
+        });
+
+        // The record still reads 'queued' only because the replay cannot land.
+        expect(await h.list()).toEqual([]);
+        expect((await records.get('p1')).status).toBe('queued');
+    });
+
+    it('rebuilds once, writes the entry back, and does not duplicate on a second list', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx: vi.fn(), ...tables() });
+
+        expect(await h.list()).toHaveLength(1);
+        expect(await h.list()).toHaveLength(1);
+        for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+        expect(h.saved.at(-1)[W]).toHaveLength(1);
+    });
+
+    it('the rebuilt entry broadcasts and settles the record it came from', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const broadcastTx = vi.fn(async () => 'tx-p1');
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
+
+        const [restored] = await h.list();
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: restored.id });
+        expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
+        expect(broadcastTx).toHaveBeenCalledWith('hex-p1');
+        expect(await records.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-p1' });
+        expect(await h.list()).toEqual([]);
+    });
+});
+
+describe('the broadcast route claims its record before the bytes go out', () => {
+    const queuedRecord = (id) => ({
+        id, chain: 'bitcoin', network: 'regtest', status: 'queued', txHex: `hex-${id}`, txid: null, error: 'offline',
+    });
+
+    it('the record reads broadcasting for the length of the network call', async () => {
+        const gate = deferred();
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(() => gate.promise),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+
+        const inFlight = h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        await vi.waitFor(async () => {
+            expect((await h.vault.pendingTxs.get('p1')).status).toBe('broadcasting');
+        });
+
+        gate.resolve('tx-A');
+        expect((await inFlight).ok).toBe(true);
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
+    });
+
+    it('a transient rejection releases the claim back to queued', async () => {
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' })],
+            broadcastTx: vi.fn(async () => { throw new Error('ECONNREFUSED'); }),
+        });
+        await h.vault.pendingTxs.put(queuedRecord('p1'));
+
+        await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({
+            status: 'queued', error: 'ECONNREFUSED',
+        });
     });
 });
