@@ -56,12 +56,12 @@ import { serializeError } from './MessageHost.js';
  *   chainRegistry?: import('@xchain-wallet/core').registry.ChainRegistry,
  *   sdkRegistry?: import('@xchain-wallet/core').sdk.SDKRegistry,
  *   onUnlocked?: () => Promise<void> | void,
- *   onLocked?: () => Promise<void> | void,
+ *   onLocked?: (result: { secretsCleared: boolean }) => Promise<void> | void,
  * }} PreHostDispatchDeps
  *
  * @typedef {Object} PreHostDeps
  * @property {() => Promise<void> | void} [onUnlocked]
- * @property {() => Promise<void> | void} [onLocked]
+ * @property {(result: { secretsCleared: boolean }) => Promise<void> | void} [onLocked]   receives whether both secret clears succeeded, so a shell can keep its auto-lock retry record when they did not
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]
  */
