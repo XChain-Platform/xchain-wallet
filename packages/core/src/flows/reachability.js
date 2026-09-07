@@ -37,12 +37,27 @@ const DEFAULT_TIMEOUT_MS = 3000;
  */
 
 /**
+ * How current the explorer's indexed data for this chain is, read off the
+ * `/status` body the default explorer probe fetches. The explorer SERVES a
+ * chain whose indexed tip is behind (marked, never refused), so "reachable"
+ * alone no longer says the balances and history it answers are current; this
+ * does. Absent when the explorer does not measure the chain or the probe was
+ * not the default one.
+ * @typedef {Object} ExplorerFreshness
+ * @property {boolean} stale
+ * @property {number | null} tipBlock         newest indexed block
+ * @property {number | null} tipAgeSeconds    how old that block is
+ * @property {boolean | null} replicaHalted   the indexer replica carries an active halt
+ */
+
+/**
  * @typedef {Object} ChainReachability
  * @property {string} chainId
  * @property {{ explorer: ServiceStatus, encoder: ServiceStatus, hub: ServiceStatus }} services
  * @property {'normal' | 'degraded' | 'offline' | 'not-configured'} mode
  * @property {Record<string, number>} [latencyMs]     populated when the probe succeeded
  * @property {Record<string, string>} [errors]        populated when the probe failed
+ * @property {{ explorer: ExplorerFreshness }} [freshness]  populated when the explorer reported it
  */
 
 /**
@@ -115,11 +130,17 @@ async function probeChain({ chainId, sdk, encoderProbe, hubProbe, explorerProbe,
     const latencyMs = {};
     /** @type {Record<string, string>} */
     const errors = {};
+    /** @type {Record<string, unknown>} */
+    const values = {};
     const services = await Promise.all([
-        runProbe('encoder', sdk, encoderProbe, timeoutMs, latencyMs, errors),
-        runProbe('hub', sdk, hubProbe, timeoutMs, latencyMs, errors),
-        runProbe('explorer', sdk, explorerProbe, timeoutMs, latencyMs, errors),
+        runProbe('encoder', sdk, encoderProbe, timeoutMs, latencyMs, errors, values),
+        runProbe('hub', sdk, hubProbe, timeoutMs, latencyMs, errors, values),
+        runProbe('explorer', sdk, explorerProbe, timeoutMs, latencyMs, errors, values),
     ]);
+    // The default explorer probe resolves the /status body, which carries the
+    // per-coin freshness maps; a custom probe resolves whatever it likes and
+    // yields no verdict.
+    const freshness = explorerFreshnessFrom(values.explorer, sdk);
     const result = {
         chainId,
         services: {
@@ -127,24 +148,50 @@ async function probeChain({ chainId, sdk, encoderProbe, hubProbe, explorerProbe,
             hub: services[1],
             explorer: services[2],
         },
-        mode: classifyChainMode(services),
+        mode: classifyChainMode(services, freshness),
     };
     if (Object.keys(latencyMs).length > 0) result.latencyMs = latencyMs;
     if (Object.keys(errors).length > 0) result.errors = errors;
+    if (freshness) result.freshness = { explorer: freshness };
     return result;
 }
 
-async function runProbe(name, sdk, probe, timeoutMs, latencyMs, errors) {
+async function runProbe(name, sdk, probe, timeoutMs, latencyMs, errors, values) {
     if (probe === null) return 'not-configured';
     const start = Date.now();
     try {
-        await runWithTimeout(() => probe(sdk), timeoutMs);
+        const value = await runWithTimeout(() => probe(sdk), timeoutMs);
         latencyMs[name] = Date.now() - start;
+        if (values) values[name] = value;
         return 'reachable';
     } catch (e) {
         errors[name] = e && e.message ? e.message : String(e);
         return 'unreachable';
     }
+}
+
+/**
+ * Read this chain's freshness off an explorer /status body. `/status` keys
+ * every map by coin prefix (BTC / TBTC / RDOGE), the same prefix the SDK's
+ * explorer client carries, so that is the only key consulted: a sibling
+ * coin's staleness is a claim about a different chain.
+ *
+ * @param {unknown} status
+ * @param {any} sdk
+ * @returns {ExplorerFreshness | null}
+ */
+function explorerFreshnessFrom(status, sdk) {
+    if (!status || typeof status !== 'object') return null;
+    const s = /** @type {any} */ (status);
+    const coin = sdk && sdk.explorer && typeof sdk.explorer.coin === 'string' ? sdk.explorer.coin : null;
+    if (!coin || !s.stale || typeof s.stale !== 'object' || s.stale[coin] === undefined) return null;
+    const num = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+    return {
+        stale: s.stale[coin] === true,
+        tipBlock: s.last_block && typeof s.last_block === 'object' ? num(s.last_block[coin]) : null,
+        tipAgeSeconds: s.tip_age_seconds && typeof s.tip_age_seconds === 'object' ? num(s.tip_age_seconds[coin]) : null,
+        replicaHalted: s.replica_halted && typeof s.replica_halted[coin] === 'boolean' ? s.replica_halted[coin] : null,
+    };
 }
 
 function runWithTimeout(fn, timeoutMs) {
@@ -175,14 +222,18 @@ function runWithTimeout(fn, timeoutMs) {
     });
 }
 
-function classifyChainMode(services) {
+function classifyChainMode(services, freshness) {
     const statuses = services;
     const configured = statuses.filter((s) => s !== 'not-configured');
     if (configured.length === 0) return 'not-configured';
     const reachable = configured.filter((s) => s === 'reachable').length;
-    if (reachable === configured.length) return 'normal';
     if (reachable === 0) return 'offline';
-    return 'degraded';
+    if (reachable < configured.length) return 'degraded';
+    // Every service answered, but the explorer answered from behind the
+    // chain: what the wallet shows is real and delayed, which is degraded in
+    // the sense the banner exists for ("you're not getting fresh data").
+    if (freshness && freshness.stale) return 'degraded';
+    return 'normal';
 }
 
 function rollupOverall(perChain) {
@@ -228,7 +279,21 @@ function assertPinged(result) {
 
 /** @type {ServiceProbe} */
 async function defaultExplorerProbe(sdk) {
-    // Explorer has no dedicated ping. Hit the root path; the server
+    // /status is the probe of choice: one request that both answers "is it
+    // up" and carries the per-coin freshness maps (stale, last_block,
+    // tip_age_seconds, replica_halted) the banner turns into "balances and
+    // history are behind, last confirmed block N was X ago". It is also the
+    // one route the explorer keeps reachable whatever state a coin is in.
+    if (typeof sdk.getStatus === 'function') {
+        try {
+            return await sdk.getStatus();
+        } catch (e) {
+            const msg = String(e?.message ?? e);
+            if (/\b(4\d\d|5\d\d)\b/.test(msg) || /status/i.test(msg)) return undefined;
+            throw e;
+        }
+    }
+    // Older SDK shape with no getStatus: hit the root path; the server
     // responds to any HTTP request with a routing result quickly. A
     // 404 from a live server still means "reachable" for our purposes
     // since the timeout, not the status, is what we measure against.

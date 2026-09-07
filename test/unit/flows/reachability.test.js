@@ -99,3 +99,92 @@ describe('checkReachability default probes', () => {
         expect(res.overall).toBe('normal');
     });
 });
+
+// The explorer SERVES a chain whose indexed tip is behind (marked, never
+// refused), so a reachable explorer no longer means current balances. The
+// default probe reads /status, whose per-coin maps say how far behind, and the
+// chain reads as degraded with the delay attached for the banner.
+describe('checkReachability explorer freshness', () => {
+    // A /status body as the live explorer shapes it, keyed by coin prefix.
+    const status = (over = {}) => ({
+        stale:           { TLTC: true, TBTC: false },
+        last_block:      { TLTC: 4876327, TBTC: 151373 },
+        tip_age_seconds: { TLTC: 215254, TBTC: 33 },
+        replica_halted:  { TLTC: true, TBTC: false },
+        ...over,
+    });
+    const liveSdk = (coin, body) => ({
+        pingHub: async () => true,
+        pingEncoder: async () => ({ ok: true }),
+        getStatus: async () => body,
+        explorer: { coin, _get: async () => ({ ok: true }) },
+    });
+
+    it('reads this chain\'s freshness off /status and degrades a stale chain, keeping every service reachable', async () => {
+        const res = await checkReachability({
+            sdkRegistry: registryFor(liveSdk('TLTC', status())),
+            chainIds: ['litecoin-testnet'],
+            timeoutMs: 500,
+        });
+        const row = res.perChain[0];
+        expect(row.services).toEqual({ encoder: 'reachable', hub: 'reachable', explorer: 'reachable' });
+        expect(row.mode).toBe('degraded');
+        expect(row.freshness.explorer).toEqual({ stale: true, tipBlock: 4876327, tipAgeSeconds: 215254, replicaHalted: true });
+        expect(res.overall).toBe('degraded');
+    });
+
+    it('leaves a current chain normal and still attaches its freshness', async () => {
+        const res = await checkReachability({
+            sdkRegistry: registryFor(liveSdk('TBTC', status())),
+            chainIds: ['bitcoin-testnet'],
+            timeoutMs: 500,
+        });
+        expect(res.perChain[0].mode).toBe('normal');
+        expect(res.perChain[0].freshness.explorer.stale).toBe(false);
+    });
+
+    it('never reads a sibling coin\'s verdict: an unmeasured coin has no freshness and stays normal', async () => {
+        const res = await checkReachability({
+            sdkRegistry: registryFor(liveSdk('RDOGE', status())),
+            chainIds: ['dogecoin-regtest'],
+            timeoutMs: 500,
+        });
+        expect(res.perChain[0].mode).toBe('normal');
+        expect(res.perChain[0].freshness).toBeUndefined();
+    });
+
+    it('treats a /status that answers an HTTP error as reachable-without-verdict, like the old root probe', async () => {
+        const sdk = liveSdk('TLTC', null);
+        sdk.getStatus = async () => { throw new Error('Explorer returned HTTP 503 for /TLTC/api/status'); };
+        const res = await checkReachability({
+            sdkRegistry: registryFor(sdk),
+            chainIds: ['litecoin-testnet'],
+            timeoutMs: 500,
+        });
+        expect(res.perChain[0].services.explorer).toBe('reachable');
+        expect(res.perChain[0].freshness).toBeUndefined();
+    });
+
+    it('still marks the explorer unreachable when /status fails at the network', async () => {
+        const sdk = liveSdk('TLTC', null);
+        sdk.getStatus = async () => { throw new Error('Explorer request failed: Network Error'); };
+        const res = await checkReachability({
+            sdkRegistry: registryFor(sdk),
+            chainIds: ['litecoin-testnet'],
+            timeoutMs: 500,
+        });
+        expect(res.perChain[0].services.explorer).toBe('unreachable');
+        expect(res.perChain[0].mode).toBe('degraded');
+    });
+
+    it('a custom explorer probe yields no freshness verdict', async () => {
+        const res = await checkReachability({
+            sdkRegistry: registryFor(liveSdk('TLTC', status())),
+            chainIds: ['litecoin-testnet'],
+            timeoutMs: 500,
+            probes: { explorer: async () => 'pong' },
+        });
+        expect(res.perChain[0].mode).toBe('normal');
+        expect(res.perChain[0].freshness).toBeUndefined();
+    });
+});
