@@ -385,6 +385,25 @@ export function loadSdkClass() {
     return XChainSDK;
 }
 
+/**
+ * Put the installed SDK back to the state a freshly started process is in.
+ *
+ * A measurement is only a cold-open if nothing from an earlier one is still
+ * warm. From 0.15.1 the SDK's light client caches the explorer's /verify
+ * validator set per (explorer, coin, checkpoint height) at MODULE level, so a
+ * second measurement in the same process skips the three proof reads and
+ * reports the busiest host three requests light. That is correct behaviour for
+ * a wallet, which is one process, and wrong for a profiler that measures more
+ * than once: the cold-open smoke measured 18 on its first pass and the exported
+ * burst size, measured afterwards, said 15. The SDK exposes the reset for
+ * exactly this embedder case; an SDK without it has nothing to reset.
+ */
+export function resetSdkProcessCaches() {
+    const require = createRequire(import.meta.url);
+    const sdk = require('xchain-sdk');
+    sdk.LightClient?.clearValidatorSetCache?.();
+}
+
 /** The installed SDK's version, so a profile says which light client it drove. */
 export function installedSdkVersion() {
     try {
@@ -427,6 +446,8 @@ export async function measureColdOpen({
         throw new Error('measureColdOpen: tokensPerAddress must be a non-negative integer');
     }
     const XChainSDK = sdkClass ?? loadSdkClass();
+    // Every measurement starts cold, whatever ran before it in this process.
+    if (!sdkClass) resetSdkProcessCaches();
     const chainRegistry = new ChainRegistry();
     const { vault, chains, addresses } = makeVault({ chainRegistry, networkKind, addressesPerChain });
     if (chains.length === 0) {
