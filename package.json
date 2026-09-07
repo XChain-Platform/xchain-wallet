@@ -74,6 +74,9 @@
             "esbuild",
             "sharp",
             "tiny-secp256k1"
+        ],
+        "minimumReleaseAgeExclude": [
+            "@dankest-llc/*"
         ]
     },
     "devDependencies": {

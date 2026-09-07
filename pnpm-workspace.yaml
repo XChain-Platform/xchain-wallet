@@ -168,10 +168,23 @@ allowBuilds:
   sharp: true
   tiny-secp256k1: true
 
-# No release-age exclusions. The list is deliberately absent rather than
-# empty: the one entry it ever held (`@dankest-llc/xchain-sdk@0.10.0`) only
-# appeared to work because that version had already aged past the threshold,
-# so it was never the thing letting the pin land. The SDK repin is sequenced
-# AFTER the age gate instead (release-management.md section 6, amendment v11):
-# publish, wait out the gate, then repin. Do not reintroduce an exclusion to
-# rush a fresh publish into the lockfile.
+# Release-age exclusion for the project's OWN scope, and only that scope.
+#
+# pnpm 11 refuses any lockfile entry published less than a day ago
+# (minimumReleaseAge, a default, set nowhere in this repo). That is the right
+# guard for the 938 third-party entries here and stays on for them. It is the
+# wrong guard for @dankest-llc/*: those publishes are signed and ceremonied
+# (release-management.md section 6, and release:npm-check refuses a version
+# that is not the repo's), so the only thing the day bought was a train that
+# published the SDK and then could not ship the wallet that uses it.
+#
+# The earlier note here said an exclusion "does not work". It was spelled as
+# the npm ALIAS this repo declares the SDK under ("xchain-sdk"), and pnpm
+# matches this list against the REAL package name, never the alias. Measured
+# 2026-09-07 on pnpm 11.8.0 with a two-hour-old publish: '@dankest-llc/*'
+# passes install and the deps-status check that guards every script;
+# 'xchain-sdk' fails both. Keep it spelled by scope, never by alias.
+# Mirrored in package.json's pnpm block for the same reason every other key
+# is (release-management.md section 6, amendment v12).
+minimumReleaseAgeExclude:
+  - '@dankest-llc/*'
