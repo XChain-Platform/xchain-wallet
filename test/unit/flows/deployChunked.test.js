@@ -594,3 +594,233 @@ describe('a resumed run assembles from the record, not from current arguments', 
         expect(sent2[sent2.length - 1].GAS_LIMIT).toBe('4242');
     });
 });
+
+// Deferred assembly (the indexer's DEPLOY_DEFERRED_ASSEMBLY rule): a chunk group
+// deploys at whichever piece COMPLETES it, so the contract's action_index is not
+// the assembler's whenever the pieces confirmed out of order - which a reorg can
+// do to a run this flow sequenced correctly. Two consequences the wallet has to
+// carry, and both cost real money if it does not:
+//
+//   - a resume that re-sends an already-broadcast assembler lands it against a
+//     COMPLETE group, which the indexer deploys inline: a second contract, at a
+//     second index, paid for twice;
+//   - recording the assembler's own index as the contract addresses a contract
+//     that is not there.
+//
+// The explorer answers both on the assembler's action detail, with
+// `deployed_contract_index` and the `assembly_status` that makes the poll
+// terminate.
+describe('a resumed assembler asks what it already produced before re-sending', () => {
+    // Braces on purpose: `mockReset()` RETURNS the mock, and a beforeEach that
+    // returns a function hands vitest a teardown hook, which it then calls -
+    // invoking the mock itself with no arguments after every test.
+    beforeEach(() => { submitAction.mockReset(); });
+
+    const ASM = '3000';
+    const CONTRACT = '3002';
+
+    /** A record interrupted DURING the assembling leg's indexer wait. */
+    function assemblingVault(extra = {}) {
+        const vault = fakeVault();
+        vault.store.set('r1', {
+            id: 'r1', walletId: 'w1', chainId: 'c', sourceAddress: FROM.address,
+            codeHash: HASH, code: 'x'.repeat(500), totalChunks: 3, stage: 'assembling',
+            assembleParams: { VERSION: '2', CODE_HASH: HASH, GAS_LIMIT: '100000' },
+            deployTxid: 'tx-assembler', contractActionIndex: null,
+            chunks: [
+                { index: 0, txid: 't0', actionIndex: '900' },
+                { index: 1, txid: 't1', actionIndex: '901' },
+                { index: 2, txid: 't2', actionIndex: '902' },
+            ],
+            ...extra,
+        });
+        return vault;
+    }
+
+    /**
+     * getAction has to answer for two different kinds of row here: the carrier
+     * rows `verifyRecordedChunks` reads on a fall-through, and the assembler's
+     * detail carrying the deferred-assembly fields.
+     */
+    function sdkWithAssembler(assemblerDetails) {
+        const details = [...assemblerDetails];
+        return fakeSdk({
+            getTransaction: vi.fn(async () => ({
+                tx_hash: 'tx-assembler', actions: [{ action: 'DEPLOY', action_index: ASM }],
+            })),
+            getAction: vi.fn(async (idx) => {
+                if (['900', '901', '902'].includes(String(idx))) {
+                    return { status: 'valid', code_hash: HASH, chunk_index: Number(idx) - 900 };
+                }
+                return details.length > 1 ? details.shift() : details[0];
+            }),
+        });
+    }
+
+    it('submits NOTHING when the group already deployed, and records the looked-up index', async () => {
+        const vault = assemblingVault();
+        const sdk = sdkWithAssembler([{
+            action_index: ASM,
+            status: 'pending: CODE_HASH (awaiting chunks)',
+            deployed_contract_index: Number(CONTRACT),
+            assembly_status: 'valid',
+        }]);
+        const { opts } = baseOpts({ vault, sdk, opts: { resumeId: 'r1' } });
+        const res = await deployChunkedRun(opts);
+
+        expect(submitAction).not.toHaveBeenCalled();
+        expect(sdk.waitForAction).not.toHaveBeenCalled();
+        const record = vault.store.get('r1');
+        expect(record.contractActionIndex).toBe(CONTRACT);
+        expect(record.stage).toBe('done');
+        expect(res.contractActionIndex).toBe(CONTRACT);
+        expect(res.txid).toBe('tx-assembler');
+    });
+
+    it('polls while the group is still assembling, then takes the index it lands on', async () => {
+        const vault = assemblingVault();
+        const pending = {
+            action_index: ASM,
+            status: 'pending: CODE_HASH (awaiting chunks)',
+            deployed_contract_index: null,
+            assembly_status: 'pending: CODE_HASH (awaiting chunks)',
+        };
+        const sdk = sdkWithAssembler([
+            pending,
+            pending,
+            {
+                action_index: ASM,
+                status: 'pending: CODE_HASH (awaiting chunks)',
+                deployed_contract_index: CONTRACT,
+                assembly_status: 'valid',
+            },
+        ]);
+        const { opts } = baseOpts({
+            vault, sdk, opts: { resumeId: 'r1', waitOpts: { timeout: 5000, pollInterval: 1 } },
+        });
+        await deployChunkedRun(opts);
+
+        expect(submitAction).not.toHaveBeenCalled();
+        expect(sdk.getAction).toHaveBeenCalledTimes(3);
+        expect(vault.store.get('r1').contractActionIndex).toBe(CONTRACT);
+    });
+
+    it('stops resumably, without re-sending, when the poll runs out on a pending group', async () => {
+        const vault = assemblingVault();
+        const sdk = sdkWithAssembler([{
+            action_index: ASM,
+            deployed_contract_index: null,
+            assembly_status: 'pending: CODE_HASH (awaiting chunks)',
+        }]);
+        const { opts } = baseOpts({
+            vault, sdk, opts: { resumeId: 'r1', waitOpts: { timeout: 5, pollInterval: 1 } },
+        });
+        await expect(deployChunkedRun(opts)).rejects.toThrow(/can be resumed/);
+        expect(submitAction).not.toHaveBeenCalled();
+        expect(vault.store.get('r1').stage).toBe('assembling');
+    });
+
+    it('re-sends exactly one assembler when the first one failed terminally', async () => {
+        // A consumed assembler (the completing piece hashed to something else)
+        // keeps a null index forever, so the status is the only terminator. The
+        // group is complete, so the re-sent assembler deploys inline.
+        const vault = assemblingVault();
+        const sdk = sdkWithAssembler([{
+            action_index: ASM,
+            deployed_contract_index: null,
+            assembly_status: 'invalid: CODE_HASH (mismatch)',
+        }]);
+        submitAction.mockImplementation(async () => ({ txid: 'tx-2', indexed: { action_index: 3100 } }));
+        const { opts } = baseOpts({ vault, sdk, opts: { resumeId: 'r1' } });
+        await deployChunkedRun(opts);
+
+        const sent = submitAction.mock.calls.map((c) => c[0].actionData.params);
+        expect(sent).toHaveLength(1);
+        expect(sent[0].VERSION).toBe('2');
+    });
+
+    it('waits on the txid first when the assembling leg has not indexed yet', async () => {
+        const vault = assemblingVault();
+        const sdk = fakeSdk({
+            // Still unmined at resume time, so the txid resolves to no action.
+            getTransaction: vi.fn(async () => ({ tx_hash: 'tx-assembler', actions: [] })),
+            waitForAction: vi.fn(async () => ({
+                tx_hash: 'tx-assembler', actions: [{ action: 'DEPLOY', action_index: ASM }],
+            })),
+            getAction: vi.fn(async () => ({
+                action_index: ASM, deployed_contract_index: CONTRACT, assembly_status: 'valid',
+            })),
+        });
+        const { opts } = baseOpts({ vault, sdk, opts: { resumeId: 'r1' } });
+        await deployChunkedRun(opts);
+
+        expect(sdk.waitForAction).toHaveBeenCalledWith('tx-assembler', undefined);
+        expect(submitAction).not.toHaveBeenCalled();
+        expect(vault.store.get('r1').contractActionIndex).toBe(CONTRACT);
+    });
+
+    it('records the assembling leg s txid at BROADCAST, so a resume has something to ask about', async () => {
+        // The write side of the same defect: `stampChunkTxid` is a no-op for the
+        // assembler (it carries no chunk index), so without this stamp an
+        // interrupted run resumes with stage `assembling` and no txid, and re-sends.
+        const vault = fakeVault();
+        const seen = [];
+        submitAction.mockImplementation(async (args) => {
+            const isAssembler = args.actionData.params.VERSION !== '4';
+            args.onProgress('waiting', { txid: isAssembler ? 'tx-asm' : 'tx-chunk' });
+            if (isAssembler) {
+                const rec = [...vault.store.values()][0];
+                seen.push({ deployTxid: rec.deployTxid, stage: rec.stage });
+            }
+            return { txid: isAssembler ? 'tx-asm' : 'tx-chunk', indexed: { action_index: 7 } };
+        });
+        const { opts } = baseOpts({ vault });
+        await deployChunkedRun(opts);
+        // In the record DURING the assembling leg, before its indexer wait returned.
+        expect(seen).toEqual([{ deployTxid: 'tx-asm', stage: 'assembling' }]);
+    });
+});
+
+describe('a fresh run records the contract index the explorer resolves', () => {
+    beforeEach(() => { submitAction.mockReset(); });
+
+    it('takes deployed_contract_index over the assembling leg s own index', async () => {
+        let n = 0;
+        submitAction.mockImplementation(async () => {
+            n += 1;
+            return { txid: `tx${n}`, indexed: { action_index: 1000 + n } };
+        });
+        const vault = fakeVault();
+        const sdk = fakeSdk({
+            getAction: vi.fn(async () => ({
+                // The assembler landed pending and a carrier completed the group.
+                status: 'pending: CODE_HASH (awaiting chunks)',
+                deployed_contract_index: 1006,
+                assembly_status: 'valid',
+            })),
+        });
+        const { opts } = baseOpts({ vault, sdk });
+        const res = await deployChunkedRun(opts);
+        const record = [...vault.store.values()][0];
+        // The assembling leg indexed at 1004; the contract is at 1006.
+        expect(record.contractActionIndex).toBe('1006');
+        expect(res.contractActionIndex).toBe('1006');
+        expect(record.stage).toBe('done');
+    });
+
+    it('falls back to the leg s own index only when the explorer serves neither field', async () => {
+        let n = 0;
+        submitAction.mockImplementation(async () => {
+            n += 1;
+            return { txid: `tx${n}`, indexed: { action_index: 1000 + n } };
+        });
+        const vault = fakeVault();
+        // An explorer predating the field: a `valid` assembler IS the contract.
+        const sdk = fakeSdk({
+            getAction: vi.fn(async () => ({ status: 'valid', code_hash: HASH })),
+        });
+        const { opts } = baseOpts({ vault, sdk });
+        await deployChunkedRun(opts);
+        expect([...vault.store.values()][0].contractActionIndex).toBe('1004');
+    });
+});
