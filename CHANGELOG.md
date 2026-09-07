@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Resuming a chunked contract deploy whose assembling transaction already landed no longer re-sends and re-pays for it; the wallet reads the deployed contract's index from the explorer instead.
+- A chunked contract deploy's saved name now files against the contract's actual index instead of the assembling transaction's, so a group finished by an earlier piece still shows the right name.
 - A message sent between two of your own addresses now opens as a conversation with yourself instead of vanishing, where the inbox used to report no messages at all (#14).
 - A new message is funded from the delivery chain's active address instead of the first address listed, so a wallet whose first address is empty can still send (#11).
 - When a message cannot be composed (for example, not enough funds on the sending address), the reason is shown on the compose screen instead of Send message silently doing nothing (#12).

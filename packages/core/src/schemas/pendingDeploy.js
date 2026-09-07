@@ -27,6 +27,15 @@
 // wasteful but never corrupting, and a chunk from an earlier partial run
 // is reused by a later assembly.
 //
+// That gather-at-a-lower-index rule was a pre-activation ordering
+// requirement (an assembler ahead of its own chunks was invalid). Deferred
+// assembly supersedes it: a carrier landing after a pending assembler can
+// complete the group and deploy the contract at ITS OWN action_index.
+//
+// So a completed record's `contractActionIndex` is filled from the
+// explorer's lookup of the finished contract, never assumed to equal the
+// assembling leg's own index.
+//
 // `sourceAddress` is therefore load-bearing, not informational: chunks are
 // gathered per-deployer, so resuming from a DIFFERENT address silently
 // orphans every chunk already paid for. The flow pins it.

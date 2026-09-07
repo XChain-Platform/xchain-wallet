@@ -459,12 +459,21 @@ export function DeployContractForm({ walletId, onBack }) {
     // the contract's action_index is usually not knowable yet - the single-leg
     // lane returns as soon as the transaction is broadcast - so the store takes
     // whichever identity this result has and settles the rest later.
+    //
+    // Under deferred assembly a chunked deploy's assembling leg is not
+    // necessarily the contract's index (another piece can complete the group
+    // first), so the flow's resolved `contractActionIndex` is read ahead of
+    // the leg's own indexed action; the indexed action is only a fallback for
+    // an older flow shape that never set the field.
     function rememberDeployedName(res) {
         const label = name.trim();
         if (!label || !chainId) return;
+        const resolvedIndex = res?.contractActionIndex;
+        const hasResolvedIndex = resolvedIndex !== null && resolvedIndex !== undefined
+            && resolvedIndex !== '' && Number.isFinite(Number(resolvedIndex));
         recordDeployedContractName({
             chainId,
-            actionIndex: indexedActionIndex(res),
+            actionIndex: hasResolvedIndex ? String(resolvedIndex) : indexedActionIndex(res),
             txid: res?.txid || res?.tx_hash || res?.broadcast?.txid || null,
             name: label,
         });

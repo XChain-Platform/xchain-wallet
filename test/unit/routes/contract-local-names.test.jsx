@@ -180,6 +180,73 @@ describe('the deploy form persists the Name it asked for', () => {
     });
 });
 
+// Under deferred assembly the assembling leg's own action is not
+// necessarily the contract's - a carrier landing after it can finish the
+// group first - so the name has to be filed against the flow's resolved
+// `contractActionIndex`, not the leg `deployChunked` itself indexed at.
+describe('a chunked deploy files the name against the resolved contract index', () => {
+    const CHUNK_PLAN = { single: false, totalChunks: 2, codeHash: 'ab' };
+
+    async function driveChunkedDeploy(messaging) {
+        let utils;
+        await domAct(async () => {
+            utils = mount(DeployContractForm, messaging, {});
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText(/^Name/), { target: { value: 'MyMarket' } });
+            fireEvent.change(utils.getByLabelText('Code source'), { target: { value: CONTRACT_SOURCE } });
+            fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '50000' } });
+            await drain();
+        });
+        // The chunked plan routes the first Deploy click to the review stage
+        // instead of the confirm screen (PC-38); the second Deploy click there
+        // is what actually calls `messaging.deployChunked`.
+        await domAct(async () => {
+            fireEvent.click(button(utils, /^Deploy/));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Password'), { target: { value: 'hunter2' } });
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /^Deploy/));
+            await drain();
+        });
+        return utils;
+    }
+
+    it('reads contractActionIndex, not the assembling leg\'s own indexed action', async () => {
+        const { messaging } = harness({
+            planDeploy: () => Promise.resolve(CHUNK_PLAN),
+            // The assembler itself indexed at 3000, but an earlier carrier
+            // completed the group first, so the deployed contract is 3002.
+            deployChunked: () => Promise.resolve({
+                txid: 'assembler-txid',
+                indexed: { action_index: 3000 },
+                contractActionIndex: '3002',
+            }),
+        });
+        await driveChunkedDeploy(messaging);
+        expect(contractNameFor({ chainId: CHAIN, actionIndex: '3002' })).toBe('MyMarket');
+        expect(contractNameFor({ chainId: CHAIN, actionIndex: '3000' })).toBeNull();
+    });
+
+    it('falls back to the assembling leg\'s own indexed action when contractActionIndex is absent (older flow shape)', async () => {
+        const { messaging } = harness({
+            planDeploy: () => Promise.resolve(CHUNK_PLAN),
+            deployChunked: () => Promise.resolve({
+                txid: 'assembler-txid-2',
+                indexed: { action_index: 3010 },
+                // no contractActionIndex - an older flow build that never resolved one
+            }),
+        });
+        await driveChunkedDeploy(messaging);
+        expect(contractNameFor({ chainId: CHAIN, actionIndex: '3010' })).toBe('MyMarket');
+    });
+});
+
 describe('the contracts list shows the stored name', () => {
     it('renders the label instead of (unnamed), and settles a txid-filed one onto its index', async () => {
         // Exactly the state the deploy above leaves behind: a label waiting on
