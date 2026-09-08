@@ -209,13 +209,41 @@ describe('walletBalances reads a chain in batches when the SDK and explorer allo
         expect(entry.retryAfterSeconds).toBeNull();
     });
 
-    it('surfaces error and errorCode when the address is missing from the response', async () => {
-        // A route that answered 200 but skipped an address is a failure for
-        // that address, not an empty wallet.
-        const sdk = batchSdk(FIXTURE, { batchImpl: async () => ({}) });
-        const entry = (await run(['A1'], sdk))[CHAIN_ID][0];
-        expect(entry.balances).toBeNull();
-        expect(entry.error).toMatch(/no batch result for A1/);
+    it('surfaces error and errorCode when a LATER address is missing from the response', async () => {
+        // A route that answered the batch shape but skipped an address is a
+        // failure for that address, not an empty wallet, and not a fallback.
+        const sdk = batchSdk(FIXTURE, {
+            batchImpl: async (addresses) => batchBodyFor(addresses.slice(0, 1), FIXTURE),
+        });
+        const [first, second] = (await run(['A1', 'A2'], sdk))[CHAIN_ID];
+        expect(first.balances).not.toBeNull();
+        expect(second.balances).toBeNull();
+        expect(second.error).toMatch(/no batch result for A2/);
+        expect(sdk.getBalances).not.toHaveBeenCalled();
+    });
+});
+
+describe('walletBalances treats a reply that is not the batch shape as "no batch route"', () => {
+    // The web shell's dev-mock SDK is a Proxy answering every get* name with
+    // a function that resolves to []; the real SDK names this case itself
+    // (EXPLORER_BATCH_UNSUPPORTED), the flow must hold the rule for stand-ins.
+    it.each([
+        ['an empty array', async () => []],
+        ['an object without the first address', async () => ({})],
+        ['undefined', async () => undefined],
+    ])('falls back per address on %s and never probes that SDK again', async (_label, batchImpl) => {
+        const sdk = batchSdk(FIXTURE, { batchImpl });
+        const first = await run(['A1', 'A2'], sdk);
+        expect(first[CHAIN_ID].map((e) => e.error)).toEqual([null, null]);
+        expect(first[CHAIN_ID][0].balances).toEqual(
+            (await run(['A1'], perAddressSdk(FIXTURE)))[CHAIN_ID][0].balances,
+        );
+        expect(sdk.getBalancesBatch).toHaveBeenCalledTimes(1);
+        expect(sdk.getBalances).toHaveBeenCalledTimes(2);
+
+        await run(['A1'], sdk);
+        expect(sdk.getBalancesBatch).toHaveBeenCalledTimes(1);
+        expect(sdk.getBalances).toHaveBeenCalledTimes(3);
     });
 });
 

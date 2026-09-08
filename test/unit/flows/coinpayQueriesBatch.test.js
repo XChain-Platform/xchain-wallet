@@ -206,6 +206,22 @@ describe('an explorer without the route is fallen back on and remembered', () =>
         expect(sdk.getCoinpayObligationsBatch).toHaveBeenCalledTimes(1);
         expect(sdk.getCoinpayObligations).toHaveBeenCalledTimes(3);
     });
+
+    it('treats a reply that is not the batch shape (the dev-mock SDK answers []) the same way', async () => {
+        const sdk = makeSdk({ batchImpl: async () => [] });
+        const registry = registryOf({ 'bitcoin-regtest': sdk });
+
+        const pending = ['A0', 'A1'].map((a) => call(registry, 'bitcoin-regtest', a));
+        await closeWindow();
+        expect(await Promise.all(pending)).toEqual([body('A0'), body('A1')]);
+        expect(sdk.getCoinpayObligationsBatch).toHaveBeenCalledTimes(1);
+        expect(sdk.getCoinpayObligations).toHaveBeenCalledTimes(2);
+
+        const later = call(registry, 'bitcoin-regtest', 'A2');
+        expect(await later).toEqual(body('A2'));
+        expect(sdk.getCoinpayObligationsBatch).toHaveBeenCalledTimes(1);
+        expect(sdk.getCoinpayObligations).toHaveBeenCalledTimes(3);
+    });
 });
 
 describe('a rate-limited batch rejects its callers instead of re-firing per address', () => {

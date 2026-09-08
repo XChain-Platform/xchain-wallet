@@ -84,6 +84,26 @@ export function isBatchUnsupported(sdk, feature) {
 }
 
 /**
+ * Is `resp` a batch route's answer at all: an object keyed by address that
+ * carries the first address the request named?
+ *
+ * The SDK applies this same rule at the transport (`EXPLORER_BATCH_UNSUPPORTED`
+ * for a 200 without it), but the flows do not only run over the real SDK. The
+ * web shell's dev-mock SDK is a Proxy that answers every `get*` name with a
+ * function resolving to an empty list, so `typeof sdk.getBalancesBatch` is a
+ * function there while the reply is `[]`; without this check every address in
+ * the dev shell read "no batch result" and Home rendered no balances at all
+ * (the command-palette e2e spec is what caught it). A reply of this shape is
+ * "no batch route", remembered and served per address, exactly like the 404.
+ * A real batch body that carries the first address but skips a later one is
+ * still a per-entry failure, which is what the SDK's rule leaves alone too.
+ */
+export function isBatchShape(resp, firstAddress) {
+    return !!resp && typeof resp === 'object' && !Array.isArray(resp)
+        && Object.prototype.hasOwnProperty.call(resp, firstAddress);
+}
+
+/**
  * Test hook. A WeakMap cannot be emptied, so the memo is replaced wholesale;
  * without this a test that drives a 404 would leak its verdict into every
  * later test sharing the same SDK stub.
@@ -495,19 +515,20 @@ function readsFromBatchEntry(entry, address) {
 // One POST for up to BALANCES_BATCH_MAX_ADDRESSES addresses of one chain.
 // Returns the same entries, in the same order, as the per-address path would.
 async function batchChunkEntries({ sdk, chunk, nativeTicker, opts }) {
+    // An explorer (or a stand-in SDK) without the batch route. Remember the
+    // instance so later polls skip the probe entirely, and serve this chunk
+    // the old way so the user sees balances rather than an error.
+    const fallBack = () => {
+        rememberBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
+        return Promise.all(
+            chunk.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts })),
+        );
+    };
     let resp;
     try {
         resp = await sdk.getBalancesBatch(chunk.map((a) => a.address), opts);
     } catch (e) {
-        if (e && isBatchUnsupportedError(e)) {
-            // An explorer that predates the batch route. Remember the instance
-            // so later polls skip the probe entirely, and serve this chunk the
-            // old way so the user sees balances rather than an error.
-            rememberBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
-            return Promise.all(
-                chunk.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts })),
-            );
-        }
+        if (e && isBatchUnsupportedError(e)) return fallBack();
         // Every other failure (a rate limit, a 5xx, a dead network) marks the
         // whole chunk and stops there. Falling back per address would fire the
         // twenty requests the batch call just replaced, so one 429 would
@@ -518,6 +539,7 @@ async function batchChunkEntries({ sdk, chunk, nativeTicker, opts }) {
             return base;
         });
     }
+    if (!isBatchShape(resp, chunk[0].address)) return fallBack();
     return chunk.map((addr) => {
         const base = baseEntryFor(addr);
         const { balResp, addrResp } = readsFromBatchEntry(

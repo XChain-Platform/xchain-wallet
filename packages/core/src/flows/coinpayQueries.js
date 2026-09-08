@@ -22,6 +22,7 @@
 import { obligationBaseUnits } from '../market/obligationStatus.js';
 import {
     BATCH_FEATURE_COINPAY,
+    isBatchShape,
     isBatchUnsupported,
     isBatchUnsupportedError,
     rememberBatchUnsupported,
@@ -88,6 +89,14 @@ function bodyOrThrow(slot, address) {
 
 // One POST for up to COINPAY_BATCH_MAX_ADDRESSES addresses of one chain.
 async function runCoinpayChunk({ sdk, addresses, resolvers, opts }) {
+    // An explorer (or a stand-in SDK) without the batch route. Remember the
+    // instance so no later window even arms, and serve these callers the old
+    // way once so the scan they belong to still answers.
+    const fallBack = () => {
+        rememberBatchUnsupported(sdk, BATCH_FEATURE_COINPAY);
+        return Promise.all(resolvers.map((r, i) => readOneAddress(sdk, addresses[i], opts)
+            .then(r.resolve, r.reject)));
+    };
     let resp;
     try {
         // Deduplicated for the request only: the response is keyed by address,
@@ -96,18 +105,19 @@ async function runCoinpayChunk({ sdk, addresses, resolvers, opts }) {
         resp = await sdk.getCoinpayObligationsBatch([...new Set(addresses)], opts);
     } catch (e) {
         if (e && isBatchUnsupportedError(e)) {
-            // An explorer that predates the batch route. Remember the instance
-            // so no later window even arms, and serve these callers the old way
-            // once so the scan they belong to still answers.
-            rememberBatchUnsupported(sdk, BATCH_FEATURE_COINPAY);
-            await Promise.all(resolvers.map((r, i) => readOneAddress(sdk, addresses[i], opts)
-                .then(r.resolve, r.reject)));
+            await fallBack();
             return;
         }
         // Any other failure is the whole request's. Re-issuing per address
         // would fire the reads the batch replaced, which on a 429 is the burst
         // that earns the next one; the badge hook already catches per address.
         for (const r of resolvers) r.reject(e);
+        return;
+    }
+    // A reply that is not the batch shape (the dev-mock SDK's empty list, see
+    // isBatchShape) is the same "no route" verdict the 404 gives.
+    if (!isBatchShape(resp, addresses[0])) {
+        await fallBack();
         return;
     }
     resolvers.forEach((r, i) => {
