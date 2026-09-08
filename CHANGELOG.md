@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A batch can compose a parent token and its sub-tokens in one action.
 
 ### Changed
+- The wallet moves to xchain-sdk 0.15.3, whose deploy workflow resolves a chunked contract through the explorer.
 - A rate-limited read now waits the seconds the service asked for (up to 60 s) instead of two, and the copy says "asked the wallet to slow down for N seconds; retrying" with a live countdown on Home.
 - The lockout banner says "Too many incorrect passwords" so it no longer reads as a rate limit.
 
