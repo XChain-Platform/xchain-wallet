@@ -712,6 +712,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 for (const record of (r.pendingTxs || [])) {
                     if (!record?.txid) continue;
                     const key = `${r.chainId}:${String(record.txid).toLowerCase()}`;
+                    // A native send never has a mempool row above to refresh
+                    // its sighting from; the host's own read of the UTXO set
+                    // is that sighting, on the same clock.
+                    if (record.networkSeenNow) lastMempoolSeenRef.current.set(key, nowMs);
                     pendingCandidates.push(pendingTxToEntry({
                         chainId: r.chainId,
                         address: r.address,

@@ -459,6 +459,14 @@ export {
 } from './balances.js';
 export { createPollThrottle } from './pollThrottle.js';
 export { livePendingTxs } from './pendingTxFeed.js';
+// A plain native-coin send carries no action, so the action feeds
+// never retire its record; the chain's UTXO set is its confirmation source.
+export {
+    isNativePendingTx,
+    nativeSendVerdict,
+    utxoListOf,
+    reconcileNativePendingTxs,
+} from './nativePendingConfirmation.js';
 export {
     verifyAddressBalance,
     verifyAddressAction,

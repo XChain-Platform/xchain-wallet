@@ -4589,8 +4589,18 @@ export function createBackgroundHost(deps) {
     // M2.1: this wallet's own in-flight sends, the only record of a
     // transaction that exists between our broadcast and the network's first
     // sighting of it. Summaries only; the psbt/tx hex never leaves the host.
-    host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry }) => {
-        return livePendingTxs({ ...req, vault, chainRegistry });
+    //
+    // A native-coin send is invisible to every action feed, so this
+    // read first reconciles the address's native sends against the chain's
+    // UTXO set (retiring the ones a block holds, stamping the ones the
+    // mempool holds) and then lists what is still in flight. Best-effort:
+    // a tracker outage lists the records exactly as before.
+    host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        let seenNow;
+        try {
+            ({ seenNow } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
+        } catch { /* the listing below must never depend on the tracker */ }
+        return livePendingTxs({ ...req, vault, chainRegistry, seenNow });
     });
 
     // §28.3 "Indexed" timeline stage: latest block the indexer has
