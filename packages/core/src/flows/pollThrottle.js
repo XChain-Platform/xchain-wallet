@@ -43,6 +43,10 @@
  *                                                 window from now. Interval polls call this too,
  *                                                 so a refocus right after the beat is dropped
  * @property {() => void} fail                     a poll failed: clears in-flight, window unchanged
+ * @property {() => boolean} isInFlight             a poll is running right now. Sibling to `start`
+ *                                                  rather than a second return path from it,
+ *                                                  because the interval beat must be gated on the
+ *                                                  IN-FLIGHT slot only, never on the window
  * @property {(atMs?: number) => boolean} claim    start + succeed in one step, for a poll whose
  *                                                 "success" is issuing it (History's tick bump)
  * @property {() => void} reset                    forget everything (wallet or account switch)
@@ -92,8 +96,16 @@ export function createPollThrottle(intervalMs, { now = () => Date.now() } = {}) 
         lastSuccessAt = null;
     };
 
+    // Read-only view of the in-flight slot. The beat keeps calling `start()`
+    // and ignoring its answer (that is what keeps the window moving), so it
+    // needs a way to ask "is a load still running?" without the window's
+    // opinion mixed in: a 429 the SDK is waiting out can hold one load for a
+    // minute, and the beat firing three more at the same bucket is how a wait
+    // turns into the next 429.
+    const isInFlight = () => inFlight;
+
     return {
-        due, start, succeed, fail, claim, reset,
+        due, start, succeed, fail, claim, reset, isInFlight,
         lastSuccessAt: () => lastSuccessAt,
         intervalMs,
     };

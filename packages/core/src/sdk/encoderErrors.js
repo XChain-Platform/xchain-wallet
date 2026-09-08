@@ -35,6 +35,12 @@
 //      with `annotateEncoderFeeRequirement` and it is parsed back out here. A
 //      caller that has the quote to hand can pass `requiredNative` instead.
 
+// The rate-limit sentence is shared with the explorer mapper rather than
+// written twice: Home re-renders it once a second off a shrinking count, so a
+// second copy of the wording here would drift from the one on screen. Only the
+// subject differs ("The transaction service").
+import { rateLimitRetryAfterSeconds, rateLimitedMessage } from './explorerErrors.js';
+
 // Suffix `annotateEncoderFeeRequirement` appends; `requiredFeeFromError` parses
 // it back. Only the AMOUNT rides along: the quote has no ticker field, and the
 // form that renders the sentence already knows which chain it is on.
@@ -84,6 +90,14 @@ export function encoderErrorCode(err) {
         return code;
     }
     const message = String(e.message || '');
+    // The SDK's rate-limit class is one class for two services, and its code
+    // (`RATE_LIMITED`) names neither, so it is claimed here only when the error
+    // says the ENCODER refused: the `service` field in-process, or the message
+    // prefix across the messaging boundary, which the loop below matches. It
+    // maps onto the existing 429 code so one branch serves both SDK vintages.
+    if ((code === 'RATE_LIMITED' || e.name === 'SDKRateLimitedError') && e.service === 'encoder') {
+        return 'ENCODER_HTTP_429';
+    }
     for (const [pattern, mapped] of MESSAGE_TO_CODE) {
         const m = pattern.exec(message);
         if (m) return mapped.replace('$1', m[1] || '');
@@ -175,11 +189,20 @@ export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
             + 'was spent. Check your connection and try again.';
     }
 
+    if (code === 'ENCODER_HTTP_429') {
+        // A rate limit, not an outage: the service is up and said how long to
+        // wait (rate-limits spec, M4). No countdown on this path, unlike Home's
+        // banner - a submit is not re-run for the user, so the sentence says
+        // the number once and the pre-signature reassurance closes it.
+        return `${rateLimitedMessage(rateLimitRetryAfterSeconds(err), { subject: 'The transaction service' })} `
+            + 'Nothing was signed or sent, so nothing was spent.';
+    }
+
     if (code.startsWith('ENCODER_HTTP_')) {
         const status = code.slice('ENCODER_HTTP_'.length);
-        // 5xx and 429 are the service having a bad minute; a 4xx is a request it
-        // refused, which retrying will not fix.
-        const retryable = status === '429' || status.startsWith('5');
+        // A 5xx is the service having a bad minute; a 4xx is a request it
+        // refused, which retrying will not fix. 429 left this branch above.
+        const retryable = status.startsWith('5');
         return retryable
             ? `The transaction service is temporarily unavailable (error ${status}). Nothing was signed or `
               + 'sent, so nothing was spent. Try again in a moment.'

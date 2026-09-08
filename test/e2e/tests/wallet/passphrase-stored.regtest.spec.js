@@ -638,7 +638,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                         await expect(capturePassphraseField(page),
                             'the wrong passphrase threw the user back to the password step')
                             .toBeVisible();
-                        await expect(page.getByText(/Too many failed attempts/i),
+                        await expect(page.getByText(/Too many incorrect passwords/i),
                             'a mistyped passphrase counted against the UNLOCK lockout, which locks '
                             + 'a user out of a wallet whose password they got right')
                             .toHaveCount(0);

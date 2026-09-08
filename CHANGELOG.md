@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `android-applinks-verify.sh` provisions a Google Play emulator image, installs the app and asserts the Android App Links verdict, refusing images that cannot answer.
 - A Windows CI job now performs the desktop install-and-update swap on native x64 hardware and files the result as its own evidence, alongside the human-observed rehearsal it can never replace.
 - A batch can compose a parent token and its sub-tokens in one action.
+
+### Changed
+- A rate-limited read now waits the seconds the service asked for (up to 60 s) instead of two, and the copy says "asked the wallet to slow down for N seconds; retrying" with a live countdown on Home.
+- The lockout banner says "Too many incorrect passwords" so it no longer reads as a rate limit.
+
+### Fixed
+- Home's 20-second balance poll no longer starts a second load while one is still waiting on the service.
 - `verify-ci-controls.mjs` measures the public release-CI page against the repository's live settings, one probe per control the page names.
 - The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
 - The cold-open profiler now measures proof verification, the badge's own coinpay scan and the cost of an alt-tab, and prints the per-route worst minute and the ten-second edge burst every rate limit on the wallet's path is derived from.

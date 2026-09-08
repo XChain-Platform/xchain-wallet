@@ -404,7 +404,10 @@ export function Locked({ onUnlocked }) {
             aria-live="polite"
         >
             <span>
-                Too many failed attempts. Try again in{' '}
+                {/* "incorrect passwords", never "attempts" or anything that
+                    reads as rate limiting: a tester who saw the old wording
+                    went looking for a VPN (rate-limits spec, the incident). */}
+                Too many incorrect passwords. Try again in{' '}
                 <span className={styles.lockoutCountdown}>
                     {formatCountdown(remainingMs)}
                 </span>

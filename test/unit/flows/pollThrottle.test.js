@@ -102,6 +102,45 @@ describe('createPollThrottle', () => {
         expect(th.start(100 + INTERVAL)).toBe(true);
     });
 
+    // Home's 20 s beat is deliberately NOT gated on the window (it is what
+    // moves the window), so it needs a way to ask about the in-flight slot on
+    // its own: a load waiting out a 60 s Retry-After must not be joined by two
+    // more beats against the same bucket. `start()`'s boolean cannot answer
+    // that - false there also means "the data is still fresh".
+    it('isInFlight() reports the slot, and only the slot', () => {
+        const c = clock();
+        const th = createPollThrottle(INTERVAL, { now: c.now });
+        expect(th.isInFlight()).toBe(false);
+
+        expect(th.start()).toBe(true);
+        expect(th.isInFlight()).toBe(true);
+        // A long wait does not release it; only an outcome does.
+        c.advance(INTERVAL * 3);
+        expect(th.isInFlight()).toBe(true);
+
+        th.succeed();
+        expect(th.isInFlight()).toBe(false);
+
+        c.advance(INTERVAL);
+        th.start();
+        th.fail();
+        expect(th.isInFlight()).toBe(false);
+
+        th.start();
+        th.reset();
+        expect(th.isInFlight()).toBe(false);
+    });
+
+    it('isInFlight() is false while the window is closed, so the beat is not blocked by it', () => {
+        const c = clock();
+        const th = createPollThrottle(INTERVAL, { now: c.now });
+        th.succeed();
+        // Fresh data: an EVENT would be dropped here, but the beat must still
+        // be allowed through, which is why the two answers are separate.
+        expect(th.due()).toBe(false);
+        expect(th.isInFlight()).toBe(false);
+    });
+
     it('refuses a nonsensical interval', () => {
         expect(() => createPollThrottle(-1)).toThrow();
         expect(() => createPollThrottle(NaN)).toThrow();

@@ -110,7 +110,7 @@ assert.match(
 
 assert.match(lockedSrc, /role="status"/, 'banner uses status role');
 assert.match(lockedSrc, /aria-live="polite"/, 'banner is aria-live polite');
-assert.match(lockedSrc, /Too many failed attempts/, 'banner copy present');
+assert.match(lockedSrc, /Too many incorrect passwords/, 'banner copy present');
 
 assert.match(
     lockedSrc,

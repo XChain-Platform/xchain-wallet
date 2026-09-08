@@ -25,7 +25,7 @@
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 
 /**
- * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'backend_behind' | 'unknown'} HumanizedErrorCause
+ * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'backend_behind' | 'rate_limited' | 'unknown'} HumanizedErrorCause
  */
 
 /**
@@ -33,6 +33,9 @@ import { explorerReadFailure } from '../../sdk/explorerErrors.js';
  * @property {string} message  plain-language, house-voice copy for display
  * @property {HumanizedErrorCause} cause  recognized cause key (for recovery logic)
  * @property {string} raw  the original error message, preserved for logs / detail
+ * @property {number|null} [retryAfterSeconds]  only on `rate_limited`: the wait the origin
+ *                                              asked for, in whole seconds, or null when it
+ *                                              named none. Home counts it down and re-loads
  */
 
 /**
@@ -56,7 +59,17 @@ export function humanizeError(err, verb = 'complete this') {
     // user - and a third ("Explorer request timed out") matched `network` and
     // blamed the user's own connection for a service-side timeout.
     const explorerRead = explorerReadFailure(err, verb);
-    if (explorerRead) return { message: explorerRead.message, cause: explorerRead.cause, raw };
+    if (explorerRead) {
+        const out = { message: explorerRead.message, cause: explorerRead.cause, raw };
+        // Only the rate-limit branch carries a number, and a caller that wants
+        // to count it down (Home) must not have to re-parse the sentence it was
+        // just handed. Absent on every other branch, so nothing else grows a
+        // field it would have to ignore.
+        if (explorerRead.retryAfterSeconds !== undefined) {
+            out.retryAfterSeconds = explorerRead.retryAfterSeconds;
+        }
+        return out;
+    }
 
     // D-160: the keyword chain below reads the message as EVIDENCE, which is
     // right for a wire error and wrong for one the wallet wrote for this exact

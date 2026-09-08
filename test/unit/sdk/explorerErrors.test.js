@@ -33,7 +33,10 @@ import {
     explorerErrorMessage,
     explorerReadFailure,
     isExplorerError,
+    rateLimitRetryAfterSeconds,
+    rateLimitedMessage,
 } from '../../../packages/core/src/sdk/explorerErrors.js';
+import { encoderErrorMessage } from '../../../packages/core/src/sdk/encoderErrors.js';
 import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 import { humanizeError } from '../../../packages/core/src/shared/utils/humanizeError.js';
 
@@ -110,9 +113,10 @@ describe('explorerErrorMessage', () => {
             .toMatch(/refused this request \(error 404\)/);
         expect(explorerErrorMessage(boundaryError('Explorer returned HTTP 404 for /RBTC/api/x')))
             .not.toMatch(/try again in a moment/i);
-        // 429 is a rate limit, not a refusal of the request's content.
+        // 429 is a rate limit, not a refusal of the request's content, and not
+        // an outage either: it has its own sentence, below.
         expect(explorerErrorMessage(boundaryError('Explorer returned HTTP 429 for /RBTC/api/x')))
-            .toMatch(/temporarily unavailable \(error 429\)/);
+            .not.toMatch(/temporarily unavailable/);
         expect(explorerErrorMessage(boundaryError('Explorer returned HTTP 503 for /RBTC/api/x')))
             .toMatch(/temporarily unavailable \(error 503\)/);
     });
@@ -238,5 +242,172 @@ describe('explorerReadFailure, and humanizeError through it', () => {
         expect(humanizeError(new Error('insufficient funds'), 'send').cause).toBe('insufficient_funds');
         expect(humanizeError(new Error('utxo-tracker is not synced'), 'send').cause).toBe('backend_behind');
         expect(explorerReadFailure(new Error('boom'), 'send')).toBe(null);
+    });
+});
+
+// Rate limiting (rate-limits spec, M4). A 429 that reached the wallet is one
+// the SDK already waited out and re-asked for, so the honest sentence is not
+// "temporarily unavailable, try again in a moment" - which invites the retry
+// that keeps the bucket empty - but the number of seconds the origin named.
+//
+// Two SDK vintages have to land on the same branch, because the wallet ships
+// pinned to 0.15.1 for a while yet: the NEW SDKRateLimitedError with its
+// seconds, and the OLD SDKExplorerError + EXPLORER_HTTP_429 with none.
+describe('rate limiting', () => {
+    /** The new class in-process: fields intact. */
+    const rateLimited = (message, fields = {}) => Object.assign(
+        new Error(message),
+        { name: 'SDKRateLimitedError', code: 'RATE_LIMITED', status: 429, ...fields },
+    );
+    /** The same error after the messaging boundary: name and message only. */
+    const crossedBoundary = (message) => Object.assign(
+        new Error(message), { name: 'SDKRateLimitedError' },
+    );
+    const EXPLORER_429 = 'Explorer returned HTTP 429 for /RLTC/api/balances/x; retry after 3 seconds';
+
+    describe('explorerErrorCode', () => {
+        it('claims the new class in-process and across the boundary', () => {
+            expect(explorerErrorCode(rateLimited(EXPLORER_429, {
+                service: 'explorer', retryAfterSeconds: 3,
+            }))).toBe('RATE_LIMITED');
+            expect(explorerErrorCode(crossedBoundary(EXPLORER_429))).toBe('RATE_LIMITED');
+        });
+
+        it('recognises the wait from the message alone, with no name and no code', () => {
+            // Belt and braces for a host that reserializes into a plain Error:
+            // only the new class writes the "; retry after N seconds" suffix.
+            expect(explorerErrorCode(new Error(EXPLORER_429))).toBe('RATE_LIMITED');
+        });
+
+        it('still maps the shipped 0.15.1 shape, which carries no seconds at all', () => {
+            expect(explorerErrorCode(boundaryError('Explorer returned HTTP 429 for /RLTC/api/x')))
+                .toBe('EXPLORER_HTTP_429');
+            expect(explorerErrorCode(codedError('EXPLORER_HTTP_429', 'Explorer returned HTTP 429 for /x')))
+                .toBe('EXPLORER_HTTP_429');
+        });
+
+        it('does not claim the ENCODER half of the same error class', () => {
+            // One class, two services: the code and the name say neither, so
+            // claiming by name alone would put the explorer's read copy on a
+            // failed submit.
+            const encoder = rateLimited(
+                'Encoder returned HTTP 429 for method create_tx; retry after 12 seconds',
+                { service: 'encoder', retryAfterSeconds: 12 },
+            );
+            expect(explorerErrorCode(encoder)).toBe(null);
+            expect(explorerErrorMessage(encoder)).toBe(null);
+        });
+    });
+
+    describe('rateLimitRetryAfterSeconds', () => {
+        it('prefers the field, which is the only one the SDK guarantees', () => {
+            expect(rateLimitRetryAfterSeconds(rateLimited(EXPLORER_429, { retryAfterSeconds: 30 })))
+                .toBe(30);
+        });
+
+        it('recovers the number from the message when the field did not survive', () => {
+            expect(rateLimitRetryAfterSeconds(crossedBoundary(EXPLORER_429))).toBe(3);
+            expect(rateLimitRetryAfterSeconds(crossedBoundary(
+                'Encoder returned HTTP 429 for method create_tx; retry after 45 seconds'))).toBe(45);
+        });
+
+        it('is null when nobody named a number', () => {
+            expect(rateLimitRetryAfterSeconds(boundaryError('Explorer returned HTTP 429 for /x'))).toBe(null);
+            expect(rateLimitRetryAfterSeconds(new Error('boom'))).toBe(null);
+            expect(rateLimitRetryAfterSeconds(null)).toBe(null);
+        });
+    });
+
+    describe('rateLimitedMessage', () => {
+        it('is the sentence the spec pins, singular and plural', () => {
+            expect(rateLimitedMessage(3))
+                .toBe('The service asked the wallet to slow down for 3 seconds; retrying.');
+            // The countdown reaches 1 on screen, so "1 seconds" would ship.
+            expect(rateLimitedMessage(1))
+                .toBe('The service asked the wallet to slow down for 1 second; retrying.');
+        });
+
+        it('says "a moment" rather than invent a number it was never given', () => {
+            expect(rateLimitedMessage(null))
+                .toBe('The service asked the wallet to slow down for a moment; retrying.');
+            expect(rateLimitedMessage(0))
+                .toBe('The service asked the wallet to slow down for a moment; retrying.');
+        });
+
+        it('names the service the caller is talking to', () => {
+            expect(rateLimitedMessage(12, { subject: 'The transaction service' }))
+                .toBe('The transaction service asked the wallet to slow down for 12 seconds; retrying.');
+        });
+    });
+
+    describe('the submit copy', () => {
+        it('says the wait, then that nothing was spent', () => {
+            const msg = explorerErrorMessage(crossedBoundary(EXPLORER_429));
+            expect(msg).toBe('The service asked the wallet to slow down for 3 seconds; retrying. '
+                + 'Nothing was signed or sent, so nothing was spent.');
+            expect(msg, 'the URL is still on screen').not.toMatch(/\/RLTC\/api|Explorer returned/);
+        });
+
+        it('gives the shipped SDK shape the same branch, minus the number', () => {
+            expect(explorerErrorMessage(boundaryError('Explorer returned HTTP 429 for /RLTC/api/x')))
+                .toBe('The service asked the wallet to slow down for a moment; retrying. '
+                    + 'Nothing was signed or sent, so nothing was spent.');
+        });
+
+        it('says it in the encoder voice for a refused submit', () => {
+            const encoder = crossedBoundary(
+                'Encoder returned HTTP 429 for method create_tx; retry after 12 seconds');
+            expect(encoderErrorMessage(encoder, {}))
+                .toBe('The transaction service asked the wallet to slow down for 12 seconds; retrying. '
+                    + 'Nothing was signed or sent, so nothing was spent.');
+        });
+
+        it('keeps mapping the old encoder 429 code the same way', () => {
+            const old = Object.assign(
+                new Error('Encoder returned HTTP 429 for method create_tx'),
+                { name: 'SDKEncoderError', code: 'ENCODER_HTTP_429' },
+            );
+            expect(encoderErrorMessage(old, {}))
+                .toBe('The transaction service asked the wallet to slow down for a moment; retrying. '
+                    + 'Nothing was signed or sent, so nothing was spent.');
+        });
+
+        it('leaves the 5xx wording alone', () => {
+            expect(explorerErrorMessage(boundaryError('Explorer returned HTTP 503 for /x')))
+                .toMatch(/temporarily unavailable \(error 503\)/);
+            expect(encoderErrorMessage(Object.assign(
+                new Error('Encoder returned HTTP 503 for method create_tx'),
+                { name: 'SDKEncoderError' },
+            ), {})).toMatch(/transaction service is temporarily unavailable \(error 503\)/);
+        });
+    });
+
+    describe('the read copy, which Home counts down', () => {
+        it('carries the cause and the seconds through humanizeError', () => {
+            const h = humanizeError(crossedBoundary(EXPLORER_429), 'load balances');
+            expect(h.message)
+                .toBe("Couldn't load balances. The service asked the wallet to slow down for 3 seconds; retrying.");
+            expect(h.cause).toBe('rate_limited');
+            expect(h.retryAfterSeconds, 'the countdown has nothing to count').toBe(3);
+        });
+
+        it('hands the reader a null rather than a made-up wait', () => {
+            const h = humanizeError(boundaryError('Explorer returned HTTP 429 for /RLTC/api/x'), 'load balances');
+            expect(h.message)
+                .toBe("Couldn't load balances. The service asked the wallet to slow down for a moment; retrying.");
+            expect(h.cause).toBe('rate_limited');
+            expect(h.retryAfterSeconds).toBe(null);
+        });
+
+        it('does not tell a reader nothing was signed or sent', () => {
+            expect(humanizeError(crossedBoundary(EXPLORER_429), 'load balances').message)
+                .not.toMatch(/signed|sent|spent/i);
+        });
+
+        it('leaves every other read failure without a wait to count', () => {
+            const h = humanizeError(boundaryError('Explorer returned HTTP 503 for /x'), 'load balances');
+            expect(h.cause).toBe('backend_behind');
+            expect(h.retryAfterSeconds).toBeUndefined();
+        });
     });
 });
