@@ -126,10 +126,16 @@ assert.ok(
     'nothing hub-side repeats on the poll; if it does, the sustained profile is wrong',
 );
 
-// The badge hook's scan is its own step, on its own interval, and it repeats.
+// The shared hook's scan is its own step, on its own interval, and it repeats.
 assert.ok(oneAddress.byStep['coinpay-badge'] > 0, 'the badge\'s first scan is part of the cold-open');
 assert.equal(oneAddress.badgeRequests.length, oneAddress.byStep['coinpay-badge'], 'the badge repeat is the same scan');
 assert.equal(oneAddress.badgeIntervalMs, COINPAY_BADGE_POLL_MS, 'the badge cadence is the hook\'s own constant');
+// ...and it is the ONLY coinpay step. Before spec row 29 Home ran a second,
+// identical scan of its own (step 'coinpay-obligations', on the 20 s balance
+// beat); the provider's shared rows replaced it, so a cold-open
+// carrying that step again means the duplicate scan is back.
+assert.equal(oneAddress.byStep['coinpay-obligations'], undefined,
+    'Home must not run a coinpay scan of its own; the shared hook is the tree\'s only one');
 
 const busiest = busiestHost(oneAddress);
 assert.ok(busiest.count > 1, 'one host must take more than one request of a cold-open');
@@ -214,8 +220,10 @@ assert.equal(profile.edge.burst, oneAddress.total);
 assert.equal(profile.edge.required, oneAddress.total * ATTEMPTS_PER_CALL * 3);
 
 // The per-poll figures are per chain per address, so a fourth chain cannot
-// fail this: two balance reads, one coinpay read, no proof reads.
-assert.deepEqual(profile.perPoll, { balanceReadsPerAddress: 2, coinpayReadsPerAddress: 1, proofReadsPerAddress: 0 });
+// fail this: two balance reads, NO coinpay read (spec row 29 moved the resume
+// cards onto the shared hook, so the 20 s beat carries no coinpay traffic at
+// all), no proof reads.
+assert.deepEqual(profile.perPoll, { balanceReadsPerAddress: 2, coinpayReadsPerAddress: 0, proofReadsPerAddress: 0 });
 
 // The worst minute per route folds in every further poll and badge scan that
 // fits in the minute after the cold-open.
@@ -225,8 +233,14 @@ const furtherPolls = Math.ceil(60_000 / BALANCE_POLL_INTERVAL_MS) - 1;
 assert.equal(balancesRoute.worstMinute, balancesRoute.coldOpen + balancesRoute.perPoll * furtherPolls);
 const coinpayRoute = profile.routes.find((r) => r.family === 'coinpay');
 const furtherBadge = Math.ceil(60_000 / COINPAY_BADGE_POLL_MS) - 1;
+// The coinpay route's worst minute is now the cold-open scan plus the badge
+// repeats ONLY: its per-poll term is zero, so the formula below has to be
+// pinned with that term stated, or a coinpay read creeping back into Home's
+// beat would still satisfy it.
+assert.equal(coinpayRoute.perPoll, 0, 'no coinpay read rides the 20 s balance poll any more');
 assert.equal(coinpayRoute.worstMinute,
     coinpayRoute.coldOpen + coinpayRoute.perPoll * furtherPolls + coinpayRoute.perBadge * furtherBadge);
+assert.equal(coinpayRoute.worstMinute, coinpayRoute.coldOpen + coinpayRoute.perBadge * furtherBadge);
 assert.equal(balancesRoute.required, balancesRoute.worstMinute * ATTEMPTS_PER_CALL * 3);
 
 console.log(

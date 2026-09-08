@@ -53,7 +53,7 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
-import { useCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
+import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
@@ -184,6 +184,21 @@ export function App() {
     );
 }
 
+// PC-15: the "Payments due" nav badge. Its count comes from the tree's ONE
+// pending-COINPAY scan (CoinpayObligationsProvider, mounted around the
+// unlocked route below and shared with Home's resume cards), and reading a
+// context means being rendered UNDER the provider. So each nav surface gets a
+// thin wrapper here rather than the App body reading a second scan of its own.
+function LeftNavWithObligations({ badges, ...rest }) {
+    const { payableCount } = useSharedCoinpayObligations();
+    return <LeftNav {...rest} badges={{ ...badges, obligations: payableCount }} />;
+}
+
+function BottomTabBarWithObligations({ badges, ...rest }) {
+    const { payableCount } = useSharedCoinpayObligations();
+    return <BottomTabBar {...rest} badges={{ ...badges, obligations: payableCount }} />;
+}
+
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     // Keyboard-binding overrides for the palette + shortcuts live in
@@ -277,8 +292,6 @@ function AppInner() {
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
-    // PC-15: pending-COINPAY scan backing the "Payments due" nav badge.
-    const { payableCount: obligationsDue } = useCoinpayObligations(activeWalletId, activeAccountId);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. Inert unless unlocked. Contacts feed its fuzzy search and
     // are loaded lazily the first time it opens.
@@ -2305,10 +2318,14 @@ function AppInner() {
                     setUnlockedView('history');
                 },
             });
-            return (
+            // Assigned rather than returned directly so the whole unlocked
+            // tree (both nav surfaces AND the route, Home included) sits under
+            // one CoinpayObligationsProvider, which is the tree's only
+            // pending-COINPAY scan.
+            const unlockedTree = (
                 <FullLayoutWithNav
                     nav={
-                        <LeftNav
+                        <LeftNavWithObligations
                             currentView={unlockedView}
                             onSelect={(view) => setUnlockedView(view)}
                             onLock={handleNavLock}
@@ -2318,11 +2335,11 @@ function AppInner() {
                             walletName={activeWalletName}
                             hasVmAddress={hasVmAddress}
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread, obligations: obligationsDue }}
+                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     bottomBar={
-                        <BottomTabBar
+                        <BottomTabBarWithObligations
                             currentView={unlockedView}
                             onSelect={(view) => setUnlockedView(view)}
                             onLock={handleNavLock}
@@ -2330,7 +2347,7 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             hasVmAddress={hasVmAddress}
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread, obligations: obligationsDue }}
+                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     header={
@@ -2366,6 +2383,11 @@ function AppInner() {
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
                 </FullLayoutWithNav>
+            );
+            return (
+                <CoinpayObligationsProvider walletId={activeWalletId} accountId={activeAccountId}>
+                    {unlockedTree}
+                </CoinpayObligationsProvider>
             );
         }
         default:

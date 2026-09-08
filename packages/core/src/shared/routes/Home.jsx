@@ -14,6 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
+import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
@@ -211,8 +212,15 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [pendingAirdrops, setPendingAirdrops] = useState(
         /** @type {any[]} */ ([]),
     );
-    const [pendingCoinpays, setPendingCoinpays] = useState(
-        /** @type {any[]} */ ([]),
+    // Pending COINPAY obligations behind the "Payment due" resume cards.
+    // Read from the tree's shared scan rather than re-scanned here: Home used
+    // to fan one explorer read per address out of every 20 s balance poll, on
+    // top of the identical scan the shells' nav badge already runs (spec row
+    // 29). Under a CoinpayObligationsProvider (web, desktop, mobile) these
+    // rows ARE the badge's rows, refreshed on its 60 s cadence; the extension
+    // popup mounts no provider, so this call runs the only instance there.
+    const { obligations: pendingCoinpays } = useSharedCoinpayObligations(
+        activeWalletId, activeAccountId,
     );
     // Unfinished confirms (an UNSIGNED composed PSBT the popup
     // closed on). Same slot as the two cards above; nothing here has moved
@@ -503,8 +511,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeWalletId, messaging]);
 
-    // Per-wallet load: balances, multisig indicator, pending airdrops,
-    // pending COINPAY obligations. `reset: true` (wallet/account switch,
+    // Per-wallet load: balances, multisig indicator, pending airdrops and
+    // unfinished confirms. `reset: true` (wallet/account switch,
     // manual reload key) flushes state to the loading-skeleton first;
     // `reset: false` (poll / focus refresh below) fetches quietly in the
     // background and only swaps state in once fresh data lands, so an
@@ -538,7 +546,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             setActiveByChain({});
             setMultisig(null);
             setPendingAirdrops([]);
-            setPendingCoinpays([]);
             setConfirmSessions([]);
             setLoadError(null);
         }
@@ -638,38 +645,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             } catch { /* non-fatal */ }
         }
 
-        if (typeof messaging.getCoinpayObligationsForAddress === 'function') {
-            try {
-                const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                const pairs = [];
-                for (const [cId, addrs] of Object.entries(byChain || {})) {
-                    for (const a of addrs) pairs.push({ chainId: cId, address: a.address });
-                }
-                const results = await Promise.all(pairs.map((p) =>
-                    messaging.getCoinpayObligationsForAddress({
-                        chainId: p.chainId, address: p.address,
-                    })
-                        .then((resp) => ({ ...p, rows: extractObligationRows(resp) }))
-                        .catch(() => ({ ...p, rows: [] }))
-                ));
-                if (isCancelled()) return;
-                const obligations = [];
-                for (const r of results) {
-                    for (const row of r.rows) {
-                        if (!isPendingForPayer(row, r.address)) continue;
-                        obligations.push({
-                            chainId: r.chainId,
-                            address: r.address,
-                            orderMatchActionIndex: String(row.action_index ?? row.actionIndex),
-                            coinAmount: row.coin_amount,
-                            payeeAddress: row.payee_address || row.payeeAddress,
-                            expiration: row.expiration,
-                        });
-                    }
-                }
-                setPendingCoinpays(obligations);
-            } catch { /* non-fatal */ }
-        }
+        // No coinpay scan here on purpose. Before spec row 29 one sat between
+        // the airdrop read and the confirm read, costing one explorer read per
+        // address on every beat of this poll, duplicating the scan
+        // `useCoinpayObligations` already runs for the nav badge. The resume
+        // cards read that one scan through `useSharedCoinpayObligations` above.
 
         // Confirms the popup closed on. Extension-only in
         // practice (the store is chrome.storage.session), and the route
@@ -1305,24 +1285,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             ) : null}
         </Screen>
     );
-}
-
-function isPendingForPayer(row, address) {
-    if (!row || typeof row !== 'object') return false;
-    const status = String(row.coinpay_status || row.status || '').toLowerCase();
-    if (status !== 'pending_coinpay') return false;
-    const payer = row.payer_address || row.payerAddress;
-    return typeof payer === 'string' && payer === address;
-}
-
-function extractObligationRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    if (Array.isArray(resp.obligations)) return resp.obligations;
-    if (Array.isArray(resp.coinpay_obligations)) return resp.coinpay_obligations;
-    return [];
 }
 
 /**

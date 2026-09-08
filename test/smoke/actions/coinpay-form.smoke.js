@@ -21,8 +21,9 @@
 //      getCoinpayObligationsForAddress / getCoinpaysForAddress.
 //   6. Three App.jsx files track the 'coinpay' sub-route, register the
 //      ActionsMenu 'coinpay' entry, and thread onResumeCoinpay to Home.
-//   7. Home scans for pending obligations via getCoinpayObligationsForAddress
-//      and renders a resume card that invokes onResumeCoinpay.
+//   7. Home reads pending obligations from the shared coinpay scan (one per
+//      tree, never its own per-poll read) and renders a resume card that
+//      invokes onResumeCoinpay.
 //   8. SDK pin bumped to ^1.9.1 (matches the getCoinpayObligations method
 //      that lands in xchain-sdk 1.9.1).
 
@@ -201,10 +202,12 @@ for (const [shell, appPath] of [
 
 const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/onResumeCoinpay/.test(homeSrc), 'Home.jsx accepts onResumeCoinpay prop');
-assert.ok(/getCoinpayObligationsForAddress/.test(homeSrc),
-    'Home.jsx fetches pending obligations on mount');
-assert.ok(/pending_coinpay/.test(homeSrc),
-    'Home.jsx filters to pending_coinpay obligations');
+assert.ok(/useSharedCoinpayObligations\(/.test(homeSrc),
+    'Home.jsx reads pending obligations from the shared scan');
+// The per-poll read Home once ran beside the badge scan doubled the coinpay
+// traffic (rate-limits spec, row 29); its return is the regression this pins.
+assert.ok(!/messaging\.getCoinpayObligationsForAddress/.test(homeSrc),
+    'Home.jsx runs no coinpay scan of its own');
 
 // --- 7b. the obligation-rebuild chokepoint -----------------------------
 //

@@ -19,7 +19,9 @@
 // is PC-16 auto-pay's engine; a badge that reconciles within a poll
 // interval is the right cost for a visibility layer.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    createContext, createElement, useCallback, useContext, useEffect, useRef, useState,
+} from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
@@ -218,6 +220,56 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     ).length;
 
     return { obligations, scanning, refresh, payableCount };
+}
+
+// One scan per tree.
+//
+// Home's resume card and the shells' nav badge want the same wallet-wide
+// pending-COINPAY rows, and every `useCoinpayObligations` instance costs one
+// explorer read per address per sweep. A shell that mounts this provider pays
+// for exactly ONE instance and hands its state to every consumer below it,
+// which is where the duplicate scan went (spec row 29 / C45).
+//
+// Not every tree has a provider, so the shared hook falls back to an instance
+// of its own: the extension popup mounts Home but no nav badge, so nothing
+// there would run the scan otherwise. ObligationsView keeps its own instance
+// on purpose (a transient view with a manual refresh button).
+const CoinpayObligationsContext = createContext(
+    /** @type {ReturnType<typeof useCoinpayObligations> | null} */ (null));
+
+/**
+ * Runs the tree's single pending-COINPAY scan and provides it.
+ *
+ * @param {{
+ *   walletId?: string | null,
+ *   accountId?: string | null,
+ *   pollMs?: number,
+ *   children?: any,
+ * }} props
+ */
+export function CoinpayObligationsProvider({ walletId, accountId, pollMs, children }) {
+    const value = useCoinpayObligations(walletId, accountId, { pollMs });
+    return createElement(CoinpayObligationsContext.Provider, { value }, children);
+}
+
+/**
+ * The provider's state when one is mounted above, otherwise this caller's
+ * own instance.
+ *
+ * A hook call cannot be conditional, so the fallback instance is ALWAYS
+ * created; under a provider it is handed a null walletId, and
+ * `useCoinpayObligations`' own early return means it never scans. So the
+ * fallback costs a state slot and no explorer reads.
+ *
+ * @param {string | null | undefined} [walletId]
+ * @param {string | null | undefined} [accountId]
+ * @param {{ pollMs?: number }} [opts]
+ * @returns {ReturnType<typeof useCoinpayObligations>}
+ */
+export function useSharedCoinpayObligations(walletId, accountId, opts = {}) {
+    const provided = useContext(CoinpayObligationsContext);
+    const own = useCoinpayObligations(provided ? null : walletId, accountId, opts);
+    return provided || own;
 }
 
 // Row filters, shared shape-tolerant readers. Same semantics as the

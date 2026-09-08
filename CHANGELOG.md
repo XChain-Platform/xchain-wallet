@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The wallet moves to xchain-sdk 0.15.3, whose deploy workflow resolves a chunked contract through the explorer.
 - A rate-limited read now waits the seconds the service asked for (up to 60 s) instead of two, and the copy says "asked the wallet to slow down for N seconds; retrying" with a live countdown on Home.
 - The lockout banner says "Too many incorrect passwords" so it no longer reads as a rate limit.
+- Home reads pending payments from the one shared scan instead of its own per-poll read, 15 fewer explorer reads per 20 s on a five-address wallet.
 
 ### Fixed
 - Home's 20-second balance poll no longer starts a second load while one is still waiting on the service.

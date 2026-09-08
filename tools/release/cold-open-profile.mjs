@@ -148,11 +148,14 @@ export const COUNTING_PERIOD_SEC = 10;
 /**
  * The step name under which the repeat load is recorded.
  *
- * Home's polling effect re-runs the whole balance load (balances, native coin
- * and coinpay, every address on every chain) every BALANCE_POLL_INTERVAL_MS,
- * and again on a focus or visibilitychange that the poll throttle admits. So a
+ * Home's polling effect re-runs the whole balance load (balances and native
+ * coin, every address on every chain) every BALANCE_POLL_INTERVAL_MS, and
+ * again on a focus or visibilitychange that the poll throttle admits. So a
  * cold-open is not a one-off spike to be absorbed: it is the wallet's
  * steady-state shape.
+ *
+ * No coinpay here: spec row 29 deleted Home's own per-poll coinpay scan in
+ * favour of the shared hook, so coinpay traffic is the badge step alone.
  *
  * The repeat is measured by running it, not by classifying the first load's
  * rows, because it is genuinely smaller: the registry sync is boot-only, each
@@ -162,10 +165,11 @@ export const COUNTING_PERIOD_SEC = 10;
 const POLL_STEP = 'poll';
 
 /**
- * The nav badge's own coinpay scan. The web SPA (and so the desktop and mobile
- * shells, which bundle it) mounts `useCoinpayObligations` beside Home, and it
- * polls on its own cadence, separate from Home's beat. Recorded as its own
- * step because it repeats on a different interval.
+ * The tree's only coinpay scan. The web SPA (and so the desktop and mobile
+ * shells, which bundle it) mounts one `CoinpayObligationsProvider` whose
+ * single `useCoinpayObligations` instance feeds both the nav badge and Home's
+ * resume cards, on its own cadence rather than Home's beat. Recorded as its
+ * own step because it repeats on a different interval.
  */
 const BADGE_STEP = 'coinpay-badge';
 
@@ -510,17 +514,14 @@ export async function measureColdOpen({
             activeNetwork: networkKind,
         });
 
-        // 3. Home's coinpay resume card, one read per address, fired from the
-        //    same mount effect with nothing between it and the balance load.
-        step = 'coinpay-obligations';
-        await coinpayScan();
-
-        // 4. The nav badge's own first scan, same reads again from a second
-        //    hook mounted beside Home in the web SPA.
+        // 3. The tree's first coinpay scan, one read per address. ONE scan,
+        //    not two: Home's own per-poll read is gone (spec row 29), so the
+        //    provider's badge instance is the whole coinpay cost and its
+        //    resume cards come out of the same rows.
         step = BADGE_STEP;
         await coinpayScan();
 
-        // 5. Proof verification: one job per (chain, address, token), each
+        // 4. Proof verification: one job per (chain, address, token), each
         //    through the real `verifyAddressBalance` flow and the installed
         //    SDK's light client, which is what decides how many reads a job
         //    costs (the proof, then the checkpoint's validator set; an SDK
@@ -539,9 +540,11 @@ export async function measureColdOpen({
         await Promise.all(jobs.map((j) => verifyAddressBalance({ sdkRegistry, ...j }).catch(() => null)));
         const proofReads = requests.length - before;
 
-        // 6. The SECOND load, on the same SDK instances, because a cold-open
-        //    is not a one-off. Home's polling effect re-runs steps 2 and 3
-        //    every BALANCE_POLL_INTERVAL_MS for as long as the wallet is open.
+        // 5. The SECOND load, on the same SDK instances, because a cold-open
+        //    is not a one-off. Home's polling effect re-runs step 2 every
+        //    BALANCE_POLL_INTERVAL_MS for as long as the wallet is open. Step
+        //    3 is NOT part of that beat any more (spec row 29): the coinpay
+        //    scan repeats on the badge's own, slower interval below.
         //
         //    Driven rather than derived by subtraction: the repeat is SMALLER
         //    than the first load by exactly the requests that happen once per
@@ -556,7 +559,6 @@ export async function measureColdOpen({
             sdkRegistry,
             activeNetwork: networkKind,
         });
-        await coinpayScan();
 
         //    Whether the proof fan-out re-fires on this poll is decided by the
         //    hook's own re-fire signature over the balances the poll hands it:
@@ -576,7 +578,7 @@ export async function measureColdOpen({
             refiresOnPoll,
         };
 
-        // 7. The badge's repeat, on its own interval.
+        // 6. The badge's repeat, on its own interval.
         step = BADGE_STEP;
         const badgeStart = requests.length;
         await coinpayScan();
@@ -586,7 +588,7 @@ export async function measureColdOpen({
         restoreSockets();
     }
 
-    // 8. What an alt-tab costs, driven through the shipped throttle: `focus`
+    // 7. What an alt-tab costs, driven through the shipped throttle: `focus`
     //    and `visibilitychange` fire together, once with data fresher than the
     //    poll interval (the user flicked away and back) and once after the
     //    data has aged past it (the user came back after a while). The count
@@ -742,6 +744,9 @@ export function coldOpenProfile(m, { headroom = 2, periodSec = COUNTING_PERIOD_S
         / (chainCount * m.addressesPerChain);
     const perPoll = {
         balanceReadsPerAddress: perAddress(m.recurringRequests, 'balances') + perAddress(m.recurringRequests, 'address'),
+        // Kept, and 0 since spec row 29: the beat itself no longer scans
+        // coinpay. Still measured rather than hard-coded, so a coinpay read
+        // re-entering Home's poll shows up here instead of hiding.
         coinpayReadsPerAddress: perAddress(m.recurringRequests, 'coinpay'),
         proofReadsPerAddress: m.proof.refiresOnPoll ? (m.proof.reads / (chainCount * m.addressesPerChain)) : 0,
     };
@@ -867,7 +872,8 @@ async function main() {
     console.log(`\nEvery ${p.recurringIntervalMs / 1000}s while the wallet stays open (Home's poll), per chain, per address:`);
     console.log(`  ${p.perPoll.balanceReadsPerAddress} balance reads, ${p.perPoll.coinpayReadsPerAddress} coinpay read(s),`
         + ` ${p.perPoll.proofReadsPerAddress} proof reads`);
-    console.log(`  the badge's coinpay scan repeats every ${p.badgeIntervalMs / 1000}s: ${m.badgeRequests.length} more reads`);
+    console.log(`  the shared coinpay scan is NOT on this beat; it repeats every`
+        + ` ${p.badgeIntervalMs / 1000}s: ${m.badgeRequests.length} more reads`);
     console.log(`\nProof verification, once per session: ${p.proof.jobs} job(s), ${p.proof.reads} reads`
         + ` (${p.proof.readsPerJob} per job on this SDK); re-fires on a poll: ${p.proof.refiresOnPoll ? 'YES' : 'no'}`);
     console.log(`\nAn alt-tab (focus + visibilitychange together), driven through the poll throttle:`);
