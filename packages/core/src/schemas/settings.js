@@ -191,7 +191,7 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
  * @property {Record<string, FeeSettings>} fees
  * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean, priceDataEnabled?: boolean, metadataFetchEnabled?: boolean }} privacy   v2: adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant (0-600 inclusive, 0 = never clear, default 60, §17.7.1 / G028); hapticsEnabled is v2-tolerant (defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference, Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant (defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier, Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant (defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS, Cluster P FOLLOWUP 6); priceDataEnabled is v2-tolerant (defaults true; when false the price oracle is disabled and the TokenDetail stats strip / chart hide for native coins, sends a request to a third-party API revealing wallet activity, hence the opt-out).
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
- * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean, governancePolls?: boolean, deadlines?: boolean, dispenserEscrow?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action) and governancePolls (v2-tolerant, defaults true; notify when a new VOTE poll opens over a held token, binding polls flagged)
+ * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean, governancePolls?: boolean, deadlines?: boolean, dispenserEscrow?: boolean, incomingPending?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action) and governancePolls (v2-tolerant, defaults true; notify when a new VOTE poll opens over a held token, binding polls flagged); incomingPending is v2-tolerant, defaults true; notify when a watched address has an INCOMING payment sitting in the mempool, before it confirms
  * @property {boolean} developerMode
  * @property {boolean} learnMode
  * @property {{ undoSendSeconds: number, testSendThresholdSats: number }} grace                              v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
@@ -298,6 +298,7 @@ export function createDefaultSettings() {
             governancePolls: true,
             deadlines: true,
             dispenserEscrow: true,
+            incomingPending: true,
         },
         developerMode: false,
         learnMode: false,
@@ -456,7 +457,9 @@ export function validateSettings(record) {
             // v2-tolerant: older records predate the deadlines flag (PC-45).
             (r.notifications.deadlines == null || isBoolean(r.notifications.deadlines)) &&
             // v2-tolerant: older records predate the dispenserEscrow flag (PC-46).
-            (r.notifications.dispenserEscrow == null || isBoolean(r.notifications.dispenserEscrow)),
+            (r.notifications.dispenserEscrow == null || isBoolean(r.notifications.dispenserEscrow)) &&
+            // v2-tolerant: older records predate the incomingPending flag (M3.2).
+            (r.notifications.incomingPending == null || isBoolean(r.notifications.incomingPending)),
         'malformed',
     );
 

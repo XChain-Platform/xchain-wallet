@@ -15,6 +15,8 @@ import {
     createDefaultSettings,
     createDefaultAdsChainState,
     validateSettings,
+    deflateSettings,
+    inflateSettings,
     THEMES,
     FEE_STRATEGIES,
     REDUCED_MOTION_MODES,
@@ -321,6 +323,42 @@ describe('validateSettings', () => {
     it('rejects malformed notifications', () => {
         const s = createDefaultSettings();
         expect(validateSettings({ ...s, notifications: null }).ok).toBe(false);
+    });
+
+    it('notifications.incomingPending defaults true', () => {
+        const s = createDefaultSettings();
+        expect(s.notifications.incomingPending).toBe(true);
+    });
+
+    it('accepts missing notifications.incomingPending (v2-tolerant)', () => {
+        const s = createDefaultSettings();
+        const { incomingPending, ...notificationsWithout } = s.notifications;
+        const r = validateSettings({ ...s, notifications: notificationsWithout });
+        expect(r.ok).toBe(true);
+    });
+
+    it('rejects non-boolean notifications.incomingPending when present', () => {
+        const s = createDefaultSettings();
+        const r = validateSettings({ ...s, notifications: { ...s.notifications, incomingPending: 'yes' } });
+        expect(r.ok).toBe(false);
+    });
+
+    it('accepts notifications.incomingPending=false', () => {
+        const s = createDefaultSettings();
+        const r = validateSettings({ ...s, notifications: { ...s.notifications, incomingPending: false } });
+        expect(r.ok).toBe(true);
+    });
+
+    it('sparse update to notifications.incomingPending round-trips and leaves sibling flags intact', () => {
+        const full = createDefaultSettings();
+        full.notifications = { ...full.notifications, incomingPending: false };
+        const stored = deflateSettings(full);
+        expect(stored.notifications).toEqual({ incomingPending: false });
+        const inflated = inflateSettings(stored);
+        expect(inflated.notifications.incomingPending).toBe(false);
+        expect(inflated.notifications.incomingReceipts).toBe(true);
+        expect(inflated.notifications.txConfirmations).toBe(true);
+        expect(inflated.notifications.governancePolls).toBe(true);
     });
 
     it('rejects non-boolean developerMode', () => {

@@ -107,6 +107,14 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
         hint: 'Notify when a watched address receives a transaction.',
     },
     {
+        key: 'incomingPending',
+        label: 'Incoming pending payments',
+        hint: 'Notify as soon as a payment to a watched address is seen in the mempool, before it confirms.',
+        // Same v2-tolerant default as governancePolls: the watcher treats an
+        // absent flag as ON, so a pre-flag settings record renders ON here too.
+        defaultOn: true,
+    },
+    {
         key: 'messages',
         label: 'Incoming messages',
         hint: 'Notify when a watched address receives a message.',
