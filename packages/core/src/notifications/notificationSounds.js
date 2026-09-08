@@ -33,6 +33,17 @@
 export const SOUND_NONE = 'none';
 
 /**
+ * Window event the Settings preview button dispatches (`detail: { soundId }`).
+ * The shell that can make a noise listens for it and plays through its
+ * adapter's `playSound`; a shell without the seam hears nothing, which is
+ * the deferral I-34b describes. An event rather than a messaging helper
+ * because the three messaging twins are held to export parity by the smoke
+ * gate, and a preview stub on desktop/extension would be a button that does
+ * nothing. Mirrors the adapter's own CustomEvent bridge to the toast layer.
+ */
+export const SOUND_PREVIEW_EVENT = 'xchain:sound-preview';
+
+/**
  * The bundled palette. `file` is relative to the shell's sound directory
  * (`/sounds/` on web). Kinds may share a file; every family is re-pickable.
  *

@@ -16,9 +16,9 @@
 // the family's palette default), and each write is a single-family patch
 // so picking one sound cannot clobber the other nine.
 //
-// Preview is the shell-capability half: the web messaging module exposes
-// `playNotificationSound`, the desktop and extension twins deliberately do
-// not, and the button must be absent rather than dead where it is missing.
+// Preview is the shell-capability half: the button dispatches the core
+// SOUND_PREVIEW_EVENT window event, which only the web host listens for, and
+// it must be absent rather than dead on the shells without the seam.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
@@ -28,6 +28,7 @@ import {
     SOUND_FAMILIES,
     SOUND_NONE,
     SOUND_PALETTE,
+    SOUND_PREVIEW_EVENT,
 } from '../../../packages/core/src/notifications/notificationSounds.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
@@ -35,6 +36,9 @@ import { createDefaultSettings } from '../../../packages/core/src/schemas/settin
 let settings = createDefaultSettings();
 let update = vi.fn();
 let messaging = {};
+let shell = 'web';
+let previews = [];
+const onPreview = (e) => previews.push(e.detail && e.detail.soundId);
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, update, refresh: async () => {} }),
@@ -53,7 +57,7 @@ vi.mock('../../../packages/core/src/shared/hooks/usePriceAlerts.js', () => ({
 }));
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
-    useMessaging: () => ({ shell: 'web', messaging }),
+    useMessaging: () => ({ shell, messaging }),
 }));
 
 const { NotificationsSection } = await import(
@@ -67,10 +71,14 @@ function soundsOn(perKind = {}) {
 beforeEach(() => {
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
-    messaging = { playNotificationSound: vi.fn(async () => ({ played: true })) };
+    messaging = {};
+    shell = 'web';
+    previews = [];
+    window.addEventListener(SOUND_PREVIEW_EVENT, onPreview);
 });
 
 afterEach(() => {
+    window.removeEventListener(SOUND_PREVIEW_EVENT, onPreview);
     cleanup();
     vi.clearAllMocks();
 });
@@ -164,20 +172,19 @@ describe('the per-family pickers', () => {
 });
 
 describe('the Preview button', () => {
-    it('plays the picked sound for that family', () => {
+    it('dispatches the preview event carrying the picked sound for that family', () => {
         soundsOn({ priceAlerts: 'drop' });
         render(<NotificationsSection />);
         fireEvent.click(screen.getByLabelText('Preview Incoming pending payments sound'));
-        expect(messaging.playNotificationSound).toHaveBeenCalledTimes(1);
         // The pending family's default, not the re-picked price-alert one.
-        expect(messaging.playNotificationSound).toHaveBeenCalledWith('pluck');
+        expect(previews).toEqual(['pluck']);
     });
 
-    it('plays a re-picked sound rather than the default', () => {
+    it('previews a re-picked sound rather than the default', () => {
         soundsOn({ incomingPending: 'bong' });
         render(<NotificationsSection />);
         fireEvent.click(screen.getByLabelText('Preview Incoming pending payments sound'));
-        expect(messaging.playNotificationSound).toHaveBeenCalledWith('bong');
+        expect(previews).toEqual(['bong']);
     });
 
     it('is disabled where the family is muted', () => {
@@ -186,30 +193,33 @@ describe('the Preview button', () => {
         const btn = screen.getByLabelText('Preview Incoming pending payments sound');
         expect(btn.disabled).toBe(true);
         fireEvent.click(btn);
-        expect(messaging.playNotificationSound).not.toHaveBeenCalled();
+        expect(previews).toEqual([]);
         // Only the muted row is dead; the rest still preview.
         expect(screen.getByLabelText('Preview Price alerts sound').disabled).toBe(false);
     });
 
-    it('is ABSENT where the shell cannot play a sound', () => {
-        // The desktop and extension messaging modules carry no
-        // playNotificationSound; the pickers still work, the button is gone.
-        messaging = {};
-        soundsOn();
-        render(<NotificationsSection />);
-        expect(screen.queryByLabelText('Preview Incoming pending payments sound')).toBeNull();
-        expect(screen.queryByText('Preview')).toBeNull();
-        expect(screen.getByLabelText('Incoming pending payments sound')).toBeTruthy();
+    it('is ABSENT on the shells without the delivery seam', () => {
+        for (const other of ['desktop', 'popup']) {
+            shell = other;
+            soundsOn();
+            render(<NotificationsSection />);
+            expect(screen.queryByLabelText('Preview Incoming pending payments sound'), other).toBeNull();
+            expect(screen.queryByText('Preview'), other).toBeNull();
+            // The pickers still work there; only the button is gone.
+            expect(screen.getByLabelText('Incoming pending payments sound')).toBeTruthy();
+            cleanup();
+        }
     });
 
-    it('swallows a rejected play instead of surfacing it', async () => {
-        messaging = { playNotificationSound: vi.fn(() => Promise.reject(new Error('autoplay blocked'))) };
+    it('never raises a notification event: a preview is not a delivery', () => {
+        const seen = [];
+        const onNotify = (e) => seen.push(e.detail);
+        window.addEventListener('xchain:notification', onNotify);
         soundsOn();
         render(<NotificationsSection />);
         fireEvent.click(screen.getByLabelText('Preview Incoming pending payments sound'));
-        // An unhandled rejection here would fail the run; reaching the
-        // assertion after a turn of the microtask queue is the proof.
-        await Promise.resolve();
-        expect(messaging.playNotificationSound).toHaveBeenCalledWith('pluck');
+        window.removeEventListener('xchain:notification', onNotify);
+        expect(previews).toEqual(['pluck']);
+        expect(seen).toEqual([]);
     });
 });

@@ -22,6 +22,7 @@ export { CoinpayAutopayWatcher, pendingTxReferencesMatch } from './CoinpayAutopa
 export { getActiveAddresses } from './getActiveAddresses.js';
 export {
     SOUND_NONE,
+    SOUND_PREVIEW_EVENT,
     SOUND_PALETTE,
     SOUND_FAMILIES,
     soundById,

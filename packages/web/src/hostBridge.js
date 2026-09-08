@@ -1261,18 +1261,17 @@ export async function sendMessage(type, request) {
     throw hydrateEnvelopeError(response.error);
 }
 
-/**
- * Settings preview for event sounds (§6 M4.1): play one palette sound by id
- * with no live event and no toast. Needs no vault, so it works while locked;
- * the desktop/extension messaging twins have no counterpart (their shells
- * lack the delivery seam, ruling I-34b) and the section hides Preview there.
- *
- * @param {string} soundId
- * @returns {Promise<{ played: boolean }>}
- */
+// Settings preview for event sounds (§6 M4.1): the shared section dispatches
+// SOUND_PREVIEW_EVENT and this shell, the one with the delivery seam, plays
+// the palette sound through its adapter with no live event and no toast.
+// Needs no vault, so it works while locked. Desktop and the extension have
+// no listener (ruling I-34b) and the section hides Preview there.
 const previewAdapter = createWebNotifyAdapter();
-export async function playNotificationSound(soundId) {
-    return { played: previewAdapter.playSound(soundId) };
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener(notificationsLib.SOUND_PREVIEW_EVENT, (e) => {
+        const soundId = e && e.detail && e.detail.soundId;
+        if (typeof soundId === 'string') previewAdapter.playSound(soundId);
+    });
 }
 
 /** Test hook: expose module state without touching real IDB/localStorage. */

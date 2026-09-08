@@ -31,6 +31,7 @@ import {
     SOUND_FAMILIES,
     SOUND_NONE,
     SOUND_PALETTE,
+    SOUND_PREVIEW_EVENT,
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
 import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
@@ -220,18 +221,20 @@ export function NotificationsSection({ walletId } = {}) {
  * price-alert manager collapse behind theirs: ten always-visible selects
  * would double the panel's height for a feature that ships off.
  *
- * Preview is rendered only where the shell can actually make a noise. The
- * web shell exposes `messaging.playNotificationSound`; the desktop and
- * extension messaging modules deliberately do not, and a button that does
- * nothing is worse than no button.
+ * Preview is rendered only where the shell can actually make a noise: the
+ * web shell (which the mobile wrapper shares), whose host listens for
+ * SOUND_PREVIEW_EVENT and plays through its notify adapter. Desktop and the
+ * extension lack the delivery seam (ruling I-34b), and a button that does
+ * nothing is worse than no button, so it is gated on the shell rather than
+ * routed through a messaging helper the parity gate would demand of all three.
  *
  * @param {object} props
  * @param {import('../../../schemas/settings.js').Settings} props.settings
  * @param {(patch: Record<string, unknown>) => Promise<unknown>} props.update
  */
 function SoundsBlock({ settings, update }) {
-    const { messaging } = useMessaging();
-    const canPreview = typeof messaging?.playNotificationSound === 'function';
+    const { shell } = useMessaging();
+    const canPreview = shell === 'web';
     const enabled = settings.sounds?.enabled === true;
 
     const onToggle = async (next) => {
@@ -254,12 +257,10 @@ function SoundsBlock({ settings, update }) {
     };
     const onPreview = (soundId) => {
         try {
-            const p = messaging.playNotificationSound(soundId);
-            // A preview that cannot play (autoplay policy, missing file) is
-            // not worth an error surface; the user just hears nothing.
-            if (p && typeof p.catch === 'function') p.catch(() => {});
+            window.dispatchEvent(new CustomEvent(SOUND_PREVIEW_EVENT, { detail: { soundId } }));
         } catch {
-            // Same reasoning for a synchronous throw.
+            // No window (a non-DOM render): the user just hears nothing, which
+            // is not worth an error surface.
         }
     };
 
