@@ -25,7 +25,7 @@
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 
 /**
- * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'backend_behind' | 'rate_limited' | 'unknown'} HumanizedErrorCause
+ * @typedef {'insufficient_funds' | 'inputs_on_hold' | 'network' | 'rejected' | 'backend_behind' | 'rate_limited' | 'unknown'} HumanizedErrorCause
  */
 
 /**
@@ -105,7 +105,20 @@ export function humanizeError(err, verb = 'complete this') {
     let cause = 'unknown';
     let message = `Couldn't ${verb}.`;
 
-    if (/insufficient|not enough|balance too low|inadequate funds|too low/.test(hay)) {
+    if (/reserved by a transaction built/.test(hay)) {
+        // The encoder holds every input a successful build selected for five
+        // minutes, and the wallet builds when the confirm modal opens, so a
+        // cancelled or otherwise un-broadcast confirm parks that coin. An address
+        // with few spendable outputs then runs out of candidates and the encoder
+        // reports the shortfall with the reserved inputs named. Read BEFORE the
+        // generic insufficient-funds branch: this message also says "insufficient
+        // funds", and "you don't have enough" plus a Use Max affordance sent a
+        // user holding 2,000 TDOGE in circles. Waiting fixes it; funding
+        // the address does not.
+        cause = 'inputs_on_hold';
+        message = `Couldn't ${verb}. Coins at this address are still on hold for a transaction `
+            + 'prepared in the last 5 minutes. Broadcast that transaction, or wait 5 minutes and try again.';
+    } else if (/insufficient|not enough|balance too low|inadequate funds|too low/.test(hay)) {
         cause = 'insufficient_funds';
         message = `Couldn't ${verb}. You don't have enough funds for this transaction.`;
     } else if (/network|timeout|timed out|econnrefused|econnreset|enotfound|etimedout|fetch failed|unreachable|offline|dns|no response/.test(hay)) {
