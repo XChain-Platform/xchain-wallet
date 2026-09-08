@@ -27,6 +27,8 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { useToast } from '../components/ToastHost.jsx';
+import { copyText } from '../clipboard.js';
+import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -448,6 +450,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // then opens the platform share sheet. We feature-detect file-share
     // support and hide the Share button on browsers that can't take a
     // File via navigator.share (older Chromium on desktop, mainly).
+    //
+    // The PNG is decoded from the data URL in-process (dataUrlToBlob), not
+    // via `fetch(dataUrl)`: every shell's CSP pins connect-src to the
+    // wallet's own hosts, so the fetch was refused and both buttons
+    // failed with "Failed to fetch".
+    const canCopyImages = useMemo(() => (
+        typeof navigator !== 'undefined'
+        && typeof navigator.clipboard?.write === 'function'
+        && typeof ClipboardItem === 'function'
+    ), []);
+
     const canShareFiles = useMemo(() => {
         if (typeof navigator === 'undefined') return false;
         if (typeof navigator.share !== 'function') return false;
@@ -468,20 +481,33 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const copyQrImage = useCallback(async () => {
         if (!qrDataUrl) return;
+        // A WebView without the async image clipboard (older Android
+        // WebViews, Firefox before 127) cannot take a PNG at all. Copying
+        // the payment link is the useful thing the button can still do
+        // there, and the toast says which one happened.
+        if (!canCopyImages) {
+            const { ok } = await copyText(qrUri || address?.address || '');
+            showToast({
+                message: ok
+                    ? 'This app cannot copy images, so the payment link was copied instead.'
+                    : 'Copy failed: clipboard unavailable',
+            });
+            return;
+        }
         try {
-            const blob = await (await fetch(qrDataUrl)).blob();
+            const blob = dataUrlToBlob(qrDataUrl);
             await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
             showToast({ message: 'QR code copied to clipboard.' });
         } catch (err) {
             showToast({ message: `Copy failed: ${err?.message || 'clipboard unavailable'}` });
         }
-    }, [qrDataUrl, showToast]);
+    }, [qrDataUrl, qrUri, address?.address, canCopyImages, showToast]);
 
     const shareQrImage = useCallback(async () => {
         if (!qrDataUrl) return;
         let blob;
         try {
-            blob = await (await fetch(qrDataUrl)).blob();
+            blob = dataUrlToBlob(qrDataUrl);
         } catch (err) {
             showToast({ message: `Share failed: ${err?.message || 'could not read QR image'}` });
             return;
@@ -489,9 +515,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         // Mirror the Copy action first so the user always ends up with
         // the image on the clipboard, regardless of which share target
         // they pick. Clipboard failures are non-fatal; proceed to share.
-        try {
-            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        } catch { /* keep going */ }
+        if (canCopyImages) {
+            try {
+                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            } catch { /* keep going */ }
+        }
         try {
             const file = new File([blob], qrFileName, { type: blob.type });
             await navigator.share({
@@ -503,7 +531,24 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (err?.name === 'AbortError') return; // user dismissed sheet
             showToast({ message: `Share failed: ${err?.message || 'share unavailable'}` });
         }
-    }, [qrDataUrl, address?.address, qrFileName, showToast]);
+    }, [qrDataUrl, address?.address, qrFileName, canCopyImages, showToast]);
+
+    // Single-tap address copy. The field is read-only, so before this a
+    // user had to select the text by hand and copy it; a tap now copies
+    // the bare address (not the payment URI, which is what the QR
+    // carries, because the thing people paste into another wallet is the
+    // address). Enter/Space do the same from the keyboard.
+    const copyAddress = useCallback(async () => {
+        if (!address?.address) return;
+        const { ok } = await copyText(address.address);
+        showToast({ message: ok ? 'Address copied to clipboard.' : 'Copy failed: clipboard unavailable' });
+    }, [address?.address, showToast]);
+    const onAddressKeyDown = useCallback((event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            copyAddress();
+        }
+    }, [copyAddress]);
 
     const header = (
         <PageHeader
@@ -600,6 +645,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     value={address.address}
                     readOnly
                     onChange={() => {}}
+                    onClick={copyAddress}
+                    onKeyDown={onAddressKeyDown}
+                    title="Tap to copy"
+                    hint="Tap the address to copy it."
+                    style={{ cursor: 'copy' }}
                     onIconClick={() => setAddressPickerOpen(true)}
                     iconLabel="Choose receive address"
                 />

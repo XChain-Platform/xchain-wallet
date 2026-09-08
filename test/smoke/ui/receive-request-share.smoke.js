@@ -68,6 +68,14 @@ assert.match(recvSrc, /QRCode\.toDataURL\(qrUri/, 'request URI rendered to QR');
 
 assert.match(recvSrc, /copyQrImage = useCallback/, 'copy callback memoized');
 assert.match(recvSrc, /shareQrImage = useCallback/, 'share callback memoized');
+// Every shell's CSP pins connect-src to the wallet's own hosts, so a
+// `fetch(dataUrl)` is refused and both buttons failed with "Failed to
+// fetch" (user report, 2026-09-07). The PNG is decoded in-process.
+assert.doesNotMatch(recvSrc, /fetch\(qrDataUrl\)/, 'never fetches the QR data URL');
+assert.match(recvSrc, /dataUrlToBlob\(qrDataUrl\)/, 'decodes the QR data URL in-process');
+// Same report: the read-only address needed a manual select + copy.
+assert.match(recvSrc, /copyAddress = useCallback/, 'single-tap address copy callback');
+assert.match(recvSrc, /onClick=\{copyAddress\}/, 'tapping the address field copies it');
 assert.match(
     recvSrc,
     /navigator\.clipboard\.write\(\[new ClipboardItem/,
