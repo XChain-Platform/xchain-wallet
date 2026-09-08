@@ -539,4 +539,143 @@ test.describe(`Incoming pending payment on ${REGTEST_CHAIN_LABEL} regtest`, () =
                 + 'above proves nothing about quiet hours').toBeVisible({ timeout: 60_000 });
         });
     });
+
+    /* ───── M4: event sounds ──────────────────────────────────────── */
+
+    // Headless Chromium has no audio device, so "it played" is recorded at the
+    // one place every play goes through: HTMLMediaElement.prototype.play. The
+    // recorder resolves, so the adapter sees a successful play and nothing
+    // else changes. Each entry is the element's src, an absolute URL that ends
+    // in the palette file; a play is therefore a POSITIVE fact about which
+    // file was asked for, not an absence. Installed as an init script for the
+    // same reason as the notification collector above.
+    const collectSoundPlays = (page) => page.addInitScript(() => {
+        window.__xcSoundPlays = [];
+        const proto = window.HTMLMediaElement && window.HTMLMediaElement.prototype;
+        if (!proto) return;
+        proto.play = function play() {
+            window.__xcSoundPlays.push(String(this.currentSrc || this.src || ''));
+            return Promise.resolve();
+        };
+    });
+    const soundPlays = (page) => page.evaluate(() => window.__xcSoundPlays || []);
+    const resetSoundPlays = (page) => page.evaluate(() => { window.__xcSoundPlays = []; });
+    const FAMILY = 'Incoming pending payments';
+
+    /**
+     * Drives the real Settings screen: master sounds switch, the family's
+     * picker, and returns to Home. `pick` is a palette id or 'none'; pass
+     * `enabled: false` AFTER a pick to leave a picked-but-muted record.
+     */
+    async function setSounds(page, { enabled, pick } = {}) {
+        await openSettings(page);
+        const master = page.getByRole('switch', { name: 'Notification sounds', exact: true });
+        await expect(master, 'Settings has no "Notification sounds" switch').toBeVisible({ timeout: 30_000 });
+        if (pick !== undefined) {
+            if (!(await master.isChecked())) await master.click();
+            const picker = page.getByRole('combobox', { name: `${FAMILY} sound`, exact: true });
+            await expect(picker, `no "${FAMILY} sound" picker under the sounds switch`).toBeVisible({ timeout: 30_000 });
+            await picker.selectOption(pick);
+            await expect(picker).toHaveValue(pick);
+        }
+        if (enabled !== undefined && (await master.isChecked()) !== enabled) await master.click();
+        if (enabled !== undefined) await expect(master).toBeChecked({ checked: enabled });
+        await gotoSection(page, 'Home');
+    }
+
+    test('sounds on: the pending toast is accompanied by the picked sound, preview plays it alone, and the pick survives a reload', async ({ browser, page }) => {
+        test.fixme(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, whose onAddress `
+            + 'drops MEMPOOL_ACTION frames, so no pending sighting can reach the notification rail.');
+        await collectNotifications(page);
+        await collectSoundPlays(page);
+        const { txid, heldBlocks } = await payTheSubject(browser, page, {
+            beforePayment: async (p) => {
+                await setSounds(p, { enabled: true, pick: 'chime' });
+
+                await test.step('CLAIM 6: preview plays the picked file with no live event and no toast', async () => {
+                    await openSettings(p);
+                    await resetSoundPlays(p);
+                    await p.getByRole('button', { name: `Preview ${FAMILY} sound`, exact: true }).click();
+                    await expect.poll(async () => soundPlays(p), { timeout: 10_000, message: 'Preview started no play' })
+                        .toHaveLength(1);
+                    expect((await soundPlays(p))[0]).toMatch(/\/sounds\/chime\.mp3$/);
+                    expect(receivedKinds(await collected(p)), 'preview raised a notification').toEqual([]);
+                    await gotoSection(p, 'Home');
+                });
+
+                await test.step('CLAIM 7: the pick and the master switch survive a reload (sparse top-level record)', async () => {
+                    await p.reload();
+                    await unlockAfterReload(p, PASSWORD);
+                    await openSettings(p);
+                    await expect(p.getByRole('switch', { name: 'Notification sounds', exact: true })).toBeChecked();
+                    await expect(p.getByRole('combobox', { name: `${FAMILY} sound`, exact: true })).toHaveValue('chime');
+                    await gotoSection(p, 'Home');
+                    await resetSoundPlays(p);
+                });
+            },
+        });
+        await waitForMempoolRow(txid);
+
+        await test.step('CLAIM 8: one toast, one play of the picked file, and never a play without a toast', async () => {
+            const toast = page.getByRole('status').filter({ hasText: /Incoming on/ });
+            await expect(toast, 'no "Incoming on ..." toast for a payment the explorer\'s mempool carries')
+                .toBeVisible({ timeout: FRAME_BUDGET_MS });
+            await expect.poll(async () => soundPlays(page), { timeout: 30_000, message: 'the toast showed but no sound play was started' })
+                .toHaveLength(1);
+            expect((await soundPlays(page))[0]).toMatch(/\/sounds\/chime\.mp3$/);
+            const kinds = receivedKinds(await collected(page)).map((n) => n.kind);
+            expect(kinds).toEqual(['incoming-pending']);
+            expect((await soundPlays(page)).length, 'more plays than notifications: a sound was the sole signal')
+                .toBeLessThanOrEqual(kinds.length);
+            expect(await blocksMined(), 'a block was mined while the miner was parked').toBe(heldBlocks);
+        });
+    });
+
+    test('a different pick plays a different file for the next event of that kind', async ({ browser, page }) => {
+        test.fixme(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, whose onAddress `
+            + 'drops MEMPOOL_ACTION frames, so no pending sighting can reach the notification rail.');
+        await collectNotifications(page);
+        await collectSoundPlays(page);
+        const { txid } = await payTheSubject(browser, page, {
+            beforePayment: async (p) => {
+                await setSounds(p, { enabled: true, pick: 'bong' });
+                await resetSoundPlays(p);
+            },
+        });
+        await waitForMempoolRow(txid);
+
+        await test.step('CLAIM 9: the play names the newly picked file, not the default', async () => {
+            const toast = page.getByRole('status').filter({ hasText: /Incoming on/ });
+            await expect(toast).toBeVisible({ timeout: FRAME_BUDGET_MS });
+            await expect.poll(async () => soundPlays(page), { timeout: 30_000, message: 'no play after the toast' })
+                .toHaveLength(1);
+            expect((await soundPlays(page))[0]).toMatch(/\/sounds\/bong\.mp3$/);
+        });
+    });
+
+    test('master off: the same event still toasts and plays nothing', async ({ browser, page }) => {
+        test.fixme(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, whose onAddress `
+            + 'drops MEMPOOL_ACTION frames, so no pending sighting can reach the notification rail.');
+        await collectNotifications(page);
+        await collectSoundPlays(page);
+        const { txid } = await payTheSubject(browser, page, {
+            beforePayment: async (p) => {
+                // Picked first, then muted: the record carries a sound and the
+                // master alone is what silences it.
+                await setSounds(p, { pick: 'chime' });
+                await setSounds(p, { enabled: false });
+                await resetSoundPlays(p);
+            },
+        });
+        await waitForMempoolRow(txid);
+
+        await test.step('CLAIM 10: the toast is there, the sound is not', async () => {
+            const toast = page.getByRole('status').filter({ hasText: /Incoming on/ });
+            await expect(toast, 'the toast itself is missing, so the silence below proves nothing about the master switch')
+                .toBeVisible({ timeout: FRAME_BUDGET_MS });
+            await page.waitForTimeout(10_000);
+            expect(await soundPlays(page), 'a sound played with the master switch OFF').toEqual([]);
+            expect(receivedKinds(await collected(page)).map((n) => n.kind)).toEqual(['incoming-pending']);
+        });
+    });
 });
