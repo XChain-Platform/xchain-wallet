@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Home's balance poll and the pending-payments scan each read a chain's addresses in one batched explorer request instead of one or two per address, falling back to the per-address reads on an explorer or SDK that predates the batch route; the profiler reports both shapes.
+- The auto-pay watcher reads every source address's pending payments in one batched request per chain instead of one per address.
 - Label changes now queue an on-chain sync automatically and ask for the wallet password once per unlock, so renaming many addresses costs one publish instead of one each.
 - `android-applinks-verify.sh` provisions a Google Play emulator image, installs the app and asserts the Android App Links verdict, refusing images that cannot answer.
 - A Windows CI job now performs the desktop install-and-update swap on native x64 hardware and files the result as its own evidence, alongside the human-observed rehearsal it can never replace.

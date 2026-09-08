@@ -181,6 +181,72 @@ describe('happy path', () => {
     });
 });
 
+describe('obligation reads fan out per chain', () => {
+    it('reads two source addresses as ONE batch request and still pays each in consent order', async () => {
+        // Two consents from two payer addresses on one chain. Issued in one
+        // tick, the reads share the coalescer's window and reach an SDK that
+        // carries the batch method as a single request; the handling that
+        // follows stays sequential, so both matches are paid, in order.
+        const obligations = [
+            obligationRow(),
+            obligationRow({ action_index: '901', payer_address: 'addr-payer-2' }),
+        ];
+        const matches = [matchRow(), matchRow({ action_index: '901', get_action_index: '501' })];
+        const { sdk, registry } = makeSdkRegistry({ obligations, matches });
+        sdk.getCoinpayObligationsBatch = vi.fn(async (addrs) => Object.fromEntries(addrs.map((a) => [
+            a,
+            { coinpay_obligations: { data: obligations.filter((o) => o.payer_address === a) }, error: null },
+        ])));
+        const vault = makeVault({
+            consents: [
+                consentRow(),
+                consentRow({ id: 'bitcoin-regtest::bb', sourceAddress: 'addr-payer-2', txid: 'bb', orderActionIndex: '501' }),
+            ],
+            addresses: [
+                { id: 'addr-id-1', chain: 'bitcoin', network: 'regtest', address: 'addr-payer', publicKey: '02ab', derivationPath: "m/84'/1'/0'/0/0" },
+                { id: 'addr-id-2', chain: 'bitcoin', network: 'regtest', address: 'addr-payer-2', publicKey: '02cd', derivationPath: "m/84'/1'/0'/0/1" },
+            ],
+        });
+        const { watcher, coinpayAction } = makeWatcher({ vault, sdkRegistryPair: { sdk, registry } });
+        await watcher.pollOnce();
+
+        expect(sdk.getCoinpayObligationsBatch).toHaveBeenCalledTimes(1);
+        expect(sdk.getCoinpayObligationsBatch.mock.calls[0][0]).toEqual(['addr-payer', 'addr-payer-2']);
+        expect(sdk.getCoinpayObligations).not.toHaveBeenCalled();
+        expect(coinpayAction).toHaveBeenCalledTimes(2);
+        expect(coinpayAction.mock.calls.map((c) => c[0].orderMatchActionIndex)).toEqual(['900', '901']);
+        expect(coinpayAction.mock.calls.map((c) => c[0].from.address)).toEqual(['addr-payer', 'addr-payer-2']);
+    });
+
+    it('a read that fails for one address skips only that address', async () => {
+        const obligations = [obligationRow(), obligationRow({ action_index: '901', payer_address: 'addr-payer-2' })];
+        const matches = [matchRow(), matchRow({ action_index: '901', get_action_index: '501' })];
+        const { sdk, registry } = makeSdkRegistry({ obligations, matches });
+        sdk.getCoinpayObligationsBatch = vi.fn(async (addrs) => Object.fromEntries(addrs.map((a) => [
+            a,
+            a === 'addr-payer'
+                ? { coinpay_obligations: null, error: { code: 'EXPLORER_HTTP_503', error: 'down', status: 503 } }
+                : { coinpay_obligations: { data: obligations.filter((o) => o.payer_address === a) }, error: null },
+        ])));
+        const vault = makeVault({
+            consents: [
+                consentRow(),
+                consentRow({ id: 'bitcoin-regtest::bb', sourceAddress: 'addr-payer-2', txid: 'bb', orderActionIndex: '501' }),
+            ],
+            addresses: [
+                { id: 'addr-id-1', chain: 'bitcoin', network: 'regtest', address: 'addr-payer', publicKey: '02ab', derivationPath: "m/84'/1'/0'/0/0" },
+                { id: 'addr-id-2', chain: 'bitcoin', network: 'regtest', address: 'addr-payer-2', publicKey: '02cd', derivationPath: "m/84'/1'/0'/0/1" },
+            ],
+        });
+        const { watcher, coinpayAction } = makeWatcher({ vault, sdkRegistryPair: { sdk, registry } });
+        await watcher.pollOnce();
+
+        expect(sdk.getCoinpayObligationsBatch).toHaveBeenCalledTimes(1);
+        expect(coinpayAction).toHaveBeenCalledTimes(1);
+        expect(coinpayAction.mock.calls[0][0].orderMatchActionIndex).toBe('901');
+    });
+});
+
 describe('single active payer', () => {
     it('stays notify-only (no payment, no notification) while a foreign lease is live', async () => {
         const vault = makeVault({
