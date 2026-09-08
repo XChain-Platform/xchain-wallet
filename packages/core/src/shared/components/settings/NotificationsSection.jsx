@@ -24,9 +24,16 @@
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
+import { useMessaging } from '../../useMessaging.js';
 import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
 import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
-import { ROW, ROW_HINT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    SOUND_FAMILIES,
+    SOUND_NONE,
+    SOUND_PALETTE,
+    pickedSoundForFamily,
+} from '../../../notifications/notificationSounds.js';
+import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const TIME_INPUT = {
     background: 'var(--xc-surface-2, transparent)',
@@ -200,6 +207,109 @@ export function NotificationsSection({ walletId } = {}) {
                 </div>
             ))}
             <QuietHoursRow settings={settings} update={update} />
+            <SoundsBlock settings={settings} update={update} />
+        </div>
+    );
+}
+
+/**
+ * Event sounds (§6 M4.2). A master toggle, off by default, and while it is
+ * on one picker per notification family plus a Preview button.
+ *
+ * The pickers stay collapsed behind the master the way quiet hours and the
+ * price-alert manager collapse behind theirs: ten always-visible selects
+ * would double the panel's height for a feature that ships off.
+ *
+ * Preview is rendered only where the shell can actually make a noise. The
+ * web shell exposes `messaging.playNotificationSound`; the desktop and
+ * extension messaging modules deliberately do not, and a button that does
+ * nothing is worse than no button.
+ *
+ * @param {object} props
+ * @param {import('../../../schemas/settings.js').Settings} props.settings
+ * @param {(patch: Record<string, unknown>) => Promise<unknown>} props.update
+ */
+function SoundsBlock({ settings, update }) {
+    const { messaging } = useMessaging();
+    const canPreview = typeof messaging?.playNotificationSound === 'function';
+    const enabled = settings.sounds?.enabled === true;
+
+    const onToggle = async (next) => {
+        try {
+            await update({ sounds: { enabled: next } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('notifications.sounds update failed:', err);
+        }
+    };
+    // One family's patch, not the whole map: the settings merge recurses,
+    // so writing a single key leaves every sibling family untouched.
+    const onPick = async (familyKey, soundId) => {
+        try {
+            await update({ sounds: { perKind: { [familyKey]: soundId } } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error(`notifications.sounds.${familyKey} update failed:`, err);
+        }
+    };
+    const onPreview = (soundId) => {
+        try {
+            const p = messaging.playNotificationSound(soundId);
+            // A preview that cannot play (autoplay policy, missing file) is
+            // not worth an error surface; the user just hears nothing.
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch {
+            // Same reasoning for a synchronous throw.
+        }
+    };
+
+    return (
+        <div style={STACK}>
+            <ToggleRow
+                label="Notification sounds"
+                hint="Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply."
+                checked={enabled}
+                onChange={onToggle}
+            />
+            {enabled ? (
+                <div style={MANAGER}>
+                    {SOUND_FAMILIES.map((family) => {
+                        const picked = pickedSoundForFamily(settings, family.key);
+                        return (
+                            <div key={family.key} style={ALERT_ROW}>
+                                <span>{family.label}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                                    <select
+                                        style={SELECT}
+                                        aria-label={`${family.label} sound`}
+                                        value={picked}
+                                        onChange={(e) => onPick(family.key, e.target.value)}
+                                    >
+                                        {SOUND_PALETTE.map((s) => (
+                                            <option key={s.id} value={s.id}>{s.label}</option>
+                                        ))}
+                                        <option value={SOUND_NONE}>No sound</option>
+                                    </select>
+                                    {canPreview ? (
+                                        <button
+                                            type="button"
+                                            style={LINK_BTN}
+                                            aria-label={`Preview ${family.label} sound`}
+                                            disabled={picked === SOUND_NONE}
+                                            onClick={() => onPreview(picked)}
+                                        >
+                                            Preview
+                                        </button>
+                                    ) : null}
+                                </span>
+                            </div>
+                        );
+                    })}
+                    <span style={ROW_HINT}>
+                        Sounds never arrive on their own: each one rides the notification it belongs to.
+                    </span>
+                </div>
+            ) : null}
         </div>
     );
 }

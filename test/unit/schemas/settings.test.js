@@ -361,6 +361,85 @@ describe('validateSettings', () => {
         expect(inflated.notifications.governancePolls).toBe(true);
     });
 
+    // §6 M4.2 event sounds: a top-level, additive, v2-tolerant field.
+    it('sounds defaults to silent with no per-family picks', () => {
+        const s = createDefaultSettings();
+        expect(s.sounds).toEqual({ enabled: false, perKind: {} });
+    });
+
+    it('accepts a missing sounds field (v2-tolerant)', () => {
+        const s = createDefaultSettings();
+        const { sounds, ...without } = s;
+        expect(validateSettings(without).ok).toBe(true);
+    });
+
+    it('accepts sounds with a per-family palette pick', () => {
+        const s = createDefaultSettings();
+        const r = validateSettings({ ...s, sounds: { enabled: true, perKind: { incomingPending: 'bong' } } });
+        expect(r.ok).toBe(true);
+    });
+
+    it("accepts the 'none' sentinel as a per-family pick", () => {
+        const s = createDefaultSettings();
+        const r = validateSettings({ ...s, sounds: { enabled: true, perKind: { incomingPending: 'none' } } });
+        expect(r.ok).toBe(true);
+    });
+
+    it('accepts a sound id the current palette does not know', () => {
+        // Ruling I-75: renaming a palette entry must never make a stored
+        // record unreadable; the unknown id resolves to the family default
+        // at read time instead.
+        const s = createDefaultSettings();
+        const r = validateSettings({ ...s, sounds: { enabled: true, perKind: { incomingPending: 'retired-in-v9' } } });
+        expect(r.ok).toBe(true);
+    });
+
+    it('rejects a non-boolean sounds.enabled', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, sounds: { enabled: 'yes', perKind: {} } }).ok).toBe(false);
+    });
+
+    it('rejects a non-object sounds.perKind', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, sounds: { enabled: false, perKind: 'bong' } }).ok).toBe(false);
+    });
+
+    it('rejects a non-string sounds.perKind value', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, sounds: { enabled: true, perKind: { incomingPending: 7 } } }).ok).toBe(false);
+    });
+
+    it('rejects an empty-string sounds.perKind value', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, sounds: { enabled: true, perKind: { incomingPending: '' } } }).ok).toBe(false);
+    });
+
+    it('rejects a non-object sounds', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, sounds: null }).ok).toBe(false);
+    });
+
+    it('round-trips sounds sparsely and leaves every other field default', () => {
+        const full = createDefaultSettings();
+        full.sounds = { enabled: true, perKind: { incomingPending: 'bong' } };
+        const stored = deflateSettings(full);
+        expect(stored.sounds).toEqual({ enabled: true, perKind: { incomingPending: 'bong' } });
+        const inflated = inflateSettings(stored);
+        expect(inflated.sounds).toEqual({ enabled: true, perKind: { incomingPending: 'bong' } });
+        expect(inflated.notifications).toEqual(createDefaultSettings().notifications);
+        expect(inflated.quietHours).toEqual(createDefaultSettings().quietHours);
+        expect(validateSettings(inflated).ok).toBe(true);
+    });
+
+    it('stores only the master toggle when no family has been re-picked', () => {
+        const full = createDefaultSettings();
+        full.sounds = { enabled: true, perKind: {} };
+        const stored = deflateSettings(full);
+        expect(stored.sounds).toEqual({ enabled: true });
+        // The absent perKind is restored from the default, not lost.
+        expect(inflateSettings(stored).sounds).toEqual({ enabled: true, perKind: {} });
+    });
+
     it('rejects non-boolean developerMode', () => {
         const s = createDefaultSettings();
         expect(validateSettings({ ...s, developerMode: 1 }).ok).toBe(false);

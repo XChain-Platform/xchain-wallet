@@ -600,6 +600,13 @@ const DISPENSER_ESCROW_SEEN_KEY = 'xchain.dispenserEscrow.seen';
 // is hoisted (a function declaration below), so referencing it here is safe.
 function startNotifications() {
     if (notificationService || !vault) return;
+    // One sound-aware adapter for every producer below (§6 M4.1): core
+    // resolves the sound per delivery from settings.sounds, the adapter plays
+    // it on the in-app path. The adapter is stateless, so sharing one is safe.
+    const notify = notificationsLib.withNotificationSound(createWebNotifyAdapter(), async () => {
+        const flowsNs = await getFlows();
+        return flowsNs.getSettings(vault);
+    });
     notificationService = new notificationsLib.NotificationService({
         getActiveAddresses: async () => {
             const flowsNs = await getFlows();
@@ -613,7 +620,7 @@ function startNotifications() {
             const flowsNs = await getFlows();
             return flowsNs.getSettings(vault);
         },
-        notify: createWebNotifyAdapter(),
+        notify,
         getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
         onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
         onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
@@ -638,7 +645,7 @@ function startNotifications() {
                 const flowsNs = await getFlows();
                 return flowsNs.getSettings(vault);
             },
-            notify: createWebNotifyAdapter(),
+            notify,
             markTriggered: async (id) => {
                 const flowsNs = await getFlows();
                 return flowsNs.markAlertTriggered({ vault, id });
@@ -665,7 +672,7 @@ function startNotifications() {
                 const flowsNs = await getFlows();
                 return flowsNs.getSettings(vault);
             },
-            notify: createWebNotifyAdapter(),
+            notify,
             loadSeen: () => {
                 try { return JSON.parse(globalThis.localStorage?.getItem(GOV_POLL_SEEN_KEY) || 'null'); }
                 catch (_err) { return null; }
@@ -696,7 +703,7 @@ function startNotifications() {
                 return flowsNs.getSettings(vault);
             },
             coinForChain: (chainId) => chainRegistry.get(chainId)?.coin || null,
-            notify: createWebNotifyAdapter(),
+            notify,
             loadSeen: () => {
                 try { return JSON.parse(globalThis.localStorage?.getItem(DEADLINE_SEEN_KEY) || 'null'); }
                 catch (_err) { return null; }
@@ -726,7 +733,7 @@ function startNotifications() {
                 const flowsNs = await getFlows();
                 return flowsNs.getSettings(vault);
             },
-            notify: createWebNotifyAdapter(),
+            notify,
             loadSeen: () => {
                 try { return JSON.parse(globalThis.localStorage?.getItem(DISPENSER_ESCROW_SEEN_KEY) || 'null'); }
                 catch (_err) { return null; }
@@ -751,7 +758,7 @@ function startNotifications() {
             chainRegistry,
             getSigner: (walletId) => (signerPool ? signerPool.get(walletId) : null),
             reservationLedger: host.reservationLedger,
-            notify: createWebNotifyAdapter(),
+            notify,
             shellKind: 'web',
             logger: console,
         });
@@ -1252,6 +1259,20 @@ export async function sendMessage(type, request) {
     // Keeps `code` and the THROTTLED hints the envelope now carries; rebuilding
     // with name+message alone dropped them.
     throw hydrateEnvelopeError(response.error);
+}
+
+/**
+ * Settings preview for event sounds (§6 M4.1): play one palette sound by id
+ * with no live event and no toast. Needs no vault, so it works while locked;
+ * the desktop/extension messaging twins have no counterpart (their shells
+ * lack the delivery seam, ruling I-34b) and the section hides Preview there.
+ *
+ * @param {string} soundId
+ * @returns {Promise<{ played: boolean }>}
+ */
+const previewAdapter = createWebNotifyAdapter();
+export async function playNotificationSound(soundId) {
+    return { played: previewAdapter.playSound(soundId) };
 }
 
 /** Test hook: expose module state without touching real IDB/localStorage. */

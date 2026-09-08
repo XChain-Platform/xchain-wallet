@@ -18,7 +18,26 @@
 // stubbed both ways.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createWebNotifyAdapter, NOTIFICATION_EVENT } from '../../../packages/web/src/notifications/webNotifyAdapter.js';
+import { createWebNotifyAdapter, NOTIFICATION_EVENT, soundUrl } from '../../../packages/web/src/notifications/webNotifyAdapter.js';
+
+/**
+ * A recording Audio: the M4 sound path is a fact only if play() was asked
+ * for the right file, and jsdom has no audio device to hear it.
+ */
+function stubAudio({ reject = false } = {}) {
+    const plays = [];
+    const ctor = vi.fn(function Audio(src) {
+        this.src = src;
+        this.play = () => {
+            plays.push(src);
+            return reject ? Promise.reject(new Error('NotAllowedError')) : Promise.resolve();
+        };
+    });
+    vi.stubGlobal('Audio', ctor);
+    return plays;
+}
+
+const sound = { id: 'pluck', file: 'pluck.mp3' };
 
 function stubVisibility(state) {
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
@@ -64,6 +83,85 @@ describe('webNotifyAdapter', () => {
         const ctor = stubNotification('granted');
         createWebNotifyAdapter()(payload);
         expect(ctor).not.toHaveBeenCalled();
+    });
+
+    // §6 M4.1: the sound rides the in-app path, never the OS one, and is
+    // never the sole signal.
+    it('plays the resolved sound while the tab is visible, from the sounds directory', () => {
+        stubVisibility('visible');
+        stubNotification('granted');
+        const plays = stubAudio();
+        const seen = [];
+        const onEvent = (e) => seen.push(e.detail.kind);
+        window.addEventListener(NOTIFICATION_EVENT, onEvent);
+        createWebNotifyAdapter()({ ...payload, sound });
+        window.removeEventListener(NOTIFICATION_EVENT, onEvent);
+        expect(seen).toEqual(['incoming-pending']);
+        expect(plays).toEqual([soundUrl('pluck.mp3')]);
+        expect(plays[0]).toMatch(/\/sounds\/pluck\.mp3$/);
+    });
+
+    it('plays nothing while the tab is hidden: the OS notification carries its own sound', () => {
+        stubVisibility('hidden');
+        const ctor = stubNotification('granted');
+        const plays = stubAudio();
+        createWebNotifyAdapter()({ ...payload, sound });
+        expect(ctor).toHaveBeenCalledTimes(1);
+        expect(plays).toEqual([]);
+    });
+
+    it('plays nothing when core resolved no sound (master off, family muted, or a payload without the field)', () => {
+        stubVisibility('visible');
+        stubNotification('granted');
+        const plays = stubAudio();
+        const notify = createWebNotifyAdapter();
+        notify({ ...payload, sound: null });
+        notify(payload);
+        expect(plays).toEqual([]);
+    });
+
+    it('a refused play (autoplay policy) leaves the toast standing and throws nothing', async () => {
+        stubVisibility('visible');
+        stubNotification('granted');
+        const plays = stubAudio({ reject: true });
+        const seen = [];
+        const onEvent = (e) => seen.push(e.detail.kind);
+        window.addEventListener(NOTIFICATION_EVENT, onEvent);
+        expect(() => createWebNotifyAdapter()({ ...payload, sound })).not.toThrow();
+        await Promise.resolve();
+        window.removeEventListener(NOTIFICATION_EVENT, onEvent);
+        expect(seen).toEqual(['incoming-pending']);
+        expect(plays).toHaveLength(1);
+    });
+
+    it('survives a runtime without Audio at all', () => {
+        stubVisibility('visible');
+        stubNotification('granted');
+        vi.stubGlobal('Audio', undefined);
+        expect(() => createWebNotifyAdapter()({ ...payload, sound })).not.toThrow();
+    });
+
+    describe('playSound (the settings preview)', () => {
+        it('plays a palette id by its file, with no toast', () => {
+            const plays = stubAudio();
+            const seen = [];
+            const onEvent = (e) => seen.push(e.detail);
+            window.addEventListener(NOTIFICATION_EVENT, onEvent);
+            const notify = createWebNotifyAdapter();
+            expect(notify.playSound('chime')).toBe(true);
+            window.removeEventListener(NOTIFICATION_EVENT, onEvent);
+            expect(plays).toEqual([soundUrl('chime.mp3')]);
+            expect(seen).toEqual([]);
+        });
+
+        it('none and unknown ids are a no-op reported as false', () => {
+            const plays = stubAudio();
+            const notify = createWebNotifyAdapter();
+            expect(notify.playSound('none')).toBe(false);
+            expect(notify.playSound('kazoo')).toBe(false);
+            expect(notify.playSound(undefined)).toBe(false);
+            expect(plays).toEqual([]);
+        });
     });
 
     it('raises no OS notification without permission, and does not throw', () => {

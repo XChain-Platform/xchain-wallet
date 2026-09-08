@@ -21,9 +21,15 @@ import {
     createWalletLocal,
     importMnemonicLocal,
     importBackupLocal,
+    playNotificationSound,
 } from './hostBridge.js';
 
 export { sendMessage, getSessionStatus };
+
+// §6 M4.1 event-sound preview: web-only (the shell that owns the delivery
+// seam). Absent from the desktop/extension twins on purpose; the settings
+// section hides its Preview button when this is not a function.
+export { playNotificationSound };
 
 /**
  * @param {string} password
