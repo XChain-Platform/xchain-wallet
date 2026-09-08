@@ -21,6 +21,7 @@
 // budget, or narrative. Those stay local, because they are choices a spec
 // makes rather than facts about the app.
 
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -126,6 +127,82 @@ export async function waitForMempoolRow(txid, timeoutMs = 210_000) {
         + `have been mined out from under this wait: either the ${REGTEST_COIN} decoder is not `
         + 'polling its node (it is the platform\'s only mempool store) or the node never accepted '
         + 'the broadcast.');
+}
+
+/**
+ * ONE read of the explorer's own mempool window: the row for `txid`, or null.
+ *
+ * The inverse of `waitForMempoolRow`, for the claim "the network never
+ * reported this". A wait would be the wrong shape there: the assertion is
+ * that a read taken at a specific moment carries nothing, and a helper that
+ * keeps trying would turn a control into a hope. A refused read throws, so a
+ * dead explorer is never mistaken for an empty one.
+ */
+export async function mempoolRowFor(txid) {
+    const body = await explorerJson('mempool');
+    const rows = Array.isArray(body?.data) ? body.data : [];
+    return rows.find((r) => String(r.tx_hash).toLowerCase() === txid.toLowerCase()) || null;
+}
+
+/**
+ * ONE read of the explorer's own history for `address`: the row for `txid`,
+ * or null. The confirmed-side twin of `mempoolRowFor`, for the control "the
+ * explorer does not know this transaction at all", which is what a frozen
+ * decoder has to look like from outside.
+ */
+export async function historyRowFor(address, txid) {
+    const body = await explorerJson(`history/${address}/address`);
+    const rows = Array.isArray(body?.data) ? body.data : [];
+    return rows.find((r) => String(r.tx_hash).toLowerCase() === txid.toLowerCase()) || null;
+}
+
+/** This chain's decoder container on the regtest host, named the way the stack names it. */
+export const DECODER_CONTAINER = `xchain-node-${REGTEST_CHAIN_ID}-xchain-decoder`;
+
+/**
+ * Freezes or thaws this chain's DECODER container (`docker pause` /
+ * `docker unpause`) over the same credential-free ssh path `runInIndexer`
+ * uses.
+ *
+ * Why a spec would want this: the decoder is the platform's ONLY mempool
+ * store (spec I-47). A frozen decoder means no node ever reports a
+ * transaction broadcast under it, which is the one situation M2 acceptance
+ * test 3 is about, and it is not reachable any other way on a venue whose
+ * nodes accept everything the wallet sends. `pause` rather than `stop`:
+ * the process keeps its state and its DB session and simply resumes, so the
+ * venue's next poll behaves as if the clock had skipped.
+ *
+ * A spec that pauses MUST thaw unconditionally in `afterEach`: a paused
+ * decoder stalls the whole chain's pipeline for every neighbour on the venue.
+ */
+export async function decoderControl(verb) {
+    if (verb !== 'pause' && verb !== 'unpause') {
+        throw new Error(`decoderControl: unknown verb ${verb}`);
+    }
+    const host = process.env.XC_REGTEST_SSH_HOST || 'jdog@localhost';
+    const args = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', host, 'docker', verb, DECODER_CONTAINER];
+    return new Promise((resolve, reject) => {
+        const child = spawn('ssh', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        const timer = setTimeout(() => {
+            child.kill('SIGKILL');
+            reject(new Error(`ssh ${host} docker ${verb} ${DECODER_CONTAINER} timed out`));
+        }, 30_000);
+        child.stdout.on('data', (d) => { out += d; });
+        child.stderr.on('data', (d) => { out += d; });
+        child.on('error', (err) => { clearTimeout(timer); reject(err); });
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            // `unpause` on a container that is not paused is a no-op for our
+            // purposes (afterEach thaws unconditionally), and docker says so
+            // with a non-zero exit we would otherwise turn into a failure.
+            if (code !== 0 && !(verb === 'unpause' && /is not paused/i.test(out))) {
+                reject(new Error(`ssh ${host} docker ${verb} ${DECODER_CONTAINER} exited ${code}: ${out.trim()}`));
+                return;
+            }
+            resolve(out.trim());
+        });
+    });
 }
 
 /**
