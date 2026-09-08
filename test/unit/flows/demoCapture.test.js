@@ -32,6 +32,7 @@ import {
 } from '../../../packages/core/src/flows/demoCapture.js';
 import { isValidBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
 import {
+    synthesizeDemoBalances,
     synthesizeDemoDefiPositions,
     synthesizeDemoDispenses,
     synthesizeDemoHistory,
@@ -179,5 +180,25 @@ describe('demo fixtures are clock-injectable', () => {
 
         expect(synthesizeDemoMessages(addr, { now: NOW }))
             .toEqual(synthesizeDemoMessages(addr, { now: NOW }));
+    });
+});
+
+describe('demo balances have the aggregator\'s entry shape', () => {
+    it('gives every entry the typed failure fields beside `error`, all null', () => {
+        // `AddressBalancesEntry` (flows/balances.js) carries `errorCode` and
+        // `retryAfterSeconds` next to `error`. A demo read never fails, so the
+        // values are null, but a reader keyed on the typed shape must find the
+        // keys present, or the fixture and the typedef have drifted apart.
+        const out = synthesizeDemoBalances({
+            'bitcoin-mainnet': [
+                { address: 'bc1qfirst', label: 'Main', addressType: 'p2wpkh', derivationPath: "m/84'/0'/0'/0/0" },
+                { address: 'bc1qsecond', label: '', addressType: 'p2wpkh', derivationPath: null },
+            ],
+        });
+        expect(out['bitcoin-mainnet']).toHaveLength(2);
+        for (const entry of out['bitcoin-mainnet']) {
+            expect(Object.keys(entry)).toEqual(expect.arrayContaining(['error', 'errorCode', 'retryAfterSeconds']));
+            expect(entry).toMatchObject({ error: null, errorCode: null, retryAfterSeconds: null });
+        }
     });
 });

@@ -707,6 +707,15 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const poll = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
             if (pollThrottleRef.current.isInFlight()) return;
+            // Claim the slot the reset path's way. `start()` alone marks a
+            // load in flight only once the window has aged, and at beat time
+            // the window is younger than the interval by the previous load's
+            // own latency (the beat fires one interval after the previous
+            // BEAT; `succeed()` ran later, when that load landed), so a bare
+            // `start()` left the beat's load unmarked and the next beat
+            // stacked a second one on it. The window is re-keyed on this
+            // load's landing either way.
+            pollThrottleRef.current.reset();
             pollThrottleRef.current.start();
             load();
         };

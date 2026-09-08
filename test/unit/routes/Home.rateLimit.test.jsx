@@ -264,4 +264,39 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         await advance(BALANCE_POLL_INTERVAL_MS * 2);
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1);
     });
+
+    it('holds the slot for the load the BEAT fires, not only the one a reset fires', async () => {
+        // The mount load claims the slot on the reset path. The beat's own
+        // load is the one that ran unmarked: the beat fires one interval after
+        // the previous beat, the window is keyed on when that load LANDED,
+        // so at beat time the window is younger than the interval by the
+        // previous load's latency and a bare `start()` marks nothing.
+        vi.useFakeTimers();
+        const messaging = baseMessaging();
+        let landFirst;
+        messaging.getWalletBalances
+            .mockImplementationOnce(() => new Promise((resolve) => { landFirst = resolve; }))
+            // Every later load waits, as one sitting out a Retry-After does.
+            .mockImplementation(() => new Promise(() => {}));
+
+        mountHome(messaging);
+        await settle();
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1);
+
+        // The first load takes half a second to land.
+        await advance(500);
+        await act(async () => { landFirst(landed); });
+        await settle();
+
+        // First beat, 19.5 s after that landing: it fires a load that will hang.
+        await advance(BALANCE_POLL_INTERVAL_MS - 500);
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
+
+        // Second beat: the load the first beat fired is still open.
+        await advance(BALANCE_POLL_INTERVAL_MS);
+        expect(messaging.getWalletBalances, 'the beat\'s own load ran unmarked, so the next beat stacked on it')
+            .toHaveBeenCalledTimes(2);
+        await advance(BALANCE_POLL_INTERVAL_MS * 2);
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
+    });
 });
