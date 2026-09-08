@@ -69,6 +69,7 @@ import {
     expect,
     gotoSection,
     mainButton,
+    openSettings,
     test,
 } from '../../fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
@@ -171,7 +172,7 @@ async function gotoTokensTab(page) {
  *
  * @returns {Promise<{ subject: string, txid: string, heldBlocks: number }>}
  */
-async function payTheSubject(browser, page) {
+async function payTheSubject(browser, page, { beforePayment } = {}) {
     /** The subject wallet's address: the RECIPIENT, and History's subject. */
     let subject;
     /** The txid of the payment made TO it by someone else. */
@@ -184,6 +185,10 @@ async function payTheSubject(browser, page) {
         await switchToRegtest(page, PASSWORD);
         subject = await readOwnAddress(page);
         expect(subject, 'the subject wallet named no address to be paid at').toBeTruthy();
+        // The notification specs change a setting on the subject BEFORE anyone
+        // pays it, so the rail is measured against the setting the user had,
+        // not one flipped after the frame was already in flight.
+        if (beforePayment) await beforePayment(page);
     });
 
     const payer = await openPayerWallet(browser);
@@ -384,6 +389,154 @@ test.describe(`Incoming pending payment on ${REGTEST_CHAIN_LABEL} regtest`, () =
 
             expect(await blocksMined(), 'a block was mined while the miner was parked, so the row '
                 + 'above was not measured against an unconfirmed payment').toBe(heldBlocks);
+        });
+    });
+
+    /* ───── M3: the notification rail ─────────────────────────────── */
+
+    // The web shell's notify adapter dispatches every notification as a
+    // window CustomEvent BEFORE the React layer decides whether to toast it
+    // (see webNotifyAdapter.js), so a collector on that event is the exact
+    // record of what the NotificationService delivered, toast or not. It is
+    // installed as an init script so it survives the reloads the onboarding
+    // walk makes, and it is the thing the negative claims below count on: a
+    // toast that auto-dismisses could come and go between two polls of the
+    // DOM, but an event cannot un-happen.
+    const NOTIFICATION_EVENT = 'xchain:notification';
+    const collectNotifications = (page) => page.addInitScript((eventName) => {
+        window.__xcNotifications = [];
+        window.addEventListener(eventName, (e) => {
+            window.__xcNotifications.push({ kind: e.detail?.kind, title: e.detail?.title, body: e.detail?.body });
+        });
+    }, NOTIFICATION_EVENT);
+    const collected = (page) => page.evaluate(() => window.__xcNotifications || []);
+    const receivedKinds = (list) => list.filter((n) => n.kind === 'incoming-pending' || n.kind === 'incoming-receipt');
+
+    /** The window in which a frame must have reached the wallet: ~85s worst case (spec §1) plus slack. */
+    const FRAME_BUDGET_MS = 120_000;
+    /** How long a negative claim listens before calling the rail silent. */
+    const SILENCE_MS = 100_000;
+
+    /** Toggles the named notification switch on the Settings screen and returns to Home. */
+    async function setNotificationSwitch(page, name, on) {
+        await openSettings(page);
+        const sw = page.getByRole('switch', { name, exact: true });
+        await expect(sw, `Settings has no "${name}" switch`).toBeVisible({ timeout: 30_000 });
+        if ((await sw.isChecked()) !== on) await sw.click();
+        await expect(sw).toBeChecked({ checked: on });
+        await gotoSection(page, 'Home');
+    }
+
+    test('raises exactly one in-app toast for the pending payment, and none again when it confirms', async ({ browser, page }) => {
+        test.fixme(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, whose onAddress `
+            + 'drops MEMPOOL_ACTION frames, so no pending sighting can reach the notification rail.');
+        await collectNotifications(page);
+        const { subject, txid, heldBlocks } = await payTheSubject(browser, page);
+        await waitForMempoolRow(txid);
+
+        await test.step('CLAIM 1: one "incoming pending" toast, naming the chain and "pending" and nothing more', async () => {
+            // The user-facing surface first: the toast the operator would see.
+            const toast = page.getByRole('status').filter({ hasText: /Incoming on/ });
+            await expect(toast, 'no "Incoming on ..." toast appeared for a payment the explorer\'s own '
+                + 'mempool already carries. Check the subject\'s NotificationService subscribed to its '
+                + 'regtest address (Settings -> Network filter) before blaming the explorer fan-out')
+                .toBeVisible({ timeout: FRAME_BUDGET_MS });
+            await expect(toast).toContainText(/pending/i);
+            // Privacy (§46.4): no amount, no counterparty.
+            await expect(toast).not.toContainText(PAY_AMOUNT);
+
+            // The record behind the surface: exactly one delivery of that kind.
+            await expect.poll(async () => receivedKinds(await collected(page)).length,
+                { timeout: 30_000, message: 'the rail delivered a different number of "received" '
+                    + 'notifications than the one toast on screen' }).toBe(1);
+            const [n] = receivedKinds(await collected(page));
+            expect(n.kind).toBe('incoming-pending');
+            expect(`${n.title} ${n.body}`).not.toContain(subject);
+
+            expect(await blocksMined(), 'a block was mined while the miner was parked, so the toast '
+                + 'above may have been the confirmation, not the pending sighting').toBe(heldBlocks);
+        });
+
+        await test.step('CLAIM 2: the confirmation of the same transaction raises no second "received" notification', async () => {
+            await minerRpc('continue_mining', {});
+            await waitForValidAction(txid);
+            // The explorer's NEW_ACTION for this action has had every chance to
+            // arrive: the change detector polls at 5s and the frame is live, so
+            // 30s after the action is known indexed is a generous window. The
+            // positive control that the confirmed-side frame DOES reach this
+            // wallet is the toggle-off test below, where the receipt fires.
+            await page.waitForTimeout(30_000);
+            const kinds = receivedKinds(await collected(page)).map((n) => n.kind);
+            expect(kinds, 'the confirmation was announced on top of the pending notice: one transaction, '
+                + 'two "received" notifications').toEqual(['incoming-pending']);
+        });
+    });
+
+    test('toggle off: the same payment raises nothing while History still shows it pending, and its confirmation still raises a receipt', async ({ browser, page }) => {
+        test.fixme(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, whose onAddress `
+            + 'drops MEMPOOL_ACTION frames, so this would pass for the wrong reason.');
+        await collectNotifications(page);
+        const { txid } = await payTheSubject(browser, page, {
+            beforePayment: (p) => setNotificationSwitch(p, 'Incoming pending payments', false),
+        });
+        await waitForMempoolRow(txid);
+
+        await test.step('CLAIM 3: silent for the whole frame window, with the pending row on screen as the control', async () => {
+            await page.waitForTimeout(SILENCE_MS);
+            expect(receivedKinds(await collected(page)), 'the rail announced a pending payment with '
+                + 'its toggle OFF').toEqual([]);
+            // The rail is silent, not broken: the same sighting reached History.
+            await gotoSection(page, 'History');
+            await expect(pendingRowFor(page, txid), 'the pending row is missing too, so the silence '
+                + 'above proves nothing about the toggle').toBeVisible({ timeout: 60_000 });
+        });
+
+        await test.step('CLAIM 4 (positive control for CLAIM 2): a payment never announced as pending IS announced when it confirms', async () => {
+            await minerRpc('continue_mining', {});
+            await waitForValidAction(txid);
+            await expect.poll(async () => receivedKinds(await collected(page)).map((n) => n.kind),
+                { timeout: FRAME_BUDGET_MS, message: 'no incoming-receipt arrived for the confirmed '
+                    + 'payment. This is the confirmed-side branch that reads the explorer\'s '
+                    + 'destinations[] (M1.4 / M3.3); before this work it had never fired' })
+                .toEqual(['incoming-receipt']);
+        });
+    });
+
+    test('quiet hours covering now: the same payment raises nothing', async ({ browser, page }) => {
+        test.fixme(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, whose onAddress `
+            + 'drops MEMPOOL_ACTION frames, so this would pass for the wrong reason.');
+        await collectNotifications(page);
+        const { txid } = await payTheSubject(browser, page, {
+            beforePayment: async (p) => {
+                // A window from an hour ago to two hours from now, in the
+                // browser's local time (the wallet reads the quiet-hours
+                // clock off the machine it runs on).
+                const { start, end } = await p.evaluate(() => {
+                    const h = new Date().getHours();
+                    const hh = (n) => String(((n % 24) + 24) % 24).padStart(2, '0');
+                    return { start: `${hh(h - 1)}:00`, end: `${hh(h + 2)}:00` };
+                });
+                await openSettings(p);
+                const sw = p.getByRole('switch', { name: 'Quiet hours', exact: true });
+                await expect(sw).toBeVisible({ timeout: 30_000 });
+                if (!(await sw.isChecked())) await sw.click();
+                await expect(sw).toBeChecked();
+                await p.locator('#quiet-hours-start').fill(start);
+                await p.locator('#quiet-hours-end').fill(end);
+                await expect(p.locator('#quiet-hours-start')).toHaveValue(start);
+                await expect(p.locator('#quiet-hours-end')).toHaveValue(end);
+                await gotoSection(p, 'Home');
+            },
+        });
+        await waitForMempoolRow(txid);
+
+        await test.step('CLAIM 5: silent for the whole frame window', async () => {
+            await page.waitForTimeout(SILENCE_MS);
+            expect(receivedKinds(await collected(page)), 'the rail announced a pending payment inside '
+                + 'quiet hours').toEqual([]);
+            await gotoSection(page, 'History');
+            await expect(pendingRowFor(page, txid), 'the pending row is missing too, so the silence '
+                + 'above proves nothing about quiet hours').toBeVisible({ timeout: 60_000 });
         });
     });
 });
