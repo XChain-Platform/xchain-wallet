@@ -23,7 +23,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // here = .../xchain-wallet/test/smoke/audits → wsRoot is three up, platformRoot four.
 const wsRoot = join(here, '..', '..', '..');
 const platformRoot = join(wsRoot, '..');
-// The spec moved to claude/specs/living/ and this path was not moved with it,
+// The spec moved to the platform tree's living specs and this path was not moved with it,
 // so from then until 2026-08-03 this gate SKIPPED on every run, everywhere,
 // including the dev box it exists to guard. A loud skip is honest about not
 // running; it is not honest about never being able to run again. Whoever

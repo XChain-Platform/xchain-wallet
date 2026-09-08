@@ -22,7 +22,7 @@
 // tool cannot: the credential it consumes. A refresh token that can publish to
 // the Chrome Web Store is functionally the publisher account, which is the
 // tool's own stated reason for existing, and for three days after the tool
-// landed that credential had no K-row in `claude/specs/wallet-release-rails.md`
+// landed that credential had no K-row in `wallet-release-rails.md` (platform tree)
 // §4 - no custody rule, no rotation owner, no compromise story. It was not
 // forgotten by accident: the closing row that built the tool SAID the
 // credential joins the key inventory as a real K-row, and nothing read that

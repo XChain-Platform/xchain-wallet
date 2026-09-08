@@ -13,7 +13,7 @@
 // The spec calls for a Zustand-proxy pattern; the wallet ships with
 // a MessagingProvider + per-component fetch pattern. The decision to
 // keep the shipping model is captured in
-// `claude/reports/specs/2026-04-28_zustand-proxy-deferred.md`. This
+// `2026-04-28_zustand-proxy-deferred.md` (platform tree). This
 // smoke pins that ADR exists and that the codebase ships the
 // MessagingProvider model (no Zustand layer). If a future Cluster
 // adopts Zustand it should both (a) update the ADR and (b) update
@@ -28,8 +28,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-// 1. (Retired) ADR-existence gate. This previously required a deferral
-//    ADR under claude/reports/specs/ in the parent monorepo, a cross-repo
+// 1. (Retired) ADR-existence gate. This once required a deferral
+//    ADR under the parent monorepo's private reports tree, a cross-repo
 //    doc not tracked from the wallet sub-repo (the file does not exist).
 //    The code-structure checks below are the load-bearing part of this
 //    smoke and remain enforced.

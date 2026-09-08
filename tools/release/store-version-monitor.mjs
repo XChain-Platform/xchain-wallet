@@ -978,8 +978,8 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
         for (const r of chromeAlerts) err.push(`  item=${r.key} id=${r.itemId} live-version=${r.version}: ${r.detail}`);
         err.push('Do not assume this is benign. Verify in the CWS console who published it '
             + 'before doing anything else. K7 custody / group-publisher recovery is spec §2 '
-            + '(claude/specs/wallet-publishing-chrome-extension.md); emergency levers once a '
-            + 'bad build is confirmed live are claude/reports/launch/INCIDENT-RUNBOOK.md §14.');
+            + '(wallet-publishing-chrome-extension.md, platform tree); emergency levers once a '
+            + 'bad build is confirmed live are INCIDENT-RUNBOOK.md §14 (platform tree).');
     }
     if (playAlerts.length > 0) {
         err.push('PLAY LISTING INCIDENT SIGNAL: the Android listing is not answering as ours.');
@@ -988,7 +988,7 @@ export async function run({ argv = [], env = process.env, fetchImpl, timeoutMs, 
             + 'self-inflicted unpublish; check Play Console -> Publishing overview and the '
             + 'developer-account email before assuming anything. Android emergency levers '
             + '(the staged-rollout halt, and the direct APK lane that has none) are '
-            + 'claude/reports/launch/INCIDENT-RUNBOOK.md §15.');
+            + 'INCIDENT-RUNBOOK.md §15 (platform tree).');
     }
     if (directAlerts.length > 0) {
         err.push('DIRECT APK INCIDENT SIGNAL: the self-hosted download lane does not match its '

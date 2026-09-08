@@ -1,9 +1,9 @@
 # Release-signing pipeline - `tools/release/`
 
-Spec reference: `claude/reports/xchain-wallet/XCHAIN_WALLET_SPEC.md` §51.
+Spec reference: `XCHAIN_WALLET_SPEC.md` (platform tree) §51.
 Release-engineering rails shared by every shell (versioning, channels,
 credential inventory, CI matrix, the full release procedure and its
-rollback story): `claude/specs/wallet-release-rails.md`.
+rollback story): `wallet-release-rails.md` (platform tree).
 
 This directory holds the scripts and conventions for cutting a signed
 release. The gates all run today, and as of 2026-08-06 so does the
@@ -11,7 +11,7 @@ signing step: the maintainer's release key exists and its fingerprint
 is published in `SECURITY.md`. `sign.sh` still exits with a clear error
 when `XCHAIN_RELEASE_GPG_KEY` is unset, which now means "this run was
 not told which key to use" rather than "there is no key". What is left
-of G180 (in `claude/reports/xchain-wallet/SPEC_GAPS.md`) is publication
+of G180 (in `SPEC_GAPS.md` (platform tree)) is publication
 reaching a reader, which is a deploy rather than a key.
 
 The companion verification side lives at [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release) -
@@ -98,7 +98,7 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
 | `rehearse.mjs` | §7.5: probes every shipped update lane against the staging feed (pointer, per-arch selection, download, sha512, signed manifest), records human-attested swaps, and gates the production publish on the result. Covers the direct Android lane too, by a second probe that drives the SHIPPED `directUpdateCheck.js` against the published `latest.json` in both directions and proves the APK its notice sends a user to is the one K1 signed. | Live (host pending) |
 | `rehearsal-matrix.mjs` | The shipped update lanes and the named hardware each is smoked on (DD4). Two sets: `LANES` (electron-updater) and `DIRECT_LANES` (the sideloaded APK, whose feed carries a notice and no installer). Data, not code. | Live |
-| `release-record.mjs` | The §6 release record, opened and enforced. `open --tag vX.Y.Z` instantiates `claude/reports/wallet-releases/vX.Y.Z.md` from `TEMPLATE.md` with the identity fields filled (store integers asked of `packages/mobile/scripts/version.js`, never recomputed from §2's formula) and never overwrites an existing record. `assert --tag` is the gate `publish.sh` runs before a production publish; an untouched copy of the template does not count. `coverage` checks that every `v*` tag AND the version the working tree declares have a record, and is run by `test/smoke/audits/release-record.smoke.js` inside `pnpm ci`. Exits 0 covered / 1 missing / 3 the records directory is not in this checkout. Tags whose commit declares a different version are reported, not failed: `release.yml`'s verify-tag refuses those, so they never produced a release. | Live, and gating since 2026-08-04 |
+| `release-record.mjs` | The §6 release record, opened and enforced. `open --tag vX.Y.Z` instantiates `wallet-releases/vX.Y.Z.md` (platform tree) from `TEMPLATE.md` with the identity fields filled (store integers asked of `packages/mobile/scripts/version.js`, never recomputed from §2's formula) and never overwrites an existing record. `assert --tag` is the gate `publish.sh` runs before a production publish; an untouched copy of the template does not count. `coverage` checks that every `v*` tag AND the version the working tree declares have a record, and is run by `test/smoke/audits/release-record.smoke.js` inside `pnpm ci`. Exits 0 covered / 1 missing / 3 the records directory is not in this checkout. Tags whose commit declares a different version are reported, not failed: `release.yml`'s verify-tag refuses those, so they never produced a release. | Live, and gating since 2026-08-04 |
 | `bump-version.mjs` | §6 step 1: write the release version into every place this repo declares it, in one pass. Membership is derived from the filesystem exactly as `test/smoke/audits/version-lockstep.smoke.js` derives it (the root `package.json`, every `packages/*/package.json`, the extension manifest's `version` and `version_name`, core's `WALLET_VERSION`, README's badge and Status line), so a package added tomorrow is reached without editing anything here. The CHANGELOG section is promoted from `## [Unreleased]`, and the tool REFUSES to bump while that section is empty: a release heading with no entries under it satisfied every gate in this repo and documented nothing. `--dry-run` prints the plan and writes nothing. | Live; driven by `test/smoke/audits/release-bump-version.smoke.js` |
 | `deploy-web.sh` | §6 step 5b: verify the web tarball against the signed manifest, then unpack it into a versioned directory and flip a symlink. `--manifest` is required and `verify.sh` runs before anything is written (hash for this one artifact, tag anchor, signature bound to the release key), so the last hop of the web lane cannot serve bytes nobody signed. `--no-sig` forwards to `verify.sh`'s degraded mode for a webroot host with no gpg; there is no flag that skips the manifest. | Live |
 | `expected-artifacts.txt` | The declared artifact set a release must contain. Data, not code. | Live |
@@ -402,7 +402,7 @@ before it installs anything
 and checks against a key pinned in the app).
 
 One key, one ceremony, one thing to rotate. See
-`claude/reports/launch/GPG-KEY-CEREMONY-RUNBOOK.md`.
+`GPG-KEY-CEREMONY-RUNBOOK.md` (platform tree).
 
 ## Environment variables
 
@@ -425,8 +425,8 @@ from the root `package.json` at invocation time.
 ## Per-release procedure
 
 The authoritative checklist is §6 of
-`claude/specs/wallet-release-rails.md`, instantiated per release as
-`claude/reports/wallet-releases/vX.Y.Z.md`. What this directory owns:
+`wallet-release-rails.md` (platform tree), instantiated per release as
+`wallet-releases/vX.Y.Z.md` (platform tree). What this directory owns:
 
 0. Open the release record, before anything else:
 

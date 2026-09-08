@@ -132,7 +132,7 @@ assert.equal(deadTests.length, 0,
 
 // Lowered 7 -> 6 on 2026-08-04, taking this assertion's own instruction: a
 // spec WAS genuinely retired.'s taproot-envelope spec moved to
-// claude/specs/resolved/ in fd16bf6 ("the spec is RESOLVED"), carrying its
+// the platform tree's resolved specs in fd16bf6 ("the spec is RESOLVED"), carrying its
 // frontier block with it, which is the convention the eleven specs already
 // there set. So the floor was measuring a population that had legitimately
 // shrunk, and it went red on a correct change. Verified rather than assumed:
@@ -145,7 +145,7 @@ assert.equal(deadTests.length, 0,
 // session that wrote the floor had no way to know the spec would retire.
 assert.ok(withFrontier.length >= 6,
     `only ${withFrontier.length} of ${specs.length} specs in ${SPECS_DIR} carry a BUILD-SPEC:FRONTIER `
-    + 'block, fewer than the 6 standing after retired its spec to claude/specs/resolved/. That'
+    + 'block, fewer than the 6 standing after a spec was retired to the resolved directory. That '
     + 'block is where a spec keeps its own record of what is left and who owns each row; if one lost '
     + 'its block, the goal state now lives nowhere. If a spec was genuinely retired, lower this floor '
     + 'in the same change and say why.');

@@ -1,6 +1,6 @@
 # Reproducible builds - `tools/build-reproduce/`
 
-Spec reference: `claude/reports/xchain-wallet/XCHAIN_WALLET_SPEC.md` §51.4.
+Spec reference: `XCHAIN_WALLET_SPEC.md` (platform tree) §51.4.
 
 ## Goal
 

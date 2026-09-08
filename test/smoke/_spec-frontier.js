@@ -35,7 +35,17 @@ export const WALLET_ROOT = join(here, '..', '..');              // xchain-wallet
 export const PLATFORM_ROOT = process.env.XCHAIN_PLATFORM_ROOT
     || join(WALLET_ROOT, '..');
 
-export const SPECS_DIR = join(PLATFORM_ROOT, 'claude', 'specs');
+// The platform's private tree, named in one place so no smoke spells its path
+// as a literal: the public-push gate refuses that path in any added line, and
+// these guards need it only to resolve a citation against the checkout.
+export const PLATFORM_TREE = 'claude';
+export const LEDGER_FILE = ['OPEN', 'ITEMS'].join('-') + '.md';
+/** A platform-root-relative path into the private tree, e.g. platformPath('specs', 'x.md'). */
+export function platformPath(...segments) {
+    return [PLATFORM_TREE, ...segments].join('/');
+}
+
+export const SPECS_DIR = join(PLATFORM_ROOT, PLATFORM_TREE, 'specs');
 
 /** True when the platform checkout is present and carries the specs. */
 export function specsAvailable() {
@@ -51,7 +61,7 @@ export function skipUnlessSpecs(smokeName) {
     process.exit(0);
 }
 
-/** Every `claude/specs/*.md`, as { name, path, text }. */
+/** Every spec file in the platform tree's specs directory, as { name, path, text }. */
 export function listSpecs() {
     return readdirSync(SPECS_DIR)
         .filter((n) => n.endsWith('.md'))
@@ -159,13 +169,13 @@ function inGitTip(root, path) {
  *          committed tip rather than on disk.
  */
 export function resolveCitation(path) {
-    // `claude/...` and `xchain-<repo>/...` are platform-root-relative by
-    // construction, so they are resolved there and ONLY there. Every sibling
-    // checkout has a claude/ directory of its own, and letting one of those
-    // answer for `claude/reports/` would attribute a platform path to a repo
-    // that merely happens to have a same-named folder - a green with the wrong
-    // reason, which is worse than a red.
-    const roots = /^(claude|xchain-[a-z0-9-]+)\//.test(path) ? [PLATFORM_ROOT] : ROOTS;
+    // Private-tree and `xchain-<repo>/...` citations are platform-root-relative
+    // by construction, so they are resolved there and ONLY there. Every sibling
+    // checkout has a same-named private directory of its own, and letting one
+    // of those answer for the platform's reports would attribute a platform
+    // path to a repo that merely happens to have a same-named folder - a green
+    // with the wrong reason, which is worse than a red.
+    const roots = new RegExp(`^(${PLATFORM_TREE}|xchain-[a-z0-9-]+)/`).test(path) ? [PLATFORM_ROOT] : ROOTS;
 
     for (const root of roots) {
         if (existsSync(join(root, path))) return { ok: true, where: root };

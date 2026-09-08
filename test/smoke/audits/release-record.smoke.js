@@ -12,7 +12,7 @@
 // convention.
 //
 // WHAT WENT WRONG. §6 says the per-release record is instantiated from
-// `claude/reports/wallet-releases/TEMPLATE.md` at the start of a release
+// `TEMPLATE.md` (platform tree) at the start of a release
 // and closed by step 8. Nothing created it and nothing asked for it, so
 // v0.334.0 - the first release this project ever attempted - was tagged,
 // built green and left half-finished while that directory still held

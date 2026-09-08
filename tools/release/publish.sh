@@ -89,7 +89,7 @@
 # from TEMPLATE.md at the START of a release and closed by step 8, and
 # for the first release nothing created it and nothing asked for it:
 # v0.334.0 was tagged, built green and left half-finished while
-# `claude/reports/wallet-releases/` still held only TEMPLATE.md, so for a
+# `wallet-releases/` (platform tree) still held only TEMPLATE.md, so for a
 # day the only account of it lived in GitHub's run history and had to be
 # reconstructed from a CI summary job afterwards. A production publish
 # now refuses without an instantiated record, with no skip switch. An

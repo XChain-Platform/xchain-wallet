@@ -10,8 +10,8 @@
 
 // The §6 step-1 gate must be able to WAIT, and waiting must not soften it.
 //
-// WHY. Under the platform release policy (claude/specs/living/
-// release-management.md) the wallet's release tag is cut on master's MERGE
+// WHY. Under the platform release policy (the living release-management spec
+// in the platform tree) the wallet's release tag is cut on master's MERGE
 // commit, and that commit does not exist until the release PR is merged.
 // Its CI therefore starts at merge time, seconds before the operator wants
 // to tag. Run at that moment the gate answers "no run of `ci.yml` exists
