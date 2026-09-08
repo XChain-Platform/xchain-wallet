@@ -29,6 +29,70 @@ import { tickerForCoin } from '../registry/coinTicker.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 
 /**
+ * Most addresses one batch request may carry.
+ *
+ * The explorer refuses a longer list with `TOO_MANY_ADDRESSES`, so the ceiling
+ * is the route's, not a local taste; a wallet with more addresses on one chain
+ * sends several requests rather than one that comes back 400.
+ */
+export const BALANCES_BATCH_MAX_ADDRESSES = 20;
+
+/** Feature names the unsupported memo records, one per batch route. */
+export const BATCH_FEATURE_BALANCES = 'balances';
+export const BATCH_FEATURE_COINPAY = 'coinpay';
+
+/**
+ * Batch routes an SDK instance has already answered 404 for.
+ *
+ * An explorer older than the batch endpoints answers the POST with a 404, and
+ * re-probing it on every 20s poll would spend one wasted request per chain for
+ * as long as the wallet stays open. The memo is keyed by the SDK INSTANCE (a
+ * WeakMap) rather than by chain id, so a network switch, which builds a fresh
+ * registry, starts probing again: a wallet moved onto an upgraded explorer must
+ * not stay pinned to the fallback by a memo the old endpoint earned.
+ *
+ * It lives beside the balances flow because coinpayQueries.js shares it. One
+ * implementation is what keeps the two flows agreeing on which SDK instance is
+ * answering, instead of each holding its own idea of "unsupported".
+ */
+let batchUnsupported = new WeakMap();
+
+/** Record that `sdk` has no `feature` batch route. */
+export function rememberBatchUnsupported(sdk, feature) {
+    if (!sdk || typeof sdk !== 'object') return;
+    const features = batchUnsupported.get(sdk);
+    if (features) features.add(feature);
+    else batchUnsupported.set(sdk, new Set([feature]));
+}
+
+/** Has `sdk` already told us it has no `feature` batch route? */
+/**
+ * The SDK's two ways of saying "this explorer has no batch route": the typed
+ * EXPLORER_BATCH_UNSUPPORTED (an older explorer hands every unknown POST to
+ * its JSON-RPC router, which answers an error object at HTTP 200, and the
+ * SDK names that shape) and a plain 404 from a deployment that refuses
+ * unknown POSTs outright. Anything else is a real failure of a real route.
+ */
+export function isBatchUnsupportedError(e) {
+    return !!e && (e.code === 'EXPLORER_BATCH_UNSUPPORTED' || e.code === 'EXPLORER_HTTP_404');
+}
+
+export function isBatchUnsupported(sdk, feature) {
+    if (!sdk || typeof sdk !== 'object') return false;
+    const features = batchUnsupported.get(sdk);
+    return Boolean(features && features.has(feature));
+}
+
+/**
+ * Test hook. A WeakMap cannot be emptied, so the memo is replaced wholesale;
+ * without this a test that drives a 404 would leak its verdict into every
+ * later test sharing the same SDK stub.
+ */
+export function _resetBatchSupportMemo() {
+    batchUnsupported = new WeakMap();
+}
+
+/**
  * How often Home re-runs the whole balance load while the wallet is open.
  *
  * Nothing pushes balance changes to the wallet (an incoming send, a mint
@@ -125,6 +189,22 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
         sdk.getBalances(address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
         sdk.getAddress(address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
     ]);
+    return shapeFromReads({ balResp, addrResp, nativeTicker });
+}
+
+/**
+ * Build the `{ native, tokens }` shape from the two reads, each of which is
+ * either the endpoint's body or an Error standing for its failure. Throws when
+ * BOTH failed, so a caller can surface one error.
+ *
+ * Pure, and shared by the per-address reads above and the batch reads below,
+ * because those two paths are the same answer fetched two ways: a wallet on a
+ * new explorer and one on an old explorer must render identically, and a second
+ * copy of this logic is exactly how that would stop being true.
+ *
+ * @param {{ balResp: unknown, addrResp: unknown, nativeTicker: string | null }} reads
+ */
+function shapeFromReads({ balResp, addrResp, nativeTicker }) {
     const balOk = !(balResp instanceof Error);
     const addrOk = !(addrResp instanceof Error);
     if (!balOk && !addrOk) {
@@ -346,6 +426,112 @@ export async function chainTipBlockTime({ sdkRegistry, chainId }) {
     return { chainId, blockTime: Number(own) };
 }
 
+// The entry every read path returns, before any answer has landed. One builder
+// so a field added for the batch path cannot go missing on the per-address one.
+function baseEntryFor(addr) {
+    /** @type {AddressBalancesEntry} */
+    return {
+        address: addr.address,
+        addressType: addr.addressType,
+        derivationPath: addr.derivationPath,
+        label: addr.label,
+        balances: null,
+        error: null,
+        errorCode: null,
+        retryAfterSeconds: null,
+    };
+}
+
+// Put the failure on the entry TYPED as well as prose: a rate limit's code and
+// the seconds the origin named, which the entries carry across the messaging
+// boundary where an Error's own fields do not survive. Guarded so a
+// non-integer or a negative never reaches a countdown as a number.
+function applyFailure(entry, e) {
+    entry.error = e && e.message ? String(e.message) : String(e);
+    if (e && typeof e.code === 'string') entry.errorCode = e.code;
+    if (e && Number.isInteger(e.retryAfterSeconds) && e.retryAfterSeconds >= 0) {
+        entry.retryAfterSeconds = e.retryAfterSeconds;
+    }
+}
+
+// D-6: fetch the TOKEN ledger (/balances/) and the NATIVE coin balance
+// (/address/) for one address and hand the UI the { native, tokens } shape it
+// reads. Either call failing alone still yields a partial result; only a double
+// failure (the helper throws) surfaces `error`.
+async function perAddressEntry({ sdk, addr, nativeTicker, opts }) {
+    const base = baseEntryFor(addr);
+    try {
+        base.balances = await fetchAddressShape({
+            sdk, address: addr.address, nativeTicker, opts,
+        });
+    } catch (e) {
+        applyFailure(base, e);
+    }
+    return base;
+}
+
+// One address's slot in a batch response, turned into the two values
+// shapeFromReads reads. A null half is a read that did not answer, so it
+// becomes an Error carrying the slot's own code and message: that is what makes
+// the shared shaper mark it `unavailable` in the same words the per-address
+// path would have used.
+function readsFromBatchEntry(entry, address) {
+    const err = entry && entry.error ? entry.error : null;
+    const failed = () => {
+        const e = new Error(String((err && err.error) || `no batch result for ${address}`));
+        if (err && typeof err.code === 'string') e.code = err.code;
+        if (err && err.status != null) e.status = err.status;
+        if (err && Number.isInteger(err.retryAfterSeconds)) {
+            e.retryAfterSeconds = err.retryAfterSeconds;
+        }
+        return e;
+    };
+    return {
+        balResp: entry && entry.balances != null ? entry.balances : failed(),
+        addrResp: entry && entry.address != null ? entry.address : failed(),
+    };
+}
+
+// One POST for up to BALANCES_BATCH_MAX_ADDRESSES addresses of one chain.
+// Returns the same entries, in the same order, as the per-address path would.
+async function batchChunkEntries({ sdk, chunk, nativeTicker, opts }) {
+    let resp;
+    try {
+        resp = await sdk.getBalancesBatch(chunk.map((a) => a.address), opts);
+    } catch (e) {
+        if (e && isBatchUnsupportedError(e)) {
+            // An explorer that predates the batch route. Remember the instance
+            // so later polls skip the probe entirely, and serve this chunk the
+            // old way so the user sees balances rather than an error.
+            rememberBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
+            return Promise.all(
+                chunk.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts })),
+            );
+        }
+        // Every other failure (a rate limit, a 5xx, a dead network) marks the
+        // whole chunk and stops there. Falling back per address would fire the
+        // twenty requests the batch call just replaced, so one 429 would
+        // manufacture the burst that earns the next one.
+        return chunk.map((addr) => {
+            const base = baseEntryFor(addr);
+            applyFailure(base, e);
+            return base;
+        });
+    }
+    return chunk.map((addr) => {
+        const base = baseEntryFor(addr);
+        const { balResp, addrResp } = readsFromBatchEntry(
+            resp ? resp[addr.address] : null, addr.address,
+        );
+        try {
+            base.balances = shapeFromReads({ balResp, addrResp, nativeTicker });
+        } catch (e) {
+            applyFailure(base, e);
+        }
+        return base;
+    });
+}
+
 /**
  * @typedef {Object} WalletBalancesOpts
  * @property {import('../storage/Vault.js').Vault} vault
@@ -354,15 +540,22 @@ export async function chainTipBlockTime({ sdkRegistry, chainId }) {
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} [chainId]               optional filter; only fetch for this chain
  * @property {'mainnet' | 'testnet' | 'regtest'} [activeNetwork]  optional filter; skips chains whose `networkKind` doesn't match. The host wrapper threads this from `settings.activeNetwork` so a user on mainnet generates zero requests against testnet / regtest chains
- * @property {object} [opts]                  passed through to each `sdk.getBalances`
+ * @property {object} [opts]                  passed through to each `sdk.getBalances`, or to `sdk.getBalancesBatch` on the batch path
  */
 
 /**
  * Aggregate balances for every HD / imported address owned by a wallet,
  * grouped by chainId. Fetches are parallelized per chain.
  *
+ * Reads a chain's addresses in chunks of BALANCES_BATCH_MAX_ADDRESSES through
+ * `sdk.getBalancesBatch` when the SDK carries the method and the explorer
+ * serves the route, and per address otherwise. The entries are identical either
+ * way: both paths shape their answer with `shapeFromReads`.
+ *
  * Partial results: a fetch failure on one address yields that entry
- * with `balances: null, error: <message>`; other entries are unaffected.
+ * with `balances: null, error: <message>`; other entries are unaffected. A
+ * batch request that fails outright marks every address in that chunk with the
+ * same failure, since no per-address answer was obtained for any of them.
  *
  * @param {WalletBalancesOpts} params
  * @returns {Promise<Record<string, AddressBalancesEntry[]>>}
@@ -437,8 +630,17 @@ export async function walletBalances({
         byChain[cid].push(a);
     }
 
-    // 3. Fetch balances per address, in parallel per chain. Per-address
-    //    failures are captured as entries with `error` set.
+    // 3. Fetch balances per chain. Per-address failures are captured as entries
+    //    with `error` set, whichever path served them.
+    //
+    //    One request per chain rather than two per address is the whole point:
+    //    a five-address wallet on three chains asked the explorer for 30 reads
+    //    every 20s poll, which is the sustained rate the zone rate limits have
+    //    to clear. When the SDK carries `getBalancesBatch` and the explorer
+    //    answers it, the same poll is 3 requests. Both halves are conditions,
+    //    not assumptions: an SDK older than the method, or an explorer older
+    //    than the route, falls back to the per-address reads and is no worse
+    //    off than before.
     /** @type {Record<string, AddressBalancesEntry[]>} */
     const result = {};
     await Promise.all(
@@ -446,45 +648,24 @@ export async function walletBalances({
             const sdk = sdkRegistry.get(cid);
             const descriptor = chainRegistry.descriptorFor(cid);
             const nativeTicker = tickerForCoin(descriptor && descriptor.coin);
-            const entries = await Promise.all(
-                addrs.map(async (addr) => {
-                    /** @type {AddressBalancesEntry} */
-                    const base = {
-                        address: addr.address,
-                        addressType: addr.addressType,
-                        derivationPath: addr.derivationPath,
-                        label: addr.label,
-                        balances: null,
-                        error: null,
-                        errorCode: null,
-                        retryAfterSeconds: null,
-                    };
-                    // D-6: fetch the TOKEN ledger (/balances/) and the NATIVE coin
-                    // balance (/address/) together (shared with addressBalances via
-                    // fetchAddressShape), and hand the UI the { native, tokens } shape
-                    // it reads. Either call failing alone still yields a partial result;
-                    // only a double failure (the helper throws) surfaces `error`.
-                    try {
-                        base.balances = await fetchAddressShape({
-                            sdk, address: addr.address, nativeTicker, opts,
-                        });
-                    } catch (e) {
-                        base.error = e && e.message ? String(e.message) : String(e);
-                        // `fetchAddressShape` rethrows the /balances read's own
-                        // error, so `e` IS the SDK error and still has its
-                        // fields. Keep the two a UI can act on rather than only
-                        // the sentence: a rate limit's code and the seconds the
-                        // origin named. Guarded so a non-integer or a negative
-                        // never reaches a countdown as a number.
-                        if (e && typeof e.code === 'string') base.errorCode = e.code;
-                        if (e && Number.isInteger(e.retryAfterSeconds) && e.retryAfterSeconds >= 0) {
-                            base.retryAfterSeconds = e.retryAfterSeconds;
-                        }
-                    }
-                    return base;
-                }),
+            const canBatch = sdk && typeof sdk.getBalancesBatch === 'function'
+                && !isBatchUnsupported(sdk, BATCH_FEATURE_BALANCES);
+            if (!canBatch) {
+                result[cid] = await Promise.all(
+                    addrs.map((addr) => perAddressEntry({ sdk, addr, nativeTicker, opts })),
+                );
+                return;
+            }
+            const chunks = [];
+            for (let i = 0; i < addrs.length; i += BALANCES_BATCH_MAX_ADDRESSES) {
+                chunks.push(addrs.slice(i, i + BALANCES_BATCH_MAX_ADDRESSES));
+            }
+            const perChunk = await Promise.all(
+                chunks.map((chunk) => batchChunkEntries({ sdk, chunk, nativeTicker, opts })),
             );
-            result[cid] = entries;
+            // Flattened in chunk order, so the entries come back in the address
+            // order the caller passed however many requests it took.
+            result[cid] = perChunk.flat();
         }),
     );
     return result;

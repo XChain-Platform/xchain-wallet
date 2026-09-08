@@ -266,24 +266,51 @@ assert.equal(overApi.fitsToday, true, 'and the bare cold-open still fits, so the
 // fail this: two balance reads, NO coinpay read (spec row 29 moved the resume
 // cards onto the shared hook, so the 20 s beat carries no coinpay traffic at
 // all), no proof reads.
-assert.deepEqual(profile.perPoll, { balanceReadsPerAddress: 2, coinpayReadsPerAddress: 0, proofReadsPerAddress: 0 });
+// Two honest shapes, decided by the SDK in node_modules: the flows feature-detect
+// the batch reads, so the pinned SDK (no batch methods) still reads two per
+// address, and the SDK that carries them reads one batch per chain and no
+// per-address balance read at all. Each shape is pinned in full so the other
+// cannot satisfy it.
+assert.equal(typeof profile.batchSupported, 'boolean', 'the profile says which SDK shape it measured');
+if (profile.batchSupported) {
+    assert.deepEqual(profile.perPoll, { balanceReadsPerAddress: 0, batchBalanceReadsPerChain: 1, coinpayReadsPerAddress: 0, proofReadsPerAddress: 0 });
+    assert.deepEqual(profile.badge, { coinpayReadsPerAddress: 0, coinpayBatchReadsPerChain: 1 });
+} else {
+    assert.deepEqual(profile.perPoll, { balanceReadsPerAddress: 2, batchBalanceReadsPerChain: 0, coinpayReadsPerAddress: 0, proofReadsPerAddress: 0 });
+    assert.deepEqual(profile.badge, { coinpayReadsPerAddress: 1, coinpayBatchReadsPerChain: 0 });
+}
 
 // The worst minute per route folds in every further poll and badge scan that
 // fits in the minute after the cold-open.
-const balancesRoute = profile.routes.find((r) => r.family === 'balances' && r.host.startsWith('explorer.'));
-assert.ok(balancesRoute, 'the balances route is profiled');
 const furtherPolls = Math.ceil(60_000 / BALANCE_POLL_INTERVAL_MS) - 1;
-assert.equal(balancesRoute.worstMinute, balancesRoute.coldOpen + balancesRoute.perPoll * furtherPolls);
-const coinpayRoute = profile.routes.find((r) => r.family === 'coinpay');
 const furtherBadge = Math.ceil(60_000 / COINPAY_BADGE_POLL_MS) - 1;
-// The coinpay route's worst minute is now the cold-open scan plus the badge
-// repeats ONLY: its per-poll term is zero, so the formula below has to be
-// pinned with that term stated, or a coinpay read creeping back into Home's
-// beat would still satisfy it.
-assert.equal(coinpayRoute.perPoll, 0, 'no coinpay read rides the 20 s balance poll any more');
-assert.equal(coinpayRoute.worstMinute,
-    coinpayRoute.coldOpen + coinpayRoute.perPoll * furtherPolls + coinpayRoute.perBadge * furtherBadge);
-assert.equal(coinpayRoute.worstMinute, coinpayRoute.coldOpen + coinpayRoute.perBadge * furtherBadge);
+let balancesRoute;
+if (profile.batchSupported) {
+    // One family carries both batch POSTs: the beat's balance batches and the
+    // badge's coinpay batches, one per chain each, and nothing per address.
+    balancesRoute = profile.routes.find((r) => r.family === 'batch' && r.host.startsWith('explorer.'));
+    assert.ok(balancesRoute, 'the batch route is profiled');
+    assert.equal(balancesRoute.perPoll, oneAddress.chains.length, 'one balance batch per chain per poll');
+    assert.equal(balancesRoute.perBadge, oneAddress.chains.length, 'one coinpay batch per chain per badge scan');
+    assert.equal(balancesRoute.worstMinute,
+        balancesRoute.coldOpen + balancesRoute.perPoll * furtherPolls + balancesRoute.perBadge * furtherBadge);
+    assert.equal(profile.routes.find((r) => r.family === 'balances'), undefined, 'no per-address balance read is left');
+    assert.equal(profile.routes.find((r) => r.family === 'coinpay'), undefined, 'no per-address coinpay read is left');
+} else {
+    balancesRoute = profile.routes.find((r) => r.family === 'balances' && r.host.startsWith('explorer.'));
+    assert.ok(balancesRoute, 'the balances route is profiled');
+    assert.equal(balancesRoute.worstMinute, balancesRoute.coldOpen + balancesRoute.perPoll * furtherPolls);
+    const coinpayRoute = profile.routes.find((r) => r.family === 'coinpay');
+    // The coinpay route's worst minute is now the cold-open scan plus the badge
+    // repeats ONLY: its per-poll term is zero, so the formula below has to be
+    // pinned with that term stated, or a coinpay read creeping back into Home's
+    // beat would still satisfy it.
+    assert.equal(coinpayRoute.perPoll, 0, 'no coinpay read rides the 20 s balance poll any more');
+    assert.equal(coinpayRoute.worstMinute,
+        coinpayRoute.coldOpen + coinpayRoute.perPoll * furtherPolls + coinpayRoute.perBadge * furtherBadge);
+    assert.equal(coinpayRoute.worstMinute, coinpayRoute.coldOpen + coinpayRoute.perBadge * furtherBadge);
+    assert.equal(profile.routes.find((r) => r.family === 'batch'), undefined, 'this SDK predates the batch route');
+}
 assert.equal(balancesRoute.required, balancesRoute.worstMinute * ATTEMPTS_PER_CALL * 3);
 
 console.log(

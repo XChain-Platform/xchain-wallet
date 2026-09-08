@@ -649,6 +649,10 @@ export async function measureColdOpen({
         tokensPerAddress,
         chains: chains.map((d) => d.id),
         sdkVersion: sdkClass ? 'injected' : installedSdkVersion(),
+        // Whether the SDK under measurement carries the batch reads at all: the
+        // flows feature-detect them, so the same wallet code profiles two ways
+        // and the report has to say which one it measured.
+        batchSupported: typeof XChainSDK.prototype.getBalancesBatch === 'function',
         requests: all,
         recurringRequests: recurring,
         recurringIntervalMs: BALANCE_POLL_INTERVAL_MS,
@@ -693,6 +697,9 @@ export function driveRefocus(intervalMs = BALANCE_POLL_INTERVAL_MS) {
  * the family.
  */
 export function routeFamily({ host, path, method }) {
+    // The two batch POSTs share one origin limiter, so they are one family:
+    // a POST to the bare route, never the per-address GET a segment deeper.
+    if (method === 'POST' && /\/api\/(balances|coinpay_obligations)$/.test(path)) return 'batch';
     if (/\/api\/balances\//.test(path)) return 'balances';
     if (/\/api\/address\//.test(path)) return 'address';
     if (/\/api\/coinpay_obligations\//.test(path)) return 'coinpay';
@@ -795,13 +802,24 @@ export function coldOpenProfile(m, { headroom = 2, periodSec = COUNTING_PERIOD_S
     const chainCount = m.chains.length;
     const perAddress = (list, family) => list.filter((r) => routeFamily(r) === family).length
         / (chainCount * m.addressesPerChain);
+    // A batch POST is one request per CHAIN, not per address, so it is
+    // reported per chain; the per-address figures fall to zero on an SDK that
+    // carries the batch methods, and the two are printed side by side so a
+    // profile on either SDK reads honestly.
+    const perChain = (list, tail) => list.filter((r) => routeFamily(r) === 'batch' && r.path.endsWith('/api/' + tail)).length
+        / chainCount;
     const perPoll = {
         balanceReadsPerAddress: perAddress(m.recurringRequests, 'balances') + perAddress(m.recurringRequests, 'address'),
+        batchBalanceReadsPerChain: perChain(m.recurringRequests, 'balances'),
         // Kept, and 0 since spec row 29: the beat itself no longer scans
         // coinpay. Still measured rather than hard-coded, so a coinpay read
         // re-entering Home's poll shows up here instead of hiding.
         coinpayReadsPerAddress: perAddress(m.recurringRequests, 'coinpay'),
         proofReadsPerAddress: m.proof.refiresOnPoll ? (m.proof.reads / (chainCount * m.addressesPerChain)) : 0,
+    };
+    const badge = {
+        coinpayReadsPerAddress: perAddress(m.badgeRequests, 'coinpay'),
+        coinpayBatchReadsPerChain: perChain(m.badgeRequests, 'coinpay_obligations'),
     };
 
     return {
@@ -813,7 +831,9 @@ export function coldOpenProfile(m, { headroom = 2, periodSec = COUNTING_PERIOD_S
         busiestHost: busiestHost(m),
         recurringIntervalMs: m.recurringIntervalMs,
         badgeIntervalMs: m.badgeIntervalMs,
+        batchSupported: m.batchSupported,
         perPoll,
+        badge,
         proof: m.proof,
         refocus: m.refocus,
         rules,
@@ -929,8 +949,11 @@ async function main() {
     console.log(`\nEvery ${p.recurringIntervalMs / 1000}s while the wallet stays open (Home's poll), per chain, per address:`);
     console.log(`  ${p.perPoll.balanceReadsPerAddress} balance reads, ${p.perPoll.coinpayReadsPerAddress} coinpay read(s),`
         + ` ${p.perPoll.proofReadsPerAddress} proof reads`);
+    console.log(`  and per chain: ${p.perPoll.batchBalanceReadsPerChain} batch balance read(s)`
+        + ` (this SDK ${p.batchSupported ? 'carries' : 'predates'} the batch reads)`);
     console.log(`  the shared coinpay scan is NOT on this beat; it repeats every`
-        + ` ${p.badgeIntervalMs / 1000}s: ${m.badgeRequests.length} more reads`);
+        + ` ${p.badgeIntervalMs / 1000}s: ${m.badgeRequests.length} more reads`
+        + ` (${p.badge.coinpayReadsPerAddress} per address, ${p.badge.coinpayBatchReadsPerChain} batch per chain)`);
     console.log(`\nProof verification, once per session: ${p.proof.jobs} job(s), ${p.proof.reads} reads`
         + ` (${p.proof.readsPerJob} per job on this SDK); re-fires on a poll: ${p.proof.refiresOnPoll ? 'YES' : 'no'}`);
     console.log(`\nAn alt-tab (focus + visibilitychange together), driven through the poll throttle:`);
