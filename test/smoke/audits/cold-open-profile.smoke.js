@@ -12,9 +12,9 @@
 //
 // The tool answers the question the burst probe structurally cannot: what does
 // one honest wallet ASK FOR, per host, per route, per window? A burst fired at
-// a host on the rule-9 skip measures the skip; the client's own demand is
-// measurable here, offline, and it is the number every rate limit on the
-// wallet's path is derived from (rate-limits spec §3.4).
+// one endpoint can only see the limit it happens to trip; the client's own
+// demand is measurable here, offline, and it is the number every rate limit on
+// the wallet's path is derived from.
 //
 // Six properties, and they are all about the number not being a story
 // somebody told:
@@ -24,8 +24,10 @@
 // 3. The proof fan-out is measured (it was the profile's blind spot) and does
 //    not re-fire on a poll whose (chain, address, token) set is unchanged.
 // 4. An alt-tab costs one poll after the data has aged, none before.
-// 5. Both zone rules and the rule-9 skip list are transcribed as measured,
-//    and the wallet's explorer paths are counted where the rules count them.
+// 5. Both zone rules and both skip lists are transcribed as read off the rule
+//    editors, and the wallet's traffic is counted where the rules count it:
+//    since the M2 edge change that is all of it under the API rule and none of
+//    it under the General one.
 // 6. The cadences the wallet repeats on are read from the app's own
 //    constants, not copied.
 
@@ -35,7 +37,7 @@ import https from 'node:https';
 
 import {
     measureColdOpen, coldOpenProfile, coldOpenBurstSize, busiestHost, driveRefocus, routeFamily,
-    ZONE_RULES, RATE_LIMIT_SKIP_HOSTS, ATTEMPTS_PER_CALL, COUNTING_PERIOD_SEC,
+    ZONE_RULES, RATE_LIMIT_SKIP_HOSTS, SBFM_ONLY_SKIP_HOSTS, ATTEMPTS_PER_CALL, COUNTING_PERIOD_SEC,
 } from '../../../tools/release/cold-open-profile.mjs';
 import { DEFAULT_SDK_NETWORK_OPTIONS } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
@@ -168,30 +170,48 @@ assert.deepEqual(
 assert.equal(oneAddress.refocus.intervalMs, BALANCE_POLL_INTERVAL_MS);
 assert.deepEqual(driveRefocus(1000), { intervalMs: 1000, insideWindow: 0, afterWindow: 1 });
 
-// --- 5. The zone rules and the skip are transcribed as measured ----------
+// --- 5. The zone rules and both skips are transcribed as read ------------
+
+const API_HOSTS = ['explorer.xchain.io', 'hub.xchain.io', 'encoder.xchain.io'];
 
 const general = ZONE_RULES.find((r) => r.name === 'General Rate Limit');
 const api = ZONE_RULES.find((r) => r.name === 'API Rate Limit');
 assert.ok(general && api, 'both zone rules must be recorded');
 assert.deepEqual(
     [general.threshold, general.periodSec, api.threshold, api.periodSec],
-    [90, 60, 30, 60],
-    'both rules are one-minute windows (90 and 30), not the "req/sec" their names suggest',
+    [90, 60, 564, 10],
+    'the General rule is 90 per minute and the API rule 564 per 10 seconds, the plan\'s shortest window',
 );
-assert.equal(general.matches('/icon/favicon.png'), false, 'the General rule excludes /icon/');
-assert.equal(general.matches('/'), true);
+assert.equal(api.action, 'Block 429, 10 seconds', 'the API rule\'s mitigation is the 10 s minimum, not a minute');
+assert.equal(general.matches('/icon/favicon.png', 'wallet.xchain.io'), false, 'the General rule excludes /icon/');
+assert.equal(general.matches('/', 'wallet.xchain.io'), true);
 
-// The wallet's explorer calls are /{COIN}/api/..., NOT /api/..., so the API
-// rule does not see them and the General rule is the one that would bind.
-assert.equal(api.matches('/TBTC/api/balances/tb1qexample'), false);
-assert.equal(general.matches('/TBTC/api/balances/tb1qexample'), true);
-assert.equal(api.matches('/api/v1/chain-registry'), true);
-
-assert.equal(RATE_LIMIT_SKIP_HOSTS.length, 14, 'custom rule 9 names fourteen hosts');
-for (const h of ['explorer.xchain.io', 'hub.xchain.io', 'encoder.xchain.io']) {
-    assert.ok(RATE_LIMIT_SKIP_HOSTS.includes(h), `${h} is on the rule-9 skip today`);
+// Since M2 the API rule matches by HOSTNAME, and the General rule excludes the
+// same three hosts so it cannot bite the wallet's API traffic first. The
+// wallet's explorer calls are /{COIN}/api/..., which the old path expression
+// never saw at all, so a rule that still keyed on the path would count none of
+// the traffic it exists to bound.
+for (const h of API_HOSTS) {
+    assert.equal(api.matches('/TBTC/api/balances/tb1qexample', h), true, `the API rule counts ${h} by host`);
+    assert.equal(general.matches('/TBTC/api/balances/tb1qexample', h), false, `the General rule excludes ${h}`);
+    assert.ok(api.expression.includes(`"${h}"`), `the printed API expression names ${h}`);
+    assert.ok(general.expression.includes(`"${h}"`), `the printed General expression names ${h} in its exclusion`);
 }
+assert.equal(api.matches('/api/v1/chain-registry', 'wallet.xchain.io'), false,
+    'the API rule is not a path rule any more: an /api/ path on another host is the General rule\'s');
+assert.equal(general.matches('/api/v1/chain-registry', 'wallet.xchain.io'), true);
+
+// The two skips are different skips, and confusing them puts the wallet's
+// ceiling back at "none": rule 9 skips ALL rate limiting on the eleven hosts it
+// kept, rule 10 skips Super Bot Fight Mode alone on the three API hosts.
+assert.equal(RATE_LIMIT_SKIP_HOSTS.length, 11, 'custom rule 9 names eleven hosts since the API hosts came off it');
+for (const h of API_HOSTS) {
+    assert.ok(!RATE_LIMIT_SKIP_HOSTS.includes(h), `${h} is NOT on the rate-limit skip any more`);
+    assert.ok(SBFM_ONLY_SKIP_HOSTS.includes(h), `${h} is on custom rule 10's SBFM-only skip`);
+}
+assert.equal(SBFM_ONLY_SKIP_HOSTS.length, 3, 'rule 10 names the three API hosts and nothing else');
 assert.ok(!RATE_LIMIT_SKIP_HOSTS.includes('wallet.xchain.io'), 'the wallet SPA host is NOT on the skip');
+assert.ok(!SBFM_ONLY_SKIP_HOSTS.includes('wallet.xchain.io'), 'and it gets no SBFM skip either');
 
 // --- 6. The arithmetic, and the multipliers it rests on -------------------
 
@@ -205,19 +225,42 @@ const profile = coldOpenProfile(oneAddress, { headroom: 3 });
 assert.equal(profile.periodSec, COUNTING_PERIOD_SEC);
 assert.equal(profile.recurringIntervalMs, BALANCE_POLL_INTERVAL_MS, 'the repeat cadence is the app\'s own constant');
 
-// As the zone is configured today, every host the wallet's API traffic lands
-// on is on the rule-9 skip, so the two edge rules count NONE of it. If this
-// starts failing, the skip was narrowed (M2) and the recorded list is stale.
+// The split the M2 rules were reshaped to produce: the API rule counts EVERY
+// request the profiled wallet makes and the General rule counts none, so exactly
+// one ceiling applies to the wallet and it is the one sized from this profile.
+// Nothing the wallet touches is on a rate-limit skip any more, so `skipped` is
+// zero; a non-zero one here means an API host went back onto rule 9.
 const generalRow = profile.rules.find((r) => r.rule === 'General Rate Limit');
-assert.equal(generalRow.matched, 0, 'today the General rule counts nothing the wallet\'s API traffic does');
-assert.equal(generalRow.skipped, oneAddress.total, 'every API request is on a skip-listed host');
-assert.equal(generalRow.fitsToday, true);
+const apiRow = profile.rules.find((r) => r.rule === 'API Rate Limit');
+assert.equal(apiRow.matched, oneAddress.total, 'the API rule counts every request of the session');
+assert.equal(generalRow.matched, 0, 'the General rule counts none of the wallet\'s API traffic');
+assert.equal(apiRow.skipped, 0, 'no request of this session is skipped by rule 9 any more');
+assert.equal(generalRow.skipped, 0);
+assert.equal(apiRow.worstCasePerPeriod, oneAddress.total * ATTEMPTS_PER_CALL, 'retries are counted at the edge too');
+assert.equal(apiRow.requiredPerPeriod, oneAddress.total * ATTEMPTS_PER_CALL * 3);
+assert.equal(apiRow.fitsToday, true, 'one cold-open with retries fits under 564');
+assert.equal(apiRow.clearsRequirement, true, 'and so does the same cold-open times the headroom multiplier');
+assert.equal(generalRow.clearsRequirement, true);
 
-// The per-host edge requirement is the whole cold-open times retries times
-// headroom, on the hosts the wallet actually reached.
+// The API rule's requirement is the whole cold-open times retries times
+// headroom, over ITS window (10 s, not the General rule's minute), on the hosts
+// the wallet actually reached.
+assert.equal(profile.edge.rule, 'API Rate Limit');
 assert.deepEqual(profile.edge.hosts, ['explorer.xchain.io', 'hub.xchain.io']);
+assert.equal(profile.edge.periodSec, api.periodSec, 'the burst is sized against the window the rule runs');
+assert.equal(profile.edge.threshold, api.threshold);
 assert.equal(profile.edge.burst, oneAddress.total);
 assert.equal(profile.edge.required, oneAddress.total * ATTEMPTS_PER_CALL * 3);
+
+// The verdict the tool exits on is the HEADROOM question, not the bare one: a
+// requirement above the recorded threshold must come back false, or a rule set
+// to admit exactly one wallet would still report OK. Driven by pushing the
+// multiplier past the threshold rather than by editing the recorded rule.
+const overHeadroom = coldOpenProfile(oneAddress, { headroom: 1000 });
+const overApi = overHeadroom.rules.find((r) => r.rule === 'API Rate Limit');
+assert.ok(overApi.requiredPerPeriod > overApi.threshold, 'the driven requirement must exceed the threshold here');
+assert.equal(overApi.clearsRequirement, false, 'a requirement above the threshold is not cleared');
+assert.equal(overApi.fitsToday, true, 'and the bare cold-open still fits, so the two verdicts are not the same one');
 
 // The per-poll figures are per chain per address, so a fourth chain cannot
 // fail this: two balance reads, NO coinpay read (spec row 29 moved the resume
@@ -250,7 +293,9 @@ console.log(
     + ' replaced, so profiling the load never adds it; the proof fan-out is measured and does not'
     + ' re-fire on a poll whose token set is unchanged; an alt-tab costs one poll after the data has'
     + ' aged and none before, driven through the shipped throttle; both zone rules are transcribed as'
-    + ' one-minute windows with the fourteen-host rule-9 skip, under which today\'s edge rules count none'
-    + ' of the wallet\'s API traffic; the per-host edge requirement and the per-route worst minute are'
-    + ' derived with the wallet\'s own retry multiplier and poll constants)',
+    + ' read off the rule editors, the General one at 90 per minute excluding the three API hosts and the'
+    + ' API one at 564 per 10s matching them by hostname, with rule 9\'s rate-limit skip down to eleven'
+    + ' hosts and rule 10\'s SBFM-only skip on the three, so the API rule counts every request of the'
+    + ' session and the General rule counts none; the API rule\'s requirement and the per-route worst'
+    + ' minute are derived with the wallet\'s own retry multiplier and poll constants)',
 );

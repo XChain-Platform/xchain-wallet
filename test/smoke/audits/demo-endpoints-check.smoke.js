@@ -93,7 +93,10 @@ assert.match(blocked.detail, /cannot load a balance/, 'the 403 detail says what 
 
 const limited = classifyProbe(explorerProbe, { status: 429, body: '' });
 assert.equal(limited.state, 'failure');
-assert.match(limited.detail, /below one wallet cold-open/, 'the 429 detail names the limit it hit');
+// A plain refusal, and it has to read as one: these hosts are counted by the
+// edge rules now, so there is no skip left for a 429 here to be evidence about.
+assert.match(limited.detail, /a limiter on this path refused the request/, 'the 429 detail names the refusal it hit');
+assert.doesNotMatch(limited.detail, /skip/, 'and it must not explain the 429 as a skip that stopped covering the host');
 
 assert.equal(classifyProbe(explorerProbe, { status: 502, body: '' }).state, 'failure');
 assert.equal(
@@ -999,9 +1002,10 @@ assert.ok(
     'a rate-limited burst adds its own failure row rather than hiding inside the per-probe result',
 );
 
-// A CLEAN burst must SAY what it measured. These hosts sit on the zone's
-// fourteen-host rate-limit skip (custom rule 9), so an unthrottled burst measures the skip
-// and says nothing about the limit under it - and the 2026-08-02 run was read
+// A CLEAN burst must SAY what it measured. Since the M2 edge change these hosts
+// are counted rather than skipped, at a threshold sized from the whole measured
+// cold-open with headroom, so a burst this size is meant to pass: it locates no
+// threshold and says nothing about where one sits. The 2026-08-02 run was read
 // as evidence it did, because a clean burst produced no row at all.
 const cleanBurst = await checkDemoEndpoints({
     descriptors: FAKE,
@@ -1013,8 +1017,13 @@ assert.ok(cleanRow, 'a clean burst still reports what it measured rather than st
 assert.equal(cleanRow.state, 'live');
 assert.match(
     cleanRow.detail,
-    /measures the SKIP, not the limit/,
+    /measures NO REFUSAL, not the threshold itself/,
     'a clean burst must not be readable as proof the limit is survivable',
+);
+assert.doesNotMatch(
+    cleanRow.detail,
+    /measures the SKIP/,
+    'and it must not still claim a rate-limit skip these hosts no longer have',
 );
 
 // "N requests came back 200" is not a rate. How long the burst took decides
@@ -1053,8 +1062,8 @@ console.log(
     + ' each turn a healthy-looking response into the failure a reviewer would hit; inconclusive never becomes a'
     + ' pass and a failure outranks it; the opt-in burst is the only probe that can see a rate limit, its default'
     + ' size is the measured wallet cold-open rather than a round number, and a CLEAN burst says so rather than'
-    + ' staying silent, because these hosts are on the zone rate-limit skip and an unthrottled burst measures the'
-    + ' skip; the encoder'
+    + ' staying silent, because these hosts are counted by an edge rule sized from that cold-open and a burst'
+    + ' this size is meant to pass, locating no threshold; the encoder'
     + ' and hub-rpc probes also send a CORS preflight at the exact POST path the SDK uses, trailing slash'
     + ' included, and a blocked preflight is a FAILURE named UNREACHABLE FROM THE APP even when the reply beside'
     + ' it is healthy, asserted on the outgoing OPTIONS request itself so a dropped header cannot hide behind a'

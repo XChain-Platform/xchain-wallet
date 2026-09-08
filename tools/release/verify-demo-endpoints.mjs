@@ -622,8 +622,8 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
     if (raw.status === 429) {
         return {
             state: 'failure',
-            detail: '429 rate limited: this host is no longer covered by the zone rate-limit skip'
-                + ', and the configured limits are far below one wallet cold-open.',
+            detail: '429 rate limited: a limiter on this path refused the request (the edge rule or the origin limiter)'
+                + ', and a wallet cold-open fans out far wider than this probe does.',
         };
     }
     if (typeof raw.status !== 'number' || raw.status < 200 || raw.status >= 300) {
@@ -941,11 +941,12 @@ export async function checkDemoEndpoints({
             });
         } else {
             // A CLEAN burst is not silence, and letting it be silence is what
-            // made the 2026-08-02 run read as evidence it was not. These hosts
-            // are on the zone's fourteen-host rate-limit SKIP (custom rule 9), so an
-            // unthrottled burst measures the skip and says nothing whatever
-            // about the limit underneath it. Reported as a row so a
-            // green run states what it measured rather than implying the
+            // made the 2026-08-02 run read as evidence it was not. Since the M2
+            // edge change these hosts are COUNTED rather than skipped, at a
+            // threshold set from the whole measured cold-open with headroom, so
+            // a burst this size is meant to pass and passing says only that:
+            // the limit was not reached, not where it sits. Reported as a row
+            // so a green run states what it measured rather than implying the
             // stronger thing it cannot see.
             results.push({
                 service: 'rate-limit',
@@ -953,9 +954,10 @@ export async function checkDemoEndpoints({
                 url: burstResult.url,
                 state: 'live',
                 detail: `${burst}/${burst} rapid requests unthrottled in ${burstResult.elapsedMs}ms`
-                    + ` (${burstResult.ratePerSec} req/sec observed). This host is on the zone's`
-                    + ' rate-limit skip, so this measures the SKIP, not the limit under it:'
-                    + ' run tools/release/cold-open-profile.mjs for what the limit must clear.',
+                    + ` (${burstResult.ratePerSec} req/sec observed). A burst this size sits well under`
+                    + ' the edge rule that counts this host, so this measures NO REFUSAL, not the'
+                    + ' threshold itself: run tools/release/cold-open-profile.mjs for what the limit'
+                    + ' must clear.',
             });
         }
     }
@@ -1045,9 +1047,11 @@ Options:
                     because it points at PRODUCTION: one request per host
                     cannot see a rate limit, and a wallet opening on three
                     chains is not one request. Note what a CLEAN burst means -
-                    these hosts sit on the zone's fourteen-host rate-limit
-                    skip, so an unthrottled burst measures the SKIP and says
-                    nothing about the limit under it.
+                    these hosts are counted by an edge rule sized from the
+                    whole cold-open with headroom, and by the explorer's own
+                    per-route limiters, so a burst this size is expected to
+                    pass and passing locates no threshold. A 429 during it is
+                    a real refusal, not an artefact.
   --json            machine-readable result instead of the table
   -h, --help        print this and exit 0
 

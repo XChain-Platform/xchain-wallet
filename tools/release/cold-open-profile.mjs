@@ -14,22 +14,24 @@
 // path (the edge rules, and the explorer's per-route limiters once they key
 // on the real client) be set above so the wallet fits with headroom?
 //
-// WHY THIS EXISTS. Every threshold in the rate-limits spec is DERIVED from the
-// number this prints, times a stated multiplier, never picked. The zone's two
-// Cloudflare rate-limiting rules (`General Rate Limit`, 90 per minute on every
-// path but /icon/, and `API Rate Limit`, 30 per minute on /api/ and /explorer/,
-// both Block 429 for a minute) are SKIPPED by custom rule 9 for fourteen named
-// hosts, which today include every host the wallet's API traffic lands on, so
-// they bind only the hosts left off the list (wallet.xchain.io's SPA load among
-// them). The edge rule that will replace the API one is sized from the
-// wallet's worst ten-second burst, and the explorer's eight origin limits from
-// its worst minute, both printed here.
+// WHY THIS EXISTS. Every rate-limit threshold on the wallet's path is DERIVED
+// from the number this prints, times a stated multiplier, never picked. Since
+// the M2 edge change both of the zone's Cloudflare rate-limiting rules apply to
+// the wallet's traffic instead of skipping it: `General Rate Limit` still counts
+// 90 per minute on every path but /icon/ and now EXCLUDES the three API hosts,
+// and `API Rate Limit` counts those three hosts by HOSTNAME (the old /api/ and
+// /explorer/ path match is gone) over the plan's shortest window. Custom rule
+// 9's rate-limit skip covers only the eleven other hosts now; the API hosts
+// keep a Super Bot Fight Mode skip alone, as custom rule 10. So the API rule is
+// the ceiling one cold open has to fit under, sized from the wallet's worst
+// ten-second burst, and the explorer's eight origin limits from its worst
+// minute, both printed here.
 //
 // The residual it closes is a specific one. `verify-demo-endpoints.mjs
-// --burst` fired at a host on the skip measures the skip, not the limit, and
-// its old count of 8 was a number nobody had derived from anything. So the
-// question this file answers is the other one: what does the CLIENT demand, in
-// requests, per host, per route, per window?
+// --burst` fires a bounded burst at ONE endpoint and can only ever see the
+// limit it happens to trip, and its old count of 8 was a number nobody had
+// derived from anything. So the question this file answers is the other one:
+// what does the CLIENT demand, in requests, per host, per route, per window?
 //
 // HOW IT MEASURES, and why not by reading the code. The fan-out is DRIVEN, not
 // restated: the real `walletBalances`, `getCoinpayObligationsForAddress`,
@@ -81,45 +83,73 @@ import { COINPAY_BADGE_POLL_MS } from '../../packages/core/src/shared/hooks/useC
 export const EXIT = { OK: 0, FAILURE: 1, CONFIG: 2 };
 
 /**
+ * The three hosts the wallet's API traffic lands on.
+ *
+ * One list because three of the rules below name exactly this set: the API rate
+ * limit counts it, the General rate limit excludes it, and custom rule 10 skips
+ * Super Bot Fight Mode for it. Keeping one copy is what stops a transcription
+ * from disagreeing with itself when a fourth API host appears.
+ */
+const API_HOSTS = Object.freeze([
+    'explorer.xchain.io',
+    'hub.xchain.io',
+    'encoder.xchain.io',
+]);
+
+/** The `{"a" "b"}` host set Cloudflare's expression editor writes. */
+const hostSet = (hosts) => `{${hosts.map((h) => `"${h}"`).join(' ')}}`;
+
+/**
  * The zone's two rate-limiting rules, RECORDED rather than measured.
  *
- * These are operator-owned facts read off the Cloudflare dashboard for zone
- * xchain.io (rule editors opened read-only 2026-09-04; both rules action Block
- * 429 with a one-minute mitigation). Nothing in this repo can observe them (a
- * request that is skipped tells you nothing about the limit that was skipped)
- * so they live here as data with their provenance attached, and an operator
- * who changes them in the dashboard has to change them here.
+ * These are operator-owned facts read off the zone's rule editors after the M2
+ * edge change (September 2026). Nothing in this repo can observe them (a probe
+ * that is not blocked tells you nothing about the threshold it stayed under) so
+ * they live here as data with their provenance attached, and an operator who
+ * changes them in the dashboard has to change them here.
  *
- * `matches` is each rule's expression, transcribed. The rule names on the
- * dashboard say "1.5 req/sec" and "0.5 req/sec"; those are the rates, and the
- * configured windows are one minute, which is why `threshold` and `periodSec`
- * are recorded as the count the rule actually enforces.
+ * `matches` is each rule's expression, transcribed, and the host set inside the
+ * printed expression is built from the same list the predicate tests so the two
+ * cannot drift. The General rule's dashboard name still says "1.5 req/sec";
+ * that is the rate, and its configured window is one minute, which is why
+ * `threshold` and `periodSec` are recorded as the count the rule enforces. The
+ * API rule now runs the plan's shortest window, 10 seconds, with a 10-second
+ * mitigation: an unpaced cold-open lands inside one window whatever its length,
+ * so the shortest window is the one that both bites soonest and recovers
+ * fastest for a client that was only opening a wallet.
  */
 export const ZONE_RULES = Object.freeze([
     Object.freeze({
         name: 'General Rate Limit',
-        expression: 'starts_with(http.request.uri.path, "/") and not starts_with(http.request.uri.path, "/icon/")',
+        expression: 'starts_with(http.request.uri.path, "/") and not starts_with(http.request.uri.path, "/icon/")'
+            + ` and not (http.host in ${hostSet(API_HOSTS)})`,
         threshold: 90,
         periodSec: 60,
         action: 'Block 429, 1 minute',
-        matches: (path) => path.startsWith('/') && !path.startsWith('/icon/'),
+        matches: (path, host) => path.startsWith('/')
+            && !path.startsWith('/icon/')
+            && !API_HOSTS.includes(host),
     }),
     Object.freeze({
         name: 'API Rate Limit',
-        expression: 'starts_with(http.request.uri, "/api/") or starts_with(http.request.uri, "/explorer/")',
-        threshold: 30,
-        periodSec: 60,
-        action: 'Block 429, 1 minute',
-        matches: (path) => path.startsWith('/api/') || path.startsWith('/explorer/'),
+        expression: `(http.host in ${hostSet(API_HOSTS)})`,
+        threshold: 564,
+        periodSec: 10,
+        action: 'Block 429, 10 seconds',
+        // By HOST, not by path: the wallet's explorer reads are /{COIN}/api/...
+        // and the old /api/ path match never saw them at all.
+        matches: (path, host) => API_HOSTS.includes(host),
     }),
 ]);
 
 /**
  * Custom rule 9, "Allow non-browser clients (skip SBFM)": Skip action for
  * "All rate limiting rules" and "All Super Bot Fight Mode Rules" on these
- * fourteen hosts (read off the rule editor 2026-09-04). A request to one of
- * them is never counted by either rule above, so the two rules bind only the
- * hosts left off this list. `wallet.xchain.io` is deliberately not on it.
+ * eleven hosts. A request to one of them is counted by neither rule above.
+ *
+ * The three API hosts came OFF this list in the M2 edge change; their traffic
+ * is the wallet's, it is measured here, and it is now counted. `wallet.xchain.io`
+ * has never been on it: the SPA load counts against the General rule.
  */
 export const RATE_LIMIT_SKIP_HOSTS = Object.freeze([
     'xchain.io',
@@ -130,17 +160,25 @@ export const RATE_LIMIT_SKIP_HOSTS = Object.freeze([
     'btns-testnet.xchain.io',
     'btns-dogeparty.xchain.io',
     'btns-dogeparty-testnet.xchain.io',
-    'explorer.xchain.io',
-    'hub.xchain.io',
-    'encoder.xchain.io',
     'dashboard.xchain.io',
     'docs.xchain.io',
     'www.xchain.io',
 ]);
 
 /**
- * Cloudflare's shortest counting period on this plan, and the window the
- * spec's replacement API rule uses: a wallet burst arrives all at once, so the
+ * Custom rule 10, "API hosts: skip SBFM only": Skip action for "All Super Bot
+ * Fight Mode Rules" and NOTHING else on the three API hosts.
+ *
+ * Its own list rather than a note on the one above, because the difference is
+ * the whole point of the M2 change: a host here still meets every rate-limiting
+ * rule that names it, and reading this as a rate-limit skip would put the
+ * wallet's ceiling back at "none".
+ */
+export const SBFM_ONLY_SKIP_HOSTS = API_HOSTS;
+
+/**
+ * Cloudflare's shortest counting period on this plan, and the window the API
+ * rule above is configured for: a wallet burst arrives all at once, so the
  * count inside this window is the count that decides whether it is blocked.
  */
 export const COUNTING_PERIOD_SEC = 10;
@@ -676,10 +714,13 @@ export function routeFamily({ host, path, method }) {
  *
  * Three views come out, because three different limits are derived from them:
  *
- * - `rules`: today's two edge rules, counting only requests on hosts the rule
- *   actually sees (the rule-9 skip hosts are counted separately as `skipped`).
- * - `edge`: the requirement for a per-host edge rule on the API hosts over the
- *   shortest counting period: the whole cold-open lands inside it.
+ * - `rules`: the zone's two edge rules, counting the requests each one's own
+ *   expression matches on a host it is not skipped for (requests on a rule-9
+ *   host are counted separately as `skipped`). Since M2 that is the API rule
+ *   counting all of the wallet's traffic and the General rule counting none of
+ *   it, which is the split the rules were reshaped to produce.
+ * - `edge`: what the API rule's threshold has to clear, derived rather than
+ *   read: the whole cold-open lands inside one of its 10-second windows.
  * - `routes`: per host and route family, the cold-open, the per-poll repeat,
  *   and the worst minute a wallet left open produces (cold-open plus every
  *   further poll and badge scan that fits in the same minute), which is what
@@ -691,9 +732,10 @@ export function routeFamily({ host, path, method }) {
 export function coldOpenProfile(m, { headroom = 2, periodSec = COUNTING_PERIOD_SEC } = {}) {
     const skipped = (r) => RATE_LIMIT_SKIP_HOSTS.includes(r.host);
     const rules = ZONE_RULES.map((rule) => {
-        const seen = m.requests.filter((r) => rule.matches(r.path) && !skipped(r));
-        const onSkip = m.requests.filter((r) => rule.matches(r.path) && skipped(r));
+        const seen = m.requests.filter((r) => rule.matches(r.path, r.host) && !skipped(r));
+        const onSkip = m.requests.filter((r) => rule.matches(r.path, r.host) && skipped(r));
         const worstCase = seen.length * ATTEMPTS_PER_CALL;
+        const required = worstCase * headroom;
         return {
             rule: rule.name,
             expression: rule.expression,
@@ -703,20 +745,31 @@ export function coldOpenProfile(m, { headroom = 2, periodSec = COUNTING_PERIOD_S
             matched: seen.length,
             skipped: onSkip.length,
             worstCasePerPeriod: worstCase,
-            requiredPerPeriod: worstCase * headroom,
+            requiredPerPeriod: required,
+            // Two different questions, and the verdict rides the stricter one:
+            // `fitsToday` is "would the profiled wallet get through at all", while
+            // `clearsRequirement` is "does the threshold also carry the headroom
+            // the second wallet behind the same NAT needs".
             fitsToday: worstCase <= rule.threshold,
+            clearsRequirement: required <= rule.threshold,
             hosts: [...new Set(seen.map((r) => r.host))],
             skippedHosts: [...new Set(onSkip.map((r) => r.host))],
         };
     });
 
-    // The API hosts are the skip-listed hosts the wallet actually reaches;
-    // derived from the measurement so a fourth API host would show up here.
-    const apiHosts = [...new Set(m.requests.filter(skipped).map((r) => r.host))].sort();
+    // The hosts the API rule counts, derived from the measurement through the
+    // rule's own predicate rather than restated, so a fourth API host (or one
+    // dropped from the rule) shows up here instead of hiding.
+    const apiRule = ZONE_RULES.find((r) => r.name === 'API Rate Limit');
+    const apiHosts = [...new Set(m.requests.filter((r) => apiRule.matches(r.path, r.host)).map((r) => r.host))].sort();
     const burst = m.requests.filter((r) => apiHosts.includes(r.host)).length;
     const edge = {
+        rule: apiRule.name,
         hosts: apiHosts,
-        periodSec,
+        // The rule's own window, not an assumed one: sizing a burst against a
+        // period the rule does not run would derive the wrong threshold.
+        periodSec: apiRule.periodSec,
+        threshold: apiRule.threshold,
         burst,
         withRetries: burst * ATTEMPTS_PER_CALL,
         required: burst * ATTEMPTS_PER_CALL * headroom,
@@ -814,8 +867,9 @@ SENDS NO TRAFFIC. Every request is recorded and refused at the socket (or at
 fetch, for the light client), so running this does not add the load it measures.
 
 Exit codes:
-  0  the profile was measured
-  1  an edge rule the wallet's traffic is counted under is set below one cold-open
+  0  the profile was measured, and every edge rule counting this traffic clears it
+  1  an edge rule the wallet's traffic is counted under is set below one
+     cold-open with retries times the headroom multiplier
   2  a configuration problem (no descriptors, SDK not installed)
 `;
 
@@ -855,7 +909,10 @@ async function main() {
         return EXIT.CONFIG;
     }
     const p = coldOpenProfile(m, { headroom: args.headroom });
-    const ok = p.rules.every((r) => r.fitsToday);
+    // The verdict is the headroom question, not the bare one: a threshold that
+    // exactly admits one measured cold-open blocks the second wallet behind the
+    // same NAT, which is a 429 the user reads as an outage.
+    const ok = p.rules.every((r) => r.clearsRequirement);
 
     if (args.json) {
         console.log(JSON.stringify({ measurement: m, profile: p }, null, 2));
@@ -880,22 +937,24 @@ async function main() {
     console.log(`  ${p.refocus.insideWindow} poll(s) when the data is fresher than ${p.refocus.intervalMs / 1000}s,`
         + ` ${p.refocus.afterWindow} poll(s) when it is older`);
 
-    console.log(`\nToday's edge rules (x${p.attemptsPerCall} for the SDK's retry, x${p.headroom} headroom):\n`);
+    console.log(`\nThe zone's edge rules (x${p.attemptsPerCall} for the SDK's retry, x${p.headroom} headroom):\n`);
     for (const r of p.rules) {
-        const mark = r.fitsToday ? 'OK  ' : 'OVER';
+        const mark = r.clearsRequirement ? 'OK  ' : 'OVER';
         console.log(`${mark} ${r.rule}: ${r.threshold} per ${r.periodSec}s, ${r.action}`);
         console.log(`       expression: ${r.expression}`);
         console.log(`       counts ${r.matched} of this session's requests (${r.worstCasePerPeriod} with retries)`
             + ` on ${r.hosts.join(', ') || 'no host'}`);
-        console.log(`       skips ${r.skipped} on ${r.skippedHosts.join(', ') || 'no host'} (custom rule 9)`);
-        if (!r.fitsToday) {
+        console.log(`       skips ${r.skipped} on ${r.skippedHosts.join(', ') || 'no host'}`
+            + ' (custom rule 9, the eleven hosts that kept the rate-limit skip)');
+        if (!r.clearsRequirement) {
             console.log(`       raise to at least ${r.requiredPerPeriod} per ${r.periodSec}s`);
         }
     }
 
-    console.log(`\nA per-host edge rule on ${p.edge.hosts.join(', ')} over the plan's shortest window (${p.edge.periodSec}s):`);
+    console.log(`\nThe ${p.edge.rule} counts every request on ${p.edge.hosts.join(', ')}`
+        + ` inside its ${p.edge.periodSec}s window:`);
     console.log(`  one cold open lands ${p.edge.burst} requests inside it, ${p.edge.withRetries} with retries;`
-        + ` threshold must be at least ${p.edge.required} (x${p.headroom})`);
+        + ` threshold must be at least ${p.edge.required} (x${p.headroom}), and is ${p.edge.threshold}`);
 
     console.log('\nOrigin limiters, worst minute a wallet left open produces, by host and route:');
     console.log('  cold  poll  badge  minute  x retries  required   route');
@@ -905,8 +964,9 @@ async function main() {
     }
     console.log();
     if (ok) {
-        console.log('No edge rule that counts this session\'s traffic is set below one cold-open.'
-            + ' The API hosts sit on the rule-9 skip, so their ceiling is the per-host rule above, not today\'s two.');
+        console.log('No edge rule that counts this session\'s traffic is set below one cold-open with headroom.'
+            + ` The API rule counts all ${p.edge.burst} requests the wallet puts on the API hosts, and the`
+            + ' General rule counts none of them.');
     } else {
         console.log('An edge rule that counts this session\'s traffic is set BELOW one cold-open:'
             + ' the wallet would be blocked at the edge as a 429 the client cannot tell from an outage.'
