@@ -43,7 +43,10 @@ assert.match(src, /<PermissionRow \/>/, 'mounts the permission row above the tog
 const schemaFlagsBlock = schemaSrc.match(/notifications:\s*\{[\s\S]*?\}\s*,/);
 assert.ok(schemaFlagsBlock, 'extract notifications object from schema source');
 const flagKeys = [...schemaFlagsBlock[0].matchAll(/(\w+):\s*(?:true|false)/g)].map((m) => m[1]);
-assert.equal(flagKeys.length, 9, `schema defines exactly 9 notification flags (got ${flagKeys.length})`);
+// Ten since incomingPending (a payment seen in the mempool, before it confirms)
+// joined the nine originals; the count pins that a new flag arrives WITH its
+// toggle, which the loop below then checks by name.
+assert.equal(flagKeys.length, 10, `schema defines exactly 10 notification flags (got ${flagKeys.length})`);
 for (const key of flagKeys) {
     assert.ok(
         src.includes(`key: '${key}'`),
