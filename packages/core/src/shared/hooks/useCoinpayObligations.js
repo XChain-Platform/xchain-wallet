@@ -176,10 +176,23 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 if (!cancelled && aliveRef.current) setScanning(false);
             }
         };
-        // The scan on mount and the one on the beat are never gated: they are
-        // the badge's freshness. They do take the in-flight slot, so a tab
-        // switch landing mid-scan does not start a second one.
-        const beat = () => { throttle.start(); run(); };
+        // The scan on mount and the one on the beat are never gated on the
+        // WINDOW: they are the badge's freshness, and `run()` is what moves the
+        // window (it calls succeed/fail). They ARE gated on the in-flight slot,
+        // and they claim it with `reset(); start()` rather than a plain
+        // `start()`. A bare `start()` only marks the slot when the window has
+        // already aged, and at beat time it has not: the beat fires `pollMs`
+        // after the previous beat, while the previous scan noted its success
+        // later still, when it landed. Left at that, the beat's own scan runs
+        // unmarked, and a scan the SDK is holding open on a `Retry-After` (up
+        // to 60 s) is joined by the next beat against the same bucket.
+        // Clearing the window first makes the claim unconditional.
+        const beat = () => {
+            if (throttle.isInFlight()) return;
+            throttle.reset();
+            throttle.start();
+            run();
+        };
         beat();
         const timer = setInterval(beat, pollMs);
         const onVisible = () => {

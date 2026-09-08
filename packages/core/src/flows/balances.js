@@ -17,6 +17,13 @@
 // does NOT fail the whole operation. The per-address entry surfaces
 // `error` instead of `balances`, so UIs can render retry affordances
 // for the failing rows.
+//
+// The entry carries the failure TYPED as well as prose: `errorCode` and
+// `retryAfterSeconds` are copied off the SDK error next to `error`. Without
+// them a UI has to re-parse the sentence the SDK already structured (Home
+// read "; retry after N seconds" back out of the message with a regex), and
+// the entries cross the messaging boundary, where an Error's own fields do
+// not survive. Both are plain JSON values, so they do.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
@@ -155,6 +162,10 @@ async function fetchAddressShape({ sdk, address, nativeTicker, opts }) {
  * @property {string} label
  * @property {unknown | null} balances        raw SDK response, or null on failure
  * @property {string | null} error            human-readable failure reason, or null on success
+ * @property {string | null} errorCode        the failing SDK error's `code` (e.g. 'RATE_LIMITED',
+ *                                            'EXPLORER_HTTP_429'), or null when it named none
+ * @property {number | null} retryAfterSeconds  whole seconds the origin asked the wallet to wait,
+ *                                            when the error named a number; null otherwise
  */
 
 /**
@@ -445,6 +456,8 @@ export async function walletBalances({
                         label: addr.label,
                         balances: null,
                         error: null,
+                        errorCode: null,
+                        retryAfterSeconds: null,
                     };
                     // D-6: fetch the TOKEN ledger (/balances/) and the NATIVE coin
                     // balance (/address/) together (shared with addressBalances via
@@ -457,6 +470,16 @@ export async function walletBalances({
                         });
                     } catch (e) {
                         base.error = e && e.message ? String(e.message) : String(e);
+                        // `fetchAddressShape` rethrows the /balances read's own
+                        // error, so `e` IS the SDK error and still has its
+                        // fields. Keep the two a UI can act on rather than only
+                        // the sentence: a rate limit's code and the seconds the
+                        // origin named. Guarded so a non-integer or a negative
+                        // never reaches a countdown as a number.
+                        if (e && typeof e.code === 'string') base.errorCode = e.code;
+                        if (e && Number.isInteger(e.retryAfterSeconds) && e.retryAfterSeconds >= 0) {
+                            base.retryAfterSeconds = e.retryAfterSeconds;
+                        }
                     }
                     return base;
                 }),

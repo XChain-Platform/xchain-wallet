@@ -49,11 +49,28 @@ const ADDRESS = 'rltc1qexample';
 
 /** What the aggregator returns when an address read was refused. */
 const refused = (message) => ({
-    [CHAIN]: [{ address: ADDRESS, balances: null, error: message }],
+    [CHAIN]: [{
+        address: ADDRESS, balances: null, error: message, errorCode: null, retryAfterSeconds: null,
+    }],
+});
+
+/**
+ * The same, with the failure TYPED: the aggregator copies the SDK error's
+ * `code` and `retryAfterSeconds` onto the entry, so the number does not have
+ * to be recovered from the sentence.
+ */
+const refusedTyped = (message, errorCode, retryAfterSeconds) => ({
+    [CHAIN]: [{
+        address: ADDRESS, balances: null, error: message, errorCode, retryAfterSeconds,
+    }],
 });
 
 /** What it returns when the read went through. */
-const landed = { [CHAIN]: [{ address: ADDRESS, balances: {}, error: null }] };
+const landed = {
+    [CHAIN]: [{
+        address: ADDRESS, balances: {}, error: null, errorCode: null, retryAfterSeconds: null,
+    }],
+};
 
 const RATE_LIMITED_WITH_SECONDS =
     `Explorer returned HTTP 429 for /RLTC/api/balances/${ADDRESS}; retry after 3 seconds`;
@@ -128,6 +145,46 @@ describe('Home shows a rate limit as a wait, not as a broken screen', () => {
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
         expect(onScreen(), 'the banner outlived the balances that landed')
             .not.toMatch(/slow down|Couldn't load balances/);
+    });
+
+    it('counts down the seconds the ENTRY names, with no number in the sentence', async () => {
+        // Row 40: the entry carries the SDK error's `code` and
+        // `retryAfterSeconds` as plain fields, so the message never has to be
+        // re-parsed. The prose here is the no-header shape ("a moment" is all
+        // the regex could ever get out of it); 42 can only have come from the
+        // field. Strip the field or stop passing it and this goes red while
+        // every string-only case above stays green.
+        vi.useFakeTimers();
+        const messaging = baseMessaging();
+        messaging.getWalletBalances.mockResolvedValue(
+            refusedTyped(RATE_LIMITED_NO_SECONDS, 'RATE_LIMITED', 42),
+        );
+
+        mountHome(messaging);
+        await settle();
+
+        expect(onScreen(), 'the typed seconds lost to the message regex')
+            .toContain('slow down for 42 seconds; retrying.');
+        await advance(1_000);
+        expect(onScreen()).toContain('slow down for 41 seconds; retrying.');
+    });
+
+    it('lets the entry\'s CODE decide the cause when the message carries no 429 prefix', async () => {
+        // The mapper trusts a `RATE_LIMITED` code only beside the service that
+        // minted it or the "Explorer returned HTTP 429" opener; the aggregator
+        // states the service, since a balance read is always an explorer read.
+        // A reworded SDK message must therefore still produce the countdown.
+        vi.useFakeTimers();
+        const messaging = baseMessaging();
+        messaging.getWalletBalances.mockResolvedValue(
+            refusedTyped('The explorer refused this read', 'RATE_LIMITED', 42),
+        );
+
+        mountHome(messaging);
+        await settle();
+
+        expect(onScreen(), 'the code alone did not decide the cause')
+            .toContain('slow down for 42 seconds; retrying.');
     });
 
     it('says "a moment" when nothing named a number, and does not invent one', async () => {

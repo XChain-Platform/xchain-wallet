@@ -8,16 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The badge hook's re-poll rule (rate-limits spec, M3a). The scan costs one
-// explorer read per (chain, address), and `visibilitychange` fires at the same
-// moment Home re-polls balances, so an alt-tab used to add a whole extra sweep
-// on top of the poll it just had. What is pinned here: a tab switch inside the
-// poll interval scans nothing, the first one after the interval scans once
-// however many events arrive, and the manual refresh is never throttled.
+// The badge hook's re-poll rule (rate-limits spec, M3a for the tab switch, M4
+// row 41 for the beat). The scan costs one explorer read per (chain, address),
+// and `visibilitychange` fires at the same moment Home re-polls balances, so an
+// an alt-tab once added a whole extra sweep on top of the poll it just had. What
+// is pinned here: a tab switch inside the poll interval scans nothing, the
+// first one after the interval scans once however many events arrive, the
+// manual refresh is never throttled, and the beat starts nothing while a scan
+// is still open, which is what a 429 the SDK is waiting out looks like here.
 //
-// Only `Date` is faked. The window is a clock comparison, so moving the clock
-// is what "advance" means here, and leaving setTimeout real keeps React
-// Testing Library's async helpers on their normal path.
+// Most cases fake only `Date`. The window is a clock comparison, so moving the
+// clock is what "advance" means, and leaving the timers real keeps React
+// Testing Library's async helpers on their normal path. The in-flight case
+// fakes every timer, because there the beat itself is under test.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -83,6 +86,41 @@ describe('useCoinpayObligations re-poll throttle', () => {
         await waitFor(() => expect(result.current.scanning).toBe(false));
         // Still one: the rescan restarted the window as it landed.
         fireVisible();
+        expect(scanCount()).toBe(2);
+    });
+
+    it('does not start a second scan while the first is still open, and beats again once it lands', async () => {
+        // The beat is the thing under test here, so every timer is faked, not
+        // just `Date`: `advanceTimersByTimeAsync` then both fires the interval
+        // and moves the clock the window reads. The real-timer restore first is
+        // load-bearing - `useFakeTimers` over an already-installed fake clock
+        // keeps the OLD `toFake` list, so the interval would silently stay real
+        // and every assertion below would be vacuous. Testing Library's
+        // `waitFor` polls on `setInterval`, so it cannot be used past this
+        // point; the flushes are explicit instead.
+        vi.useRealTimers();
+        vi.useFakeTimers();
+        let release;
+        const held = new Promise((r) => { release = r; });
+        messaging.getAddressesByChain.mockReset().mockReturnValueOnce(held)
+            .mockResolvedValue({ [CHAIN]: [{ address: ADDR }] });
+
+        renderHook(() => useCoinpayObligations('w1', 'a1', { pollMs: POLL_MS }));
+        // The mount scan issues its first read synchronously inside the effect.
+        expect(scanCount()).toBe(1);
+
+        // This is the 429 shape: the SDK sits on a `Retry-After` of up to 60 s,
+        // so a whole poll interval (and more) passes under one open scan.
+        await act(async () => { await vi.advanceTimersByTimeAsync(POLL_MS); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(POLL_MS); });
+        expect(scanCount()).toBe(1);
+
+        await act(async () => {
+            release({ [CHAIN]: [{ address: ADDR }] });
+            await vi.advanceTimersByTimeAsync(1);
+        });
+        // Landed, so the slot is free and the next beat scans again.
+        await act(async () => { await vi.advanceTimersByTimeAsync(POLL_MS); });
         expect(scanCount()).toBe(2);
     });
 

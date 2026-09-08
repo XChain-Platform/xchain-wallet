@@ -58,7 +58,13 @@ const RATE_LIMIT_FALLBACK_SECONDS = 15;
  * of them named, since a shorter one expiring first would re-load into a bucket
  * another address is still waiting on.
  *
- * @param {Record<string, Array<{ error?: string | null }>> | null | undefined} balancesByChain
+ * An entry also carries the failure TYPED (`errorCode`, `retryAfterSeconds`),
+ * copied straight off the SDK error, so those decide here and the mapper's
+ * message regex is only reached for an SDK that named neither: the pinned
+ * 0.15.x throws `EXPLORER_HTTP_429` with no seconds on it at all.
+ *
+ * @param {Record<string, Array<{ error?: string | null, errorCode?: string | null,
+ *   retryAfterSeconds?: number | null }>> | null | undefined} balancesByChain
  * @returns {{ seconds: number | null } | null}  null when nothing was rate limited
  */
 function rateLimitWaitFromBalances(balancesByChain) {
@@ -71,9 +77,21 @@ function rateLimitWaitFromBalances(balancesByChain) {
         for (const entry of entries) {
             const message = typeof entry?.error === 'string' ? entry.error : '';
             if (!message) continue;
-            // The mapper reads a message alone, which is exactly what an entry
-            // carries: the aggregator kept `e.message` and nothing else.
-            const read = explorerReadFailure({ message, name: '' }, BALANCES_VERB);
+            // Hand the mapper the typed fields the aggregator kept alongside
+            // the sentence; it keys on `code` first and the message last, so a
+            // named code and a named number decide without any re-parsing.
+            // `service` is stated rather than copied: a balance read is always
+            // an explorer read, and the mapper's rate-limit branch wants either
+            // the service or the "Explorer returned HTTP 429" prefix before it
+            // trusts the code, so without it the code alone would still fall
+            // back to the message.
+            const read = explorerReadFailure({
+                name: '',
+                code: entry.errorCode ?? undefined,
+                service: 'explorer',
+                message,
+                retryAfterSeconds: entry.retryAfterSeconds ?? undefined,
+            }, BALANCES_VERB);
             if (!read || read.cause !== 'rate_limited') continue;
             limited = true;
             const named = read.retryAfterSeconds;

@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Home's 20-second balance poll no longer starts a second load while one is still waiting on the service.
+- History's 20-second beat and the payments-due badge's scan no longer start a second fetch while one is still waiting on the service.
+- A refused balance read carries its error code and the seconds the service asked for as fields on the entry, so Home reads them instead of parsing the message.
 - `verify-ci-controls.mjs` measures the public release-CI page against the repository's live settings, one probe per control the page names.
 - The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
 - The cold-open profiler now measures proof verification, the badge's own coinpay scan and the cost of an alt-tab, and prints the per-route worst minute and the ten-second edge burst every rate limit on the wallet's path is derived from.

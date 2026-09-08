@@ -525,9 +525,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // the next one.
         const throttle = pollThrottleRef.current;
         throttle.reset();
-        // Every bump costs a full fan-out per (chain, address), so the tick is
-        // also what restarts the throttle window.
-        const bump = () => { throttle.succeed(); setRefreshTick((n) => n + 1); };
+        // Every bump costs a full fan-out per (chain, address), and the fan-out
+        // effect below now owns the throttle end to end: it claims the
+        // in-flight slot when it starts and restarts the window where it lands.
+        // So the bump no longer notes a success of its own (asking for a
+        // fan-out is not the same as having had one) and only has to decide
+        // whether to ask at all. It skips while one is still running: a read
+        // the SDK is holding open on a `Retry-After` can sit for up to 60 s,
+        // and a 20 s beat firing through it would put three whole fan-outs
+        // against the bucket the first one is waiting on.
+        const bump = () => {
+            if (throttle.isInFlight()) return;
+            setRefreshTick((n) => n + 1);
+        };
         const id = setInterval(() => {
             // A hidden tab is not watching; polling it only burns the shared
             // rate limit the explorer zone is sized against.
@@ -537,7 +547,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         if (typeof window === 'undefined') return () => clearInterval(id);
         // A refocus is worth a fan-out only when the rows are already an
         // interval old; a burst of window switches used to cost one each.
-        const onFocus = () => { if (throttle.claim()) setRefreshTick((n) => n + 1); };
+        // `start()` rather than `claim()`: the fan-out this bump asks for is
+        // what releases the slot, when it lands, so the focus must claim the
+        // slot and leave it claimed. The fan-out effect re-marks it with its
+        // own `reset(); start()` a tick later, which is harmless.
+        const onFocus = () => { if (throttle.start()) setRefreshTick((n) => n + 1); };
         window.addEventListener('focus', onFocus);
         return () => {
             clearInterval(id);
@@ -555,9 +569,24 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         if (chainsToLoad.length === 0) {
             setEntries([]);
             setHistoryFetchedAt(null);
+            // Nothing to fetch, so nothing lands below to release the slot a
+            // focus may have claimed on the way here. `fail()` rather than
+            // `succeed()`: no read happened, so the window must not move.
+            pollThrottleRef.current.fail();
             return;
         }
         let cancelled = false;
+        // This fan-out owns the throttle's in-flight slot from here until it
+        // lands below. `reset(); start()` rather than a plain `start()`,
+        // because `start()` marks the slot only when the WINDOW has aged, and
+        // the fan-outs that run regardless of the window (the mount, and the
+        // one a beat asked for) arrive with a window younger than the interval
+        // by the previous fan-out's own latency. Those would run unmarked, and
+        // the next beat would stack a second fan-out on one still waiting out a
+        // 429. Clearing the window first makes the claim unconditional.
+        const throttle = pollThrottleRef.current;
+        throttle.reset();
+        throttle.start();
         // A background refresh must not blank the list it is refreshing; the
         // loading state belongs to the first load only.
         if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
@@ -612,6 +641,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
         Promise.all(tasks).then((perAddrResults) => {
             if (cancelled) return;
+            // The fan-out landed: release the slot and restart the window from
+            // here, so the next beat may ask for another and a refocus in
+            // between is dropped as too fresh. Every task catches to [], so
+            // this chain never rejects and there is no failure path to release
+            // the slot on. A cancelled fan-out deliberately releases nothing:
+            // it was replaced by a newer run of this effect, and that run took
+            // the slot for itself.
+            throttle.succeed();
             // Build a (chainId, action_index) -> link record map so
             // history rows can identify their peer cheaply.
             /** @type {Map<string, { peerChainId: string | null, peerCoinTicker: string, peerActionIndex: string, linkActionIndex: string }>} */

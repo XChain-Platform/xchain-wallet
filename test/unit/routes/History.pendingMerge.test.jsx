@@ -20,6 +20,7 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -200,6 +201,11 @@ describe('History shows unconfirmed transactions', () => {
         const { messaging } = mountHistory({ mempool: [] });
         await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(1));
         messaging.getAddressMempool.mockResolvedValue([mempoolRow()]);
+        // The mount fan-out restarts the re-poll window when it lands, so a
+        // focus inside that window is dropped by design; age the rows past
+        // one interval first. Only Date is faked: waitFor polls on setInterval.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(2));
     });

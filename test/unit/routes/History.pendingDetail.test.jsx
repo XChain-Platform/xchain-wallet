@@ -22,6 +22,7 @@ import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-li
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -225,6 +226,11 @@ describe('History pending detail branch', () => {
 
         messaging.getAddressMempool.mockResolvedValue([]);
         messaging.getAddressHistory.mockResolvedValue([confirmedRow(SEEN_HASH)]);
+        // The mount fan-out restarts the re-poll window when it lands, so a
+        // focus inside that window is dropped by design; age the rows past
+        // one interval first. Only Date is faked: waitFor polls on setInterval.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
 
         await waitFor(() => {
