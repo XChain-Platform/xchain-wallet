@@ -82,4 +82,42 @@ assert.match(src, /type="time"/, 'renders start/end time inputs');
 const schemaHasQuietHours = /quietHours\??:/.test(schemaSrc) || readFileSync(schemaPath, 'utf8').includes('quietHours');
 assert.ok(schemaHasQuietHours, 'schema documents/defines quietHours');
 
+// Sounds block (§6 M4.2, row 38). The gate runs this smoke but not the unit
+// suite, so these pins are the only thing standing between an edit that
+// quietly moves `sounds` under `notifications` (breaking the sparse merge,
+// which is only one level deep) or drops a control, and a green build.
+const soundsDefault = schemaSrc.match(/sounds:\s*\{\s*enabled:\s*false,\s*perKind:\s*\{\}\s*\}/);
+assert.ok(soundsDefault, 'createDefaultSettings defines sounds: { enabled: false, perKind: {} }');
+assert.ok(
+    !schemaFlagsBlock[0].includes('sounds'),
+    'sounds default stays top-level, not nested under notifications (the sparse merge is one level deep)',
+);
+
+assert.match(
+    src,
+    /from '\.\.\/\.\.\/\.\.\/notifications\/notificationSounds\.js'/,
+    'imports the sound palette/families from notificationSounds.js',
+);
+assert.match(src, /\bSOUND_FAMILIES\b/, 'uses SOUND_FAMILIES to render one row per notification family');
+assert.match(src, /\bSOUND_PALETTE\b/, 'uses SOUND_PALETTE to populate each family select');
+assert.match(src, /\bSOUND_NONE\b/, 'uses the SOUND_NONE sentinel for the muted pick');
+assert.match(src, /\bpickedSoundForFamily\b/, 'reads the resolved pick via pickedSoundForFamily');
+
+assert.match(src, /label="Notification sounds"/, 'renders the master "Notification sounds" toggle');
+assert.match(src, /<option value=\{SOUND_NONE\}>No sound<\/option>/, 'each family select offers a "No sound" option');
+
+assert.match(src, /import \{ useMessaging \}/, 'imports useMessaging to read the active shell');
+assert.match(src, /const canPreview = shell === 'web'/, 'gates the Preview control on the web shell');
+assert.match(src, /\bSOUND_PREVIEW_EVENT\b/, 'imports the SOUND_PREVIEW_EVENT contract');
+assert.match(
+    src,
+    /new CustomEvent\(SOUND_PREVIEW_EVENT,\s*\{\s*detail:\s*\{\s*soundId\s*\}\s*\}\)/,
+    'Preview dispatches SOUND_PREVIEW_EVENT with the picked soundId',
+);
+assert.match(
+    src,
+    /aria-label=\{`Preview \$\{family\.label\} sound`\}/,
+    'renders a per-family Preview button',
+);
+
 console.log('settings-notifications smoke OK');

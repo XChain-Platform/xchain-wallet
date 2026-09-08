@@ -8,18 +8,29 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// NotificationsSection: §35.1 Notifications panel + §46.
+// NotificationsSection: §35.1 Notifications panel + §46 + §6 M4.2.
 //
-// Five toggles backed by `settings.notifications.*`. Toggling these flags
-// is the user *preference*; delivery is the §46 NotificationService
+// Ten per-kind toggles backed by `settings.notifications.*`. Toggling these
+// flags is the user *preference*; delivery is the §46 NotificationService
 // (`packages/core/src/notifications/`), hosted per-shell (extension SW,
-// web in-page host, Electron main) and gated by exactly these flags.
+// web in-page host, Electron main) and gated by exactly these flags. Below
+// the flag list sit a quiet-hours (do-not-disturb) row, the price-alert
+// manager under the priceAlerts toggle, and the M4 sounds block.
 //
 // The permission row owns the one piece of delivery the user must grant:
 // the browser/OS notification permission (web + desktop renderer). It reads
 // `Notification.permission` live and is hidden where that API is absent
 // (e.g. the extension popup, whose delivery uses `chrome.notifications`,
 // granted via the manifest, no runtime prompt).
+//
+// The sounds block is a separate, top-level preference: `settings.sounds`
+// (never nested under `notifications`, so a single family pick doesn't
+// freeze the whole flag block under the sparse-merge rule). It has its own
+// master switch, off by default, and while on, one sound picker per
+// notification family plus a Preview button. Preview is gated on the web
+// shell (`shell === 'web'`) because that is the only host with the
+// delivery seam to actually play a sound (ruling I-34b); it dispatches
+// SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
