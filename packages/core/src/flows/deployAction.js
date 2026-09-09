@@ -17,10 +17,11 @@
 // before it reaches the encoder; callers pass raw UTF-8 source as
 // params.CODE and the SDK sets CODE_ENCODING='hex' internally (see
 // xchain-sdk validator.js). GAS_LIMIT is a decimal string per the
-// protocol; NAME and CONSTRUCTOR_PARAMS are optional.
+// protocol; CONSTRUCTOR_PARAMS is optional.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { preflightContractMeta, metaNameOf } from './contractMetaPreflight.js';
 
 /**
  * @typedef {Object} DeployActionOpts
@@ -32,7 +33,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {Record<string, string>} params      DEPLOY fields (VERSION, CODE, GAS_LIMIT; optional NAME, CONSTRUCTOR_PARAMS)
+ * @property {Record<string, string>} params      DEPLOY fields (VERSION, CODE, GAS_LIMIT; optional CONSTRUCTOR_PARAMS)
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -61,7 +62,20 @@ export async function deployAction(opts) {
     }
     const source = normalizeSource(opts.from, 'deployAction');
 
-    const name = opts.params.NAME || '(unnamed)';
+    // CONTRACT_META_REQUIRED, asked BEFORE submitAction composes anything: a
+    // source exporting no `meta` indexes `invalid` and the fee is spent for
+    // nothing. Throws the consensus string; returns null on an SDK that
+    // predates the check, which composes exactly as today.
+    const meta = preflightContractMeta({
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        code: opts.params.CODE,
+    });
+
+    // The contract's own name, off its source, for the pending-transaction
+    // line. There is no NAME on the wire in any DEPLOY version, so this is the
+    // only name the wallet can honestly show before the indexer answers.
+    const name = metaNameOf(meta) || '(unnamed)';
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,

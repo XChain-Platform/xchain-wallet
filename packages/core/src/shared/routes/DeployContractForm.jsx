@@ -11,8 +11,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { normalizeConstructorParams, indexedActionIndex } from '../../flows/deployChunked.js';
-import { recordDeployedContractName } from '../utils/contractNameMemory.js';
+import { normalizeConstructorParams } from '../../flows/deployChunked.js';
+import { normalizeMetaRead, CONTRACT_META_REQUIRED } from '../../flows/contractMetaPreflight.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -63,7 +64,8 @@ function coinLabel(c) {
  *
  * Surface:
  *
- *   Name:               [ … ]
+ *   Contract identity:  Name / Version / Description, READ-ONLY, parsed
+ *                       from the pasted source
  *   Code source:        [ textarea (multi-line JS) ]
  *   Gas limit:          [ input, auto-suggested ]
  *   Constructor params: [ pipe-delimited ]
@@ -82,12 +84,23 @@ function coinLabel(c) {
  *
  * Hex-encoding of the source happens inside the SDK validator chain;
  * callers pass raw UTF-8 as `params.CODE`. GAS_LIMIT is a decimal
- * string per the protocol. CONSTRUCTOR_PARAMS is optional. The Name
- * input is a LOCAL label and must never reach actionParams: no DEPLOY
- * version carries a NAME slot, and the SDK's leg-field guard hard-rejects
- * any action carrying a field its format cannot hold. On deploy success it
- * is filed in contractNameMemory (keyed by chain + the contract's action
- * index) so the contract list and detail page can show it back.
+ * string per the protocol. CONSTRUCTOR_PARAMS is optional.
+ *
+ * THE NAME FIELD IS GONE. It used to be a device-local label, because no
+ * DEPLOY version carries a NAME slot on the wire; under
+ * CONTRACT_META_REQUIRED a contract's name, description and version are an
+ * export of its own source, so asking the user to type one would invite them
+ * to name a contract something the chain will not record. The form instead
+ * shows what the chain is about to record, read-only, parsed out of the
+ * pasted source by `sdk.contracts.getExportedMeta` through the messaging
+ * layer.
+ *
+ * FEATURE-DETECTED BY RESULT SHAPE. The published SDK the wallet pins today
+ * predates the check, and a shell may not relay it at all, so the panel shows
+ * NOTHING rather than a stale or invented label unless a real answer comes
+ * back. `normalizeMetaRead` is the same check the deploy flows apply
+ * host-side; a `typeof` probe would pass against the web dev-shell's Proxy
+ * mock, which answers every `get*` name.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -121,7 +134,6 @@ export function DeployContractForm({ walletId, onBack }) {
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
-    const [name, setName] = useState('');
     const [code, setCode] = useState('');
     const [gasLimit, setGasLimit] = useState('');
     const [constructorParams, setConstructorParams] = useState('');
@@ -140,6 +152,12 @@ export function DeployContractForm({ walletId, onBack }) {
     );
     const [suggestedGas, setSuggestedGas] = useState(/** @type {number | null} */ (null));
     const [suggestedRationale, setSuggestedRationale] = useState(/** @type {string | null} */ (null));
+    // The contract's own identity, as the SDK reads it out of the pasted
+    // source. Null means "no answer" (an SDK or a shell without the check), and
+    // renders nothing at all rather than a guess.
+    const [metaRead, setMetaRead] = useState(
+        /** @type {{ status: string, name?: string, description?: string, version?: string, computed?: string[] } | null} */ (null),
+    );
 
     // PC-38: the SDK's audited template library. Sync + no network host-side,
     // so this is a cheap one-shot load per chain.
@@ -334,6 +352,38 @@ export function DeployContractForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [messaging, chainId, code, gasLimit, suggestedGas, constructorParams]);
 
+    // Re-read the contract's identity whenever the source changes. Static and
+    // host-side (an acorn walk, no network), so it rides the same edit cadence
+    // as the deploy plan above rather than waiting for a button.
+    useEffect(() => {
+        let cancelled = false;
+        setMetaRead(null);
+        if (!chainId || !code.trim()) return undefined;
+        if (typeof messaging.getContractExportedMeta !== 'function') return undefined;
+        messaging.getContractExportedMeta({ chainId, code })
+            // The shape check, not the call, is what decides whether there is an
+            // answer here: a shell relaying a mock returns something for every
+            // method name.
+            .then((res) => { if (!cancelled) setMetaRead(normalizeMetaRead(res)); })
+            .catch(() => { if (!cancelled) setMetaRead(null); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, code]);
+
+    // What the chain will record, hardened for display: these are strings out
+    // of a source the user may have pasted from anywhere, rendered on a
+    // signing-adjacent screen.
+    const metaName = metaRead?.status === 'present'
+        ? neutralizeControlText(metaRead.name, { maxLength: 64 }) : '';
+    const metaVersion = metaRead?.status === 'present'
+        ? neutralizeControlText(metaRead.version, { maxLength: 32 }) : '';
+    const metaDescription = metaRead?.status === 'present'
+        ? neutralizeControlText(metaRead.description, { maxLength: 512 }) : '';
+    // Proven absent: the chain refuses this deploy, so the form does too,
+    // before anything is composed and therefore before any fee is spent. An
+    // `undecidable` read (a computed meta) never refuses; the chain may accept
+    // it, and refusing would block a legal deploy.
+    const metaAbsent = metaRead?.status === 'absent';
+
     async function handleUseTemplate(templateName) {
         if (!chainId) return;
         setFormError(null);
@@ -405,6 +455,12 @@ export function DeployContractForm({ walletId, onBack }) {
             setFormError('Fix the syntax error before previewing (see Validate code).');
             return;
         }
+        if (metaAbsent) {
+            setFormError('This contract exports no meta.name and meta.description, so the network '
+                + `would reject the deploy (${CONTRACT_META_REQUIRED}) after you paid for it. `
+                + 'Add a meta block to the source and try again.');
+            return;
+        }
         if (cooldownBlocks.trim() !== '') {
             const cb = Number(cooldownBlocks.trim());
             if (!Number.isInteger(cb) || cb < 1 || cb > 100000) {
@@ -454,31 +510,6 @@ export function DeployContractForm({ walletId, onBack }) {
         hardware: 'deployActionHw',
     });
 
-    // File the Name the user typed against the contract it just
-    // deployed. The label is local (no DEPLOY version carries a NAME slot), and
-    // the contract's action_index is usually not knowable yet - the single-leg
-    // lane returns as soon as the transaction is broadcast - so the store takes
-    // whichever identity this result has and settles the rest later.
-    //
-    // Under deferred assembly a chunked deploy's assembling leg is not
-    // necessarily the contract's index (another piece can complete the group
-    // first), so the flow's resolved `contractActionIndex` is read ahead of
-    // the leg's own indexed action; the indexed action is only a fallback for
-    // an older flow shape that never set the field.
-    function rememberDeployedName(res) {
-        const label = name.trim();
-        if (!label || !chainId) return;
-        const resolvedIndex = res?.contractActionIndex;
-        const hasResolvedIndex = resolvedIndex !== null && resolvedIndex !== undefined
-            && resolvedIndex !== '' && Number.isFinite(Number(resolvedIndex));
-        recordDeployedContractName({
-            chainId,
-            actionIndex: hasResolvedIndex ? String(resolvedIndex) : indexedActionIndex(res),
-            txid: res?.txid || res?.tx_hash || res?.broadcast?.txid || null,
-            name: label,
-        });
-    }
-
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
@@ -513,7 +544,6 @@ export function DeployContractForm({ walletId, onBack }) {
                     prebuiltPsbt,
                 }),
             });
-            rememberDeployedName(res);
             setResult(res);
             setPassword('');
             setStage('done');
@@ -571,7 +601,8 @@ export function DeployContractForm({ walletId, onBack }) {
                     from: base.from,
                     code,
                     gasLimit: String(gasLimit || suggestedGas || ''),
-                    name: name.trim() || undefined,
+                    // No name is passed: the flow labels the run with the
+                    // contract's own `meta.name`, read off the same source.
                     constructorParams: constructorParams.trim() || undefined,
                     cooldownBlocks: cooldownBlocks.trim() || undefined,
                     slashDestination: slashDestination.trim() || undefined,
@@ -604,7 +635,6 @@ export function DeployContractForm({ walletId, onBack }) {
             } else {
                 res = await messaging.deployAction({ ...base, password });
             }
-            rememberDeployedName(res);
             setResult(res);
             setPassword('');
             setStage('done');
@@ -718,10 +748,12 @@ export function DeployContractForm({ walletId, onBack }) {
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Txid</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
-                    {name.trim() ? (
+                    {metaName ? (
                         <>
-                            <dt className={styles.detailsLabel}>Name (saved on this device)</dt>
-                            <dd className={styles.detailsValue}>{name.trim()}</dd>
+                            <dt className={styles.detailsLabel}>Contract</dt>
+                            <dd className={styles.detailsValue}>
+                                {metaName}{metaVersion ? ` v${metaVersion}` : ''}
+                            </dd>
                         </>
                     ) : null}
                 </dl>
@@ -736,7 +768,7 @@ export function DeployContractForm({ walletId, onBack }) {
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Deploy contract {name.trim() ? `"${name.trim()}"` : ''} to{' '}
+                    Deploy contract {metaName ? `"${metaName}"` : ''} to{' '}
                     {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
                 </p>
                 <dl className={styles.detailsList}>
@@ -748,8 +780,17 @@ export function DeployContractForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>Name (saved on this device)</dt>
-                    <dd className={styles.detailsValue}>{name.trim() || '(unnamed)'}</dd>
+                    {/* The identity the CHAIN will record, off the source
+                        itself: what the review screen names has to be what the
+                        contract exports, not something typed beside it. */}
+                    <dt className={styles.detailsLabel}>Name</dt>
+                    <dd className={styles.detailsValue}>{metaName || 'Unnamed contract'}</dd>
+                    {metaVersion ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Version</dt>
+                            <dd className={styles.detailsValue}>{metaVersion}</dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Code</dt>
                     <dd className={styles.detailsValue}>
                         {sizeInfo ? `${sizeInfo.bytes} bytes` : `${new Blob([code]).size} bytes`}
@@ -931,23 +972,43 @@ export function DeployContractForm({ walletId, onBack }) {
                 </StatusMessage>
             )}
 
-            <Input
-                label="Name (optional)"
-                // PC-38 §14 rule 3: the hint says exactly what the
-                // name does, and no more. DEPLOY carries no NAME field in any
-                // version (the wire string is DEPLOY|<ver>|<code|hash>|<gas>)
-                // and the explorer's contract rows have no name column, so this
-                // label is stored on this device and merged into the contract
-                // list and detail page by contractNameMemory. Anyone else
-                // looking at the same contract sees only its number.
-                hint="Not published on chain: the protocol has no name field for contracts, which are identified by their number. Saved on this device so you see it in My contracts; you can change it later."
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {/* Contract identity, READ-ONLY, off the source below. Nothing is
+                rendered when the installed SDK or this shell cannot answer:
+                showing an empty "Name" row would read as "this contract has no
+                name", which is a different and possibly false claim. */}
+            {metaRead && metaRead.status === 'present' ? (
+                <dl className={styles.detailsList} aria-label="Contract identity">
+                    <dt className={styles.detailsLabel}>Name</dt>
+                    <dd className={styles.detailsValue}>{metaName || '(not a string literal)'}</dd>
+                    {metaVersion ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Version</dt>
+                            <dd className={styles.detailsValue}>{metaVersion}</dd>
+                        </>
+                    ) : null}
+                    {metaDescription ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Description</dt>
+                            <dd className={styles.detailsValue}>{metaDescription}</dd>
+                        </>
+                    ) : null}
+                </dl>
+            ) : null}
+            {/* A computed name ('Escrow ' + xchain.getBlockHeight()) is legal
+                and the chain evaluates it at deploy, so this advises rather
+                than refusing: the wallet cannot show a value it cannot read. */}
+            {metaRead && metaRead.status === 'undecidable' ? (
+                <p className={styles.hint}>
+                    This contract&apos;s name is computed rather than written out, so it can only be
+                    read once the network evaluates it at deploy.
+                </p>
+            ) : null}
+            {metaAbsent ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    This contract exports no name or description. The network rejects a deploy
+                    without them, so add a meta block to the source before deploying.
+                </StatusMessage>
+            ) : null}
 
             {/* PC-38: resume an interrupted chunked deploy. Those chunks are
                 already on chain and already paid for; restarting re-pays. */}
@@ -979,7 +1040,6 @@ export function DeployContractForm({ walletId, onBack }) {
                                         variant="secondary"
                                         onClick={() => {
                                             setCode(r.code);
-                                            setName(r.name || '');
                                             setResumeId(r.id);
                                             setValidation(null);
                                             setSizeInfo(null);

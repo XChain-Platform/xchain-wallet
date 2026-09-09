@@ -52,6 +52,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { createPendingDeploy } from '../schemas/pendingDeploy.js';
+import { preflightContractMeta, metaNameOf } from './contractMetaPreflight.js';
 
 /**
  * Plan a deploy: does this source fit one inline DEPLOY, or does it need
@@ -406,7 +407,7 @@ export async function verifyRecordedChunks({ sdkRegistry, chainId, record }) {
  * @param {any} opts.from
  * @param {string} opts.code
  * @param {string} opts.gasLimit
- * @param {string} [opts.name]
+ * @param {string} [opts.name]   legacy label; the contract's own `meta.name` is used when absent
  * @param {string|string[]} [opts.constructorParams]
  * @param {string} [opts.cooldownBlocks]
  * @param {string} [opts.slashDestination]
@@ -426,6 +427,20 @@ export async function deployChunkedRun(opts) {
         throw new Error('deployChunkedRun: code is required');
     }
     if (!opts.gasLimit) throw new Error('deployChunkedRun: gasLimit is required');
+    // CONTRACT_META_REQUIRED, before any leg is planned or composed. A chunked
+    // group is judged once, at completion, on the ASSEMBLED source - so a
+    // source with no `meta` buys N paid carriers and an assembler that indexes
+    // `invalid`. A resume is refused on the same read: its chunks are already
+    // sunk, and the assembler it is about to pay for cannot succeed.
+    const meta = preflightContractMeta({
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        code: opts.code,
+    });
+    // The contract's own name for the record and the assembling leg's pending
+    // line. `opts.name` stays ahead of it only so an older caller that still
+    // passes one is not silently overridden.
+    const contractName = opts.name || metaNameOf(meta) || undefined;
     // Each leg must be INDEXED before the next is built (consensus rule 2), so
     // the indexer wait is mandatory here, unlike every single-leg flow where it
     // is an optional hook. Default it from the SDK rather than making every
@@ -485,7 +500,7 @@ export async function deployChunkedRun(opts) {
             code: opts.code,
             totalChunks: plan.totalChunks,
             assembleParams: assembleFromOpts,
-            name: opts.name,
+            name: contractName,
         });
         await opts.vault.pendingDeploys.put(record);
     }
@@ -742,7 +757,7 @@ export async function deployChunkedRun(opts) {
 
     // Phase 2: assemble. Every carrier now sits at a lower action_index.
     progress('assemble-start', { totalChunks: plan.totalChunks });
-    const deployRes = await submitLeg(assemble, `Deploy contract "${opts.name || '(unnamed)'}" (assembling ${plan.totalChunks} chunks)`);
+    const deployRes = await submitLeg(assemble, `Deploy contract "${contractName || '(unnamed)'}" (assembling ${plan.totalChunks} chunks)`);
     const assemblerIndex = indexedActionIndex(deployRes);
     // The contract is not necessarily at the assembler's own index - see
     // `resolveDeployedContractIndex`. Recording the leg's index without asking

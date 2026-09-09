@@ -71,16 +71,34 @@ const MINT_XCHAIN = 1000;
  * literal (the VM rejects both at deploy).
  */
 const COUNTER_BODY =
-    "module.exports = { inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
+    "module.exports = { meta: { name: 'Wallet Counter', description: 'Increments a stored"
+    + " counter and returns its new value.', version: '1.0.0' },"
+    + " inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
 /** A chunked DEPLOY assembles a bigger body, so it is metered above the inline lane's 200000. */
 const CHUNKED_DEPLOY_GAS = '300000';
 
-const SMALL_SOURCE = 'function main(){ return 1 }';
-// Padding chosen from chunkHelper.planDeploy: 6102 is the smallest that stops
-// fitting one inline DEPLOY, and it plans as exactly 2 chunks.
-const CHUNKED_SOURCE = `//${'x'.repeat(6102)}\nfunction main(){ return 1 }`;
+/**
+ * The minimal body every planner case below pads.
+ *
+ * It EXPORTS, and its export carries `meta`, because CONTRACT_META_REQUIRED
+ * refuses at consensus any DEPLOY whose contract exports no
+ * `meta.name` and `meta.description`. A bare `function main(){}` planned fine
+ * and deployed fine until that rule; `uniqueChunkedSource` below is broadcast
+ * and its contract row asserted valid, so the body has to be deployable, not
+ * merely plannable.
+ */
+const MINIMAL_BODY =
+    "module.exports = { meta: { name: 'Chunk Plan Probe', description: 'Minimal contract,"
+    + " padded to force the chunked deploy lane.', version: '1.0.0' },"
+    + " main: function(){ return 1 } };";
+
+const SMALL_SOURCE = MINIMAL_BODY;
+// Padding chosen from chunkHelper.planDeploy: 6102 is the smallest pad that
+// stops the padded body fitting one inline DEPLOY, and it plans as exactly 2
+// chunks.
+const CHUNKED_SOURCE = `//${'x'.repeat(6102)}\n${MINIMAL_BODY}`;
 
 /**
  * A source unique to this run, still planning as exactly 2 chunks.
@@ -92,7 +110,7 @@ const CHUNKED_SOURCE = `//${'x'.repeat(6102)}\nfunction main(){ return 1 }`;
  * indistinguishable from this one's.
  */
 function uniqueChunkedSource(tag) {
-    return `//${'x'.repeat(6102)}\nfunction main(){ return 1 } // ${tag}`;
+    return `//${'x'.repeat(6102)}\n${MINIMAL_BODY} // ${tag}`;
 }
 
 const codeHashOf = (source) => createHash('sha256').update(Buffer.from(source, 'utf8')).digest('hex');

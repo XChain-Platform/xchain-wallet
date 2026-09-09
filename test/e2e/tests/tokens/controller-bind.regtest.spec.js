@@ -141,7 +141,9 @@ const DEPLOY_GAS = '200000';
  * VM rejects both at deploy.
  */
 const GUARD_SOURCE =
-    "module.exports = { guard: function(){ if (xchain.getInputParam(0) === 'SEND')"
+    "module.exports = { meta: { name: 'Transfer Gate', description: 'Controller guard"
+    + " that denies SEND transfers.', version: '1.0.0' },"
+    + " guard: function(){ if (xchain.getInputParam(0) === 'SEND')"
     + " { xchain.revert('transfers are gated'); } return {}; } };";
 
 /**
@@ -153,13 +155,18 @@ const GUARD_SOURCE =
  * resolve?" and "did the guard branch match?" tangled together.
  */
 const DENY_ALL_SOURCE =
-    "module.exports = { guard: function(){ xchain.revert('all-class denied'); } };";
+    "module.exports = { meta: { name: 'All Deny Gate', description: 'Controller guard"
+    + " that denies every action class it is bound to.', version: '1.0.0' },"
+    + " guard: function(){ xchain.revert('all-class denied'); } };";
 
 /**
  * Allows everything. Bound over `transfer` ON TOP of the deny-all binding, to
  * show most-specific-wins: the concrete class outranks the catch-all.
  */
-const ALLOW_SOURCE = 'module.exports = { guard: function(){ return {}; } };';
+const ALLOW_SOURCE =
+    "module.exports = { meta: { name: 'Allow Gate', description: 'Controller guard"
+    + " that allows every action class it is bound to.', version: '1.0.0' },"
+    + " guard: function(){ return {}; } };";
 
 // A local `explorerJson` here would be a bare fetch that returned
 // whatever JSON came back, error bodies included. The shared fixture helper of

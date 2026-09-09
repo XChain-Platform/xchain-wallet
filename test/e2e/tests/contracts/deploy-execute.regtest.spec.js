@@ -51,12 +51,14 @@
 //    method wrote proves the VM RAN the deployed body, which is the only thing
 //    that distinguishes a real round trip from a well-formed no-op.
 
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { searchForTx } from '../../fixtures/pendingHistory.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    REGTEST_TICKER,
     fundAddress,
     healVenueClock,
     mintXchain,
@@ -86,13 +88,12 @@ const MINT_XCHAIN = 2000;
  * fail this spec for a reason that has nothing to do with the wallet.
  */
 const CONTRACT_SOURCE =
-    "module.exports = { inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
+    "module.exports = { meta: { name: 'Wallet Counter', description: 'Increments a stored"
+    + " counter and returns its new value.', version: '1.0.0' },"
+    + " inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
 const DEPLOY_GAS = '200000';
-
-/** Unique per run: the venue is shared and its contract list is cumulative. */
-const RUN_TAG = `e2e${Date.now()}`;
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -195,15 +196,21 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
     // this spec is their regression proof:
     //
     //   DEPLOY / NAME. The `Name (optional)` input rode into the action
-    //   params; it is a screen-local label and now never leaves the screen.
-    //   This spec fills it, so a reintroduction stops the deploy step cold.
+    //   params; it was a screen-local label and has since been removed
+    //   outright (CONTRACT_META_REQUIRED: the name is the contract's own
+    //   `meta.name`, read off the source and recorded by the chain). This
+    //   spec asserts the field is gone and the parsed identity is shown.
     //   EXECUTE / GAS_LIMIT. The form set GAS_LIMIT on every compose while
     //   EXECUTE v0 has no gas slot at all (a top-level call runs at the
     //   protocol gas ceiling); the form no longer carries the concept.
     test('a contract deployed from the wallet accepts a method call from the wallet', async ({ page }) => {
         let deployer;
         let contractIndex;
-        const contractName = `Counter ${RUN_TAG}`;
+        let deployTxid;
+        // The name the chain records is the one in CONTRACT_SOURCE's meta block;
+        // the row label every wallet surface prints is "<name> v<version> (C:<coin>:<n>)".
+        const META_NAME = 'Wallet Counter';
+        const META_VERSION = '1.0.0';
 
         await test.step('onboard onto regtest and fund the deploying address', async () => {
             await createWallet(page, { password: PASSWORD });
@@ -258,8 +265,15 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             expect(await main.getByLabel('From', { exact: true }).inputValue(),
                 'the form still signs with the funded address').toBe(deployer);
 
-            await main.getByLabel('Name (optional)').fill(contractName);
+            // No Name field any more: the form shows what the chain is about
+            // to record, parsed read-only out of the pasted source.
+            await expect(main.getByLabel('Name (optional)'),
+                'the deploy form carries no on-device Name field').toHaveCount(0);
             await main.getByLabel('Code source').fill(CONTRACT_SOURCE);
+            const identity = main.locator('dl[aria-label="Contract identity"]');
+            await expect(identity, 'the parsed contract identity is shown').toBeVisible({ timeout: 30_000 });
+            await expect(identity).toContainText(META_NAME);
+            await expect(identity).toContainText(META_VERSION);
 
             // Drive the SDK-backed helper rather than skipping to submit: a
             // source the validator rejects can never deploy, so a green
@@ -274,6 +288,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
 
             await expect(main.getByText(/Contract deployed\./)).toBeVisible({ timeout: 120_000 });
             const txid = await readDoneTxid(page);
+            deployTxid = txid;
 
             // The chain's verdict on the whole action, not merely on the
             // transaction: a DEPLOY whose body the indexer refuses is still a
@@ -302,15 +317,17 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
                 'the chain stored the source that was typed')
                 .toBe(CONTRACT_SOURCE.replace(/\s+/g, ' ').trim());
 
-            // The Name field's hint promises the label is "not published on
-            // chain: the protocol has no name field for contracts". A name was
-            // typed above, so this is the assertion that keeps that sentence
-            // true: the wire string is exactly DEPLOY|<ver>|<code>|<gas> and
-            // carries nothing else. If a NAME segment ever appears here, either
-            // the wire grew a field or the form started smuggling one - and the
-            // hint would be lying either way.
+            // The name travels INSIDE the code as `meta.name`, never as a wire
+            // field: the wire string is exactly DEPLOY|<ver>|<code>|<gas> and
+            // carries nothing else. If a NAME segment ever appears here the
+            // wire grew a field or the form started smuggling one.
             expect(String(action.tx_data).split('|').length,
                 'DEPLOY v0 rides as DEPLOY|0|<code>|<gas>, with no name segment').toBe(4);
+            // And the chain recorded the identity the form showed before deploy.
+            expect(String(contract.meta_name ?? contract.META_NAME),
+                'the explorer contract object carries the recorded meta name').toBe(META_NAME);
+            expect(String(contract.meta_version ?? contract.META_VERSION),
+                'the explorer contract object carries the recorded meta version').toBe(META_VERSION);
         });
 
         await test.step('call a method on it', async () => {
@@ -326,28 +343,35 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // dispenser browse hit on 2026-09-02. The filter is also the real
             // user path, so nothing is being reached around here.
             //
-            // FOUND BY THE NAME THIS RUN TYPED, which is also what the row is
-            // labelled with. The wallet labels a row `row.localName || ... ||
-            // 'Contract <n>'`, so a spec that fills the deploy form's Name
-            // field gets a row reading "Counter e2e<stamp>" rather than the
-            // bare `Contract <index>` an index-based locator looks for. The
-            // name carries RUN_TAG, so it is unique across runs and across
-            // chains, which the index by itself is not.
+            // FOUND BY THE NAME THE CHAIN RECORDED, which is what every row is
+            // labelled with: "<meta.name> v<meta.version> (C:<coin>:<index>)".
+            // The address makes the label unique across runs and chains, which
+            // the name alone (every run deploys the same source) is not.
             //
             // `.first()` because the list renders the same contract twice on
             // purpose - once under "My contracts (deployed by me)", once under
             // "Browse all contracts" - and the first is the one that proves the
             // wallet recognises the deploy as its own.
             await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
-            const row = page.getByRole('button', { name: contractName, exact: true });
+            const rowLabel = `${META_NAME} v${META_VERSION} (C:${REGTEST_TICKER}:${contractIndex})`;
+            const row = page.getByRole('button', { name: rowLabel, exact: true });
             await expect(row.first()).toBeVisible({ timeout: 60_000 });
-            expect(await row.count(),
-                'the wallet lists its own deploy under "My contracts", not only under browse-all')
-                .toBeGreaterThan(1);
+            // The two sections load independently ("My contracts" is a
+            // per-address query, browse-all a paginated one), so the second
+            // copy can land after the first is already visible: poll the count
+            // rather than read it once (a one-shot read went red on 2026-09-09
+            // with both rows on screen in the failure snapshot).
+            await expect.poll(async () => row.count(), {
+                message: 'the wallet lists its own deploy under "My contracts", not only under browse-all',
+                timeout: 30_000,
+            }).toBeGreaterThan(1);
             await row.first().click();
 
             const main = page.getByRole('main');
-            await expect(page.getByText(`Contract #${contractIndex}`).first())
+            // The detail page is headed by the same "<name> v<version> (C:<coin>:<n>)"
+            // label as the list row (the bare "Contract #n" heading retired with
+            // the on-device Name field).
+            await expect(page.getByRole('heading', { name: rowLabel, exact: true }).first())
                 .toBeVisible({ timeout: 30_000 });
 
             await page.getByRole('button', { name: 'Call method', exact: true }).click();
@@ -393,6 +417,17 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             const mine = (executions.data || []).find((r) => r.tx_hash === txid);
             expect(mine.status, 'the execution history agrees with the action').toBe('valid');
             expect(mine.method_name).toBe('inc');
+        });
+
+        await test.step('the history rows name the contract the chain recorded', async () => {
+            // Both rows this run put on chain (the DEPLOY and the EXECUTE) are
+            // labelled with the contract's own identity, read off the explorer
+            // payloads, never off a device-local label.
+            await gotoSection(page, 'History');
+            const label = `${META_NAME} v${META_VERSION} (C:${REGTEST_TICKER}:${contractIndex})`;
+            await searchForTx(page, deployTxid);
+            await expect(page.getByText(label, { exact: true }).first(),
+                'a history row shows "<name> v<version> (<address>)"').toBeVisible({ timeout: 60_000 });
         });
     });
 });

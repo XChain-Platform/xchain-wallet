@@ -18,10 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The wallet moves to xchain-sdk 0.15.3, whose deploy workflow resolves a chunked contract through the explorer.
 - Release tooling transcribes the zone's current edge rules: the API hosts are rate limited per client over 10-second windows instead of skipped.
+- Contracts are named by the name, version and description their own source exports, shown as "Escrow v1.0.0 (C:BTC:12)" in history, the contracts list and the contract page, with the description on the contract page.
+- The deploy form no longer asks for a contract name; it shows the name, version and description parsed from the pasted source, read-only.
+- A deploy whose source exports no contract name and description is refused before any transaction is composed, so no fee is spent on a deploy the network will reject.
 - A rate-limited read now waits the seconds the service asked for (up to 60 s) instead of two, and the copy says "asked the wallet to slow down for N seconds; retrying" with a live countdown on Home.
 - The lockout banner says "Too many incorrect passwords" so it no longer reads as a rate limit.
 - Home reads pending payments from the one shared scan instead of its own per-poll read, 15 fewer explorer reads per 20 s on a five-address wallet.
 - Home's 20 s balance poll holds its in-flight slot, so a load waiting out a rate limit is no longer joined by the next beat.
+
+### Removed
+- The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
 - Home's 20-second balance poll no longer starts a second load while one is still waiting on the service.

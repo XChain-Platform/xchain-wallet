@@ -526,10 +526,11 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                 if (!code) throw new Error('no contract-code textarea');
                 fireEvent.change(code, { target: { value: 'export function main() {}' } });
                 setValue(utils, 'Gas limit', '100000');
-                // Filled deliberately: NAME used to ride into actionParams,
-                // and no DEPLOY version has a slot for it, so a filled Name
-                // field made the deploy uncomposable.
-                setValue(utils, /^Name/, 'MyContract');
+                // There is no Name field to fill any more: a contract's name is
+                // an export of its own source under CONTRACT_META_REQUIRED. The
+                // NAME assertion below stays, because no DEPLOY version has a
+                // slot for one and a params.NAME would make the deploy
+                // uncomposable whatever put it there.
             },
         });
         expectSingleEncode(calls, { action: 'DEPLOY', submitMethod: 'deployAction' });

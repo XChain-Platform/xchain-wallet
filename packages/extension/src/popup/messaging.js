@@ -1820,6 +1820,16 @@ export function checkContractCodeSize(req) {
     return /** @type {any} */ (sendMessage('contracts.checkCodeSize', req));
 }
 
+/**
+ * The identity the chain will record for a pasted source (meta.name,
+ * description, version), read statically. Null when the SDK cannot answer.
+ *
+ * @param {{ chainId: string, code: string }} req
+ */
+export function getContractExportedMeta(req) {
+    return /** @type {any} */ (sendMessage('contracts.getExportedMeta', req));
+}
+
 /** @param {{ chainId: string, code: string }} req */
 export function suggestContractGasLimit(req) {
     return /** @type {any} */ (sendMessage('contracts.suggestGasLimit', req));

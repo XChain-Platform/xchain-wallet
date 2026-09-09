@@ -197,6 +197,7 @@ const {
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
+    contractExportedMeta,
     dividendAction,
     holdersFor,
     createList,
@@ -4341,6 +4342,14 @@ export function createBackgroundHost(deps) {
 
     host.register('contracts.checkCodeSize', async (req, { sdkRegistry }) => {
         return contractCheckCodeSize({ ...req, sdkRegistry });
+    });
+
+    // CONTRACT_META_REQUIRED: the identity the chain will record, read off the
+    // pasted source (a static walk, no network) so the deploy form shows it
+    // read-only instead of asking for a label. Null when the installed SDK
+    // predates the check; the form then renders nothing.
+    host.register('contracts.getExportedMeta', async (req, { sdkRegistry }) => {
+        return contractExportedMeta({ ...req, sdkRegistry });
     });
 
     host.register('contracts.suggestGasLimit', async (req, { sdkRegistry }) => {

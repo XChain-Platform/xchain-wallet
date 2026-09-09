@@ -71,6 +71,7 @@ for (const call of [
     'messaging.validateContractCode',
     'messaging.checkContractCodeSize',
     'messaging.suggestContractGasLimit',
+    'messaging.getContractExportedMeta',
     'messaging.deployAction',
     'messaging.deployActionHw',
     'messaging.getAddressesByChain',
@@ -189,6 +190,7 @@ for (const [shell, msgPath] of [
         'validateContractCode',
         'checkContractCodeSize',
         'suggestContractGasLimit',
+        'getContractExportedMeta',
     ]) {
         assert.ok(
             new RegExp(`export function ${fn}\\b`).test(m),

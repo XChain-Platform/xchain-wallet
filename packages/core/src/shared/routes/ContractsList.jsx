@@ -14,7 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { mergeContractNames } from '../utils/contractNameMemory.js';
+import { contractDisplayLabel, contractMetaOf } from './contractResponseShape.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,14 +52,15 @@ const chainRegistry = registryLib.defaultRegistry();
  * (vmChains below), so it follows the registry rather than a coin pinned
  * here; testnet / regtest chains appear when present. The
  * search input filters the currently-rendered rows client-side on
- * CONTRACT_ACTION_INDEX prefix or name substring. The explorer
- * doesn't expose a server-side contract-name search today.
+ * CONTRACT_ACTION_INDEX prefix or name substring.
  *
- * Names: contracts have none on chain (the protocol identifies them by
- * action index), so a row's name is the device-local label the user gave
- * it at deploy time or renamed it to on the detail page;
- * contractNameMemory.js owns the store, and `mergeContractNames` attaches
- * `row.localName` to every row loaded here.
+ * Names: a contract's name, version and description are an export of its own
+ * source (CONTRACT_META_REQUIRED), extracted by the indexer and served by the
+ * explorer as `meta_name` / `meta_version` on every row here, so every viewer
+ * sees the same name. Rows print it WITH the derived address
+ * ("Escrow v1.0.0 (C:BTC:12)") because names are not unique and the address is
+ * the identity. A contract deployed before the flag day exports none and reads
+ * "Unnamed contract".
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -154,17 +155,11 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 }
                 const uniq = dedupeByActionIndex(merged);
                 uniq.sort(newestFirst);
-                // Attach the device-local labels. This is also where a
-                // label filed at deploy time under its txid (the action index
-                // was not knowable yet) gets settled under the index the
-                // indexer has since assigned. Done here rather than inside the
-                // state updater, which React may call more than once.
-                const named = mergeContractNames(cid, uniq);
                 setMyByChain((prev) => ({
                     ...prev,
                     [cid]: {
                         loading: false,
-                        rows: named,
+                        rows: uniq,
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
                 }));
@@ -206,7 +201,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             }
             Promise.all(ops).then((results) => {
                 if (cancelled) return;
-                /** @type {Map<string, { contract_action_index: string, latestBlock: number, kinds: Set<string> }>} */
+                /** @type {Map<string, { contract_action_index: string, latestBlock: number, kinds: Set<string>, meta_name: string | null, meta_version: string | null }>} */
                 const byContract = new Map();
                 const errs = [];
                 for (const r of results) {
@@ -215,18 +210,36 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         const ci = String(row.contract_action_index ?? row.CONTRACT_ACTION_INDEX ?? '');
                         if (!ci) continue;
                         const block = Number(row.block_index || 0);
+                        // A DEPOSIT / WITHDRAW payload names the contract it
+                        // touched (`contract_meta_name` / `contract_meta_version`),
+                        // which is the only identity this synthesized row has:
+                        // these entries are built from action payloads, not from
+                        // contract rows, so nothing else here carries a name.
+                        const meta = contractMetaOf(row);
                         let entry = byContract.get(ci);
                         if (!entry) {
-                            entry = { contract_action_index: ci, latestBlock: block, kinds: new Set() };
+                            entry = {
+                                contract_action_index: ci,
+                                latestBlock: block,
+                                kinds: new Set(),
+                                meta_name: meta.name,
+                                meta_version: meta.version,
+                            };
                             byContract.set(ci, entry);
-                        } else if (block > entry.latestBlock) {
-                            entry.latestBlock = block;
+                        } else {
+                            if (block > entry.latestBlock) entry.latestBlock = block;
+                            // Keep the first name seen; a later payload with none
+                            // must not blank a contract that already has one.
+                            if (!entry.meta_name && meta.name) {
+                                entry.meta_name = meta.name;
+                                entry.meta_version = meta.version;
+                            }
                         }
                         entry.kinds.add(r.kind);
                     }
                 }
-                const rows = mergeContractNames(cid, Array.from(byContract.values())
-                    .sort((a, b) => b.latestBlock - a.latestBlock));
+                const rows = Array.from(byContract.values())
+                    .sort((a, b) => b.latestBlock - a.latestBlock);
                 setInteractionsByChain((prev) => ({
                     ...prev,
                     [cid]: {
@@ -256,10 +269,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     if (cancelled) return;
                     const rows = extractRows(resp);
                     rows.sort(newestFirst);
-                    const named = mergeContractNames(cid, rows);
                     setBrowseByChain((prev) => ({
                         ...prev,
-                        [cid]: { loading: false, rows: named, error: null },
+                        [cid]: { loading: false, rows, error: null },
                     }));
                 })
                 .catch((err) => {
@@ -337,7 +349,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyText="No contracts deployed from this chain's addresses yet."
                                     onOpenContract={onOpenContract}
-                                    renderRow={(row) => <ContractRow row={row} />} />
+                                    renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
                     );
                 })}
             </Section>
@@ -350,7 +362,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyText={`No ${actionDisplayLabel('DEPOSIT').toLowerCase()} or ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions recorded against this chain's addresses yet.`}
                                     onOpenContract={onOpenContract}
-                                    renderRow={(row) => <InteractionRow row={row} />} />
+                                    renderRow={(row) => <InteractionRow row={row} chainId={cid} />} />
                     );
                 })}
                 {/* Keep the copy plain-language: this renders to end users, so no
@@ -372,7 +384,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyText="No contracts indexed on this chain yet."
                                     onOpenContract={onOpenContract}
-                                    renderRow={(row) => <ContractRow row={row} />} />
+                                    renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
                     );
                 })}
             </Section>
@@ -445,7 +457,7 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
                         key={String(rowKey(row)) + ':' + i}
                         type="button"
                         className={styles.entry}
-                        aria-label={row.localName || row.name || row.NAME || `Contract ${rowKey(row)}`}
+                        aria-label={contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}
                         onClick={() => onOpenContract(chainId, String(rowKey(row)))}
                     >
                         {renderRow(row)}
@@ -456,17 +468,16 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
     );
 }
 
-function ContractRow({ row }) {
-    // The local label wins over anything the indexer returns: it is the name
-    // this user gave this contract, and the chain has no name of its own to
-    // contradict it (contracts are identified by their action index).
-    const name = row.localName || row.name || row.NAME || '(unnamed)';
+function ContractRow({ row, chainId }) {
+    // Name and version off the chain's own record, printed with the derived
+    // address: "Escrow v1.0.0 (C:BTC:12)". Never the name alone - names are not
+    // unique, so two contracts would look like one.
     const owner = row.source || row.SOURCE || row.owner || row.OWNER;
     const status = String(row.status || row.STATUS || '(unknown)');
     return (
         <>
             <span className={styles.entryLabel}>
-                {name} #{row.action_index ?? '?'}
+                {contractDisplayLabel(row, { chainId, actionIndex: row.action_index })}
             </span>
             <span className={styles.entryDescription}>
                 {owner ? (
@@ -478,12 +489,12 @@ function ContractRow({ row }) {
     );
 }
 
-function InteractionRow({ row }) {
+function InteractionRow({ row, chainId }) {
     const kinds = Array.from(row.kinds || []).sort().join(' + ');
     return (
         <>
             <span className={styles.entryLabel}>
-                {row.localName ? `${row.localName} ` : ''}Contract #{row.contract_action_index ?? '?'}
+                {contractDisplayLabel(row, { chainId, actionIndex: row.contract_action_index })}
             </span>
             <span className={styles.entryDescription}>
                 {kinds || '(none)'} · last block {row.latestBlock || '?'}
@@ -522,7 +533,7 @@ function applySearch(rows, query) {
     const q = String(query || '').trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) => {
-        const name = String(row.localName || row.name || row.NAME || '').toLowerCase();
+        const name = String(contractMetaOf(row).name || '').toLowerCase();
         const idx = String(row.action_index ?? row.contract_action_index ?? '').toLowerCase();
         return name.includes(q) || idx.startsWith(q.replace(/^#/, ''));
     });

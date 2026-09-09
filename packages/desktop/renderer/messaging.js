@@ -1186,6 +1186,11 @@ export function checkContractCodeSize(req) {
     return /** @type {any} */ (sendMessage('contracts.checkCodeSize', req));
 }
 
+/** @param {{ chainId: string, code: string }} req */
+export function getContractExportedMeta(req) {
+    return /** @type {any} */ (sendMessage('contracts.getExportedMeta', req));
+}
+
 /** @param {object} req */
 export function suggestContractGasLimit(req) {
     return /** @type {any} */ (sendMessage('contracts.suggestGasLimit', req));

@@ -360,7 +360,15 @@ export {
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
+    contractExportedMeta,
 } from './contractUtilities.js';
+export {
+    CONTRACT_META_REQUIRED,
+    normalizeMetaRead,
+    readExportedMeta,
+    preflightContractMeta,
+    metaNameOf,
+} from './contractMetaPreflight.js';
 export { dividendAction, holdersFor } from './dividendAction.js';
 export { createList } from './createList.js';
 export { airdropAction } from './airdropAction.js';

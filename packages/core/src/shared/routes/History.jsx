@@ -48,6 +48,7 @@ import {
     STATUS_OPTIONS,
 } from '../utils/historyFilter.js';
 import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
+import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import styles from './History.module.css';
 
@@ -2767,6 +2768,34 @@ function PendingAmountLabel({ entry }) {
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
+// Which actions name a contract on their payload. XEXEC is deliberately not
+// here: its payload carries no contract index at all, only an
+// `execute_action_index` one hop away, so there is nothing to label from.
+const CONTRACT_ACTIONS = new Set(['DEPLOY', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']);
+
+/**
+ * "Escrow v1.0.0 (C:BTC:12)" for a history row that touched a contract, or ''
+ * for every other row.
+ *
+ * The four payloads carry the contract's `contract_meta_name` and
+ * `contract_meta_version` beside its index (`deployed_contract_index` on a
+ * DEPLOY, which is not necessarily the DEPLOY's own action under deferred
+ * assembly; `contract_index` on the rest), so a user reading their history sees
+ * WHICH contract they funded rather than a bare number. `normalizeHistoryRow`
+ * has already lifted the payload out of `details`, so these read off `raw`.
+ *
+ * @param {any} entry
+ * @returns {string}
+ */
+function contractRowLabel(entry) {
+    const action = String(entry?.action || '').toUpperCase();
+    if (!CONTRACT_ACTIONS.has(action)) return '';
+    const raw = entry.raw || {};
+    const idx = raw.deployed_contract_index ?? raw.contract_index ?? raw.contract_action_index;
+    if (idx === null || idx === undefined || String(idx) === '') return '';
+    return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
+}
+
 export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency }) {
     const d = chainRegistry.get(entry.chainId);
     return (
@@ -2808,6 +2837,11 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowSourceAddress}>
                     {entry.source || '-'}
                 </span>
+                {contractRowLabel(entry) ? (
+                    <span className={styles.rowContractLabel}>
+                        {contractRowLabel(entry)}
+                    </span>
+                ) : null}
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
                         <>

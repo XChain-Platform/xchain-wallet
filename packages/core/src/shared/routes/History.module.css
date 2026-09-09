@@ -587,6 +587,16 @@
     word-break: break-all;
 }
 
+/* Which contract a DEPLOY / EXECUTE / DEPOSIT / WITHDRAW row touched, named
+   the way every other surface names one: "Escrow v1.0.0 (C:BTC:12)". Not
+   monospaced like the address line above, because the leading half is a
+   human-written name and the address is short enough to read either way. */
+.rowContractLabel {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    word-break: break-word;
+}
+
 /* Confirmation count pill rendered next to the block number on line 3.
    Uses the accent color so it pops against the row's muted meta line;
    confirmations are a key on-chain finality signal and shouldn't blend
