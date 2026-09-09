@@ -88,8 +88,10 @@ overrides:
   # electron-updater parses the channel pointer it fetches from the feed with
   # js-yaml, so GHSA-52cp-r559-cp3m (quadratic CPU on merge-key chains) is
   # reachable from a file the update path downloads. Major-scoped because the
-  # tree also holds a 3.x line that this pin must not drag forward.
-  js-yaml@4: ^4.3.1
+  # tree also holds a 3.x line that this pin must not drag forward. 4.3.2 also
+  # closes GHSA-2883-xcg3-v3hh (maxTotalMergeKeys not bounding empty merge
+  # sources), which turned the audit tier red on 2026-09-09.
+  js-yaml@4: ^4.3.2
   # fast-uri >=3.0.0 <3.1.5 treats a backslash as a path separator where the
   # WHATWG URL parser does not, so two parsers disagree about the HOST of the
   # same string (GHSA-7p8r-x3mc-p8w7). It arrives under the SDK, transitively,
