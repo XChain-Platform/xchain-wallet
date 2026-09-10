@@ -3,10 +3,10 @@
 
 # Chrome Web Store publish log
 
-**Status:** SCAFFOLD. No real publish has happened yet; the row below is a worked EXAMPLE only, not a real entry.
-**Last updated:** 2026-07-31
-**Source item:** (`wallet-publishing-chrome-extension.md` (platform tree)), §2 "Publish monitoring", stage S1.
-**Canonical item name:** `io.xchain.wallet.extension` (spec §2, decided 2026-07-31), matching the desktop `io.xchain.wallet.desktop`, Android `io.xchain.wallet.android`, and iOS `io.xchain.wallet.ios`. This is the name we use for the item in writing. It is not the Chrome extension ID: Chrome derives that from the item's public key at first upload, and it goes in the row below and in the rails K7 row once it exists.
+**Status:** SCAFFOLD. No real publish has happened yet; the row below is a worked EXAMPLE only, not a real entry.  
+**Last updated:** 2026-07-31  
+**Source item:** (`wallet-publishing-chrome-extension.md` (platform tree)), §2 "Publish monitoring", stage S1.  
+**Canonical item name:** `io.xchain.wallet.extension` (spec §2, decided 2026-07-31), matching the desktop `io.xchain.wallet.desktop`, Android `io.xchain.wallet.android`, and iOS `io.xchain.wallet.ios`. This is the name we use for the item in writing. It is not the Chrome extension ID: Chrome derives that from the item's public key at first upload, and it goes in the row below and in the rails K7 row once it exists.  
 **Store-assigned extension IDs:** main `<pending first upload>`, beta `<pending first upload>`.
 
 ## Purpose and rule of use
