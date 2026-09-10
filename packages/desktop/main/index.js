@@ -57,7 +57,7 @@ import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import { isHttpUrl, shouldBlockNavigation, isTrustedSenderEvent } from './security.js';
-import { attachHidPermissions } from './permissions.js';
+import { attachHidPermissions, observeHidFrames } from './permissions.js';
 import {
     attachDeepLinkHandlers,
     registerProtocolClients,
@@ -180,6 +180,15 @@ function hardenWebContents(contents) {
         // The wallet never embeds a <webview>; refuse any attempt.
         event.preventDefault();
     });
+    // A <webview> is refused above and a top-level navigation is
+    // refused higher up, but an <iframe> is neither, and every frame in
+    // this window reports the window's own `file://` origin to the WebHID
+    // device-permission handler. That handler is given no frame, so it
+    // cannot tell the app's renderer from something the renderer embeds.
+    // Watching for the subframe here is what lets it: the packaged
+    // renderer has no iframes, so one appearing switches the HID grant off
+    // for as long as this webContents lives.
+    observeHidFrames(contents);
 }
 
 function liveWindows() {

@@ -55,7 +55,7 @@ assert.match(histSrc, /async function runRbf\(strategy\)/, 'runRbf handler defin
 assert.match(histSrc, /useMessaging\(\)/, 'reads messaging from hook');
 assert.match(
     histSrc,
-    /replaceFromHistoryEntry\(\{ messaging, entry, strategy \}\)/,
+    /replaceFromHistoryEntry\(\{ messaging, entry, strategy, walletId \}\)/,
     'flow invocation wires entry + strategy',
 );
 assert.match(histSrc, /Speed up/, 'speed-up button label');

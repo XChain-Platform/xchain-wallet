@@ -63,7 +63,7 @@ import {
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { handleWalletLock } from './background/walletLock.js';
+import { createLockBackstop } from './background/walletLock.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -558,42 +558,23 @@ function noteAutoLockActivity() {
     stampAutoLockActivity(now).catch(() => { /* best-effort */ });
 }
 
-// Set when a lock attempt failed to clear a secret. It keeps the idle
-// backstop alive across such a lock: teardown has already nulled host/vault,
-// so `maybeAutoLock`'s "already locked" guard would otherwise refuse the very
-// retry the retained auto-lock record exists to drive.
-let lockCleanupPending = false;
+// Lock sequencing (retry record kept across a lock that left a secret behind)
+// lives in walletLock.js so it can be imported and driven by a test; this
+// module registers chrome.* listeners at load and cannot be.
+const lockBackstop = createLockBackstop({
+    // Built per attempt: a lock that left a secret behind gets retried.
+    lockDeps: () => ({
+        sessionBackend: new ChromeSessionBackend(),
+        signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
+    }),
+    tearDownHost: () => tearDownHost(),
+    isUnlocked: () => Boolean(host && vault),
+    readAutoLockState,
+    clearAutoLockState,
+    shouldAutoLock,
+});
 
-async function lockWalletNow() {
-    // Clear the auto-lock record only once the lock is confirmed. Clearing it
-    // first meant a lock that threw part-way took the retry state with it, so
-    // no later alarm re-attempted while a session secret was still live.
-    try {
-        await handleWalletLock(null, {
-            sessionBackend: new ChromeSessionBackend(),
-            signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
-            onLocked: () => tearDownHost(),
-        });
-    } catch (err) {
-        lockCleanupPending = true;
-        throw err;
-    }
-    lockCleanupPending = false;
-    await clearAutoLockState();
-}
-
-async function maybeAutoLock() {
-    // already locked; nothing to do, unless a previous lock left a secret
-    // behind and is waiting on this alarm to retry the clear.
-    if ((!host || !vault) && !lockCleanupPending) return;
-    let state;
-    try { state = await readAutoLockState(); } catch { return; }
-    if (!shouldAutoLock(state, Date.now())) return;
-    console.log('[xchain] auto-lock: idle timeout reached, locking wallet');
-    try { await lockWalletNow(); } catch (err) {
-        console.error('[xchain] auto-lock lock failed:', err);
-    }
-}
+const { lockWalletNow, maybeAutoLock } = lockBackstop;
 
 // Pre-host listener runs before the vault is open so the popup can ask
 // "no-wallet / locked / unlocked?" and perform `wallet.unlock`. Both
@@ -612,24 +593,14 @@ attachSessionMetaListener({
         // backstop (with the correct idleMs + demo-skip) once Home mounts.
         clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
-        // A session is legitimately live again, so any secret a previous
-        // failed lock left behind is no longer something to chase.
-        lockCleanupPending = false;
+        lockBackstop.noteUnlocked();
         return ensureHost().catch((err) => {
             console.error('[xchain] ensureHost after unlock failed:', err);
         });
     },
-    onLocked: (result) => {
-        // Keep the auto-lock record when a secret survived the clear: it is
-        // the only thing that brings the idle alarm back to finish the job.
-        if (result?.secretsCleared === false) {
-            lockCleanupPending = true;
-        } else {
-            lockCleanupPending = false;
-            clearAutoLockState().catch(() => { /* best-effort */ });
-        }
-        tearDownHost();
-    },
+    // Keeps the auto-lock record (and tears the host down) per the backstop's
+    // rule: a secret that survived the clear leaves the idle alarm the job.
+    onLocked: (result) => lockBackstop.onLocked(result),
 });
 
 // Signer bridge: always on, independent of vault unlock state. The

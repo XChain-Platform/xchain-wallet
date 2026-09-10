@@ -194,6 +194,15 @@ export function deleteAddress(id) {
     return /** @type {any} */ (sendMessage('addresses.delete', { id }));
 }
 
+/**
+ * Put a deleted Address record back (§37.2 delete-address Undo toast).
+ * The caller passes the record it snapshotted before deleteAddress.
+ * @param {any} address
+ */
+export function restoreAddress(address) {
+    return /** @type {any} */ (sendMessage('addresses.restore', { address }));
+}
+
 /** Resolve the active address per chain for an account. @param {string} walletId @param {string} [accountId] */
 export function getActiveAddresses(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.active', { walletId, accountId }));

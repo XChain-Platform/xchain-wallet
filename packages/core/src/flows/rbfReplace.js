@@ -45,8 +45,9 @@ export class RbfInvalidEntryError extends Error {
 /**
  * @typedef {object} RbfRequest
  * @property {string} chainId
- * @property {string} originalTxHash
- * @property {'speedup' | 'cancel'} strategy
+ * @property {string} originalTxHash          the tx being replaced (for 'restore' this is the CANCEL tx)
+ * @property {'speedup' | 'cancel' | 'restore'} strategy
+ * @property {string} [restoreTxHash]         'restore' only: the spend being re-issued
  * @property {string} [feeRate]                explicit fee rate; when omitted, host picks a sensible bump
  * @property {string} [walletId]
  */
@@ -117,8 +118,27 @@ export async function sendRbfRequest({ messaging, request } = {}) {
     if (typeof request.originalTxHash !== 'string' || request.originalTxHash.length === 0) {
         throw new RbfInvalidEntryError('replaceTx: originalTxHash is required');
     }
-    if (request.strategy !== 'speedup' && request.strategy !== 'cancel') {
+    if (request.strategy !== 'speedup'
+        && request.strategy !== 'cancel'
+        && request.strategy !== 'restore') {
         throw new RbfInvalidEntryError(`replaceTx: unknown strategy "${request.strategy}"`);
+    }
+    if (request.strategy === 'restore') {
+        if (typeof request.restoreTxHash !== 'string' || request.restoreTxHash.length === 0) {
+            throw new RbfInvalidEntryError('replaceTx: restoreTxHash is required for the restore strategy');
+        }
+        // A restore whose two hashes agree asks the engine to replace a
+        // transaction with itself: it burns a fee bump and moves nothing.
+        // The shape that produces it is a caller passing the ORIGINAL
+        // hash as originalTxHash, which is the natural mistake here
+        // (every other strategy takes the original), so it is rejected
+        // rather than forwarded.
+        if (request.restoreTxHash === request.originalTxHash) {
+            throw new RbfInvalidEntryError(
+                'replaceTx: restoreTxHash must differ from originalTxHash; '
+                + 'originalTxHash is the cancel transaction being replaced.',
+            );
+        }
     }
     return messaging.replaceTx(request);
 }
@@ -142,4 +162,111 @@ export async function replaceFromHistoryEntry({ messaging, entry, strategy, wall
             feeRate,
         },
     });
+}
+
+// ── Cancel undo (§37.2 / Cluster D FOLLOWUP 3) ──────────────────────
+//
+// Undoing a cancel is NOT re-broadcasting the original bytes. Once the
+// cancel replacement is in the mempool it owns those UTXOs, and the
+// original spend is now the lower-fee conflicting transaction every
+// node will refuse. The only move that puts the money back on its way
+// is a THIRD transaction that replaces the CANCEL at a higher fee and
+// re-issues the original spend's outputs.
+//
+// That is what `strategy: 'restore'` asks the engine for, and it is why
+// `originalTxHash` on a restore request carries the cancel's hash while
+// the spend being reproduced rides in `restoreTxHash`. Getting those
+// two backwards is the bug this pair of helpers exists to make
+// impossible from the UI: `buildCancelUndo` is the only supported way
+// to assemble the request.
+//
+// The window is short and the flow says so rather than pretending
+// otherwise: once the cancel confirms, nothing can be replaced and the
+// undo is gone for good.
+
+/**
+ * Snapshot taken at the moment a cancel is broadcast, carrying exactly
+ * what the undo needs. Held by the UI for the life of the toast.
+ *
+ * @typedef {object} CancelUndoSnapshot
+ * @property {string} chainId
+ * @property {string} originalTxHash    the spend the user cancelled
+ * @property {string} cancelTxHash      the replacement that cancelled it
+ * @property {string} [walletId]
+ */
+
+/**
+ * Build the undo snapshot from the cancelled entry plus the RbfResult
+ * the cancel returned. Returns null when the pair cannot support an
+ * undo, which is the UI's signal to show no Undo affordance at all
+ * rather than a button that fails when pressed.
+ *
+ * @param {{ entry?: any, result?: any, walletId?: string }} opts
+ * @returns {CancelUndoSnapshot | null}
+ */
+export function cancelUndoSnapshot({ entry, result, walletId } = {}) {
+    const originalTxHash = entry?.txHash;
+    const cancelTxHash = result?.replacementTxHash;
+    const chainId = entry?.chainId;
+    if (typeof chainId !== 'string' || chainId.length === 0) return null;
+    if (typeof originalTxHash !== 'string' || originalTxHash.length === 0) return null;
+    if (typeof cancelTxHash !== 'string' || cancelTxHash.length === 0) return null;
+    // A host that echoed the original hash back as the replacement did
+    // not actually broadcast a replacement; there is nothing to undo and
+    // a restore built from it would be a self-replacement.
+    if (cancelTxHash === originalTxHash) return null;
+    return { chainId, originalTxHash, cancelTxHash, walletId };
+}
+
+/**
+ * Is this snapshot still undoable? Fails closed on a confirmed cancel:
+ * a mined transaction cannot be replaced, so the affordance has to be
+ * withdrawn rather than left to fail at the node.
+ *
+ * @param {{ snapshot?: CancelUndoSnapshot | null, cancelBlockIndex?: number | null }} opts
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+export function isCancelUndoable({ snapshot, cancelBlockIndex } = {}) {
+    if (!snapshot) return { ok: false, reason: 'Nothing to undo.' };
+    if (Number(cancelBlockIndex) > 0) {
+        return { ok: false, reason: 'The cancellation already confirmed.' };
+    }
+    return { ok: true };
+}
+
+/**
+ * Assemble the restore request for a cancel snapshot. Separated from
+ * the send so the mapping (cancel hash replaces, original hash is
+ * re-issued) has one testable home.
+ *
+ * @param {{ snapshot: CancelUndoSnapshot, feeRate?: string }} opts
+ * @returns {RbfRequest}
+ */
+export function buildCancelUndo({ snapshot, feeRate } = {}) {
+    if (!snapshot) throw new RbfInvalidEntryError('undoCancel: snapshot is required');
+    return {
+        chainId: snapshot.chainId,
+        // The cancel is what sits in the mempool now, so it is what the
+        // undo replaces.
+        originalTxHash: snapshot.cancelTxHash,
+        strategy: 'restore',
+        // The spend being put back on the wire.
+        restoreTxHash: snapshot.originalTxHash,
+        walletId: snapshot.walletId,
+        feeRate,
+    };
+}
+
+/**
+ * Undo a cancel: replace the cancel transaction with a re-issue of the
+ * spend it killed. Throws RbfNotSupportedError on a host without the
+ * engine, exactly as the cancel itself does.
+ *
+ * @param {{ messaging: any, snapshot: CancelUndoSnapshot, cancelBlockIndex?: number | null, feeRate?: string }} opts
+ * @returns {Promise<RbfResult>}
+ */
+export async function undoCancel({ messaging, snapshot, cancelBlockIndex, feeRate } = {}) {
+    const check = isCancelUndoable({ snapshot, cancelBlockIndex });
+    if (!check.ok) throw new RbfInvalidEntryError(check.reason);
+    return sendRbfRequest({ messaging, request: buildCancelUndo({ snapshot, feeRate }) });
 }

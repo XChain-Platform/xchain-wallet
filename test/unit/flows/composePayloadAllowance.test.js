@@ -33,6 +33,9 @@ const FILE_ACTION = 'FILE|0|sample.txt|text/plain';
 // COMPRESSION field: it is the TENTH field, so every optional field before it
 // re-materializes as an empty separator.
 const FILE_ACTION_COMPRESSED = 'FILE|0|sample.txt|text/plain|||||||1';
+// Stand-in for the deflated payload the encoder reports back: 300 stored bytes
+// out of the 2048 the wallet handed over.
+const STORED_300 = 'z'.repeat(300);
 
 function makeHarness({ encoding = 'P2SH', rawData = 'x'.repeat(2048), compression = undefined } = {}) {
     const createTx = vi.fn(async () => ({
@@ -122,25 +125,89 @@ describe('carrier allowance counts the whole compiled payload', () => {
     });
 });
 
-describe('the composed action string is the one the WALLET composed', () => {
+describe('the composed action string is the one the PSBT carries', () => {
 
-    // The wallet deliberately reports its PRE-compression string, and a
-    // compressible FILE upload is therefore REFUSED at the confirm check rather
-    // than broadcast. That refusal is the safe half of the trade: substituting
-    // a locally re-derived post-compression string turns the refusal into a
-    // broadcast commit whose reveal cannot reproduce the commit's bytes, which
-    // strands user funds.
-    it('keeps the pre-compression string even when the encoder reports it compressed', async () => {
+    // The encoder rewrites the COMPRESSION field and deflates the payload
+    // inside create_tx, and now reports BOTH halves of what it wrote. The wallet
+    // states that string (so a compressible FILE stops refusing itself) and
+    // carries those bytes to the reveal (so the reveal can still reproduce the
+    // commit's carrier, which is what made a local re-derive unsafe).
+    it('states the string the encoder actually wrote', async () => {
         const h = makeHarness({
-            compression: { compressed: true, rawLength: 2048, storedLength: 300, reason: null },
+            compression: {
+                compressed: true, rawLength: 2048, storedLength: 300, reason: null,
+                data: FILE_ACTION_COMPRESSED, rawData: STORED_300,
+            },
         });
         const composed = await composeForConfirm(h.args);
-        expect(composed.actionString).toBe(FILE_ACTION);
+        expect(composed.actionString).toBe(FILE_ACTION_COMPRESSED);
         // ...and the allowance is still sized off the STORED payload, not the
         // bytes the wallet handed over, so compression tightens the bound. That
         // is the #7200 half, which stands on its own.
         expect(composed.expectedOutputs.carrierAllowance)
-            .toBe(allowanceFor(FILE_ACTION.length + 1 + 300 + 2));
+            .toBe(allowanceFor(FILE_ACTION_COMPRESSED.length + 1 + 300 + 2));
+    });
+
+    it('hands the reveal the STORED bytes, not the ones the wallet supplied', async () => {
+        // The whole reason the substitution above is safe: submitWithSigner
+        // builds phase 2 from revealOpts.rawData, and the reveal re-derives its
+        // carrier chunks from script.compile([actionString, rawData]). Given the
+        // uncompressed payload under a compressed marker it compiles a carrier
+        // that hashes to nothing the commit created, and the commit - already
+        // broadcast - can never be spent.
+        const h = makeHarness({
+            compression: {
+                compressed: true, rawLength: 2048, storedLength: 300, reason: null,
+                data: FILE_ACTION_COMPRESSED, rawData: STORED_300,
+            },
+        });
+        const composed = await composeForConfirm(h.args);
+        expect(composed.revealOpts.rawData).toBe(STORED_300);
+        expect(composed.revealOpts.rawData).not.toBe(h.args.encoderOpts.rawData);
+    });
+
+    it('REFUSES when the encoder says it compressed but withholds what it wrote', async () => {
+        // An encoder too old to report the written bytes cannot be described or
+        // revealed against. A pre-broadcast refusal is recoverable; a broadcast
+        // commit nothing can spend is not.
+        const h = makeHarness({
+            compression: { compressed: true, rawLength: 2048, storedLength: 300, reason: null },
+        });
+        await expect(composeForConfirm(h.args)).rejects.toThrow(/does not match what you approved/);
+    });
+
+    it('REFUSES a written string that is not the wallet\'s own with only COMPRESSION set', async () => {
+        // The encoder is the artifact the confirm check polices, so "here is what
+        // I wrote" is verified, not adopted: a substituted NAME rides in on the
+        // same field the compression pass legitimately rewrites.
+        const h = makeHarness({
+            compression: {
+                compressed: true, rawLength: 2048, storedLength: 300, reason: null,
+                data: 'FILE|0|payload.exe|text/plain|||||||1', rawData: STORED_300,
+            },
+        });
+        await expect(composeForConfirm(h.args)).rejects.toThrow(/does not match what you approved/);
+    });
+
+    it('REFUSES a stored payload larger than the bytes handed over', async () => {
+        const h = makeHarness({
+            rawData: 'x'.repeat(100),
+            compression: {
+                compressed: true, rawLength: 100, storedLength: 200, reason: null,
+                data: FILE_ACTION_COMPRESSED, rawData: 'z'.repeat(200),
+            },
+        });
+        await expect(composeForConfirm(h.args)).rejects.toThrow(/does not match what you approved/);
+    });
+
+    it('REFUSES an unknown codec rather than adopting the marker it cannot read', async () => {
+        const h = makeHarness({
+            compression: {
+                compressed: true, rawLength: 2048, storedLength: 300, reason: null,
+                data: 'FILE|0|sample.txt|text/plain|||||||9', rawData: STORED_300,
+            },
+        });
+        await expect(composeForConfirm(h.args)).rejects.toThrow(/does not match what you approved/);
     });
 
     it('leaves the string byte-identical when compression did not fire', async () => {
@@ -156,28 +223,53 @@ describe('the composed action string is the one the WALLET composed', () => {
         expect(composed.actionString).toBe(FILE_ACTION);
     });
 
-    it('REFUSES a compressible FILE upload rather than broadcasting an unspendable commit', async () => {
-        // The decisive end-to-end shape, and the live defect: the PSBT decodes
-        // to the string the ENCODER wrote (compression rewrote COMPRESSION in
-        // place and reported only a boolean), while the wallet states the
-        // string it composed, so the tamper check refuses.
-        //
-        // This test pins the REFUSAL on purpose. The obvious repair, having the
-        // wallet re-derive the post-compression string locally, is rejected:
-        // it makes the confirm check pass and leaves the reveal unable to
-        // reproduce the commit's bytes, so the commit broadcasts and the reveal
-        // can never spend it. A pre-broadcast refusal is recoverable; a
-        // stranded commit is not. The real fix has to make the reveal reproduce
-        // those bytes, which lives in xchain-encoder / xchain-sdk.
+    it('ADMITS a compressible FILE upload end to end, against the bytes the PSBT carries', async () => {
+        // The decisive end-to-end shape, and the defect this item closes: the
+        // PSBT decodes to the string the ENCODER wrote, and the wallet now
+        // states that same string, so the tamper check passes instead of
+        // refusing a transaction the wallet itself asked for. Driven through the
+        // whole confirm envelope, not asserted on composeForConfirm's return.
         const h = makeHarness({
             encoding: 'OP_RETURN',
             rawData: 'x'.repeat(40),
-            compression: { compressed: true, rawLength: 40, storedLength: 20, reason: null },
+            compression: {
+                compressed: true, rawLength: 40, storedLength: 20, reason: null,
+                data: FILE_ACTION_COMPRESSED, rawData: 'z'.repeat(20),
+            },
         });
         const sdk = h.args.sdkRegistry.get();
         // What decoding the built PSBT really yields on the inline lane.
         sdk.decoder.decodeActionStringFromPsbt = vi.fn(() => ({
             ok: true, actionString: FILE_ACTION_COMPRESSED,
+        }));
+        const envelope = await composeActionForConfirm({
+            vault: h.args.vault,
+            chainRegistry: h.args.chainRegistry,
+            sdkRegistry: h.args.sdkRegistry,
+            chainId: h.args.chainId,
+            actionData: h.args.actionData,
+            encoderOpts: h.args.encoderOpts,
+            source: SPENDER,
+            ownAddresses: [SPENDER],
+        });
+        expect(envelope.actionString).toBe(FILE_ACTION_COMPRESSED);
+    });
+
+    it('still refuses when the PSBT carries a string the encoder did not report', async () => {
+        // The gate has not been loosened, only pointed at the right string: an
+        // action string in the transaction that the compression report does not
+        // account for is still tamper.
+        const h = makeHarness({
+            encoding: 'OP_RETURN',
+            rawData: 'x'.repeat(40),
+            compression: {
+                compressed: true, rawLength: 40, storedLength: 20, reason: null,
+                data: FILE_ACTION_COMPRESSED, rawData: 'z'.repeat(20),
+            },
+        });
+        const sdk = h.args.sdkRegistry.get();
+        sdk.decoder.decodeActionStringFromPsbt = vi.fn(() => ({
+            ok: true, actionString: 'FILE|0|payload.exe|text/plain|||||||1',
         }));
         await expect(composeActionForConfirm({
             vault: h.args.vault,
@@ -194,13 +286,16 @@ describe('the composed action string is the one the WALLET composed', () => {
     it('never lets a reported storedLength widen the allowance beyond the real payload', async () => {
         // The encoder is the artifact this allowance polices, so a report that
         // claims MORE stored bytes than the wallet supplied must not buy extra
-        // carriers.
+        // carriers. Here the written bytes are honest and only the LENGTH lies.
         const h = makeHarness({
             rawData: 'x'.repeat(100),
-            compression: { compressed: true, rawLength: 100, storedLength: 9_000_000, reason: null },
+            compression: {
+                compressed: true, rawLength: 100, storedLength: 9_000_000, reason: null,
+                data: FILE_ACTION_COMPRESSED, rawData: 'z'.repeat(60),
+            },
         });
         const composed = await composeForConfirm(h.args);
         expect(composed.expectedOutputs.carrierAllowance)
-            .toBe(allowanceFor(FILE_ACTION_COMPRESSED.length + 1 + 100 + 2));
+            .toBe(allowanceFor(FILE_ACTION_COMPRESSED.length + 1 + 60 + 2));
     });
 });

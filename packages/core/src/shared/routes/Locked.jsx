@@ -29,6 +29,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
+import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import styles from './Locked.module.css';
 
@@ -121,6 +122,9 @@ export function Locked({ onUnlocked }) {
                 }
                 clearDemoWalletId();
                 clearLastView(demoWalletId);
+                // sweep this wallet's messaging read marks/unread
+                // counts too, or they orphan in localStorage forever.
+                sweepMsgMemoryForWallet(demoWalletId);
                 onUnlocked?.();
                 return;
             } catch (innerErr) {
@@ -138,6 +142,11 @@ export function Locked({ onUnlocked }) {
                 // user clicking through it.
                 clearDemoWalletId();
                 clearLastView(demoWalletId);
+                // sweep this wallet's messaging read marks/unread
+                // counts too; wipeWalletStorage below clears the vault
+                // stores but not this separate xc:msgRead:/xc:msgUnread:
+                // namespace, so it would otherwise survive the wipe.
+                sweepMsgMemoryForWallet(demoWalletId);
                 await wipeWalletStorage();
                 if (typeof window !== 'undefined') window.location.reload();
             }
@@ -304,7 +313,7 @@ export function Locked({ onUnlocked }) {
                 setRemainingMs(nextRemaining);
                 setError(
                     nextRemaining > 0
-                        ? `Incorrect password. Try again in ${formatCountdown(nextRemaining)}.`
+                        ? `Too many incorrect passwords on this device. Try again in ${formatCountdown(nextRemaining)}. Changing networks will not skip the wait.`
                         : 'Incorrect password.',
                 );
                 haptic.error();
@@ -406,12 +415,15 @@ export function Locked({ onUnlocked }) {
             <span>
                 {/* "incorrect passwords", never "attempts" or anything that
                     reads as rate limiting: a tester who saw the old wording
-                    went looking for a VPN (rate-limits spec, the incident). */}
-                Too many incorrect passwords. Try again in{' '}
+                    went looking for a VPN (rate-limits spec, the incident).
+                    "on this device" plus the explicit network sentence rule
+                    out that read directly, instead of relying on the tester
+                    to infer it from "incorrect passwords" alone. */}
+                Too many incorrect passwords on this device. Try again in{' '}
                 <span className={styles.lockoutCountdown}>
                     {formatCountdown(remainingMs)}
                 </span>
-                .
+                . Changing networks will not skip the wait.
             </span>
         </div>
     ) : null;

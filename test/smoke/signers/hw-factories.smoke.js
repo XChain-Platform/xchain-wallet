@@ -476,13 +476,17 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
     // device permission without re-running the request handler, so an
     // allow-listed vendor from a remote origin has to be refused here.
     //
-    // The reach of that refusal is a TOP-LEVEL window and no finer. A live
-    // Electron 43.3.0 session invokes this handler with `origin: 'file://'`
-    // for a getDevices() call made from an http subframe and from a
-    // sandboxed opaque-origin subframe alike, identical to the app's own
-    // frame, so no return value here can separate them. `select-hid-device`
-    // below is where a frame is visible; keeping a hostile frame out of the
-    // session is a renderer trust-boundary question.
+    // The reach of that ORIGIN refusal is a TOP-LEVEL window and no finer.
+    // A live Electron 43.3.0 session invokes this handler with
+    // `origin: 'file://'` for a getDevices() call made from an http
+    // subframe and from a sandboxed opaque-origin subframe alike,
+    // identical to the app's own frame, so no return value computed from
+    // the origin can separate them. The subframe is stopped by a different
+    // input instead: `observeHidFrames` latches when the session is seen
+    // hosting an embedded frame and the handler then refuses every device
+    // (covered in test/smoke/security/hid-subframe.smoke.js).
+    // Nothing has latched in this rig, so these two cases read the origin
+    // arm alone.
     assert.equal(
         deviceHandler({
             deviceType: 'hid',
@@ -697,6 +701,14 @@ const mainIndex = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');
 assert.ok(
     /attachHidPermissions\(session\.defaultSession, \{ appRoot: APP_ROOT \}\)/.test(mainIndex),
     'main/index.js calls attachHidPermissions(session.defaultSession, { appRoot: APP_ROOT }) on app.whenReady',
+);
+// The device handler's subframe guard is only fed if every webContents is
+// observed, and `hardenWebContents` is the one function the app runs
+// against all of them (app.on('web-contents-created')). Wiring it anywhere
+// else leaves windows opened later unwatched.
+assert.ok(
+    /function hardenWebContents\(contents\)\s*\{[\s\S]*?\n\s*observeHidFrames\(contents\);[\s\S]*?\n\}/.test(mainIndex),
+    'main/index.js observes HID frames on every webContents it hardens',
 );
 
 console.log(

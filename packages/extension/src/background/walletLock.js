@@ -101,3 +101,103 @@ export async function handleWalletLock(_request, deps) {
     }
     return { locked: true };
 }
+
+/**
+ * @typedef {Object} LockBackstopDeps
+ * @property {() => { sessionBackend: unknown, signingSecretBackend: unknown }} lockDeps   built per attempt, since an attempt can be retried
+ * @property {() => void} tearDownHost                     release host + vault, zero the SignerPool
+ * @property {() => boolean} isUnlocked                     shell still holds a host AND a vault
+ * @property {() => Promise<unknown>} readAutoLockState
+ * @property {() => Promise<void>} clearAutoLockState
+ * @property {(state: unknown, now: number) => boolean} shouldAutoLock
+ * @property {() => number} [now]
+ * @property {{ log: Function, error: Function }} [logger]
+ * @property {typeof handleWalletLock} [lock]               seam for tests; defaults to the real handler
+ */
+
+/**
+ * Build the service worker's §26 auto-lock backstop.
+ *
+ * Lives here rather than inline in background.js because background.js
+ * registers chrome.* listeners at module load and so cannot be imported by a
+ * test: inline, the ordering this returns could only ever be asserted by
+ * pattern-matching the source text, which pins the words and not the
+ * behaviour.
+ *
+ * The ordering it exists to hold: `clearAutoLockState` runs only AFTER a lock
+ * that fully succeeded. Clearing first (or on the way out of a rejecting lock)
+ * discards the armed record that is the sole thing bringing the idle alarm
+ * back, so a lock whose session-key clear threw left a live secret with
+ * nothing scheduled to retry it. `cleanupPending` is the paired half: teardown
+ * has already nulled host and vault, so the "already locked" guard would
+ * otherwise refuse that very retry.
+ *
+ * @param {LockBackstopDeps} deps
+ */
+export function createLockBackstop(deps) {
+    const now = deps.now ?? Date.now;
+    const logger = deps.logger ?? console;
+    const lock = deps.lock ?? handleWalletLock;
+
+    // Set when a lock attempt failed to clear a secret; see above.
+    let cleanupPending = false;
+
+    async function lockWalletNow() {
+        const { sessionBackend, signingSecretBackend } = deps.lockDeps();
+        try {
+            await lock(null, {
+                sessionBackend,
+                signingSecretBackend,
+                onLocked: () => deps.tearDownHost(),
+            });
+        } catch (err) {
+            cleanupPending = true;
+            throw err;
+        }
+        cleanupPending = false;
+        await deps.clearAutoLockState();
+    }
+
+    async function maybeAutoLock() {
+        // Already locked; nothing to do, unless a previous lock left a secret
+        // behind and is waiting on this alarm to retry the clear.
+        if (!deps.isUnlocked() && !cleanupPending) return 'skipped';
+        let state;
+        try { state = await deps.readAutoLockState(); } catch { return 'skipped'; }
+        if (!deps.shouldAutoLock(state, now())) return 'skipped';
+        logger.log('[xchain] auto-lock: idle timeout reached, locking wallet');
+        try {
+            await lockWalletNow();
+            return 'locked';
+        } catch (err) {
+            logger.error('[xchain] auto-lock lock failed:', err);
+            return 'failed';
+        }
+    }
+
+    // The dispatcher's own lock path (a popup-driven `wallet.lock`) reports
+    // the same outcome, so it keeps the record on the same condition.
+    function onLocked(result) {
+        if (result?.secretsCleared === false) {
+            cleanupPending = true;
+        } else {
+            cleanupPending = false;
+            deps.clearAutoLockState().catch(() => { /* best-effort */ });
+        }
+        deps.tearDownHost();
+    }
+
+    // A session is legitimately live again, so any secret a previous failed
+    // lock left behind is no longer something to chase.
+    function noteUnlocked() {
+        cleanupPending = false;
+    }
+
+    return {
+        lockWalletNow,
+        maybeAutoLock,
+        onLocked,
+        noteUnlocked,
+        get cleanupPending() { return cleanupPending; },
+    };
+}

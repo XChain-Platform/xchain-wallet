@@ -1960,6 +1960,62 @@ export function createBackgroundHost(deps) {
         return { ok: removed };
     });
 
+    // §37.2 / Cluster D FOLLOWUP 2: restore an Address record from a
+    // snapshot the renderer took before calling addresses.delete. This
+    // is the host half of the delete-address Undo toast.
+    //
+    // The snapshot is written back verbatim so a future Address schema
+    // field survives the round-trip; only `id` and `address` are
+    // required by shape. What the route does NOT do is more important
+    // than what it does, because the toast leaves an 8 s window in
+    // which the vault can move underneath the snapshot:
+    //
+    //   - a second press (or a record that came back some other way)
+    //     must not re-put over whatever is on disk now, so an existing
+    //     id short-circuits as a no-op success;
+    //   - the user can re-import the same WIF while the toast is up.
+    //     That mints a NEW record for the SAME address string, and
+    //     writing the snapshot back on top would list one address twice
+    //     with two ids: a duplicate that outlives the toast and that
+    //     `assertNotAlreadyImported` would never have allowed;
+    //   - the owning account can be deleted while the toast is up
+    //     (removeWallet takes its addresses with it). Restoring into a
+    //     gone account resurrects a row whose key no longer exists, so
+    //     that fails closed too.
+    //
+    // Deleting an address does not touch `wallet.importedKeys`, so the
+    // encrypted WIF is still there and putting the record back is the
+    // whole of the undo.
+    host.register('addresses.restore', async (req, { vault }) => {
+        const address = req?.address;
+        if (!address || typeof address !== 'object') {
+            throw new Error('addresses.restore: address is required');
+        }
+        if (typeof address.id !== 'string' || !address.id) {
+            throw new Error('addresses.restore: address.id is required');
+        }
+        if (typeof address.address !== 'string' || !address.address) {
+            throw new Error('addresses.restore: address.address is required');
+        }
+        const existing = await vault.addresses.get(address.id);
+        if (existing) return { ok: true, restored: false, reason: 'already-restored' };
+
+        const all = await vault.addresses.list();
+        const duplicate = (Array.isArray(all) ? all : []).some((r) => r
+            && r.address === address.address
+            && r.chain === address.chain
+            && r.network === address.network);
+        if (duplicate) return { ok: false, restored: false, reason: 'address-already-present' };
+
+        if (address.accountId) {
+            const account = await vault.accounts?.get?.(address.accountId);
+            if (!account) return { ok: false, restored: false, reason: 'account-missing' };
+        }
+
+        await vault.addresses.put(address);
+        return { ok: true, restored: true };
+    });
+
     // Resolve the active (operating) address per chain for an account.
     host.register('addresses.active', async (req, { vault, chainRegistry }) => {
         return resolveActiveAddresses({
@@ -3711,7 +3767,7 @@ export function createBackgroundHost(deps) {
     });
 
     // Token-gated content: list and unlock.
-    // See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+    // See xchain-documentation/protocol/token-gated-content.md.
     host.register('gatedContent.list', async (req, { sdkRegistry }) => {
         const sdk = sdkRegistry.get(req.chainId);
         return listGatedFiles({ sdk, tick: req.tick });

@@ -111,7 +111,7 @@ export function TokenDetail({
     );
 
     // Token-gated content groups (per KEY_HASH). Populated when the Unlock
-    // tab is opened. See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+    // tab is opened. See xchain-documentation/protocol/token-gated-content.md.
     const [gatedGroups, setGatedGroups] = useState(/** @type {any[] | null} */ (null));
     const [gatedError, setGatedError] = useState(/** @type {string | null} */ (null));
     const [gatedLoading, setGatedLoading] = useState(false);
@@ -1406,7 +1406,7 @@ function formatTotalSupply(isNative, chainId, assetInfo) {
 // group has an Unlock button that pops an inline form (pick address,
 // enter password) and decrypts every file in the group; viewers render
 // inline for text / JSON / images and as a download link for everything
-// else. See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+// else. See xchain-documentation/protocol/token-gated-content.md.
 function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, packsMeta, messaging, ownsToken, displayName }) {
     const [addresses, setAddresses] = useState(/** @type {any[] | null} */ (null));
     const [addressesError, setAddressesError] = useState(/** @type {string | null} */ (null));

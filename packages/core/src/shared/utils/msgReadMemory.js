@@ -147,3 +147,56 @@ export function writeMsgUnread(walletId, accountId, count) {
         }
     } catch { /* noop */ }
 }
+
+// --- Wallet-removal sweep ---------------------------------------------------
+//
+// A wallet can hold many accounts, each with its own `xc:msgRead:` and
+// `xc:msgUnread:` entry (scopeKey embeds accountId), so removal has to sweep
+// every entry keyed under that walletId, not just the 'default' account. This
+// walks the store the same way clearAllChainFilters does: via
+// localStorage.length/.key(i), because Object.keys(localStorage) is known to
+// lie in the service-worker / extension-popup environments this wallet ships
+// in, which would silently leave orphaned keys behind in exactly those shells.
+
+/**
+ * Remove every xc:msgRead: and xc:msgUnread: entry for a wallet, across all
+ * of its accounts, and notify same-document listeners (the nav badge via
+ * useMessagingUnread) so they refresh without a reload. Call this at every
+ * wallet-removal entry point; a removed wallet's messaging read marks and
+ * unread counts otherwise persist forever under an id nothing will ever look
+ * up again.
+ *
+ * @param {string | null | undefined} walletId
+ * @returns {number}   how many keys were removed (best-effort count;
+ *                     localStorage failures are tolerated and counted as 0)
+ */
+export function sweepMsgMemoryForWallet(walletId) {
+    if (typeof walletId !== 'string' || !walletId) return 0;
+    let removed = 0;
+    try {
+        if (typeof localStorage === 'undefined') return 0;
+        const readPrefix = NS + walletId + ':';
+        const unreadPrefix = UNREAD_NS + walletId + ':';
+        /** @type {string[]} */
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (typeof k === 'string' && (k.startsWith(readPrefix) || k.startsWith(unreadPrefix))) {
+                toRemove.push(k);
+            }
+        }
+        for (const k of toRemove) {
+            try { localStorage.removeItem(k); removed += 1; } catch { /* tolerate */ }
+        }
+    } catch {
+        return 0;
+    }
+    try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent(MSG_UNREAD_EVENT, {
+                detail: { walletId, accountId: 'default', count: 0 },
+            }));
+        }
+    } catch { /* noop */ }
+    return removed;
+}

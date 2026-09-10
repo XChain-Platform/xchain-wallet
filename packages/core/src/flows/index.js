@@ -228,6 +228,10 @@ export {
     isEntryReplaceable,
     sendRbfRequest,
     replaceFromHistoryEntry,
+    cancelUndoSnapshot,
+    isCancelUndoable,
+    buildCancelUndo,
+    undoCancel,
     RbfNotSupportedError,
     RbfInvalidEntryError,
 } from './rbfReplace.js';

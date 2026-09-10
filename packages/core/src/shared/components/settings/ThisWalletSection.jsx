@@ -23,6 +23,7 @@
 import { useState } from 'react';
 import { useMessaging } from '../../useMessaging.js';
 import { clearLastView } from '../../utils/lastViewMemory.js';
+import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 const ACTION_BTN = {
@@ -74,6 +75,9 @@ export function ThisWalletSection({
             // the same id (vanishingly unlikely with cuids, but the
             // hygiene cost is zero) doesn't inherit a stale route.
             clearLastView(activeWallet.id);
+            // sweep this wallet's messaging read marks/unread
+            // counts too, or they orphan in localStorage forever.
+            sweepMsgMemoryForWallet(activeWallet.id);
             setConfirmingRemove(false);
             if (typeof onWalletRemoved === 'function') onWalletRemoved();
         } catch (err) {

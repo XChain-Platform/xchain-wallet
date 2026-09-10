@@ -90,13 +90,38 @@
 //     them as `http://127.0.0.1:<port>` / `null` / `file://`. The frame
 //     check lives there because that is where the evidence is.
 //
-// The residual this module cannot close: a subframe inside the app window
-// calling `getDevices()` inherits the app's own origin at every handler
-// Electron offers, so an allow-listed Ledger stays reachable from one. The
-// defence for that is to keep such a frame out of the HID-granted session
-// (the `connect.trezor.io` `frame-src`/`script-src` allowance, or a
-// separate partition for Trezor Connect), which is a renderer-side trust
-// boundary rather than a permission callback.
+// CLOSING THE SUBFRAME RESIDUAL. A subframe inside the app
+// window calling `getDevices()` inherits the app's own origin at every
+// handler Electron offers, so no return value computed from
+// `details.origin` can separate it from the app's own frame, and
+// `DevicePermissionHandlerHandlerDetails` (electron.d.ts, v43) carries
+// `deviceType`, `origin` and `device` and nothing else. The answer is
+// therefore not a finer origin check but a different input: whether the
+// HID-granted session contains a subframe AT ALL.
+//
+// It legitimately never does. The packaged renderer embeds no `<iframe>`
+// anywhere (the one iframe string in the tree is inside a token-metadata
+// fixture that `tokenInfo.js` strips), so a child frame appearing in a
+// preload-bearing window is an anomaly, not a feature. `hidFrameGuard`
+// latches on the first one Electron reports through `frame-created` /
+// `will-frame-navigate` and the device handler then refuses every device,
+// paired or not, for as long as that webContents lives. A hostile frame
+// can no longer be handed a stored Ledger by sharing the app's origin,
+// because after it exists nobody gets one.
+//
+// The latch is session-wide, not per window: a device grant is scoped to
+// the session, so a subframe in ANY window can read a device paired in
+// another and one poisoned window has to close the grant everywhere.
+//
+// The second leg is `select-hid-device`. Its frame check was URL-only, so
+// a subframe pointed at the app's own `index.html` read as the app and
+// could reach the picker; `isAppHidSelect` now also requires a TOP-LEVEL
+// frame, which `details.frame.parent` states directly.
+//
+// Renderer-side hardening (dropping the `connect.trezor.io`
+// `frame-src`/`script-src` allowance, or moving Trezor Connect to its own
+// partition) is still worth doing and is tracked separately; it is no
+// longer what holds this path shut.
 //
 // The check handler narrows `hid` alone and leaves every other permission
 // at the session default. The shared UI it hosts reads and writes the
@@ -117,6 +142,83 @@ export const HID_VENDOR_ALLOWLIST = Object.freeze({
 const ALLOWED_VENDOR_IDS = new Set(Object.values(HID_VENDOR_ALLOWLIST));
 
 /**
+ * Session-wide record of which webContents have been seen hosting a
+ * subframe. Consulted by the device-permission handler, which is handed an
+ * origin and no frame and so cannot ask the question any other way.
+ *
+ * Latching, not counting: Electron reports frame CREATION and offers no
+ * matching destruction event, and a frame that has already existed may
+ * already hold a device handle, so the flag clears only when the whole
+ * webContents goes away. Nothing legitimate in the packaged renderer
+ * creates a subframe, so no working feature depends on it staying clear.
+ *
+ * @returns {{ noteSubframe: (key: unknown) => void, forget: (key: unknown) => void, hasSubframe: () => boolean, reset: () => void }}
+ */
+export function createHidFrameGuard() {
+    const poisoned = new Set();
+    return {
+        noteSubframe(key) { poisoned.add(key); },
+        forget(key) { poisoned.delete(key); },
+        hasSubframe() { return poisoned.size > 0; },
+        reset() { poisoned.clear(); },
+    };
+}
+
+/**
+ * The guard the shipped handlers read. A module singleton because the HID
+ * grant it defends is a property of the session, which is a singleton too:
+ * `observeHidFrames` (called per webContents from index.js) and
+ * `attachHidPermissions` (called once for the default session) have to be
+ * looking at the same set.
+ */
+export const hidFrameGuard = createHidFrameGuard();
+
+/**
+ * True when `frame` is a WebFrameMain that has a parent, i.e. an embedded
+ * frame rather than a window's own top-level one.
+ *
+ * A destroyed frame throws on property access and reads as "not a
+ * subframe" here; that case is covered by the `isMainFrame` flag on
+ * `will-frame-navigate`, which is a plain boolean and cannot throw.
+ *
+ * @param {{ parent?: unknown } | null | undefined} frame
+ * @returns {boolean}
+ */
+function isSubframe(frame) {
+    if (!frame) return false;
+    try {
+        return frame.parent !== null && frame.parent !== undefined;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Watch one webContents for subframes and latch the HID guard when one
+ * appears. Called from `hardenWebContents` in index.js so every
+ * preload-bearing webContents the app creates is covered, including
+ * windows opened after the session handlers were wired.
+ *
+ * @param {{ id?: number, on?: (event: string, listener: Function) => unknown }} contents
+ * @param {{ guard?: ReturnType<typeof createHidFrameGuard> }} [opts]
+ */
+export function observeHidFrames(contents, opts = {}) {
+    if (!contents || typeof contents.on !== 'function') return;
+    const guard = opts.guard ?? hidFrameGuard;
+    const key = typeof contents.id === 'number' ? contents.id : contents;
+    contents.on('frame-created', (_event, details) => {
+        if (isSubframe(details?.frame)) guard.noteSubframe(key);
+    });
+    contents.on('will-frame-navigate', (details) => {
+        // `frame-created` fires for a frame Electron can still resolve;
+        // this arm catches the rest, and `isMainFrame` is a plain boolean
+        // that survives a frame already torn down.
+        if (details?.isMainFrame === false || isSubframe(details?.frame)) guard.noteSubframe(key);
+    });
+    contents.on('destroyed', () => { guard.forget(key); });
+}
+
+/**
  * Wire WebHID permission handlers onto an Electron session. Typical
  * caller is `packages/desktop/main/index.js`:
  *
@@ -127,7 +229,7 @@ const ALLOWED_VENDOR_IDS = new Set(Object.values(HID_VENDOR_ALLOWLIST));
  * silently widening the HID grant to every local file.
  *
  * @param {import('electron').Session} session
- * @param {{ appRoot: string }} opts
+ * @param {{ appRoot: string, guard?: ReturnType<typeof createHidFrameGuard> }} opts
  */
 export function attachHidPermissions(session, opts) {
     if (!session) throw new Error('attachHidPermissions: session is required');
@@ -147,6 +249,10 @@ export function attachHidPermissions(session, opts) {
     if (typeof session.on !== 'function') {
         throw new Error('attachHidPermissions: session.on (select-hid-device) is missing');
     }
+    // Injectable so a smoke can drive one guard's whole lifecycle without
+    // leaking state into the next case; the shipped call takes the module
+    // singleton that `observeHidFrames` latches.
+    const guard = opts?.guard ?? hidFrameGuard;
 
     session.setPermissionRequestHandler((webContents, permission, callback, details) => {
         // Electron 43 never routes `hid` here (see the handler census in
@@ -177,6 +283,12 @@ export function attachHidPermissions(session, opts) {
     session.setDevicePermissionHandler((details) => {
         if (details.deviceType !== 'hid') return false;
         if (isRemoteHidOrigin(details.origin)) return false;
+        // The subframe residual. This callback is handed an origin and no
+        // frame, and every frame in the app window spells that origin
+        // `file://`, so the only question that separates a paired-device
+        // read by the app from one by a frame it embeds is whether the
+        // session hosts an embedded frame at all. It never should.
+        if (guard.hasSubframe()) return false;
         const vendorId = details.device?.vendorId;
         if (typeof vendorId !== 'number') return false;
         return ALLOWED_VENDOR_IDS.has(vendorId);
@@ -188,7 +300,7 @@ export function attachHidPermissions(session, opts) {
         // until a picker exists to choose one; a device picker built on
         // this event therefore inherits the frame check rather than having
         // to remember it.
-        if (!isAppHidSelect(details, appRoot)) {
+        if (guard.hasSubframe() || !isAppHidSelect(details, appRoot)) {
             event.preventDefault();
             callback(null);
         }
@@ -253,12 +365,31 @@ export function isAppHidCheck(details, requestingOrigin, appRoot) {
  * grant both report the embedder's, so a subframe is visible here and
  * nowhere else.
  *
- * @param {{ frame?: { url?: string } } | undefined} details
+ * Two things have to hold and the URL answers only one of them. A frame
+ * whose url sits inside `appRoot` is running the app's own code, but a
+ * frame the app EMBEDS pointed at the app's own `index.html` reads exactly
+ * the same way, and the picker belongs to the window's top-level frame
+ * alone. The parent link states which one this is, and unlike the origin
+ * it is not collapsed by Chromium's `file://` serialization.
+ *
+ * @param {{ frame?: { url?: string, parent?: unknown } } | undefined} details
  * @param {string} appRoot   packaged renderer dir
  * @returns {boolean}        true means the frame may reach the picker
  */
 export function isAppHidSelect(details, appRoot) {
-    return !isRemoteFrameUrl(details?.frame?.url, appRoot);
+    const frame = details?.frame;
+    if (isSubframe(frame)) return false;
+    let url;
+    try {
+        url = frame?.url;
+    } catch {
+        // A WebFrameMain throws on property access once it is detached.
+        // Deny: a frame that no longer exists has no picker to open, and a
+        // throw escaping here would leave `select-hid-device` neither
+        // prevented nor answered, hanging the request.
+        return false;
+    }
+    return !isRemoteFrameUrl(url, appRoot);
 }
 
 /**

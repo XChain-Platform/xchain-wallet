@@ -15,6 +15,8 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     isEntryReplaceable,
     replaceFromHistoryEntry,
+    cancelUndoSnapshot,
+    undoCancel,
     RbfNotSupportedError,
     RbfInvalidEntryError,
 } from '../../flows/rbfReplace.js';
@@ -1412,6 +1414,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  */
 export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency }) {
     const { messaging, shell } = useMessaging();
+    const { showToast } = useToast();
     const [balancesHidden] = useBalancesHidden();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
@@ -1539,8 +1542,31 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         setRbfError(null);
         setRbfDone(null);
         try {
-            const res = await replaceFromHistoryEntry({ messaging, entry, strategy });
+            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId });
             setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
+            // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
+            // The undo is a THIRD transaction replacing the cancel and
+            // re-issuing the spend, so it is only offered while the
+            // cancel is still in the mempool; `cancelUndoSnapshot`
+            // returns null when the pair cannot support one.
+            if (strategy === 'cancel') {
+                const snapshot = cancelUndoSnapshot({ entry, result: res, walletId });
+                if (snapshot) {
+                    showToast({
+                        message: 'Transaction cancelled',
+                        actionLabel: 'Undo',
+                        onAction: async () => {
+                            setRbfError(null);
+                            try {
+                                const undone = await undoCancel({ messaging, snapshot });
+                                setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'pending'}`);
+                            } catch (undoErr) {
+                                setRbfError(undoErr?.message || 'Could not undo the cancellation.');
+                            }
+                        },
+                    });
+                }
+            }
         } catch (err) {
             if (err instanceof RbfNotSupportedError || err instanceof RbfInvalidEntryError) {
                 setRbfError(err.message);

@@ -16,17 +16,19 @@
 // back and finish the job: the auto-lock record survives that lock, and the
 // "already locked" guard admits the retry the record exists to drive.
 //
-// Coverage is in two halves because background.js cannot be imported here (it
-// registers chrome.* listeners at module load): the first half drives the real
-// lock handler and the real backstop state through the retry, the second pins
-// that background.js and the pre-host dispatcher wire that shape.
+// Every case here drives the SHIPPING sequencer (createLockBackstop, which
+// background.js wires verbatim) over the real lock handler and the real
+// backstop state, so what is asserted is the ordering itself. The one
+// structural check at the bottom only pins that background.js still delegates
+// rather than re-inlining a second copy of the sequence.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { handleWalletLock } from '../../../packages/extension/src/background/walletLock.js';
+import { createLockBackstop } from '../../../packages/extension/src/background/walletLock.js';
+import { dispatchPreHost } from '../../../packages/extension/src/background/sessionMeta.js';
 import {
     applyAutoLockSignal,
     readAutoLockState,
@@ -65,42 +67,29 @@ function flakyBackend(failures) {
     return backend;
 }
 
-/** The service worker's lock + alarm pair, over the real lock handler. */
-function backstop(sessionBackend, signingSecretBackend) {
-    const sw = { host: {}, vault: {}, lockCleanupPending: false, teardowns: 0 };
+/**
+ * The service worker's own wiring: a shell whose host + vault are nulled by
+ * teardown, the real auto-lock state module, and a clock the test advances.
+ */
+function shell(sessionBackend, signingSecretBackend) {
+    const sw = { host: {}, vault: {}, teardowns: 0, clock: 5_000 };
 
-    async function lockWalletNow() {
-        try {
-            await handleWalletLock(null, {
-                sessionBackend,
-                signingSecretBackend,
-                onLocked: () => {
-                    sw.host = null;
-                    sw.vault = null;
-                    sw.teardowns += 1;
-                },
-            });
-        } catch (err) {
-            sw.lockCleanupPending = true;
-            throw err;
-        }
-        sw.lockCleanupPending = false;
-        await clearAutoLockState();
-    }
+    const backstop = createLockBackstop({
+        lockDeps: () => ({ sessionBackend, signingSecretBackend }),
+        tearDownHost: () => {
+            sw.host = null;
+            sw.vault = null;
+            sw.teardowns += 1;
+        },
+        isUnlocked: () => Boolean(sw.host && sw.vault),
+        readAutoLockState,
+        clearAutoLockState,
+        shouldAutoLock,
+        now: () => sw.clock,
+        logger: { log() { }, error() { } },
+    });
 
-    async function maybeAutoLock(now) {
-        if ((!sw.host || !sw.vault) && !sw.lockCleanupPending) return 'skipped';
-        const state = await readAutoLockState();
-        if (!shouldAutoLock(state, now)) return 'skipped';
-        try {
-            await lockWalletNow();
-            return 'locked';
-        } catch {
-            return 'failed';
-        }
-    }
-
-    return { sw, maybeAutoLock };
+    return { sw, backstop };
 }
 
 describe('auto-lock retry after an incomplete lock', () => {
@@ -121,85 +110,154 @@ describe('auto-lock retry after an incomplete lock', () => {
     it('keeps the record through a failed clear and finishes on the next alarm', async () => {
         const sessionBackend = flakyBackend(1);
         const signingSecretBackend = flakyBackend(0);
-        const { sw, maybeAutoLock } = backstop(sessionBackend, signingSecretBackend);
+        const { sw, backstop } = shell(sessionBackend, signingSecretBackend);
 
-        expect(await maybeAutoLock(5_000)).toBe('failed');
+        expect(await backstop.maybeAutoLock()).toBe('failed');
         expect(sw.teardowns).toBe(1);
         expect(sw.host).toBeNull();
-        expect(sw.lockCleanupPending).toBe(true);
+        expect(backstop.cleanupPending).toBe(true);
         // The armed record is the only thing that brings the alarm back.
         expect(await readAutoLockState()).toMatchObject({ armed: true, idleMs: 1_000 });
 
         // Host and vault are already null, so this second pass runs only
         // because the retry flag admits it.
-        expect(await maybeAutoLock(6_000)).toBe('locked');
+        sw.clock = 6_000;
+        expect(await backstop.maybeAutoLock()).toBe('locked');
         expect(sessionBackend.clears).toBe(1);
-        expect(sw.lockCleanupPending).toBe(false);
+        expect(backstop.cleanupPending).toBe(false);
+        expect(await readAutoLockState()).toBeNull();
+    });
+
+    it('keeps the record when only the signing-secret clear fails', async () => {
+        const signingSecretBackend = flakyBackend(1);
+        const { sw, backstop } = shell(flakyBackend(0), signingSecretBackend);
+
+        expect(await backstop.maybeAutoLock()).toBe('failed');
+        expect(sw.teardowns).toBe(1);
+        expect(await readAutoLockState()).toMatchObject({ armed: true });
+
+        sw.clock = 6_000;
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(signingSecretBackend.clears).toBe(1);
         expect(await readAutoLockState()).toBeNull();
     });
 
     it('drops the record on a clean lock and stops re-arming the alarm', async () => {
-        const { sw, maybeAutoLock } = backstop(flakyBackend(0), flakyBackend(0));
+        const { sw, backstop } = shell(flakyBackend(0), flakyBackend(0));
 
-        expect(await maybeAutoLock(5_000)).toBe('locked');
-        expect(sw.lockCleanupPending).toBe(false);
+        expect(await backstop.maybeAutoLock()).toBe('locked');
+        expect(backstop.cleanupPending).toBe(false);
         expect(await readAutoLockState()).toBeNull();
-        expect(await maybeAutoLock(9_000)).toBe('skipped');
+
+        sw.clock = 9_000;
+        expect(await backstop.maybeAutoLock()).toBe('skipped');
         expect(sw.teardowns).toBe(1);
+    });
+
+    it('refuses a locked shell that has no secret left behind', async () => {
+        const sessionBackend = flakyBackend(0);
+        const { sw, backstop } = shell(sessionBackend, flakyBackend(0));
+        sw.host = null;
+        sw.vault = null;
+
+        expect(await backstop.maybeAutoLock()).toBe('skipped');
+        expect(sessionBackend.clears).toBe(0);
+        expect(sw.teardowns).toBe(0);
+        // Nothing locked, so the record must still be there for a real session.
+        expect(await readAutoLockState()).toMatchObject({ armed: true });
+    });
+
+    it('does not lock, or touch the record, before the idle window elapses', async () => {
+        const sessionBackend = flakyBackend(0);
+        const { sw, backstop } = shell(sessionBackend, flakyBackend(0));
+        sw.clock = 1_500; // armed at 1_000 with idleMs 1_000
+
+        expect(await backstop.maybeAutoLock()).toBe('skipped');
+        expect(sessionBackend.clears).toBe(0);
+        expect(sw.teardowns).toBe(0);
+        expect(await readAutoLockState()).toMatchObject({ armed: true });
+    });
+
+    it('propagates the rejection out of lockWalletNow so a rollback can catch it', async () => {
+        // ensureHost force-locks in the vault.open() catch and reports the
+        // rollback separately; swallowing here would hide a failed rollback.
+        const { backstop } = shell(flakyBackend(1), flakyBackend(0));
+
+        await expect(backstop.lockWalletNow()).rejects.toMatchObject({
+            name: 'WalletLockIncompleteError',
+        });
+        expect(backstop.cleanupPending).toBe(true);
+        expect(await readAutoLockState()).toMatchObject({ armed: true });
+    });
+
+    it('re-unlocking stops the retry chase', async () => {
+        const { sw, backstop } = shell(flakyBackend(1), flakyBackend(0));
+
+        expect(await backstop.maybeAutoLock()).toBe('failed');
+        expect(backstop.cleanupPending).toBe(true);
+
+        backstop.noteUnlocked();
+        sw.clock = 6_000;
+        expect(backstop.cleanupPending).toBe(false);
+        expect(await backstop.maybeAutoLock()).toBe('skipped');
+    });
+
+    it('keeps the record when a popup-driven wallet.lock leaves a secret behind', async () => {
+        // The dispatcher lane, not the alarm: same rule has to hold there.
+        const { sw, backstop } = shell(flakyBackend(0), flakyBackend(0));
+
+        await expect(dispatchPreHost('wallet.lock', null, {
+            storageBackend: {}, metaBackend: {},
+            sessionBackend: flakyBackend(1),
+            signingSecretBackend: flakyBackend(0),
+            onLocked: backstop.onLocked,
+        })).rejects.toMatchObject({ name: 'WalletLockIncompleteError' });
+
+        expect(sw.teardowns).toBe(1);
+        expect(backstop.cleanupPending).toBe(true);
+        expect(await readAutoLockState()).toMatchObject({ armed: true });
+    });
+
+    it('drops the record when a popup-driven wallet.lock cleared both secrets', async () => {
+        const { sw, backstop } = shell(flakyBackend(0), flakyBackend(0));
+
+        await expect(dispatchPreHost('wallet.lock', null, {
+            storageBackend: {}, metaBackend: {},
+            sessionBackend: flakyBackend(0),
+            signingSecretBackend: flakyBackend(0),
+            onLocked: backstop.onLocked,
+        })).resolves.toEqual({ locked: true });
+
+        expect(sw.teardowns).toBe(1);
+        expect(backstop.cleanupPending).toBe(false);
+        // onLocked clears best-effort, without awaiting; let it settle.
+        await Promise.resolve();
+        expect(await readAutoLockState()).toBeNull();
+    });
+
+    it('survives an unreadable auto-lock record instead of locking blind', async () => {
+        const sessionBackend = flakyBackend(0);
+        const { sw, backstop } = shell(sessionBackend, flakyBackend(0));
+        // A read that throws must not be read as "idle".
+        globalThis.chrome.storage.session.get = vi.fn(async () => { throw new Error('nope'); });
+
+        expect(await backstop.maybeAutoLock()).toBe('skipped');
+        expect(sessionBackend.clears).toBe(0);
+        expect(sw.teardowns).toBe(0);
     });
 });
 
-describe('background.js wires the auto-lock retry', () => {
+describe('background.js delegates the lock sequence', () => {
     const bg = readFileSync(
         join(wsRoot, 'packages', 'extension', 'src', 'background.js'),
         'utf8',
     );
 
-    it('clears the record only once the lock is confirmed', () => {
-        const start = bg.indexOf('async function lockWalletNow()');
-        expect(start).toBeGreaterThan(-1);
-        const region = bg.slice(start, bg.indexOf('async function maybeAutoLock()', start));
-
-        const lockAt = region.indexOf('await handleWalletLock(');
-        const clearAt = region.indexOf('await clearAutoLockState();');
-        expect(lockAt).toBeGreaterThan(-1);
-        expect(clearAt).toBeGreaterThan(lockAt);
-        expect(region).toMatch(/catch \(err\)\s*\{\s*lockCleanupPending = true;\s*throw err;\s*\}/);
-    });
-
-    it('lets the idle alarm retry once teardown has nulled host and vault', () => {
-        const start = bg.indexOf('async function maybeAutoLock()');
-        expect(start).toBeGreaterThan(-1);
-        const region = bg.slice(start, bg.indexOf('attachSessionMetaListener(', start));
-
-        expect(region).toMatch(/if \(\(!host \|\| !vault\) && !lockCleanupPending\) return;/);
-        expect(region).toMatch(/await lockWalletNow\(\)/);
-    });
-
-    it('retains the record when the lock reports a surviving secret', () => {
-        const start = bg.indexOf('onLocked: (result) =>');
-        expect(start).toBeGreaterThan(-1);
-        const region = bg.slice(start, bg.indexOf('attachSignerBridgeListener(', start));
-
-        expect(region).toMatch(
-            /if \(result\?\.secretsCleared === false\)\s*\{\s*lockCleanupPending = true;\s*\}\s*else\s*\{/,
-        );
-        const elseAt = region.indexOf('} else {');
-        expect(region.indexOf('clearAutoLockState()')).toBeGreaterThan(elseAt);
-    });
-
-    it('declares the lock result the dispatcher forwards to onLocked', () => {
-        const meta = readFileSync(
-            join(wsRoot, 'packages', 'extension', 'src', 'background', 'sessionMeta.js'),
-            'utf8',
-        );
-        const decls = meta
-            .split('\n')
-            .filter((line) => line.includes('onLocked') && line.includes('Promise<void>'));
-
-        expect(decls).toHaveLength(2);
-        for (const line of decls) {
-            expect(line).toMatch(/secretsCleared: boolean/);
-        }
+    // The behaviour above is only the service worker's behaviour while the SW
+    // keeps using the sequencer; background.js registers chrome.* listeners at
+    // module load and so cannot itself be imported and driven here.
+    it('builds the shipping backstop and keeps no second copy of the flag', () => {
+        expect(bg).toMatch(/createLockBackstop\(\{/);
+        expect(bg).not.toMatch(/let lockCleanupPending/);
     });
 });
