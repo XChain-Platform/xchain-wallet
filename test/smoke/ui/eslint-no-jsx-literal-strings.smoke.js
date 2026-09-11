@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last eighteen are component props: copy shipped through them
+// The last twenty-four are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -68,6 +68,8 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'text', 'body', 'ariaLabel', 'iconLabel', 'aria',
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
+    'copyLabel', 'balanceText', 'submitLabel',
+    'what', 'prefix', 'noun',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -233,6 +235,21 @@ for (const [attr, copy] of [
     assert.strictEqual(v.length, 1, `flags an ${attr} literal`);
     assert.match(v[0].message, new RegExp(attr));
 }
+// 18d. The same one-hop-earlier shape on three more props. PsbtSignForm's
+// ArtifactBlock forwards `copyLabel` to CopyButton, which renders it as the
+// button text AND as the accessible name, so the sink prop `label` never
+// sees the English. AmountField renders `balanceText` verbatim into the
+// amount footer, and its shipping call sites write the copy as a template
+// ("… available"). TokenWizard ships `submitLabel` as a prop default that
+// renders as button text (item 19b). None of the three names is used for a
+// technical payload anywhere in packages/*/src.
+v = findViolations(jsxAttr('copyLabel', literal('Copy signed PSBT')));
+assert.strictEqual(v.length, 1, 'flags a copyLabel literal');
+assert.match(v[0].message, /copyLabel/);
+v = findViolations(jsxAttr('balanceText', jsxExpr(template('', ' BTC available'))));
+assert.strictEqual(v.length, 1, 'flags template copy in a balanceText prop');
+assert.match(v[0].message, /balanceText/);
+
 // 18c. Toggle copy in a ternary attribute value. Both attribute paths
 // enumerated three value shapes (Literal, container Literal, container
 // TemplateLiteral); a ConditionalExpression matched none, and the generic
@@ -269,6 +286,35 @@ v = findViolations(jsxAttr('aria-label', jsxExpr(conditional(literal('Hide filte
     { allow: ['Hide filters', 'Show filters'] });
 assert.strictEqual(v.length, 0, 'allowlist suppresses ternary branch copy');
 
+// 18e. JSX CHILD copy written as a template or a ternary. Both content
+// paths tested `expr.type === 'Literal'` only, so the shipping shapes
+// RecentTradesPanel `{summary.side === 'buy' ? 'Buy' : 'Sell'}` and
+// ToastHost ``{`+${hiddenCount} more`}`` reported nothing at all while
+// the attribute paths judged the identical value shapes.
+v = findViolations(jsxElement([jsxExpr(conditional(literal('Buy'), literal('Sell')))]));
+assert.strictEqual(v.length, 1, 'flags ternary copy in JSX content');
+assert.match(v[0].message, /Buy/);
+assert.strictEqual(v[0].node.type, 'ConditionalExpression', 'reports the whole ternary node');
+v = findViolations(jsxElement([jsxExpr(template('+', ' more'))]));
+assert.strictEqual(v.length, 1, 'flags template copy in JSX content');
+assert.match(v[0].message, /more/);
+v = findViolations(jsxElement([jsxExpr(logical(identifier('custom'), literal('Pin to top')))]));
+assert.strictEqual(v.length, 1, 'flags `||` fallback copy in JSX content');
+
+// The must-stay-silent shapes, in the same position.
+v = findViolations(jsxElement([jsxExpr(template('', '/', ''))]));
+assert.strictEqual(v.length, 0, 'a pure-interpolation template child stays silent');
+v = findViolations(jsxElement([jsxExpr(conditional(identifier('a'), identifier('b')))]));
+assert.strictEqual(v.length, 0, 'a child ternary with no static copy stays silent');
+v = findViolations(jsxElement([jsxExpr(conditional(literal('Buy'), literal('Sell')))]),
+    { allow: ['Buy', 'Sell'] });
+assert.strictEqual(v.length, 0, 'allowlist suppresses child branch copy');
+
+// A branch can hold JSX of its own, so the content path reports and then
+// keeps walking rather than returning the way the Literal case does.
+v = findViolations(jsxElement([jsxExpr(conditional(jsxElement([jsxText('Nested copy')]), literal('Dismiss')))]));
+assert.strictEqual(v.length, 2, 'reports the branch copy AND the JSX nested in a branch');
+
 // 19. Copy shipped as a destructured prop default never reaches a JSX
 // node, so `function C({ label = 'Copy' })` was invisible to the rule.
 // The key decides, not the local binding, and the set keeps technical
@@ -287,6 +333,14 @@ v = findViolations(fn([objectPattern(plainProp('value'), defaulted('label', lite
 assert.strictEqual(v.length, 1, 'flags a label = "Copy" prop default');
 assert.match(v[0].message, /label/);
 assert.strictEqual(v[0].node.type, 'Literal', 'reports the default value node');
+
+// 19b. TokenWizard's `submitLabel = 'Preview'` is the same shape: the copy
+// is a prop default that renders as the wizard's submit-button text, so no
+// JSX visitor could ever see the English.
+v = findViolations(fn([objectPattern(defaulted('submitLabel', literal('Preview')))]));
+assert.strictEqual(v.length, 1, 'flags a submitLabel = "Preview" prop default');
+assert.match(v[0].message, /submitLabel/);
+assert.strictEqual(v[0].node.type, 'Literal', 'reports the submitLabel default value node');
 v = findViolations(fn([objectPattern(defaulted('label', literal('Copy'), 'lbl'))]));
 assert.strictEqual(v.length, 1, 'judges the property key, not the local binding');
 v = findViolations(fn([objectPattern(defaulted('title', template('Copy ', ' items')))]));
@@ -316,6 +370,28 @@ for (const [name, copy] of [
     assert.strictEqual(v.length, 1, `flags a ${name} = "${copy}" prop default`);
     assert.match(v[0].message, new RegExp(name));
 }
+
+// 19c. The three names admitted for copy the set had no word for.
+// QueuedResultPanel interpolates `what` into `Your ${what}` and nineteen
+// routes pass it as a literal; StalenessLabel ships `prefix = 'Last synced'`
+// as a default and renders it into `${prefix} … ago`; tickerGrammarError
+// defaults `{ noun = 'Ticker' }` into the validation line the user reads.
+v = findViolations(jsxAttr('what', literal('cross-chain swap')));
+assert.strictEqual(v.length, 1, 'flags a what literal');
+assert.match(v[0].message, /what/);
+for (const [name, copy] of [['prefix', 'Last synced'], ['noun', 'Ticker']]) {
+    v = findViolations(fn([objectPattern(defaulted(name, literal(copy)))]));
+    assert.strictEqual(v.length, 1, `flags a ${name} = "${copy}" prop default`);
+    assert.match(v[0].message, new RegExp(name));
+}
+// The style guide passes `what={<>…</>}`, a JSX element rather than copy;
+// and CopyButton's clipboard payload rides `value`, which stays out of the
+// set. Neither may start reporting.
+v = findViolations(jsxAttr('what', jsxExpr(jsxElement([jsxText('A named wrapper over ChainPicker')]))));
+assert.strictEqual(v.length, 1, 'a JSX-element `what` reports only the text inside it');
+assert.match(v[0].message, /Inline JSX text/, 'and reports it as JSX text, not as what= copy');
+v = findViolations(jsxAttr('value', literal('bc1qexampleaddress')));
+assert.strictEqual(v.length, 0, 'value stays out of the set (CopyButton clipboard payload)');
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -410,6 +486,46 @@ assert.strictEqual(reports.length, 15, 'create() flags a label = "Copy" prop def
 visitors.ObjectPattern(objectPattern(defaulted('size', literal('md'))));
 assert.strictEqual(reports.length, 15, 'create() ignores a technical prop default');
 
+// The shipping content visitor is the second implementation of the JSX-child
+// path, and it carried the same Literal-only gate findViolations did, so pin
+// the template and ternary shapes on this side too.
+visitors.JSXExpressionContainer({
+    ...jsxExpr(conditional(literal('Buy'), literal('Sell'))),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(reports.length, 16, 'create() flags ternary copy in JSX content');
+visitors.JSXExpressionContainer({
+    ...jsxExpr(template('+', ' more')),
+    parent: { type: 'JSXFragment' },
+});
+assert.strictEqual(reports.length, 17, 'create() flags template copy in JSX content');
+visitors.JSXExpressionContainer({
+    ...jsxExpr(template('', '/', '')),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(reports.length, 17, 'create() ignores a pure-interpolation template child');
+visitors.JSXExpressionContainer({
+    ...jsxExpr(conditional(identifier('a'), identifier('b'))),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(reports.length, 17, 'create() ignores a child ternary with no static copy');
+// An attribute's ternary container still belongs to the JSXAttribute
+// visitor: reporting it here would newly flag style={{ color: x ? … }}.
+visitors.JSXExpressionContainer({
+    ...jsxExpr(conditional(literal('Buy'), literal('Sell'))),
+    parent: { type: 'JSXAttribute' },
+});
+assert.strictEqual(reports.length, 17, 'create() leaves an attribute ternary container alone');
+
+// The three copy props the set gained, on the shipping side.
+visitors.JSXAttribute(jsxAttr('what', literal('cross-chain swap')));
+assert.strictEqual(reports.length, 18, 'create() flags a what literal');
+visitors.JSXAttribute(jsxAttr('value', literal('bc1qexampleaddress')));
+assert.strictEqual(reports.length, 18, 'create() leaves value out of the set');
+visitors.ObjectPattern(objectPattern(defaulted('prefix', literal('Last synced'))));
+visitors.ObjectPattern(objectPattern(defaulted('noun', literal('Ticker'))));
+assert.strictEqual(reports.length, 20, 'create() flags the prefix and noun prop defaults');
+
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {
     options: [],
@@ -426,5 +542,33 @@ const ruleSrc = read('tools/eslint/rules/no-jsx-literal-strings.js');
 assert.match(ruleSrc, /§54.*G172/, 'rule header references §54 / G172');
 assert.match(ruleSrc, /eslint-disable-next-line @xchain\/no-jsx-literal-strings/,
     'rule documents the per-line disable comment');
+
+// The wiring recipe has to be the flat-config one, and this is the only
+// thing standing between the prose and a fourth drift back. Both headers
+// once documented an eslintrc `plugins: ['@xchain']`, which was measured
+// to fail with "ESLint couldn't find the plugin \"@xchain/eslint-plugin\"":
+// that shortname names an INSTALLED npm package, never a repo-relative
+// file, and an eslintrc could not require() this ESM plugin anyway. The
+// `eslint --rule` fallback failed the same way ("Definition for rule …
+// was not found"). Only a config that imports the module and registers it
+// as an object loads the rule.
+const pluginSrc = read('tools/eslint/plugin.js');
+for (const [name, src] of [['plugin.js', pluginSrc], ['no-jsx-literal-strings.js', ruleSrc]]) {
+    assert.match(src, /import xchain from '\.\/tools\/eslint\/plugin\.js'/,
+        `${name} documents importing the plugin module`);
+    assert.match(src, /plugins: \{ '@xchain': xchain \}/,
+        `${name} documents registering the plugin object, not the eslintrc shortname`);
+    // Only the RECIPE line is forbidden: both headers still name the
+    // eslintrc form in prose, to say why it does not work.
+    assert.doesNotMatch(src, /^\/\/\s+plugins: \['@xchain'\]/m,
+        `${name} no longer offers the unresolvable eslintrc shortname as a recipe line`);
+}
+// `ecmaFeatures.jsx` is load-bearing in the runnable example: without it
+// every .jsx file dies on "Parsing error: Unexpected token <" before the
+// rule is ever consulted, so a recipe that omits it is still unrunnable.
+assert.match(pluginSrc, /ecmaFeatures: \{ jsx: true \}/,
+    'plugin.js documents the jsx parser option its example needs to parse .jsx at all');
+assert.doesNotMatch(pluginSrc, /^\/\/\s+(npx )?eslint --rule/m,
+    'plugin.js no longer offers the --rule CLI fallback as a runnable line; it cannot resolve the namespace');
 
 console.log('OK — no-jsx-literal-strings rule + plugin + filename filter smoke');

@@ -162,12 +162,83 @@ export function parseJsonPointerVersion(text) {
     return typeof parsed.version === 'string' ? parsed.version.trim() : '';
 }
 
-export function parseManifest(path) {
-    const text = readFileSync(path, 'utf8');
+/** The client's cap on the whole feed body (directUpdateCheck.js MAX_FEED_BYTES). */
+const DIRECT_FEED_MAX_CHARS = 4096;
+
+/** The client's version rule (directUpdateCheck.js SEMVER_RE), verbatim. */
+const DIRECT_SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+/**
+ * Why the SHIPPED client would discard this pointer body, or '' if it
+ * would accept it.
+ *
+ * Deliberately a COPY of `packages/web/src/update/directUpdateCheck.js`'s
+ * rule rather than an import of it, on the same grounds
+ * `store-version-monitor.mjs` states for its own copy: this file is
+ * deployed standalone as /opt/xchain/feed-sweep.mjs and an import
+ * reaching into packages/web makes it unloadable there. The copy is held
+ * to the original by an equivalence table in
+ * `test/smoke/audits/feed-sweep.smoke.js`, which drives BOTH functions
+ * over one set of bodies wherever both files exist.
+ *
+ * The size is measured the client's way - `text.length` on the decoded
+ * body, not a stat of the file - because that is the comparison
+ * `checkForDirectUpdate` actually makes before it parses anything.
+ *
+ * @param {string} text
+ * @returns {string} the reason, or '' when the client accepts it
+ */
+export function directFeedRejection(text) {
+    if (typeof text !== 'string') return 'not text';
+    if (text.length > DIRECT_FEED_MAX_CHARS) {
+        return `${text.length} characters, over the client's `
+            + `${DIRECT_FEED_MAX_CHARS}-character cap`;
+    }
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { return 'not parseable as JSON'; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return 'body is not a JSON object';
+    }
+    const version = parsed.version;
+    if (typeof version !== 'string') return 'missing a string "version"';
+    // The RAW value, never the trimmed one. `parseJsonPointerVersion`
+    // trims so classification stays forgiving, and that trim is exactly
+    // what hid `{"version":" 1.2.3 "}`: the sweep matched a real manifest
+    // while the client's anchored regex rejected the padding.
+    if (!DIRECT_SEMVER_RE.test(version)) {
+        return `"${version.slice(0, 32)}" is not a plain MAJOR.MINOR.PATCH`;
+    }
+    return '';
+}
+
+/**
+ * Parse manifest text a caller ALREADY HOLDS.
+ *
+ * Split out from the path form so the sweep can verify and parse one
+ * buffer. Re-reading the file after gpg has verified it makes the bytes
+ * that were signed and the bytes that enter the baseline two separate
+ * reads of a directory a writer can change in between.
+ *
+ * @param {string} text
+ * @param {string} name  the manifest's file name, for the tag fallback
+ * @returns {{tag: string, entries: Map<string,string>}}
+ */
+export function parseManifestText(text, name) {
     const entries = new Map();
     let tag = '';
 
-    for (const line of text.split('\n')) {
+    for (const rawLine of text.split('\n')) {
+        // STRIP THE CARRIAGE RETURN, as every other reader of these files
+        // already does (updateVerify.js `parseManifest` at :197 and
+        // `parseChannelPointer` at :337, rehearse.mjs at :235). `.` never
+        // matches \r and `$` is not multiline here, so a CRLF manifest
+        // matched NO line at all: zero entries, an empty baseline, and
+        // every published file reported UNCOVERED - while the desktop
+        // client read the very same bytes without complaint. A producer
+        // and a consumer disagreeing about a line ending aims a tampering
+        // alarm at the operator rather than at an attacker, and an alarm
+        // that fires on a good feed is one that gets muted.
+        const line = rawLine.replace(/\r$/, '');
         const header = /^# tag:\s*(.+)$/.exec(line);
         if (header) { tag = header[1].trim(); continue; }
         if (line.startsWith('#') || line.trim() === '') continue;
@@ -175,7 +246,11 @@ export function parseManifest(path) {
         if (!m) continue;
         entries.set(basename(m[2].trim()), m[1].toLowerCase());
     }
-    return { tag: tag || basename(path).replace(/\.txt$/, ''), entries };
+    return { tag: tag || name.replace(/\.txt$/, ''), entries };
+}
+
+export function parseManifest(path) {
+    return parseManifestText(readFileSync(path, 'utf8'), basename(path));
 }
 
 /**
@@ -196,7 +271,15 @@ export function parseUpdateInfo(text) {
     const lines = text.split('\n');
 
     let current = null;
-    for (const line of lines) {
+    for (const rawLine of lines) {
+        // Same carriage-return rule as parseManifestText, and for the same
+        // reason: `parseChannelPointer` (updateVerify.js:337) is a port of
+        // THIS function that strips \r, so a CRLF pointer the shipped
+        // client accepts came back here with no version and no files and
+        // was reported POINTER-UNPARSEABLE. The two halves of one contract
+        // must read a pointer the same way, or the sweep's findings are
+        // about the sweep.
+        const line = rawLine.replace(/\r$/, '');
         const version = /^version:\s*(.+)$/.exec(line);
         if (version) { out.version = unquote(version[1]); continue; }
 
@@ -245,14 +328,28 @@ function unquote(value) {
  * reports nothing at all; the summary says which mode it ran in rather
  * than letting a reader assume the stronger one.
  *
+ * VERIFY THE BYTES THE CALLER HOLDS, never a path. Handing gpg a path
+ * makes gpg open the file itself, so the run that was signed and the run
+ * that is parsed are two reads of a directory whose whole threat model is
+ * "someone can write here". A writer who replaces the manifest between
+ * them gets hashes nobody signed into a baseline the summary reports as
+ * `gpg-verified against <fpr>`, which is the anchor's own failure mode
+ * wearing the anchor's badge. gpg takes the signed data on stdin when the
+ * data argument is `-`; the detached signature stays a path because it is
+ * the one file gpg must read for itself, and swapping IT can only fail
+ * closed against bytes we already hold.
+ *
+ * @param {Buffer|string} manifestBytes  the exact bytes that will be parsed
+ * @param {string} signaturePath         the detached `.asc` beside them
  * @returns {'ok'|'bad'|'skipped'}
  */
-export function verifyManifestSignature(manifestPath, keyFingerprint, run = spawnSync) {
+export function verifyManifestSignature(manifestBytes, signaturePath, keyFingerprint,
+    run = spawnSync) {
     if (!keyFingerprint) return 'skipped';
-    const sig = `${manifestPath}.asc`;
-    if (!existsSync(sig)) return 'bad';
+    if (!existsSync(signaturePath)) return 'bad';
 
-    const result = run('gpg', ['--status-fd=1', '--verify', sig, manifestPath], {
+    const result = run('gpg', ['--status-fd=1', '--verify', signaturePath, '-'], {
+        input: manifestBytes,
         encoding: 'utf8',
     });
     if (result.error || typeof result.stdout !== 'string') return 'bad';
@@ -322,7 +419,15 @@ export function sweep(root, options = {}) {
             const full = join(manifestDir, name);
             if (!statSync(full).isFile()) continue;
 
-            const state = verifyManifestSignature(full, options.gpgKey, options.run);
+            // ONE READ, used for both decisions. Everything below judges
+            // these bytes: the signature check and the baseline entries
+            // come from the same buffer, so there is no window in which
+            // the file can become something else after it has been
+            // verified. Do not reintroduce a second read of `full` in
+            // this loop.
+            const bytes = readFileSync(full);
+            const state = verifyManifestSignature(bytes, `${full}.asc`, options.gpgKey,
+                options.run);
             if (state === 'bad') {
                 add(existsSync(`${full}.asc`) ? 'MANIFEST-BAD-SIG' : 'MANIFEST-UNSIGNED',
                     `${MANIFEST_DIR}/${name}`,
@@ -340,7 +445,7 @@ export function sweep(root, options = {}) {
             }
 
             manifestCount += 1;
-            const { tag, entries } = parseManifest(full);
+            const { tag, entries } = parseManifestText(bytes.toString('utf8'), name);
             // The RELEASE, not the signature. A re-sign tag
             // (`v0.336.0-resign1`) is the release tag's tree with the release
             // tooling corrected and nothing else, cut because the dev-mock gate
@@ -374,18 +479,29 @@ export function sweep(root, options = {}) {
             if (!statSync(file).isFile()) continue;
             const rel = `${dir}/${name}`;
 
-            if (name.endsWith('.yml') && isUpdateInfoContent(readFileSync(file, 'utf8'))) {
-                pointers.push({ rel, file, dir, kind: 'yml' });
-                continue;
+            // The text a pointer is CLASSIFIED from is the text it is
+            // later judged against, carried on the record rather than
+            // re-read below. Two reads of one file is how the manifest
+            // lane grew a check/use window, and a pointer is no less
+            // writable than a manifest.
+            if (name.endsWith('.yml')) {
+                const text = readFileSync(file, 'utf8');
+                if (isUpdateInfoContent(text)) {
+                    pointers.push({ rel, file, dir, kind: 'yml', text });
+                    continue;
+                }
             }
             // The direct-APK lane's pointer is JSON, not an electron-updater
             // yml, so the test above cannot see it. Classifying it matters
             // twice over: unclassified it would be hashed as payload and
             // reported UNCOVERED forever (no manifest names a pointer, by
             // §7.1 design), and the check it actually needs would never run.
-            if (name.endsWith('.json') && isJsonPointerContent(readFileSync(file, 'utf8'))) {
-                pointers.push({ rel, file, dir, kind: 'json' });
-                continue;
+            if (name.endsWith('.json')) {
+                const text = readFileSync(file, 'utf8');
+                if (isJsonPointerContent(text)) {
+                    pointers.push({ rel, file, dir, kind: 'json', text });
+                    continue;
+                }
             }
 
             checked += 1;
@@ -407,7 +523,22 @@ export function sweep(root, options = {}) {
     // them, which would make every rollback look like tampering. That
     // exclusion is safe only if something else checks them, and this is
     // that something.
-    for (const { rel, file, dir, kind } of pointers) {
+    //
+    // AN EMPTY BASELINE IS A FINDING, NOT A PASS. Both lanes below asked
+    // `tagsSeen.size > 0 &&` first until 2026-09-05, so a feed whose
+    // manifests were gone disabled the one check that reads its pointers:
+    // a tree holding only `android/latest.json` at version 9.9.9 swept
+    // clean, 0 findings and exit 0, while that pointer was still sending
+    // every direct install at a version whose payload and provenance had
+    // both vanished. There is no legitimate feed state it protected. A
+    // pointer exists only after a release and a release always publishes
+    // a manifest beside it (§7.3, append-only), so "live pointer, no
+    // manifests" is precisely the loss this sweep is a record of. The
+    // guard was also worst where it mattered most: `tagsSeen` is empty
+    // when the --gpg-key anchor REFUSES every manifest entry to the
+    // baseline, which is the attacker-plants-a-manifest case the anchor
+    // exists to catch.
+    for (const { rel, dir, kind, text } of pointers) {
         // A JSON pointer carries a version and nothing else - no file list,
         // no hashes - so only the version check applies to it. Stated rather
         // than silently skipped: this lane's pointer names no bytes, so
@@ -420,22 +551,40 @@ export function sweep(root, options = {}) {
         // unexplained file on the feed - and payload is exactly what it is
         // then treated as, which UNCOVERED reports. Driven: emptying
         // `latest.json` to `{}` moves it from `pointers=1` to
-        // `UNCOVERED:android/latest.json`.
+        // `UNCOVERED:android/latest.json`. POINTER-UNREADABLE below is the
+        // other question and not that one: the file IS a pointer, and the
+        // shipped client still throws it away.
         if (kind === 'json') {
-            const version = parseJsonPointerVersion(readFileSync(file, 'utf8'));
-            if (tagsSeen.size > 0 && !tagsSeen.has(`v${version}`)) {
+            // ASK THE QUESTION THE CLIENT ASKS FIRST. Structural
+            // classification is deliberately lenient so a second lane's
+            // pointer is still seen, but leniency here made the sweep
+            // report health on feeds every direct install DISCARDS:
+            // `{"version":" 1.2.3 "}` was trimmed into a version that
+            // matched a real manifest, and a body over the client's
+            // 4096-char cap was read straight through it. Both swept
+            // clean with zero findings while checkForDirectUpdate
+            // returned null, so the one channel a sideloaded install has
+            // for a security fix was dead and the record said fine.
+            const rejection = directFeedRejection(text);
+            if (rejection) {
+                add('POINTER-UNREADABLE', rel,
+                    `the shipped client discards this feed: ${rejection}`);
+                continue;
+            }
+            const version = parseJsonPointerVersion(text);
+            if (!tagsSeen.has(`v${version}`)) {
                 add('POINTER-NO-MANIFEST', rel,
                     `names version ${version}, no RELEASE_HASHES/v${version}.txt`);
             }
             continue;
         }
 
-        const info = parseUpdateInfo(readFileSync(file, 'utf8'));
+        const info = parseUpdateInfo(text);
         if (!info.version || info.files.length === 0) {
             add('POINTER-UNPARSEABLE', rel, 'no version or no files entry');
             continue;
         }
-        if (tagsSeen.size > 0 && !tagsSeen.has(`v${info.version}`)) {
+        if (!tagsSeen.has(`v${info.version}`)) {
             add('POINTER-NO-MANIFEST', rel,
                 `names version ${info.version}, no RELEASE_HASHES/v${info.version}.txt`);
         }

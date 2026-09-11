@@ -26,11 +26,24 @@
 // them. Calling `sdk.onMempoolAction` here as well would only add a second
 // holder of the identical subscription, and the cap is per connection.
 //
-// Direction matters for NEW_ACTION: source === our address means an action we
-// broadcast was indexed (→ tx confirmed); destination === our address means an
-// inbound transfer (→ incoming receipt). Using source/destination off the
-// action row is precise where an ADDRESS_UPDATE balance snapshot is not (it
-// can't tell a send from a receive).
+// Direction matters for NEW_ACTION and MEMPOOL_ACTION alike: source === our
+// address means an action we broadcast (→ tx confirmed, or the mempool
+// observation); our address among `destinations[]` means an inbound transfer
+// (→ incoming receipt once indexed, incoming pending while it sits in a
+// mempool). The explorer resolves compacted `^<id>` refs to the subscribed
+// literal before it fans a frame out (M1.1/M1.4), so the array is compared
+// byte-for-byte here. The retired singular `destination` is still honoured
+// for any older explorer that might send it. Using the parties off the action
+// row is precise where an ADDRESS_UPDATE balance snapshot is not (it can't
+// tell a send from a receive).
+//
+// One transaction, at most one "you received something" (§5 M3.3): the
+// pending sighting and the confirmation of the same tx_hash are two frames
+// about one event, so whichever is delivered first marks the (address,
+// tx_hash) pair in `_announced` and the other is suppressed. The 30s replay
+// dedup below cannot do this: it is keyed by kind and expires long before a
+// block lands. A suppressed delivery (quiet hours, toggle off) does NOT mark
+// the pair, so the user still hears about the confirmation when it arrives.
 //
 // Privacy (§46.4): notification text carries no keys and no precise balances.
 // Only the chain name and the event kind are included. (Amount/token inclusion
@@ -41,9 +54,33 @@ import { isWithinQuietHours } from './quietHours.js';
 
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
+// How long an announced (address, tx_hash) pair suppresses its twin. A
+// mempool sighting is normally confirmed within minutes; an hour covers a
+// congested chain without keeping the map growing for the session's life.
+const ANNOUNCED_TTL_MS = 60 * 60_000;
+const ANNOUNCED_CAP = 500;
 const SUB_WARN_THRESHOLD = 20; // explorer caps a connection at 25 subscriptions
 
+/** The kinds that mean "you received something" and must not double up per tx. */
+const RECEIVED_KINDS = new Set(['incoming-pending', 'incoming-receipt']);
+
 const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
+
+/**
+ * Whether a frame's parties name `address` as a RECIPIENT. The sender is
+ * never a recipient of its own frame here even when it also appears in the
+ * destinations (a change output, a self-send): that frame reaches this
+ * address as the source, and the source path owns it.
+ *
+ * @param {string} address
+ * @param {{ source?: string, destination?: string, destinations?: string[] }} data
+ */
+function isInboundFor(address, data) {
+    if (!address || !data) return false;
+    if (data.source && data.source === address) return false;
+    if (Array.isArray(data.destinations) && data.destinations.includes(address)) return true;
+    return Boolean(data.destination) && data.destination === address;
+}
 
 export class NotificationService {
     /**
@@ -105,6 +142,8 @@ export class NotificationService {
         this._conns = new Map();
         /** @type {Map<string, number>} dedup key -> expiry ms */
         this._recent = new Map();
+        /** @type {Map<string, number>} `${address}:${tx_hash}` already announced as received -> expiry ms */
+        this._announced = new Map();
     }
 
     /** Connect + subscribe for every active address. Idempotent. */
@@ -133,6 +172,7 @@ export class NotificationService {
         }
         this._conns.clear();
         this._recent.clear();
+        this._announced.clear();
         this._started = false;
     }
 
@@ -251,9 +291,19 @@ export class NotificationService {
         let plan = null;
 
         switch (msg.type) {
+            case 'MEMPOOL_ACTION': {
+                // A node is holding a transaction that pays this address, and
+                // nothing has validated it yet: the copy says "pending" and
+                // nothing stronger (§7). Our own sends were recorded above and
+                // are not incoming. Absent flag reads as ON (v2-tolerant,
+                // ruling I-35a) so an older settings record is not silent.
+                if (!isInboundFor(addr.address, data)) break;
+                if (flags.incomingPending === false) break;
+                plan = { kind: 'incoming-pending', title: `Incoming on ${addr.label}`, body: `A payment to your ${addr.label} address is pending, waiting for a block.` };
+                break;
+            }
             case 'NEW_ACTION': {
                 const source = data.source || null;
-                const destination = data.destination || null;
                 if (source && source === addr.address) {
                     // An action we broadcast has been indexed → tx confirmed.
                     // The pending record was already retired above, ahead of
@@ -263,11 +313,13 @@ export class NotificationService {
                     if (!confirmedOwnSend) break; // a stranger's transaction: never notify
                     if (!flags.txConfirmations) break;
                     plan = { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
-                } else if (destination && destination === addr.address) {
+                } else if (isInboundFor(addr.address, data)) {
                     // An inbound action landed at our address. A MESSAGE is its
                     // own notification kind (gated by its own flag); everything
                     // else is a generic incoming receipt. The action-type string
                     // rides on every live NEW_ACTION event from the explorer.
+                    // Until M1.4 the explorer sent no recipient at all, so this
+                    // branch never fired; it reads `destinations[]` now.
                     if (data.action === 'MESSAGE') {
                         if (!flags.messages) break;
                         // Privacy (§46.4): no sender, no content, only the chain.
@@ -313,10 +365,19 @@ export class NotificationService {
         // in tests/logs.
         if (isWithinQuietHours(settings)) return;
 
-        const ident = data.action_index != null
-            ? String(data.action_index)
-            : String(msg.timestamp || this._now());
+        // A mempool frame has no action index and its `timestamp` is stamped
+        // at broadcast, so the transaction hash is the only stable identity it
+        // has (I-28); a reconnect replays it with a fresh timestamp otherwise.
+        const txHash = data.tx_hash || data.txid ? String(data.tx_hash || data.txid).toLowerCase() : null;
+        const ident = msg.type === 'MEMPOOL_ACTION' && txHash
+            ? txHash
+            : data.action_index != null
+                ? String(data.action_index)
+                : String(msg.timestamp || this._now());
         if (this._isDuplicate(`${plan.kind}:${addr.address}:${ident}`)) return;
+
+        const receivedKey = RECEIVED_KINDS.has(plan.kind) && txHash ? `${addr.address}:${txHash}` : null;
+        if (receivedKey && this._wasAnnounced(receivedKey)) return;
 
         try {
             await this._notify({
@@ -328,11 +389,40 @@ export class NotificationService {
                     address: addr.address,
                     type: msg.type,
                     actionIndex: data.action_index != null ? data.action_index : null,
+                    txHash,
                 },
             });
         } catch (e) {
             this._log.error('NotificationService: notify adapter threw', e);
         }
+        // Marked after delivery, not before: a delivery the adapter refused is
+        // not one the user heard, and the confirmation should still get its turn.
+        if (receivedKey) this._markAnnounced(receivedKey);
+    }
+
+    /** Whether this (address, tx_hash) pair was already announced as received within the TTL. */
+    _wasAnnounced(key) {
+        const exp = this._announced.get(key);
+        if (exp == null) return false;
+        if (exp > this._now()) return true;
+        this._announced.delete(key);
+        return false;
+    }
+
+    _markAnnounced(key) {
+        const now = this._now();
+        if (this._announced.size >= ANNOUNCED_CAP) {
+            for (const [k, exp] of this._announced) {
+                if (exp <= now) this._announced.delete(k);
+            }
+            // Still full after sweeping: drop the oldest insertion. A missed
+            // suppression costs one duplicate toast; unbounded growth costs
+            // memory for the life of the session.
+            if (this._announced.size >= ANNOUNCED_CAP) {
+                this._announced.delete(this._announced.keys().next().value);
+            }
+        }
+        this._announced.set(key, now + ANNOUNCED_TTL_MS);
     }
 
     /**

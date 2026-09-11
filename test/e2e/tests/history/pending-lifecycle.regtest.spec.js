@@ -349,7 +349,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             await expect(banner, 'the pending detail page is titled with an action index it cannot have')
                 .not.toContainText('Send #');
 
-            await expect(page.getByText('Pending, not yet validated by the indexer.'),
+            await expect(page.getByText('Pending, not yet validated by the service.'),
                 'the pending detail branch did not render its pre-validation line, which is the one '
                 + 'thing the user has to be told about an entry the indexer has not judged yet')
                 .toBeVisible({ timeout: 30_000 });

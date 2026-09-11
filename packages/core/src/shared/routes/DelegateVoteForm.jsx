@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -192,7 +193,9 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || (verb + ' failed.'));
+            setFormError(submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
+            }));
         }
     }
 
@@ -286,7 +289,9 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
             setStage('done');
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : err?.message || (verb + ' failed.'));
+            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
+            }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         }

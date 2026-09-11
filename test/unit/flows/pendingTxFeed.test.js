@@ -99,6 +99,22 @@ describe('livePendingTxs', () => {
         expect(out).toHaveLength(0);
     });
 
+    it('marks a record the UTXO set held at this read, and nothing else', async () => {
+        const out = await livePendingTxs({
+            vault: vaultOf([record(), record({ id: 'ptx-2', txid: 'DDEEFF' })]),
+            chainRegistry: registry,
+            chainId: CHAIN_ID,
+            seenNow: new Set(['aabbcc']),
+        });
+        expect(out.map((s) => [s.txid, s.networkSeenNow])).toEqual([['AABBCC', true], ['DDEEFF', false]]);
+        // Absent set: the field is still present and false, so History never
+        // reads `undefined` as a sighting.
+        const plain = await livePendingTxs({
+            vault: vaultOf([record()]), chainRegistry: registry, chainId: CHAIN_ID,
+        });
+        expect(plain[0].networkSeenNow).toBe(false);
+    });
+
     it('does not leak another coin\'s pending send onto this chain', async () => {
         const out = await livePendingTxs({
             vault: vaultOf([record({ chain: 'DOGE' })]),

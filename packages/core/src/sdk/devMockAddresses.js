@@ -17,6 +17,8 @@
 //
 // Dogecoin has no segwit, so only base58 types are listed for its chains.
 
+import { defaultRegistry } from '../registry/index.js';
+
 export const MOCK_ADDRESS_PREFIXES = {
     'bitcoin-mainnet':  { p2pkh: '1devmock',  'p2sh-p2wpkh': '3devmock', p2wpkh: 'bc1qdevmock',   p2tr: 'bc1pdevmock' },
     'bitcoin-testnet':  { p2pkh: 'mdevmock',  'p2sh-p2wpkh': '2devmock', p2wpkh: 'tb1qdevmock',   p2tr: 'tb1pdevmock' },
@@ -24,9 +26,11 @@ export const MOCK_ADDRESS_PREFIXES = {
     'litecoin-mainnet': { p2pkh: 'Ldevmock',  'p2sh-p2wpkh': 'Mdevmock', p2wpkh: 'ltc1qdevmock' },
     'litecoin-testnet': { p2pkh: 'mdevmock',  'p2sh-p2wpkh': '2devmock', p2wpkh: 'tltc1qdevmock' },
     'litecoin-regtest': { p2pkh: 'mdevmock',  'p2sh-p2wpkh': '2devmock', p2wpkh: 'rltc1qdevmock' },
-    'dogecoin-mainnet': { p2pkh: 'Ddevmock',  'p2sh-p2wpkh': 'Adevmock' },
-    'dogecoin-testnet': { p2pkh: 'ndevmock',  'p2sh-p2wpkh': '2devmock' },
-    'dogecoin-regtest': { p2pkh: 'ndevmock',  'p2sh-p2wpkh': '2devmock' },
+    // Only p2pkh: the dogecoin descriptor's addressTypes is ['p2pkh'], and a
+    // segwit row here contradicts both it and the comment above.
+    'dogecoin-mainnet': { p2pkh: 'Ddevmock' },
+    'dogecoin-testnet': { p2pkh: 'ndevmock' },
+    'dogecoin-regtest': { p2pkh: 'ndevmock' },
 };
 
 // How many characters of the public key `mockDeriveAddress` appends.
@@ -72,14 +76,20 @@ export function isDevMockAddress(address) {
  * a recognizable `…devmock…` token and no real cryptography.
  *
  * @param {string} chainId        e.g. 'dogecoin-mainnet'
- * @param {string} type           e.g. 'p2pkh' / 'p2wpkh' / 'p2tr'
+ * @param {string} [type]         e.g. 'p2pkh' / 'p2wpkh' / 'p2tr'; omitted means the chain descriptor's defaultAddressType
  * @param {string} publicKeyHex
  * @returns {string}
  */
 export function mockDeriveAddress(chainId, type, publicKeyHex) {
     const chainPrefixes = MOCK_ADDRESS_PREFIXES[chainId]
         ?? MOCK_ADDRESS_PREFIXES['bitcoin-mainnet'];
-    const prefix = chainPrefixes[type] ?? `${type}:`;
+    // Resolve an absent type from the registry rather than guessing segwit
+    // (dogecoin is p2pkh-only, so a p2wpkh guess has no row and leaks
+    // 'p2wpkh:' into the dev shell where an address belongs).
+    const resolved = type
+        ?? defaultRegistry().descriptorFor(chainId)?.defaultAddressType
+        ?? 'p2pkh';
+    const prefix = chainPrefixes[resolved] ?? `${resolved}:`;
     const tail = String(publicKeyHex || '').slice(0, MOCK_TAIL_LENGTH).toLowerCase();
     return `${prefix}${tail}`;
 }

@@ -364,7 +364,7 @@ const CEREMONY_TOOLCHAINS = {
         note: 'maintainer key-ceremony verification. Its only requirement is gpg, which is the whole '
             + 'subject of the ceremony runbook that invokes it, so an operator cannot reach this '
             + 'script without already having gpg. Documented in the GPG key ceremony runbook '
-            + '(claude/reports/, private by design) rather than on a public docs page, because it '
+            + '(in the platform tree, private by design) rather than on a public docs page, because it '
             + 'names key custody. Registered here rather than left undeclared: this gate refused it '
             + 'on sight the moment it was added, which is the gate doing its job',
     },

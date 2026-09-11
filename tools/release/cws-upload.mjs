@@ -265,12 +265,29 @@ export function headerField(manifestText, field) {
  * signature on a perfectly good K1 one - a failure feed-sweep.mjs already
  * paid for and documents at verifyManifestSignature.
  *
+ * VERIFIES THE BYTES, NEVER THE PATH. `manifestText` is the document gpg
+ * checks, handed to it on stdin, because the caller parses those same bytes
+ * and a verdict about some other read of the same filename says nothing
+ * about them. Until 2026-09-05 this named the manifest path as gpg's
+ * document argument, so checkProvenance's cached read and this check were
+ * two separate reads: a writer on the release worktree who replaced an
+ * unsigned manifest with a genuinely signed one in between got `signed:
+ * true` over the digest table nobody signed. Only `${manifestPath}.asc` is
+ * still named by path, which changes nothing an attacker can use: a VALIDSIG
+ * over THESE bytes from the pinned fingerprint needs the release key.
+ *
+ * No text is no verification, so it is a refusal rather than an empty
+ * document handed to gpg.
+ *
  * @param {object} opts
+ * @param {string} opts.manifestPath  locates the detached signature only
+ * @param {string} opts.manifestText  the document that is verified
  * @returns {'ok'|'no-gpg'|'bad'|'wrong-key'}
  */
-export function attributeSignature({ manifestPath, fingerprint, runImpl = spawnSync }) {
-    const result = runImpl('gpg', ['--status-fd=1', '--verify', `${manifestPath}.asc`, manifestPath],
-        { encoding: 'utf8' });
+export function attributeSignature({ manifestPath, manifestText, fingerprint, runImpl = spawnSync }) {
+    if (typeof manifestText !== 'string') return 'bad';
+    const result = runImpl('gpg', ['--status-fd=1', '--verify', `${manifestPath}.asc`, '-'],
+        { encoding: 'utf8', input: manifestText });
     if (result.error && result.error.code === 'ENOENT') return 'no-gpg';
     if (result.error || typeof result.stdout !== 'string') return 'bad';
 
@@ -316,9 +333,13 @@ export async function expectedSigner(readFileImpl = readFile, env = process.env)
  * release manifest describes, the manifest must carry a signature the release
  * key actually made, and the manifest must be THIS release's.
  *
+ * Returns the very buffer it hashed as `bytes`, so the shipment can be the
+ * checked artifact rather than a second read of the same filename.
+ *
  * @param {object} opts
- * @returns {Promise<{ sha256: string, manifestPath: string, signed: boolean,
- *                     signature: string, release: string, lanes: string }>}
+ * @returns {Promise<{ sha256: string, bytes: Buffer, manifestPath: string,
+ *                     signed: boolean, signature: string, release: string,
+ *                     lanes: string }>}
  */
 export async function checkProvenance({
     zipPath, manifestPath, tag = '', allowUnsigned,
@@ -366,8 +387,11 @@ export async function checkProvenance({
                 + '  fingerprint published at https://xchain.io/security, or run from a checkout carrying\n'
                 + '  docs/release-key-pin.json.';
         } else {
+            // manifestText, not `manifest`: the signature has to cover the
+            // bytes the tag anchor and the hash table are read out of, or
+            // this gate authenticates one read and acts on another.
             const verdict = attributeSignature({
-                manifestPath: manifest, fingerprint: pin.fingerprint, runImpl,
+                manifestPath: manifest, manifestText, fingerprint: pin.fingerprint, runImpl,
             });
             if (verdict === 'ok') {
                 signed = true;
@@ -469,7 +493,10 @@ export async function checkProvenance({
         );
     }
 
-    const actual = createHash('sha256').update(await readFileImpl(zipPath)).digest('hex');
+    // Keep the bytes we hashed, because the caller uploads THESE and never
+    // re-reads the path (a second read is a second artifact).
+    const bytes = await readFileImpl(zipPath);
+    const actual = createHash('sha256').update(bytes).digest('hex');
     if (actual !== expected) {
         throw new Refusal(
             `${basename(zipPath)} does not match the hash the release manifest records.\n`
@@ -480,7 +507,7 @@ export async function checkProvenance({
         );
     }
 
-    return { sha256: actual, manifestPath: manifest, signed, signature, release, lanes };
+    return { sha256: actual, bytes, manifestPath: manifest, signed, signature, release, lanes };
 }
 
 /**
@@ -593,8 +620,10 @@ async function main(argv, env, log = console.log) {
     }
 
     const token = await accessToken(env);
-    const zipBytes = await readFile(args.zip);
-    await uploadPackage({ itemId: args.itemId, zipBytes, token });
+    // Upload the buffer the gate hashed, never a fresh read of args.zip: the
+    // OAuth round trip above is a window a writer on the shared release
+    // worktree could use to swap the file under a passed check.
+    await uploadPackage({ itemId: args.itemId, zipBytes: prov.bytes, token });
     log(`uploaded to item ${args.itemId} as a DRAFT. Nothing is visible to users yet.`);
 
     if (args.publish) {

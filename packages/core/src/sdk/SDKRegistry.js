@@ -22,7 +22,8 @@
  * @property {string} encoderUrl
  * @property {string} hubUrl
  * @property {number} [timeout] per-request ms budget (; see DEFAULT_SDK_NETWORK_OPTIONS)
- * @property {{ maxRetries: number, baseDelay: number, maxDelay: number }} [retry]
+ * @property {{ maxRetries: number, baseDelay: number, maxDelay: number,
+ *              retryAfterMaxDelay: number }} [retry]
  */
 
 /**
@@ -81,10 +82,22 @@ const ENDPOINT_FIELDS = Object.freeze([
  * degrading when its backend was unreachable. An interactive wallet must
  * fail loudly in seconds; callers that genuinely need more patience can
  * override via the `networkOptions` constructor opt.
+ *
+ * ONE EXCEPTION, and it is deliberate (rate-limits spec, M4): a 429 whose
+ * `Retry-After` the origin actually named is waited out up to
+ * `retryAfterMaxDelay`, not clamped to `maxDelay`. The 2 s cap made the
+ * wallet's single retry worthless against a rate limit - it re-asked while the
+ * bucket was still empty, spent its one retry, and surfaced the failure anyway,
+ * which is a request the limiter counts for nothing. So a 429 may now hold ONE
+ * request for up to 60 s (the SDK retries a rate limit once), while every other
+ * retryable failure, 5xx included, keeps the 2 s backoff cap and the fast, loud
+ * failure this block exists for.
  */
 export const DEFAULT_SDK_NETWORK_OPTIONS = Object.freeze({
     timeout: 10_000,
-    retry: Object.freeze({ maxRetries: 1, baseDelay: 500, maxDelay: 2_000 }),
+    retry: Object.freeze({
+        maxRetries: 1, baseDelay: 500, maxDelay: 2_000, retryAfterMaxDelay: 60_000,
+    }),
 });
 
 export class UnknownChainError extends Error {
@@ -101,7 +114,8 @@ export class SDKRegistry {
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {SDKFactory} opts.sdkFactory
      * @param {Record<string, EndpointOverride>} [opts.endpointOverrides]
-     * @param {{ timeout?: number, retry?: { maxRetries?: number, baseDelay?: number, maxDelay?: number } }} [opts.networkOptions]
+     * @param {{ timeout?: number, retry?: { maxRetries?: number, baseDelay?: number,
+     *           maxDelay?: number, retryAfterMaxDelay?: number } }} [opts.networkOptions]
      *        overrides for DEFAULT_SDK_NETWORK_OPTIONS (merged shallowly)
      */
     constructor({ chainRegistry, sdkFactory, endpointOverrides = {}, networkOptions = {} }) {

@@ -76,7 +76,7 @@ export function exactNetworkFeeSats(decomposed) {
  * @param {object} [opts]
  * @param {string[]} [opts.carrierScripts]   redeem scripts create_tx committed to; [] off the chunk lanes
  * @param {Iterable<string>} [opts.ownAddresses]  addresses the wallet controls, so change is not mistaken for a carrier
- * @param {number} [opts.revealOutputSats]   value the reveal re-emits as outputs (the native-coin protocol fee), so it is not counted as miner fee
+ * @param {number} [opts.revealOutputSats]   TOTAL value the reveal re-emits as outputs - the whole deferred set (protocol fee, oracle usage fee, ADS donation, native payment), not the protocol fee alone - so it is not counted as miner fee
  * @returns {number | null}  fee in the chain's smallest unit, or null if not knowable
  */
 export function totalNetworkFeeSats(decomposed, {

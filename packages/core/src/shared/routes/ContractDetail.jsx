@@ -9,16 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { extractSingle, contractBalanceRows } from './contractResponseShape.js';
 import {
-    MAX_CONTRACT_NAME_LENGTH,
-    contractNameFor,
-    mergeContractNames,
-    setContractName,
-} from '../utils/contractNameMemory.js';
+    extractSingle,
+    contractBalanceRows,
+    contractAddressFor,
+    contractDisplayLabel,
+    contractMetaOf,
+} from './contractResponseShape.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -28,7 +28,8 @@ const chainRegistry = registryLib.defaultRegistry();
  *
  * Layout (per spec):
  *
- *   Contract #42: "MyMarket"      [chain badge: BTC]  [Rename]
+ *   Escrow v1.0.0 (C:BTC:42)      [chain badge: BTC]
+ *     <description>
  *     Owner / Deployed / Gas limit / Status / Code hash
  *     State (expandable)
  *     Balances (tokens held by the contract)
@@ -45,11 +46,12 @@ const chainRegistry = registryLib.defaultRegistry();
  *   ...plus getAddressesByChain to flag "you own this" against the
  *   user's wallet addresses.
  *
- * The heading name is a DEVICE-LOCAL label: the protocol has no
- * name field for contracts, so the heading shows what this user called it
- * (from the deploy form's Name field, or the Rename control here) and falls
- * back to the indexer's fields and then "(unnamed)". Rename writes through
- * contractNameMemory.js, keyed by chain + this contract's action index.
+ * The heading name comes off the CHAIN: `meta.name` and `meta.version` are an
+ * export of the contract's own source (CONTRACT_META_REQUIRED), extracted by
+ * the indexer, so every viewer of this contract reads the same heading. It is
+ * printed with the derived address because names are not unique. The
+ * description is 512 bytes and shows here only, never on a list row. A contract
+ * deployed before the flag day exports none and reads "Unnamed contract".
  *
  * EXECUTE / DEPOSIT / WITHDRAW buttons are rendered but are no-ops
  * until Steps 5 + 6 land the authoring forms. The `onExecute /
@@ -96,32 +98,14 @@ export function ContractDetail({
     const [executionsPage, setExecutionsPage] = useState(1);
     const [stateExpanded, setStateExpanded] = useState(false);
     const [walletAddresses, setWalletAddresses] = useState(/** @type {string[]} */ ([]));
-    // The device-local label for this contract. Read straight from
-    // storage on mount (so it renders on the first paint, before any query
-    // answers) and refreshed once the contract row arrives, because that row is
-    // what carries the txid a deploy-time label may still be filed under.
-    const [localName, setLocalName] = useState(
-        () => contractNameFor({ chainId, actionIndex: contractActionIndex }),
-    );
-    const [renaming, setRenaming] = useState(false);
-    const [renameDraft, setRenameDraft] = useState('');
 
     useEffect(() => {
         let cancelled = false;
-        setRenaming(false);
-        setLocalName(contractNameFor({ chainId, actionIndex: contractActionIndex }));
         messaging.getContractByActionIndex({ chainId, contractActionIndex })
             .then((resp) => {
                 if (cancelled) return;
                 const row = extractSingle(resp);
                 setContract(row);
-                // Settle a label still filed under the deploy txid: this row is
-                // the first place both identities appear together.
-                const [named] = mergeContractNames(chainId, [{
-                    ...(row || {}),
-                    action_index: row?.action_index ?? contractActionIndex,
-                }]);
-                if (named && named.localName) setLocalName(named.localName);
                 const deployIdx = row?.action_index ?? row?.deploy_action_index ?? contractActionIndex;
                 if (deployIdx) {
                     messaging.getActionByIndex({ chainId, actionIndex: String(deployIdx) })
@@ -167,10 +151,12 @@ export function ContractDetail({
         () => !!owner && walletAddresses.some((a) => a === String(owner)),
         [owner, walletAddresses],
     );
-    // The local label wins: it is what this user called this contract, and the
-    // protocol has no name of its own to contradict it. The indexer lookups
-    // stay in the chain as a fallback for any future name-bearing shape.
-    const name = localName || deployAction?.params?.NAME || contract?.name || contract?.NAME || '(unnamed)';
+    // Identity off the chain: "Escrow v1.0.0 (C:BTC:42)", with the description
+    // beneath it. `contractActionIndex` is the address's own index, so the
+    // heading is correct even before the contract row answers.
+    const heading = contractDisplayLabel(contract, { chainId, actionIndex: contractActionIndex });
+    const description = contractMetaOf(contract).description;
+    const contractAddress = contractAddressFor(chainId, contractActionIndex);
     const deployBlock = contract?.block_index || contract?.BLOCK_INDEX || '?';
     const gasLimit = contract?.gas_limit || contract?.GAS_LIMIT
         || deployAction?.params?.GAS_LIMIT || '?';
@@ -187,7 +173,7 @@ export function ContractDetail({
         <PageHeader
             onBack={onBack}
             backLabel="Back to contracts list"
-            title={`Contract #${contractActionIndex}`}
+            title={contractAddress || `Contract #${contractActionIndex}`}
         />
     );
     if (contractError) {
@@ -210,68 +196,18 @@ export function ContractDetail({
             <div className={isFull ? styles.listFull : styles.listPopup}>
                 <section>
                     <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                        <h2 style={{ fontSize: '1rem', margin: 0 }}>
-                            Contract #{contractActionIndex}: &quot;{name}&quot;
-                        </h2>
+                        <h2 style={{ fontSize: '1rem', margin: 0 }}>{heading}</h2>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : null}
-                        {renaming ? null : (
-                            <Button
-                                variant="ghost"
-                                onClick={() => { setRenameDraft(localName || ''); setRenaming(true); }}
-                            >
-                                {localName ? 'Rename' : 'Name this contract'}
-                            </Button>
-                        )}
                     </header>
-                    {renaming ? (
-                        <form
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                setLocalName(setContractName({
-                                    chainId,
-                                    actionIndex: contractActionIndex,
-                                    name: renameDraft,
-                                }));
-                                setRenaming(false);
-                            }}
-                            style={{ marginBottom: '0.75rem' }}
-                        >
-                            <Input
-                                label="Name"
-                                hint="Saved on this device only. The protocol has no name field for contracts, so nobody else sees this."
-                                value={renameDraft}
-                                maxLength={MAX_CONTRACT_NAME_LENGTH}
-                                onChange={(e) => setRenameDraft(e.target.value)}
-                                autoComplete="off"
-                                autoCapitalize="none"
-                                autoCorrect="off"
-                                spellCheck={false}
-                            />
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                                <Button type="submit" variant="primary">Save name</Button>
-                                <Button type="button" variant="secondary" onClick={() => setRenaming(false)}>
-                                    Cancel
-                                </Button>
-                                {/* Clearing is the same write with an empty
-                                    name, so the contract falls back to its
-                                    number rather than keeping a blank label. */}
-                                {localName ? (
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        onClick={() => {
-                                            setContractName({ chainId, actionIndex: contractActionIndex, name: '' });
-                                            setLocalName(null);
-                                            setRenaming(false);
-                                        }}
-                                    >
-                                        Remove name
-                                    </Button>
-                                ) : null}
-                            </div>
-                        </form>
+                    {/* 512 bytes: this is the one surface wide enough for it, so
+                        the list rows carry the name and version alone. */}
+                    {description ? (
+                        <p className={styles.entryDescription} style={{ marginTop: 0 }}>{description}</p>
                     ) : null}
                     <dl className={styles.entryDescription} style={{ margin: 0 }}>
+                        {contractAddress ? (
+                            <div><strong>Address:</strong> {contractAddress}</div>
+                        ) : null}
                         <div><strong>Owner:</strong>{' '}
                             {owner
                                 ? <><AddressText address={String(owner)} />{isOwner ? ' (you)' : ''}</>

@@ -53,6 +53,10 @@ import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
 import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
+// Same reason again: one definition of "this install is fresh", so the three
+// in-page lanes below raise the same named WalletExistsError the pre-host
+// shells raise, and check the storage blob as well as the meta slot.
+import { assertFreshVault } from '../../extension/src/background/walletCreate.js';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import {
     fakeBalanceFor,
@@ -320,7 +324,9 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
              * @param {{ type?: string }} [opts]
              */
             deriveAddress(publicKeyHex, opts) {
-                return sdkLib.mockDeriveAddress(chainId, opts?.type ?? 'p2wpkh', publicKeyHex);
+                // No fallback type: mockDeriveAddress reads the chain
+                // descriptor's default, which is p2pkh on dogecoin.
+                return sdkLib.mockDeriveAddress(chainId, opts?.type, publicKeyHex);
             },
             signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {
@@ -363,7 +369,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         encoder: {
             async createTx({ data, pubkey, customOutputs, change }) {
                 const changeAddr = change
-                    || sdkLib.mockDeriveAddress(chainId, 'p2wpkh', pubkey);
+                    || sdkLib.mockDeriveAddress(chainId, undefined, pubkey);
                 const outputs = [
                     // Inline OP_RETURN action carrier (zero value) - but ONLY
                     // when there is an action.: a plain native-coin
@@ -594,6 +600,13 @@ const DISPENSER_ESCROW_SEEN_KEY = 'xchain.dispenserEscrow.seen';
 // is hoisted (a function declaration below), so referencing it here is safe.
 function startNotifications() {
     if (notificationService || !vault) return;
+    // One sound-aware adapter for every producer below (§6 M4.1): core
+    // resolves the sound per delivery from settings.sounds, the adapter plays
+    // it on the in-app path. The adapter is stateless, so sharing one is safe.
+    const notify = notificationsLib.withNotificationSound(createWebNotifyAdapter(), async () => {
+        const flowsNs = await getFlows();
+        return flowsNs.getSettings(vault);
+    });
     notificationService = new notificationsLib.NotificationService({
         getActiveAddresses: async () => {
             const flowsNs = await getFlows();
@@ -607,7 +620,7 @@ function startNotifications() {
             const flowsNs = await getFlows();
             return flowsNs.getSettings(vault);
         },
-        notify: createWebNotifyAdapter(),
+        notify,
         getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
         onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
         onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
@@ -632,7 +645,7 @@ function startNotifications() {
                 const flowsNs = await getFlows();
                 return flowsNs.getSettings(vault);
             },
-            notify: createWebNotifyAdapter(),
+            notify,
             markTriggered: async (id) => {
                 const flowsNs = await getFlows();
                 return flowsNs.markAlertTriggered({ vault, id });
@@ -659,7 +672,7 @@ function startNotifications() {
                 const flowsNs = await getFlows();
                 return flowsNs.getSettings(vault);
             },
-            notify: createWebNotifyAdapter(),
+            notify,
             loadSeen: () => {
                 try { return JSON.parse(globalThis.localStorage?.getItem(GOV_POLL_SEEN_KEY) || 'null'); }
                 catch (_err) { return null; }
@@ -690,7 +703,7 @@ function startNotifications() {
                 return flowsNs.getSettings(vault);
             },
             coinForChain: (chainId) => chainRegistry.get(chainId)?.coin || null,
-            notify: createWebNotifyAdapter(),
+            notify,
             loadSeen: () => {
                 try { return JSON.parse(globalThis.localStorage?.getItem(DEADLINE_SEEN_KEY) || 'null'); }
                 catch (_err) { return null; }
@@ -720,7 +733,7 @@ function startNotifications() {
                 const flowsNs = await getFlows();
                 return flowsNs.getSettings(vault);
             },
-            notify: createWebNotifyAdapter(),
+            notify,
             loadSeen: () => {
                 try { return JSON.parse(globalThis.localStorage?.getItem(DISPENSER_ESCROW_SEEN_KEY) || 'null'); }
                 catch (_err) { return null; }
@@ -745,7 +758,7 @@ function startNotifications() {
             chainRegistry,
             getSigner: (walletId) => (signerPool ? signerPool.get(walletId) : null),
             reservationLedger: host.reservationLedger,
-            notify: createWebNotifyAdapter(),
+            notify,
             shellKind: 'web',
             logger: console,
         });
@@ -864,9 +877,7 @@ export async function createWalletLocal(req) {
     } = req;
 
     const meta = createMetaBackend();
-    if (await meta.load()) {
-        throw new Error('wallet.create: a wallet already exists; import or reset first');
-    }
+    await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
@@ -936,9 +947,7 @@ export async function importMnemonicLocal(req) {
     } = req;
 
     const meta = createMetaBackend();
-    if (await meta.load()) {
-        throw new Error('wallet.import: a wallet already exists; unlock or reset first');
-    }
+    await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
 
     // Reject an unusable phrase BEFORE deriving the master key. Argon2id
     // is synchronous and pegs the main thread for seconds, and the vault
@@ -1017,8 +1026,14 @@ export async function importMnemonicLocal(req) {
  * genuinely new `password` because `importBackupFile` re-keys the restored
  * seal onto it.
  *
+ * `writes` and `skipped` are `importBackupFile`'s per-COLLECTION records, not
+ * totals: the same `ImportBackupFileResult` shape core returns.
+ *
  * @param {{ password: string, backupPassword: string, walletPassword: string, fileContent?: string, pointer?: object }} req
- * @returns {Promise<{ walletId: string, walletName?: string, rekeyed: boolean }>}
+ * @returns {Promise<{ walletId: string, walletName?: string, writes?: { wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }, skipped?: { wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }, rekeyed: boolean }>}
+ *   The same five fields `handleWalletImportBackup` resolves on the other two
+ *   shells, so a screen rendering the per-record merge counts reads one shape
+ *   everywhere.
  */
 export async function importBackupLocal(req) {
     const password = req?.password;
@@ -1040,9 +1055,7 @@ export async function importBackupLocal(req) {
     }
 
     const meta = createMetaBackend();
-    if (await meta.load()) {
-        throw new Error('wallet.importBackup: a wallet already exists; unlock or reset first');
-    }
+    await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
 
     const flowsNs = await getFlows();
     const kdfParams = cryptoLib.makeFreshKdfParams();
@@ -1093,6 +1106,8 @@ export async function importBackupLocal(req) {
         return {
             walletId: result.walletId,
             walletName: result.payload?.wallet?.name,
+            writes: result.writes,
+            skipped: result.skipped,
             rekeyed: result.rekeyed,
         };
     } finally {
@@ -1135,6 +1150,14 @@ export async function unlockWalletLocal(req) {
         throw new NoVaultError();
     }
 
+    // NO host-side pre-KDF throttle on this lane, by omission of a store
+    // rather than by an in-page equivalent. The extension and desktop pass
+    // `unlockThrottleStore` into `handleWalletUnlock`, which refuses a
+    // locked-out attempt before Argon2id runs; this shell has none, so the §26
+    // ladder here is the Locked screen's own (core `lockoutTracking`, persisted
+    // on the native shells by `installNativeGuardPersistence`). That gate is
+    // UI-level: a caller reaching this function directly is not counted, and
+    // every attempt costs a full KDF.
     const masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
     try {
         const storage = createStorageBackend();
@@ -1238,6 +1261,19 @@ export async function sendMessage(type, request) {
     throw hydrateEnvelopeError(response.error);
 }
 
+// Settings preview for event sounds (§6 M4.1): the shared section dispatches
+// SOUND_PREVIEW_EVENT and this shell, the one with the delivery seam, plays
+// the palette sound through its adapter with no live event and no toast.
+// Needs no vault, so it works while locked. Desktop and the extension have
+// no listener (ruling I-34b) and the section hides Preview there.
+const previewAdapter = createWebNotifyAdapter();
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener(notificationsLib.SOUND_PREVIEW_EVENT, (e) => {
+        const soundId = e && e.detail && e.detail.soundId;
+        if (typeof soundId === 'string') previewAdapter.playSound(soundId);
+    });
+}
+
 /** Test hook: expose module state without touching real IDB/localStorage. */
 export function __resetForTests() {
     stopNotifications();
@@ -1245,13 +1281,10 @@ export function __resetForTests() {
     host = null;
 }
 
+// Only a GCM tag mismatch is a wrong password. Matching error TEXT instead
+// turned any backend message containing "auth" (or "tag" inside a word such
+// as "staging") into an invalid-password error; core's aead now types the
+// tag mismatch, so storage and format faults surface as themselves.
 function isAeadAuthFailure(err) {
-    if (!err) return false;
-    const name = err.name || '';
-    const msg = err.message || String(err);
-    return (
-        name === 'OperationError' ||
-        name === 'InvalidAccessError' ||
-        /operation[- ]?error|auth|tag/i.test(msg)
-    );
+    return /** @type {any} */ (err)?.name === 'AeadAuthError';
 }

@@ -10,10 +10,9 @@
 
 // Per-list chain-filter memory: §23.5 / G052. Persists the user's last
 // chain-filter choice to localStorage so navigating away and back
-// restores the same view. Each list (history, balances) owns its own
-// key so filters don't bleed across surfaces with different semantics
-// (history filters a Set of full chainIds; the balance tabs filter
-// a single coin family or 'all').
+// restores the same view. Each list owns its own key so filters don't
+// bleed across surfaces with different semantics; the history list is
+// the only reader today and stores a Set of full chainIds.
 //
 // Defensive reads: missing / corrupt / empty values resolve to null
 // (caller falls back to its own default). Defensive writes: failures
@@ -90,33 +89,6 @@ export function writeChainSet(key, value) {
         return;
     }
     safeSet(key, JSON.stringify(Array.from(value).sort()));
-}
-
-/**
- * Read a single string filter value (e.g. 'all' or a coin family
- * name). Returns null when missing or empty.
- *
- * @param {string} key
- * @returns {string | null}
- */
-export function readChainString(key) {
-    const v = safeGet(key);
-    return typeof v === 'string' && v.length > 0 ? v : null;
-}
-
-/**
- * Write a single string filter value. 'all' is removed (the natural
- * default) so a stale entry doesn't confuse a future format change.
- *
- * @param {string} key
- * @param {string | null | undefined} value
- */
-export function writeChainString(key, value) {
-    if (!value || value === 'all') {
-        safeRemove(key);
-        return;
-    }
-    safeSet(key, value);
 }
 
 /**

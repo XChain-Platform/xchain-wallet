@@ -35,14 +35,14 @@
  ********************************************************************/
 
 /** Vendored byte-identical from xchain-documentation/protocol/constants.js. */
-export const COMPRESSION_CODE_DEFLATE_RAW = '1';
+const COMPRESSION_CODE_DEFLATE_RAW = '1';
 export const COMPRESSION_MAX_RATIO = 150;
 
 /**
  * FILE v0 field indices in the FULL action string (ACTION token included):
  * FILE|0|NAME|TYPE|TITLE|MEMO|GATE_TICKER|ENCRYPTION_METHOD|KEY_HASH|GATE_MIN_AMOUNT|COMPRESSION
  */
-export const COMPRESSION_FIELD_INDEX = 10;
+const COMPRESSION_FIELD_INDEX = 10;
 
 /**
  * Read the COMPRESSION field out of a FILE v0 action string.

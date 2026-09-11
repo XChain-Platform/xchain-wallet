@@ -21,6 +21,17 @@ export { DispenserEscrowWatcher } from './DispenserEscrowWatcher.js';
 export { CoinpayAutopayWatcher, pendingTxReferencesMatch } from './CoinpayAutopayWatcher.js';
 export { getActiveAddresses } from './getActiveAddresses.js';
 export {
+    SOUND_NONE,
+    SOUND_PREVIEW_EVENT,
+    SOUND_PALETTE,
+    SOUND_FAMILIES,
+    soundById,
+    familyForKind,
+    pickedSoundForFamily,
+    resolveNotificationSound,
+    withNotificationSound,
+} from './notificationSounds.js';
+export {
     getBroadcastTxids,
     markPendingTxIndexed,
     markPendingTxMempoolSeen,

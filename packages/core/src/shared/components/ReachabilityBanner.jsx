@@ -130,6 +130,13 @@ function summariseDegradation(perChain) {
         if (effects.length > 0) {
             summaries.push(`On ${chainLabel(c.chainId)}, ${joinList(effects)}.`);
         }
+        // Reachable but behind: the explorer answered from an indexed tip
+        // that is older than it should be. Everything the wallet shows for
+        // this chain is real up to that block; say where it stops and why,
+        // because "may be out of date" tells someone waiting on a payment
+        // nothing they can act on.
+        const delay = delayedDataSummary(c);
+        if (delay) summaries.push(`On ${chainLabel(c.chainId)}, ${delay}`);
     }
     for (const c of offline) {
         summaries.push(`${chainLabel(c.chainId)}: can't reach the network.`);
@@ -149,6 +156,29 @@ function consequencesFor(chainResult) {
         if (services[name] === 'unreachable' && CONSEQUENCE[name]) out.push(CONSEQUENCE[name]);
     }
     return out;
+}
+
+function delayedDataSummary(chainResult) {
+    const f = chainResult?.freshness?.explorer;
+    if (!f || !f.stale) return null;
+    let text = 'balances and history are behind';
+    if (f.tipBlock != null) {
+        text += `: last confirmed block ${Number(f.tipBlock).toLocaleString()}`;
+        if (f.tipAgeSeconds != null) text += ` was ${formatTipAge(f.tipAgeSeconds)} ago`;
+    }
+    text += f.replicaHalted === true
+        ? '. Indexing is paused while the service is repaired; it will catch up on its own.'
+        : '. The service is catching up and will update shortly.';
+    return text;
+}
+
+// Coarse, one unit, for "last confirmed block was 2 days ago".
+function formatTipAge(seconds) {
+    const s = Number(seconds);
+    if (s < 60) return 'under a minute';
+    if (s < 3_600) { const m = Math.round(s / 60); return `${m} minute${m === 1 ? '' : 's'}`; }
+    if (s < 86_400) { const h = Math.round(s / 3_600); return `${h} hour${h === 1 ? '' : 's'}`; }
+    const d = Math.round(s / 86_400); return `${d} day${d === 1 ? '' : 's'}`;
 }
 
 function formatAgo(diffMs) {

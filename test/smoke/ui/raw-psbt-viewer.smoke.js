@@ -90,9 +90,12 @@ assert.match(signSrc, /getSettings/, 'imports getSettings from approval messagin
 
 // Settings fetch on mount.
 assert.match(signSrc, /const \[developerMode, setDeveloperMode\] = useState\(false\);/);
+// Non-greedy across braces on purpose: the same .then body also hydrates the
+// custom-chain registry inside a try/catch, so a brace-free gap would pin the
+// absence of that block rather than this wiring.
 assert.match(
     signSrc,
-    /getSettings\(\)\s*\.then\(\(s\) => \{[^}]*setDeveloperMode\(Boolean\(s\?\.developerMode\)\);/s,
+    /getSettings\(\)\s*\.then\(\(s\) => \{[\s\S]*?setDeveloperMode\(Boolean\(s\?\.developerMode\)\);/s,
     'fetches settings on mount and sets developerMode',
 );
 assert.match(

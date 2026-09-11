@@ -20,6 +20,13 @@ import { flows, registry } from '@xchain-wallet/core';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
+import { installExtensionWipeHook } from '../storage/wipeHook.js';
+
+// Publish the shell wipe hook before any surface can offer a wipe. This
+// entry also backs the side panel, and it renders core's Locked ("Forgot
+// password"), VaultUnavailable and demo-exit escapes, every one of which
+// calls core's wipeWalletStorage().
+installExtensionWipeHook();
 
 // §26.5 panic-mode freeze. Share the freeze state with the background worker
 // and the approval window via chrome.storage.local: activating panic here must

@@ -42,7 +42,10 @@ import {
     Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
-import { chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
+import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, toTrezorSignTransaction } from './trezorFormat.js';
+// Imported from validate.js rather than the registry barrel so this package
+// does not pull the bundled descriptors in behind it.
+import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
 
 // Plain-language error for the hardware MuSig2 gap: this message is what the
 // sign screen renders directly, so it stays house-voice (no Class.method:
@@ -481,16 +484,31 @@ function formatBip44Path({ purpose, coin, accountIndex, change, index }) {
  * test can assert this hardware-signer copy of the coin-type slot never
  * diverges from the chain descriptors' derivationPaths, which is the copy
  * the software signer derives against (uuid 980fe12c).
+ *
+ * There is no longer a copy to diverge: the VALUES come from the registry's
+ * FAMILY_MAINNET_COIN_TYPE_SLOT, the one copy bound to the SDK's FAMILY_SLIP44
+ * by the cross-repo parity test. The coin short name is resolved back to its
+ * chain family through CHAIN_ID_TO_TREZOR_COIN, so support stays decided by
+ * that map alone (fail-closed by absence, testnet/regtest still refused
+ * upstream in chainIdToTrezorCoin) and no third literal is introduced here.
+ * Every chainId sharing a coin short name also shares a family, so the
+ * reverse lookup is stable whichever entry it lands on.
  * @param {string} coin
  */
 export function coinTypeFor(coin) {
-    switch (coin) {
-        case 'btc': return "0'";
-        case 'ltc': return "2'";
-        case 'doge': return "3'";
-        default:
-            throw new Error(`TrezorSigner: unknown Trezor coin "${coin}"`);
+    const chainId = Object.keys(CHAIN_ID_TO_TREZOR_COIN)
+        .find((id) => CHAIN_ID_TO_TREZOR_COIN[id] === coin);
+    if (!chainId) {
+        throw new Error(`TrezorSigner: unknown Trezor coin "${coin}"`);
     }
+    const family = chainId.split('-')[0];
+    const slot = FAMILY_MAINNET_COIN_TYPE_SLOT[family];
+    if (!slot) {
+        throw new Error(
+            `TrezorSigner: no mainnet coin-type slot registered for chain family "${family}"`,
+        );
+    }
+    return slot;
 }
 
 function signerFailure(signerId, method, res) {

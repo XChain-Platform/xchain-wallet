@@ -17,6 +17,7 @@ import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { useToast } from '../components/ToastHost.jsx';
 import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
@@ -117,6 +118,7 @@ export function AddressList({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
+    const { showToast } = useToast();
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
     // App-wide Privacy Mode (the Home eye toggle): when on, mask every
@@ -358,9 +360,13 @@ export function AddressList({
                 // `descriptor.defaultAddressType`, which is the chain
                 // default and not this wallet's.
                 addressType: effectiveWifAddressType || undefined,
+                // Withheld while the session signer can supply the master key:
+                // the host reaches for the pooled key only when `!req.password`
+                // (createBackgroundHost, wallet.importWif). A second literal
+                // `password` key below this line would override the spread
+                // and send the credential regardless.
                 ...(signerReady ? {} : { password: wifPassword }),
                 walletId,
-                password: wifPassword,
                 chainId: wifChainId,
                 wif: wifInput.trim(),
                 label: wifLabel.trim() || undefined,
@@ -809,10 +815,44 @@ export function AddressList({
                 confirmLabel: 'Delete',
                 danger: true,
             }))) return;
+            // §37.2 / Cluster D FOLLOWUP 2: snapshot the whole record
+            // before the delete so the Undo toast can put it back
+            // verbatim. Taken here rather than inside onAction because
+            // `selected` is cleared the moment the delete lands.
+            const snapshot = selected.record;
+            const snapshotLabel = snapshot.label || 'Address';
             try {
-                await messaging.deleteAddress(selected.record.id);
+                await messaging.deleteAddress(snapshot.id);
                 setSelected(null);
                 setReloadKey((k) => k + 1);
+                // Shells that have not adopted the restore shim keep
+                // today's no-undo behavior rather than being offered a
+                // button that cannot work.
+                if (typeof messaging.restoreAddress === 'function') {
+                    showToast({
+                        message: `${snapshotLabel} deleted`,
+                        actionLabel: 'Undo',
+                        onAction: async () => {
+                            try {
+                                const res = await messaging.restoreAddress(snapshot);
+                                // The host fails closed when the vault moved
+                                // underneath the snapshot (the same address
+                                // re-imported, or the owning account deleted,
+                                // while the toast was up). Say so instead of
+                                // reloading a list that did not change.
+                                if (res && res.ok === false) {
+                                    setLoadError(res.reason === 'address-already-present'
+                                        ? 'That address is already back in this wallet.'
+                                        : 'Could not restore that address.');
+                                    return;
+                                }
+                                setReloadKey((k) => k + 1);
+                            } catch (err) {
+                                setLoadError(userFacingMessage(err, 'Could not restore that address. Try again.'));
+                            }
+                        },
+                    });
+                }
             } catch (err) {
                 setLoadError(userFacingMessage(err, 'Could not delete that address. Try again.'));
             }
@@ -894,15 +934,19 @@ export function AddressList({
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
                         <span>Use</span>
                     </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={() => onShowPrivateKey?.(selected.record)}
-                        disabled={!canSecret}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                        <span>Secret</span>
-                    </button>
+                    {/* Absent when the shell wired no handler, greyed only for
+                        rows that cannot reveal (same rule as onReceive below). */}
+                    {onShowPrivateKey ? (
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => onShowPrivateKey?.(selected.record)}
+                            disabled={!canSecret}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
+                            <span>Secret</span>
+                        </button>
+                    ) : null}
                     <button
                         type="button"
                         className={local.quickAction}

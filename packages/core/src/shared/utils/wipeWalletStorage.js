@@ -28,13 +28,15 @@
  *     clear, a fresh `wallet.import` call after the IDB wipe still
  *     trips the existence check and the demo flow can't restart.
  *
- * Shell-side store (desktop): the Electron shell keeps its
- * vault blob, kdfParams meta, cached session key and unlock throttle
- * in files under `app.getPath('userData')`, which no renderer API can
- * reach. Clearing localStorage + IndexedDB there is a silent no-op, so
- * the user lands back on an unlock screen for the vault they just
- * wiped. When a shell publishes a `wipeStorage` hook on the bridge we
- * hand the job to the main process, which owns those files.
+ * Shell-side stores (desktop, extension, native mobile): the Electron
+ * shell keeps its vault blob, kdfParams meta, cached session key and
+ * unlock throttle in files under `app.getPath('userData')`, and the
+ * extension keeps the same four plus the cached signing secret in
+ * `chrome.storage`. No renderer API reaches either, so clearing
+ * localStorage + IndexedDB is a silent no-op there and the user lands
+ * back on an unlock screen for the vault they just wiped. When a shell
+ * publishes a `wipeStorage` hook on the bridge we hand the job to the
+ * process that owns those stores.
  *
  * Failure policy differs per store on purpose. The renderer stores are
  * best-effort (we resolve as soon as the delete completes or errors,
@@ -83,10 +85,20 @@ function deleteVaultDatabase() {
  * Ask the host shell to clear the stores only it can reach.
  *
  * Feature-detected rather than shell-branched: core imports nothing
- * from a shell package (CI enforces that), so the desktop preload
- * publishing `xchainWalletBridge.wipeStorage` is the entire contract.
- * Web and extension expose no such hook and no-op here, their stores
- * having already been cleared above.
+ * from a shell package (CI enforces that), so a shell publishing
+ * `xchainWalletBridge.wipeStorage` is the entire contract. Desktop
+ * (preload.cjs), the native mobile shell (installNativeWipeHook) and the
+ * extension (storage/wipeHook.js) each publish one; plain web keeps
+ * everything in the two renderer stores cleared above, so it needs none.
+ *
+ * The detect is fail-OPEN, and that is how the extension shipped a wipe
+ * that erased nothing while telling the user it had: it kept every store
+ * in chrome.storage and published no hook, so this returned quietly and
+ * the master key plus the cached plaintext password survived. A shell
+ * that holds state the renderer cannot reach and publishes no hook is a
+ * defect in that shell; the per-shell census in
+ * test/smoke/shells/wipe-hook-conformance.smoke.js is what stops the next
+ * one from failing open the same way.
  *
  * @returns {Promise<void>}
  */

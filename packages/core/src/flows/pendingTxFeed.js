@@ -42,13 +42,17 @@ import { isLivePendingStatus } from '../shared/utils/pendingHistory.js';
  * @property {string | null} rbfReplacement
  * @property {string | null} tick
  * @property {string | null} amount
+ * @property {boolean} networkSeenNow   the chain's UTXO set held this transaction
+ *   at the moment of THIS read. A native send has no mempool row for
+ *   History to refresh its sighting from, so the read carries the sighting.
  */
 
 /**
  * @param {object} record
+ * @param {boolean} networkSeenNow
  * @returns {PendingTxSummary}
  */
-function summarize(record) {
+function summarize(record, networkSeenNow) {
     return {
         id: String(record.id),
         chain: String(record.chain),
@@ -65,6 +69,7 @@ function summarize(record) {
         rbfReplacement: record.rbfReplacement == null ? null : String(record.rbfReplacement),
         tick: record.tick == null ? null : String(record.tick),
         amount: record.amount == null ? null : String(record.amount),
+        networkSeenNow: networkSeenNow === true,
     };
 }
 
@@ -74,6 +79,8 @@ function summarize(record) {
  * @property {import('../registry/index.js').ChainRegistry} [chainRegistry]
  * @property {string} chainId
  * @property {string} [address]   restrict to sends FROM this address
+ * @property {Set<string>} [seenNow]   lowercased txids the chain's UTXO set
+ *   held at this read (from `reconcileNativePendingTxs`); marks the summary
  */
 
 /**
@@ -91,7 +98,7 @@ function summarize(record) {
  * @param {LivePendingTxsOpts} params
  * @returns {Promise<PendingTxSummary[]>}
  */
-export async function livePendingTxs({ vault, chainRegistry, chainId, address }) {
+export async function livePendingTxs({ vault, chainRegistry, chainId, address, seenNow }) {
     if (!vault) throw new Error('livePendingTxs: vault is required');
     if (!chainId) throw new Error('livePendingTxs: chainId is required');
     const all = await vault.pendingTxs.list();
@@ -108,7 +115,8 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address })
             continue;
         }
         if (wanted && String(record.fromAddress || '').toLowerCase() !== wanted) continue;
-        out.push(summarize(record));
+        const seen = seenNow instanceof Set && seenNow.has(String(record.txid).toLowerCase());
+        out.push(summarize(record, seen));
     }
     return out;
 }

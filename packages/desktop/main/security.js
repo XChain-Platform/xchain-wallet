@@ -27,15 +27,66 @@
 // This is the desktop analog of the extension's BRIDGE-1 fix. The guards
 // keep every preload-bearing webContents pinned to the local app and push
 // all external URLs out to the system browser.
+//
+// "The local app" means the packaged renderer DIRECTORY, not the `file://`
+// scheme. Every caller therefore threads the resolved app root in; see
+// isAppUrl for the four ways a naive comparison gets this wrong.
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
- * True when `url` is a local `file://` URL (our packaged renderer).
+ * True when `url` carries the `file://` scheme.
+ *
+ * NOT a trust predicate: the scheme alone says nothing about WHICH local
+ * file, and every downloaded HTML page shares it. Use `isAppUrl`.
  *
  * @param {unknown} url
  * @returns {boolean}
  */
 export function isLocalFileUrl(url) {
     return typeof url === 'string' && /^file:\/\//i.test(url);
+}
+
+/**
+ * True when `url` resolves to a file inside the packaged renderer
+ * directory `appRoot`, i.e. it really is this app's own renderer.
+ *
+ * Four properties the comparison has to hold, each one a way a naive
+ * check goes wrong:
+ *   - Parse, never string-match. Our own window loads
+ *     `.../index.html?xc-init-route=<base64>`, so the search string must
+ *     drop out; fileURLToPath also decodes the percent-escapes a
+ *     packaged path containing spaces carries.
+ *   - Require an EMPTY host. `file://server/share/x.html` is a remote UNC
+ *     path on Windows and must never read as local.
+ *   - Compare resolved paths, not prefixes. A bare startsWith admits a
+ *     sibling `renderer/dist-evil/` directory.
+ *   - Absent or malformed `appRoot` yields false, so a caller that forgot
+ *     to thread it can never accidentally trust anything.
+ *
+ * Kept fs-free (no realpath) so the module stays pure and Node-testable.
+ *
+ * @param {unknown} url       the URL to classify
+ * @param {unknown} appRoot   absolute path of the packaged renderer dir
+ * @returns {boolean}
+ */
+export function isAppUrl(url, appRoot) {
+    if (typeof url !== 'string' || url.length === 0) return false;
+    if (typeof appRoot !== 'string' || appRoot.length === 0) return false;
+    let resolved;
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'file:') return false;
+        if (parsed.host !== '') return false;
+        resolved = fileURLToPath(parsed);
+    } catch {
+        return false;
+    }
+    const rel = path.relative(path.resolve(appRoot), path.resolve(resolved));
+    if (rel.length === 0) return false;
+    if (path.isAbsolute(rel)) return false;
+    return !rel.startsWith('..');
 }
 
 /**
@@ -51,35 +102,48 @@ export function isHttpUrl(url) {
 
 /**
  * Navigation guard: block any top-level navigation whose target is not
- * the local app. A renderer that tries to navigate to a remote origin
- * (which would keep the preload attached, exposing the bridge to that
- * origin) is stopped; in-app SPA routing uses history/hash and never
- * fires `will-navigate`, so this never impedes normal use.
+ * this app's own renderer. A renderer that tries to navigate to a remote
+ * origin (which would keep the preload attached, exposing the bridge to
+ * that origin) is stopped, and so is one aimed at an arbitrary local HTML
+ * file; in-app SPA routing uses history/hash and never fires
+ * `will-navigate`, so this never impedes normal use.
  *
- * @param {unknown} url  the navigation target
- * @returns {boolean}    true means the navigation must be prevented
+ * Fails closed on a missing `appRoot`: a throw here would leave
+ * `preventDefault` uncalled and the navigation would proceed.
+ *
+ * @param {unknown} url       the navigation target
+ * @param {unknown} appRoot   absolute path of the packaged renderer dir
+ * @returns {boolean}         true means the navigation must be prevented
  */
-export function shouldBlockNavigation(url) {
-    return !isLocalFileUrl(url);
+export function shouldBlockNavigation(url, appRoot) {
+    return !isAppUrl(url, appRoot);
 }
 
 /**
- * Sender-trust check for privileged IPC channels. Returns true only when
- * the calling frame can be POSITIVELY identified as a non-local origin
- * (any explicit scheme other than file://). Kept deliberately lenient -
- * an unknown/empty URL is not treated as remote - so a legitimate local
- * renderer is never rejected while a hijacked frame (which, post the
- * navigation guard, could only ever be http(s)/other) is. This is a
- * belt-and-suspenders layer behind the navigation lockdown.
+ * Sender-trust check for privileged IPC channels. Returns true when the
+ * calling frame is POSITIVELY identified as something other than this
+ * app's own renderer: any non-file scheme, or a `file://` URL outside
+ * `appRoot`. Kept deliberately lenient about an unknown/empty URL - not
+ * treated as remote - so a legitimate local renderer is never rejected.
+ * This is a belt-and-suspenders layer behind the navigation lockdown.
  *
- * @param {unknown} url  the sender frame's URL
- * @returns {boolean}    true means reject the IPC call
+ * Throws when `appRoot` is missing rather than guessing a direction: both
+ * consumers (ipcMain handlers, the WebHID permission callback) fail closed
+ * on a throw, and a silent scheme-only fallback is the very defect this
+ * predicate was rewritten to remove.
+ *
+ * @param {unknown} url       the sender frame's URL
+ * @param {unknown} appRoot   absolute path of the packaged renderer dir
+ * @returns {boolean}         true means reject the IPC call
  */
-export function isRemoteFrameUrl(url) {
+export function isRemoteFrameUrl(url, appRoot) {
+    if (typeof appRoot !== 'string' || appRoot.length === 0) {
+        throw new TypeError('isRemoteFrameUrl: appRoot (packaged renderer dir) is required');
+    }
     if (typeof url !== 'string' || url.length === 0) return false;
-    if (isLocalFileUrl(url)) return false;
-    // Any explicit non-file scheme (http, https, ws, data, blob, ...) is
-    // treated as remote/untrusted. A bare path with no scheme is not.
+    if (isAppUrl(url, appRoot)) return false;
+    // Anything else carrying an explicit scheme (http, https, data, blob,
+    // or a file:// path outside the app) is remote. A bare path is not.
     return /^[a-z][a-z0-9+.-]*:/i.test(url);
 }
 
@@ -101,12 +165,14 @@ export function senderFrameUrl(event) {
 }
 
 /**
- * True when an IPC event comes from a trusted (local, non-remote) sender.
- * Rejects only frames positively identified as remote; see isRemoteFrameUrl.
+ * True when an IPC event comes from a trusted (this app's own renderer)
+ * sender. Rejects only frames positively identified as remote; see
+ * isRemoteFrameUrl.
  *
  * @param {{ senderFrame?: { url?: string }, sender?: { getURL?: () => string } }} event
+ * @param {unknown} appRoot   absolute path of the packaged renderer dir
  * @returns {boolean}
  */
-export function isTrustedSenderEvent(event) {
-    return !isRemoteFrameUrl(senderFrameUrl(event));
+export function isTrustedSenderEvent(event, appRoot) {
+    return !isRemoteFrameUrl(senderFrameUrl(event), appRoot);
 }

@@ -19,6 +19,8 @@
 // (the UI never imports an SDK directly; it always goes through the
 // vault-owning process for discipline even when no secret is in play).
 
+import { readExportedMeta } from './contractMetaPreflight.js';
+
 /**
  * Validate contract source: size check + acorn parse + float-literal
  * warnings + reserved-identifier check.
@@ -60,4 +62,26 @@ export async function contractSuggestGasLimit({ sdkRegistry, chainId, code }) {
     if (typeof code !== 'string') throw new Error('contractSuggestGasLimit: code is required');
     const sdk = sdkRegistry.get(chainId);
     return sdk.contracts.suggestGasLimit(code);
+}
+
+/**
+ * The contract identity (`meta.name` / `meta.description` / `meta.version`)
+ * exported by a source, read statically.
+ *
+ * This is the deploy form's half of CONTRACT_META_REQUIRED: the form shows what
+ * the chain will record instead of asking the user for a label. It is a
+ * separate seam from the deploy flows' own preflight because the form asks per
+ * keystroke, long before any transaction exists.
+ *
+ * Answers `null` rather than throwing when the installed SDK predates the
+ * check, so the form can show nothing instead of a stale or invented label.
+ *
+ * @param {{ sdkRegistry: any, chainId: string, code: string }} params
+ * @returns {Promise<{ status: 'present' | 'absent' | 'undecidable' } | null>}
+ */
+export async function contractExportedMeta({ sdkRegistry, chainId, code }) {
+    if (!sdkRegistry) throw new Error('contractExportedMeta: sdkRegistry is required');
+    if (!chainId) throw new Error('contractExportedMeta: chainId is required');
+    if (typeof code !== 'string') throw new Error('contractExportedMeta: code is required');
+    return readExportedMeta(sdkRegistry.get(chainId), code);
 }

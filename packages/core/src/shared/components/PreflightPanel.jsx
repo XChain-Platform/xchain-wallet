@@ -159,9 +159,74 @@ function noticeText(f) {
     return { headline, detail: f.message && f.message !== headline ? f.message : null };
 }
 
+/*
+ * The report shape this panel ACCEPTS, which is deliberately wider than the
+ * one the SDK returns, and is declared here rather than imported for two
+ * independent reasons.
+ *
+ * It cannot be imported. `import('xchain-sdk').PreflightReport` resolved to
+ * nothing at all until the SDK declared the type, and it still resolves to
+ * nothing from THIS package: @xchain-wallet/core names xchain-sdk in no
+ * dependency block (only web, extension and desktop alias it), for the same
+ * reason the Tier-1 codes above are literals - this component renders inside
+ * the extension approval root and must not pull the SDK into that bundle.
+ *
+ * And it would be the wrong type if it could be imported. Three producers feed
+ * this prop and only one is the SDK engine:
+ *   - the engine report (via useConfirmAction / the extension's
+ *     approval/messaging.js), which carries every field plus `_stampedAt`;
+ *   - routes/DispenserDetail.jsx, a funding-only `restricted: true` report
+ *     carrying verdict, restricted, findings and unverified and nothing else.
+ *     That producer is sanctioned by name in the SDK's own preflight/
+ *     constants.js, so it is a design, not a defect;
+ *   - packages/web/src/hostBridge.js's dev mock, whose DRYRUN_VALID finding
+ *     carries no `data`.
+ * Annotating the prop as the engine's return would therefore type two of its
+ * three real callers as errors. The fields below are exactly the ones the
+ * SUPPORTED_SCHEMA_VERSION block above lists as read, optional wherever the
+ * code already guards (`report.unverified &&`, `typeof report.stateHeight ===
+ * 'number'`); the normative source for all of them stays the SDK's
+ * preflight/constants.js.
+ *
+ * @typedef {object} PreflightFinding
+ * @property {string} code                    registry code (FINDING_CODES in the SDK's preflight/constants.js)
+ * @property {'error'|'warning'|'info'} severity
+ * @property {string} message
+ * @property {boolean} [overridable]          present only on errors
+ * @property {string} [source]                'dryrun' or 'client'; absent on the wallet's own producers
+ * @property {string} [_downgradedBy]         set when Tier-1 demoted a Tier-2 error to info
+ * @property {{ commandIndex?: number, subCommandCount?: number, accepted?: number,
+ *              [key: string]: unknown }} [data]
+ */
+/**
+ * @typedef {object} PreflightUnverified
+ * @property {string} check
+ * @property {string} reason
+ */
+/**
+ * @typedef {object} PreflightReport
+ * @property {'pass'|'warn'|'fail'} verdict
+ * @property {PreflightFinding[]} findings
+ * @property {boolean} [restricted]           proper-subset report; never a completeness claim
+ * @property {PreflightUnverified[]} [unverified]
+ * @property {number|null} [stateHeight]
+ *
+ * The tail. The engine report carries these and this panel reads none of them
+ * (the block above says why `schemaVersion` in particular is a build-time pin
+ * and not a runtime read). They are declared so an engine report stays
+ * assignable here: leaving them out would make every full report an excess-
+ * property error, which is the mirror image of the mistake this typedef exists
+ * to avoid.
+ * @property {number} [schemaVersion]
+ * @property {string[]} [checksRun]
+ * @property {unknown} [quote]
+ * @property {number} [elapsedMs]
+ * @property {number} [_stampedAt]
+ */
+
 /**
  * @param {object} props
- * @param {import('xchain-sdk').PreflightReport | null} props.report
+ * @param {PreflightReport | null} props.report
  * @param {boolean} [props.loading]                       true while the report streams in
  * @param {Set<string>} props.acknowledged                codes the user has explicitly acknowledged
  * @param {(code: string) => void} props.onAcknowledge

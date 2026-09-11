@@ -119,9 +119,18 @@ function packument({ tags, time = {} }) {
 {
     // Two majors behind: still supported (41 of 41-43), but it is the
     // oldest, so the next release drops it. A warning, not a failure.
+    // The newer majors carry real dates INSIDE the grace window, so this
+    // case still asserts only what it was written to assert. It passed
+    // `time: {}` until 2026-09-05, which was itself an instance of the
+    // silent-clock defect the cases below now pin: with no timestamps,
+    // §9's window for 42 and 43 could not fire at all, so part of this
+    // fixture's green came from a check that never ran.
     const doc = packument({
         tags: { latest: '43.2.0', '43-x-y': '43.2.0', '42-x-y': '42.8.0', '41-x-y': '41.10.3' },
-        time: {},
+        time: {
+            '42.0.0': daysAgo(POLICY.MAJOR_GRACE_DAYS - 2),
+            '43.0.0': daysAgo(POLICY.MAJOR_GRACE_DAYS - 1),
+        },
     });
     const oldest = assess('41.10.3', doc);
     assert.ok(oldest.problems.some((p) => p.kind === 'about-to-be-unsupported'),
@@ -138,6 +147,48 @@ function packument({ tags, time = {} }) {
     assert.equal(dead.ok, false);
     assert.ok(dead.problems.some((p) => p.kind === 'unsupported'),
         'an unsupported major is the loudest case: nothing upstream will fix it');
+}
+
+// ------------------------------- a document that answers nothing is not "ok"
+
+{
+    // THE FAIL-OPEN. `assess('43.2.0', {})` returned ok:true until
+    // 2026-09-05: the two `|| {}` defaults made `latest` undefined and
+    // `latestMajor` NaN, every comparison against NaN is false, `problems`
+    // stayed empty and the CLI exited 0 - CURRENT, against a document
+    // containing nothing at all. That is this file's own rule, written
+    // twice in its header, broken by the function the header governs.
+    const empty = assess('43.2.0', {});
+    assert.equal(empty.state, 'inconclusive', 'an empty document decides nothing');
+    assert.equal(empty.ok, false, 'and "decides nothing" must not read as current');
+    assert.ok(empty.missing.some((m) => /dist-tags\.latest/.test(m)),
+        'the report names the evidence it did not have');
+
+    // The quiet half of the same defect: a well-formed document missing
+    // only a newer major's release date makes ageDays null, so §9's
+    // 28-day clock for that major raises nothing and never says so.
+    const noClock = assess('42.8.0', packument({
+        tags: { latest: '43.0.0', '43-x-y': '43.0.0', '42-x-y': '42.8.0' },
+        time: {},
+    }));
+    assert.equal(noClock.state, 'inconclusive',
+        "a newer major with no release date cannot be clocked, and silence is not a pass");
+    assert.ok(noClock.missing.some((m) => m.includes('43.0.0')),
+        'and the major whose clock could not run is named');
+
+    // PRECEDENCE. What we did detect is true whatever else was missing, so
+    // a real violation still reports `behind` rather than being downgraded
+    // to a gap. Without this rule the fix would trade a fail-open for a
+    // way to hide a finding by removing a field.
+    const both = assess('43.0.0', packument({
+        tags: { latest: '44.0.0', '44-x-y': '44.0.0' },
+        time: { '44.0.0': daysAgo(POLICY.MAJOR_GRACE_DAYS + 100) },
+    }));
+    assert.ok(both.missing.some((m) => /43-x-y/.test(m)),
+        'fixture: our own major has no channel tag here, so evidence really is missing');
+    assert.equal(both.state, 'behind', 'a detected violation outranks an evidence gap');
+    assert.equal(both.ok, false);
+    assert.ok(both.problems.some((p) => p.kind === 'major'), 'and the finding survives');
 }
 
 // ------------------------------------------------- the pin it actually reads
@@ -191,6 +242,20 @@ function packument({ tags, time = {} }) {
         assert.equal(gone.status, 3, 'unreachable/unreadable registry data is INCONCLUSIVE, not ok');
         assert.match(gone.stderr, /INCONCLUSIVE/);
         assert.match(gone.stderr, /not green just because/);
+
+        // A document that ARRIVED and parsed, and still answers nothing.
+        // This one exited 0 and printed CURRENT until 2026-09-05, which is
+        // the same green-because-the-data-was-bad the case above refuses,
+        // reached without any exception to catch.
+        const hollow = join(tmp, 'hollow.json');
+        writeFileSync(hollow, '{}');
+        const nothing = spawnSync(process.execPath, [TOOL, '--offline', hollow],
+            { encoding: 'utf8' });
+        assert.equal(nothing.status, 3,
+            `an empty registry document is INCONCLUSIVE, not current:\n${nothing.stdout}${nothing.stderr}`);
+        assert.match(nothing.stderr, /INCONCLUSIVE/);
+        assert.match(nothing.stderr, /dist-tags\.latest/);
+        assert.doesNotMatch(nothing.stdout, /CURRENT/);
 
         // --json is what a cron or a dashboard would read.
         const asJson = spawnSync(process.execPath, [TOOL, '--offline', behind, '--json'],

@@ -106,6 +106,13 @@ assert.match(
     /decimalStringFromSats\(maxSats\)/,
     'Max amount formatted via exact non-scientific formatter',
 );
+// Max on a TOKEN must not go through the 8-dp satoshi helpers above: ticks are issued to
+// 18 places and the amount Max writes is what gets signed.
+assert.match(
+    sendSrc,
+    /exactTokenMaxAmount\(sourceBalance\.amount\)/,
+    'token Max sweeps the balance at the tick scale, not the 8-dp satoshi grid',
+);
 assert.match(sendSrc, /maxDisabled=\{!sourceBalance\}/, 'Max disabled without balance prop forwarded to AmountField');
 
 // --- Available + fee hint --------------------------------------------

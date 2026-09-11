@@ -101,3 +101,75 @@ export function nativePaymentOutput({ tick, amount, destination, descriptor }) {
     if (value === null || value === '0') return null;
     return { address: String(destination).trim(), value };
 }
+
+/**
+ * Is `output` already among `customOutputs`? Compared on address and value,
+ * which is what an emitted output is.
+ *
+ * @param {Array<{ address?: string, value?: string | number }> | undefined} customOutputs
+ * @param {{ address: string, value: string }} output
+ * @returns {boolean}
+ */
+function hasOutput(customOutputs, output) {
+    if (!Array.isArray(customOutputs)) return false;
+    return customOutputs.some((o) => (
+        String(o?.address) === output.address && String(o?.value) === String(output.value)
+    ));
+}
+
+/**
+ * Append the destination payment output a bare native-coin send needs, unless
+ * the caller already supplied it.
+ *
+ * The suppression of the SEND action string and the addition of the payment
+ * output are ONE decision: a transaction that drops the OP_RETURN and adds no
+ * output says nothing and pays no one. They were made in separate places, so a
+ * caller that suppressed without paying (the generic `advancedAction` route,
+ * which forwards only `pubkey`/`sourceAddress`/`change`/fee opts) built exactly
+ * that transaction. Idempotent so the callers that DO pre-supply the output
+ * (`sendToken`, `buildSendPsbt`, `composeForConfirm`) keep their bytes.
+ *
+ * Idempotence is by address AND value, so a send whose destination and amount
+ * both equal an output already present (an ADS donation of exactly the sent
+ * amount, to the donation address the user is sending to) folds nothing and
+ * pays once. Accepted: it underpays the project, never the user.
+ *
+ * @param {object} args
+ * @param {{ action?: string, params?: Record<string, any> } | null} args.actionData
+ * @param {{ coin?: string } | null | undefined} args.descriptor
+ * @param {Object} args.encoderOpts
+ * @returns {Object}   encoderOpts, unchanged unless an output was appended
+ */
+export function withNativePaymentOutput({ actionData, descriptor, encoderOpts }) {
+    const params = actionData?.params || {};
+    const output = nativePaymentOutput({
+        tick: params.TICK, amount: params.AMOUNT, destination: params.DESTINATION, descriptor,
+    });
+    if (!output) return encoderOpts;
+    if (hasOutput(encoderOpts?.customOutputs, output)) return encoderOpts;
+    return {
+        ...encoderOpts,
+        customOutputs: [
+            ...(Array.isArray(encoderOpts?.customOutputs) ? encoderOpts.customOutputs : []),
+            output,
+        ],
+    };
+}
+
+/**
+ * Does `encoderOpts` carry the payment a bare native send owes its recipient?
+ * The fail-closed half of the same decision: nothing may sign a native send
+ * that pays nobody, whatever route built the opts.
+ *
+ * @param {{ action?: string, params?: Record<string, any> } | null} actionData
+ * @param {{ coin?: string } | null | undefined} descriptor
+ * @param {Object} encoderOpts
+ * @returns {boolean}
+ */
+export function hasNativePaymentOutput(actionData, descriptor, encoderOpts) {
+    const params = actionData?.params || {};
+    const output = nativePaymentOutput({
+        tick: params.TICK, amount: params.AMOUNT, destination: params.DESTINATION, descriptor,
+    });
+    return !!output && hasOutput(encoderOpts?.customOutputs, output);
+}

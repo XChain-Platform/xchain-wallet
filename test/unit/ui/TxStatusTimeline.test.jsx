@@ -65,7 +65,7 @@ describe('<TxStatusTimeline>', () => {
             />,
         );
         expect(markerFor(container, 'Indexed')).toBe('●');
-        expect(screen.getByText(/indexer at block 150/)).toBeInTheDocument();
+        expect(screen.getByText(/the service has reached block 150/)).toBeInTheDocument();
     });
 
     it('leaves Indexed pending when the watermark trails the entry block', () => {

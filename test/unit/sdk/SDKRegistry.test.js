@@ -78,10 +78,35 @@ describe('sdk/SDKRegistry', () => {
         it('defaults stay interactive-grade: worst case under 30s per call', () => {
             const { timeout, retry } = DEFAULT_SDK_NETWORK_OPTIONS;
             // 1 try + maxRetries retries, each up to `timeout`, plus
-            // backoff delays capped at maxDelay between attempts.
+            // backoff delays capped at maxDelay between attempts. This is the
+            // 5xx / timeout path, and it is the one that must stay fast: the
+            // service is not answering, so waiting longer buys nothing.
             const worstCase =
                 (1 + retry.maxRetries) * timeout + retry.maxRetries * retry.maxDelay;
             expect(worstCase).toBeLessThan(30_000);
+        });
+
+        // A 429 carries its own wait, so the honoured `Retry-After` has its own
+        // ceiling: a retry clamped to the 5xx cap re-asks while the bucket is
+        // still empty, spends the one retry and surfaces the failure anyway.
+        it('lets a named Retry-After run past the 5xx backoff cap, up to 60s', () => {
+            const { calls, factory } = captureFactory();
+            const reg = new SDKRegistry({ chainRegistry, sdkFactory: factory });
+            reg.get('bitcoin-mainnet');
+            expect(calls[0].retry.retryAfterMaxDelay).toBe(60_000);
+            expect(calls[0].retry.maxDelay, '5xx backoff must stay capped at 2s')
+                .toBe(2_000);
+        });
+
+        it('bounds the rate-limit path too: one honoured wait, not an open-ended one', () => {
+            const { timeout, retry } = DEFAULT_SDK_NETWORK_OPTIONS;
+            expect(retry.retryAfterMaxDelay).toBeGreaterThan(retry.maxDelay);
+            // The wallet holds ONE request across the wait (maxRetries is 1),
+            // and Home's banner counts that wait down rather than showing a
+            // frozen screen, which is what makes 60s acceptable at all.
+            const worstCase =
+                (1 + retry.maxRetries) * timeout + retry.maxRetries * retry.retryAfterMaxDelay;
+            expect(worstCase).toBeLessThanOrEqual(80_000);
         });
 
         it('honours networkOptions overrides, merged over the defaults', () => {

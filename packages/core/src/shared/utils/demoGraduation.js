@@ -39,6 +39,7 @@
 
 import { clearDemoWalletId } from '../../flows/demoMode.js';
 import { clearLastView } from './lastViewMemory.js';
+import { sweepMsgMemoryForWallet } from './msgReadMemory.js';
 import { wipeWalletStorage } from './wipeWalletStorage.js';
 
 /** localStorage slot holding the onboarding lane to resume after a demo wipe. */
@@ -176,6 +177,9 @@ export async function exitDemoWallet({
     }
     clearDemoWalletId();
     clearLastView(walletId);
+    // sweep this wallet's messaging read marks/unread counts
+    // too, or they orphan in localStorage forever.
+    sweepMsgMemoryForWallet(walletId);
 
     // Only when nothing else is left: a real wallet alongside the demo
     // means the vault is still the user's, and wiping it would destroy

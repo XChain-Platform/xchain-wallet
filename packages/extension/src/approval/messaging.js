@@ -126,6 +126,13 @@ export function parsePsbt(opts) {
  * (the wallet's own UI). The dApp never sees it; it only ever learns approve
  * or reject.
  *
+ * This one really is the SDK engine's return, unlike the wallet-side producers
+ * PreflightPanel also accepts, so it names the SDK type. The annotation does
+ * NOT resolve yet: this package pins `xchain-sdk` at the published 0.12.0
+ * tarball, whose index.d.ts declares nothing for pre-flight. The declaration
+ * exists in the SDK repo and reaches here on the next release the pin moves to;
+ * until then read it as intent, not as a checked binding.
+ *
  * @param {{ chainId: string, actionString: string, source?: string, mode?: string }} opts
  * @returns {Promise<import('xchain-sdk').PreflightReport>}
  */

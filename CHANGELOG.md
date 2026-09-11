@@ -8,19 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Home's balance poll and the pending-payments scan each read a chain's addresses in one batched explorer request instead of one or two per address, falling back to the per-address reads on an explorer or SDK that predates the batch route; the profiler reports both shapes.
+- The auto-pay watcher reads every source address's pending payments in one batched request per chain instead of one per address.
 - Label changes now queue an on-chain sync automatically and ask for the wallet password once per unlock, so renaming many addresses costs one publish instead of one each.
 - `android-applinks-verify.sh` provisions a Google Play emulator image, installs the app and asserts the Android App Links verdict, refusing images that cannot answer.
 - A Windows CI job now performs the desktop install-and-update swap on native x64 hardware and files the result as its own evidence, alongside the human-observed rehearsal it can never replace.
 - A batch can compose a parent token and its sub-tokens in one action.
-- `verify-ci-controls.mjs` measures the public release-CI page against the repository's live settings, one probe per control the page names.
-- The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
 
 ### Changed
+- The wallet moves to xchain-sdk 0.15.3, whose deploy workflow resolves a chunked contract through the explorer.
+- Release tooling transcribes the zone's current edge rules: the API hosts are rate limited per client over 10-second windows instead of skipped.
+- Contracts are named by the name, version and description their own source exports, shown as "Escrow v1.0.0 (C:BTC:12)" in history, the contracts list and the contract page, with the description on the contract page.
+- The deploy form no longer asks for a contract name; it shows the name, version and description parsed from the pasted source, read-only.
+- A deploy whose source exports no contract name and description is refused before any transaction is composed, so no fee is spent on a deploy the network will reject.
+- A rate-limited read now waits the seconds the service asked for (up to 60 s) instead of two, and the copy says "asked the wallet to slow down for N seconds; retrying" with a live countdown on Home.
+- The lockout banner says "Too many incorrect passwords" so it no longer reads as a rate limit.
+- Home reads pending payments from the one shared scan instead of its own per-poll read, 15 fewer explorer reads per 20 s on a five-address wallet.
+- Home's 20 s balance poll holds its in-flight slot, so a load waiting out a rate limit is no longer joined by the next beat.
+
+### Removed
+- The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
+
+### Fixed
+- Home's 20-second balance poll no longer starts a second load while one is still waiting on the service.
+- History's 20-second beat and the payments-due badge's scan no longer start a second fetch while one is still waiting on the service.
+- A refused balance read carries its error code and the seconds the service asked for as fields on the entry, so Home reads them instead of parsing the message.
+- `verify-ci-controls.mjs` measures the public release-CI page against the repository's live settings, one probe per control the page names.
+- The demo-endpoint burst probe is sized from a measured wallet cold-open instead of a fixed count.
+- The cold-open profiler now measures proof verification, the badge's own coinpay scan and the cost of an alt-tab, and prints the per-route worst minute and the ten-second edge burst every rate limit on the wallet's path is derived from.
+
+### Changed
+- Returning to the wallet re-polls balances, history and the coinpay badge only when the data is older than one poll interval, so an alt-tab costs at most one load instead of two or three.
+- Balance proofs are verified once per session for a given set of addresses and tokens instead of on every 20-second poll.
 - The optional BIP39 passphrase is now stored on the wallet, encrypted under the wallet's own password, so it is entered once at setup instead of on every unlock.
 - Donation defaults are per coin (1,000 sats/tx on Bitcoin, 0.001 LTC on Litecoin, 0.05 DOGE on Dogecoin, each sent at 25x accumulated) instead of one flat number that was wrong on two of the three chains.
 - Settings store only what the user changed; everything left at its default follows the defaults of the installed release, so a later release can retune them.
 
 ### Fixed
+- Resuming a chunked contract deploy whose assembling transaction already landed no longer re-sends and re-pays for it; the wallet reads the deployed contract's index from the explorer instead.
+- A chunked contract deploy's saved name now files against the contract's actual index instead of the assembling transaction's, so a group finished by an earlier piece still shows the right name.
 - A message sent between two of your own addresses now opens as a conversation with yourself instead of vanishing, where the inbox used to report no messages at all (#14).
 - A new message is funded from the delivery chain's active address instead of the first address listed, so a wallet whose first address is empty can still send (#11).
 - When a message cannot be composed (for example, not enough funds on the sending address), the reason is shown on the compose screen instead of Send message silently doing nothing (#12).
@@ -2146,13 +2172,13 @@ The eight `vitest.config*.js` files at the repo root are gone; equivalents land 
 
 The spec at §9.3 describes a Zustand store in the SW with `chrome.runtime.connect`-proxied mirrors in each UI context. The wallet ships with a different model, `MessagingProvider` (React Context wrapping a per-shell messaging module) plus per-component fetch from the source of truth (vault → MessageHost → flow). Both models work; the shipping model is simpler cross-shell, has fewer state-sync footguns, and has no measured performance bottleneck after 230+ releases across three shells.
 
-This step records the architectural decision in `claude/reports/specs/2026-04-28_zustand-proxy-deferred.md` (an ADR-style doc) and flips G006 from ⬜ open → ⏸ deferred. Triggers that would justify reopening (real-time subscription requirements that span surfaces, profiling-backed latency complaints, integration-test coordination pain) are documented inline so a future contributor knows what signal to watch for.
+This step records the architectural decision in `2026-04-28_zustand-proxy-deferred.md` (platform tree) (an ADR-style doc) and flips G006 from ⬜ open → ⏸ deferred. Triggers that would justify reopening (real-time subscription requirements that span surfaces, profiling-backed latency complaints, integration-test coordination pain) are documented inline so a future contributor knows what signal to watch for.
 
 The ADR also flags a spec-revision question: when `XCHAIN_WALLET_SPEC.md` next updates, §9.3 should either adopt the shipping reality or stay aspirational with an explicit "current implementation diverges" note pointing at this ADR.
 
 ### Added
 
-- **`claude/reports/specs/2026-04-28_zustand-proxy-deferred.md`** (new), ADR documenting the spec divergence, the shipping pattern, the four reasons we kept it, the trigger conditions for reopening, and the spec-revision implications.
+- **`2026-04-28_zustand-proxy-deferred.md` (platform tree)** (new), ADR documenting the spec divergence, the shipping pattern, the four reasons we kept it, the trigger conditions for reopening, and the spec-revision implications.
 - **`test/smoke/audits/zustand-proxy-deferred.smoke.js`** (new), pins the ADR exists with its required headings + G006 + spec-section citations; pins that the codebase ships the MessagingProvider pattern (no zustand dep in `@xchain-wallet/core`, no `proxyStore.{js,ts}` under core); pins MessagingProvider as a named export and the extension popup as a `<MessagingProvider>` consumer. If a future cluster adopts Zustand the ADR + this smoke must update together.
 
 Closes G006 (deferred). **Cluster V, §9 Architecture lightweight, closed at v0.232.0.** Two of three rows fully closed (G003 + G004); G006 ships as ⏸ deferred with the ADR.
@@ -3509,7 +3535,7 @@ Closes G118 (G076, wiring into balance/history rows, lands in Cluster C Step 2).
 
 §19 Backup, Step 6 of Cluster B, On-chain label publish UI (G037).
 
-The Settings → Backup panel's "Publish labels on-chain" row replaces the v0.116.0 placeholder. The user picks a chain, enters the wallet password, and the wallet encrypts its labels + contacts under a seed-derived commitment key and broadcasts the ciphertext as a FILE action. The result panel shows the txid + chain + encrypted size + discovery name. Auto-sync on label change and fetch-on-restore decryption are queued in `claude/reports/xchain-wallet/FOLLOWUPS.md`.
+The Settings → Backup panel's "Publish labels on-chain" row replaces the v0.116.0 placeholder. The user picks a chain, enters the wallet password, and the wallet encrypts its labels + contacts under a seed-derived commitment key and broadcasts the ciphertext as a FILE action. The result panel shows the txid + chain + encrypted size + discovery name. Auto-sync on label change and fetch-on-restore decryption are queued in `FOLLOWUPS.md` (platform tree).
 
 ### Added
 
@@ -3517,7 +3543,7 @@ The Settings → Backup panel's "Publish labels on-chain" row replaces the v0.11
 - **`wallet.publishLabels` host handler** in `extension/src/background/createBackgroundHost.js`. Pass-through to `publishLabelsNow` with vault + chainRegistry + sdkRegistry deps.
 - **`messaging.publishLabelsRequest`** wrappers in popup + web messaging.
 - **`PublishLabelsForm` + `PublishLabelsReport` in `BackupSection.jsx`**, chain picker (sourced from `getAddressesByChain`, only chains with addresses are shown) + wallet-password input + status row; result panel shows txid (with Copy button), chain, encrypted size, discovery name.
-- **`claude/reports/xchain-wallet/FOLLOWUPS.md`** (new shared file), `## §17/§19, closed at v0.154.0` header with three FOLLOWUPs: on-change debounced auto-sync, fetch + decrypt + apply on restore, HW-wallet support for label-publish.
+- **`FOLLOWUPS.md` (platform tree)** (new shared file), `## §17/§19, closed at v0.154.0` header with three FOLLOWUPs: on-change debounced auto-sync, fetch + decrypt + apply on restore, HW-wallet support for label-publish.
 - **`test/smoke/ui/publish-labels-ui.smoke.js`**, flow shape + zeroing assertions; host handler + messaging wrappers in both shells; BackupSection wiring (publishStage union, both subcomponents, copy refresh, FILE-action mention, txid/size/discovery surface); FOLLOWUPS.md cluster header + entries.
 
 ### Changed
@@ -4135,7 +4161,7 @@ A Copy button writes the displayed payload (PSBT hex when present, else action-f
 
 ### §21 cluster, close
 
-This commit closes the §21 Signing Safety build (Steps 1–6, v0.126.0–v0.131.0). End-to-end: pure simulator (Step 1) → renderer (Step 2) → Send.jsx wiring (Step 3) → SignApproval wiring (Step 4) → §21.3 layout polish (Step 5) → raw view (Step 6). Of the seven §21 audit rows in the 2026-04-26 gap report, five close (transaction simulator, raw PSBT viewer, the §21.3 layout pieces). Two remain deferred for §29 Send-form clusters (test-send protection, recipient checksum highlighting + autocomplete), see the close report at `claude/reports/specs/2026-04-26_signing-safety-build-close.md` (lands in the next commit).
+This commit closes the §21 Signing Safety build (Steps 1–6, v0.126.0–v0.131.0). End-to-end: pure simulator (Step 1) → renderer (Step 2) → Send.jsx wiring (Step 3) → SignApproval wiring (Step 4) → §21.3 layout polish (Step 5) → raw view (Step 6). Of the seven §21 audit rows in the 2026-04-26 gap report, five close (transaction simulator, raw PSBT viewer, the §21.3 layout pieces). Two remain deferred for §29 Send-form clusters (test-send protection, recipient checksum highlighting + autocomplete), see the close report at `2026-04-26_signing-safety-build-close.md` (platform tree) (lands in the next commit).
 
 ## [0.130.0] - 2026-04-26
 
@@ -4739,7 +4765,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 ### Added
 
-- `claude/reports/specs/2026-04-24_a11y-audit-readiness.md` (in the platform repo, gitignored), readiness packet.
+- `2026-04-24_a11y-audit-readiness.md` (in the platform repo, gitignored), readiness packet.
 
 ### Decided
 
@@ -4751,7 +4777,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 - xchain-sdk pin stays at `^1.13.0`. No source changes; documentation + version bump only.
 - 92 smokes pass.
-- Pre-launch user-initiated autonomous portion CLOSED at v1.0.0-rc.6. See `claude/reports/specs/2026-04-24_prelaunch-userinit-close.md` for the track-level retrospective (separate commit if needed; otherwise this CHANGELOG entry is the close marker).
+- Pre-launch user-initiated autonomous portion CLOSED at v1.0.0-rc.6. See `2026-04-24_prelaunch-userinit-close.md` (platform tree) for the track-level retrospective (separate commit if needed; otherwise this CHANGELOG entry is the close marker).
 
 ## [1.0.0-rc.5] - 2026-04-24
 
@@ -4759,7 +4785,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 ### Added
 
-- `claude/reports/specs/2026-04-24_security-audit-readiness.md` (in the platform repo, gitignored), readiness packet.
+- `2026-04-24_security-audit-readiness.md` (in the platform repo, gitignored), readiness packet.
 
 ### Decided
 
@@ -4773,7 +4799,7 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 ## [1.0.0-rc.4] - 2026-04-24
 
-§56.3 Pre-launch, user-initiated track, Step 3 of 5, `prefers-reduced-motion` on `AnimatedQrFrames`. Closes the deferred a11y polish item recorded in `claude/reports/specs/2026-04-24_prelaunch-close.md` § "Things deferred from autonomous work", previously queued for the external a11y audit; the fix is autonomously tractable and the audit gets a cleaner starting point.
+§56.3 Pre-launch, user-initiated track, Step 3 of 5, `prefers-reduced-motion` on `AnimatedQrFrames`. Closes the deferred a11y polish item recorded in `2026-04-24_prelaunch-close.md` (platform tree) § "Things deferred from autonomous work", previously queued for the external a11y audit; the fix is autonomously tractable and the audit gets a cleaner starting point.
 
 ### Changed
 
@@ -4800,13 +4826,13 @@ Version demoted from `1.0.0-rc.6` → `0.102.0` (then bumped here to `0.103.0`) 
 
 - `packages/extension/PRIVACY_POLICY.md`: public-facing privacy policy. Covers what's stored on-device (encrypted wallet material via Argon2id-derived key, addresses, contacts, dApp grants, queued PSBTs), what leaves the device (only user-configured RPC endpoints + optional vendor hardware-bridge calls), permissions justifications, the camera-scanner flow's `getUserMedia` runtime prompt, the absence of analytics / advertising / crash-reporting SDKs, the absence of Google API integration, and the CWS-mandated single-purpose + limited-use disclosures. Authored to be hosted as-is on a public URL, GitHub Pages from this repo or `https://dankest.llc/xchain-wallet/privacy` are both acceptable; the submission checklist documents the recommended setup.
 
-- `claude/reports/specs/2026-04-24_cws-submission.md` (in the platform repo, gitignored), submission playbook. Sections: build artifact + zip procedure, listing copy with verbatim strings, screenshot dimensions + capture procedure for the five required surfaces (Home, Send, Sign-screen, Multisig Receive, Settings → Security), promo tile spec, privacy practices form answers, common rejection reasons + dry-run greps, single-purpose statement to paste, pre-submission smoke + audit run, post-approval automation roadmap, Edge / Firefox variants. Designed so the submitter can work top-to-bottom without referring back to CWS docs.
+- `2026-04-24_cws-submission.md` (in the platform repo, gitignored), submission playbook. Sections: build artifact + zip procedure, listing copy with verbatim strings, screenshot dimensions + capture procedure for the five required surfaces (Home, Send, Sign-screen, Multisig Receive, Settings → Security), promo tile spec, privacy practices form answers, common rejection reasons + dry-run greps, single-purpose statement to paste, pre-submission smoke + audit run, post-approval automation roadmap, Edge / Firefox variants. Designed so the submitter can work top-to-bottom without referring back to CWS docs.
 
 ### Decided
 
 - **Privacy policy lives in the extension package.** Putting it at `packages/extension/PRIVACY_POLICY.md` keeps it discoverable next to the manifest it disclaims, and lets GitHub Pages serve the same file as both source and listing URL. Alternative considered (host only on dankest.llc) was rejected because the GitHub-hosted copy provides a permanent record tied to a specific git revision, useful when CWS asks "show the policy that was active at the time the v1.0.4 update was published".
 
-- **Submission checklist gitignored in the platform repo.** Per existing convention (`claude/reports/` is gitignored). The checklist points at concrete file paths and rule numbers in the wallet repo, so it stays useful as a private working doc; the user-facing parts (privacy policy, listing copy templates) live in the wallet repo where the public can read them.
+- **Submission checklist gitignored in the platform repo.** Per existing convention (`reports/` (platform tree) is gitignored). The checklist points at concrete file paths and rule numbers in the wallet repo, so it stays useful as a private working doc; the user-facing parts (privacy policy, listing copy templates) live in the wallet repo where the public can read them.
 
 ### Notes
 
@@ -4860,18 +4886,18 @@ User-initiated:
 - **Chrome Web Store submission.** Manifest review + screenshots + privacy disclosures.
 
 Release-cut deliverable:
-- **Byte-for-byte reproducible-build verification** on a clean dev machine. Run `packages/desktop/scripts/reproduce.sh v1.0.0-rc.1` twice; diff `RELEASE_HASHES.txt`. Procedure documented at `claude/reports/specs/2026-04-24_repro-build.md`.
+- **Byte-for-byte reproducible-build verification** on a clean dev machine. Run `packages/desktop/scripts/reproduce.sh v1.0.0-rc.1` twice; diff `RELEASE_HASHES.txt`. Procedure documented at `2026-04-24_repro-build.md` (platform tree).
 
 ### Reference
 
-- Pre-launch close report: `claude/reports/specs/2026-04-24_prelaunch-close.md`: full step ledger, track-level state, deferral justifications, GA cut recommendation.
-- Phase 4 close report: `claude/reports/specs/2026-04-24_phase4-close.md`: predecessor; lists the four pre-launch follow-ups.
+- Pre-launch close report: `2026-04-24_prelaunch-close.md` (platform tree): full step ledger, track-level state, deferral justifications, GA cut recommendation.
+- Phase 4 close report: `2026-04-24_phase4-close.md` (platform tree): predecessor; lists the four pre-launch follow-ups.
 
 This commit is a marker; no source changes other than the version bump.
 
 ## [0.101.0] - 2026-04-24
 
-§56.3 Pre-launch, Step 6 of 7. Reproducible-build scaffolding gate. Every ingredient required for Level-2 reproducibility is now CI-gated by a static audit script + smoke. The byte-for-byte run-twice verification still has to happen on a clean dev machine before v1.0.0 GA, see `claude/reports/specs/2026-04-24_repro-build.md` for the procedure.
+§56.3 Pre-launch, Step 6 of 7. Reproducible-build scaffolding gate. Every ingredient required for Level-2 reproducibility is now CI-gated by a static audit script + smoke. The byte-for-byte run-twice verification still has to happen on a clean dev machine before v1.0.0 GA, see `2026-04-24_repro-build.md` (platform tree) for the procedure.
 
 ### Added
 
@@ -4879,7 +4905,7 @@ This commit is a marker; no source changes other than the version bump.
 
 - `packages/core/test/repro-build-audit.smoke.js`: smoke gate. Imports `runReproBuildAudit()`, asserts every rule returns `ok: true`. Future PRs that drop a digest pin / un-freeze the lockfile / introduce non-determinism in the build config fail this smoke.
 
-- `claude/reports/specs/2026-04-24_repro-build.md`: full report. Documents the scaffolding audit (all 18 rules pass at v0.101.0), the run-twice-and-compare verification procedure that has to happen on a clean dev machine, the typical sources of reproducibility drift to watch for, and the recommendation to run the procedure on at least two independent dev machines at v1.0.0 GA.
+- `2026-04-24_repro-build.md` (platform tree): full report. Documents the scaffolding audit (all 18 rules pass at v0.101.0), the run-twice-and-compare verification procedure that has to happen on a clean dev machine, the typical sources of reproducibility drift to watch for, and the recommendation to run the procedure on at least two independent dev machines at v1.0.0 GA.
 
 ### Decided
 
@@ -4892,7 +4918,7 @@ This commit is a marker; no source changes other than the version bump.
 
 ## [0.100.0] - 2026-04-24
 
-§56.3 Pre-launch, Step 5 of 7. Static a11y audit gate. Every shared route + UI primitive now passes a five-rule mechanical audit (button label / img alt / input label / textarea label / div onClick role + tabIndex). The smoke gate fails CI if any new surface introduces a regression. Full report at `claude/reports/specs/2026-04-24_a11y-audit.md`.
+§56.3 Pre-launch, Step 5 of 7. Static a11y audit gate. Every shared route + UI primitive now passes a five-rule mechanical audit (button label / img alt / input label / textarea label / div onClick role + tabIndex). The smoke gate fails CI if any new surface introduces a regression. Full report at `2026-04-24_a11y-audit.md` (platform tree).
 
 ### Added
 
@@ -4900,7 +4926,7 @@ This commit is a marker; no source changes other than the version bump.
 
 - `packages/core/test/a11y-audit.smoke.js`: smoke gate. Imports `runA11yAudit()`, asserts `violations.length === 0`. New surfaces that introduce regressions fail this smoke alongside the rest of the suite.
 
-- `claude/reports/specs/2026-04-24_a11y-audit.md`: audit report. Documents what the audit covers, what it explicitly DOESN'T cover (color contrast, focus-visible styling, live-region timing, keyboard traps, screen-reader walkthroughs, all queued for the external a11y audit), the violations surfaced and fixed during this pass, and a follow-up checklist for the external audit.
+- `2026-04-24_a11y-audit.md` (platform tree): audit report. Documents what the audit covers, what it explicitly DOESN'T cover (color contrast, focus-visible styling, live-region timing, keyboard traps, screen-reader walkthroughs, all queued for the external a11y audit), the violations surfaced and fixed during this pass, and a follow-up checklist for the external audit.
 
 ### Changed
 
@@ -4917,7 +4943,7 @@ This commit is a marker; no source changes other than the version bump.
 
 ## [0.99.0] - 2026-04-24
 
-§56.3 Pre-launch, Step 4 of 7. Per-address (per-config) multisig (closes FOLLOWUP 3 from `claude/reports/specs/2026-04-24_phase4-close.md`). The `Wallet.multisig` single-slot field is now `Wallet.multisigs: MultisigConfig[]`, so a wallet can hold multiple multisig configurations side by side (different N-of-M groups, different schemes, different cosigner sets). Existing wallets migrate transparently, the v1→v2 migration synthesizes a `legacy-`-prefixed id for the existing config and wraps it in an array.
+§56.3 Pre-launch, Step 4 of 7. Per-address (per-config) multisig (closes FOLLOWUP 3 from `2026-04-24_phase4-close.md` (platform tree)). The `Wallet.multisig` single-slot field is now `Wallet.multisigs: MultisigConfig[]`, so a wallet can hold multiple multisig configurations side by side (different N-of-M groups, different schemes, different cosigner sets). Existing wallets migrate transparently, the v1→v2 migration synthesizes a `legacy-`-prefixed id for the existing config and wraps it in an array.
 
 ### Schema migrations
 
@@ -4970,7 +4996,7 @@ This commit is a marker; no source changes other than the version bump.
 
 ## [0.98.0] - 2026-04-24
 
-§56.3 Pre-launch, Step 3 of 7. Hardware-friendly classical multisig PSBT path (closes FOLLOWUP 1 from `claude/reports/specs/2026-04-24_phase4-close.md`). The wallet now has a clean `signMultisigPsbt` abstract on the Signer interface, software-signer implements it for real (delegating to the SDK's new `signMultisigPsbt` / `finalizeMultisigPsbt`); hardware signers throw with the specific reason their multisig path isn't wired (Trezor: signTransaction multisig envelope plumbing; Ledger: registerWallet wallet-policy provisioning).
+§56.3 Pre-launch, Step 3 of 7. Hardware-friendly classical multisig PSBT path (closes FOLLOWUP 1 from `2026-04-24_phase4-close.md` (platform tree)). The wallet now has a clean `signMultisigPsbt` abstract on the Signer interface, software-signer implements it for real (delegating to the SDK's new `signMultisigPsbt` / `finalizeMultisigPsbt`); hardware signers throw with the specific reason their multisig path isn't wired (Trezor: signTransaction multisig envelope plumbing; Ledger: registerWallet wallet-policy provisioning).
 
 ### Cross-repo
 
@@ -5005,7 +5031,7 @@ This commit is a marker; no source changes other than the version bump.
 
 ## [0.97.0] - 2026-04-24
 
-§56.3 Pre-launch, Step 2 of 7. Standalone Addresses route (closes FOLLOWUP 4 from `claude/reports/specs/2026-04-24_phase4-close.md`). The wallet now has a single dedicated surface listing every address it has generated, with per-address multisig badging and a "Multisig only" filter, what the §22 spec called for in passing but no Phase 4 step claimed.
+§56.3 Pre-launch, Step 2 of 7. Standalone Addresses route (closes FOLLOWUP 4 from `2026-04-24_phase4-close.md` (platform tree)). The wallet now has a single dedicated surface listing every address it has generated, with per-address multisig badging and a "Multisig only" filter, what the §22 spec called for in passing but no Phase 4 step claimed.
 
 ### Added
 
@@ -5025,7 +5051,7 @@ This commit is a marker; no source changes other than the version bump.
 
 ## [0.96.0] - 2026-04-24
 
-§56.3 Pre-launch, Step 1 of 7. Camera scanner for the multisig paste-inbox (closes FOLLOWUP 2 from `claude/reports/specs/2026-04-24_phase4-close.md`). The sign-screen now offers camera scanning as a first-class path alongside the existing paste-text flow; scanner-driven frames route through the same XCW chunk collector that the paste flow already drives, so there's one verify-and-dispatch path regardless of how chunks arrive.
+§56.3 Pre-launch, Step 1 of 7. Camera scanner for the multisig paste-inbox (closes FOLLOWUP 2 from `2026-04-24_phase4-close.md` (platform tree)). The sign-screen now offers camera scanning as a first-class path alongside the existing paste-text flow; scanner-driven frames route through the same XCW chunk collector that the paste flow already drives, so there's one verify-and-dispatch path regardless of how chunks arrive.
 
 ### Added
 
@@ -5065,11 +5091,11 @@ Phase 4 closes the §42 surface. **§56.3 pre-launch is its own track, not a Pha
 - A11y audit for sign-screen + multisig surfaces.
 - Reproducible-build verification (`packages/desktop/Reproducible_Builds.md` already documents the procedure).
 - Chrome Web Store submission.
-- Four small follow-ups documented in `claude/reports/specs/2026-04-24_phase4-close.md` (hardware classical multisig path, camera scanner for paste-inbox, per-address multisig configs, standalone `<AddressList>` route).
+- Four small follow-ups documented in `2026-04-24_phase4-close.md` (platform tree) (hardware classical multisig path, camera scanner for paste-inbox, per-address multisig configs, standalone `<AddressList>` route).
 
 ### Reference
 
-- Phase 4 close report: [`claude/reports/specs/2026-04-24_phase4-close.md`](../../claude/reports/specs/2026-04-24_phase4-close.md), full step ledger, spec deltas surfaced during build, MuSig2 hardware-signer compat matrix, and the four follow-ups deferred to §56.3.
+- Phase 4 close report: `2026-04-24_phase4-close.md` (platform tree), full step ledger, spec deltas surfaced during build, MuSig2 hardware-signer compat matrix, and the four follow-ups deferred to §56.3.
 
 This commit is a marker; no source changes (other than the version bump).
 
@@ -5397,12 +5423,12 @@ Phase 4, Step 9 of 23. UNSTAKE + CLAIM_REWARDS authoring forms (§42.7.2 unstake
 
 ### Notes
 
-- §42.7.2 spec / SDK format divergence. `XCHAIN_WALLET_SPEC.md` §42.7.2 describes UNSTAKE as amount-based, but the SDK's `formats.js` UNSTAKE entry is `VERSION|TIER` (no AMOUNT). Per STAKE.md, UNSTAKE withdraws the **full tier stake**, partial unstakes aren't a protocol concept. Step 9 ships tier-only, matching the on-chain format, and calls out the behavior in the form UI. FOLLOWUP 4 in `claude/reports/specs/2026-04-24_phase4-staking-followups.md` captures the spec-vs-format decision needed before v1.0 (either widen the SDK format or drop the amount language from §42.7.2).
+- §42.7.2 spec / SDK format divergence. `XCHAIN_WALLET_SPEC.md` §42.7.2 describes UNSTAKE as amount-based, but the SDK's `formats.js` UNSTAKE entry is `VERSION|TIER` (no AMOUNT). Per STAKE.md, UNSTAKE withdraws the **full tier stake**, partial unstakes aren't a protocol concept. Step 9 ships tier-only, matching the on-chain format, and calls out the behavior in the form UI. FOLLOWUP 4 in `2026-04-24_phase4-staking-followups.md` (platform tree) captures the spec-vs-format decision needed before v1.0 (either widen the SDK format or drop the amount language from §42.7.2).
 - Tier 3 stays deferred (FOLLOWUP 1 in the same doc). StakingActionForm's tier picker mirrors StakeForm, Tier 1 + Tier 2 only.
 
 ## [0.80.0] - 2026-04-24
 
-Phase 4, Step 8 of 23. STAKE authoring form (§42.7.1). Tier 1 (Oracle) + Tier 2 (Cross-chain validator) lanes ship; Tier 3 (Oracle publisher) deferred pending SDK format update, see `claude/reports/specs/2026-04-24_phase4-staking-followups.md`.
+Phase 4, Step 8 of 23. STAKE authoring form (§42.7.1). Tier 1 (Oracle) + Tier 2 (Cross-chain validator) lanes ship; Tier 3 (Oracle publisher) deferred pending SDK format update, see `2026-04-24_phase4-staking-followups.md` (platform tree).
 
 ### Added
 
@@ -5466,7 +5492,7 @@ Phase 4, Step 5 of 23. EXECUTE method form (§42.4). Adds the "Call method" auth
 
 ### Notes
 
-- ABI-driven lane is deferred. §42.4 says "If a contract publishes an ABI (via a community convention or embedded metadata), the wallet populates a method selector and typed parameter inputs." The platform hasn't defined the ABI publishing convention yet, captured as FOLLOWUP 2 in `claude/reports/specs/2026-04-24_phase4-monaco-editor.md`. Step 5 ships the manual lane only.
+- ABI-driven lane is deferred. §42.4 says "If a contract publishes an ABI (via a community convention or embedded metadata), the wallet populates a method selector and typed parameter inputs." The platform hasn't defined the ABI publishing convention yet, captured as FOLLOWUP 2 in `2026-04-24_phase4-monaco-editor.md` (platform tree). Step 5 ships the manual lane only.
 - `contracts.suggestGasLimit` is a source-code heuristic; the execute form doesn't have the contract source (only the DEPLOY action_index). Default 50000 is a conservative starting point, users override. Per-call gas estimation is a VM-side feature that would require the indexer to expose a "dry-run" endpoint, which is out of Phase 4 scope.
 
 ## [0.76.0] - 2026-04-24
@@ -5485,7 +5511,7 @@ Phase 4, Step 4 of 23. DEPLOY authoring form (§42.6). No SDK bump, `sdk.contrac
 
 ### Notes
 
-- Monaco editor is deferred. The spec's §42.6 language ("Monaco editor, full-screen mode available") is aspirational but ships a 5MB+ dependency with a CDN trust-posture trade-off that needs its own discussion. Spec follow-ups captured in `claude/reports/specs/2026-04-24_phase4-monaco-editor.md`: CodeMirror 6 recommended for the v1.0 RC cycle; the swap is a drop-in replacement of the `<textarea>` with a `<CodeEditor>` component under `packages/core/src/shared/components/` that wraps `EditorView`. Validate / Size / Suggest-gas already hit `sdk.contracts.*` and don't care about editor chrome.
+- Monaco editor is deferred. The spec's §42.6 language ("Monaco editor, full-screen mode available") is aspirational but ships a 5MB+ dependency with a CDN trust-posture trade-off that needs its own discussion. Spec follow-ups captured in `2026-04-24_phase4-monaco-editor.md` (platform tree): CodeMirror 6 recommended for the v1.0 RC cycle; the swap is a drop-in replacement of the `<textarea>` with a `<CodeEditor>` component under `packages/core/src/shared/components/` that wraps `EditorView`. Validate / Size / Suggest-gas already hit `sdk.contracts.*` and don't care about editor chrome.
 - Review-screen summary is handwritten rather than routed through `decoderLib.decodeAction`. DEPLOY isn't wired into `packages/core/src/decoder/` yet; polish captured in the Monaco follow-up doc (FOLLOWUP 3).
 - ABI / typed method selection (§42.4) is not addressed here, the DEPLOY form doesn't write ABIs yet because the platform-level ABI convention is undecided. Captured in the Monaco follow-up doc (FOLLOWUP 2); needs an `xchain-documentation` change first.
 

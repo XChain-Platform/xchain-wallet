@@ -428,7 +428,7 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
     // runs between download and install, and the stage-3 seam - a staging
     // build fetching its proof from the production feed - was invisible
     // precisely because nothing ever ran it against a staging feed.
-    const { fetchReleaseManifest, verifyDownloadedUpdate } = await import(
+    const { fetchReleaseManifest, platformLaneName, verifyDownloadedUpdate } = await import(
         pathToFileURL(UPDATE_VERIFY).href
     );
     const fetched = await fetchReleaseManifest({ feedBaseUrl: base, tag, fetch: doFetch });
@@ -442,6 +442,10 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
         artifactSha256: createHash('sha256').update(bytes).digest('hex'),
         artifactSha512: createHash('sha512').update(bytes).digest('hex'),
         pointerText,
+        // The lane the installed wallet would name for itself, derived
+        // from the same platform value rather than from the rehearsal's
+        // own vocabulary, so the probe asks the shipped question.
+        lane: platformLaneName({ platform: lane.os }),
         ...(pinned === undefined ? {} : { pinned }),
     });
     if (!verdict.ok) return fail('verify', verdict.reason);
@@ -694,6 +698,9 @@ export async function probeDirectLane({
         expectedTag: tag,
         artifactPath: apk,
         artifactSha256: createHash('sha256').update(bytes).digest('hex'),
+        // Named, because the gate asks which lane a partial manifest has
+        // to cover and this probe is the android lane by construction.
+        lane: 'android',
         ...(pinned === undefined ? {} : { pinned }),
     });
     if (!verdict.ok) return fail('verify', verdict.reason);

@@ -75,8 +75,8 @@ export const PAIRABLE_WALLET_MODES = /** @type {const} */ (['watcher', 'signer']
 // Guard against a QR frame carrying an absurd key set: 32 chains is far
 // past any realistic active-chain count and keeps a hostile paste from
 // pushing megabytes into the settings record.
-export const PARTNER_PAIRING_MAX_KEYS = 32;
-export const PARTNER_PAIRING_MAX_LABEL = 64;
+const PARTNER_PAIRING_MAX_KEYS = 32;
+const PARTNER_PAIRING_MAX_LABEL = 64;
 
 const HEX_RE = /^[0-9a-f]+$/;
 

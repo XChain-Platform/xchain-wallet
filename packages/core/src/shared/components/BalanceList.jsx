@@ -409,7 +409,7 @@ export function detectSpamCandidates(rows) {
  * Bitcoin's 546 is the familiar relay dust limit; Litecoin's relay floor sits
  * an order of magnitude higher per byte; Dogecoin Core carries an explicit
  * DEFAULT_DUST_LIMIT of 0.01 DOGE. */
-export const SMALL_BALANCE_BASE_UNITS = Object.freeze({
+const SMALL_BALANCE_BASE_UNITS = Object.freeze({
     bitcoin: 546n,
     litecoin: 5460n,
     dogecoin: 1000000n,

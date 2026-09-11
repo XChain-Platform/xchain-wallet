@@ -54,7 +54,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-    listSpecs, PLATFORM_ROOT, resolveCitation, skipUnlessSpecs,
+    listSpecs, PLATFORM_ROOT, platformPath, resolveCitation, skipUnlessSpecs,
 } from '../_spec-frontier.js';
 
 skipUnlessSpecs('publishing-spec private-pointers smoke');
@@ -258,7 +258,7 @@ assert.ok(totalPointers >= 3 * REQUIRED_LANES.length,
     + 'were written with. A block that stops being recognised as a map still has a heading, so the '
     + 'count is what notices.');
 
-assert.equal(resolveCitation('claude/reports/xchain-wallet/__no-such-report__.md').ok, false,
+assert.equal(resolveCitation(platformPath('reports', 'xchain-wallet', '__no-such-report__.md')).ok, false,
     'the resolver reports a path that cannot exist as resolving, so section 1 proves nothing. It '
     + 'falls back to the committed tips of every sibling checkout, which is deliberate (a sibling is '
     + 'routinely behind its own origin), and this line is what keeps that fallback from swallowing '

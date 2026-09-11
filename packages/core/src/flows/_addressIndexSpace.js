@@ -32,7 +32,7 @@
  * @param {'bip39' | 'counterwallet-legacy' | 'wif-only' | undefined} format
  * @returns {boolean} true when every address type shares ONE index space
  */
-export function indexSpaceSharedAcrossTypes(format) {
+function indexSpaceSharedAcrossTypes(format) {
     return format === 'counterwallet-legacy';
 }
 

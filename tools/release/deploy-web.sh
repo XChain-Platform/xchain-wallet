@@ -108,12 +108,34 @@ done
 }
 [[ -f "$MANIFEST" ]] || { echo "deploy-web.sh: manifest '$MANIFEST' does not exist" >&2; exit 2; }
 
+# ONE SET OF BYTES, HASHED AND UNPACKED. Until 2026-09-05 verify.sh was
+# pointed at the tarball's own directory and tar re-opened that same path
+# afterwards, which is two reads of a file a concurrent writer can change in
+# between: bytes that passed the gate, and different bytes unpacked and
+# flipped live under the release's name. Copy the tarball into a directory
+# only this run knows about and let BOTH steps read that copy, so "verified"
+# names an object rather than a moment.
+#
+# The copy goes to TMPDIR and never under the webroot, because the check
+# below has to be able to refuse having written nothing where the site
+# lives. An operator whose default TMPDIR is too small for the artifact
+# points TMPDIR at somewhere with room.
+STAGE="$(mktemp -d)" || { echo "deploy-web.sh: could not create a staging dir." >&2; exit 1; }
+trap 'rm -rf "$STAGE"' EXIT
+STAGED_TARBALL="$STAGE/$(basename "$TARBALL")"
+cp "$TARBALL" "$STAGED_TARBALL" || {
+    echo "deploy-web.sh: could not stage a private copy of '$TARBALL'." >&2
+    exit 1
+}
+
 # PROVENANCE, BEFORE ANYTHING IS WRITTEN. A tarball that fails here has cost
 # nothing; one that fails after the flip is already being served. verify.sh
 # narrows the hash check to this one artifact with --artifact and still checks
 # the tag anchor and the signature in full, which is what it was built for.
+# It is pointed at the staging dir; the manifest row is matched on the
+# basename, which the staged copy keeps.
 VERIFY_ARGS=(
-    --input "$(cd "$(dirname "$TARBALL")" && pwd)"
+    --input "$STAGE"
     --manifest "$MANIFEST"
     --artifact "$(basename "$TARBALL")"
     --tag "$TAG"
@@ -152,9 +174,10 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     exit 0
 fi
 
-# Unpack beside the live tree, not into it.
+# Unpack beside the live tree, not into it, and from the staged copy the
+# gate hashed rather than a fresh read of the caller's path.
 mkdir -p "$TARGET"
-tar -xzf "$TARBALL" -C "$TARGET"
+tar -xzf "$STAGED_TARBALL" -C "$TARGET"
 
 if [[ ! -f "$TARGET/index.html" ]]; then
     echo "deploy-web.sh: no index.html in the unpacked release; refusing to flip." >&2

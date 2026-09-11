@@ -109,7 +109,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
     it('opens on the pending form and says the indexer has not validated it', async () => {
         mount(() => []);
         await waitFor(() => expect(
-            screen.getByText(/not yet validated by the indexer/i),
+            screen.getByText(/not yet validated by the service/i),
         ).toBeTruthy());
         // A pending action has no index, and the title must not invent one:
         // "#0" is a real action index on every chain.
@@ -125,14 +125,14 @@ describe('the standalone detail page upgrades in place when the action confirms'
         let landed = false;
         const { messaging } = mount(() => (landed ? [confirmedRow()] : []));
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
-        expect(screen.getByText(/not yet validated by the indexer/i)).toBeTruthy();
+        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
 
         landed = true;
         // The page re-looks on the same 20s beat as the list, so the clock has
         // to move for this to be a test of the product rather than of patience.
         await advancePoll();
         await waitFor(() => {
-            expect(screen.queryByText(/not yet validated by the indexer/i)).toBeNull();
+            expect(screen.queryByText(/not yet validated by the service/i)).toBeNull();
         });
         // The confirmed identity is now on screen: the block it landed in and
         // the action index it was assigned.
@@ -147,12 +147,12 @@ describe('the standalone detail page upgrades in place when the action confirms'
         let landed = false;
         mount(() => (landed ? [confirmedRow({ tx_hash: HASH.toUpperCase() })] : []));
         await waitFor(() => expect(
-            screen.getByText(/not yet validated by the indexer/i),
+            screen.getByText(/not yet validated by the service/i),
         ).toBeTruthy());
         landed = true;
         await advancePoll();
         await waitFor(() => {
-            expect(screen.queryByText(/not yet validated by the indexer/i)).toBeNull();
+            expect(screen.queryByText(/not yet validated by the service/i)).toBeNull();
         });
     });
 
@@ -161,7 +161,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
         // to that would lose the pending detail and gain nothing.
         mount(() => [confirmedRow({ block_index: 0, action_index: '1255' })]);
         await waitFor(() => expect(
-            screen.getByText(/not yet validated by the indexer/i),
+            screen.getByText(/not yet validated by the service/i),
         ).toBeTruthy());
         await new Promise((r) => setTimeout(r, 150));
         // "Still pending" is not enough to prove no swap happened: a blockless
@@ -169,16 +169,16 @@ describe('the standalone detail page upgrades in place when the action confirms'
         // pending METADATA, which a normalized explorer row does not carry, so
         // the state-specific headline is the distinguishing evidence.
         expect(screen.getByText(/In the mempool, waiting for a block/i)).toBeTruthy();
-        expect(screen.getByText(/not yet validated by the indexer/i)).toBeTruthy();
+        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
     });
 
     it('ignores an unrelated transaction on the same address', async () => {
         mount(() => [confirmedRow({ tx_hash: 'ffffffffffffffffffffffffffffffff' })]);
         await waitFor(() => expect(
-            screen.getByText(/not yet validated by the indexer/i),
+            screen.getByText(/not yet validated by the service/i),
         ).toBeTruthy());
         await new Promise((r) => setTimeout(r, 150));
-        expect(screen.getByText(/not yet validated by the indexer/i)).toBeTruthy();
+        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
     });
 
     it('does not poll at all for an already-confirmed entry', async () => {
@@ -222,6 +222,6 @@ describe('the standalone detail page upgrades in place when the action confirms'
             ),
         );
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
-        expect(screen.getByText(/not yet validated by the indexer/i)).toBeTruthy();
+        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
     });
 });

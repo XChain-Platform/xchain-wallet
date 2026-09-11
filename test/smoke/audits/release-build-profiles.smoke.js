@@ -330,6 +330,26 @@ assert.match(
     'and refuse by exiting, not by warning',
 );
 
+// ...and the names it accepts come from the shared list, not a private copy.
+// Both sides of the mismatch check above have to mean the same thing by "a
+// profile": the staged side is filtered through BUILD_PROFILES inside
+// parseProfileStamp, so a forked literal on the requested side leaves this
+// file accepting a name csp.js retired and rejecting one csp.js added.
+assert.match(
+    mobileBuild,
+    /import \{[^}]*\bBUILD_PROFILES\b[^}]*\} from '\.\.\/\.\.\/web\/buildProfile\.js'/,
+    'the mobile build must import the shared profile list rather than restate it',
+);
+assert.match(
+    mobileBuild,
+    /!BUILD_PROFILES\.includes\(releaseProfile\)/,
+    'and validate the requested release profile against that shared list',
+);
+assert.ok(
+    !/\[\s*'(?:store|default)'\s*,\s*'(?:store|default)'\s*\]/.test(mobileBuild),
+    'and carry no inline array of profile names, which is how the copy grows back',
+);
+
 // ---- The two direct APKs must not be able to wear each other's label ----
 //
 // puts a SECOND direct APK at the `default` profile beside the

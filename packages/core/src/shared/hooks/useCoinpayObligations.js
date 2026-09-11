@@ -19,12 +19,18 @@
 // is PC-16 auto-pay's engine; a badge that reconciles within a poll
 // interval is the right cost for a visibility layer.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    createContext, createElement, useCallback, useContext, useEffect, useRef, useState,
+} from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 
 const DEFAULT_POLL_MS = 60_000;
+// Exported under its own name so the release profiler
+// (tools/release/cold-open-profile.mjs) reads the badge's cadence from the
+// hook rather than restating it.
+export const COINPAY_BADGE_POLL_MS = DEFAULT_POLL_MS;
 
 /**
  * One normalized pending obligation. `chainId` + `address` +
@@ -119,11 +125,28 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     // poll/refresh of the SAME identity they must NOT flush, or the
     // badge would flicker to zero on every sweep.
     const identityRef = useRef(/** @type {string | null} */ (null));
+    // The badge's own re-poll rule, keyed to this instance's poll interval.
+    // A tab switch fires `visibilitychange` here at the same moment Home
+    // re-polls balances, and the scan costs one explorer read per address, so
+    // it is only worth issuing when the rows are already a poll interval old.
+    // Recreated when the caller changes `pollMs`, since the window is keyed to
+    // it. See flows/pollThrottle.js.
+    const throttleRef = useRef(
+        /** @type {ReturnType<typeof flowsLib.createPollThrottle> | null} */ (null));
+    if (!throttleRef.current || throttleRef.current.intervalMs !== pollMs) {
+        throttleRef.current = flowsLib.createPollThrottle(pollMs);
+    }
 
     const refresh = useCallback(() => setScanSeq((n) => n + 1), []);
 
     useEffect(() => {
         aliveRef.current = true;
+        // Every re-run of this effect issues a scan at once: an identity
+        // change, a new interval, or the manual refresh a user pressed. None
+        // of them may be held off by the window the previous scan left, so the
+        // rule starts over here.
+        const throttle = throttleRef.current;
+        throttle.reset();
         const identity = `${walletId || ''}::${accountId || ''}`;
         if (identityRef.current !== identity) {
             identityRef.current = identity;
@@ -143,18 +166,41 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                 const found = await scanCoinpayObligations({
                     messaging, walletId, accountId: accountId || undefined,
                 });
+                throttle.succeed();
                 if (!cancelled && aliveRef.current) setObligations(found);
             } catch {
                 // Keep the previous rows on a failed sweep; a transient
-                // outage should not flicker the badge to zero.
+                // outage should not flicker the badge to zero. Release the
+                // window too, so the next event may try again rather than
+                // wait out an interval on a failure.
+                throttle.fail();
             } finally {
                 if (!cancelled && aliveRef.current) setScanning(false);
             }
         };
-        run();
-        const timer = setInterval(run, pollMs);
+        // The scan on mount and the one on the beat are never gated on the
+        // WINDOW: they are the badge's freshness, and `run()` is what moves the
+        // window (it calls succeed/fail). They ARE gated on the in-flight slot,
+        // and they claim it with `reset(); start()` rather than a plain
+        // `start()`. A bare `start()` only marks the slot when the window has
+        // already aged, and at beat time it has not: the beat fires `pollMs`
+        // after the previous beat, while the previous scan noted its success
+        // later still, when it landed. Left at that, the beat's own scan runs
+        // unmarked, and a scan the SDK is holding open on a `Retry-After` (up
+        // to 60 s) is joined by the next beat against the same bucket.
+        // Clearing the window first makes the claim unconditional.
+        const beat = () => {
+            if (throttle.isInFlight()) return;
+            throttle.reset();
+            throttle.start();
+            run();
+        };
+        beat();
+        const timer = setInterval(beat, pollMs);
         const onVisible = () => {
-            if (typeof document !== 'undefined' && document.visibilityState === 'visible') run();
+            if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+            if (!throttle.start()) return;
+            run();
         };
         if (typeof document !== 'undefined') {
             document.addEventListener('visibilitychange', onVisible);
@@ -174,6 +220,56 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
     ).length;
 
     return { obligations, scanning, refresh, payableCount };
+}
+
+// One scan per tree.
+//
+// Home's resume card and the shells' nav badge want the same wallet-wide
+// pending-COINPAY rows, and every `useCoinpayObligations` instance costs one
+// explorer read per address per sweep. A shell that mounts this provider pays
+// for exactly ONE instance and hands its state to every consumer below it,
+// which is where the duplicate scan went (spec row 29 / C45).
+//
+// Not every tree has a provider, so the shared hook falls back to an instance
+// of its own: the extension popup mounts Home but no nav badge, so nothing
+// there would run the scan otherwise. ObligationsView keeps its own instance
+// on purpose (a transient view with a manual refresh button).
+const CoinpayObligationsContext = createContext(
+    /** @type {ReturnType<typeof useCoinpayObligations> | null} */ (null));
+
+/**
+ * Runs the tree's single pending-COINPAY scan and provides it.
+ *
+ * @param {{
+ *   walletId?: string | null,
+ *   accountId?: string | null,
+ *   pollMs?: number,
+ *   children?: any,
+ * }} props
+ */
+export function CoinpayObligationsProvider({ walletId, accountId, pollMs, children }) {
+    const value = useCoinpayObligations(walletId, accountId, { pollMs });
+    return createElement(CoinpayObligationsContext.Provider, { value }, children);
+}
+
+/**
+ * The provider's state when one is mounted above, otherwise this caller's
+ * own instance.
+ *
+ * A hook call cannot be conditional, so the fallback instance is ALWAYS
+ * created; under a provider it is handed a null walletId, and
+ * `useCoinpayObligations`' own early return means it never scans. So the
+ * fallback costs a state slot and no explorer reads.
+ *
+ * @param {string | null | undefined} [walletId]
+ * @param {string | null | undefined} [accountId]
+ * @param {{ pollMs?: number }} [opts]
+ * @returns {ReturnType<typeof useCoinpayObligations>}
+ */
+export function useSharedCoinpayObligations(walletId, accountId, opts = {}) {
+    const provided = useContext(CoinpayObligationsContext);
+    const own = useCoinpayObligations(provided ? null : walletId, accountId, opts);
+    return provided || own;
 }
 
 // Row filters, shared shape-tolerant readers. Same semantics as the

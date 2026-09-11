@@ -20,7 +20,7 @@
 //   4. `BackupSection.jsx` replaces the placeholder "Coming soon" row
 //      with a four-stage publish form + result panel that wires
 //      through `messaging.publishLabelsRequest`.
-//   5. `claude/reports/xchain-wallet/FOLLOWUPS.md` exists and tracks
+//   5. `FOLLOWUPS.md` (platform tree) exists and tracks
 //      the auto-sync + restore-fetch deferred work.
 
 import { strict as assert } from 'node:assert';
@@ -158,7 +158,7 @@ assert.ok(
 );
 
 // --- 5. FOLLOWUPS.md tracks the auto-sync + restore-fetch entries --------
-// FOLLOWUPS.md lives in the parent repo's gitignored `claude/reports/` tree:
+// FOLLOWUPS.md lives in the parent repo's gitignored reports tree:
 // present in a full monorepo working tree, ABSENT from an isolated single-repo
 // CI checkout. Skip this section loudly when it's not here (it audits a dev
 // doc, not shipped product); sections 1-4 above cover the in-repo UI wiring.
@@ -181,5 +181,5 @@ if (existsSync(followups)) {
     );
 } else {
     console.log('SKIP (section 5): FOLLOWUPS.md not in this checkout '
-        + '(gitignored parent-repo claude/reports/, absent in isolated CI)');
+        + '(the parent repo\'s gitignored reports tree, absent in isolated CI)');
 }

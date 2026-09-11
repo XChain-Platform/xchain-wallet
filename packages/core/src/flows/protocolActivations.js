@@ -169,7 +169,7 @@ export const VOTE_CALLBACK_TIMELOCK_TIMES = Object.freeze({ ...VOTE_FLAG_DAY_TIM
  * @param {Record<string, number>} times
  * @returns {number | null}
  */
-export function voteFlagDayTime(chainId, times) {
+function voteFlagDayTime(chainId, times) {
     const t = times ? times[chainId] : undefined;
     return Number.isFinite(t) ? Number(t) : null;
 }

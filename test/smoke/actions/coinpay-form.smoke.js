@@ -21,8 +21,9 @@
 //      getCoinpayObligationsForAddress / getCoinpaysForAddress.
 //   6. Three App.jsx files track the 'coinpay' sub-route, register the
 //      ActionsMenu 'coinpay' entry, and thread onResumeCoinpay to Home.
-//   7. Home scans for pending obligations via getCoinpayObligationsForAddress
-//      and renders a resume card that invokes onResumeCoinpay.
+//   7. Home reads pending obligations from the shared coinpay scan (one per
+//      tree, never its own per-poll read) and renders a resume card that
+//      invokes onResumeCoinpay.
 //   8. SDK pin bumped to ^1.9.1 (matches the getCoinpayObligations method
 //      that lands in xchain-sdk 1.9.1).
 
@@ -201,10 +202,48 @@ for (const [shell, appPath] of [
 
 const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/onResumeCoinpay/.test(homeSrc), 'Home.jsx accepts onResumeCoinpay prop');
-assert.ok(/getCoinpayObligationsForAddress/.test(homeSrc),
-    'Home.jsx fetches pending obligations on mount');
-assert.ok(/pending_coinpay/.test(homeSrc),
-    'Home.jsx filters to pending_coinpay obligations');
+assert.ok(/useSharedCoinpayObligations\(/.test(homeSrc),
+    'Home.jsx reads pending obligations from the shared scan');
+// The per-poll read Home once ran beside the badge scan doubled the coinpay
+// traffic (rate-limits spec, row 29); its return is the regression this pins.
+assert.ok(!/messaging\.getCoinpayObligationsForAddress/.test(homeSrc),
+    'Home.jsx runs no coinpay scan of its own');
+
+// --- 7b. the obligation-rebuild chokepoint -----------------------------
+//
+// CoinpayForm is the one action form whose payload is a direct native-coin
+// payment to an address, and it is NOT on the shared confirm lane, so no
+// output-set tamper check binds the payee the user read to the outputs that
+// get signed. What stands in for it is host-side: every COINPAY lane runs
+// prepareCoinpay, which re-reads the obligation FROM THE CHAIN and builds the
+// payment from `obligation.payee_address` rather than from the caller's copy.
+// That one chokepoint carries the whole payment-integrity argument and
+// nothing pinned it, so a refactor threading the caller's payee straight
+// through would have read like a tidy-up.
+const flowSrc = readFileSync(join(core, 'src', 'flows', 'coinpayAction.js'), 'utf8');
+
+assert.ok(/async function prepareCoinpay\(/.test(flowSrc),
+    'coinpayAction.js still funnels its lanes through prepareCoinpay');
+assert.ok(/await verifyCoinpayObligation\(/.test(flowSrc),
+    'prepareCoinpay re-derives the obligation from the chain');
+
+// Both exported entry points take that preamble: the signing lane, which the
+// `.hw` route also dispatches to, and the watcher encode-only lane.
+for (const fn of ['buildCoinpayPsbtRequest', 'coinpayAction']) {
+    assert.ok(new RegExp(`prepareCoinpay\\(opts, '${fn}'\\)`).test(flowSrc),
+        `${fn} runs the verified preamble rather than trusting its arguments`);
+}
+
+// And the payment output is built from the VERIFIED row: these names are
+// prepareCoinpay's returns, never `opts.*`. An output sourced from the
+// request is the defect this pin exists to catch.
+assert.ok(!/address: opts\.payeeAddress/.test(flowSrc),
+    'no COINPAY lane builds its native output from the caller-supplied payee');
+assert.equal(
+    (flowSrc.match(/\{ address: (?:prepared\.)?payeeAddress, value: (?:prepared\.)?coinAmount \}/g) || []).length,
+    2,
+    'both COINPAY lanes size their native output from the verified obligation',
+);
 
 // --- 8. SDK pin bump ---------------------------------------------------
 

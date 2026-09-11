@@ -82,7 +82,7 @@ export function formatBadgeCount(n) {
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
  * @param {string} [props.walletName]
- * @param {boolean} [props.hasBtcAddress]
+ * @param {boolean} [props.hasVmAddress] gates the Contracts row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the tab is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops Send + Receive from the nav
  * @param {Record<string, number>} [props.badges]   per-view unread/attention counts; a count > 0 renders a pill on that item (e.g. { messaging: 3 })
@@ -95,7 +95,7 @@ export function LeftNav({
     onOpenWalletPicker,
     onCommandPalette,
     walletName,
-    hasBtcAddress = false,
+    hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
     badges = {},
@@ -121,7 +121,9 @@ export function LeftNav({
             ? [{ id: 'markets', label: 'DEX', Icon: Icon.MarketIcon }]
             : []),
         { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
-        ...(hasBtcAddress
+        // Gate Contracts on a VM address, matching Home and the command
+        // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
+        ...(hasVmAddress
             ? [{ id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon }]
             : []),
         { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },

@@ -16,10 +16,16 @@ import { createContext } from 'react';
  * @typedef {object} MessagingModule
  * Each shell implements the same messaging surface (unlock / create /
  * import / list / balances / addresses / send / …). Function names and
- * signatures match across popup + web; MessagingProvider receives the
- * shell's module verbatim so shared routes call e.g.
+ * signatures match across popup + web + desktop; MessagingProvider receives
+ * the shell's module verbatim so shared routes call e.g.
  * `messaging.unlockWallet(password)` without caring which transport
- * (chrome.runtime vs in-page host) fulfils it.
+ * (chrome.runtime vs in-page host vs preload bridge) fulfils it.
+ *
+ * The list below is a partial contract, not the whole surface: each shell
+ * exports ~320 helpers and core reaches most of them behind
+ * `typeof messaging?.x !== 'function'` guards. The executable statement of
+ * the agreement is test/smoke/shells/desktop-messaging-parity.smoke.js, which
+ * compares all three modules name-for-name and type-for-type.
  *
  * @property {(password: string, opts?: { bip39Passphrase?: string }) => Promise<{ unlocked: true, passphraseCaptureNeeded?: Array<{ id: string, name: string }>, poolUnavailable?: true }>} unlockWallet
  * @property {(opts: { walletId: string, password: string, bip39Passphrase: string }) => Promise<any>} [capturePassphrase]
@@ -28,9 +34,9 @@ import { createContext } from 'react';
  *   own the wallet's stored addresses, and stores nothing in that case.
  * @property {() => Promise<any>} [lockWallet]
  * @property {() => Promise<any>} [listWallets]
- * @property {(walletId: string) => Promise<any>} [getWalletBalances]
- * @property {(walletId: string) => Promise<any>} [getAddressesByChain]
- * @property {(walletId: string, chainId: string) => Promise<any>} [getNewestAddress]
+ * @property {(walletId: string, accountId?: string) => Promise<any>} [getWalletBalances]
+ * @property {(walletId: string, accountId?: string) => Promise<any>} [getAddressesByChain]
+ * @property {(walletId: string, chainId: string, accountId?: string) => Promise<any>} [getNewestAddress]
  * @property {(walletId: string, accountId?: string) => Promise<any>} [getActiveAddresses]
  * @property {(accountId: string, chainId: string, addressId: string) => Promise<any>} [setActiveAddress]
  * @property {(opts: any) => Promise<any>} [createWallet]

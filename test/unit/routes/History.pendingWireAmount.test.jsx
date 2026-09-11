@@ -102,7 +102,7 @@ describe('History refuses a pending SEND whose amount is not an amount', () => {
         expect(view.container.textContent).not.toContain('abc XCHAIN');
 
         const panel = await openPendingPanel(view);
-        expect(within(panel).getByText(/does not read SEND data/)).toBeTruthy();
+        expect(within(panel).getByText(/does not read Send data/)).toBeTruthy();
         expect(within(panel).getByText('abc')).toBeTruthy();
         expect(panel.textContent).not.toContain(`abc XCHAIN to ${OURS}`);
     });
@@ -130,7 +130,7 @@ describe('History refuses a pending SEND whose amount is not an amount', () => {
 
             expect(annotation(view)).toBeNull();
             const panel = await openPendingPanel(view);
-            expect(within(panel).getByText(/does not read SEND data/)).toBeTruthy();
+            expect(within(panel).getByText(/does not read Send data/)).toBeTruthy();
             expect(panel.textContent).not.toContain(`${amount} XCHAIN to`);
         });
     }

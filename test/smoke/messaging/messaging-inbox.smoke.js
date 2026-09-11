@@ -23,6 +23,9 @@
 //   5. Three App.jsx files track the 'messaging' sub-route and thread
 //      onMessaging to Home.
 //   6. Home renders a "Messaging" button and accepts onMessaging prop.
+// 7. sweepMsgMemoryForWallet actually removes every
+//      xc:msgRead: / xc:msgUnread: key for a walletId, across multiple
+//      accounts, and is wired into all 3 wallet-removal entry points.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -231,6 +234,93 @@ assert.ok(/onMessaging/.test(homeSrc), 'Home.jsx accepts onMessaging prop');
 assert.ok(/>\s*Messaging\b/.test(homeSrc),
     'Home.jsx renders a "Messaging" button');
 
+// --- 7. wallet-removal sweep -----------------------------------
+
+// 7a. Behavioral: sweep actually clears every key, across accounts, and
+// notifies the unread-badge listener, using a minimal localStorage/window
+// stand-in so this runs the real code path rather than grepping for it.
+{
+    /** @type {Map<string, string>} */
+    const store = new Map();
+    const fakeLocalStorage = {
+        getItem(k) { return store.has(k) ? store.get(k) : null; },
+        setItem(k, v) { store.set(k, String(v)); },
+        removeItem(k) { store.delete(k); },
+        get length() { return store.size; },
+        key(i) { return Array.from(store.keys())[i] ?? null; },
+    };
+    const priorLS = globalThis.localStorage;
+    const priorWindow = globalThis.window;
+    globalThis.localStorage = fakeLocalStorage;
+    let dispatched = [];
+    globalThis.window = {
+        dispatchEvent(evt) { dispatched.push(evt); },
+        addEventListener() {},
+        removeEventListener() {},
+    };
+    try {
+        const {
+            readMsgRead, writeMsgRead, readMsgUnread, writeMsgUnread,
+            sweepMsgMemoryForWallet, MSG_UNREAD_EVENT,
+        } = await import('../../../packages/core/src/shared/utils/msgReadMemory.js');
+
+        assert.equal(typeof sweepMsgMemoryForWallet, 'function',
+            'msgReadMemory exports sweepMsgMemoryForWallet');
+
+        // Two accounts on wallet A, one on wallet B, to prove the sweep
+        // is scoped to the removed wallet and covers every account on it.
+        writeMsgRead('walletA', 'acct1', { cp1: ['tx1'] });
+        writeMsgRead('walletA', 'acct2', { cp2: ['tx2'] });
+        writeMsgRead('walletA', null, { cp3: ['tx3'] }); // 'default' scope
+        writeMsgUnread('walletA', 'acct1', 3);
+        writeMsgUnread('walletA', 'acct2', 1);
+        writeMsgRead('walletB', 'acct1', { cp4: ['tx4'] });
+        writeMsgUnread('walletB', 'acct1', 5);
+
+        const removed = sweepMsgMemoryForWallet('walletA');
+        assert.equal(removed, 5, 'sweep removes all 5 walletA keys (3 msgRead scopes + 2 msgUnread scopes)');
+
+        assert.deepEqual(readMsgRead('walletA', 'acct1'), {}, 'walletA acct1 read marks gone');
+        assert.deepEqual(readMsgRead('walletA', 'acct2'), {}, 'walletA acct2 read marks gone');
+        assert.deepEqual(readMsgRead('walletA', null), {}, 'walletA default-scope read marks gone');
+        assert.equal(readMsgUnread('walletA', 'acct1'), 0, 'walletA acct1 unread count gone');
+        assert.equal(readMsgUnread('walletA', 'acct2'), 0, 'walletA acct2 unread count gone');
+
+        // walletB, a different wallet, must survive the sweep untouched.
+        assert.deepEqual(readMsgRead('walletB', 'acct1'), { cp4: ['tx4'] },
+            'a different wallet (walletB) is not touched by walletA\'s sweep');
+        assert.equal(readMsgUnread('walletB', 'acct1'), 5,
+            'walletB unread count is not touched by walletA\'s sweep');
+
+        assert.ok(dispatched.some((e) => e.type === MSG_UNREAD_EVENT),
+            'sweep dispatches MSG_UNREAD_EVENT so a mounted nav badge refreshes without reload');
+    } finally {
+        globalThis.localStorage = priorLS;
+        globalThis.window = priorWindow;
+    }
+}
+
+// 7b. Static: the sweep is actually wired into all 3 removal entry points.
+{
+    const thisWalletSrc = readFileSync(
+        join(core, 'src', 'shared', 'components', 'settings', 'ThisWalletSection.jsx'), 'utf8',
+    );
+    assert.ok(/sweepMsgMemoryForWallet\(activeWallet\.id\)/.test(thisWalletSrc),
+        'ThisWalletSection onConfirmRemove sweeps messaging memory for the removed wallet');
+
+    const demoGradSrc = readFileSync(
+        join(core, 'src', 'shared', 'utils', 'demoGraduation.js'), 'utf8',
+    );
+    assert.ok(/sweepMsgMemoryForWallet\(walletId\)/.test(demoGradSrc),
+        'exitDemoWallet sweeps messaging memory for the removed demo wallet');
+
+    const lockedSrc = readFileSync(join(sharedRoutes, 'Locked.jsx'), 'utf8');
+    assert.ok(
+        (lockedSrc.match(/sweepMsgMemoryForWallet\(demoWalletId\)/g) || []).length >= 2,
+        'Locked.jsx handleExitDemo sweeps messaging memory on both the surgical-remove and full-wipe fallback paths',
+    );
+}
+
 console.log(
-    'OK: messaging-inbox smoke (§41.7.2: getMessagingInbox core flow with password-gated ECIES decrypt via exportPrivateKey; MessagingInbox 4-stage state machine + password re-prompt + Conversations/Thread panes + counterparty grouping; messaging.inbox handler + 3-shell messaging + 3-shell App.jsx + Home "Messaging" button)',
+    'OK: messaging-inbox smoke (§41.7.2: getMessagingInbox core flow with password-gated ECIES decrypt via exportPrivateKey; MessagingInbox 4-stage state machine + password re-prompt + Conversations/Thread panes + counterparty grouping; messaging.inbox handler + 3-shell messaging + 3-shell App.jsx + Home "Messaging" button; wallet-removal sweep of xc:msgRead:/xc:msgUnread: at all 3 entry points)',
 );

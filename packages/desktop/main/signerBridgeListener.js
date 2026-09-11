@@ -42,6 +42,11 @@
 //      every getAddresses/signPsbt for that id would flow to B.
 //   3. A per-message signerIds cap bounds registry growth from a
 //      misbehaving/compromised renderer.
+//   4. A per-sender CUMULATIVE cap bounds it across messages. Guard 3
+//      alone bounds one message and nothing else, so N valid messages
+//      retained 64*N transports: 100 messages is 6,400 live entries in
+//      `transports`, `ownedIds` and `ownerBySignerId`, none of which any
+//      teardown reaches while the sender stays alive.
 
 import { createBackgroundTransport } from '@xchain-wallet/core/signers';
 // The extension package owns the process-wide signer-bridge registry;
@@ -57,6 +62,12 @@ export const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 // single message is a misbehaving or hostile sender, so drop it.
 export const MAX_SIGNER_IDS_PER_MESSAGE = 64;
 
+// Same ceiling, applied across every message a single webContents ever
+// sends rather than to one message. Re-registering an id already owned
+// costs nothing, and `unregister` (or window teardown) returns capacity,
+// so a real renderer with a handful of paired devices never meets it.
+export const MAX_SIGNER_IDS_PER_SENDER = 64;
+
 /**
  * Attach the main-process signer-bridge listener. Returns a detach
  * function for tests + hot reload.
@@ -68,6 +79,8 @@ export const MAX_SIGNER_IDS_PER_MESSAGE = 64;
  *        index.js identifies as a remote origin; defaults to accept-all so
  *        the pure unit harness (fake senders with no URL) is unaffected.
  * @param {number} [opts.maxSignerIdsPerMessage]
+ * @param {number} [opts.maxSignerIdsPerSender]  cumulative cap on the ids one
+ *        webContents may hold at once; freed by unregister and teardown.
  * @returns {() => void}
  */
 export function attachSignerBridgeListener({
@@ -75,6 +88,7 @@ export function attachSignerBridgeListener({
     channel = SIGNER_BRIDGE_CHANNEL,
     isTrustedSender = () => true,
     maxSignerIdsPerMessage = MAX_SIGNER_IDS_PER_MESSAGE,
+    maxSignerIdsPerSender = MAX_SIGNER_IDS_PER_SENDER,
 }) {
     if (!ipcMain || typeof ipcMain.on !== 'function') {
         throw new Error('attachSignerBridgeListener: ipcMain.on is required');
@@ -131,6 +145,22 @@ export function attachSignerBridgeListener({
                 // of ids; an over-cap message is a misbehaving/hostile
                 // sender and is dropped whole rather than partially applied.
                 if (msg.signerIds.length > maxSignerIdsPerMessage) return;
+                // Cumulative quota: count the ids this message would ADD
+                // (already-owned ids are free re-points, and ids another
+                // live sender owns are dropped below anyway) and refuse
+                // the whole message if the sender cannot hold them all.
+                // Whole-message, not partial, to match the batch cap above.
+                const adds = new Set();
+                for (const sid of msg.signerIds) {
+                    if (typeof sid !== 'string' || sid.length === 0) continue;
+                    if (ownedIds.has(sid)) continue;
+                    const holder = ownerBySignerId.get(sid);
+                    if (holder !== undefined && holder !== sender.id && bySender.has(holder)) {
+                        continue;
+                    }
+                    adds.add(sid);
+                }
+                if (ownedIds.size + adds.size > maxSignerIdsPerSender) return;
                 for (const sid of msg.signerIds) {
                     if (typeof sid !== 'string' || sid.length === 0) continue;
                     // Ownership guard: never re-point a signerId a different,

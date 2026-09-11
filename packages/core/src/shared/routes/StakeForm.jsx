@@ -17,6 +17,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -284,7 +285,9 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
-            setFormError(err?.message || 'Stake failed.');
+            setFormError(submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || 'Stake failed.',
+            }));
         }
     }
 
@@ -415,7 +418,11 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
-                isBadPassword ? 'Incorrect password.' : err?.message || 'Stake failed.',
+                isBadPassword
+                    ? 'Incorrect password.'
+                    : submitFailureMessage(err, {
+                        chainId, coinTicker, fallback: err?.message || 'Stake failed.',
+                    }),
             );
             setStage('review');
             if (!isWatcherMode && !isHwSource) {

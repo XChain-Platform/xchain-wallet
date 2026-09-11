@@ -164,6 +164,14 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 deferredFeeOutput: composed.deferredFeeOutput || null,
                 // ...and the rest of the deferred set, which the fee alone omitted.
                 deferredOutputs: composed.deferredOutputs || [],
+                // ...and the change the reveal must be built with, or its
+                // surplus sweep lands on the un-rotated spending address.
+                revealOpts: composed.revealOpts || null,
+                // The donation verdict these bytes actually carry. The submit
+                // path re-resolved it from a fresh settings snapshot, so a
+                // concurrent window that moved the accumulator between compose
+                // and Approve booked a donation this transaction never made.
+                adsDonation: { included: !!composed.adsPlan?.canSubmit },
             }, composed),
         })
     ), [confirmAction, messaging, settings, walletId]);

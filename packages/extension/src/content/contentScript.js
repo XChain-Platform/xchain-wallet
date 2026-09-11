@@ -85,46 +85,51 @@
             origin: window.location.origin,
         };
 
-        chrome.runtime.sendMessage({ type: data.type, request }, (response) => {
-            // Chrome surfaces chrome.runtime.lastError when the
-            // extension context is invalidated mid-request (updates,
-            // reloads). Serialize it into the same envelope so the
-            // page always gets a response.
-            const err = chrome.runtime.lastError;
-            if (err) {
-                window.postMessage({
-                    source: RESPONSE_SOURCE,
-                    id: data.id,
-                    ok: false,
-                    error: {
-                        name: 'BridgeError',
-                        message: `RUNTIME_UNAVAILABLE: ${err.message}`,
-                        code: 'INTERNAL_ERROR',
-                    },
-                }, window.location.origin);
-                return;
-            }
-            if (!response || typeof response !== 'object') {
-                window.postMessage({
-                    source: RESPONSE_SOURCE,
-                    id: data.id,
-                    ok: false,
-                    error: {
-                        name: 'BridgeError',
-                        message: 'NO_RESPONSE: no response from background',
-                        code: 'INTERNAL_ERROR',
-                    },
-                }, window.location.origin);
-                return;
-            }
+        // Post exactly one envelope on every path out of this listener: the
+        // injected provider parks a promise per request with no deadline, so
+        // a silent path hangs the dApp call and leaks its pending entry.
+        const refuse = (message) => {
             window.postMessage({
                 source: RESPONSE_SOURCE,
                 id: data.id,
-                ok: response.ok === true,
-                result: response.result,
-                error: response.error,
+                ok: false,
+                error: {
+                    name: 'BridgeError',
+                    message,
+                    code: 'INTERNAL_ERROR',
+                },
             }, window.location.origin);
-        });
+        };
+
+        try {
+            chrome.runtime.sendMessage({ type: data.type, request }, (response) => {
+                // Chrome surfaces chrome.runtime.lastError when the
+                // extension context is invalidated mid-request (updates,
+                // reloads). Serialize it into the same envelope so the
+                // page always gets a response.
+                const err = chrome.runtime.lastError;
+                if (err) {
+                    refuse(`RUNTIME_UNAVAILABLE: ${err.message}`);
+                    return;
+                }
+                if (!response || typeof response !== 'object') {
+                    refuse('NO_RESPONSE: no response from background');
+                    return;
+                }
+                window.postMessage({
+                    source: RESPONSE_SOURCE,
+                    id: data.id,
+                    ok: response.ok === true,
+                    result: response.result,
+                    error: response.error,
+                }, window.location.origin);
+            });
+        } catch (e) {
+            // Answer the invalidation the callback above cannot see: an
+            // update, reload or disable makes sendMessage throw out of the
+            // call itself, so no callback runs and lastError is never read.
+            refuse(`RUNTIME_UNAVAILABLE: ${(e && e.message) || String(e)}`);
+        }
     });
 
     // Step 3 (future): forward background-initiated events (accountsChanged

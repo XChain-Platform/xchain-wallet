@@ -62,8 +62,8 @@ export const UR_PSBT_TYPE = 'crypto-psbt';
 // room to spare while capping the index array at something trivial. The
 // fragment cap keeps one part from carrying the DoS on its own.
 export const UR_MAX_SEQ_LEN = 4096;
-export const UR_MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
-export const UR_MAX_FRAGMENT_BYTES = 64 * 1024;
+const UR_MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
+const UR_MAX_FRAGMENT_BYTES = 64 * 1024;
 export const UR_MAX_FRAME_CHARS = 8 * 1024;
 
 export class UrError extends Error {

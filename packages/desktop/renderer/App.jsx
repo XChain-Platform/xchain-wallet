@@ -53,7 +53,7 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
-import { useCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
+import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
@@ -144,6 +144,8 @@ import { CoSignerAccountList } from '@xchain-wallet/core/shared/routes/CoSignerA
 import { CoSignerProvision } from '@xchain-wallet/core/shared/routes/CoSignerProvision.jsx';
 import { CoSignerAccountDetail } from '@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx';
 import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
+import { ViewPrivateKey } from '@xchain-wallet/core/shared/routes/ViewPrivateKey.jsx';
+import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { SignMessageForm } from '@xchain-wallet/core/shared/routes/SignMessageForm.jsx';
@@ -182,6 +184,21 @@ export function App() {
     );
 }
 
+// PC-15: the "Payments due" nav badge. Its count comes from the tree's ONE
+// pending-COINPAY scan (CoinpayObligationsProvider, mounted around the
+// unlocked route below and shared with Home's resume cards), and reading a
+// context means being rendered UNDER the provider. So each nav surface gets a
+// thin wrapper here rather than the App body reading a second scan of its own.
+function LeftNavWithObligations({ badges, ...rest }) {
+    const { payableCount } = useSharedCoinpayObligations();
+    return <LeftNav {...rest} badges={{ ...badges, obligations: payableCount }} />;
+}
+
+function BottomTabBarWithObligations({ badges, ...rest }) {
+    const { payableCount } = useSharedCoinpayObligations();
+    return <BottomTabBar {...rest} badges={{ ...badges, obligations: payableCount }} />;
+}
+
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     // Keyboard-binding overrides for the palette + shortcuts live in
@@ -195,10 +212,15 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
+    // §17.7: the address staged for the key-reveal ceremony; cleared on Back
+    // so a stale address cannot leak into a later visit.
+    const [privateKeyAddress, setPrivateKeyAddress] = useState(
+        /** @type {any | null} */ (null),
+    );
     // PC-32: the address whose on-chain preferences are being edited.
     const [addressPrefsTarget, setAddressPrefsTarget] = useState(
         /** @type {{ chainId: string, address: string } | null} */ (null),
@@ -270,8 +292,6 @@ function AppInner() {
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
-    // PC-15: pending-COINPAY scan backing the "Payments due" nav badge.
-    const { payableCount: obligationsDue } = useCoinpayObligations(activeWalletId, activeAccountId);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. Inert unless unlocked. Contacts feed its fuzzy search and
     // are loaded lazily the first time it opens.
@@ -910,12 +930,15 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'controller-bind' && activeWalletId && tokenDetailRef) {
+            // D-153: see the web shell. The ADDRESS-scoped half of this form
+            // has nothing to do with tokens, so a token context must not gate
+            // the route.
+            if (unlockedView === 'controller-bind' && activeWalletId) {
                 return (
                     <ControllerBindForm
                         walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
+                        chainId={tokenDetailRef?.chainId}
+                        tick={tokenDetailRef?.tick}
                         onBack={formBack}
                     />
                 );
@@ -1466,9 +1489,27 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView('home')}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
+                        onShowPrivateKey={(addr) => {
+                            setPrivateKeyAddress(addr);
+                            setUnlockedView('view-private-key');
+                        }}
                         onEditPreferences={(sel) => {
                             setAddressPrefsTarget(sel);
                             setUnlockedView('address-preferences');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'view-private-key' && activeWalletId && privateKeyAddress) {
+                return (
+                    <ViewPrivateKey
+                        walletId={activeWalletId}
+                        address={privateKeyAddress}
+                        renderQR={({ value }) => <KeyQR value={value} alt="Private key QR" />}
+                        onBack={() => {
+                            setPrivateKeyAddress(null);
+                            setUnlockedView('addresses');
                         }}
                     />
                 );
@@ -2277,10 +2318,14 @@ function AppInner() {
                     setUnlockedView('history');
                 },
             });
-            return (
+            // Assigned rather than returned directly so the whole unlocked
+            // tree (both nav surfaces AND the route, Home included) sits under
+            // one CoinpayObligationsProvider, which is the tree's only
+            // pending-COINPAY scan.
+            const unlockedTree = (
                 <FullLayoutWithNav
                     nav={
-                        <LeftNav
+                        <LeftNavWithObligations
                             currentView={unlockedView}
                             onSelect={(view) => setUnlockedView(view)}
                             onLock={handleNavLock}
@@ -2288,21 +2333,21 @@ function AppInner() {
                             onOpenSettings={handleOpenSettings}
                             onCommandPalette={palette.openPalette}
                             walletName={activeWalletName}
-                            hasBtcAddress={hasBtcAddress}
+                            hasVmAddress={hasVmAddress}
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread, obligations: obligationsDue }}
+                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     bottomBar={
-                        <BottomTabBar
+                        <BottomTabBarWithObligations
                             currentView={unlockedView}
                             onSelect={(view) => setUnlockedView(view)}
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
-                            hasBtcAddress={hasBtcAddress}
+                            hasVmAddress={hasVmAddress}
                             isSignerMode={isSignerMode}
-                            badges={{ messaging: messagingUnread, obligations: obligationsDue }}
+                            badges={{ messaging: messagingUnread }}
                         />
                     }
                     header={
@@ -2338,6 +2383,11 @@ function AppInner() {
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
                 </FullLayoutWithNav>
+            );
+            return (
+                <CoinpayObligationsProvider walletId={activeWalletId} accountId={activeAccountId}>
+                    {unlockedTree}
+                </CoinpayObligationsProvider>
             );
         }
         default:

@@ -623,6 +623,24 @@ const PKG = 'io.xchain.wallet.android';
     assert.match(skewed.detail, /two different releases/,
         'the skew must be reported as skew, not as a missing file');
 
+    // A RE-SIGNED release is the same release. The corrected manifest is
+    // republished under the release's own name while its header says
+    // `-resign<N>`, so comparing verbatim reported the release that was
+    // just repaired as mis-served.
+    const resigned = judgeDirect({
+        feedText: feed, apkName: APK, apkBytes: bytes,
+        manifestText: manifest.replace('# tag: v0.336.0', '# tag: v0.336.0-resign1'),
+    });
+    assert.equal(resigned.state, 'ok', 'a re-signed manifest names the same release');
+    // And the relaxation is the re-sign rule, not "any suffix": another
+    // release's re-signature is still a mis-serve.
+    const otherResign = judgeDirect({
+        feedText: feed, apkName: APK, apkBytes: bytes,
+        manifestText: manifest.replace('# tag: v0.336.0', '# tag: v0.337.0-resign1'),
+    });
+    assert.equal(otherResign.state, 'alert', 'another release, re-signed, is still a mis-serve');
+    assert.match(otherResign.detail, /two different releases/);
+
     // Cannot-tell is never folded into clean, same rule as the Chrome lane.
     assert.equal(judgeDirect({ transport: 'ETIMEDOUT' }).state, 'inconclusive',
         'an unreachable feed is UNSURE, never OK');

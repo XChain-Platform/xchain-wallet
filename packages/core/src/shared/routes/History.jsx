@@ -15,6 +15,8 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     isEntryReplaceable,
     replaceFromHistoryEntry,
+    cancelUndoSnapshot,
+    undoCancel,
     RbfNotSupportedError,
     RbfInvalidEntryError,
 } from '../../flows/rbfReplace.js';
@@ -48,6 +50,7 @@ import {
     STATUS_OPTIONS,
 } from '../utils/historyFilter.js';
 import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
+import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import styles from './History.module.css';
 
@@ -505,6 +508,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // remembered here, and travels to the entry that outlives the row.
     const lastMempoolSeenRef = useRef(/** @type {Map<string, number>} */ (new Map()));
 
+    // One re-fetch rule for this mount, on the same interval the beat below
+    // runs at: a `focus` bump only buys something once the rows are older than
+    // one beat, and a user flicking between windows used to land a full
+    // history fan-out per switch. See flows/pollThrottle.js.
+    const pollThrottleRef = useRef(flowsLib.createPollThrottle(flowsLib.BALANCE_POLL_INTERVAL_MS));
+
     // M2.1: History had no cadence of its own; a confirmed row only ever
     // appeared because the route remounted. Pending rows need one, so the
     // fetch below re-runs on the same 20s beat Home already uses for
@@ -514,7 +523,24 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     useEffect(() => {
         if (!addressesByChain) return undefined;
         if (flowsLib.isDemoWallet(walletId)) return undefined;
-        const bump = () => setRefreshTick((n) => n + 1);
+        // The addresses or the wallet just changed, so the rows on screen no
+        // longer describe what is being fetched: no earlier bump may hold off
+        // the next one.
+        const throttle = pollThrottleRef.current;
+        throttle.reset();
+        // Every bump costs a full fan-out per (chain, address), and the fan-out
+        // effect below now owns the throttle end to end: it claims the
+        // in-flight slot when it starts and restarts the window where it lands.
+        // So the bump no longer notes a success of its own (asking for a
+        // fan-out is not the same as having had one) and only has to decide
+        // whether to ask at all. It skips while one is still running: a read
+        // the SDK is holding open on a `Retry-After` can sit for up to 60 s,
+        // and a 20 s beat firing through it would put three whole fan-outs
+        // against the bucket the first one is waiting on.
+        const bump = () => {
+            if (throttle.isInFlight()) return;
+            setRefreshTick((n) => n + 1);
+        };
         const id = setInterval(() => {
             // A hidden tab is not watching; polling it only burns the shared
             // rate limit the explorer zone is sized against.
@@ -522,10 +548,17 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             bump();
         }, flowsLib.BALANCE_POLL_INTERVAL_MS);
         if (typeof window === 'undefined') return () => clearInterval(id);
-        window.addEventListener('focus', bump);
+        // A refocus is worth a fan-out only when the rows are already an
+        // interval old; a burst of window switches used to cost one each.
+        // `start()` rather than `claim()`: the fan-out this bump asks for is
+        // what releases the slot, when it lands, so the focus must claim the
+        // slot and leave it claimed. The fan-out effect re-marks it with its
+        // own `reset(); start()` a tick later, which is harmless.
+        const onFocus = () => { if (throttle.start()) setRefreshTick((n) => n + 1); };
+        window.addEventListener('focus', onFocus);
         return () => {
             clearInterval(id);
-            window.removeEventListener('focus', bump);
+            window.removeEventListener('focus', onFocus);
         };
     }, [addressesByChain, walletId]);
 
@@ -539,9 +572,24 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         if (chainsToLoad.length === 0) {
             setEntries([]);
             setHistoryFetchedAt(null);
+            // Nothing to fetch, so nothing lands below to release the slot a
+            // focus may have claimed on the way here. `fail()` rather than
+            // `succeed()`: no read happened, so the window must not move.
+            pollThrottleRef.current.fail();
             return;
         }
         let cancelled = false;
+        // This fan-out owns the throttle's in-flight slot from here until it
+        // lands below. `reset(); start()` rather than a plain `start()`,
+        // because `start()` marks the slot only when the WINDOW has aged, and
+        // the fan-outs that run regardless of the window (the mount, and the
+        // one a beat asked for) arrive with a window younger than the interval
+        // by the previous fan-out's own latency. Those would run unmarked, and
+        // the next beat would stack a second fan-out on one still waiting out a
+        // 429. Clearing the window first makes the claim unconditional.
+        const throttle = pollThrottleRef.current;
+        throttle.reset();
+        throttle.start();
         // A background refresh must not blank the list it is refreshing; the
         // loading state belongs to the first load only.
         if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
@@ -596,6 +644,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
         Promise.all(tasks).then((perAddrResults) => {
             if (cancelled) return;
+            // The fan-out landed: release the slot and restart the window from
+            // here, so the next beat may ask for another and a refocus in
+            // between is dropped as too fresh. Every task catches to [], so
+            // this chain never rejects and there is no failure path to release
+            // the slot on. A cancelled fan-out deliberately releases nothing:
+            // it was replaced by a newer run of this effect, and that run took
+            // the slot for itself.
+            throttle.succeed();
             // Build a (chainId, action_index) -> link record map so
             // history rows can identify their peer cheaply.
             /** @type {Map<string, { peerChainId: string | null, peerCoinTicker: string, peerActionIndex: string, linkActionIndex: string }>} */
@@ -659,6 +715,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 for (const record of (r.pendingTxs || [])) {
                     if (!record?.txid) continue;
                     const key = `${r.chainId}:${String(record.txid).toLowerCase()}`;
+                    // A native send never has a mempool row above to refresh
+                    // its sighting from; the host's own read of the UTXO set
+                    // is that sighting, on the same clock.
+                    if (record.networkSeenNow) lastMempoolSeenRef.current.set(key, nowMs);
                     pendingCandidates.push(pendingTxToEntry({
                         chainId: r.chainId,
                         address: r.address,
@@ -1354,6 +1414,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  */
 export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency }) {
     const { messaging, shell } = useMessaging();
+    const { showToast } = useToast();
     const [balancesHidden] = useBalancesHidden();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
@@ -1481,8 +1542,31 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         setRbfError(null);
         setRbfDone(null);
         try {
-            const res = await replaceFromHistoryEntry({ messaging, entry, strategy });
+            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId });
             setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
+            // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
+            // The undo is a THIRD transaction replacing the cancel and
+            // re-issuing the spend, so it is only offered while the
+            // cancel is still in the mempool; `cancelUndoSnapshot`
+            // returns null when the pair cannot support one.
+            if (strategy === 'cancel') {
+                const snapshot = cancelUndoSnapshot({ entry, result: res, walletId });
+                if (snapshot) {
+                    showToast({
+                        message: 'Transaction cancelled',
+                        actionLabel: 'Undo',
+                        onAction: async () => {
+                            setRbfError(null);
+                            try {
+                                const undone = await undoCancel({ messaging, snapshot });
+                                setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'pending'}`);
+                            } catch (undoErr) {
+                                setRbfError(undoErr?.message || 'Could not undo the cancellation.');
+                            }
+                        },
+                    });
+                }
+            }
         } catch (err) {
             if (err instanceof RbfNotSupportedError || err instanceof RbfInvalidEntryError) {
                 setRbfError(err.message);
@@ -1939,7 +2023,7 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
             {desc.kind === 'segments' ? (
                 <>
                     <p className={styles.pendingHelp}>
-                        {t('pending.detail.undecodable', { action: desc.action })}
+                        {t('pending.detail.undecodable', { action: actionDisplayLabel(desc.action) })}
                     </p>
                     <ul className={styles.pendingSegments}>
                         {desc.segments.map((seg, i) => (
@@ -2710,6 +2794,34 @@ function PendingAmountLabel({ entry }) {
  * One history row. Used both for top-level entries and for member rows
  * inside an expanded group card.
  */
+// Which actions name a contract on their payload. XEXEC is deliberately not
+// here: its payload carries no contract index at all, only an
+// `execute_action_index` one hop away, so there is nothing to label from.
+const CONTRACT_ACTIONS = new Set(['DEPLOY', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']);
+
+/**
+ * "Escrow v1.0.0 (C:BTC:12)" for a history row that touched a contract, or ''
+ * for every other row.
+ *
+ * The four payloads carry the contract's `contract_meta_name` and
+ * `contract_meta_version` beside its index (`deployed_contract_index` on a
+ * DEPLOY, which is not necessarily the DEPLOY's own action under deferred
+ * assembly; `contract_index` on the rest), so a user reading their history sees
+ * WHICH contract they funded rather than a bare number. `normalizeHistoryRow`
+ * has already lifted the payload out of `details`, so these read off `raw`.
+ *
+ * @param {any} entry
+ * @returns {string}
+ */
+function contractRowLabel(entry) {
+    const action = String(entry?.action || '').toUpperCase();
+    if (!CONTRACT_ACTIONS.has(action)) return '';
+    const raw = entry.raw || {};
+    const idx = raw.deployed_contract_index ?? raw.contract_index ?? raw.contract_action_index;
+    if (idx === null || idx === undefined || String(idx) === '') return '';
+    return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
+}
+
 export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency }) {
     const d = chainRegistry.get(entry.chainId);
     return (
@@ -2751,6 +2863,11 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowSourceAddress}>
                     {entry.source || '-'}
                 </span>
+                {contractRowLabel(entry) ? (
+                    <span className={styles.rowContractLabel}>
+                        {contractRowLabel(entry)}
+                    </span>
+                ) : null}
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
                         <>

@@ -15,7 +15,7 @@ overrides:
   form-data: ^4.0.6
   '@tootallnate/once': ^2.0.1
   axios: ^1.16.1
-  js-yaml@4: ^4.3.1
+  js-yaml@4: ^4.3.2
   fast-uri: ^3.1.6
   hono: ^4.12.34
   '@xmldom/xmldom': ^0.8.15
@@ -178,8 +178,8 @@ importers:
         specifier: ^8.9.0
         version: 8.9.0
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.12.0
-        version: '@dankest-llc/xchain-sdk@0.12.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.15.3
+        version: '@dankest-llc/xchain-sdk@0.15.3'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -224,8 +224,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.12.0
-        version: '@dankest-llc/xchain-sdk@0.12.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.15.3
+        version: '@dankest-llc/xchain-sdk@0.15.3'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -300,8 +300,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.12.0
-        version: '@dankest-llc/xchain-sdk@0.12.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.15.3
+        version: '@dankest-llc/xchain-sdk@0.15.3'
     devDependencies:
       '@vitejs/plugin-basic-ssl':
         specifier: ^1.1.0
@@ -608,8 +608,8 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@dankest-llc/xchain-sdk@0.12.0':
-    resolution: {integrity: sha512-d7+VCrZVzeh1ek0WXjg+5dLk7Tj+SvovG9sJA+w/MSJYioPUyQNtrZ8ZnobWf6LvjqXc2ScrIuhg8NYm9uwoww==}
+  '@dankest-llc/xchain-sdk@0.15.3':
+    resolution: {integrity: sha512-dhs080sbQP4DuZf3OmCHIO7SPfdm0fG+TXll3taY1cI/R1dT7LSm2A7z4mWNxfXai/QSIfqsHCP4ReU/HYbcnQ==}
     engines: {node: '>=22.0.0'}
 
   '@electron-internal/extract-zip@1.0.5':
@@ -2799,8 +2799,8 @@ packages:
   js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
 
-  js-yaml@4.3.1:
-    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
   jsdom@25.0.1:
@@ -4612,7 +4612,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@dankest-llc/xchain-sdk@0.12.0':
+  '@dankest-llc/xchain-sdk@0.15.3':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       '@brandonblack/musig': 0.0.1-alpha.1
@@ -5700,7 +5700,7 @@ snapshots:
       hosted-git-info: 4.1.0
       isbinaryfile: 5.0.7
       jiti: 2.7.0
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       json5: 2.2.3
       lazy-val: 1.0.5
       minimatch: 10.2.5
@@ -6018,7 +6018,7 @@ snapshots:
       fs-extra: 10.1.0
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       sanitize-filename: 1.6.4
       source-map-support: 0.5.21
       stat-mode: 1.0.0
@@ -6303,7 +6303,7 @@ snapshots:
       app-builder-lib: 26.15.7(dmg-builder@26.15.7)(electron-builder-squirrel-windows@26.15.7)
       builder-util: 26.15.3
       fs-extra: 10.1.0
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
     transitivePeerDependencies:
       - electron-builder-squirrel-windows
       - supports-color
@@ -6395,7 +6395,7 @@ snapshots:
     dependencies:
       builder-util-runtime: 9.7.0
       fs-extra: 10.1.0
-      js-yaml: 4.3.1
+      js-yaml: 4.3.2
       lazy-val: 1.0.5
       lodash.escaperegexp: 4.1.2
       lodash.isequal: 4.5.0
@@ -7066,7 +7066,7 @@ snapshots:
 
   js-tokens@9.0.1: {}
 
-  js-yaml@4.3.1:
+  js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
 

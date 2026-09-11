@@ -252,8 +252,12 @@ assert.match(hostSrc, /host\.register\('chainRegistry\.removeCustomChain'/,
     'removeCustomChain route registered');
 assert.match(hostSrc, /seedCustomChainsFromVault/,
     'seedCustomChainsFromVault helper present');
-assert.match(hostSrc, /void seedCustomChainsFromVault\(vault, chainRegistry\)/,
-    'settings.get triggers seed');
+// The seed and the endpoint-override pass share one sequenced task, so the
+// override map is rebuilt against a registry that already knows the
+// user-added chain. Behaviour lives in
+// test/unit/background/customChainsSeedRetry.test.js; this pins the shape.
+assert.match(hostSrc, /await seedCustomChainsFromVault\(vault, chainRegistry\);\s*\n\s*await applyEndpointOverridesFromVault\(vault, sdkRegistry\);/,
+    'settings.get triggers the seed and then the endpoint overrides');
 
 // ─── 5. Three messaging shells expose the shims ─────────────────────────
 
@@ -283,4 +287,53 @@ assert.match(sectionSrc, /messaging\.listCustomChains/, 'CustomChainsRow calls m
 assert.match(sectionSrc, /messaging\.addCustomChain/, 'CustomChainsRow calls messaging.addCustomChain');
 assert.match(sectionSrc, /messaging\.removeCustomChain/, 'CustomChainsRow calls messaging.removeCustomChain');
 
-console.log('OK: custom chain registry flow + schema + host + shells + UI');
+// ─── 7. Every UI realm hydrates its OWN registry from settings ──────────
+//
+// The host seeds only the ChainRegistry instance it holds. The MV3 popup,
+// the approval window and the desktop renderer each run a separate realm
+// with their own defaultRegistry(), so each must install the persisted
+// custom chains itself or every registry-derived surface there (endpoint
+// editor, regtest blocks, pickers) keeps showing bundled chains only.
+
+const registryIndexSrc = readFileSync(join(wsRoot, 'packages/core/src/registry/index.js'), 'utf8');
+assert.match(registryIndexSrc, /export \{ hydrateCustomChainsFromSettings \}/,
+    'registry barrel exports hydrateCustomChainsFromSettings');
+
+// Popup + desktop renderer + web: the shared settings hook hydrates on every
+// successful read, which is also the first readable moment after unlock.
+const useSettingsSrc = readFileSync(
+    join(wsRoot, 'packages/core/src/shared/hooks/useSettings.js'),
+    'utf8',
+);
+assert.match(useSettingsSrc, /hydrateCustomChainsFromSettings\(defaultRegistry\(\), next\)/,
+    'useSettings hydrates the realm registry from each settings read');
+
+// Approval window: outside MessagingProvider, so it hydrates directly.
+const approvalMainSrc = readFileSync(join(wsRoot, 'packages/extension/src/approval/main.jsx'), 'utf8');
+assert.match(approvalMainSrc, /hydrateCustomChainsFromSettings\(registry\.defaultRegistry\(\)/,
+    'approval entry hydrates its realm registry at boot');
+const signApprovalSrc = readFileSync(
+    join(wsRoot, 'packages/extension/src/approval/kinds/SignApproval.jsx'),
+    'utf8',
+);
+assert.match(signApprovalSrc, /hydrateCustomChainsFromSettings\(chainRegistry, s\)/,
+    'SignApproval hydrates its realm registry from the unlocked settings read');
+// ConnectApproval carries no password gate, so it hydrates on mount and reads
+// the list through the live hook: behaviour lives in
+// test/unit/approval/connectApprovalChains.test.jsx.
+const connectApprovalSrc = readFileSync(
+    join(wsRoot, 'packages/extension/src/approval/kinds/ConnectApproval.jsx'),
+    'utf8',
+);
+assert.match(connectApprovalSrc, /hydrateCustomChainsFromSettings\(chainRegistry, s\)/,
+    'ConnectApproval hydrates its realm registry from the settings read');
+assert.match(connectApprovalSrc, /useSupportedChains\(chainRegistry\)/,
+    'ConnectApproval reads the chain list from the live registry');
+
+// Same-session add / remove mirrors into the calling realm's registry.
+assert.match(sectionSrc, /chainRegistry\.addCustom\(accepted\)/,
+    'CustomChainsRow installs an accepted descriptor into the local registry');
+assert.match(sectionSrc, /chainRegistry\.removeCustom\(chainId\)/,
+    'CustomChainsRow mirrors a removal into the local registry');
+
+console.log('OK: custom chain registry flow + schema + host + shells + UI + per-realm hydration');

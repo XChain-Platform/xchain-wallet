@@ -349,3 +349,51 @@ describe('fail closed', () => {
         expect(calls).not.toContain('quitAndInstall');
     });
 });
+
+// --- the release shape every desktop cut actually has -------------------
+//
+// windows is NOT-SHIPPED in shipped-lanes.txt, so a desktop release is
+// signed `--lane mac,linux` and its manifest carries `# lanes: mac linux`.
+// These cases drive that manifest through the REAL downloadAndInstall, so
+// they fail if the install's lane stops reaching the gate - which a full
+// manifest can never show, because it is covered whatever the lane says.
+const PARTIAL_MANIFEST = Buffer.from(
+    MANIFEST.toString('utf8').replace(
+        '# artifacts: 2',
+        '# coverage: partial\n# lanes: mac linux\n# artifacts: 2',
+    ),
+);
+
+describe('a partial release covering this install', () => {
+    it('installs when the manifest names this install\'s lane', async () => {
+        const { mod, calls } = fakeModule();
+        const result = await (await attach(mod, {
+            fetchImpl: feed({ manifest: PARTIAL_MANIFEST }), laneName: 'linux',
+        })).downloadAndInstall();
+
+        expect(result).toEqual({ ok: true });
+        expect(calls).toContain('quitAndInstall');
+    });
+
+    it('refuses when the manifest covers other lanes only', async () => {
+        const { mod, calls } = fakeModule();
+        const result = await (await attach(mod, {
+            fetchImpl: feed({ manifest: PARTIAL_MANIFEST }), laneName: 'android',
+        })).downloadAndInstall();
+
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/not android/);
+        expect(calls).not.toContain('quitAndInstall');
+    });
+
+    it('refuses when this build cannot name its own lane', async () => {
+        const { mod, calls } = fakeModule();
+        const result = await (await attach(mod, {
+            fetchImpl: feed({ manifest: PARTIAL_MANIFEST }), laneName: null,
+        })).downloadAndInstall();
+
+        expect(result.ok).toBe(false);
+        expect(result.reason).toMatch(/cannot name its own/);
+        expect(calls).not.toContain('quitAndInstall');
+    });
+});

@@ -31,6 +31,7 @@ import { createBackgroundHost } from '@xchain-wallet/extension/src/background/cr
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
  * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]  PC-16: pre-unlocked signers so session flows + auto-pay can sign without a per-op password
  * @property {import('@xchain-wallet/extension/src/bridge/Approvals.js').Approvals} [approvals]
+ * @property {(settings: object, ctx: { sdkRegistry: object }) => Promise<void>} [onPrivacySettingsChanged]  Desktop-only: re-applies egress routing after a settings.update touching `privacy`
  *
  * @typedef {{ type: string, request?: unknown }} IpcMessage
  * @typedef {{ ok: true, result: unknown } | { ok: false, error: { name: string, message: string } }} IpcResponse

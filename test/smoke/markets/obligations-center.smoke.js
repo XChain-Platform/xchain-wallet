@@ -11,7 +11,7 @@
 // Smoke for PC-15 (COINPAY obligations center): the ObligationsView
 // queue route exists with countdown/at-risk/expired states and a
 // prefilled Pay-now handoff; the nav badge is wired in LeftNav +
-// BottomTabBar and fed by useCoinpayObligations in the web and
+// BottomTabBar and fed by ONE CoinpayObligationsProvider scan in the web and
 // desktop shells; CoinpayForm gained the expired funds-safety block.
 
 import { strict as assert } from 'node:assert';
@@ -79,8 +79,13 @@ for (const [label, ...p] of [
     ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],
 ]) {
     const app = read(...p);
-    assert.match(app, /useCoinpayObligations\(activeWalletId, activeAccountId\)/, `${label}: badge hook mounted`);
-    assert.match(app, /badges=\{\{ messaging: messagingUnread, obligations: obligationsDue \}\}/, `${label}: badge fed to nav`);
+    // One scan per tree (rate-limits spec, row 29): the provider wraps the
+    // unlocked tree and the nav reads the count from the shared hook, so a
+    // second bare hook call here would be the duplicate scan coming back.
+    assert.match(app, /<CoinpayObligationsProvider walletId=\{activeWalletId\} accountId=\{activeAccountId\}>/, `${label}: obligations provider wraps the unlocked tree`);
+    assert.match(app, /useSharedCoinpayObligations\(\)/, `${label}: nav badge reads the shared scan`);
+    assert.match(app, /badges=\{\{ \.\.\.badges, obligations: payableCount \}\}/, `${label}: badge fed to nav`);
+    assert.doesNotMatch(app, /useCoinpayObligations\(activeWalletId/, `${label}: no second scan beside the provider`);
     assert.match(app, /unlockedView === 'obligations' && activeWalletId/, `${label}: obligations view routed`);
     assert.match(app, /setResumeCoinpay\(\{ \.\.\.ref, from: 'obligations' \}\)/, `${label}: Pay now prefills CoinpayForm`);
     assert.match(app, /from === 'obligations'\s*\?\s*'obligations'/, `${label}: CoinpayForm backs out to the queue`);

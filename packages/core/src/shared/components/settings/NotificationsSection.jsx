@@ -8,25 +8,44 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// NotificationsSection: §35.1 Notifications panel + §46.
+// NotificationsSection: §35.1 Notifications panel + §46 + §6 M4.2.
 //
-// Five toggles backed by `settings.notifications.*`. Toggling these flags
-// is the user *preference*; delivery is the §46 NotificationService
+// Ten per-kind toggles backed by `settings.notifications.*`. Toggling these
+// flags is the user *preference*; delivery is the §46 NotificationService
 // (`packages/core/src/notifications/`), hosted per-shell (extension SW,
-// web in-page host, Electron main) and gated by exactly these flags.
+// web in-page host, Electron main) and gated by exactly these flags. Below
+// the flag list sit a quiet-hours (do-not-disturb) row, the price-alert
+// manager under the priceAlerts toggle, and the M4 sounds block.
 //
 // The permission row owns the one piece of delivery the user must grant:
 // the browser/OS notification permission (web + desktop renderer). It reads
 // `Notification.permission` live and is hidden where that API is absent
 // (e.g. the extension popup, whose delivery uses `chrome.notifications`,
 // granted via the manifest, no runtime prompt).
+//
+// The sounds block is a separate, top-level preference: `settings.sounds`
+// (never nested under `notifications`, so a single family pick doesn't
+// freeze the whole flag block under the sparse-merge rule). It has its own
+// master switch, off by default, and while on, one sound picker per
+// notification family plus a Preview button. Preview is gated on the web
+// shell (`shell === 'web'`) because that is the only host with the
+// delivery seam to actually play a sound (ruling I-34b); it dispatches
+// SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
+import { useMessaging } from '../../useMessaging.js';
 import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
 import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
-import { ROW, ROW_HINT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    SOUND_FAMILIES,
+    SOUND_NONE,
+    SOUND_PALETTE,
+    SOUND_PREVIEW_EVENT,
+    pickedSoundForFamily,
+} from '../../../notifications/notificationSounds.js';
+import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const TIME_INPUT = {
     background: 'var(--xc-surface-2, transparent)',
@@ -105,6 +124,14 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
         key: 'incomingReceipts',
         label: 'Incoming receipts',
         hint: 'Notify when a watched address receives a transaction.',
+    },
+    {
+        key: 'incomingPending',
+        label: 'Incoming pending payments',
+        hint: 'Notify as soon as a payment to a watched address is seen in the mempool, before it confirms.',
+        // Same v2-tolerant default as governancePolls: the watcher treats an
+        // absent flag as ON, so a pre-flag settings record renders ON here too.
+        defaultOn: true,
     },
     {
         key: 'messages',
@@ -192,6 +219,109 @@ export function NotificationsSection({ walletId } = {}) {
                 </div>
             ))}
             <QuietHoursRow settings={settings} update={update} />
+            <SoundsBlock settings={settings} update={update} />
+        </div>
+    );
+}
+
+/**
+ * Event sounds (§6 M4.2). A master toggle, off by default, and while it is
+ * on one picker per notification family plus a Preview button.
+ *
+ * The pickers stay collapsed behind the master the way quiet hours and the
+ * price-alert manager collapse behind theirs: ten always-visible selects
+ * would double the panel's height for a feature that ships off.
+ *
+ * Preview is rendered only where the shell can actually make a noise: the
+ * web shell (which the mobile wrapper shares), whose host listens for
+ * SOUND_PREVIEW_EVENT and plays through its notify adapter. Desktop and the
+ * extension lack the delivery seam (ruling I-34b), and a button that does
+ * nothing is worse than no button, so it is gated on the shell rather than
+ * routed through a messaging helper the parity gate would demand of all three.
+ *
+ * @param {object} props
+ * @param {import('../../../schemas/settings.js').Settings} props.settings
+ * @param {(patch: Record<string, unknown>) => Promise<unknown>} props.update
+ */
+function SoundsBlock({ settings, update }) {
+    const { shell } = useMessaging();
+    const canPreview = shell === 'web';
+    const enabled = settings.sounds?.enabled === true;
+
+    const onToggle = async (next) => {
+        try {
+            await update({ sounds: { enabled: next } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('notifications.sounds update failed:', err);
+        }
+    };
+    // One family's patch, not the whole map: the settings merge recurses,
+    // so writing a single key leaves every sibling family untouched.
+    const onPick = async (familyKey, soundId) => {
+        try {
+            await update({ sounds: { perKind: { [familyKey]: soundId } } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error(`notifications.sounds.${familyKey} update failed:`, err);
+        }
+    };
+    const onPreview = (soundId) => {
+        try {
+            window.dispatchEvent(new CustomEvent(SOUND_PREVIEW_EVENT, { detail: { soundId } }));
+        } catch {
+            // No window (a non-DOM render): the user just hears nothing, which
+            // is not worth an error surface.
+        }
+    };
+
+    return (
+        <div style={STACK}>
+            <ToggleRow
+                label="Notification sounds"
+                hint="Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply."
+                checked={enabled}
+                onChange={onToggle}
+            />
+            {enabled ? (
+                <div style={MANAGER}>
+                    {SOUND_FAMILIES.map((family) => {
+                        const picked = pickedSoundForFamily(settings, family.key);
+                        return (
+                            <div key={family.key} style={ALERT_ROW}>
+                                <span>{family.label}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                                    <select
+                                        style={SELECT}
+                                        aria-label={`${family.label} sound`}
+                                        value={picked}
+                                        onChange={(e) => onPick(family.key, e.target.value)}
+                                    >
+                                        {SOUND_PALETTE.map((s) => (
+                                            <option key={s.id} value={s.id}>{s.label}</option>
+                                        ))}
+                                        <option value={SOUND_NONE}>No sound</option>
+                                    </select>
+                                    {canPreview ? (
+                                        <button
+                                            type="button"
+                                            style={LINK_BTN}
+                                            aria-label={`Preview ${family.label} sound`}
+                                            disabled={picked === SOUND_NONE}
+                                            onClick={() => onPreview(picked)}
+                                        >
+                                            Preview
+                                        </button>
+                                    ) : null}
+                                </span>
+                            </div>
+                        );
+                    })}
+                    <span style={ROW_HINT}>
+                        Sounds never arrive on their own: each one rides the notification it belongs to.
+                    </span>
+                </div>
+            ) : null}
         </div>
     );
 }

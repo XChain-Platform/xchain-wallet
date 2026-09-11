@@ -114,10 +114,30 @@ for (const route of ['broadcast.queue.list', 'broadcast.queue.enqueue', 'broadca
 // --- 4. Mutating routes persist after the change -----------------------
 
 const broadcastBlock = sliceRouteBody(bg, 'broadcast.queue.broadcast');
+// Removal re-resolves the entry by id AFTER the network await: `q` is the
+// live shared array, and a discard or a second broadcast can shift it while
+// this handler waits, so the index captured before the await may point at a
+// different signed tx by the time the splice runs.
+const REMOVE_BY_ID = /const cur = q\.findIndex\(\(e\) => e\.id === id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/;
 assert.ok(
-    broadcastBlock && /q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
-    'broadcast.queue.broadcast persists after splicing the entry',
+    broadcastBlock && REMOVE_BY_ID.test(broadcastBlock),
+    'broadcast.queue.broadcast removes by re-resolved id, then persists',
 );
+assert.ok(
+    broadcastBlock && !/q\.splice\(idx, 1\)/.test(broadcastBlock),
+    'broadcast.queue.broadcast never splices by the pre-await index',
+);
+// The in-flight claim is taken synchronously, before the first await, so a
+// second call for the same entry fails before broadcastTx runs.
+{
+    const firstAwait = broadcastBlock.indexOf('await ');
+    const claim = broadcastBlock.indexOf('inFlightQueueBroadcasts.add(');
+    assert.ok(claim > 0 && claim < firstAwait, 'the entry is claimed in-flight before the first await');
+    assert.ok(
+        /finally \{\s*\n\s*inFlightQueueBroadcasts\.delete\(claim\);/.test(broadcastBlock),
+        'the in-flight claim is released in a finally',
+    );
+}
 // This queue retries on demand, so it needs the same permanence
 // verdict the core drain applies. A signed transaction whose inputs are gone
 // can never confirm; leaving it listed invites the user to press "Broadcast
@@ -129,7 +149,7 @@ assert.ok(
 );
 assert.ok(
     broadcastBlock
-        && /=== 'permanent'\)\s*\{\s*\n\s*q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
+        && /=== 'permanent'\)\s*\{\s*\n\s*const cur = q\.findIndex\(\(e\) => e\.id === id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
     'a PERMANENT failure drops the entry from the queue and persists that',
 );
 assert.ok(

@@ -28,7 +28,10 @@ function makeRegistry(chains) {
 
 async function getChains(chains, opts = {}) {
     const host = new MessageHost({
-        vault: {},
+        // The route runs assertNotBlocked, which reads settings. A bare `{}`
+        // vault threw a TypeError before the icon work could run, failing
+        // these cases for a reason that has nothing to do with icons.
+        vault: { settings: { get: async () => ({ blockedOrigins: [] }) } },
         chainRegistry: makeRegistry(chains),
         sdkRegistry: {},
     });

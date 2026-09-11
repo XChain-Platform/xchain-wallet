@@ -28,11 +28,27 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { PAYLOAD_DIRS, parseManifest, parseUpdateInfo, sweep, verifyManifestSignature }
-    from '../../../tools/release/feed-sweep.mjs';
+import { directFeedRejection, PAYLOAD_DIRS, parseManifest, parseUpdateInfo, sweep,
+    verifyManifestSignature } from '../../../tools/release/feed-sweep.mjs';
+// The two CONSUMERS this producer has to agree with, imported so the
+// parity assertions below read the shipped rule rather than a restatement
+// of it. Neither is what feed-sweep.mjs itself imports at runtime: the
+// sweep is deployed standalone and keeps its own copy on purpose.
+import { parseUpdateFeed, UPDATE_FEED_MAX_BYTES }
+    from '../../../packages/web/src/update/directUpdateCheck.js';
+import { parseChannelPointer } from '../../../packages/desktop/main/updateVerify.js';
 
 const root = mkdtempSync(join(tmpdir(), 'xchain-feed-sweep-'));
 const codes = (result) => result.findings.map((f) => f.code).sort();
+
+/**
+ * Call the verifier the way `sweep()` does: the manifest as BYTES already
+ * in hand, the detached signature as the one path gpg opens for itself.
+ * The verifier takes bytes precisely so nothing can re-read the manifest
+ * between the signature check and the parse.
+ */
+const verifySig = (manifestPath, key, run) =>
+    verifyManifestSignature(readFileSync(manifestPath), `${manifestPath}.asc`, key, run);
 
 function sha256(text) { return createHash('sha256').update(text).digest('hex'); }
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
@@ -258,9 +274,19 @@ const V2 = {
     // gpg exits 0 for a good signature from an UNTRUSTED key, so reading
     // the exit status instead of VALIDSIG would accept exactly the case
     // this anchor exists to reject.
+    //
+    // The manifest here MUST exist and MUST have its .asc beside it. Naming
+    // a missing path takes the missing-.asc branch, never calls the double,
+    // and passes however the status parsing is written, which is a green
+    // assertion that cannot fail.
     const noStatus = () => ({ stdout: 'gpg: Good signature from "Someone Else"\n', status: 0 });
-    assert.equal(verifyManifestSignature('/nonexistent', 'ABCD', noStatus), 'bad',
+    assert.equal(verifySig(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'), 'ABCD', noStatus), 'bad',
         'a zero exit with no VALIDSIG line is not a pass');
+
+    // The other branch, kept explicit now that it is no longer the one the
+    // line above happened to take.
+    assert.equal(verifyManifestSignature('bytes', '/nonexistent.asc', 'ABCD', noStatus), 'bad',
+        'a manifest with no detached signature beside it is not verified');
 }
 
 // ------------------------------------------------------------ manifests
@@ -293,10 +319,10 @@ const V2 = {
             + `[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-08-06 1786041697 0 4 0 22 10 00 ${K1_PRIMARY}\n`,
     });
 
-    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+    assert.equal(verifySig(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
         K1_PRIMARY, validsig), 'ok',
     'the PRIMARY fingerprint verifies - it is the only one any document publishes');
-    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+    assert.equal(verifySig(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
         K1_SUBKEY, validsig), 'ok',
     'and the signing subkey still verifies, for anyone who pinned that');
 
@@ -308,7 +334,7 @@ const V2 = {
         stdout: '[GNUPG:] VALIDSIG ' + 'B'.repeat(40) + ' 2026-08-06 1 0 4 0 22 10 00 '
             + 'C'.repeat(40) + '\n',
     });
-    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+    assert.equal(verifySig(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
         K1_PRIMARY, otherKey), 'bad',
     'a good signature from someone else is still rejected on both fields');
 
@@ -317,7 +343,7 @@ const V2 = {
     // whose fingerprint ended in those characters, and short-id collisions
     // are cheap to mint - so the sweep would have counted the collision
     // key's manifest into the union and swept the payload under it clean.
-    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+    assert.equal(verifySig(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
         K1_PRIMARY.slice(-16), validsig), 'bad',
     'the last 16 characters of the real fingerprint are NOT the fingerprint');
 
@@ -327,7 +353,7 @@ const V2 = {
             + ' 2026-08-06 1 0 4 0 22 10 00 ' + `1${'1'.repeat(23)}${K1_PRIMARY.slice(-16)}`
             + '\n',
     });
-    assert.equal(verifyManifestSignature(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
+    assert.equal(verifySig(join(root, 'RELEASE_HASHES', 'v0.333.1.txt'),
         K1_PRIMARY.slice(-16), collision), 'bad',
     'and a 40-hex fingerprint that merely ENDS WITH the configured value is refused');
 }
@@ -410,6 +436,197 @@ const V2 = {
     assert.equal(stripped.pointers, 0, 'a versionless JSON file is not a pointer');
     assert.deepEqual(codes(stripped), ['UNCOVERED'],
         'and it is reported as an uncovered file rather than ignored');
+}
+
+// ------------------------------------- an empty baseline is not a pass
+
+{
+    // THE FAIL-OPEN BOTH POINTER LANES CARRIED. Until 2026-09-05 each one
+    // asked `tagsSeen.size > 0` before it would read the baseline, so a
+    // feed whose manifests were gone disabled the only check that reads
+    // its pointers. A tree holding one live pointer and nothing else -
+    // provenance gone, payload gone, the pointer still sending every
+    // direct install at 9.9.9 - swept clean, 0 findings, exit 0. That
+    // state is the loss this sweep exists to record, reported as health.
+    buildFeed(root, { artifacts: {}, manifests: {} });
+    mkdirSync(join(root, 'android'), { recursive: true });
+    writeFileSync(join(root, 'android', 'latest.json'), '{"version":"9.9.9"}\n');
+    const bare = sweep(root);
+    assert.equal(bare.manifests, 0, 'the baseline really is empty');
+    assert.equal(bare.pointers, 1, 'and the pointer really is live');
+    assert.deepEqual(codes(bare), ['POINTER-NO-MANIFEST'],
+        'an empty baseline is a finding against a live pointer, never a reason to skip it');
+}
+
+{
+    // The electron-updater lane carried its own copy of that guard, so
+    // fixing only the JSON lane above would have left this one fail-open
+    // in exactly the same way. Same feed shape, other pointer kind.
+    buildFeed(root, {
+        artifacts: V1,
+        manifests: {},
+        pointers: { 'stable-linux.yml': updateInfo('0.333.1', Object.entries(V1)) },
+    });
+    const bare = sweep(root);
+    assert.equal(bare.manifests, 0, 'the baseline really is empty');
+    assert.ok(codes(bare).includes('POINTER-NO-MANIFEST'),
+        'the yml lane refuses a live pointer with no covering manifest too');
+}
+
+// ------------------- the manifest that changed after it was verified
+//
+// TIME OF CHECK IS NOT TIME OF USE. The sweep verifies and baselines the SAME
+// bytes, read once. Handing gpg a PATH and then reading the file a second time
+// to build the baseline lets whoever can write to the feed - the one
+// capability this whole tool assumes an attacker has - swap the manifest
+// between those two reads and get hashes nobody signed into a union the
+// summary reports as `gpg-verified against <fpr>`. That is the anchor's own
+// failure mode wearing the anchor's badge.
+
+{
+    const K1 = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333';
+    const manifest = join(root, 'RELEASE_HASHES', 'v0.333.1.txt');
+    const evil = 'xchain-wallet-0.333.1-evil.AppImage';
+
+    buildFeed(root, {
+        artifacts: { ...V1, [evil]: 'malware' },
+        manifests: { 'v0.333.1': Object.keys(V1) },
+    });
+
+    // The swap happens inside gpg's own turn, which IS the window: by the
+    // time a path-based verifier returns, the file it read is gone.
+    let swapped = false;
+    const runThenSwap = () => {
+        if (!swapped) {
+            swapped = true;
+            writeFileSync(manifest,
+                `${readFileSync(manifest, 'utf8')}${sha256('malware')}  ./${evil}\n`);
+        }
+        return { stdout: `[GNUPG:] VALIDSIG ${K1} 2026-07-31\n`, status: 0 };
+    };
+
+    const result = sweep(root, { gpgKey: K1, run: runThenSwap });
+    assert.ok(swapped, 'the swap really ran, inside the verifier call');
+    assert.ok(codes(result).includes('UNCOVERED'),
+        'the baseline is the bytes that were VERIFIED: a hash line appended after the '
+        + 'signature check does not get to cover the planted artifact');
+    assert.match(result.signatureMode, /gpg-verified/,
+        'and the run still reports itself as anchored, which is why the laundering '
+        + 'mattered - the summary was the part an incident would be read from');
+}
+
+// ------------- a pointer the SHIPPED client discards is not a healthy feed
+//
+// MEASURED: `{"version":" 0.333.1 "}` and a body over the client's
+// 4096-character cap each swept clean with zero findings while
+// `checkForDirectUpdate` returned null on both. The direct lane is the only
+// channel a sideloaded install has for a security fix, so a feed every one
+// of those installs throws away is an outage, and a record that calls it
+// healthy is the reassuring kind of wrong.
+
+{
+    const withPointer = (body) => {
+        buildFeed(root, { artifacts: V1, manifests: { 'v0.333.1': Object.keys(V1) } });
+        mkdirSync(join(root, 'android'), { recursive: true });
+        writeFileSync(join(root, 'android', 'latest.json'), body);
+        return sweep(root);
+    };
+
+    assert.deepEqual(codes(withPointer('{"version":"0.333.1"}\n')), [],
+        'the control: a pointer the client accepts, naming a covered release, is clean');
+
+    assert.deepEqual(codes(withPointer('{"version":" 0.333.1 "}\n')), ['POINTER-UNREADABLE'],
+        'padding a version past the client\'s anchored regex is a finding, not a match - '
+        + 'the sweep used to trim it and hit a real manifest');
+
+    assert.deepEqual(
+        codes(withPointer(JSON.stringify({ version: '0.333.1', note: 'x'.repeat(5000) }))),
+        ['POINTER-UNREADABLE'],
+        'a body over the client\'s cap is discarded by every direct install, however '
+        + 'valid the version inside it looks');
+}
+
+// --- the sweep's copy of the client's feed rule must not drift from it ---
+//
+// Deliberately a COPY rather than an import, on the grounds
+// store-version-monitor.mjs states for its own: this file is deployed
+// standalone as /opt/xchain/feed-sweep.mjs, and an import reaching into
+// packages/web makes it unloadable there. A copy is only safe if something
+// proves the two agree, so this does - including the cap, which the app
+// applies before it parses and which therefore is part of the same rule.
+
+{
+    const sized = (n) => {
+        const base = JSON.stringify({ version: '1.2.3', pad: '' });
+        return JSON.stringify({ version: '1.2.3', pad: 'x'.repeat(n - base.length) });
+    };
+    assert.equal(sized(UPDATE_FEED_MAX_BYTES).length, UPDATE_FEED_MAX_BYTES,
+        'the boundary fixture really sits ON the cap, or it tests the wrong side of it');
+
+    const table = [
+        '{"version":"0.336.0"}',
+        '{"version":"1.2.3"}',
+        '{"version":"0.0.0"}',
+        '{"version":" 1.2.3 "}',      // the padding that trimmed into a match
+        '{"version":"01.2.3"}',       // leading zero
+        '{"version":"1.2"}',          // too few parts
+        '{"version":"1.2.3-rc.1"}',   // pre-release
+        '{"version":3}',              // not a string
+        '{"notVersion":"1.2.3"}',
+        '[{"version":"1.2.3"}]',      // array
+        'null',
+        'not json at all',
+        sized(UPDATE_FEED_MAX_BYTES),
+        sized(UPDATE_FEED_MAX_BYTES + 1),
+    ];
+
+    // The app's own acceptance, expressed the way checkForDirectUpdate
+    // expresses it: the cap first, on the decoded text, then the parse.
+    const clientAccepts = (text) => {
+        if (text.length > UPDATE_FEED_MAX_BYTES) return false;
+        try { parseUpdateFeed(JSON.parse(text)); return true; } catch { return false; }
+    };
+
+    for (const body of table) {
+        assert.equal(directFeedRejection(body) === '', clientAccepts(body),
+            `the sweep and the shipped client disagree about ${body.slice(0, 48)}: a feed one `
+            + 'accepts and the other refuses means the sweep is not auditing what ships');
+    }
+}
+
+// ------------------------------- CRLF: producer and consumer must agree
+//
+// `parseChannelPointer` (updateVerify.js) is a PORT of `parseUpdateInfo`
+// and strips a trailing \r; the sweep did not. `.` never matches \r and
+// `$` is not multiline, so a CRLF pointer the shipped client reads
+// perfectly came back here with no version and no files, and a CRLF
+// manifest parsed to zero entries - an empty baseline and every published
+// file UNCOVERED. An integrity tool that cries tampering over a line
+// ending is one that gets muted, which is this file's own stated failure.
+
+{
+    const crlf = (text) => text.replace(/\n/g, '\r\n');
+    const yml = updateInfo('0.333.1', Object.entries(V1));
+
+    assert.deepEqual(parseUpdateInfo(crlf(yml)), parseUpdateInfo(yml),
+        'the yml parser reads CRLF exactly as it reads LF');
+    assert.equal(parseChannelPointer(crlf(yml)).version, '0.333.1',
+        'and the shipped consumer really does accept that same pointer, so this is '
+        + 'parity with what ships rather than a rule invented in the sweep');
+
+    buildFeed(root, {
+        artifacts: V1,
+        manifests: { 'v0.333.1': Object.keys(V1) },
+        pointers: { 'stable-linux.yml': crlf(yml) },
+    });
+    const manifest = join(root, 'RELEASE_HASHES', 'v0.333.1.txt');
+    writeFileSync(manifest, crlf(readFileSync(manifest, 'utf8')));
+
+    const parsed = parseManifest(manifest);
+    assert.equal(parsed.tag, 'v0.333.1', 'the tag header survives CRLF');
+    assert.equal(parsed.entries.size, 2, 'and so does every hash line');
+    assert.deepEqual(codes(sweep(root)), [],
+        'a CRLF feed the desktop client accepts is not a tampering finding');
 }
 
 {

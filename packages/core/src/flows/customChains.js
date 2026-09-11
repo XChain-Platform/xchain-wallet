@@ -21,14 +21,23 @@
 //   - listCustomChains({ vault })
 //       Returns the persisted descriptor list (a copy; mutating the
 //       returned array is safe).
-//   - addCustomChain({ vault, chainRegistry, descriptor })
+//   - addCustomChain({ vault, chainRegistry, descriptor, sdkRegistry })
 //       Validates → checks for collisions against bundled + already-
 //       persisted ids → persists → registers. Returns the descriptor.
 //       Throws on validation failure / duplicate id.
-//   - removeCustomChain({ vault, chainRegistry, chainId })
+//   - removeCustomChain({ vault, chainRegistry, chainId, sdkRegistry })
 //       Removes from settings + ChainRegistry. Bundled chains can't be
 //       removed (the registry's removeCustom enforces this). Returns
 //       `{ removed: boolean }`.
+//
+// Both mutators drop the chain's cached SDK client. SDKRegistry caches one
+// instance per chainId and `get()` returns it before it re-reads the
+// descriptor, so removing a chain and re-adding the same id with different
+// endpoints kept dialling the ORIGINAL node, signed submissions included,
+// with no self-heal short of a restart: a settings save carrying no
+// endpoint override reports `changed: []` and tears nothing down.
+// `sdkRegistry` is optional so callers that hold none still work; the host
+// routes pass it.
 //
 // Per-descriptor validation re-runs at write time so a user can paste a
 // JSON descriptor without trusting that the source verified the shape.
@@ -66,10 +75,10 @@ export async function listCustomChains({ vault }) {
 /**
  * Validate, persist, and register a user-supplied ChainDescriptor.
  *
- * @param {{ vault: any, chainRegistry: any, descriptor: object }} args
+ * @param {{ vault: any, chainRegistry: any, descriptor: object, sdkRegistry?: any }} args
  * @returns {Promise<{ descriptor: object }>}
  */
-export async function addCustomChain({ vault, chainRegistry, descriptor }) {
+export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegistry }) {
     if (!descriptor || typeof descriptor !== 'object') {
         throw new Error('addCustomChain: descriptor must be an object');
     }
@@ -90,6 +99,7 @@ export async function addCustomChain({ vault, chainRegistry, descriptor }) {
         // covers the edge case where a previous boot persisted but the
         // registry seed step failed or was skipped.
         try { chainRegistry?.addCustom?.(descriptor); } catch { /* idempotent */ }
+        dropCachedSdk(sdkRegistry, descriptor.id);
         return { descriptor };
     }
     // Persist first; if the addCustom call throws (race against another
@@ -106,14 +116,31 @@ export async function addCustomChain({ vault, chainRegistry, descriptor }) {
         await writeSettings(vault, rolled);
         throw err;
     }
+    // Only after the registration stands: the rollback path above leaves
+    // the descriptor unregistered, so there is nothing to rebuild from.
+    dropCachedSdk(sdkRegistry, descriptor.id);
     return { descriptor };
 }
 
 /**
- * @param {{ vault: any, chainRegistry: any, chainId: string }} args
+ * Drop a chain's cached SDK client so the next `get()` rebuilds it from
+ * the current descriptor. Tolerates a caller that passes no registry, and
+ * a registry that predates `invalidate`; a chain with no live instance is
+ * already a no-op inside `invalidate` itself.
+ *
+ * @param {any} sdkRegistry
+ * @param {string} chainId
+ */
+function dropCachedSdk(sdkRegistry, chainId) {
+    if (typeof sdkRegistry?.invalidate !== 'function') return;
+    try { sdkRegistry.invalidate(chainId); } catch { /* never fail the mutation on a cache drop */ }
+}
+
+/**
+ * @param {{ vault: any, chainRegistry: any, chainId: string, sdkRegistry?: any }} args
  * @returns {Promise<{ removed: boolean }>}
  */
-export async function removeCustomChain({ vault, chainRegistry, chainId }) {
+export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegistry }) {
     if (typeof chainId !== 'string' || !chainId) {
         throw new Error('removeCustomChain: chainId is required');
     }
@@ -140,5 +167,6 @@ export async function removeCustomChain({ vault, chainRegistry, chainId }) {
         }
         throw _err;
     }
+    if (persistedRemoved || registryRemoved) dropCachedSdk(sdkRegistry, chainId);
     return { removed: persistedRemoved || registryRemoved };
 }

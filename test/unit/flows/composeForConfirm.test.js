@@ -4,6 +4,8 @@
 // composeForConfirm single-encode pipeline (§5.3.1).
 
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
 
 function makeHarness({ adsEnabled = false, adsCanSubmit = false } = {}) {
@@ -297,6 +299,26 @@ describe('composeForConfirm native-fee placement on the chunk lane', () => {
         expect(composed.expectedOutputs.addressed.some((s) => s.address === FEE_DEST)).toBe(false);
     });
 
+    // Every OTHER deferred output has to leave the expected set too, and the
+    // output-set check is now fail-CLOSED on an unconsumed requirement, so
+    // leaving one in would flag every chunk-lane action as tampered rather
+    // than merely mis-describing the transaction. The oracle usage fee below
+    // stands in for the whole class (ADS donation, native payment output).
+    it('keeps EVERY deferred output out of the expected set, not just the fee', async () => {
+        const h = deployHarness();
+        const ORACLE = { address: 'mOracleFeeDest11111111111111111111', value: '5005464' };
+        h.args.encoderOpts = { ...h.args.encoderOpts, customOutputs: [ORACLE] };
+        const composed = await composeForConfirm(h.args);
+
+        // The commit still RESERVES it (the reveal spends that reservation)...
+        expect(h.createTx.mock.calls[0][0].customOutputs).toContainEqual(ORACLE);
+        // ...and it rides the envelope so the submit path emits it on the reveal...
+        expect(composed.deferredOutputs).toContainEqual(ORACLE);
+        // ...but the phase-1 transaction does not carry it, so nothing may
+        // require it of the previewed PSBT.
+        expect(composed.expectedOutputs.addressed).toEqual([]);
+    });
+
     // Placement is read off the encoding the encoder chose, not predicted from
     // the action's size, so a long action the encoder still packs into one
     // transaction pays its fee there and defers nothing.
@@ -307,5 +329,30 @@ describe('composeForConfirm native-fee placement on the chunk lane', () => {
         expect(h.createTx.mock.calls[0][0].customOutputs)
             .toContainEqual({ address: FEE_DEST, value: FEE_SATS });
         expect(composed.expectedOutputs.addressed.some((s) => s.address === FEE_DEST)).toBe(true);
+    });
+});
+
+// The internal compose result, PINNED rather than merely described.
+//
+// Nothing typechecks this package, so the `ComposedAction` typedef drifted six
+// fields behind its own return while three shells restated a ninth-field
+// subset of the envelope built from it. This reads the typedef's @property
+// names back out of the source and compares them to the keys the function
+// returns, so the next field to be added has to be documented or go red.
+describe('composeForConfirm result shape', () => {
+    const SRC = readFileSync(
+        join(process.cwd(), 'packages', 'core', 'src', 'flows', 'composeForConfirm.js'), 'utf8');
+
+    it('the ComposedAction typedef names exactly the keys the result carries', async () => {
+        const start = SRC.indexOf('@typedef {Object} ComposedAction');
+        expect(start).toBeGreaterThan(-1);
+        const block = SRC.slice(start, SRC.indexOf('*/', start));
+        // Greedy to the LAST brace on the line: several of these types nest
+        // braces, and a lazy match stops at the inner one and drops the row.
+        const documented = [...block.matchAll(/^\s*\*\s*@property\s+\{.+\}\s+(\w+)/gm)].map((m) => m[1]);
+
+        const h = makeHarness();
+        const composed = await composeForConfirm(BASE_ARGS(h));
+        expect(documented.sort()).toEqual(Object.keys(composed).sort());
     });
 });

@@ -170,6 +170,20 @@ jobs:
         env:
           XCHAIN_REQUIRE_SIBLINGS: "1"
         run: pnpm exec vitest run --config test/vitest/integration.config.js test/integration/hd/wallet-sdk-derivation-parity.test.js
+      # Wallet<->SDK pre-flight schema/code parity guard, the second escape of
+      # the same shape. PreflightPanel hand-copies the Tier-1 finding codes and
+      # the report schema version out of the SDK, and
+      # xchain-sdk/src/preflight/constants.js names the test below as THE
+      # enforcement point of its additive-only promise. That test also skips by
+      # default when the SDK will not resolve, and it runs in the `test` job,
+      # which sets nothing: so until this step existed, the enforcement point
+      # the SDK names could only pass or vanish, never fail, in either lane that
+      # certifies a release. The file runs twice by design, non-strict there and
+      # strict here, exactly as the chain-registry guard below does.
+      - name: Wallet<->SDK preflight schema/code parity guard
+        env:
+          XCHAIN_REQUIRE_SIBLINGS: "1"
+        run: pnpm exec vitest run --config test/vitest/unit.config.js test/unit/components/PreflightPanel.tier1Notice.test.jsx
       # Wallet<->hub chain-registry guard. No hub checkout here, and
       # that is the point: --check compares bin/chain-registry.sync.json against
       # the bundled descriptors, so a descriptor fix that was never mirrored into

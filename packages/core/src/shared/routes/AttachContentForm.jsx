@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -30,6 +30,9 @@ import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -115,9 +118,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [tisTxid, setTisTxid] = useState(/** @type {string | null} */ (null));
     const [tisActionIndex, setTisActionIndex] = useState(/** @type {string | null} */ (null));
     const [descTxid, setDescTxid] = useState(/** @type {string | null} */ (null));
-    const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    // A leg that was SIGNED but never reached the network. The confirm
+    // lane resolves that case rather than throwing, and the next leg is
+    // keyed on this one's action index, so the flow stops here.
+    const [queuedLeg, setQueuedLeg] = useState(false);
     const [fileTxid, setFileTxid] = useState(/** @type {string | null} */ (null));
     const [fileActionIndex, setFileActionIndex] = useState(/** @type {string | null} */ (null));
     const [linkTxid, setLinkTxid] = useState(/** @type {string | null} */ (null));
@@ -285,6 +291,100 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
 
+    // §5.6: all four legs sign through the shared confirm lane. The ISSUE
+    // leg is the sharpest case, token administration signed against a
+    // locally rendered summary while every other ISSUE surface in the
+    // wallet composes through the tamper-checked confirm page. This form
+    // refuses watcher mode outright, so there is no legacy lane to keep.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    // "In flight" is now the pre-open host compose, not a local flag each
+    // leg set by hand around its own dispatch.
+    const submitting = actionConfirm.composing;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitFile = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'fileAction',
+        hardware: 'fileActionHw',
+    });
+    const submitLink = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'linkAction',
+        hardware: 'linkActionHw',
+    });
+    const submitIssue = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'issueToken',
+        hardware: 'issueTokenHw',
+    });
+
+    /**
+     * Compose one leg host-side, approve it on the shared confirm page and
+     * sign those exact bytes. `onBroadcast` carries the leg's own
+     * post-broadcast bookkeeping, which the shared screen knows nothing of.
+     *
+     * @param {object} leg
+     * @param {{ action: string, params: object }} leg.actionData
+     * @param {object} [leg.encoderOpts]
+     * @param {(prebuiltPsbt: object) => Promise<any>} leg.dispatch
+     * @param {(res: any) => void} leg.onBroadcast
+     * @param {string} leg.fallback   error sentence when nothing better is known
+     */
+    async function runLegThroughConfirm({ actionData, encoderOpts, dispatch, onBroadcast, fallback }) {
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from: sourceDescriptor(),
+                actionData,
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    ...(encoderOpts || {}),
+                },
+                onApprove: dispatch,
+            });
+            // Signed but never broadcast: each later leg is keyed on an
+            // earlier one's action index, so the chain cannot continue and
+            // saying it did would be the worse of the two wrong answers.
+            if (res?.queued) { setQueuedLeg(true); return; }
+            onBroadcast(res);
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setSubmitError(submitFailureMessage(err, {
+                chainId, coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || fallback,
+            }));
+        }
+    }
+
+    /** The source descriptor every leg's request body carries. */
+    function sourceDescriptor() {
+        return {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+    }
+
+    /** The file bytes as the Latin-1 binary string the encoder rebuilds. */
+    function latin1Of(bytes) {
+        let out = '';
+        for (let i = 0; i < bytes.length; i += 1) out += String.fromCharCode(bytes[i]);
+        return out;
+    }
+
     // Thumbnail for image files; small enough (≤7 KB) that a data
     // URL is fine.
     const previewUrl = useMemo(() => {
@@ -370,26 +470,21 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (submitting || !fileMeta) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        setSubmitting(true);
-        setSubmitError(null);
-        try {
-            // Latin-1 binary string; the encoder rebuilds the exact
-            // bytes via Buffer.from(rawData, 'binary').
-            let rawData = '';
-            for (let i = 0; i < fileMeta.bytes.length; i += 1) {
-                rawData += String.fromCharCode(fileMeta.bytes[i]);
-            }
-            const base = {
+        const rawData = latin1Of(fileMeta.bytes);
+        await runLegThroughConfirm({
+            // The same params flows/fileAction.js builds, so the previewed
+            // and the submitted composition cannot drift (PC-28).
+            actionData: {
+                action: 'FILE',
+                params: flowsLib.fileActionParams({
+                    name: fileMeta.name, type: fileMeta.type, title, memo,
+                }),
+            },
+            encoderOpts: { rawData },
+            dispatch: (prebuiltPsbt) => submitFile({
                 walletId,
                 chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
+                from: sourceDescriptor(),
                 payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
                 name: fileMeta.name,
@@ -397,34 +492,17 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 title: title.trim() || undefined,
                 memo: memo.trim() || undefined,
                 rawData,
-            };
-            const res = hw
-                ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.fileAction({ ...base, password });
-            const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('Broadcast did not return a transaction id.');
-            setFileTxid(txid);
-            setPassword('');
-            setStage('wait-index');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : submitFailureMessage(err, {
-                        chainId,
-                        coinTicker,
-                        mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'File upload failed.',
-                    }),
-            );
-            if (!hw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        } finally {
-            setSubmitting(false);
-        }
+                prebuiltPsbt,
+            }),
+            onBroadcast: (res) => {
+                const txid = res?.txid || res?.broadcast?.txid;
+                if (!txid) throw new Error('Broadcast did not return a transaction id.');
+                setFileTxid(txid);
+                setPassword('');
+                setStage('wait-index');
+            },
+            fallback: 'File upload failed.',
+        });
     }
 
     async function handleSignLink(event) {
@@ -432,54 +510,40 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (submitting || !fileActionIndex || !issueActionIndex) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        setSubmitting(true);
-        setSubmitError(null);
-        try {
-            const base = {
+        await runLegThroughConfirm({
+            // The same params flows/linkAction.js builds from these fields.
+            actionData: {
+                action: 'LINK',
+                params: {
+                    VERSION: '0',
+                    COIN1: String(coinTicker).toUpperCase(),
+                    COIN1_ACTION_INDEX: String(fileActionIndex),
+                    COIN2: String(coinTicker).toUpperCase(),
+                    COIN2_ACTION_INDEX: String(issueActionIndex),
+                    MEMO: '',
+                },
+            },
+            dispatch: (prebuiltPsbt) => submitLink({
                 walletId,
                 chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
+                from: sourceDescriptor(),
                 payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
                 coin1: coinTicker,
                 coin1ActionIndex: fileActionIndex,
                 coin2: coinTicker,
                 coin2ActionIndex: issueActionIndex,
-            };
-            const res = hw
-                ? await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.linkAction({ ...base, password });
-            const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('LINK broadcast did not return a txid.');
-            setLinkTxid(txid);
-            setPassword('');
-            setStage(setAsTokenInfo ? 'review-tis' : 'done');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : submitFailureMessage(err, {
-                        chainId,
-                        coinTicker,
-                        mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'LINK broadcast failed.',
-                    }),
-            );
-            if (!hw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        } finally {
-            setSubmitting(false);
-        }
+                prebuiltPsbt,
+            }),
+            onBroadcast: (res) => {
+                const txid = res?.txid || res?.broadcast?.txid;
+                if (!txid) throw new Error('LINK broadcast did not return a txid.');
+                setLinkTxid(txid);
+                setPassword('');
+                setStage(setAsTokenInfo ? 'review-tis' : 'done');
+            },
+            fallback: 'LINK broadcast failed.',
+        });
     }
 
     // The token's information document: minimal TIS JSON (same shape as
@@ -505,62 +569,40 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (submitting || !tisJson) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        setSubmitting(true);
-        setSubmitError(null);
-        try {
-            // JSON.stringify output may contain non-ASCII (title); encode
-            // to UTF-8 bytes first, then to the Latin-1 binary string the
-            // encoder expects.
-            const utf8 = new TextEncoder().encode(tisJson);
-            let rawData = '';
-            for (let i = 0; i < utf8.length; i += 1) {
-                rawData += String.fromCharCode(utf8[i]);
-            }
-            const base = {
+        // JSON.stringify output may contain non-ASCII (title); encode to
+        // UTF-8 bytes first, then to the Latin-1 binary string the encoder
+        // expects.
+        const rawData = latin1Of(new TextEncoder().encode(tisJson));
+        const tisName = String(tick).toUpperCase() + '.json';
+        await runLegThroughConfirm({
+            actionData: {
+                action: 'FILE',
+                params: flowsLib.fileActionParams({
+                    name: tisName, type: 'application/json', title: 'Token information',
+                }),
+            },
+            encoderOpts: { rawData },
+            dispatch: (prebuiltPsbt) => submitFile({
                 walletId,
                 chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
+                from: sourceDescriptor(),
                 payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
-                name: String(tick).toUpperCase() + '.json',
+                name: tisName,
                 type: 'application/json',
                 title: 'Token information',
                 rawData,
-            };
-            const res = hw
-                ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.fileAction({ ...base, password });
-            const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('Token-info upload did not return a txid.');
-            setTisTxid(txid);
-            setPassword('');
-            setStage('wait-tis');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : submitFailureMessage(err, {
-                        chainId,
-                        coinTicker,
-                        mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'Token-info upload failed.',
-                    }),
-            );
-            if (!hw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        } finally {
-            setSubmitting(false);
-        }
+                prebuiltPsbt,
+            }),
+            onBroadcast: (res) => {
+                const txid = res?.txid || res?.broadcast?.txid;
+                if (!txid) throw new Error('Token-info upload did not return a txid.');
+                setTisTxid(txid);
+                setPassword('');
+                setStage('wait-tis');
+            },
+            fallback: 'Token-info upload failed.',
+        });
     }
 
     async function handleSignDescribe(event) {
@@ -568,56 +610,32 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         if (submitting || !tisActionIndex) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        setSubmitting(true);
-        setSubmitError(null);
-        try {
-            const base = {
+        // ISSUE v1: edit description (owner-only at the indexer).
+        const issueParams = {
+            VERSION: '1',
+            TICK: String(tick).toUpperCase(),
+            DESCRIPTION: 'action:' + String(tisActionIndex),
+        };
+        await runLegThroughConfirm({
+            actionData: { action: 'ISSUE', params: issueParams },
+            dispatch: (prebuiltPsbt) => submitIssue({
                 walletId,
                 chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
+                from: sourceDescriptor(),
                 payFeeInNativeCoin: nativeFee.flag,
                 ...(feePerKb != null ? { feePerKb } : {}),
-                // ISSUE v1: edit description (owner-only at the indexer).
-                params: {
-                    VERSION: '1',
-                    TICK: String(tick).toUpperCase(),
-                    DESCRIPTION: 'action:' + String(tisActionIndex),
-                },
-            };
-            const res = hw
-                ? await messaging.issueTokenHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.issueToken({ ...base, password });
-            const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('Description update did not return a txid.');
-            setDescTxid(txid);
-            setPassword('');
-            setStage('done');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : submitFailureMessage(err, {
-                        chainId,
-                        coinTicker,
-                        mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'Description update failed.',
-                    }),
-            );
-            if (!hw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        } finally {
-            setSubmitting(false);
-        }
+                params: issueParams,
+                prebuiltPsbt,
+            }),
+            onBroadcast: (res) => {
+                const txid = res?.txid || res?.broadcast?.txid;
+                if (!txid) throw new Error('Description update did not return a txid.');
+                setDescTxid(txid);
+                setPassword('');
+                setStage('done');
+            },
+            fallback: 'Description update failed.',
+        });
     }
 
     const header = (
@@ -654,6 +672,38 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    // A leg signed but not broadcast stops the chain: the shared panel
+    // says so and deliberately offers no retry (re-signing while a signed
+    // copy is queued is the double-broadcast trap).
+    if (queuedLeg) {
+        return wrap(<QueuedResultPanel onDone={onBack} what="attachment" />);
+    }
+
+    // Confirm page for whichever leg is in flight, rendered in place of that
+    // leg's review stage; the stage machine stays intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
     }
 
     if (stage === 'done') {

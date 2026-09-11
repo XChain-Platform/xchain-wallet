@@ -12,7 +12,7 @@
 // require it, and prove every release tag has one.
 //
 // THE RULE THIS ENFORCES. §6 says the per-release record is instantiated
-// from `claude/reports/wallet-releases/TEMPLATE.md` at the START of a
+// from `TEMPLATE.md` (platform tree) at the START of a
 // release and closed by step 8. Until this file existed, nothing created
 // it and nothing asked for it: v0.334.0 was tagged, built green and left
 // half-finished while that directory still held only TEMPLATE.md, so for
@@ -249,7 +249,7 @@ function storeIntegers(tag) {
 function unavailableMessage() {
     return `no release records directory at ${RECORDS_DIR}.\n`
         + '  The §6 records live in the PLATFORM repo, one level above this one\n'
-        + '  (claude/reports/wallet-releases/). Check that repo out beside this\n'
+        + '  (the wallet-releases directory of its private tree). Check that repo out beside this\n'
         + '  one, or point XCHAIN_WALLET_RELEASE_RECORDS at it. This relocates\n'
         + '  the records; it does not waive them.';
 }

@@ -85,7 +85,7 @@ export const AES_GCM_ENVELOPE_BYTES = 28;
 export const ECIES_HANDOFF_HEX_CHARS = 190;
 
 /** KEY_HASH is always sha256 hex: 64 characters. */
-export const KEY_HASH_HEX_CHARS = 64;
+const KEY_HASH_HEX_CHARS = 64;
 
 /**
  * Minimal-push length-prefix size for an n-byte data push, matching

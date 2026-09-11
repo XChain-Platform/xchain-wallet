@@ -45,6 +45,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { releaseTagOf } from '../../../tools/release/feed-sweep.mjs';
+import { releaseTagOf as desktopReleaseTagOf } from '../../../packages/desktop/main/updateVerify.js';
+import { releaseTagOf as monitorReleaseTagOf } from '../../../tools/release/store-version-monitor.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -300,12 +302,22 @@ const execFileSyncPair = (script, args) => {
         'and its contents are left alone');
 }
 
-// --- 6. One rule, two languages ------------------------------------------
+// --- 6. One rule, four readers -------------------------------------------
 //
-// `verify.sh` strips the suffix in bash (lib.sh `xr_release_tag_of`) and the
-// feed sweep strips it in JS (`releaseTagOf`). They are read by different
-// tools on different machines and they must agree, so both are driven over
-// one table rather than inspected.
+// `verify.sh` strips the suffix in bash (lib.sh `xr_release_tag_of`), the feed
+// sweep strips it in JS (`releaseTagOf`), and so now do the DESKTOP UPDATE GATE
+// (`updateVerify.js`) and the direct-feed monitor (`store-version-monitor.mjs`).
+// They are read by different tools on different machines and they must agree,
+// so all four are driven over one table rather than inspected. The desktop
+// reader is the one that can STOP AN INSTALL: while it compared the header
+// verbatim, republishing a corrected manifest under the release's own name
+// refused every update of that release, and the monitor called the release that
+// had just been repaired mis-served.
+//
+// The two new spellings are LOCAL rather than imports: updateVerify.js is
+// bundled into the Electron main process, and store-version-monitor.mjs is
+// copied alone into rollback-rerelease.sh's fixture repo. This table is what
+// keeps four spellings one rule.
 {
     const table = [
         ['v0.336.0-resign1', 'v0.336.0'],
@@ -318,6 +330,10 @@ const execFileSyncPair = (script, args) => {
     for (const [input, expected] of table) {
         assert.equal(releaseTagOf(input), expected,
             `feed-sweep releaseTagOf(${input})`);
+        assert.equal(desktopReleaseTagOf(input), expected,
+            `updateVerify releaseTagOf(${input})`);
+        assert.equal(monitorReleaseTagOf(input), expected,
+            `store-version-monitor releaseTagOf(${input})`);
         const bash = execFileSync('bash', ['-c',
             `source "${join(root, 'tools/release/lib.sh')}"; xr_release_tag_of "${input}"`],
         { encoding: 'utf8' }).trim();

@@ -23,6 +23,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateChainDescriptor } from '../../../packages/core/src/registry/validate.js';
 import {
+    ADDRESS_TYPE_BIP44_PURPOSE_SLOT,
     BUNDLED_DESCRIPTORS,
     ChainRegistry,
     FAMILY_MAINNET_COIN_TYPE_SLOT,
@@ -230,5 +231,103 @@ describe('applyRemoteDescriptors / addCustom reject drifted descriptors', () => 
                 derivationPaths: { p2pkh: "m/44'/9'/A'/C/Index" },
             }),
         ).toThrow();
+    });
+
+    it('addCustom throws on a purpose-swapped known-family chain at a non-reserved id', () => {
+        const reg = new ChainRegistry();
+        expect(() =>
+            reg.addCustom(
+                withPaths(
+                    { ...btcRegtest, id: 'bitcoin-regtest-evil' },
+                    { p2wpkh: "m/44'/0'/A'/C/I" },
+                ),
+            ),
+        ).toThrow();
+    });
+});
+
+// The BIP44 purpose slot is a format selector, not decoration: SoftwareSigner
+// picks its message-signing opts from the path's purpose while encoding the
+// address from the requested type, and both hardware signers hardcode the
+// purpose per address type. A descriptor filing a legacy path under a segwit
+// address type therefore splits one seed into two address sets on the same
+// chain. The coin-type pin above never saw it, because it reads only the
+// second hardened segment.
+describe('validateChainDescriptor: family BIP44 purpose slot parity', () => {
+    it('rejects a bitcoin descriptor filing a legacy 44 purpose under p2wpkh', () => {
+        const res = validateChainDescriptor(
+            withPaths(btcMainnet, { p2wpkh: "m/44'/0'/A'/C/I" }),
+        );
+        expect(res.ok).toBe(false);
+        expect(res.errors.join(' ')).toMatch(/purpose slot/);
+    });
+
+    it('rejects a litecoin descriptor filing a segwit 84 purpose under p2pkh', () => {
+        const ltcMainnet = BUNDLED_DESCRIPTORS.find((d) => d.id === 'litecoin-mainnet');
+        const res = validateChainDescriptor(
+            withPaths(ltcMainnet, { p2pkh: "m/84'/2'/A'/C/I" }),
+        );
+        expect(res.ok).toBe(false);
+        expect(res.errors.join(' ')).toMatch(/purpose slot/);
+    });
+
+    it('accepts every bundled descriptor unchanged (purpose pin is consistent)', () => {
+        for (const d of BUNDLED_DESCRIPTORS) {
+            const res = validateChainDescriptor(d);
+            expect(res.ok, `${d.id}: ${res.errors?.join('; ')}`).toBe(true);
+        }
+    });
+
+    it('leaves an unknown coin family unconstrained on purpose', () => {
+        const res = validateChainDescriptor({
+            ...btcMainnet,
+            id: 'forkcoin-mainnet',
+            coin: 'forkcoin',
+            addressTypes: ['p2wpkh'],
+            defaultAddressType: 'p2wpkh',
+            derivationPaths: { p2wpkh: "m/44'/9999'/A'/C/I" },
+        });
+        expect(res.ok, res.errors?.join('; ')).toBe(true);
+    });
+
+    it('leaves an unregistered address type unconstrained on a known family', () => {
+        const res = validateChainDescriptor(
+            withPaths(btcMainnet, { 'p2wpkh-experimental': "m/99'/0'/A'/C/I" }),
+        );
+        expect(res.ok, res.errors?.join('; ')).toBe(true);
+    });
+
+    // Mirrors the coin-type completeness check: a NEW bundled address type
+    // added without a purpose entry would be pinned by nothing and pass.
+    it('every bundled address type is registered in the purpose map', () => {
+        const types = new Set();
+        for (const d of BUNDLED_DESCRIPTORS) {
+            if (!FAMILY_MAINNET_COIN_TYPE_SLOT[d.coin]) continue;
+            for (const t of Object.keys(d.derivationPaths)) types.add(t);
+        }
+        for (const t of types) {
+            expect(
+                ADDRESS_TYPE_BIP44_PURPOSE_SLOT[t],
+                `bundled address type "${t}" is missing from ADDRESS_TYPE_BIP44_PURPOSE_SLOT`,
+            ).toBeTruthy();
+        }
+    });
+
+    it('the promoted purpose map matches the bundled descriptors', () => {
+        for (const d of BUNDLED_DESCRIPTORS) {
+            if (!FAMILY_MAINNET_COIN_TYPE_SLOT[d.coin]) continue;
+            for (const [addressType, template] of Object.entries(d.derivationPaths)) {
+                const expected = ADDRESS_TYPE_BIP44_PURPOSE_SLOT[addressType];
+                if (!expected) continue;
+                expect(template.match(/^m\/(\d+')\//)[1]).toBe(expected);
+            }
+        }
+    });
+
+    it('applyRemoteDescriptors throws on a purpose-swapped override of a bundled id', () => {
+        const reg = new ChainRegistry();
+        expect(() =>
+            reg.applyRemoteDescriptors([withPaths(btcMainnet, { p2wpkh: "m/44'/0'/A'/C/I" })]),
+        ).toThrow(/invalid remote descriptor/);
     });
 });

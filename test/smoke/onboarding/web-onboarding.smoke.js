@@ -187,6 +187,11 @@ let createdMnemonic = null;
     }
     assert.ok(caught, 'second create rejects');
     assert.match(caught.message, /already exists/i);
+    // Same identity the pre-host shells raise: shared routes branch on the
+    // NAME, and a bare Error whose message carries an internal message-type
+    // prefix is the regression this pins.
+    assert.equal(caught.name, 'WalletExistsError',
+        'the web create lane raises the shared WalletExistsError, not a bare Error');
 }
 
 // --- 3. Reset storage and exercise import ---------------------------
@@ -245,6 +250,8 @@ for (const k of Array.from(fakeKv._store?.keys?.() || [])) fakeKv._store.delete(
     }
     assert.ok(caught, 'second import rejects');
     assert.match(caught.message, /already exists/i);
+    assert.equal(caught.name, 'WalletExistsError',
+        'the web import lane raises the shared WalletExistsError, not a bare Error');
 }
 
 // Restore the original IDB opener.

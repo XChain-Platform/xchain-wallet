@@ -25,10 +25,11 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
     isLocalFileUrl,
+    isAppUrl,
     isHttpUrl,
     shouldBlockNavigation,
     isRemoteFrameUrl,
@@ -46,6 +47,7 @@ import { createRuntime, handleIpcMessage } from '../../../packages/desktop/main/
 import {
     attachSignerBridgeListener,
     MAX_SIGNER_IDS_PER_MESSAGE,
+    MAX_SIGNER_IDS_PER_SENDER,
 } from '../../../packages/desktop/main/signerBridgeListener.js';
 // Imported by the SAME specifier `signerBridgeListener.js` uses, never by a
 // relative path to the same file. The registry is a process-wide
@@ -69,27 +71,62 @@ assert.equal(isHttpUrl('https://x.example'), true);
 assert.equal(isHttpUrl('http://x.example'), true);
 assert.equal(isHttpUrl('file:///a'), false);
 
-// Navigation guard: block anything that is not the local app.
-assert.equal(shouldBlockNavigation('https://evil.example'), true);
-assert.equal(shouldBlockNavigation('ftp://x'), true);
-assert.equal(shouldBlockNavigation('file:///app/index.html'), false);
+// Trust is the packaged renderer DIRECTORY, never the file:// scheme:
+// a downloaded HTML file must not read as the app and keep the preload.
+const APP_ROOT = join(desktop, 'renderer', 'dist');
+const appIndexUrl = pathToFileURL(join(APP_ROOT, 'index.html')).href;
+const appIndexWithRoute = `${appIndexUrl}?xc-init-route=eyJ2IjoxfQ%3D%3D`;
+const siblingDirUrl = pathToFileURL(join(`${APP_ROOT}-evil`, 'index.html')).href;
+const traversalUrl = `${pathToFileURL(join(APP_ROOT, 'x')).href}/../../../evil.html`;
 
-// Remote-frame detection: only a positively-non-file scheme is remote.
-assert.equal(isRemoteFrameUrl('https://evil.example'), true);
-assert.equal(isRemoteFrameUrl('data:text/html,x'), true);
-assert.equal(isRemoteFrameUrl('blob:https://x/y'), true);
-assert.equal(isRemoteFrameUrl('file:///app/index.html'), false);
-assert.equal(isRemoteFrameUrl(''), false);            // unknown -> not treated remote
-assert.equal(isRemoteFrameUrl(undefined), false);
+assert.equal(isAppUrl(appIndexUrl, APP_ROOT), true);
+assert.equal(isAppUrl(appIndexWithRoute, APP_ROOT), true, 'our own ?xc-init-route load stays trusted');
+assert.equal(isAppUrl(`${appIndexUrl}#/send`, APP_ROOT), true, 'hash routing stays trusted');
+assert.equal(isAppUrl(siblingDirUrl, APP_ROOT), false, 'a sibling dist-evil/ dir is not the app');
+assert.equal(isAppUrl(traversalUrl, APP_ROOT), false, 'dot-dot traversal out of the root is not the app');
+assert.equal(isAppUrl('file:///tmp/evil.html', APP_ROOT), false, 'a downloaded local file is not the app');
+assert.equal(isAppUrl('file://evil.example/share/index.html', APP_ROOT), false, 'a UNC/remote share is not the app');
+assert.equal(isAppUrl('https://evil.example', APP_ROOT), false);
+assert.equal(isAppUrl(appIndexUrl, undefined), false, 'no app root means nothing is the app');
+assert.equal(isAppUrl('not a url', APP_ROOT), false);
+
+// Navigation guard: block anything that is not this app's own renderer.
+assert.equal(shouldBlockNavigation('https://evil.example', APP_ROOT), true);
+assert.equal(shouldBlockNavigation('ftp://x', APP_ROOT), true);
+assert.equal(shouldBlockNavigation('file:///tmp/evil.html', APP_ROOT), true);
+assert.equal(shouldBlockNavigation(siblingDirUrl, APP_ROOT), true);
+assert.equal(shouldBlockNavigation(appIndexUrl, APP_ROOT), false);
+assert.equal(shouldBlockNavigation(appIndexWithRoute, APP_ROOT), false);
+assert.equal(shouldBlockNavigation(appIndexUrl, undefined), true, 'a missing app root blocks, never allows');
+
+// Remote-frame detection: anything not the app's own renderer is remote.
+assert.equal(isRemoteFrameUrl('https://evil.example', APP_ROOT), true);
+assert.equal(isRemoteFrameUrl('data:text/html,x', APP_ROOT), true);
+assert.equal(isRemoteFrameUrl('blob:https://x/y', APP_ROOT), true);
+assert.equal(isRemoteFrameUrl('file:///tmp/evil.html', APP_ROOT), true, 'a local file outside the app is remote');
+assert.equal(isRemoteFrameUrl(siblingDirUrl, APP_ROOT), true);
+assert.equal(isRemoteFrameUrl(appIndexUrl, APP_ROOT), false);
+assert.equal(isRemoteFrameUrl('', APP_ROOT), false);            // unknown -> not treated remote
+assert.equal(isRemoteFrameUrl(undefined, APP_ROOT), false);
+assert.throws(
+    () => isRemoteFrameUrl(appIndexUrl),
+    /appRoot/,
+    'a call site that forgot the app root throws instead of falling back to the scheme',
+);
 
 assert.equal(senderFrameUrl({ senderFrame: { url: 'file:///a' } }), 'file:///a');
 assert.equal(senderFrameUrl({ sender: { getURL: () => 'https://x' } }), 'https://x');
 assert.equal(senderFrameUrl({}), '');
 
-assert.equal(isTrustedSenderEvent({ senderFrame: { url: 'file:///a/index.html' } }), true);
-assert.equal(isTrustedSenderEvent({ senderFrame: { url: 'https://evil.example' } }), false);
-assert.equal(isTrustedSenderEvent({ sender: { getURL: () => 'https://evil.example' } }), false);
-assert.equal(isTrustedSenderEvent({}), true, 'unknown sender is not positively remote');
+assert.equal(isTrustedSenderEvent({ senderFrame: { url: appIndexUrl } }, APP_ROOT), true);
+assert.equal(isTrustedSenderEvent({ senderFrame: { url: 'https://evil.example' } }, APP_ROOT), false);
+assert.equal(isTrustedSenderEvent({ sender: { getURL: () => 'https://evil.example' } }, APP_ROOT), false);
+assert.equal(
+    isTrustedSenderEvent({ senderFrame: { url: 'file:///tmp/evil.html' } }, APP_ROOT),
+    false,
+    'a preload-bearing frame moved to an arbitrary local file loses IPC trust',
+);
+assert.equal(isTrustedSenderEvent({}, APP_ROOT), true, 'unknown sender is not positively remote');
 
 // --- 2. FileUnlockThrottleStore + runtime pre-KDF gate ----------------
 
@@ -226,6 +263,54 @@ bgSignerBridge.clearAll();
     assert.equal(typeof bgSignerBridge.getTransport('from-trusted'), 'function', 'trusted sender registers');
     detach();
 }
+
+// 4d. Cumulative per-sender quota: the per-message cap bounds ONE message,
+// so without this a trusted renderer looping valid 64-id batches retains
+// 64*N transports forever. Ten batches of 4 is the shape of that loop.
+bgSignerBridge.clearAll();
+{
+    const ipc = fakeIpcMain();
+    const detach = attachSignerBridgeListener({ ipcMain: ipc, maxSignerIdsPerSender: 8 });
+    const wc = fakeWc(4);
+    for (let batch = 0; batch < 10; batch += 1) {
+        const ids = Array.from({ length: 4 }, (_, i) => `grow-${batch}-${i}`);
+        ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ids });
+    }
+    assert.equal(
+        bgSignerBridge.registeredIds().length,
+        8,
+        'repeated valid batches stop at the cumulative quota instead of growing',
+    );
+    // Re-registering ids already owned is free: it re-points, never spends quota.
+    ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ['grow-0-0', 'grow-0-1'] });
+    assert.equal(bgSignerBridge.registeredIds().length, 8, 're-registering owned ids costs no quota');
+    // Unregister returns capacity, so a legitimate re-pair still succeeds.
+    ipc._emit(CH, { sender: wc }, { kind: 'unregister', signerIds: ['grow-0-0', 'grow-0-1'] });
+    assert.equal(bgSignerBridge.registeredIds().length, 6, 'unregister frees the ids');
+    ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ['fresh-a', 'fresh-b'] });
+    assert.equal(
+        typeof bgSignerBridge.getTransport('fresh-a'),
+        'function',
+        'capacity recovers after unregister',
+    );
+    // Over-quota messages are dropped whole, matching the per-message cap.
+    ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: ['over-a', 'over-b', 'over-c'] });
+    assert.equal(bgSignerBridge.getTransport('over-a'), null, 'an over-quota batch registers nothing');
+    // The quota is per sender: a second window is never starved by the first.
+    const wc2 = fakeWc(5);
+    ipc._emit(CH, { sender: wc2 }, { kind: 'register', signerIds: ['other-window'] });
+    assert.equal(
+        typeof bgSignerBridge.getTransport('other-window'),
+        'function',
+        'a second webContents has its own quota',
+    );
+    detach();
+}
+assert.equal(
+    MAX_SIGNER_IDS_PER_SENDER,
+    MAX_SIGNER_IDS_PER_MESSAGE,
+    'the shipped cumulative quota matches the per-message cap',
+);
 bgSignerBridge.clearAll();
 
 // --- 5. index.js wires the lockdown (source scan) ---------------------
@@ -237,9 +322,12 @@ for (const [needle, why] of [
     ["on('will-navigate'", 'blocks navigation away from the local app'],
     ["on('will-attach-webview'", 'refuses <webview> embedding'],
     ['shell.openExternal', 'external links go to the system browser'],
-    ['isTrustedSenderEvent(event)', 'privileged IPC handlers check the sender frame'],
+    ['isTrustedSender(event)', 'privileged IPC handlers check the sender frame'],
     ['FileUnlockThrottleStore', 'wires the file-backed unlock throttle'],
-    ['isTrustedSender: isTrustedSenderEvent', 'signer bridge gets the sender-trust predicate'],
+    ['attachSignerBridgeListener({ ipcMain, isTrustedSender })', 'signer bridge gets the sender-trust predicate'],
+    ["const APP_ROOT = join(here, '..', 'renderer', 'dist')", 'defines the packaged renderer dir'],
+    ['win.loadFile(join(APP_ROOT,', 'loads the renderer from that same dir, so the two cannot drift'],
+    ['attachHidPermissions(session.defaultSession, { appRoot: APP_ROOT })', 'the HID grant is pinned to the app dir'],
 ]) {
     assert.ok(mainIndex.includes(needle), `index.js ${why}`);
 }
@@ -247,6 +335,33 @@ assert.ok(
     /import \{[^}]*\bshell\b[^}]*\} from 'electron'/.test(mainIndex),
     'index.js imports shell from electron',
 );
+
+// Census: every call to a path-pinned predicate threads an app root. A
+// one-argument call is the exact shape of the scheme-only regression, and
+// the module now throws on it at runtime; catch it here instead. The
+// negative control for this loop is the pre-fix tree, where all eight
+// index.js call sites and the permissions.js one were single-argument.
+{
+    const pinned = ['isAppUrl', 'shouldBlockNavigation', 'isRemoteFrameUrl', 'isTrustedSenderEvent'];
+    const sources = [
+        ['main/index.js', mainIndex],
+        ['main/permissions.js', readFileSync(join(desktop, 'main', 'permissions.js'), 'utf8')],
+    ];
+    let checked = 0;
+    for (const [label, src] of sources) {
+        for (const name of pinned) {
+            const call = new RegExp(`\\b${name}\\(([^()]*)\\)`, 'g');
+            for (const m of src.matchAll(call)) {
+                checked += 1;
+                assert.ok(
+                    m[1].includes(','),
+                    `${label}: ${m[0]} must pass an app root, not pin trust to the file:// scheme`,
+                );
+            }
+        }
+    }
+    assert.ok(checked > 0, 'the call-site census found no calls at all, so it proved nothing');
+}
 
 console.log(
     'OK: desktop security-hardening smoke (security.js nav/sender predicates; FileUnlockThrottleStore round-trip + .tmp hygiene + runtime pre-KDF lockout; keychain/storage/meta clear() purges half-written .tmp; signerBridge ownership guard + per-message cap + injected sender-trust; index.js wires web-contents-created lockdown + IPC sender checks)',

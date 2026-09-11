@@ -22,17 +22,23 @@
 // from the listener; we use the sendResponse pattern for broadest MV3
 // compatibility.
 //
-// Co-exists with the pre-host listener in `sessionMeta.js`: this adapter
-// returns `false` for types in `PRE_HOST_MESSAGE_TYPES` so the two
-// listeners stay disjoint and no message ever gets two sendResponses.
+// Co-exists with the pre-host listeners in `sessionMeta.js` and
+// `wipeExtensionStorage.js`: this adapter returns `false` for the types
+// they own so the listeners stay disjoint and no message ever gets two
+// sendResponses. The overlap is not a benign duplicate: this adapter
+// answers an unowned type with UnknownMessageTypeError, and the FIRST
+// sendResponse is the one the page sees, so a wipe that really happened
+// would intermittently report a failure.
 
 import { PRE_HOST_MESSAGE_TYPES } from './sessionMeta.js';
+import { WIPE_STORAGE_MESSAGE_TYPE } from './wipeExtensionStorage.js';
 import {
     isMessageAllowedFromSender,
     isTrustedExtensionSender,
     webSenderOrigin,
 } from '../bridge/publicSurface.js';
 import { bridgeErrorCodeFor } from '../bridge/errorCodes.js';
+import { serializeError } from './MessageHost.js';
 
 /**
  * Attach a MessageHost to a chrome.runtime surface. Returns a function
@@ -61,15 +67,18 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
     const onWebSender = typeof opts.onWebSender === 'function' ? opts.onWebSender : null;
 
     const listener = (message, sender, sendResponse) => {
-        // Pre-host listener (sessionMeta.js) owns a small set of types
-        // that must work before the MessageHost's vault-backed handlers
-        // are registered. Skip those here so no message ever sees two
-        // sendResponses.
+        // Pre-host listeners own a small set of types that must work
+        // before the MessageHost's vault-backed handlers are registered:
+        // sessionMeta.js owns session/unlock/create/import, and
+        // wipeExtensionStorage.js owns the wipe (reached from the Locked
+        // screen, i.e. with the vault shut). Skip those here so no message
+        // ever sees two sendResponses.
         if (
             message &&
             typeof message === 'object' &&
             typeof message.type === 'string' &&
-            PRE_HOST_MESSAGE_TYPES.has(message.type)
+            (PRE_HOST_MESSAGE_TYPES.has(message.type)
+                || message.type === WIPE_STORAGE_MESSAGE_TYPE)
         ) {
             return false;
         }
@@ -145,14 +154,9 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
             .then((response) => sendResponse(publishedError(response, trusted)))
             .catch((err) => {
                 // host.handle already serializes errors; this catch guards
-                // against truly unexpected failures.
-                sendResponse(publishedError({
-                    ok: false,
-                    error: {
-                        name: (err && err.name) || 'Error',
-                        message: (err && err.message) || String(err),
-                    },
-                }, trusted));
+                // against truly unexpected failures. Same serializer, so a
+                // structured field never turns on which catch fired.
+                sendResponse(publishedError(serializeError(err), trusted));
             });
         return true; // signals async response per MV3 contract
     };

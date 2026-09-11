@@ -28,6 +28,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LEDGER_FILE, platformPath } from '../_spec-frontier.js';
 
 import { egressHostsFor } from '../../../packages/core/src/privacy/wireAudit.js';
 import { DOCS_ROOT, docsPath, readDoc, skipUnlessDocs } from '../_docs-repo.js';
@@ -1451,13 +1452,13 @@ for (const script of ['release:sign', 'release:verify']) {
     // The classification. `map` names the §4a pointer the phrase resolves
     // through; `why` records what makes a phrase need no map at all.
     const CLASSIFIED = {
-        'the correspondence log': { map: 'claude/reports/xchain-wallet/extension-store-correspondence.md' },
-        "the operator's correspondence log": { map: 'claude/reports/xchain-wallet/extension-store-correspondence.md' },
-        'the incident runbook': { map: 'claude/reports/launch/INCIDENT-RUNBOOK.md' },
-        'the credential inventory': { map: 'claude/specs/wallet-release-rails.md' },
-        'the release credential inventory': { map: 'claude/specs/wallet-release-rails.md' },
-        'the recovery-credential store': { map: 'claude/specs/wallet-release-rails.md' },
-        "the project's own release tracking": { map: 'claude/OPEN-ITEMS.md' },
+        'the correspondence log': { map: platformPath('reports', 'xchain-wallet', 'extension-store-correspondence.md') },
+        "the operator's correspondence log": { map: platformPath('reports', 'xchain-wallet', 'extension-store-correspondence.md') },
+        'the incident runbook': { map: platformPath('reports', 'launch', 'INCIDENT-RUNBOOK.md') },
+        'the credential inventory': { map: platformPath('specs', 'wallet-release-rails.md') },
+        'the release credential inventory': { map: platformPath('specs', 'wallet-release-rails.md') },
+        'the recovery-credential store': { map: platformPath('specs', 'wallet-release-rails.md') },
+        "the project's own release tracking": { map: platformPath(LEDGER_FILE) },
         'the publish log': { why: 'the page gives its repo path in the same Phase 6 step' },
         'the explorer access log': { why: 'a server-side log described in the privacy prose, not an operator artifact' },
     };

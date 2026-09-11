@@ -15,8 +15,10 @@
 //      FullLayoutWithNav are named exports.
 //   2. Primary nav items match the §24.2 list (Home, History, Send,
 //      Receive, DEX, Dispensers, Contracts, Messaging, Contacts).
-//   3. Contracts row is gated on hasBtcAddress (BTC-only per
-//      BITCOIN_ACTIONS); active row gets aria-current="page".
+//   3. Contracts row is gated on hasVmAddress (DEPLOY sits in
+//      COMMON_ACTIONS, so LTC/DOGE carry it too, and Home plus the
+//      command palette already use that gate); active row gets
+//      aria-current="page".
 //   4. CSS module declares a 220px sidebar, collapses it on the compact
 //      layout tier and narrows it to a 64px rail on the rail tier
 //, and overrides --xc-screen-h on the main pane.
@@ -70,10 +72,12 @@ assert.ok(/'dispenser-detail'/.test(navSrc) && /'dispenser-explorer'/.test(navSr
 assert.ok(/'staking-dashboard'/.test(navSrc) && /'contract-deploy'/.test(navSrc),
     'LeftNav contracts group covers staking + contract drilldowns');
 
-// --- 3. hasBtcAddress gate + aria-current --------------------------------
+// --- 3. hasVmAddress gate + aria-current ---------------------------------
 
-assert.ok(/hasBtcAddress\s*\?[\s\S]*?'contracts-list'/.test(navSrc),
-    'Contracts row only appears when hasBtcAddress is true');
+assert.ok(/hasVmAddress\s*\?[\s\S]*?'contracts-list'/.test(navSrc),
+    'Contracts row only appears when hasVmAddress is true');
+assert.ok(!/hasBtcAddress/.test(navSrc),
+    'LeftNav no longer carries a BTC gate (contracts is the registry VM gate)');
 assert.ok(/aria-current=\{active \? 'page' : undefined\}/.test(navSrc),
     'Active row receives aria-current="page"');
 
@@ -132,11 +136,19 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
                 && /onLock=\{handleNavLock\}/.test(src)),
         `${label} App wires LeftNav.onLock through lockWallet()`,
     );
+    // Both rails take the registry VM gate the Home tile and the command
+    // palette already use, so neither may still be handed the BTC one.
+    assert.equal(
+        (src.match(/hasVmAddress=\{hasVmAddress\}/g) || []).length, 2,
+        `${label} App passes hasVmAddress into both LeftNav and BottomTabBar`,
+    );
+    assert.ok(!/hasBtcAddress=\{hasBtcAddress\}/.test(src),
+        `${label} App no longer passes hasBtcAddress into a nav rail`);
 }
 
 assert.ok(!/LeftNav/.test(popupApp),
     'Extension popup intentionally does NOT mount LeftNav (always compact per §24.1)');
 
 console.log(
-    'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasBtcAddress; active row aria-current="page"; 220px sidebar, 64px rail tier, collapsed on compact; web + desktop App.jsx wrap unlocked tree, popup left compact)',
+    'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasVmAddress; active row aria-current="page"; 220px sidebar, 64px rail tier, collapsed on compact; web + desktop App.jsx wrap unlocked tree, popup left compact)',
 );

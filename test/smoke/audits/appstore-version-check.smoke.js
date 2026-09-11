@@ -45,7 +45,7 @@ import { readFileSync } from 'node:fs';
 import {
     classifyVersionRecord, credentialsFromEnv, bundleIdFromProject, shippedCapabilities,
     ascToken, EXIT, CANONICAL_PRIVACY_URL, SEED_PLACEHOLDER, REQUIRED_SCREENSHOT_TYPES,
-    SCREENSHOT_DIR_BY_TYPE, pinnedListingDigests,
+    SCREENSHOT_DIR_BY_TYPE, pinnedListingDigests, tagDerivations,
 } from '../../../tools/release/verify-appstore-version.mjs';
 
 const SHIPS_BOTH = { messaging: true, betting: true };
@@ -147,6 +147,70 @@ const otherVersion = classifyVersionRecord(healthyRecord({
 }), SHIPS_BOTH);
 assert.deepEqual(state(otherVersion, 'build-number'), ['failure'],
     'the same build under a different version string must fail the derivation');
+
+// --- 3b. A respin, which is the case the derivation could not express -------
+//
+// Apple's CFBundleShortVersionString cannot carry a lane, so a respin of
+// 0.336.0 sits at Apple as marketing 0.336.0 with build 3360051. Rebuilding a
+// tag out of that string only ever names the stable one, so this gate failed
+// the respin as "a build from a different release" - at the one moment a
+// respin exists for.
+const RESPIN_TAG = 'v0.336.0-respin.1';
+const respinBuild = { version: '3360051', processingState: 'VALID', expired: false };
+
+const respinTagged = classifyVersionRecord(
+    healthyRecord({ build: respinBuild }), SHIPS_BOTH, pinFor(), RESPIN_TAG,
+);
+assert.deepEqual(state(respinTagged, 'build-number'), ['ok'],
+    'a respin build passes when the gate is told the respin tag');
+assert.deepEqual(state(respinTagged, 'marketing-version'), ['ok'],
+    'and the marketing version Apple holds is checked against that same tag');
+
+const stableUnderRespinTag = classifyVersionRecord(
+    healthyRecord(), SHIPS_BOTH, pinFor(), RESPIN_TAG,
+);
+assert.deepEqual(state(stableUnderRespinTag, 'build-number'), ['failure'],
+    'the STABLE build under a respin tag must fail: it is the build the respin replaces');
+
+const stableTagged = classifyVersionRecord(healthyRecord(), SHIPS_BOTH, pinFor(), 'v0.336.0');
+assert.equal(stableTagged.exit, EXIT.READY, 'the stable record under its own tag is still READY');
+assert.deepEqual(state(stableTagged, 'build-number'), ['ok']);
+
+// A tag that disagrees with what Apple holds is a new failure the old
+// derivation could not see at all, because it compared the string to itself.
+const wrongMarketing = classifyVersionRecord(healthyRecord(), SHIPS_BOTH, pinFor(), 'v0.337.0');
+assert.deepEqual(state(wrongMarketing, 'marketing-version'), ['failure'],
+    'Apple holding a different marketing version than the tag must fail');
+
+// Tagless, the gate keeps working: the respin passes on the band, the stable
+// record still passes exactly, and a build from another release still fails.
+const respinTagless = classifyVersionRecord(healthyRecord({ build: respinBuild }), SHIPS_BOTH, pinFor());
+assert.deepEqual(state(respinTagless, 'build-number'), ['ok'],
+    'a respin build passes the lane-tolerant band with no tag');
+assert.match(find(respinTagless, 'build-number')[0].detail, /respin 1/,
+    'and the detail says it answered the lane-tolerant question');
+assert.equal(state(respinTagless, 'marketing-version').length, 0,
+    'with no tag there is nothing to check the marketing version against');
+for (const wrong of ['3350050', '3360150', '3360049', '3360100']) {
+    const out = classifyVersionRecord(healthyRecord({
+        build: { version: wrong, processingState: 'VALID', expired: false },
+    }), SHIPS_BOTH, pinFor());
+    assert.deepEqual(state(out, 'build-number'), ['failure'],
+        `build ${wrong} is outside 0.336.0's band and must still fail with no tag`);
+}
+
+// An unparseable tag is a configuration error, never a silent pass.
+assert.equal(tagDerivations(null), null, 'no tag derives nothing');
+assert.equal(tagDerivations('   '), null, 'a blank tag derives nothing');
+assert.ok(tagDerivations('v0.336.0-nonsense.1').error, 'a malformed tag reports an error');
+const badTag = classifyVersionRecord(healthyRecord(), SHIPS_BOTH, pinFor(), 'v0.336.0-nonsense.1');
+assert.deepEqual(state(badTag, 'build-number'), ['failure'],
+    'a malformed tag fails the check rather than falling back to the weaker one');
+assert.deepEqual(
+    tagDerivations(RESPIN_TAG),
+    { tag: RESPIN_TAG, marketing: '0.336.0', build: '3360051' },
+    'the derivations come from the version oracle, not from a second formula here',
+);
 
 // --- 4. §5's release control ------------------------------------------------
 

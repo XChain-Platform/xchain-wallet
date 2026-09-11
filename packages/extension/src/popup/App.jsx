@@ -160,6 +160,11 @@ import { MultisigSigningSession } from '@xchain-wallet/core/shared/routes/Multis
 import { CoSignerAccountList } from '@xchain-wallet/core/shared/routes/CoSignerAccountList.jsx';
 import { CoSignerProvision } from '@xchain-wallet/core/shared/routes/CoSignerProvision.jsx';
 import { CoSignerAccountDetail } from '@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx';
+import { MyLists } from '@xchain-wallet/core/shared/routes/MyLists.jsx';
+import { ListDetail } from '@xchain-wallet/core/shared/routes/ListDetail.jsx';
+import { ListCreateForm } from '@xchain-wallet/core/shared/routes/ListCreateForm.jsx';
+import { ListForkForm } from '@xchain-wallet/core/shared/routes/ListForkForm.jsx';
+import { ObligationsView } from '@xchain-wallet/core/shared/routes/ObligationsView.jsx';
 import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
 import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
@@ -199,7 +204,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -284,8 +289,19 @@ function AppInner() {
     const [coSignerAccountId, setCoSignerAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    // `from` records the queue the payment was picked up from, so backing
+    // out of CoinpayForm returns there instead of Home.
     const [resumeCoinpay, setResumeCoinpay] = useState(
-        /** @type {{ chainId: string, address: string, orderMatchActionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, address: string, orderMatchActionIndex: string, from?: 'obligations' } | null} */ (null),
+    );
+    // PC-10 "My Lists": which list ListDetail is showing, and the
+    // {chainId, actionIndex, type, items} handed from ListDetail's
+    // "Fork & edit" button into ListForkForm.
+    const [listRef, setListRef] = useState(
+        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+    );
+    const [listForkRef, setListForkRef] = useState(
+        /** @type {{ chainId: string, actionIndex: string, type: string, items: string[] } | null} */ (null),
     );
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
@@ -1045,6 +1061,50 @@ function AppInner() {
                     />
                 );
             }
+            // The shared palette ships nav-lists / create-list unconditionally,
+            // so these routes are what keeps those commands from dead-ending.
+            if (unlockedView === 'lists' && activeWalletId) {
+                return (
+                    <MyLists
+                        walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
+                        onOpenList={(cid, actionIndex) => {
+                            setListRef({ chainId: cid, actionIndex });
+                            setUnlockedView('list-detail');
+                        }}
+                        onCreateList={() => setUnlockedView('list-create')}
+                        onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'list-detail' && activeWalletId && listRef) {
+                return (
+                    <ListDetail
+                        chainId={listRef.chainId}
+                        actionIndex={listRef.actionIndex}
+                        onBack={() => setUnlockedView('lists')}
+                        onFork={(ref) => { setListForkRef(ref); setUnlockedView('list-fork'); }}
+                    />
+                );
+            }
+            if (unlockedView === 'list-create' && activeWalletId) {
+                return (
+                    <ListCreateForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('lists')}
+                    />
+                );
+            }
+            if (unlockedView === 'list-fork' && activeWalletId && listForkRef) {
+                return (
+                    <ListForkForm
+                        walletId={activeWalletId}
+                        listRef={listForkRef}
+                        onBack={() => setUnlockedView('list-detail')}
+                        onDone={() => { setListForkRef(null); setUnlockedView('lists'); }}
+                    />
+                );
+            }
             if (unlockedView === 'dispensers-list' && activeWalletId) {
                 return (
                     <DispensersList
@@ -1202,6 +1262,21 @@ function AppInner() {
                     />
                 );
             }
+            // The shared palette ships nav-obligations unconditionally, so this
+            // route is what keeps "Payments due" from dead-ending on Home.
+            if (unlockedView === 'obligations' && activeWalletId) {
+                return (
+                    <ObligationsView
+                        walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
+                        onBack={() => setUnlockedView('home')}
+                        onPay={(ref) => {
+                            setResumeCoinpay({ ...ref, from: 'obligations' });
+                            setUnlockedView('coinpay');
+                        }}
+                    />
+                );
+            }
             if (unlockedView === 'coinpay' && activeWalletId) {
                 return (
                     <CoinpayForm
@@ -1210,9 +1285,12 @@ function AppInner() {
                         address={resumeCoinpay?.address}
                         orderMatchActionIndex={resumeCoinpay?.orderMatchActionIndex}
                         onBack={() => {
+                            const from = resumeCoinpay?.from;
                             const cameFromResume = resumeCoinpay !== null;
                             setResumeCoinpay(null);
-                            setUnlockedView(cameFromResume ? 'home' : 'actions');
+                            setUnlockedView(from === 'obligations'
+                                ? 'obligations'
+                                : (cameFromResume ? 'home' : 'actions'));
                         }}
                     />
                 );

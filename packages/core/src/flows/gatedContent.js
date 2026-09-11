@@ -13,7 +13,7 @@
 // holder's address, decrypts the file client-side. No on-chain
 // transaction is required to unlock.
 //
-// See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+// See xchain-documentation/protocol/token-gated-content.md.
 //
 // Caching:
 //   - keys cached by (address, keyHash) so unlocking one pack member

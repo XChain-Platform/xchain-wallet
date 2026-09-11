@@ -30,6 +30,7 @@ import {
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -275,6 +276,11 @@ export function ComposeMessage({
     }, [addressesByChain, fromAddressId, chainId]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    // The native ticker both submit catches hand submitFailureMessage, so its
+    // fee and encoder sentences name the coin the user is actually spending.
+    const nativeTicker = descriptor?.coin
+        ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
+        : '';
     const hw = isHwSource(fromAddress);
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -457,7 +463,18 @@ export function ComposeMessage({
                 setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
                 return;
             }
-            setSubmitError(err?.message || 'Send failed.');
+            // submitFailureMessage owns the translation for the shapes the
+            // encoder writes for a log ("no spendable UTXOs found for the
+            // funding address"), since this is the screen a user reads. The
+            // fallback keeps err.message AHEAD of the house string, which is
+            // the helper's stated contract ("the message the form would have
+            // shown") and what every other swept form passes. Dropping that
+            // half swallows a specific host reason, such as an
+            // insufficient-funds shortfall naming the amount required, behind
+            // a bare "Send failed."
+            setSubmitError(submitFailureMessage(err, {
+                chainId, coinTicker: nativeTicker, fallback: err?.message || 'Send failed.',
+            }));
         }
     }
 
@@ -541,7 +558,13 @@ export function ComposeMessage({
                 setSubmitError("The recipient's encryption key is no longer available. Refresh and try again.");
                 setPubkeyState('missing');
             } else {
-                setSubmitError(err?.message || 'Send failed.');
+                // Same translation, and the same fallback, as the confirm path
+                // above. The helper's own header names this exact trap: a form
+                // swept on one submit path and not the other still ships wire
+                // wording on the other.
+                setSubmitError(submitFailureMessage(err, {
+                    chainId, coinTicker: nativeTicker, fallback: err?.message || 'Send failed.',
+                }));
             }
             setStage('review');
             if (!hw) {

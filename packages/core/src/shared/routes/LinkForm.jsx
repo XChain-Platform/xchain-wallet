@@ -15,6 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -29,6 +30,8 @@ import { humanizeError } from '../utils/humanizeError.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -255,6 +258,83 @@ export function LinkForm({ walletId, onBack }) {
     // authoritative price check runs at submit via applyNativeFeePreflight.
     const nativeFee = useNativeFee(submitDescriptor);
 
+    // The wire params, mirroring linkAction's own build. What is signed is a
+    // BINDING between two on-chain records, and the confirm page's action-byte
+    // cross-check is the only thing that proves the COIN/index pair the user
+    // read is the pair encoded into the transaction.
+    const linkParams = useMemo(() => ({
+        VERSION: '0',
+        COIN1: String(ticker1).toUpperCase(),
+        COIN1_ACTION_INDEX: actionIndex1,
+        COIN2: String(ticker2).toUpperCase(),
+        COIN2_ACTION_INDEX: actionIndex2,
+        MEMO: memo.trim() || '',
+    }), [ticker1, actionIndex1, ticker2, actionIndex2, memo]);
+
+    // §5.6: the signing lanes compose ONE PSBT host-side and approve it on
+    // the shared confirm page; watcher keeps the legacy review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = !isWatcherMode;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'linkAction',
+        hardware: 'linkActionHw',
+    });
+
+    // Compose, tamper-check and pre-flight run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const r = await actionConfirm.run({
+                chainId: submitChainId,
+                from,
+                actionData: { action: 'LINK', params: linkParams },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                onApprove: (prebuiltPsbt) => submitConfirmed({
+                    walletId,
+                    chainId: submitChainId,
+                    from,
+                    coin1: ticker1,
+                    coin1ActionIndex: actionIndex1,
+                    coin2: ticker2,
+                    coin2ActionIndex: actionIndex2,
+                    ...(memo.trim() ? { memo: memo.trim() } : {}),
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(r);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(submitFailureMessage(err, {
+                chainId: submitChainId,
+                coinTicker: feeCoinTicker || '',
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Sign failed.',
+            }));
+        }
+    }
+
     // Form submit goes to the review stage, not directly to broadcast.
     // Runs the same guards that previously gated signing so nothing
     // reachable from the review screen is in an invalid state.
@@ -268,6 +348,7 @@ export function LinkForm({ walletId, onBack }) {
             return;
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -305,14 +386,6 @@ export function LinkForm({ walletId, onBack }) {
             };
             let r;
             if (isWatcherMode) {
-                const linkParams = {
-                    VERSION: '0',
-                    COIN1: String(ticker1).toUpperCase(),
-                    COIN1_ACTION_INDEX: actionIndex1,
-                    COIN2: String(ticker2).toUpperCase(),
-                    COIN2_ACTION_INDEX: actionIndex2,
-                    MEMO: memo.trim() || '',
-                };
                 r = await messaging.buildActionPsbtRequest({
                     chainId: submitChainId,
                     from: base.from,
@@ -385,6 +458,12 @@ export function LinkForm({ walletId, onBack }) {
                 />,
             );
         }
+        // A queued result is SIGNED and not broadcast: the confirm lane
+        // resolves a transient broadcast failure that way, and the copy
+        // below would report a link that is not on any chain yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="link" />);
+        }
         return wrap(
             <>
                 <p className={styles.successTitle}>Cross-chain link broadcast</p>
@@ -406,6 +485,31 @@ export function LinkForm({ walletId, onBack }) {
 
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    // Confirm page, rendered in place of the form; form state stays intact
+    // behind it, so Reject lands back on the composer.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={submitDescriptor?.displayName || submitChainId}
+                feeText={feeEstimate?.coinAmount && feeCoinTicker
+                    ? `Network fee: ${feeEstimate.coinAmount} ${feeCoinTicker}`
+                    : undefined}
+                coinTicker={feeCoinTicker || ''}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={submitChainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
     }
 
     // Review + submitting: show a summary dl, the decoded sub-action
@@ -632,11 +736,13 @@ export function LinkForm({ walletId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
+                    loading={actionConfirm.composing}
                     disabled={!!validationError
                         || !fromAddress
-                        || !actionIndex1 || !actionIndex2}
+                        || !actionIndex1 || !actionIndex2
+                        || actionConfirm.composing}
                 >
-                    Review
+                    {singleEncode ? 'Link' : 'Review'}
                 </Button>
             </div>
         </form>,

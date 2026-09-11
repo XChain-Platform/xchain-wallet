@@ -7,6 +7,8 @@
 // already-verified ComposedAction. A tamper throws.
 
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { composeActionForConfirm } from '../../../packages/core/src/flows/composeActionForConfirm.js';
 import { TamperDetectedError } from '../../../packages/core/src/flows/confirmChecks.js';
 
@@ -331,6 +333,31 @@ describe('composeActionForConfirm', () => {
         expect(composed.networkFeeSats).toBe(null);
     });
 
+    // ...and the projection has to say so too. The fee line went honest and
+    // the balance line beside it did not: the simulator was handed '0', which
+    // it can only read as "free", so a 1 BTC send from 10 BTC printed a flat
+    // 10 -> 9 with the unknown charge nowhere on a signing screen.
+    it('does not project a post-balance when the fee could not be read', async () => {
+        const h = makeHarness({ inputs: [{ value: 5000 }, { value: null }] });
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'SEND',
+            params: { TICK: 'BTC', AMOUNT: '1', DESTINATION: 'dest' },
+        }));
+        h.sdk.getBalances = vi.fn(async () => ({ data: [] }));
+        h.sdk.getAddress = vi.fn(async () => ({ balances: { confirmed: '10' } }));
+        h.chainRegistry.descriptorFor = () => ({ coin: 'bitcoin', networkKind: 'regtest' });
+
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.networkFeeSats).toBe(null);
+        const coinRow = composed.simulation.deltas.find((d) => d.isCoin && !d.isFee);
+        expect(coinRow.before).toBe('10');
+        expect(coinRow.after).not.toBe('9');
+        expect(coinRow.afterUnknown).toBe(true);
+        expect(composed.simulation.notes.some((n) => /network fee could not be read/i.test(n)))
+            .toBe(true);
+    });
+
     it('throws a tamper error when the PSBT carries an output the user did not approve', async () => {
         const h = makeHarness({
             outputs: [
@@ -445,5 +472,69 @@ describe('composeActionForConfirm on a chunk lane', () => {
         // carries the largest payloads in the protocol.
         const h = makeChunkHarness();
         await expect(composeActionForConfirm(CHUNK_ARGS(h))).rejects.toThrow(TamperDetectedError);
+    });
+});
+
+// The host boundary contract, ENFORCED rather than declared.
+//
+// Nothing typechecks core, extension, web or desktop, so the JSDoc on this
+// route was free to drift and did: the producer grew to twenty fields while
+// three shells each restated a nine-field subset of it and one shell declared
+// nothing at all. These assertions read the typedef's own @property names back
+// out of the source and compare them to the keys the function returns, so a
+// field added on one side and not the other goes red instead of quietly
+// becoming a fourth wrong declaration.
+describe('composeActionForConfirm host envelope shape', () => {
+    const SRC = readFileSync(
+        join(process.cwd(), 'packages', 'core', 'src', 'flows', 'composeActionForConfirm.js'), 'utf8');
+
+    function documentedEnvelopeKeys() {
+        const start = SRC.indexOf('@typedef {Object} HostComposeEnvelope');
+        expect(start).toBeGreaterThan(-1);
+        const end = SRC.indexOf('*/', start);
+        const block = SRC.slice(start, end);
+        // Greedy up to the LAST brace on the line: half these types nest
+        // braces of their own ({{ address, value }|null}), and a lazy match
+        // stops at the inner one and silently drops the property.
+        return [...block.matchAll(/^\s*\*\s*@property\s+\{.+\}\s+(\w+)/gm)].map((m) => m[1]);
+    }
+
+    it('the typedef names exactly the keys the envelope carries', async () => {
+        const h = makeHarness();
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect([...documentedEnvelopeKeys()].sort()).toEqual(Object.keys(composed).sort());
+    });
+
+    // The host/internal boundary itself: build material stays host-side.
+    // `encoderOpts` carries the ADS-folded customOutputs and `carrierScripts`
+    // is what the tamper check already consumed here; neither is actionable in
+    // the popup and both were dropped on purpose.
+    it('drops the internal ComposedAction build material', async () => {
+        const h = makeHarness();
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed).not.toHaveProperty('encoderOpts');
+        expect(composed).not.toHaveProperty('carrierScripts');
+    });
+
+    // The nullability the shell declarations denied. A bare native payment has
+    // no XChain action at all, so three of the fields the shells typed as
+    // plain strings are null on the wallet's commonest operation.
+    it('a bare native payment nulls the action fields the shells typed as strings', async () => {
+        const h = makeHarness({
+            outputs: [
+                { address: 'bcrt1qdest', scriptPubKeyHex: '0014dd', scriptType: 'p2wpkh', value: '100000000' },
+                { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 100 },
+            ],
+        });
+        const composed = await composeActionForConfirm({
+            ...ARGS(h),
+            actionData: { action: 'SEND', params: { TICK: 'BTC', AMOUNT: '1', DESTINATION: 'bcrt1qdest' } },
+        });
+        expect(composed.bareNativePayment).toBe(true);
+        expect(composed.actionString).toBe(null);
+        expect(composed.action).toBe(null);
+        expect(composed.version).toBe(null);
+        expect(composed.encoding).toBe(null);
+        expect(composed.tamperVerified).toBe(true);
     });
 });

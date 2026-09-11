@@ -36,6 +36,14 @@
 //      therefore wastes a fee but can never corrupt the group, which is what
 //      makes resume safe.
 //
+// Rule 2 is what this flow ENFORCES; it is no longer what the chain requires.
+// From the deferred-assembly flag day a group deploys at whichever piece
+// completes it, so the contract can sit at a chunk carrier's action_index and
+// the assembler's own index is not the contract's. The wallet keeps sending
+// sequentially (nothing here needs parallel legs), but it no longer ASSUMES the
+// answer: it reads the contract's index off the explorer, and a resume asks
+// what an already-broadcast assembler produced before re-sending it.
+//
 // Every leg is a real transaction with a real fee, so the run is RESUMABLE:
 // each confirmed chunk is written to the pendingDeploy record before the next
 // leg starts, and a resumed run re-verifies those action_indexes on chain
@@ -44,6 +52,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { createPendingDeploy } from '../schemas/pendingDeploy.js';
+import { preflightContractMeta, metaNameOf } from './contractMetaPreflight.js';
 
 /**
  * Plan a deploy: does this source fit one inline DEPLOY, or does it need
@@ -229,6 +238,109 @@ async function actionIndexForTxid({ sdk, txid }) {
     return idx === undefined || idx === null ? null : String(idx);
 }
 
+// Bounds for the contract-resolution poll below. Same numbers the indexer wait
+// and the SDK's own resolver use, so a caller that passes `waitOpts` once gets
+// one consistent patience budget for the whole run.
+const RESOLVE_TIMEOUT_MS = 120000;
+const RESOLVE_INTERVAL_MS = 1500;
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/**
+ * The action-detail object out of whichever envelope the explorer route wrapped
+ * it in: `{ data: {...} }`, `{ data: [ {...} ] }`, `{ data: { action: {...} } }`
+ * or the bare row.
+ */
+function unwrapActionDetail(row) {
+    let d = row && row.data !== undefined && row.data !== null ? row.data : row;
+    if (Array.isArray(d)) d = d[0];
+    if (d && typeof d === 'object' && d.action && typeof d.action === 'object'
+        && (d.action.action_index !== undefined || d.action.actionIndex !== undefined)) {
+        d = d.action;
+    }
+    return d && typeof d === 'object' ? d : null;
+}
+
+/**
+ * Which action_index the contract of an assembling DEPLOY ended up at, asked of
+ * the chain rather than assumed.
+ *
+ * WHY this is not simply the assembler's own index: with deferred assembly the
+ * group deploys at whichever piece COMPLETES it, so a group whose pieces
+ * confirmed out of order (a reorg can do that to a run that was sequenced
+ * correctly) has its contract, its address and its state at a chunk CARRIER's
+ * index. Only the explorer knows which, and it says so on the assembler's own
+ * action detail:
+ *
+ *   deployed_contract_index  the contract's action_index, or null
+ *   assembly_status          `valid`, `pending: ... (awaiting chunks)`, or a
+ *                            terminal `invalid: ...` / failure string
+ *
+ * The status is what makes the poll terminate: an assembler CONSUMED by a
+ * failed completion (a hash mismatch at the completing carrier, a source
+ * drained of gas) keeps a null index forever, and without the status a client
+ * would poll it until the timeout on every resume.
+ *
+ * Neither field present means an OLDER explorer, which can only mean today's
+ * rule: a `valid` assembler IS the contract, an `invalid` one is a re-send.
+ * `fieldPresent` tells the caller which world it is in, because only in the old
+ * one may it fall back to the leg's own index.
+ *
+ * @param {{ sdk: any, actionIndex: string|number, timeoutMs?: number, intervalMs?: number }} args
+ * @returns {Promise<{ contractActionIndex: string|null, status: string|null,
+ *   terminal: boolean, fieldPresent: boolean }>}
+ */
+async function resolveDeployedContractIndex({ sdk, actionIndex, timeoutMs, intervalMs }) {
+    const budget = Number(timeoutMs) > 0 ? Number(timeoutMs) : RESOLVE_TIMEOUT_MS;
+    const wait = Number(intervalMs) > 0 ? Number(intervalMs) : RESOLVE_INTERVAL_MS;
+    const deadline = Date.now() + budget;
+    // What we answer if the poll runs out: unresolved, and NOT terminal, so the
+    // caller keeps the run resumable instead of recording a contract that may
+    // yet appear at another index.
+    let unresolved = { contractActionIndex: null, status: null, terminal: false, fieldPresent: false };
+    for (;;) {
+        let detail = null;
+        try {
+            detail = unwrapActionDetail(await sdk.getAction(String(actionIndex)));
+        } catch {
+            // An unreadable explorer is not a verdict; keep polling.
+            detail = null;
+        }
+        if (detail) {
+            const idx = detail.deployed_contract_index;
+            const assembly = detail.assembly_status;
+            if (idx !== undefined || assembly !== undefined) {
+                const status = assembly === undefined || assembly === null ? null : String(assembly);
+                if (idx !== undefined && idx !== null && String(idx) !== '') {
+                    return { contractActionIndex: String(idx), status, terminal: true, fieldPresent: true };
+                }
+                if (!/^pending/i.test(status || '')) {
+                    return { contractActionIndex: null, status, terminal: true, fieldPresent: true };
+                }
+                unresolved = { contractActionIndex: null, status, terminal: false, fieldPresent: true };
+            } else {
+                const own = String((detail.status || (detail.state && detail.state.status)) || '');
+                if (/^valid/i.test(own)) {
+                    return { contractActionIndex: String(actionIndex), status: own, terminal: true, fieldPresent: false };
+                }
+                if (/^invalid/i.test(own)) {
+                    return { contractActionIndex: null, status: own, terminal: true, fieldPresent: false };
+                }
+                unresolved = { contractActionIndex: null, status: own || null, terminal: false, fieldPresent: false };
+            }
+        }
+        if (Date.now() + wait > deadline) return unresolved;
+        await sleep(wait);
+    }
+}
+
+/** The resumable stop when the group has not finished assembling yet. */
+function stillAssemblingError(status) {
+    return new Error('deployChunkedRun: the assembling DEPLOY has not deployed its contract yet '
+        + `(${status || 'no answer from the explorer'}); the run is saved and can be resumed `
+        + 'once the chain catches up');
+}
+
 /**
  * Re-verify a resumed record's chunks against the chain.
  *
@@ -295,7 +407,7 @@ export async function verifyRecordedChunks({ sdkRegistry, chainId, record }) {
  * @param {any} opts.from
  * @param {string} opts.code
  * @param {string} opts.gasLimit
- * @param {string} [opts.name]
+ * @param {string} [opts.name]   legacy label; the contract's own `meta.name` is used when absent
  * @param {string|string[]} [opts.constructorParams]
  * @param {string} [opts.cooldownBlocks]
  * @param {string} [opts.slashDestination]
@@ -315,6 +427,20 @@ export async function deployChunkedRun(opts) {
         throw new Error('deployChunkedRun: code is required');
     }
     if (!opts.gasLimit) throw new Error('deployChunkedRun: gasLimit is required');
+    // CONTRACT_META_REQUIRED, before any leg is planned or composed. A chunked
+    // group is judged once, at completion, on the ASSEMBLED source - so a
+    // source with no `meta` buys N paid carriers and an assembler that indexes
+    // `invalid`. A resume is refused on the same read: its chunks are already
+    // sunk, and the assembler it is about to pay for cannot succeed.
+    const meta = preflightContractMeta({
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        code: opts.code,
+    });
+    // The contract's own name for the record and the assembling leg's pending
+    // line. `opts.name` stays ahead of it only so an older caller that still
+    // passes one is not silently overridden.
+    const contractName = opts.name || metaNameOf(meta) || undefined;
     // Each leg must be INDEXED before the next is built (consensus rule 2), so
     // the indexer wait is mandatory here, unlike every single-leg flow where it
     // is an optional hook. Default it from the SDK rather than making every
@@ -374,7 +500,7 @@ export async function deployChunkedRun(opts) {
             code: opts.code,
             totalChunks: plan.totalChunks,
             assembleParams: assembleFromOpts,
-            name: opts.name,
+            name: contractName,
         });
         await opts.vault.pendingDeploys.put(record);
     }
@@ -397,6 +523,58 @@ export async function deployChunkedRun(opts) {
         && String(record.assembleParams.CODE_HASH || '') === String(plan.codeHash))
         ? record.assembleParams
         : assembleFromOpts;
+
+    // The same patience budget the indexer wait gets, under the waiter's own
+    // option names.
+    const resolveBounds = {
+        timeoutMs: opts.waitOpts && opts.waitOpts.timeout,
+        intervalMs: opts.waitOpts && opts.waitOpts.pollInterval,
+    };
+
+    // A resume that already broadcast the assembling leg must ASK the chain what
+    // that leg produced before it sends anything at all.
+    //
+    // Under deferred assembly the group deploys at whichever piece completes it,
+    // so a resume that blindly re-sent the assembler would land it against a
+    // COMPLETE group: the indexer deploys it inline, at the new assembler's
+    // index, and the deployer has paid twice for two contracts, the second one
+    // at an address nothing points at. The txid stamped at broadcast (below) is
+    // the only handle a run interrupted during the indexer wait keeps.
+    if (opts.resumeId && record.stage === 'assembling' && record.deployTxid) {
+        const sdk = opts.sdkRegistry.get(opts.chainId);
+        let assemblerIndex = await actionIndexForTxid({ sdk, txid: record.deployTxid });
+        if (!assemblerIndex) {
+            // Broadcast but not indexed YET: wait on it exactly as the
+            // interrupted run would have, rather than paying for a second one.
+            try {
+                const waited = await waitForTxid(record.deployTxid, opts.waitOpts);
+                assemblerIndex = indexedActionIndex({ indexed: waited });
+            } catch {
+                // Genuinely gone: fall through to the re-send below.
+            }
+        }
+        if (assemblerIndex) {
+            const resolved = await resolveDeployedContractIndex({
+                sdk, actionIndex: assemblerIndex, ...resolveBounds,
+            });
+            if (resolved.contractActionIndex) {
+                record = { ...record, contractActionIndex: resolved.contractActionIndex, stage: 'done' };
+                await opts.vault.pendingDeploys.put(record);
+                progress('assemble-done', { actionIndex: record.contractActionIndex, resumed: true });
+                return {
+                    txid: record.deployTxid,
+                    contractActionIndex: record.contractActionIndex,
+                    pendingDeployId: record.id,
+                    codeHash: plan.codeHash,
+                    totalChunks: plan.totalChunks,
+                };
+            }
+            if (!resolved.terminal) throw stillAssemblingError(resolved.status);
+            // Terminally failed (a hash mismatch at the completing piece, a
+            // source drained of gas, or carriers that never arrived): re-sending
+            // the assembler IS the fix, so fall through to it.
+        }
+    }
 
     const verified = opts.resumeId
         ? await verifyRecordedChunks({ sdkRegistry: opts.sdkRegistry, chainId: opts.chainId, record })
@@ -435,6 +613,19 @@ export async function deployChunkedRun(opts) {
                 ? { ...c, txid: String(txid) }
                 : c)),
         };
+        await opts.vault.pendingDeploys.put(record);
+    };
+
+    /**
+     * The same stamp for the ASSEMBLING leg, which carries no chunk index and
+     * so is invisible to `stampChunkTxid`. Without it a run interrupted during
+     * the assembler's indexer wait resumes with stage `assembling` and no txid,
+     * so the resume cannot ask what that leg produced and re-sends; against a
+     * group that meanwhile completed, that buys a SECOND contract.
+     */
+    const stampDeployTxid = async (txid) => {
+        if (!txid || record.stage !== 'assembling') return;
+        record = { ...record, deployTxid: String(txid) };
         await opts.vault.pendingDeploys.put(record);
     };
 
@@ -479,7 +670,10 @@ export async function deployChunkedRun(opts) {
             // Fire-and-forget: a failed vault write must not abort a leg that is
             // already on the wire, and the next persist covers it.
             if ((phase === 'waiting' || phase === 'broadcasting') && data && data.txid) {
-                stampChunkTxid(chunkIndex, data.txid).catch(() => {});
+                const stamp = chunkIndex === null
+                    ? stampDeployTxid(data.txid)
+                    : stampChunkTxid(chunkIndex, data.txid);
+                stamp.catch(() => {});
             }
         },
     });
@@ -563,17 +757,47 @@ export async function deployChunkedRun(opts) {
 
     // Phase 2: assemble. Every carrier now sits at a lower action_index.
     progress('assemble-start', { totalChunks: plan.totalChunks });
-    const deployRes = await submitLeg(assemble, `Deploy contract "${opts.name || '(unnamed)'}" (assembling ${plan.totalChunks} chunks)`);
+    const deployRes = await submitLeg(assemble, `Deploy contract "${contractName || '(unnamed)'}" (assembling ${plan.totalChunks} chunks)`);
+    const assemblerIndex = indexedActionIndex(deployRes);
+    // The contract is not necessarily at the assembler's own index - see
+    // `resolveDeployedContractIndex`. Recording the leg's index without asking
+    // would name the wrong action as the contract for every group whose pieces
+    // confirmed out of order, and every deposit, execution and state read the
+    // wallet made afterwards would address a contract that is not there.
+    const resolved = assemblerIndex
+        ? await resolveDeployedContractIndex({
+            sdk: opts.sdkRegistry.get(opts.chainId), actionIndex: assemblerIndex, ...resolveBounds,
+        })
+        : null;
+    if (resolved && resolved.fieldPresent && !resolved.contractActionIndex && !resolved.terminal) {
+        // Still awaiting chunks: the leg is on chain and its txid is stamped, so
+        // the honest move is to stop resumably rather than record a contract
+        // index that does not exist yet.
+        throw stillAssemblingError(resolved.status);
+    }
     record = {
         ...record,
-        deployTxid: deployRes.txid || (deployRes.broadcast && deployRes.broadcast.txid) || null,
-        contractActionIndex: indexedActionIndex(deployRes),
+        deployTxid: deployRes.txid || (deployRes.broadcast && deployRes.broadcast.txid) || record.deployTxid || null,
+        // Fall back to the leg's own index ONLY where the explorer serves no
+        // field to read (an older build), never where it answered.
+        contractActionIndex: resolved && resolved.fieldPresent
+            ? resolved.contractActionIndex
+            : assemblerIndex,
         stage: 'done',
     };
     await opts.vault.pendingDeploys.put(record);
     progress('assemble-done', { actionIndex: record.contractActionIndex });
 
-    return { ...deployRes, pendingDeployId: record.id, codeHash: plan.codeHash, totalChunks: plan.totalChunks };
+    return {
+        ...deployRes,
+        // The RESOLVED contract index, which `deployRes.indexed` does not carry:
+        // that one is the assembling leg's own action, and the two differ
+        // whenever another piece completed the group.
+        contractActionIndex: record.contractActionIndex,
+        pendingDeployId: record.id,
+        codeHash: plan.codeHash,
+        totalChunks: plan.totalChunks,
+    };
 }
 
 /**

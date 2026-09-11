@@ -88,7 +88,9 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { storeVersionFromTag } from '../../packages/mobile/scripts/version.js';
+import {
+    storeVersionFromTag, marketingVersionFromTag, MAX_LANE_N,
+} from '../../packages/mobile/scripts/version.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WS_ROOT = join(HERE, '..', '..');
@@ -258,6 +260,29 @@ export async function shippedCapabilities(wsRoot = WS_ROOT) {
     };
 }
 
+/**
+ * The two Apple fields a release tag derives, or null when no tag was given.
+ *
+ * Imported from the one version oracle rather than reimplemented, for the
+ * reason verify-ios-artifact.mjs states at the same seam: three copies of this
+ * arithmetic used to disagree.
+ *
+ * @param {string|null|undefined} tag
+ * @returns {{tag: string, marketing: string, build: string}|{error: string}|null}
+ */
+export function tagDerivations(tag) {
+    if (typeof tag !== 'string' || tag.trim().length === 0) return null;
+    try {
+        return {
+            tag: tag.trim(),
+            marketing: marketingVersionFromTag(tag.trim()),
+            build: String(storeVersionFromTag(tag.trim())),
+        };
+    } catch (err) {
+        return { error: err.message };
+    }
+}
+
 const ok = (id, detail) => ({ id, state: 'ok', detail });
 const bad = (id, detail) => ({ id, state: 'failure', detail });
 const loud = (id, detail) => ({ id, state: 'deferred', detail });
@@ -272,9 +297,11 @@ const dunno = (id, detail) => ({ id, state: 'inconclusive', detail });
  *
  * @param {object} record             as assembled by fetchVersionRecord
  * @param {{messaging: boolean, betting: boolean}} ships
+ * @param {object|null} pinned        pinnedListingDigests(), or null
+ * @param {string|null} tag           the intended release tag, if the caller knows it
  * @returns {{exit: number, checks: Array<{id: string, state: string, detail: string}>}}
  */
-export function classifyVersionRecord(record, ships, pinned = null) {
+export function classifyVersionRecord(record, ships, pinned = null, tag = null) {
     const checks = [];
     const v = record.version ?? {};
     const build = record.build ?? null;
@@ -297,25 +324,74 @@ export function classifyVersionRecord(record, ships, pinned = null) {
             checks.push(ok('build-valid', `VALID, unexpired${build.expirationDate ? `, expires ${build.expirationDate}` : ''}`));
         }
 
-        // The store integer is derived from the version string by this repo's
-        // own formula, so an attached build from a different release is caught
-        // even though its number looks entirely plausible.
-        let expected = null;
-        try {
-            expected = String(storeVersionFromTag(`v${v.versionString}`));
-        } catch {
-            expected = null;
+        // The store integer is derived from a tag by this repo's own formula,
+        // so an attached build from a different release is caught even though
+        // its number looks entirely plausible.
+        //
+        // WHICH tag, though. Apple's CFBundleShortVersionString cannot carry a
+        // lane (marketingVersionFromTag drops it deliberately), so rebuilding
+        // `v${versionString}` only ever names the STABLE tag, and a respin -
+        // whose build is STABLE_BUILD + N for the same marketing version - was
+        // failed here as "a build from a different release". That is the one
+        // moment a respin exists for. So: given the intended release tag, both
+        // Apple fields are checked against that one tag and the answer is
+        // exact; without it, the build is accepted anywhere in that release's
+        // respin band, which is the most the marketing string can support.
+        const asked = tagDerivations(tag);
+        if (asked?.error) {
+            checks.push(bad('build-number', `release tag ${JSON.stringify(tag)} is not one this repo can parse: ${asked.error}`));
+        } else if (asked) {
+            if (String(build.version) !== asked.build) {
+                checks.push(bad(
+                    'build-number',
+                    `attached build is ${build.version}, but release ${asked.tag} derives ${asked.build}`
+                    + ' - this is a build from a different release',
+                ));
+            } else {
+                checks.push(ok('build-number', `${build.version} is what ${asked.tag} derives`));
+            }
+        } else {
+            let stable = null;
+            try {
+                stable = storeVersionFromTag(`v${v.versionString}`);
+            } catch {
+                stable = null;
+            }
+            const attached = Number(build.version);
+            if (stable === null) {
+                checks.push(dunno('build-number', `cannot derive a store integer from version string ${JSON.stringify(v.versionString)}`));
+            } else if (!Number.isInteger(attached)) {
+                checks.push(dunno('build-number', `attached build ${JSON.stringify(build.version)} is not an integer`));
+            } else if (attached < stable || attached > stable + MAX_LANE_N) {
+                checks.push(bad(
+                    'build-number',
+                    `attached build is ${build.version}, but version ${v.versionString} derives ${stable}`
+                    + ` (respins up to ${stable + MAX_LANE_N}) - this is a build from a different release`,
+                ));
+            } else if (attached === stable) {
+                checks.push(ok('build-number', `${build.version} is what ${v.versionString} derives`));
+            } else {
+                checks.push(ok(
+                    'build-number',
+                    `${build.version} is respin ${attached - stable} of ${v.versionString}. Apple's version string`
+                    + ' cannot carry a lane, so this is the lane-tolerant answer; pass --tag to check it exactly',
+                ));
+            }
         }
-        if (expected === null) {
-            checks.push(dunno('build-number', `cannot derive a store integer from version string ${JSON.stringify(v.versionString)}`));
-        } else if (String(build.version) !== expected) {
+    }
+
+    // The marketing version Apple holds, checkable only against a tag: with no
+    // tag there is nothing to compare it to but itself.
+    const wanted = tagDerivations(tag);
+    if (wanted && !wanted.error) {
+        if (v.versionString !== wanted.marketing) {
             checks.push(bad(
-                'build-number',
-                `attached build is ${build.version}, but version ${v.versionString} derives ${expected}`
-                + ' - this is a build from a different release',
+                'marketing-version',
+                `Apple holds version ${JSON.stringify(v.versionString)}, but release ${wanted.tag}`
+                + ` is version ${wanted.marketing}. Submitting would ship the wrong version string`,
             ));
         } else {
-            checks.push(ok('build-number', `${build.version} is what ${v.versionString} derives`));
+            checks.push(ok('marketing-version', `${v.versionString} is what ${wanted.tag} derives`));
         }
     }
 
@@ -660,9 +736,14 @@ const USAGE = `verify-appstore-version.mjs - would App Store Connect actually ac
 submission of the current version? (App Store Connect pre-submission gate.)
 
 Usage:
-  node tools/release/verify-appstore-version.mjs [--json]
+  node tools/release/verify-appstore-version.mjs [--tag vX.Y.Z[-respin.N]] [--json]
 
 Options:
+  --tag <tag>       the release tag being submitted. Apple's version string
+                    cannot carry a lane, so without this the build number is
+                    only checked against that release's respin band; with it,
+                    both Apple fields are checked exactly. Falls back to
+                    XCHAIN_RELEASE_TAG, the same input sign.sh takes.
   --json            machine-readable outcome
   -h, --help        print this and exit 0
 
@@ -679,7 +760,22 @@ Exit codes:
   3  inconclusive  something could not be read. NOT a pass.
 `;
 
-export async function checkAppStoreVersion({ env = process.env, fetchImpl = fetch, wsRoot = WS_ROOT } = {}) {
+export async function checkAppStoreVersion({
+    env = process.env, fetchImpl = fetch, wsRoot = WS_ROOT, tag = null,
+} = {}) {
+    // A tag the oracle refuses to parse is a typo on submission day, not a
+    // record problem, so it is answered as a config error before a token is
+    // signed or a byte is fetched.
+    const releaseTag = tag ?? env.XCHAIN_RELEASE_TAG ?? null;
+    const derived = tagDerivations(releaseTag);
+    if (derived?.error) {
+        return {
+            exit: EXIT.CONFIG,
+            reason: `release tag ${JSON.stringify(releaseTag)} is not one this repo can parse: ${derived.error}`,
+            checks: [],
+        };
+    }
+
     const creds = credentialsFromEnv(env);
     if (creds.error) return { exit: EXIT.CONFIG, reason: creds.error, checks: [] };
 
@@ -710,8 +806,8 @@ export async function checkAppStoreVersion({ env = process.env, fetchImpl = fetc
         return { exit: config ? EXIT.CONFIG : EXIT.INCONCLUSIVE, reason: fetched.error, checks: [] };
     }
 
-    const outcome = classifyVersionRecord(fetched.record, ships, pinnedListingDigests(wsRoot));
-    return { ...outcome, record: fetched.record, ships, bundleId };
+    const outcome = classifyVersionRecord(fetched.record, ships, pinnedListingDigests(wsRoot), releaseTag);
+    return { ...outcome, record: fetched.record, ships, bundleId, tag: releaseTag };
 }
 
 async function main() {
@@ -720,7 +816,15 @@ async function main() {
         process.stdout.write(USAGE);
         return EXIT.READY;
     }
-    const outcome = await checkAppStoreVersion();
+    // `--tag` with nothing after it is a typo, not a request for the tagless
+    // form: falling back silently would answer the weaker question under the
+    // name of the stronger one.
+    const tagAt = argv.indexOf('--tag');
+    if (tagAt !== -1 && !argv[tagAt + 1]) {
+        process.stderr.write('verify-appstore-version: --tag needs a release tag after it (e.g. --tag v0.336.0-respin.1)\n');
+        return EXIT.CONFIG;
+    }
+    const outcome = await checkAppStoreVersion({ tag: tagAt === -1 ? null : argv[tagAt + 1] });
 
     if (argv.includes('--json')) {
         console.log(JSON.stringify(outcome, null, 2));

@@ -59,16 +59,4 @@ export const CROSS_CHAIN_TEMPLATES = (() => {
     return Object.freeze(out);
 })();
 
-/**
- * Look up a single template by id. Returns null when no template
- * matches; callers render an "unknown template" hint rather than
- * crashing.
- *
- * @param {string} id
- * @returns {import('./validate.js').CrossChainTemplate | null}
- */
-export function templateById(id) {
-    return CROSS_CHAIN_TEMPLATES.find((t) => t.id === id) || null;
-}
-
 export { validateCrossChainTemplate } from './validate.js';

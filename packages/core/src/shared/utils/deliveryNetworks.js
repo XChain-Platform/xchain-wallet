@@ -14,9 +14,9 @@
 // each network. A MESSAGE can broadcast on any chain regardless of the
 // recipient's chain, so the user picks the network that funds + pays the fee.
 
-export const DELIVERY_COIN_LABEL = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
-export const DELIVERY_COIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };
-export const DELIVERY_COIN_CHARACTERISTIC = {
+const DELIVERY_COIN_LABEL = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+const DELIVERY_COIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };
+const DELIVERY_COIN_CHARACTERISTIC = {
     bitcoin: 'slowest + strongest',
     litecoin: 'faster + cheaper',
     dogecoin: 'fastest + cheapest',

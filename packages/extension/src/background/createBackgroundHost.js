@@ -197,6 +197,7 @@ const {
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
+    contractExportedMeta,
     dividendAction,
     holdersFor,
     createList,
@@ -433,6 +434,36 @@ async function confirmChangeAndOwnAddresses({
     if (!ownAddresses.includes(sourceAddress)) ownAddresses.push(sourceAddress);
     if (!ownAddresses.includes(change)) ownAddresses.push(change);
     return { change, ownAddresses };
+}
+
+/**
+ * Second half of that preamble: harden the encoder opts for a device source.
+ *
+ * A device source needs each segwit input's FULL previous transaction in the
+ * PSBT. Ledger takes the outpoint it signs from those bytes rather than from
+ * the PSBT's own txid, so a witnessUtxo-only input - which is what the encoder
+ * builds by default, for the default address type - cannot be signed on
+ * hardware at all.
+ *
+ * Requested HERE, at the single compose, rather than hydrated later: §5.3's
+ * guarantee is that the PSBT the user previewed is the one that gets signed,
+ * and adding inputs' prev txs after the tamper check would mean signing bytes
+ * nobody checked. Software sources do not ask for it, so they keep today's
+ * PSBT size on a path that crosses the messaging boundary and now also lands
+ * in storage.session (§5.4).
+ *
+ * Shared rather than inlined, because inlined it was copied by two routes and
+ * forgotten by the three per-action clones of the preamble, which left a
+ * VOTE, MESSAGE or BET from a device address composing an unsignable PSBT.
+ *
+ * @param {any} req
+ * @param {Object} encoderOpts
+ * @returns {Object}
+ */
+function deviceHardenedEncoderOpts(req, encoderOpts) {
+    const kind = req?.from?.source;
+    if (kind === 'ledger' || kind === 'trezor') return { ...encoderOpts, attachPrevTx: true };
+    return encoderOpts;
 }
 
 /**
@@ -767,30 +798,46 @@ export function createBackgroundHost(deps) {
     // registry is module-scoped in the shell entry (extension/web/
     // desktop) and survives host teardown across lock/unlock cycles,
     // so we only seed once per registry instance: re-installing a
-    // descriptor would throw on the duplicate id.
+    // descriptor would throw on the duplicate id. Only a COMPLETED read
+    // latches: the popup's first settings.get lands while the vault is
+    // still locked, and a read that fails there leaves the registry
+    // unseeded so the next settings.get retries. Concurrent callers share
+    // the in-flight promise, which keeps the pass single-flight.
     let customChainsSeeded = false;
+    /** @type {Promise<void> | null} */
+    let customChainsSeedPromise = null;
     async function seedCustomChainsFromVault(vault, chainRegistry) {
         if (customChainsSeeded) return;
-        customChainsSeeded = true;
+        if (customChainsSeedPromise) return customChainsSeedPromise;
         if (!vault || !chainRegistry) return;
-        try {
-            const settings = await vault.settings.get();
-            const list = Array.isArray(settings?.customChains) ? settings.customChains : [];
-            for (const descriptor of list) {
-                try {
-                    if (!descriptor || typeof descriptor !== 'object') continue;
-                    if (typeof descriptor.id !== 'string') continue;
-                    if (chainRegistry.has(descriptor.id)) continue;
-                    chainRegistry.addCustom(descriptor);
-                } catch {
-                    // Per-descriptor failures (corrupt persisted record,
-                    // descriptor invalid against the current validator)
-                    // are skipped silently: the boot path must not crash
-                    // on a single bad row.
+        customChainsSeedPromise = (async () => {
+            try {
+                const settings = await vault.settings.get();
+                const list = Array.isArray(settings?.customChains) ? settings.customChains : [];
+                for (const descriptor of list) {
+                    try {
+                        if (!descriptor || typeof descriptor !== 'object') continue;
+                        if (typeof descriptor.id !== 'string') continue;
+                        if (chainRegistry.has(descriptor.id)) continue;
+                        chainRegistry.addCustom(descriptor);
+                    } catch {
+                        // Per-descriptor failures (corrupt persisted record,
+                        // descriptor invalid against the current validator)
+                        // are skipped silently: the boot path must not crash
+                        // on a single bad row.
+                    }
                 }
+                // Last statement in the try, so a throwing read never latches.
+                customChainsSeeded = true;
+            } catch {
+                // Vault not open / read failed: boot continues and the next
+                // settings.get runs the pass again.
             }
-        } catch {
-            // Vault not open / read failed: boot continues.
+        })();
+        try {
+            await customChainsSeedPromise;
+        } finally {
+            customChainsSeedPromise = null;
         }
     }
     // Settings -> Network & Endpoints is the surface an operator
@@ -1146,17 +1193,25 @@ export function createBackgroundHost(deps) {
             throttleVault = vault;
             void refreshThrottleLimitsFromVault();
         }
-        // Cluster Q FOLLOWUP 2: opportunistic custom-chain re-seed.
+        // Cluster Q FOLLOWUP 2: opportunistic custom-chain re-seed,
+        // followed by the same opportunistic trigger for custom endpoints.
         // Single-flight per host instance via the customChainsSeeded
         // guard. Settings.get is the natural trigger because the popup
         // calls it shortly after unlock, before any chain-aware UI
-        // mounts.
-        void seedCustomChainsFromVault(vault, chainRegistry);
-        // Same opportunistic trigger for custom endpoints. Covers
-        // the web shell, where the module-scoped SDKRegistry is replaced
-        // once the real SDK factory resolves and the fresh instance would
-        // otherwise start with an empty override map.
-        void applyEndpointOverridesFromVault(vault, sdkRegistry);
+        // mounts. The endpoint pass covers the web shell, where the
+        // module-scoped SDKRegistry is replaced once the real SDK factory
+        // resolves and the fresh instance would otherwise start with an
+        // empty override map.
+        //
+        // The two run in sequence rather than side by side: the SDK
+        // registry drops overrides for chain ids the chain registry does
+        // not know, and REPLACES the whole override map instead of merging
+        // it, so an endpoint pass that reaches the vault first discards a
+        // user-added chain's endpoints for the rest of the session.
+        void (async () => {
+            await seedCustomChainsFromVault(vault, chainRegistry);
+            await applyEndpointOverridesFromVault(vault, sdkRegistry);
+        })();
         return getSettings(vault);
     });
 
@@ -1766,17 +1821,22 @@ export function createBackgroundHost(deps) {
         const descriptors = await listCustomChains({ vault });
         return { descriptors };
     });
-    host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry }) => {
+    // Both mutators take `sdkRegistry` so the chain's cached SDK client is
+    // dropped along with its descriptor. Without it, removing a chain and
+    // re-adding the same id with different endpoints kept every request,
+    // signed submissions included, pointed at the ORIGINAL node for the
+    // rest of the session.
+    host.register('chainRegistry.addCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || !req.descriptor) {
             throw new Error('chainRegistry.addCustomChain: descriptor required');
         }
-        return addCustomChain({ vault, chainRegistry, descriptor: req.descriptor });
+        return addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: req.descriptor });
     });
-    host.register('chainRegistry.removeCustomChain', async (req, { vault, chainRegistry }) => {
+    host.register('chainRegistry.removeCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || typeof req.chainId !== 'string') {
             throw new Error('chainRegistry.removeCustomChain: chainId required');
         }
-        return removeCustomChain({ vault, chainRegistry, chainId: req.chainId });
+        return removeCustomChain({ vault, chainRegistry, sdkRegistry, chainId: req.chainId });
     });
 
     // §31.4 / Cluster O FOLLOWUP 2: recipient resolution for DIVIDEND
@@ -1900,6 +1960,62 @@ export function createBackgroundHost(deps) {
         return { ok: removed };
     });
 
+    // §37.2 / Cluster D FOLLOWUP 2: restore an Address record from a
+    // snapshot the renderer took before calling addresses.delete. This
+    // is the host half of the delete-address Undo toast.
+    //
+    // The snapshot is written back verbatim so a future Address schema
+    // field survives the round-trip; only `id` and `address` are
+    // required by shape. What the route does NOT do is more important
+    // than what it does, because the toast leaves an 8 s window in
+    // which the vault can move underneath the snapshot:
+    //
+    //   - a second press (or a record that came back some other way)
+    //     must not re-put over whatever is on disk now, so an existing
+    //     id short-circuits as a no-op success;
+    //   - the user can re-import the same WIF while the toast is up.
+    //     That mints a NEW record for the SAME address string, and
+    //     writing the snapshot back on top would list one address twice
+    //     with two ids: a duplicate that outlives the toast and that
+    //     `assertNotAlreadyImported` would never have allowed;
+    //   - the owning account can be deleted while the toast is up
+    //     (removeWallet takes its addresses with it). Restoring into a
+    //     gone account resurrects a row whose key no longer exists, so
+    //     that fails closed too.
+    //
+    // Deleting an address does not touch `wallet.importedKeys`, so the
+    // encrypted WIF is still there and putting the record back is the
+    // whole of the undo.
+    host.register('addresses.restore', async (req, { vault }) => {
+        const address = req?.address;
+        if (!address || typeof address !== 'object') {
+            throw new Error('addresses.restore: address is required');
+        }
+        if (typeof address.id !== 'string' || !address.id) {
+            throw new Error('addresses.restore: address.id is required');
+        }
+        if (typeof address.address !== 'string' || !address.address) {
+            throw new Error('addresses.restore: address.address is required');
+        }
+        const existing = await vault.addresses.get(address.id);
+        if (existing) return { ok: true, restored: false, reason: 'already-restored' };
+
+        const all = await vault.addresses.list();
+        const duplicate = (Array.isArray(all) ? all : []).some((r) => r
+            && r.address === address.address
+            && r.chain === address.chain
+            && r.network === address.network);
+        if (duplicate) return { ok: false, restored: false, reason: 'address-already-present' };
+
+        if (address.accountId) {
+            const account = await vault.accounts?.get?.(address.accountId);
+            if (!account) return { ok: false, restored: false, reason: 'account-missing' };
+        }
+
+        await vault.addresses.put(address);
+        return { ok: true, restored: true };
+    });
+
     // Resolve the active (operating) address per chain for an account.
     host.register('addresses.active', async (req, { vault, chainRegistry }) => {
         return resolveActiveAddresses({
@@ -2018,21 +2134,8 @@ export function createBackgroundHost(deps) {
             };
         }
 
-        // A device source needs each segwit input's FULL previous
-        // transaction in the PSBT. Ledger takes the outpoint it signs from
-        // those bytes rather than from the PSBT's own txid, so a
-        // witnessUtxo-only input - which is what the encoder builds by default,
-        // for the default address type - cannot be signed on hardware at all.
-        //
-        // Requested HERE, at the single compose, rather than hydrated later:
-        // §5.3's guarantee is that the PSBT the user previewed is the one that
-        // gets signed, and adding inputs' prev txs after the tamper check would
-        // mean signing bytes nobody checked. Software sources do not ask for
-        // it, so they keep today's PSBT size on a path that crosses the
-        // messaging boundary and now also lands in storage.session (§5.4).
-        if (req?.from?.source === 'ledger' || req?.from?.source === 'trezor') {
-            encoderOpts = { ...encoderOpts, attachPrevTx: true };
-        }
+        // Device hardening; the rationale lives on the helper.
+        encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
 
         const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
@@ -2075,9 +2178,7 @@ export function createBackgroundHost(deps) {
             ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req.rbf !== undefined && { rbf: req.rbf }),
         };
-        if (req?.from?.source === 'ledger' || req?.from?.source === 'trezor') {
-            encoderOpts = { ...encoderOpts, attachPrevTx: true };
-        }
+        encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
         const { change } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
@@ -2133,13 +2234,13 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
             chainId,
             actionData: { action: 'VOTE', params },
-            encoderOpts: {
+            encoderOpts: deviceHardenedEncoderOpts(req, {
                 pubkey: source.publicKey,
                 change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
-            },
+            }),
             source: source.address,
             ownAddresses,
         });
@@ -2202,8 +2303,14 @@ export function createBackgroundHost(deps) {
     // closure, because it has to cross the boundary; the name is allow-listed
     // on resume for the same reason `action.vote.composeForConfirm` allow-lists
     // its builder name.
+    // `supported` says whether this shell HAS the store, which is not the same
+    // answer as "nothing is stored". Without it a caller reads the same empty
+    // list from an extension with no pending confirms and from a desktop or web
+    // shell that can never hold one (`createConfirmActionSessionStorage`
+    // returns null off-extension), so the resume feature reads as present and
+    // inert. Additive: a caller that ignores the field behaves as before.
     host.register('action.confirmSession.put', async (req) => {
-        if (!confirmSessionStorage) return { stored: false };
+        if (!confirmSessionStorage) return { supported: false, stored: false };
         const id = req?.id;
         if (typeof id !== 'string' || !id) {
             throw new Error('action.confirmSession.put: id is required');
@@ -2216,13 +2323,13 @@ export function createBackgroundHost(deps) {
             dispatch: req.dispatch || null,
             createdAt: req.createdAt || null,
         });
-        return { stored: true };
+        return { supported: true, stored: true };
     });
 
     host.register('action.confirmSession.list', async () => {
-        if (!confirmSessionStorage) return { sessions: [] };
+        if (!confirmSessionStorage) return { supported: false, sessions: [] };
         const all = await confirmSessionStorage.loadSessions();
-        return { sessions: Object.values(all || {}) };
+        return { supported: true, sessions: Object.values(all || {}) };
     });
 
     // Called on EVERY terminal state (approved, rejected, errored). A session
@@ -2232,13 +2339,13 @@ export function createBackgroundHost(deps) {
     // path additionally runs the §4.6 input-liveness re-check, so a stale one
     // interrupts rather than signs - but clearing eagerly is the first line.
     host.register('action.confirmSession.clear', async (req) => {
-        if (!confirmSessionStorage) return { cleared: false };
+        if (!confirmSessionStorage) return { supported: false, cleared: false };
         const id = req?.id;
         if (typeof id !== 'string' || !id) {
             throw new Error('action.confirmSession.clear: id is required');
         }
         await confirmSessionStorage.removeSession(id);
-        return { cleared: true };
+        return { supported: true, cleared: true };
     });
 
     // Re-price a composed action's native-coin protocol fee at Approve
@@ -2463,10 +2570,39 @@ export function createBackgroundHost(deps) {
     // (Cluster G FOLLOWUP 2). The in-memory map remains the live source
     // of truth for the running process; storage rehydrates at first
     // queue access and writes back on every mutation.
-    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string }>>} */
+    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }>>} */
     const queuedBroadcasts = new Map();
     let queueLoaded = false;
-    let queueLoadPromise = /** @type {Promise<void> | null} */ (null);
+    let queueLoadPromise = /** @type {Promise<boolean> | null} */ (null);
+    // Fold a persisted snapshot into the live map instead of replacing it. A
+    // retried rehydrate can land after this process already queued entries of
+    // its own, and `getQueue` hands the routes the live array they splice, so
+    // the array identity has to survive the merge.
+    //
+    // No tombstone set is needed to stop the merge resurrecting a removed
+    // entry: a merge only runs while `queueLoaded` is false, and in that window
+    // the map holds nothing but entries `pushQueueEntry` added, which
+    // persistQueue has refused to write. An entry that is both in memory and in
+    // the snapshot implies a load that already succeeded, and that latches
+    // `queueLoaded` so no further merge happens.
+    function mergeQueueSnapshot(snapshot) {
+        for (const walletId of Object.keys(snapshot)) {
+            const arr = snapshot[walletId];
+            if (!Array.isArray(arr) || arr.length === 0) continue;
+            const restorable = arr.filter((e) => e && typeof e === 'object');
+            if (restorable.length === 0) continue;
+            const live = queuedBroadcasts.get(walletId);
+            if (!live) {
+                queuedBroadcasts.set(walletId, restorable);
+                continue;
+            }
+            const held = new Set(live.map((e) => e.id));
+            // Persisted entries were signed before anything this process
+            // queued, so they go in front to keep the list oldest-first.
+            const missing = restorable.filter((e) => !held.has(e.id));
+            if (missing.length > 0) live.unshift(...missing);
+        }
+    }
     async function ensureQueueLoaded() {
         if (queueLoaded || !broadcastQueueStorage) {
             queueLoaded = true;
@@ -2474,25 +2610,45 @@ export function createBackgroundHost(deps) {
         }
         if (!queueLoadPromise) {
             queueLoadPromise = (async () => {
+                let snapshot = null;
                 try {
-                    const snapshot = await broadcastQueueStorage.load();
-                    for (const walletId of Object.keys(snapshot || {})) {
-                        const arr = snapshot[walletId];
-                        if (Array.isArray(arr) && arr.length > 0) {
-                            queuedBroadcasts.set(walletId, [...arr]);
-                        }
-                    }
+                    snapshot = await broadcastQueueStorage.load();
                 } catch (_e) {
-                    // Tolerate storage failures: start fresh in-memory.
-                } finally {
-                    queueLoaded = true;
+                    snapshot = null;
                 }
+                // Fail closed. `load` resolves null only for a read that did
+                // not reach the store; an empty queue is still an object.
+                // Latching `queueLoaded` on a failed read lets the next persist
+                // write the half-empty map over every wallet's persisted
+                // entries.
+                if (!snapshot || typeof snapshot !== 'object') return false;
+                mergeQueueSnapshot(snapshot);
+                if (typeof broadcastQueueStorage.loadSettlements === 'function') {
+                    try {
+                        mergeOwedSettlements(await broadcastQueueStorage.loadSettlements());
+                    } catch (_e) {
+                        // An unreadable journal costs the replay of writes owed
+                        // before this boot, never the queue itself.
+                    }
+                }
+                queueLoaded = true;
+                return true;
             })();
         }
-        await queueLoadPromise;
+        const loaded = await queueLoadPromise;
+        // Drop the single-flight latch on failure so the next access retries
+        // rather than resolving forever against the same dead read.
+        if (!loaded) queueLoadPromise = null;
     }
     async function persistQueue() {
         if (!broadcastQueueStorage) return;
+        if (!queueLoaded) {
+            await ensureQueueLoaded();
+            // Storage is still unreadable, so the map is known-incomplete.
+            // Keep it as the live truth for this process and leave what is on
+            // disk alone; writing it back is the erasure this guards against.
+            if (!queueLoaded) return;
+        }
         /** @type {Record<string, any[]>} */
         const snapshot = {};
         for (const [walletId, entries] of queuedBroadcasts.entries()) {
@@ -2503,6 +2659,93 @@ export function createBackgroundHost(deps) {
         } catch (_e) {
             // Same tolerance as load: never block a queue mutation on
             // a storage failure.
+        }
+    }
+    // Hold a PendingTx write the vault refused until a vault takes it. Leaving
+    // the queue is what makes an entry unretriable, and a record left 'queued'
+    // after its bytes landed keeps netting the spend out of the balance.
+    const OWED_SETTLEMENT_LIMIT = 50;
+    /** @type {Array<{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt: number }>} */
+    let owedSettlements = [];
+    function mergeOwedSettlements(persisted) {
+        if (!Array.isArray(persisted) || persisted.length === 0) return;
+        const held = new Set(owedSettlements.map((s) => s.pendingTxId));
+        for (const owed of persisted) {
+            if (!owed || typeof owed !== 'object') continue;
+            if (typeof owed.pendingTxId !== 'string' || !owed.pendingTxId) continue;
+            if (held.has(owed.pendingTxId)) continue;
+            held.add(owed.pendingTxId);
+            owedSettlements.push({ ...owed });
+        }
+    }
+    // Write the journal to the queue's own storage key. The wallet wipe clears
+    // the local store by enumerated key, so a key of its own would outlive the
+    // wallet whose transactions the journal names.
+    async function persistOwedSettlements() {
+        if (!queueLoaded) return;
+        if (typeof broadcastQueueStorage?.saveSettlements !== 'function') return;
+        try {
+            await broadcastQueueStorage.saveSettlements(owedSettlements.map((s) => ({ ...s })));
+        } catch (_e) {
+            // Same tolerance the queue save takes: a storage failure never
+            // blocks the route that recorded the write.
+        }
+    }
+    // Record what the replay needs and nothing else: a journal record names a
+    // PendingTx and the write to apply, never signed bytes, and never enters
+    // `queuedBroadcasts`, so no route can list or broadcast one.
+    function recordOwedSettlement(walletId, pendingTxId, op, patch) {
+        if (typeof pendingTxId !== 'string' || !pendingTxId) return;
+        // One record per PendingTx, holding the latest write owed to it.
+        owedSettlements = owedSettlements.filter((s) => s.pendingTxId !== pendingTxId);
+        owedSettlements.push({
+            id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            ...(typeof walletId === 'string' && walletId ? { walletId } : {}),
+            pendingTxId,
+            op,
+            ...(patch ? { patch } : {}),
+            recordedAt: Date.now(),
+        });
+        // Cap the journal so a vault that never reopens cannot grow the stored
+        // blob without bound; the oldest owed write goes first.
+        if (owedSettlements.length > OWED_SETTLEMENT_LIMIT) {
+            owedSettlements = owedSettlements.slice(-OWED_SETTLEMENT_LIMIT);
+        }
+        void persistOwedSettlements();
+    }
+    /**
+     * Replay every owed write against an open vault. Each record is applied,
+     * dropped because the PendingTx it names already left 'queued', or kept for
+     * the next attempt while the vault stays unreachable. Never throws: the
+     * routes that call it must not turn a settled broadcast into a route error.
+     *
+     * @param {any} vault
+     */
+    async function flushOwedSettlements(vault) {
+        if (owedSettlements.length === 0) return;
+        try {
+            const kept = [];
+            let changed = false;
+            for (const owed of owedSettlements) {
+                let verdict;
+                if (owed.op === 'discard') {
+                    try {
+                        await flows.discardQueuedBroadcast({ vault, pendingTxId: owed.pendingTxId });
+                        verdict = 'settled';
+                    } catch (_e) {
+                        verdict = 'unreachable';
+                    }
+                } else {
+                    verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
+                }
+                if (verdict === 'unreachable') kept.push(owed);
+                else changed = true;
+            }
+            if (!changed) return;
+            owedSettlements = kept;
+            await persistOwedSettlements();
+        } catch (_e) {
+            // A journal that cannot drain stays as it is for the next route.
         }
     }
     function getQueue(walletId) {
@@ -2521,6 +2764,112 @@ export function createBackgroundHost(deps) {
     // but starting the load at host construction means the queue is
     // typically warm by the time the renderer mounts the banner.
     void ensureQueueLoaded();
+    // Wallets whose durable records this process has already reconciled. The
+    // scan reads four collections, and one pass per wallet per process covers
+    // it: every later enqueue goes through `pushQueueEntry`.
+    const recoveredWallets = new Set();
+    /**
+     * Address strings this wallet spends from: its accounts' addresses plus the
+     * imported keys the wallet record links, which carry `accountId: null` and
+     * are therefore missed by the account walk alone (§11.3.3). Same join
+     * `removeWallet` applies when it decides which PendingTx rows die with the
+     * wallet. Throws rather than narrowing when a collection is unreadable, so
+     * the caller can refuse instead of attributing records by a partial answer.
+     *
+     * @param {any} vault
+     * @param {string} walletId
+     * @returns {Promise<Set<string>>}
+     */
+    async function ownedAddressesFor(vault, walletId) {
+        const accounts = await vault.accounts.findBy('walletId', walletId);
+        const accountIds = new Set(
+            (Array.isArray(accounts) ? accounts : []).map((a) => a?.id).filter(Boolean),
+        );
+        const importedIds = await importedAddressIdsFor(vault, walletId);
+        const all = await vault.addresses.list();
+        /** @type {Set<string>} */
+        const owned = new Set();
+        for (const addr of Array.isArray(all) ? all : []) {
+            if (!addr || typeof addr.address !== 'string' || !addr.address) continue;
+            if ((addr.accountId && accountIds.has(addr.accountId)) || importedIds.has(addr.id)) {
+                owned.add(addr.address);
+            }
+        }
+        return owned;
+    }
+    /**
+     * Rebuild queue entries from the durable half for signed transactions the
+     * local store no longer holds. The two halves are not equally durable: the
+     * signing flow writes the PendingTx as 'queued' into the vault and only
+     * then asks this host to queue the bytes, and the queue's own blob is
+     * best-effort (a quota refusal, a private window, or a shell with no
+     * storage API at all leaves it empty while the vault keeps the record).
+     * Nothing else reads a 'queued' record, so without this the signed bytes
+     * are unreachable from every surface the user has.
+     *
+     * Three conditions bound what comes back, and each is a refusal:
+     *   - the record's `fromAddress` belongs to THIS wallet. An unreadable
+     *     table or an empty address set restores nothing rather than guessing,
+     *     because a wrong join would list one wallet's signed bytes under
+     *     another.
+     *   - the record still reads 'queued'. The broadcast route claims its
+     *     record as 'broadcasting' before the bytes go out, so a transaction
+     *     that reached a node cannot come back as a fresh queue entry and be
+     *     offered for a second broadcast.
+     *   - no owed settlement names it. A journaled write belongs to an entry
+     *     whose broadcast or discard already happened.
+     *
+     * @param {any} vault
+     * @param {any} chainRegistry
+     * @param {string} walletId
+     */
+    async function restoreQueueFromVault(vault, chainRegistry, walletId) {
+        if (!queueLoaded || recoveredWallets.has(walletId)) return;
+        let owned;
+        let queued;
+        try {
+            owned = await ownedAddressesFor(vault, walletId);
+            if (owned.size === 0) return;
+            queued = await vault.pendingTxs.findBy('status', 'queued');
+        } catch (_e) {
+            // A vault that cannot answer leaves the reconcile un-latched, so
+            // the next list retries it against an open one.
+            return;
+        }
+        recoveredWallets.add(walletId);
+        if (!Array.isArray(queued) || queued.length === 0) return;
+        const live = getQueue(walletId);
+        const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
+        for (const owed of owedSettlements) held.add(owed.pendingTxId);
+        const restorable = queued
+            .filter((r) => r
+                && typeof r.txHex === 'string' && r.txHex
+                && typeof r.id === 'string' && !held.has(r.id)
+                && owned.has(r.fromAddress))
+            .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+        for (const record of restorable) {
+            // Entries name a registry chain id; records name coin plus network.
+            // A record whose chain this build cannot resolve has no SDK to
+            // broadcast through, so listing it would only offer a button that
+            // throws.
+            const chainId = chainRegistry?.chainIdFor?.(record.chain, record.network);
+            if (typeof chainId !== 'string' || !chainId) continue;
+            held.add(record.id);
+            pushQueueEntry(walletId, {
+                chainId,
+                signedTxHex: record.txHex,
+                summary: record.actionSummary,
+                signedAt: Date.parse(record.createdAt) || Date.now(),
+                txid: record.txid,
+                pendingTxId: record.id,
+                // No ADS verdict: it rode the entry, never the record, so the
+                // donation this transaction may carry is not re-derivable here.
+                // Booking nothing under-counts the accumulator; booking a guess
+                // credits a donation that was never paid.
+                adsCommit: null,
+            });
+        }
+    }
     /**
      * Push a signed-but-unbroadcast tx onto the per-walletId queue.
      * Cluster G FOLLOWUP 1: used both by the action.* handlers' auto-
@@ -2528,12 +2877,19 @@ export function createBackgroundHost(deps) {
      * and by the renderer's `enqueueBroadcastRequest` shim for callers
      * that want to enqueue directly (e.g. PsbtSignForm's broadcast leg).
      *
+     * The entry submitAction hands over also names the PendingTx record it
+     * stamped 'queued' (`pendingTxId`) and the ADS verdict the signed bytes
+     * carry (`adsCommit`); both ride on the stored record so the broadcast
+     * and discard routes can settle the durable half and book the donation
+     * once the bytes actually land. Renderer enqueues carry neither.
+     *
      * @param {string} walletId
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string }} entry
-     * @returns {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string }}
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * @returns {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }}
      */
     function pushQueueEntry(walletId, entry) {
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const adsCommit = entry.adsCommit;
         const stored = {
             id,
             chainId: entry.chainId,
@@ -2543,6 +2899,15 @@ export function createBackgroundHost(deps) {
                 : `Broadcast pending on ${entry.chainId}`,
             signedAt: typeof entry.signedAt === 'number' ? entry.signedAt : Date.now(),
             ...(entry.txid ? { txid: entry.txid } : {}),
+            ...(typeof entry.pendingTxId === 'string' && entry.pendingTxId
+                ? { pendingTxId: entry.pendingTxId }
+                : {}),
+            ...(adsCommit
+                && typeof adsCommit === 'object'
+                && typeof adsCommit.chainId === 'string'
+                && typeof adsCommit.donationIncluded === 'boolean'
+                ? { adsCommit: { chainId: adsCommit.chainId, donationIncluded: adsCommit.donationIncluded } }
+                : {}),
         };
         getQueue(walletId).push(stored);
         // Fire-and-forget: onBroadcastFailure callers (action.send /
@@ -2552,8 +2917,14 @@ export function createBackgroundHost(deps) {
         void persistQueue();
         return stored;
     }
-    host.register('broadcast.queue.list', async (req) => {
+    host.register('broadcast.queue.list', async (req, { vault, chainRegistry }) => {
         await ensureQueueLoaded();
+        // The queued-broadcast banner lists on mount, which is the first moment
+        // after an unlock at which an owed write has a vault to land in.
+        await flushOwedSettlements(vault);
+        if (typeof req?.walletId === 'string' && req.walletId) {
+            await restoreQueueFromVault(vault, chainRegistry, req.walletId);
+        }
         return [...getQueue(req?.walletId)];
     });
     // Cluster G FOLLOWUP 1: explicit enqueue endpoint. Renderer-side
@@ -2581,61 +2952,207 @@ export function createBackgroundHost(deps) {
             txid: req?.txid,
         });
     });
-    host.register('broadcast.queue.broadcast', async (req, { sdkRegistry }) => {
-        await ensureQueueLoaded();
-        const q = getQueue(req?.walletId);
-        const id = req?.id;
-        const idx = q.findIndex((entry) => entry.id === id);
-        if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
-        const entry = q[idx];
-        const sdk = sdkRegistry.get(entry.chainId);
-        // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
-        // encoder as a second argument and refuses without it ("Encoder client
-        // is required for broadcasting"), so calling it one-argument here meant
-        // every "Broadcast now" failed with an SDK developer message and the
-        // signed transaction stayed queued forever. Measured on an Android
-        // emulator against the LTC regtest venue, SSC-6. Same call the
-        // core queue drain and `broadcast.signedTx` below already make.
-        if (typeof sdk?.encoder?.broadcastTx !== 'function') {
-            throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks encoder.broadcastTx`);
-        }
-        // Panic-mode freeze. Broadcasting an already-signed tx invokes no signer,
-        // so without this it sails straight through an active freeze - the exact
-        // irreversible-effector gap the freeze exists to close. This host route
-        // maintains its own queue and bypasses core drainQueuedBroadcast (which
-        // already gates), so the same assertion is applied here at the new call site.
-        flows.assertSigningAllowed();
-        let result;
+    /**
+     * Settle the PendingTx half of a queued broadcast once the host queue has
+     * settled its own. submitAction stamps its record 'queued' and names it on
+     * the entry as `pendingTxId`; the two surfaces otherwise never reconcile,
+     * and a record left 'queued' after the bytes landed keeps netting the spend
+     * out of the balance, never subscribes for its confirmation, and stays
+     * eligible for a re-broadcast the node would reject as already known.
+     * Only a record the queue still owns is written (the same precondition
+     * core's drain and discard apply), and a missing record or a locked vault
+     * never turns a settled broadcast into a route error. Renderer enqueues
+     * carry no id.
+     *
+     * The three outcomes are kept apart because only one of them owes a retry:
+     * 'settled' wrote the record, 'closed' found nothing to write (no id, no
+     * record, or a record that already reached a terminal status), and
+     * 'unreachable' means the vault refused the read or the write and the
+     * caller journals it.
+     *
+     * @param {any} vault
+     * @param {{ pendingTxId?: string }} entry
+     * @param {object} patch
+     * @returns {Promise<'settled' | 'closed' | 'unreachable'>}
+     */
+    async function settleQueuedPendingTx(vault, entry, patch) {
+        const pendingTxId = entry?.pendingTxId;
+        if (typeof pendingTxId !== 'string' || !pendingTxId) return 'closed';
+        return applyPendingTxPatch(vault, pendingTxId, patch);
+    }
+    /**
+     * Apply one patch to a PendingTx the queue still owns, reporting which of
+     * the three outcomes above happened.
+     *
+     * Two statuses are writable. 'queued' is the record as the signing flow
+     * left it; 'broadcasting' is the claim the broadcast route stamps before
+     * the bytes go out, the same transition core's drain writes at the same
+     * point. Every other status is terminal and belongs to whatever moved the
+     * record there.
+     *
+     * @param {any} vault
+     * @param {string} pendingTxId
+     * @param {object} patch
+     * @returns {Promise<'settled' | 'closed' | 'unreachable'>}
+     */
+    async function applyPendingTxPatch(vault, pendingTxId, patch) {
+        let existing;
         try {
-            result = await sdk.encoder.broadcastTx(entry.signedTxHex);
-        } catch (err) {
-            // The same permanence split the core queue applies,
-            // applied here too - this queue retries on demand and had no way to
-            // stop. A signed transaction whose inputs are gone can never
-            // confirm, so leaving it on the list invites the user to press
-            // "Broadcast now" forever on something already dead. Drop it from
-            // the queue and say why; the recovery is a fresh compose, not
-            // another attempt at these bytes. Transient failures stay queued,
-            // which is what the surface is for.
-            if (flows.classifyBroadcastFailure(err) === 'permanent') {
-                q.splice(idx, 1);
-                await persistQueue();
-            }
-            throw err;
+            existing = await vault?.pendingTxs?.get(pendingTxId);
+        } catch (_e) {
+            return 'unreachable';
         }
-        q.splice(idx, 1);
-        await persistQueue();
-        // Encoder result shape varies by chain, same as `broadcast.signedTx`
-        // below: normalize so the caller always sees { txid }.
-        const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
-        return { ...(result && typeof result === 'object' ? result : {}), txid };
+        if (!existing) return 'closed';
+        if (existing.status !== 'queued' && existing.status !== 'broadcasting') return 'closed';
+        try {
+            await vault.pendingTxs.put({ ...existing, ...patch });
+        } catch (_e) {
+            return 'unreachable';
+        }
+        return 'settled';
+    }
+    // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
+    // `broadcastTx` is an irreversible effector, so a second call for the same
+    // entry (double-click, popup and expanded tab racing) must fail before it
+    // reaches the network. The claim is taken synchronously, before the
+    // handler's first await, so two calls in the same tick cannot both pass
+    // the check; core drainQueuedBroadcast keeps the same guard for its lane.
+    const inFlightQueueBroadcasts = new Set();
+    host.register('broadcast.queue.broadcast', async (req, { sdkRegistry, vault, chainRegistry }) => {
+        const walletId = req?.walletId;
+        const id = req?.id;
+        const claim = `${walletId}:${id}`;
+        if (inFlightQueueBroadcasts.has(claim)) {
+            throw new Error(`broadcast.queue: entry "${id}" is already being broadcast`);
+        }
+        inFlightQueueBroadcasts.add(claim);
+        try {
+            await ensureQueueLoaded();
+            const q = getQueue(walletId);
+            const idx = q.findIndex((entry) => entry.id === id);
+            if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
+            const entry = q[idx];
+            const sdk = sdkRegistry.get(entry.chainId);
+            // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
+            // encoder as a second argument and refuses without it ("Encoder client
+            // is required for broadcasting"), so calling it one-argument here meant
+            // every "Broadcast now" failed with an SDK developer message and the
+            // signed transaction stayed queued forever. Measured on an Android
+            // emulator against the LTC regtest venue, SSC-6. Same call the
+            // core queue drain and `broadcast.signedTx` below already make.
+            if (typeof sdk?.encoder?.broadcastTx !== 'function') {
+                throw new Error(`broadcast.queue: SDK for "${entry.chainId}" lacks encoder.broadcastTx`);
+            }
+            // Panic-mode freeze. Broadcasting an already-signed tx invokes no signer,
+            // so without this it sails straight through an active freeze - the exact
+            // irreversible-effector gap the freeze exists to close. This host route
+            // maintains its own queue and bypasses core drainQueuedBroadcast (which
+            // already gates), so the same assertion is applied here at the new call site.
+            flows.assertSigningAllowed();
+            // Claim the durable half before the bytes go out, the same write
+            // core's drain makes at the same point. A record reading 'queued'
+            // is what the reload recovery treats as proof that its transaction
+            // never reached a node, so a record left at 'queued' across the
+            // network call is what would let a later boot rebuild a landed
+            // transaction as a fresh queue entry and offer it for a second
+            // broadcast. A vault that refuses the claim does not block the
+            // broadcast: the settlement journal below is the route back.
+            await settleQueuedPendingTx(vault, entry, { status: 'broadcasting', error: null });
+            // `q` is the live array the queue Map holds and every renderer context
+            // mutates it through this one host, so a discard of a lower entry or
+            // another broadcast can shift it while this handler waits on the
+            // network. Removal after the await therefore re-resolves the entry by
+            // id rather than trusting the index captured above; the stale index
+            // would delete a different, still-valid signed transaction.
+            let result;
+            try {
+                result = await sdk.encoder.broadcastTx(entry.signedTxHex);
+            } catch (err) {
+                // The same permanence split the core queue applies,
+                // applied here too - this queue retries on demand and had no way to
+                // stop. A signed transaction whose inputs are gone can never
+                // confirm, so leaving it on the list invites the user to press
+                // "Broadcast now" forever on something already dead. Drop it from
+                // the queue and say why; the recovery is a fresh compose, not
+                // another attempt at these bytes. Transient failures stay queued,
+                // which is what the surface is for.
+                const failure = err && err.message ? String(err.message) : String(err);
+                // Release the claim either way, the two transitions core's drain
+                // records: a permanent rejection retires the record so it stops
+                // netting and offers a re-compose, and a transient one returns it
+                // to 'queued', the status both this surface and the reload
+                // recovery read as "signed, never sent".
+                let releasePatch = { status: 'queued', error: failure };
+                if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                    const cur = q.findIndex((e) => e.id === id);
+                    if (cur >= 0) q.splice(cur, 1);
+                    await persistQueue();
+                    releasePatch = { status: 'failed', error: failure };
+                }
+                if (await settleQueuedPendingTx(vault, entry, releasePatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', releasePatch);
+                }
+                throw err;
+            }
+            const cur = q.findIndex((e) => e.id === id);
+            if (cur >= 0) q.splice(cur, 1);
+            await persistQueue();
+            // Encoder result shape varies by chain, same as `broadcast.signedTx`
+            // below: normalize so the caller always sees { txid }.
+            const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
+            const landedPatch = {
+                status: 'broadcast',
+                broadcastAt: new Date().toISOString(),
+                txid: txid ?? entry.txid ?? null,
+                error: null,
+            };
+            if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
+                recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
+            }
+            await flushOwedSettlements(vault);
+            // §36.3 / §5.3.4: the queued tx is what donates, so its ADS verdict is
+            // booked here, after the bytes landed and after the entry left the
+            // queue (a retry cannot reach it, so nothing books twice).
+            // `donationIncluded` is the verdict submitAction resolved for these
+            // exact bytes; it is carried, never re-derived from today's settings.
+            // Accounting is non-critical: a settings-write failure must not turn a
+            // landed broadcast into an error for the caller.
+            if (entry.adsCommit) {
+                try {
+                    await flows.commitAdsStep({
+                        vault,
+                        chainId: entry.adsCommit.chainId || entry.chainId,
+                        donationIncluded: entry.adsCommit.donationIncluded,
+                        chainRegistry,
+                    });
+                } catch (e) {
+                    console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
+                }
+            }
+            return { ...(result && typeof result === 'object' ? result : {}), txid };
+        } finally {
+            inFlightQueueBroadcasts.delete(claim);
+        }
     });
-    host.register('broadcast.queue.discard', async (req) => {
+    host.register('broadcast.queue.discard', async (req, { vault }) => {
         await ensureQueueLoaded();
         const q = getQueue(req?.walletId);
         const idx = q.findIndex((entry) => entry.id === req?.id);
+        const entry = idx >= 0 ? q[idx] : null;
         if (idx >= 0) q.splice(idx, 1);
         await persistQueue();
+        // Retire the PendingTx half too, through the same idempotent helper the
+        // core lane's Discard uses (it deletes only a record still 'queued').
+        if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+            try {
+                await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
+            } catch (_e) {
+                // The vault refused the delete. The queue half is already gone,
+                // so the journal is the only route left back to the record.
+                recordOwedSettlement(req?.walletId, entry.pendingTxId, 'discard');
+            }
+        }
+        await flushOwedSettlements(vault);
         return { discarded: idx >= 0 };
     });
 
@@ -3250,7 +3767,7 @@ export function createBackgroundHost(deps) {
     });
 
     // Token-gated content: list and unlock.
-    // See xchain-documentation/protocol/TOKEN_GATED_CONTENT.md.
+    // See xchain-documentation/protocol/token-gated-content.md.
     host.register('gatedContent.list', async (req, { sdkRegistry }) => {
         const sdk = sdkRegistry.get(req.chainId);
         return listGatedFiles({ sdk, tick: req.tick });
@@ -3363,13 +3880,13 @@ export function createBackgroundHost(deps) {
             // sets COIN and resolves their key).
             chainId: broadcastChainId,
             actionData: { action: 'MESSAGE', params },
-            encoderOpts: {
+            encoderOpts: deviceHardenedEncoderOpts(req, {
                 pubkey: source.publicKey,
                 change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
                 ...(req?.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req?.rbf !== undefined && { rbf: req.rbf }),
-            },
+            }),
             source: source.address,
             ownAddresses,
         });
@@ -3653,7 +4170,7 @@ export function createBackgroundHost(deps) {
             sdkRegistry,
             chainId,
             actionData: { action: 'BET', params },
-            encoderOpts: {
+            encoderOpts: deviceHardenedEncoderOpts(req, {
                 pubkey: source.publicKey,
                 change,
                 ...(req?.fee !== undefined && { fee: req.fee }),
@@ -3665,7 +4182,7 @@ export function createBackgroundHost(deps) {
                 // fee-bearing on create (v0) and place (v2), and on LTC/DOGE a
                 // native output is the ONLY way to pay it.
                 ...(req?.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: req.payFeeInNativeCoin }),
-            },
+            }),
             source: source.address,
             ownAddresses,
         });
@@ -3881,6 +4398,14 @@ export function createBackgroundHost(deps) {
 
     host.register('contracts.checkCodeSize', async (req, { sdkRegistry }) => {
         return contractCheckCodeSize({ ...req, sdkRegistry });
+    });
+
+    // CONTRACT_META_REQUIRED: the identity the chain will record, read off the
+    // pasted source (a static walk, no network) so the deploy form shows it
+    // read-only instead of asking for a label. Null when the installed SDK
+    // predates the check; the form then renders nothing.
+    host.register('contracts.getExportedMeta', async (req, { sdkRegistry }) => {
+        return contractExportedMeta({ ...req, sdkRegistry });
     });
 
     host.register('contracts.suggestGasLimit', async (req, { sdkRegistry }) => {
@@ -4129,8 +4654,18 @@ export function createBackgroundHost(deps) {
     // M2.1: this wallet's own in-flight sends, the only record of a
     // transaction that exists between our broadcast and the network's first
     // sighting of it. Summaries only; the psbt/tx hex never leaves the host.
-    host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry }) => {
-        return livePendingTxs({ ...req, vault, chainRegistry });
+    //
+    // A native-coin send is invisible to every action feed, so this
+    // read first reconciles the address's native sends against the chain's
+    // UTXO set (retiring the ones a block holds, stamping the ones the
+    // mempool holds) and then lists what is still in flight. Best-effort:
+    // a tracker outage lists the records exactly as before.
+    host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        let seenNow;
+        try {
+            ({ seenNow } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
+        } catch { /* the listing below must never depend on the tracker */ }
+        return livePendingTxs({ ...req, vault, chainRegistry, seenNow });
     });
 
     // §28.3 "Indexed" timeline stage: latest block the indexer has

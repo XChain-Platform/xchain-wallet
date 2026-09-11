@@ -20,7 +20,8 @@
 //   3. The sheet lists Receive + the rest of the §24.2 nav (DEX,
 //      Dispensers, Contracts, Messaging, Contacts) plus the optional
 //      footer items (Switch wallet / Settings / Lock); Contracts is
-//      gated on hasBtcAddress.
+//      gated on hasVmAddress (DEPLOY sits in COMMON_ACTIONS, so the
+//      row is not BTC-exclusive).
 //   4. CSS module declares a 56px fixed bar that respects the iOS
 //      safe-area inset.
 //   5. FullLayoutWithNav grew a `bottomBar` slot; web + desktop
@@ -64,7 +65,7 @@ assert.ok(/aria-expanded=\{sheetOpen \? 'true' : 'false'\}/.test(barSrc),
 assert.ok(/aria-controls="xc-bottom-sheet"/.test(barSrc),
     'More tab references its sheet via aria-controls');
 
-// --- 3. Sheet rows + hasBtcAddress gating + footer rows -----------------
+// --- 3. Sheet rows + hasVmAddress gating + footer rows ------------------
 
 const sheetLabels = ['Receive', 'DEX', 'Dispensers', 'Contracts', 'Messaging', 'Contacts'];
 for (const label of sheetLabels) {
@@ -73,8 +74,10 @@ for (const label of sheetLabels) {
         `Bottom sheet lists ${label}`,
     );
 }
-assert.ok(/requiresBtc:\s*true[\s\S]*?hasBtcAddress/.test(barSrc),
-    'Contracts row requires hasBtcAddress to render');
+assert.ok(/requiresVm:\s*true[\s\S]*?hasVmAddress/.test(barSrc),
+    'Contracts row requires hasVmAddress to render');
+assert.ok(!/requiresBtc|hasBtcAddress/.test(barSrc),
+    'BottomTabBar no longer carries a BTC gate for the Contracts row');
 for (const label of ['Switch wallet', 'Settings', 'Lock']) {
     assert.ok(barSrc.includes(`>${label}</span>`),
         `Bottom sheet footer renders ${label} when callback supplied`);
@@ -160,5 +163,5 @@ assert.ok(!/BottomTabBar/.test(popupApp),
     'Extension popup intentionally does NOT mount BottomTabBar (always compact per §24.1)');
 
 console.log(
-    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(BTC-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
+    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
 );

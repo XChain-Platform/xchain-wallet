@@ -15,6 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -268,7 +269,13 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
             const bad = err?.name === 'InvalidPasswordError';
             updateRow(activeRowIndex, {
                 status: 'failed',
-                error: bad ? 'Incorrect password.' : err?.message || 'Sign failed.',
+                // Each row carries its own chain, so the sentence is built
+                // against the ROW's chain rather than a form-wide one.
+                error: bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                    chainId: activeRow.chainId,
+                    coinTicker: activeCoinTicker,
+                    fallback: err?.message || 'Sign failed.',
+                }),
             });
             if (!activeHw) {
                 passwordRef.current?.focus();

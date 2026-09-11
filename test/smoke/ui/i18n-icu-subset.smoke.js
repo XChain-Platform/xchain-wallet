@@ -122,4 +122,25 @@ assert.strictEqual(
     '{count} addresses',
 );
 
+// 10. Omitting the args object is the same call as passing an empty one.
+//     Returning the dictionary value untouched on a falsy `vars` renders an ICU
+//     plural/select key's own SOURCE text into the UI, while item 9's `{}` call
+//     renders the graceful bare tokens: one key, two outputs, decided only by
+//     whether the caller typed `{}`. A simple-substitution key is output-identical
+//     either way, so only an ICU key exposes the split.
+assert.strictEqual(
+    t('home.addressCount'),
+    t('home.addressCount', {}),
+);
+assert.strictEqual(
+    t('home.addressCount'),
+    '{count} addresses',
+);
+//     Simple substitution is unchanged by that equivalence: a referenced
+//     arg the caller omits still renders as its bare token.
+assert.strictEqual(
+    t('home.balanceUnavailable'),
+    'Balance unavailable: {reason}',
+);
+
 console.log('OK: i18n locales layout + formatjs rendering (plural / select / mixed) + legacy-fallback route smoke');

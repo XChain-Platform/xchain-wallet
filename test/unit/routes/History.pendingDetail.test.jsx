@@ -22,6 +22,7 @@ import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-li
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -174,7 +175,7 @@ describe('History pending detail branch', () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
         const panel = panelIn(region);
-        expect(within(panel).getByText('Pending, not yet validated by the indexer.')).toBeTruthy();
+        expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
         expect(within(panel).getByText('In the mempool, waiting for a block')).toBeTruthy();
         // Nothing on the page may claim acceptance before an indexer has
         // seen the block: a mempool row is pre-validation.
@@ -196,7 +197,7 @@ describe('History pending detail branch', () => {
             mempool: [mempoolRow({ action: 'MINT', data: 'MINT|0|XCHAIN|100|^397' })],
         });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(/does not read MINT data/)).toBeTruthy();
+        expect(within(region).getByText(/does not read Mint data/)).toBeTruthy();
         expect(within(region).getByText('^397')).toBeTruthy();
         expect(region.textContent).not.toContain('100 XCHAIN to');
     });
@@ -221,14 +222,19 @@ describe('History pending detail branch', () => {
         // the user is reading changes key underneath them.
         const { messaging, view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText('Pending, not yet validated by the indexer.')).toBeTruthy();
+        expect(within(region).getByText('Pending, not yet validated by the service.')).toBeTruthy();
 
         messaging.getAddressMempool.mockResolvedValue([]);
         messaging.getAddressHistory.mockResolvedValue([confirmedRow(SEEN_HASH)]);
+        // The mount fan-out restarts the re-poll window when it lands, so a
+        // focus inside that window is dropped by design; age the rows past
+        // one interval first. Only Date is faked: waitFor polls on setInterval.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
 
         await waitFor(() => {
-            expect(screen.queryByText('Pending, not yet validated by the indexer.')).toBeNull();
+            expect(screen.queryByText('Pending, not yet validated by the service.')).toBeNull();
         });
         // Same view, still open, now showing the confirmed form.
         const upgraded = screen.getByRole('region', { name: 'Action detail' });

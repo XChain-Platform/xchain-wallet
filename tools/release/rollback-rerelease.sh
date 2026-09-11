@@ -23,7 +23,7 @@
 # re-release it as a NEW, HIGHER version number, through the exact same
 # build-tag-sign-publish-review pipeline as any other release. This
 # script does not shortcut that pipeline and cannot, because no lever to
-# shortcut it exists (see claude/reports/launch/INCIDENT-RUNBOOK.md
+# shortcut it exists (see INCIDENT-RUNBOOK.md (platform tree)
 # section 14, "Chrome extension: emergency levers", read before reaching
 # for this script during an actual incident).
 #
@@ -400,7 +400,7 @@ release - claim the release in the ledger before touching anything):
      publish, deploy-web).
   6. Submit the resulting xchain-wallet-extension-v$NEW_VERSION.zip to
      the Chrome Web Store console as a normal update, per
-     claude/specs/wallet-publishing-chrome-extension.md §4. It goes
+     wallet-publishing-chrome-extension.md §4 (platform tree). It goes
      through the SAME review queue as any other release. Record the
      submission in packages/extension/docs/publish-log.md (this step's
      sha256 check is in the QA checklist section above) and any reviewer
@@ -411,7 +411,7 @@ release - claim the release in the ledger before touching anything):
 
 This whole sequence is the SLOW path. If the incident needs a response
 before a store review clock can possibly deliver one, use
-claude/reports/launch/INCIDENT-RUNBOOK.md section 14 in parallel.
+INCIDENT-RUNBOOK.md section 14 (platform tree) in parallel.
 --------------------------------------------------------------------------
 EOF
 

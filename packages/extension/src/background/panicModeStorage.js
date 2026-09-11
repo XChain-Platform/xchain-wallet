@@ -40,7 +40,7 @@ const STORAGE_KEY = 'xchain.panicMode';
 /**
  * @returns {PanicModeStorage | null}
  */
-export function createPanicModeStorage() {
+function createPanicModeStorage() {
     if (typeof chrome === 'undefined' || !chrome?.storage?.local) return null;
     return {
         async load() {

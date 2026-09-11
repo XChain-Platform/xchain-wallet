@@ -174,7 +174,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
  * additional addresses get `null` balances so the row still renders.
  *
  * @param {Record<string, Array<{ address: string, label: string, addressType: string, derivationPath: string | null }>>} addressesByChain
- * @returns {Record<string, Array<{ address: string, label: string, addressType: string, derivationPath: string | null, balances: BalanceFixture | null, error: null }>>}
+ * @returns {Record<string, Array<{ address: string, label: string, addressType: string, derivationPath: string | null, balances: BalanceFixture | null, error: null, errorCode: null, retryAfterSeconds: null }>>}
  */
 export function synthesizeDemoBalances(addressesByChain) {
     /** @type {Record<string, any[]>} */
@@ -192,6 +192,11 @@ export function synthesizeDemoBalances(addressesByChain) {
                 ? { native: fixture.native, tokens: fixture.tokens }
                 : { native: fixture?.native ? { ...fixture.native, quantity: '0' } : null, tokens: [] },
             error: null,
+            // The typed failure fields beside `error` (see `AddressBalancesEntry`
+            // in flows/balances.js): a demo read never fails, so both are null,
+            // but a reader keyed on the typed shape must find them present.
+            errorCode: null,
+            retryAfterSeconds: null,
         }));
     }
     return out;
@@ -985,7 +990,7 @@ const DEMO_CONTACTS = [
 
 // Non-contact demo counterparties for the inbox, kept distinct from the seeded
 // contacts so those rows render as truncated addresses, not names.
-export const DEMO_MESSAGE_ADDRESSES = {
+const DEMO_MESSAGE_ADDRESSES = {
     alice: 'demo1alicexchaincounterpartyaddr00000000001',
     bob: 'demo1bobxchaincounterpartyaddr0000000000002',
     carol: 'demo1carolxchaincounterpartyaddr00000000003',

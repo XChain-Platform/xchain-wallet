@@ -43,6 +43,7 @@ import {
 import { SIGNING_SECRET_SESSION_KEY } from './signingSecretSession.js';
 import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 import { ChromeUnlockThrottleStore } from './unlockThrottle.js';
+import { serializeError } from './MessageHost.js';
 
 /**
  * @typedef {Object} PreHostBackends
@@ -55,12 +56,12 @@ import { ChromeUnlockThrottleStore } from './unlockThrottle.js';
  *   chainRegistry?: import('@xchain-wallet/core').registry.ChainRegistry,
  *   sdkRegistry?: import('@xchain-wallet/core').sdk.SDKRegistry,
  *   onUnlocked?: () => Promise<void> | void,
- *   onLocked?: () => Promise<void> | void,
+ *   onLocked?: (result: { secretsCleared: boolean }) => Promise<void> | void,
  * }} PreHostDispatchDeps
  *
  * @typedef {Object} PreHostDeps
  * @property {() => Promise<void> | void} [onUnlocked]
- * @property {() => Promise<void> | void} [onLocked]
+ * @property {(result: { secretsCleared: boolean }) => Promise<void> | void} [onLocked]   receives whether both secret clears succeeded, so a shell can keep its auto-lock retry record when they did not
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]
  */
@@ -132,13 +133,12 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                 });
                 sendResponse({ ok: true, result });
             } catch (err) {
-                sendResponse({
-                    ok: false,
-                    error: {
-                        name: (err && err.name) || 'Error',
-                        message: (err && err.message) || String(err),
-                    },
-                });
+                // The same serializer the host lane uses. A hand-rolled
+                // { name, message } dropped `code` and the THROTTLED hints
+                // (retryAfterMs / burst / windowMs) that the renderer
+                // transports all rebuild, and `UnlockThrottledError` carries
+                // retryAfterMs on exactly this lane.
+                sendResponse(serializeError(err));
             }
         })();
         return true; // async response

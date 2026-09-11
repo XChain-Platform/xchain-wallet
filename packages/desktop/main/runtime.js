@@ -60,19 +60,39 @@ import {
     dispatchPreHost,
     PRE_HOST_MESSAGE_TYPES,
 } from '@xchain-wallet/extension/src/background/sessionMeta.js';
+import { serializeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
+// The pure idle decision, shared with the extension backstop so the two
+// shells cannot drift on what "idle" means.
+import { shouldAutoLock } from '@xchain-wallet/extension/src/background/autoLockState.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
+import { applyAutoLockReport, stampAutoLockActivity } from './autoLockState.js';
+
+/**
+ * Renderer-sent type that arms/disarms the auto-lock backstop. The SAME
+ * string the extension popup sends, because `useAutoLockPolicy` is shared
+ * and the messaging barrels are pinned to one wire name per helper
+ * (test/unit/shells/messagingBarrelContract.test.js).
+ */
+export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
 
 /**
  * @typedef {Object} DesktopRuntimeDeps
  * @property {{ load: () => Promise<Uint8Array | null>, save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> }} storageBackend
  * @property {{ load: () => Promise<Uint8Array | null>, save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> }} sessionBackend
  * @property {{ load: () => Promise<unknown | null>, save: (obj: unknown) => Promise<void>, clear: () => Promise<void> }} metaBackend
+ * @property {{ load: () => Promise<unknown | null>, save: (s: object) => Promise<void>, clear: () => Promise<void> }} [autoLockStore]
+ *        §26: restart-surviving auto-lock record (main/autoLockState.js).
+ *        Without it the launch gate is inert and a quit-then-relaunch
+ *        auto-unlocks with no regard for `autolockMinutes`.
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
  *        §50 / Cluster L FOLLOWUP 4: supplied by main/index.js so the
  *        diagnostic dump records electron version + OS + walletVersion.
+ * @property {(settings: object, ctx: { sdkRegistry: object }) => Promise<void>} [onPrivacySettingsChanged]
+ *        Applies the egress policy (Tor routing) for the given settings.
+ *        Injected by main/index.js, which owns the `electron` import.
  * @property {(n: { kind: string, title: string, body: string }) => void} [notify]
  *        §46: OS-notification adapter, injected by main/index.js (which
  *        owns the `electron` import). When absent (unit tests / headless),
@@ -109,9 +129,17 @@ export function createRuntime(deps) {
         // handleWalletUnlock enforces the same pre-KDF lockout the extension
         // ships; when absent (older callers / tests) unlock is un-throttled.
         unlockThrottleStore: deps.unlockThrottleStore || null,
+        // §26: restart-surviving auto-lock record. Optional for the same
+        // reason as the throttle store (older callers and unit tests build
+        // runtimes without one); when absent, enforceLaunchAutoLock is a
+        // no-op and the shell behaves exactly as it did before.
+        autoLockStore: deps.autoLockStore || null,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
         getDiagnosticContext: deps.getDiagnosticContext,
+        // Egress-policy applier, kept optional: unit tests and headless
+        // callers build runtimes without it and must still get a host.
+        onPrivacySettingsChanged: deps.onPrivacySettingsChanged || null,
         notify: deps.notify || null,
         vault: null,
         host: null,
@@ -129,6 +157,68 @@ export function createRuntime(deps) {
         // auto-pay stays disarmed until one password unlock arms it.
         signerPool: new signersLib.SignerPool(),
     };
+}
+
+/**
+ * Enforce the user's configured auto-lock across a QUIT, once per launch.
+ *
+ * `session.bin` is deliberately left on disk at `before-quit` so a relaunch
+ * skips the password prompt (§40.12). Nothing consulted `autolockMinutes`
+ * on that path, so the skip had no upper bound: quit with a 15-minute
+ * auto-lock set, come back a month later, and the vault opened itself.
+ * This is the missing bound. Call it ONCE at app-ready, before the boot
+ * `ensureHost`; when it clears the session backend, that ensureHost finds
+ * no key and the renderer gets the lock screen.
+ *
+ * Fails CLOSED on a missing or unreadable record, which is also what
+ * covers the crash and kill paths that never wrote a stamp: the cost of
+ * being wrong is one password prompt, and the cost the other way is an
+ * unlocked wallet the user believed had locked itself.
+ *
+ * Deliberately NOT folded into `ensureHost`. That function is also called
+ * straight after a password unlock (`onUnlocked`), where the record can
+ * legitimately be absent for a tick; refusing there would clear the key
+ * the user had just authenticated and leave the UI claiming an unlock that
+ * had been undone. The gate belongs on the launch path only, which is the
+ * only path the finding is about.
+ *
+ * @param {DesktopRuntime} runtime
+ * @param {number} [now]
+ * @returns {Promise<{ locked: boolean, reason: string }>}
+ */
+export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
+    const store = runtime?.autoLockStore;
+    if (!store) return { locked: false, reason: 'no-store' };
+    // Nothing persisted means nothing to enforce: a shell with no cached
+    // key already lands on the unlock screen, and clearing an empty
+    // session backend would only churn the disk.
+    let hasPersistedKey = false;
+    try {
+        hasPersistedKey = (await runtime.sessionBackend.load()) != null;
+    } catch {
+        hasPersistedKey = false;
+    }
+    if (!hasPersistedKey) return { locked: false, reason: 'no-session' };
+
+    let state = null;
+    try { state = await store.load(); } catch { state = null; }
+
+    let reason = '';
+    if (!state) reason = 'no-record';
+    else if (state.armed !== true) reason = 'disarmed';   // the user chose Never, or a demo wallet
+    else if (shouldAutoLock(state, now)) reason = 'idle-window-elapsed';
+
+    if (reason === 'disarmed') return { locked: false, reason };
+    if (reason === '') return { locked: false, reason: 'within-window' };
+
+    // Drop the cached key AND the stale record together: leaving the
+    // record would let the next launch read a stamp that no longer
+    // describes any session.
+    try { await runtime.sessionBackend.clear(); } catch (err) {
+        console.error('[xchain] auto-lock could not clear the cached session key:', err);
+    }
+    try { await store.clear(); } catch { /* best-effort */ }
+    return { locked: true, reason };
 }
 
 /**
@@ -151,12 +241,29 @@ export async function ensureHost(runtime) {
     try {
         await vault.open();
         runtime.vault = vault;
+
+        // Apply the egress policy before the host or any watcher can reach
+        // the network (both boot and the `onUnlocked` path land here).
+        if (runtime.onPrivacySettingsChanged) {
+            try {
+                const settings = await flowsLib.getSettings(vault);
+                await runtime.onPrivacySettingsChanged(settings, { sdkRegistry: runtime.sdkRegistry });
+            } catch (err) {
+                // Loud, not fatal: this failing means traffic leaves
+                // direct while the UI claims the toggle is on.
+                console.error('[xchain] egress policy not applied at unlock:', err);
+            }
+        }
+
         runtime.host = createDesktopMessageHost({
             vault,
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
             signerPool: runtime.signerPool,
             getDiagnosticContext: runtime.getDiagnosticContext,
+            // Re-applies routing on any settings.update touching `privacy`,
+            // so the toggle takes effect on the next request.
+            onPrivacySettingsChanged: runtime.onPrivacySettingsChanged,
         });
 
         // §46: start the live notification watcher. main/index.js injects the
@@ -387,6 +494,10 @@ export async function wipeRuntimeStores(runtime) {
         ['meta', runtime.metaBackend],
         ['session', runtime.sessionBackend],
         ['unlockThrottle', runtime.unlockThrottleStore],
+        // The auto-lock stamp describes a session that no longer exists
+        // after a wipe; carrying it into the next wallet would hand that
+        // wallet somebody else's idle clock.
+        ['autoLock', runtime.autoLockStore],
     ];
     for (const [name, backend] of targets) {
         if (!backend || typeof backend.clear !== 'function') continue;
@@ -416,6 +527,26 @@ export async function handleIpcMessage(runtime, message) {
     }
 
     try {
+        // §26 auto-lock, taken BEFORE both lanes on purpose.
+        //
+        // Not in PRE_HOST_MESSAGE_TYPES because that set and its dispatcher
+        // are shared with the extension shell, and this handling is
+        // desktop-specific. Ahead of the host lane because the shared
+        // `createBackgroundHost` registers `session.autolock` against the
+        // extension's chrome.storage record, which on desktop writes to a
+        // `chrome` that does not exist and silently does nothing; and
+        // because a DISARM has to land while the vault is closed, which
+        // the host lane cannot serve.
+        if (message.type === AUTO_LOCK_REPORT_TYPE) {
+            await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
+            return { ok: true, result: { armed: message.request?.armed === true } };
+        }
+        // Every other message is renderer activity, and the idle clock has
+        // to advance from it or a user who is actively using the app would
+        // come back to a locked wallet. Throttled inside the helper.
+        stampAutoLockActivity(runtime.autoLockStore, Date.now())
+            .catch(() => { /* best-effort; never blocks the message */ });
+
         if (PRE_HOST_MESSAGE_TYPES.has(message.type)) {
             const result = await dispatchPreHost(message.type, message.request, {
                 storageBackend: runtime.storageBackend,
@@ -435,7 +566,11 @@ export async function handleIpcMessage(runtime, message) {
                         console.error('[xchain] ensureHost after unlock failed:', err);
                     }
                 },
-                onLocked: () => { tearDownHost(runtime); },
+                onLocked: () => {
+                    tearDownHost(runtime);
+                    // An explicit lock ends the window the stamp described.
+                    runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
+                },
             });
             return { ok: true, result };
         }
@@ -453,12 +588,10 @@ export async function handleIpcMessage(runtime, message) {
     }
 }
 
+// The host lane's serializer, not a second hand-rolled envelope: it carries
+// `code` and the THROTTLED hints (retryAfterMs / burst / windowMs) that every
+// renderer transport rebuilds, and `UnlockThrottledError` sets retryAfterMs on
+// the pre-host lane this file dispatches.
 function errorEnvelope(err) {
-    return {
-        ok: false,
-        error: {
-            name: (err && err.name) || 'Error',
-            message: (err && err.message) || String(err),
-        },
-    };
+    return serializeError(err);
 }

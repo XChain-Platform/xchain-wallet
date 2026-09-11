@@ -128,12 +128,16 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
 
     useAutoLock(lock, { enabled: armed, idleMs });
 
-    // §26 background backstop (extension only): the foreground hook above
-    // dies with the popup, so hand the service worker the arm decision and
-    // the threshold and let it lock after the popup closes. `reportAutoLock`
-    // is implemented by the extension shell only; web/desktop keep a
-    // long-lived window and are fully covered by the foreground hook now
-    // that it outlives navigation.
+    // §26 out-of-renderer backstop: the foreground hook above dies with the
+    // renderer, so hand the shell's own process the arm decision and the
+    // threshold and let it enforce the window once the UI is gone. Two
+    // shells implement `reportAutoLock`, for two different lifetimes: the
+    // extension service worker locks a popup-less session on its keepalive
+    // alarm, and desktop persists the record to a file so its
+    // skip-the-prompt keychain relaunch is bounded by the SAME window
+    // (quit-and-relaunch is a gap the foreground hook cannot see). Plain
+    // web keeps its key in memory only, so a closed tab is already locked
+    // and it implements nothing.
     //
     // Skipped while the session status is still resolving: reporting a
     // premature `armed: false` there would disarm the backstop for a

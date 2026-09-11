@@ -194,6 +194,15 @@ export function deleteAddress(id) {
     return /** @type {any} */ (sendMessage('addresses.delete', { id }));
 }
 
+/**
+ * Put a deleted Address record back (§37.2 delete-address Undo toast).
+ * The caller passes the record it snapshotted before deleteAddress.
+ * @param {any} address
+ */
+export function restoreAddress(address) {
+    return /** @type {any} */ (sendMessage('addresses.restore', { address }));
+}
+
 /** Resolve the active address per chain for an account. @param {string} walletId @param {string} [accountId] */
 export function getActiveAddresses(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.active', { walletId, accountId }));
@@ -252,11 +261,16 @@ export function buildSendPsbtRequest(opts) {
  * The host half of the single-encode pipeline. Composes the
  * ONE PSBT the ConfirmActionModal previews and the signer signs, resolves
  * fee + ADS, and runs the tamper check host-side. Resolves with a
- * serializable, already-tamper-verified ComposedAction; rejects (tamper /
+ * serializable, already-tamper-verified HostComposeEnvelope; rejects (tamper /
  * compose failure) so the invoking form renders the error and no modal opens.
  *
+ * The envelope is declared ONCE, beside the return that builds it. This
+ * restated a nine-field subset of a twenty-field return and typed the action
+ * fields non-null, which the bare-payment lane contradicts, so point at the
+ * producer rather than keeping a fourth copy in sync.
+ *
  * @param {object} opts   SEND base shape (walletId/chainId/from/to/tick/amount/memo/fee/feePerKb/rbf) or { actionData, encoderOpts, from }
- * @returns {Promise<{ actionString: string, action: string, version: number|string, psbt: string, encoding: string, quote: object|null, adsPlan: object, expectedOutputs: object, tamperVerified: true }>}
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope>}
  */
 export function composeForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.composeForConfirm', opts));
@@ -333,18 +347,29 @@ export function requoteNativeFee(opts) {
 }
 
 /**
- * Persist the in-flight confirm so a popup CLOSE (which MV3 does
- * on every focus loss, including the one a hardware prompt causes) costs a tap
- * instead of re-entering the whole form. Stored in `chrome.storage.session`,
- * so it dies with the browser session; a no-op on shells without one.
+ * Persist the in-flight confirm so a tab CLOSE costs a tap instead of
+ * re-entering the whole form.
+ *
+ * INERT ON THIS SHELL. The store behind it is `chrome.storage.session`
+ * (`createConfirmActionSessionStorage`), which resolves to null outside an
+ * extension, so the host answers `{ supported: false, stored: false }` here and
+ * no confirm is ever resumed on web or mobile. A refresh re-locks the wallet
+ * anyway. Kept for surface parity: shared routes call it by name on every shell.
  *
  * @param {{ id: string, request: object, composed: object, report: object|null, dispatch: object|null, createdAt: number }} opts
+ * @returns {Promise<{ supported: boolean, stored: boolean }>}
  */
 export function putConfirmSession(opts) {
     return /** @type {any} */ (sendMessage('action.confirmSession.put', opts));
 }
 
-/** The stored confirms, for the Home resume card. */
+/**
+ * The stored confirms, for the Home resume card. Always
+ * `{ supported: false, sessions: [] }` on this shell; `supported` is what
+ * separates "nothing stored" from "this shell cannot store confirms".
+ *
+ * @returns {Promise<{ supported: boolean, sessions: Array<object> }>}
+ */
 export function listConfirmSessions() {
     return /** @type {any} */ (sendMessage('action.confirmSession.list', {}));
 }
@@ -1374,6 +1399,11 @@ export function validateContractCode(req) {
 /** @param {object} req */
 export function checkContractCodeSize(req) {
     return /** @type {any} */ (sendMessage('contracts.checkCodeSize', req));
+}
+
+/** @param {{ chainId: string, code: string }} req */
+export function getContractExportedMeta(req) {
+    return /** @type {any} */ (sendMessage('contracts.getExportedMeta', req));
 }
 
 /** @param {object} req */

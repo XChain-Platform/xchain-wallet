@@ -37,6 +37,7 @@ import {
     buildPolicyDraft,
 } from './CoSignerPolicyEditor.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -68,7 +69,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                 if (!a) { setError('Agent account not found.'); return; }
                 setAccount(a);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load the agent account.'); });
+            .catch((err) => { if (!cancelled) setError(userFacingMessage(err, 'Failed to load the agent account.')); });
         return () => { cancelled = true; };
     }, [accountId, messaging]);
 
@@ -83,7 +84,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
             });
             setAccount(updated);
         } catch (err) {
-            setError(err?.message || 'Failed to update the agent account.');
+            setError(userFacingMessage(err, 'Failed to update the agent account.'));
         } finally {
             setBusy(false);
         }
@@ -113,7 +114,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
             setAccount(updated);
             setEditing(false);
         } catch (err) {
-            setEditError(err?.message || 'Failed to save changes.');
+            setEditError(userFacingMessage(err, 'Failed to save changes.'));
         } finally {
             setBusy(false);
         }

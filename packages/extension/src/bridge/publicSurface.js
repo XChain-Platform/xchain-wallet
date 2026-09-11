@@ -34,7 +34,7 @@
 
 // Every public bridge handler name starts with this namespace. Anything
 // outside it is privileged and must never be invoked by a web origin.
-export const PUBLIC_BRIDGE_PREFIX = 'bridge.';
+const PUBLIC_BRIDGE_PREFIX = 'bridge.';
 
 /**
  * True when `type` is a public, web-reachable bridge message type.
@@ -56,6 +56,22 @@ export function isPublicBridgeType(type) {
  * reliable discriminator because the extension's own full-screen UI also
  * runs inside a tab, so we key strictly on the sender origin matching our
  * own extension id. Missing/opaque sender info fails closed (untrusted).
+ *
+ * CHROMIUM ONLY, and that is a live constraint rather than an oversight.
+ * The expected origin is built from a literal `chrome-extension://` scheme,
+ * so on Gecko this refuses the extension's OWN popup: Firefox serves
+ * extension pages from `moz-extension://<uuid>` while `runtime.id` is the
+ * gecko id, which appears in no URL, and it omits `sender.origin` besides,
+ * so neither branch below can match. It fails closed (a dead privileged
+ * surface and a dead signer-bridge port, never an open one), but silently
+ * apart from a FORBIDDEN_SENDER envelope.
+ *
+ * manifest.json's `browser_specific_settings.gecko.id` is VESTIGIAL today:
+ * no Firefox build or release lane exists in this repo. Enabling one means
+ * deriving the expected origin from the runtime (the origin of
+ * `runtime.getURL('/')`) rather than this literal, and updating the
+ * moz-extension case in test/unit/bridge/web-origin-trust-boundary.test.js,
+ * which pins today's refusal so that change is a deliberate act.
  *
  * @param {{ origin?: string, url?: string } | null | undefined} sender
  * @param {string | null | undefined} runtimeId   chrome.runtime.id

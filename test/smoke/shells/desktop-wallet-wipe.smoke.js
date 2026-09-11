@@ -239,7 +239,7 @@ assert.ok(
     'main/index.js registers the xchain:wipe-storage channel',
 );
 assert.ok(
-    /isTrustedSenderEvent\(event\)/.test(wipeHandler.slice(0, 400)),
+    /isTrustedSender\(event\)/.test(wipeHandler.slice(0, 400)),
     'the wipe channel is gated on a trusted sender: a remote frame cannot nuke a wallet',
 );
 assert.ok(

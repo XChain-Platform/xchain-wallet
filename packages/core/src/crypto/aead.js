@@ -57,12 +57,34 @@ export async function encrypt(key, plaintext, aad) {
 }
 
 /**
- * Decrypt a blob produced by `encrypt`. Throws on auth failure.
+ * A GCM tag mismatch: the key, the AAD or the ciphertext is wrong. Callers
+ * decide "wrong password" on THIS, not on error text. Sniffing the message
+ * instead ("auth", "tag", "OperationError") also matches storage and
+ * application errors that have nothing to do with authentication, and the
+ * unlock path charged those to its lockout throttle.
+ *
+ * Matched by `name` rather than `instanceof`, because these errors cross the
+ * shell messaging boundary as plain objects. The message is the underlying
+ * library's, unchanged, so existing message-based handling still behaves.
+ */
+export class AeadAuthError extends Error {
+    /** @param {unknown} cause */
+    constructor(cause) {
+        super(/** @type {any} */ (cause)?.message || 'aead: authentication failed');
+        this.name = 'AeadAuthError';
+        this.cause = cause;
+    }
+}
+
+/**
+ * Decrypt a blob produced by `encrypt`.
  *
  * @param {Uint8Array} key
  * @param {Uint8Array} blob       iv || ciphertext(||tag)
  * @param {Uint8Array} [aad]
  * @returns {Promise<Uint8Array>}
+ * @throws {AeadAuthError} on a tag mismatch; a plain Error for a bad key or a
+ *   malformed blob, which are programming or format faults, not auth failures
  */
 export async function decrypt(key, blob, aad) {
     assertKey(key);
@@ -72,7 +94,13 @@ export async function decrypt(key, blob, aad) {
     const iv = blob.subarray(0, IV_LENGTH);
     const ct = blob.subarray(IV_LENGTH);
     const cipher = gcm(key, iv, aad && aad.length > 0 ? aad : undefined);
-    return cipher.decrypt(ct);
+    // Key and length are pre-checked above, so what is left here is the tag
+    // comparison; type it rather than leave callers reading the message.
+    try {
+        return cipher.decrypt(ct);
+    } catch (err) {
+        throw new AeadAuthError(err);
+    }
 }
 
 function assertKey(key) {

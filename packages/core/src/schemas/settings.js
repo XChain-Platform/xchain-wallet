@@ -191,7 +191,7 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
  * @property {Record<string, FeeSettings>} fees
  * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean, priceDataEnabled?: boolean, metadataFetchEnabled?: boolean }} privacy   v2: adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant (0-600 inclusive, 0 = never clear, default 60, §17.7.1 / G028); hapticsEnabled is v2-tolerant (defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference, Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant (defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier, Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant (defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS, Cluster P FOLLOWUP 6); priceDataEnabled is v2-tolerant (defaults true; when false the price oracle is disabled and the TokenDetail stats strip / chart hide for native coins, sends a request to a third-party API revealing wallet activity, hence the opt-out).
  * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
- * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean, governancePolls?: boolean, deadlines?: boolean, dispenserEscrow?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action) and governancePolls (v2-tolerant, defaults true; notify when a new VOTE poll opens over a held token, binding polls flagged)
+ * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean, governancePolls?: boolean, deadlines?: boolean, dispenserEscrow?: boolean, incomingPending?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action) and governancePolls (v2-tolerant, defaults true; notify when a new VOTE poll opens over a held token, binding polls flagged); incomingPending is v2-tolerant, defaults true; notify when a watched address has an INCOMING payment sitting in the mempool, before it confirms
  * @property {boolean} developerMode
  * @property {boolean} learnMode
  * @property {{ undoSendSeconds: number, testSendThresholdSats: number }} grace                              v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
@@ -215,6 +215,7 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
  * @property {object[]} [customChains]                                                                       v2-tolerant: user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
  * @property {boolean} [showFiatInHistory] v2-tolerant. When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
  * @property {{ enabled: boolean, start: string, end: string }} [quietHours] v2-tolerant. Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
+ * @property {{ enabled: boolean, perKind: Record<string, string> }} [sounds] v2-tolerant. Event sounds (spec §6 M4.2). TOP-LEVEL, never nested under the notification flags: the sparse merge is one level deep, so nesting would freeze the whole flag block on the first picker change. `enabled` is the master switch and defaults FALSE (ruling I-35a: audio is opt-in, no surprise noise on upgrade). `perKind` maps a notification family key (the `SOUND_FAMILIES` keys, which are the notification flag names) to a palette sound id or the sentinel 'none' (that family muted while the master stays on); a family absent from the map plays its palette default, and an id the palette no longer knows resolves to that default at read time (`pickedSoundForFamily`) rather than failing validation, so a palette rename can never make a stored record unreadable.
  */
 
 // Form-draft retention (surfaced in Settings > Privacy, Cluster P FU 6).
@@ -298,6 +299,7 @@ export function createDefaultSettings() {
             governancePolls: true,
             deadlines: true,
             dispenserEscrow: true,
+            incomingPending: true,
         },
         developerMode: false,
         learnMode: false,
@@ -321,6 +323,10 @@ export function createDefaultSettings() {
         walletMode: WALLET_MODE_DEFAULT,
         partnerPairing: null,
         activeNetwork: NETWORK_DEFAULT,
+        // Event sounds (§6 M4.2). Silent out of the box; every family's
+        // sound comes from the palette default until the user picks one,
+        // so an empty `perKind` is the fully-configured state, not a gap.
+        sounds: { enabled: false, perKind: {} },
     };
 }
 
@@ -456,7 +462,9 @@ export function validateSettings(record) {
             // v2-tolerant: older records predate the deadlines flag (PC-45).
             (r.notifications.deadlines == null || isBoolean(r.notifications.deadlines)) &&
             // v2-tolerant: older records predate the dispenserEscrow flag (PC-46).
-            (r.notifications.dispenserEscrow == null || isBoolean(r.notifications.dispenserEscrow)),
+            (r.notifications.dispenserEscrow == null || isBoolean(r.notifications.dispenserEscrow)) &&
+            // v2-tolerant: older records predate the incomingPending flag (M3.2).
+            (r.notifications.incomingPending == null || isBoolean(r.notifications.incomingPending)),
         'malformed',
     );
 
@@ -674,6 +682,23 @@ export function validateSettings(record) {
                 && QUIET_HOURS_TIME_RE.test(r.quietHours.start)
                 && QUIET_HOURS_TIME_RE.test(r.quietHours.end),
             "must be { enabled: boolean, start: 'HH:MM', end: 'HH:MM' } when present",
+        );
+    }
+    // §6 M4.2 event sounds. Additive TOP-LEVEL field, so no version bump
+    // and no migration: an absent `sounds` inflates to the silent default.
+    // The value grammar is deliberately loose (ruling I-75): any family
+    // key, any non-empty id, because a palette rename must never make a
+    // stored record unreadable. An id the palette no longer knows falls
+    // back to the family default at read time (`pickedSoundForFamily`)
+    // rather than failing validation here.
+    if (r.sounds !== undefined) {
+        check(
+            errors,
+            'sounds',
+            isPlainObject(r.sounds)
+                && isBoolean(r.sounds.enabled)
+                && isRecordOf(r.sounds.perKind, isNonEmptyString),
+            'must be { enabled: boolean, perKind: Record<familyKey, soundId> } when present',
         );
     }
     if (r.customChains !== undefined) {

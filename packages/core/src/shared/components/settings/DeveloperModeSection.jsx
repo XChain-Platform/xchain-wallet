@@ -234,7 +234,7 @@ function RegtestNetworksRow({ developerMode, fees }) {
         <div style={REGTEST_BLOCK}>
             <div style={{ fontWeight: 600, color: 'var(--xc-text)' }}>Regtest networks</div>
             <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                Activate a bundled regtest descriptor on this wallet. Seeds the per-chain fee + ADS records and derives the first address on the new chain across every existing account.
+                Activate a bundled regtest descriptor on this wallet. Seeds the per-chain fee and donation records and derives the first address on the new chain across every existing account.
                 {!developerMode ? ' Turn Developer Mode on to enable activation.' : ''}
             </div>
             {regtests.map((d) => (
@@ -656,6 +656,18 @@ function CustomChainsRow({ developerMode }) {
         try {
             const r = await messaging.addCustomChain({ descriptor });
             const id = r?.descriptor?.id || descriptor?.id || '(unknown)';
+            // The host registered the chain in ITS realm; in the popup and
+            // desktop renderer this realm's registry is a separate instance,
+            // so install the accepted descriptor here too or the endpoint
+            // editor and pickers keep omitting it until the next settings
+            // read. The web shell shares one instance, where has() makes
+            // this a no-op.
+            try {
+                const accepted = r?.descriptor ?? descriptor;
+                if (typeof accepted?.id === 'string' && !chainRegistry.has(accepted.id)) {
+                    chainRegistry.addCustom(accepted);
+                }
+            } catch { /* host already accepted the chain; the next read re-hydrates */ }
             setStatusText(`Added "${id}".`);
             setPasted('');
             setOpen(false);
@@ -678,6 +690,11 @@ function CustomChainsRow({ developerMode }) {
         setStatusText(null);
         try {
             await messaging.removeCustomChain({ chainId });
+            // Mirror the removal into this realm's registry; only a
+            // user-added entry is touched (removeCustom throws for bundled ids).
+            try {
+                if (chainRegistry.get(chainId)?.isUserAdded) chainRegistry.removeCustom(chainId);
+            } catch { /* bundled or already gone: nothing to mirror */ }
             setStatusText(`Removed "${chainId}".`);
             await refresh();
         } catch (err) {

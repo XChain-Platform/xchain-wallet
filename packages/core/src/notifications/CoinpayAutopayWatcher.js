@@ -335,17 +335,25 @@ export class CoinpayAutopayWatcher {
         /** @type {Map<string, object[]>} block_index -> order_matches rows (memo per cycle) */
         const matchesByBlock = new Map();
 
-        for (const [address, addrConsents] of byAddress.entries()) {
-            let rows;
-            try {
-                const resp = await getCoinpayObligationsForAddress({
-                    sdkRegistry: this._sdkRegistry, chainId, address,
-                });
-                rows = extractCoinpayRows(resp);
-            } catch (e) {
-                this._log.warn(`CoinpayAutopayWatcher: obligation read failed for ${chainId}`, e);
-                continue;
-            }
+        // Read every address's obligations in one go, BEFORE handling any of
+        // them: issued in the same tick, the reads land in one coalescing
+        // window and reach the explorer as one batch request per chain instead
+        // of one per address. A failed read yields null for that address and
+        // is skipped below, as the sequential loop skipped it. Handling stays
+        // sequential and in consent order on purpose: it reserves, signs and
+        // holds, and shares the per-cycle match memo.
+        const addresses = Array.from(byAddress.keys());
+        const reads = await Promise.all(addresses.map((address) => getCoinpayObligationsForAddress({
+            sdkRegistry: this._sdkRegistry, chainId, address,
+        }).then(extractCoinpayRows, (e) => {
+            this._log.warn(`CoinpayAutopayWatcher: obligation read failed for ${chainId}`, e);
+            return null;
+        })));
+
+        for (const [i, address] of addresses.entries()) {
+            const rows = reads[i];
+            if (!rows) continue;
+            const addrConsents = byAddress.get(address);
             for (const row of rows) {
                 const payer = row.payer_address ?? row.payerAddress;
                 if (payer !== address) continue;
@@ -624,7 +632,7 @@ export class CoinpayAutopayWatcher {
                 return `A match on ${orderRef} is close to its payment deadline and auto-pay has stood down. Pay${amount ? ` ${amount}` : ''} manually from Payments due now.`;
             case 'amounts-unavailable':
             case 'match-unavailable':
-                return `A match on ${orderRef} could not be verified against the indexer. Review and pay manually from Payments due.`;
+                return `A match on ${orderRef} could not be verified with the service. Review and pay manually from Payments due.`;
             default:
                 return `A match on ${orderRef} needs a manual payment. Open Payments due to review it.`;
         }

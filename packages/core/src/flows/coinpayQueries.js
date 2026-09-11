@@ -20,10 +20,129 @@
 // payer side to build the queue.
 
 import { obligationBaseUnits } from '../market/obligationStatus.js';
+import {
+    BATCH_FEATURE_COINPAY,
+    isBatchShape,
+    isBatchUnsupported,
+    isBatchUnsupportedError,
+    rememberBatchUnsupported,
+    _resetBatchSupportMemo,
+} from './balances.js';
 
 /**
  * @typedef {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} SdkCtx
  */
+
+/**
+ * How long a coalescing window stays open.
+ *
+ * The badge scan fires one call per (chain, address) pair from a single
+ * `Promise.all`, so every call of a scan is already on the same tick; a window
+ * only has to outlast that tick, not wait for a later one. 25 ms is short
+ * enough that a lone caller (the sign-time re-read below) pays a delay nobody
+ * can perceive, and long enough that no scan is ever split across two windows.
+ */
+export const COINPAY_BATCH_WINDOW_MS = 25;
+
+/** Most addresses one batch request may carry; the explorer's own ceiling. */
+export const COINPAY_BATCH_MAX_ADDRESSES = 20;
+
+/**
+ * Windows currently open, one per (SDK instance, chainId).
+ *
+ * A plain Set scanned linearly rather than a keyed map, because the key is a
+ * PAIR whose first half is an object identity: at most a handful of chains can
+ * have a window open inside 25 ms, so the scan is cheaper than the composite
+ * key it would replace, and clearing the set is all a test reset has to do.
+ *
+ * @type {Set<{ sdk: object, chainId: string, addresses: string[], resolvers: {resolve: Function, reject: Function}[], opts: object | undefined, timer: * }>}
+ */
+const openWindows = new Set();
+
+/**
+ * Test hook: drop every open window and forget which SDK instances answered
+ * 404. Without it a pending timer, or a memo a 404 test earned, would decide
+ * the next test's path. Callers still waiting on a dropped window are left
+ * unsettled by design; a test resets between cases, not mid-flight.
+ */
+export function _resetCoinpayBatching() {
+    for (const w of openWindows) if (w.timer) clearTimeout(w.timer);
+    openWindows.clear();
+    _resetBatchSupportMemo();
+}
+
+/** The per-address read: what every fallback path serves. */
+function readOneAddress(sdk, address, opts) {
+    return sdk.getCoinpayObligations(address, 'address', opts);
+}
+
+// One address's slot in a batch response. A slot with no body is that
+// caller's failure and nobody else's, so only that caller is rejected.
+function bodyOrThrow(slot, address) {
+    if (slot && slot.coinpay_obligations != null) return slot.coinpay_obligations;
+    const err = slot && slot.error ? slot.error : null;
+    const e = new Error(String((err && err.error) || `no coinpay batch result for ${address}`));
+    if (err && typeof err.code === 'string') e.code = err.code;
+    if (err && err.status != null) e.status = err.status;
+    throw e;
+}
+
+// One POST for up to COINPAY_BATCH_MAX_ADDRESSES addresses of one chain.
+async function runCoinpayChunk({ sdk, addresses, resolvers, opts }) {
+    // An explorer (or a stand-in SDK) without the batch route. Remember the
+    // instance so no later window even arms, and serve these callers the old
+    // way once so the scan they belong to still answers.
+    const fallBack = () => {
+        rememberBatchUnsupported(sdk, BATCH_FEATURE_COINPAY);
+        return Promise.all(resolvers.map((r, i) => readOneAddress(sdk, addresses[i], opts)
+            .then(r.resolve, r.reject)));
+    };
+    let resp;
+    try {
+        // Deduplicated for the request only: the response is keyed by address,
+        // so two callers asking for the same address still each find their
+        // slot, and the duplicate does not eat one of the twenty.
+        resp = await sdk.getCoinpayObligationsBatch([...new Set(addresses)], opts);
+    } catch (e) {
+        if (e && isBatchUnsupportedError(e)) {
+            await fallBack();
+            return;
+        }
+        // Any other failure is the whole request's. Re-issuing per address
+        // would fire the reads the batch replaced, which on a 429 is the burst
+        // that earns the next one; the badge hook already catches per address.
+        for (const r of resolvers) r.reject(e);
+        return;
+    }
+    // A reply that is not the batch shape (the dev-mock SDK's empty list, see
+    // isBatchShape) is the same "no route" verdict the 404 gives.
+    if (!isBatchShape(resp, addresses[0])) {
+        await fallBack();
+        return;
+    }
+    resolvers.forEach((r, i) => {
+        try {
+            r.resolve(bodyOrThrow(resp ? resp[addresses[i]] : null, addresses[i]));
+        } catch (e) {
+            r.reject(e);
+        }
+    });
+}
+
+// Close a window: take its callers, split them into requests of at most
+// COINPAY_BATCH_MAX_ADDRESSES, and answer each caller from its own slot.
+function flushWindow(w) {
+    openWindows.delete(w);
+    const { sdk, addresses, resolvers, opts } = w;
+    for (let i = 0; i < addresses.length; i += COINPAY_BATCH_MAX_ADDRESSES) {
+        runCoinpayChunk({
+            sdk,
+            addresses: addresses.slice(i, i + COINPAY_BATCH_MAX_ADDRESSES),
+            resolvers: resolvers.slice(i, i + COINPAY_BATCH_MAX_ADDRESSES),
+            opts,
+        });
+    }
+}
 
 /**
  * Obligations touching `address` on `chainId`. The explorer joins
@@ -32,6 +151,19 @@ import { obligationBaseUnits } from '../market/obligationStatus.js';
  * (`pending_coinpay`, `fulfilled`, `expired`, `invalid`). The caller
  * filters to `pending_coinpay` and `payer_address === address` to
  * build the user's outstanding-payment queue.
+ *
+ * The signature and the answer are unchanged; what changed is how many
+ * requests N callers cost. Calls landing within COINPAY_BATCH_WINDOW_MS on the
+ * same (SDK instance, chain) are answered by ONE request, so the badge scan of
+ * a five-address wallet is one read per chain instead of five. Callers of a
+ * chain whose SDK or explorer has no batch route go straight to the
+ * per-address read with no window at all, so that path gains no latency.
+ *
+ * `opts` is taken from the FIRST caller in a window and applies to the whole
+ * request, which is honest only because every wallet caller passes none (the
+ * badge hook, the CoinpayForm scan, the autopay watcher and the sign-time
+ * re-read below). A caller that needs its own paging should read the SDK
+ * directly rather than expect a window to keep two sets of query options.
  *
  * @param {SdkCtx & { address: string, opts?: object }} params
  */
@@ -42,7 +174,22 @@ export async function getCoinpayObligationsForAddress({ sdkRegistry, chainId, ad
         throw new Error('getCoinpayObligationsForAddress: address is required');
     }
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getCoinpayObligations(address, 'address', opts);
+    const canBatch = sdk && typeof sdk.getCoinpayObligationsBatch === 'function'
+        && !isBatchUnsupported(sdk, BATCH_FEATURE_COINPAY);
+    if (!canBatch) return readOneAddress(sdk, address, opts);
+    return new Promise((resolve, reject) => {
+        let w = null;
+        for (const open of openWindows) {
+            if (open.sdk === sdk && open.chainId === chainId) { w = open; break; }
+        }
+        if (!w) {
+            w = { sdk, chainId, addresses: [], resolvers: [], opts, timer: null };
+            openWindows.add(w);
+            w.timer = setTimeout(() => flushWindow(w), COINPAY_BATCH_WINDOW_MS);
+        }
+        w.addresses.push(address);
+        w.resolvers.push({ resolve, reject });
+    });
 }
 
 // The explorer has returned obligations under several envelope shapes over

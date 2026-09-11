@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -18,6 +18,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { GatedPublishForm } from './GatedPublishForm.jsx';
 import {
@@ -28,8 +29,22 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/**
+ * The file bytes as the Latin-1 binary string the encoder rebuilds verbatim
+ * (Buffer.from(rawData, 'binary')).
+ *
+ * @param {Uint8Array} bytes
+ */
+function latin1Of(bytes) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) out += String.fromCharCode(bytes[i]);
+    return out;
+}
 
 /**
  * PC-28 unified "Publish file" form, reachable from ActionsMenu (no
@@ -87,6 +102,7 @@ export function PublishFileForm({ walletId, onBack }) {
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -264,6 +280,79 @@ export function PublishFileForm({ walletId, onBack }) {
         reader.readAsArrayBuffer(file);
     }
 
+    // §5.6: a publish is permanent and a chunked FILE is among the largest
+    // payloads the encoder builds, so the output-set tamper check and the
+    // pre-flight panel matter here more than anywhere. Watcher keeps the
+    // legacy review stage.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = !isWatcherMode;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'fileAction',
+        hardware: 'fileActionHw',
+    });
+
+    // Compose, tamper-check and pre-flight run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const rawData = latin1Of(fileMeta.bytes);
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        // The same params flows/fileAction.js builds, so the previewed and
+        // the submitted composition cannot drift (PC-28).
+        const params = flowsLib.fileActionParams({
+            name: fileMeta.name, type: fileMeta.type, title, memo,
+        });
+        setSubmitError(null);
+        try {
+            const r = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'FILE', params },
+                encoderOpts: {
+                    rawData,
+                    payFeeInNativeCoin: nativeFee.flag || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                onApprove: (prebuiltPsbt) => submitConfirmed({
+                    walletId,
+                    chainId,
+                    from,
+                    name: fileMeta.name,
+                    type: fileMeta.type,
+                    title: title.trim() || undefined,
+                    memo: memo.trim() || undefined,
+                    rawData,
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(r);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(submitFailureMessage(err, {
+                chainId,
+                coinTicker,
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Publish failed.',
+            }));
+        }
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!fileMeta) { setFormError('Pick a file first.'); return; }
@@ -288,6 +377,7 @@ export function PublishFileForm({ walletId, onBack }) {
         }
         setFormError(null);
         setSubmitError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -299,12 +389,7 @@ export function PublishFileForm({ walletId, onBack }) {
         setStage('submitting');
         setSubmitError(null);
         try {
-            // Latin-1 binary string; the encoder rebuilds the exact bytes
-            // via Buffer.from(rawData, 'binary').
-            let rawData = '';
-            for (let i = 0; i < fileMeta.bytes.length; i += 1) {
-                rawData += String.fromCharCode(fileMeta.bytes[i]);
-            }
+            const rawData = latin1Of(fileMeta.bytes);
             const from = {
                 address: fromAddress.address,
                 publicKey: fromAddress.publicKey,
@@ -412,6 +497,31 @@ export function PublishFileForm({ walletId, onBack }) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
     }
 
+    // Confirm page, rendered in place of the form; the picked file and the
+    // typed metadata stay intact behind it.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (stage === 'done') {
         // The encoder REPORTS what compression did; the wallet must not infer it,
         // because with the default ON neither asking nor not asking tells you what
@@ -429,6 +539,12 @@ export function PublishFileForm({ walletId, onBack }) {
             );
         }
         const txid = result?.txid || result?.broadcast?.txid || null;
+        // A queued result is SIGNED and not broadcast: the confirm lane
+        // resolves a transient broadcast failure that way, and "File
+        // published" would claim a permanent publish that never happened.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="file publish" />);
+        }
         return wrap(
             <>
                 <h2 className={styles.successTitle}>File published</h2>
@@ -716,8 +832,13 @@ export function PublishFileForm({ walletId, onBack }) {
                         <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
                     ) : null}
                     <div className={styles.actions}>
-                        <Button type="submit" variant="primary" disabled={!fileMeta || !fromAddress}>
-                            Review publish
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={actionConfirm.composing}
+                            disabled={!fileMeta || !fromAddress || actionConfirm.composing}
+                        >
+                            {singleEncode ? 'Publish file' : 'Review publish'}
                         </Button>
                     </div>
                 </>

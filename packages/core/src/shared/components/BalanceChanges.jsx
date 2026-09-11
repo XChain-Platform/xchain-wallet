@@ -92,6 +92,52 @@ export function BalanceChanges({ result, loading = false, error = null, title = 
 }
 
 function DeltaRow({ delta }) {
+    // A fee the wallet could not read. It has no amount and no post-state to
+    // print, and the branches below would render "( BTC undefined)" or a bare
+    // arrow for it. Say unknown, which is the fact.
+    if (delta.isFee && delta.feeUnknown) {
+        return (
+            <div
+                className={styles.row}
+                data-fee="true"
+                data-fee-unknown="true"
+                data-coin={delta.isCoin ? 'true' : undefined}
+            >
+                <dt className={styles.tick}>{delta.feeLabel || 'Network fee'}</dt>
+                <dd className={styles.amount}>
+                    {delta.before !== '' ? (
+                        <>
+                            <span className={styles.before}>{delta.before}</span>
+                            <span className={styles.arrow}>→</span>
+                            <span className={styles.after}>unknown</span>
+                        </>
+                    ) : (
+                        <span className={styles.feeAmount}>unknown</span>
+                    )}
+                </dd>
+            </div>
+        );
+    }
+    // The paired balance row: `before` is real, `after` is not projectable
+    // because the miner fee above is unknown. directionOf would read the empty
+    // string as 0 and colour it as a total debit, so this branch comes first.
+    if (!delta.isFee && delta.afterUnknown) {
+        return (
+            <div
+                className={styles.row}
+                data-coin={delta.isCoin ? 'true' : undefined}
+                data-direction="flat"
+                data-after-unknown="true"
+            >
+                <dt className={styles.tick}>Your {delta.tick}</dt>
+                <dd className={styles.amount}>
+                    <span className={styles.before}>{delta.before}</span>
+                    <span className={styles.arrow}>→</span>
+                    <span className={styles.after}>unknown</span>
+                </dd>
+            </div>
+        );
+    }
     if (delta.isFee) {
         // Label-only row carries `feeAmount` and no before/after. Paired
         // with a coin-debit row above it. When emitted standalone (action

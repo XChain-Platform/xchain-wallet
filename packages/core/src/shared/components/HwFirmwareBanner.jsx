@@ -86,21 +86,3 @@ export function HwFirmwareBanner({ signerInfo }) {
         </div>
     );
 }
-
-/**
- * Helper for callers that need to know whether the form's submit should
- * be hard-gated on a firmware update. Mirrors the verdict's `unsupported`
- * status. The user must update before this wallet release will sign.
- *
- * @param {{ vendor: string, model: string, firmwareVersion: string | null } | null | undefined} signerInfo
- * @returns {boolean}
- */
-export function isFirmwareSignBlocked(signerInfo) {
-    if (!signerInfo?.vendor || !signerInfo?.model) return false;
-    const verdict = checkFirmware({
-        vendor: signerInfo.vendor,
-        model: signerInfo.model,
-        version: signerInfo.firmwareVersion ?? '',
-    });
-    return verdict.status === 'unsupported';
-}

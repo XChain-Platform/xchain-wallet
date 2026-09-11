@@ -41,6 +41,7 @@ import {
     attachChromeRuntime,
     attachSessionMetaListener,
     attachSignerBridgeListener,
+    attachWipeStorageListener,
     createBackgroundHost,
     createConnectedTabRegistry,
     createDevMockSdk as createDevMockSdkImpl,
@@ -62,7 +63,7 @@ import {
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { handleWalletLock } from './background/walletLock.js';
+import { createLockBackstop } from './background/walletLock.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -228,11 +229,33 @@ async function ensureHost() {
         // No unlocked session. The popup must unlock + re-init the host.
         return null;
     }
-    vault = new storageLib.Vault({
-        backend: new ChromeStorageBackend(),
-        masterKey,
-    });
-    await vault.open();
+    // Zero the loaded buffer once the Vault has taken its private copy; the
+    // constructor copies, and `vault.close()` only clears that copy. Leaving
+    // this one to the collector keeps plaintext key bytes in worker heap for
+    // the whole unlocked session, against the fill(0) convention every other
+    // key-loading path here follows.
+    try {
+        vault = new storageLib.Vault({
+            backend: new ChromeStorageBackend(),
+            masterKey,
+        });
+    } finally {
+        masterKey.fill(0);
+    }
+    // Guard vault.open() only: a later failure (a watcher, the panic-mode load)
+    // leaves the key valid, so force-locking there would cost a usable session.
+    try {
+        await vault.open();
+    } catch (err) {
+        // Lock rather than leave a half-rehydrated session: a key that cannot open
+        // the vault proves nothing and sits beside the signing-capable password.
+        try {
+            await lockWalletNow();
+        } catch (rollbackErr) {
+            console.error('[xchain] ensureHost rollback after vault.open failed:', rollbackErr);
+        }
+        throw err;
+    }
 
     // Re-populate the SignerPool after a service-worker restart. On the
     // normal unlock path the pre-host handler already filled the pool while
@@ -535,25 +558,23 @@ function noteAutoLockActivity() {
     stampAutoLockActivity(now).catch(() => { /* best-effort */ });
 }
 
-async function lockWalletNow() {
-    await clearAutoLockState();
-    await handleWalletLock(null, {
+// Lock sequencing (retry record kept across a lock that left a secret behind)
+// lives in walletLock.js so it can be imported and driven by a test; this
+// module registers chrome.* listeners at load and cannot be.
+const lockBackstop = createLockBackstop({
+    // Built per attempt: a lock that left a secret behind gets retried.
+    lockDeps: () => ({
         sessionBackend: new ChromeSessionBackend(),
         signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
-        onLocked: () => tearDownHost(),
-    });
-}
+    }),
+    tearDownHost: () => tearDownHost(),
+    isUnlocked: () => Boolean(host && vault),
+    readAutoLockState,
+    clearAutoLockState,
+    shouldAutoLock,
+});
 
-async function maybeAutoLock() {
-    if (!host || !vault) return;  // already locked; nothing to do
-    let state;
-    try { state = await readAutoLockState(); } catch { return; }
-    if (!shouldAutoLock(state, Date.now())) return;
-    console.log('[xchain] auto-lock: idle timeout reached, locking wallet');
-    try { await lockWalletNow(); } catch (err) {
-        console.error('[xchain] auto-lock lock failed:', err);
-    }
-}
+const { lockWalletNow, maybeAutoLock } = lockBackstop;
 
 // Pre-host listener runs before the vault is open so the popup can ask
 // "no-wallet / locked / unlocked?" and perform `wallet.unlock`. Both
@@ -572,14 +593,14 @@ attachSessionMetaListener({
         // backstop (with the correct idleMs + demo-skip) once Home mounts.
         clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
+        lockBackstop.noteUnlocked();
         return ensureHost().catch((err) => {
             console.error('[xchain] ensureHost after unlock failed:', err);
         });
     },
-    onLocked: () => {
-        clearAutoLockState().catch(() => { /* best-effort */ });
-        tearDownHost();
-    },
+    // Keeps the auto-lock record (and tears the host down) per the backstop's
+    // rule: a secret that survived the clear leaves the idle alarm the job.
+    onLocked: (result) => lockBackstop.onLocked(result),
 });
 
 // Signer bridge: always on, independent of vault unlock state. The
@@ -588,6 +609,14 @@ attachSessionMetaListener({
 // `signerBridge` so `action.send.hw` / `signer.status` handlers can
 // route sign requests to the renderer-hosted signer.
 attachSignerBridgeListener();
+
+// "Wipe wallet data": always on, and pre-host on purpose. The escapes that
+// reach it (Locked "Forgot password", the corrupt-vault WIPE, demo exit)
+// all run with the vault CLOSED, so it cannot live behind ensureHost. The
+// teardown is the second half of the wipe: clearing chrome.storage while
+// the worker still holds an open vault and a warm signer pool leaves the
+// wiped wallet serving.
+attachWipeStorageListener({ onWiped: () => tearDownHost() });
 
 // §46: MV3 keepalive. Chrome evicts an idle service worker after ~30s, which
 // would silently tear down the notification WebSocket. A periodic alarm wakes

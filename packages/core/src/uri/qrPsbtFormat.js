@@ -27,8 +27,6 @@
 // flags any of them; it is retained for any future format added ahead
 // of its decoder.
 
-export const QR_PSBT_FORMATS = /** @type {const} */ (['xcw', 'bbqr', 'ur']);
-
 /**
  * @param {string} frame
  * @returns {'xcw' | 'bbqr' | 'ur' | null}

@@ -133,10 +133,10 @@ export function TxStatusTimeline({
     const indexed = confirmed && (watermark > 0 ? watermark >= blockIndex : true);
     const indexedSub = indexed
         ? (watermark > 0
-            ? `Fully processed · indexer at block ${watermark.toLocaleString()}`
+            ? `Fully processed · the service has reached block ${watermark.toLocaleString()}`
             : 'Fully processed and searchable')
         : (confirmed
-            ? 'Indexer is still catching up to this block'
+            ? 'The service is still catching up to this block'
             : 'Waiting to confirm before it can be processed');
     const confirmedSubBase = confirmed && timestamp > 0
         ? relativeTime(timestamp)

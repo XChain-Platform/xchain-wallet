@@ -166,7 +166,7 @@ export function ConnectedSitesSection() {
     return (
         <div style={STACK}>
             {(!sites || sites.length === 0) ? (
-                <Status text="No dApps connected. Sites that call window.xchain.connect appear here." />
+                <Status text="No sites connected yet. When a website asks to connect to this wallet and you allow it, it appears here." />
             ) : (
                 sites.map((site) => {
                     const isOpen = expanded.has(site.id);

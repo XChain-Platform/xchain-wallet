@@ -117,6 +117,15 @@ run_tier "drift: wallet<->SDK derivation parity" \
   env XCHAIN_REQUIRE_SIBLINGS=1 \
   pnpm exec vitest run --config test/vitest/integration.config.js \
     test/integration/hd/wallet-sdk-derivation-parity.test.js
+# Same escape, second site: PreflightPanel hand-copies the Tier-1 finding codes
+# and the report schema version, and xchain-sdk/src/preflight/constants.js names
+# that test as the enforcement point of its additive-only promise. It also runs
+# non-strict inside the `test` tier above, where an unresolvable SDK is a skip;
+# only here can that skip become a failure.
+run_tier "drift: wallet<->SDK preflight schema/code parity" \
+  env XCHAIN_REQUIRE_SIBLINGS=1 \
+  pnpm exec vitest run --config test/vitest/unit.config.js \
+    test/unit/components/PreflightPanel.tier1Notice.test.jsx
 run_tier "drift: wallet<->hub chain-registry snapshot" \
   node bin/sync-chain-registry.mjs --check
 

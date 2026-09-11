@@ -97,6 +97,22 @@ export function decimalStringFromSats(sats) {
     const frac = (clamped % 100000000n).toString().padStart(8, '0').replace(/0+$/, '');
     return frac ? `${whole}.${frac}` : whole;
 }
+
+// The Max amount for a NON-native (token) balance: the balance string itself, validated
+// as a plain non-zero decimal, or null when it is neither.
+//
+// The two helpers above are fixed at the 8-dp satoshi grid, which is right for a coin and
+// wrong for a tick: ticks are issued up to MAX_TOKEN_DECIMALS = 18 places, and
+// balanceAdapter already hands this balance over exact at the tick's own divisibility.
+// Round-tripping it through them truncated a '1.000000000000000001' balance to '1' and
+// made Max do nothing at all for any balance below one satoshi, on a string that is what
+// gets signed.
+export function exactTokenMaxAmount(raw) {
+    const s = String(raw === null || raw === undefined ? '' : raw).trim();
+    if (!/^\d+(\.\d+)?$/.test(s)) return null;
+    if (/^0+(\.0+)?$/.test(s)) return null;
+    return s;
+}
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -1231,13 +1247,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const onMax = useCallback(async () => {
         if (maxBusy) return; // a quote is already in flight; a second one would race it into the field
         if (!sourceBalance || !sourceBalance.amount) return;
-        // Exact string/BigInt math: this string is what gets signed, and a
-        // parseFloat round-trip on a large (>~90M-sat DOGE) balance drifts
-        // by whole sats, leaving dust behind or overshooting the balance.
-        const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount);
-        if (balanceSats == null || balanceSats <= 0n) return;
-        let maxSats = balanceSats;
+        let display;
         if (isNativeSend) {
+            // Exact string/BigInt math: this string is what gets signed, and a
+            // parseFloat round-trip on a large (>~90M-sat DOGE) balance drifts
+            // by whole sats, leaving dust behind or overshooting the balance.
+            const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount);
+            if (balanceSats == null || balanceSats <= 0n) return;
+            let maxSats = balanceSats;
             const quoted = await quoteMaxSats();
             if (quoted != null) {
                 maxSats = quoted;
@@ -1245,8 +1262,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount);
                 if (feeSats != null) maxSats = balanceSats > feeSats ? balanceSats - feeSats : 0n;
             }
+            display = decimalStringFromSats(maxSats);
+        } else {
+            // A TOKEN balance is not satoshi-denominated and pays no coin fee out of itself,
+            // so it is swept verbatim at the tick's own divisibility. The 8-dp sats path
+            // truncated anything finer.
+            display = exactTokenMaxAmount(sourceBalance.amount);
+            if (display == null) return;
         }
-        const display = decimalStringFromSats(maxSats);
         setAmount(display);
         if (amountInputMode === 'fiat' && amountFiatRate) {
             const fv = coinToFiat(display, amountFiatRate);
@@ -1565,6 +1588,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         // lane and its fee rides the reveal.
                         deferredFeeOutput: composed.deferredFeeOutput || null,
                         deferredOutputs: composed.deferredOutputs || [],
+                        // See useActionConfirmFlow for both: the reveal's change
+                        // and the donation verdict these bytes actually carry.
+                        revealOpts: composed.revealOpts || null,
+                        adsDonation: { included: !!composed.adsPlan?.canSubmit },
                     };
                     return isHwSource
                         ? messaging.sendAssetHw({

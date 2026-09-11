@@ -1,6 +1,6 @@
 # Regtest integration - `tools/regtest/`
 
-Spec reference: `claude/reports/xchain-wallet/XCHAIN_WALLET_SPEC.md`
+Spec reference: `XCHAIN_WALLET_SPEC.md` (platform tree)
 §52 (testing) and §49 (offline / degraded mode).
 
 This directory holds helpers for running the wallet against a local
@@ -46,7 +46,7 @@ the stack isn't running.
 Full E2E provisioning (one-shot `pnpm test:integration` that brings
 the stack up, runs every relevant test, tears it down) lands
 alongside G163 (E2E Playwright suite against regtest) - pairs with
-this row in `claude/reports/xchain-wallet/SPEC_GAPS.md`.
+this row in `SPEC_GAPS.md` (platform tree).
 
 ## Inputs
 

@@ -35,7 +35,64 @@ import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativ
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
+import { pushPrefixSize } from './fileSizeLimits.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
+import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
+
+// FILE v0's COMPRESSION field index in the full action string, and the encoder's
+// own field-setting rule mirrored byte for byte (pad the optional fields up to
+// it, then drop the trailing empties). Mirrored rather than imported because the
+// encoder is a separate container with no shared module tree; it is used ONLY to
+// re-derive the one string the encoder is allowed to have written, never to
+// compress anything here.
+const COMPRESSION_FIELD_INDEX = 10;
+
+function withCompressionField(actionString, value) {
+    const parts = String(actionString).split('|');
+    while (parts.length <= COMPRESSION_FIELD_INDEX) parts.push('');
+    parts[COMPRESSION_FIELD_INDEX] = String(value == null ? '' : value);
+    while (parts.length > 2 && parts[parts.length - 1] === '') parts.pop();
+    return parts.join('|');
+}
+
+/**
+ * The action string and payload the built PSBT ACTUALLY carries.
+ *
+ * The encoder's transparent FILE compression rewrites the COMPRESSION field and
+ * deflates the payload inside create_tx, so the string this wallet composed is
+ * not the string in the transaction. Stating the composed one made a
+ * compressible FILE upload refuse itself as tampered; re-deriving the written
+ * one LOCALLY is worse, because the reveal then rebuilds from the caller's
+ * uncompressed payload and cannot reproduce the commit's carrier, stranding the
+ * commit. Both halves have to come from the encoder, which now returns them.
+ *
+ * The encoder is the artifact the confirm check polices, so its answer is
+ * VERIFIED, not trusted: the written string must be this wallet's own composed
+ * string with nothing but the COMPRESSION field set to a codec we know, and the
+ * stored payload must be no larger than the bytes handed over. Anything else is
+ * an encoder writing something the user did not approve, and refusing here -
+ * before the modal opens and before any signature - is the recoverable outcome.
+ */
+function carriedPayloadOf(composedActionString, suppliedRawData, compression) {
+    if (!compression || compression.compressed !== true)
+        return { actionString: composedActionString, rawData: suppliedRawData, compressed: false };
+
+    const written = typeof compression.data === 'string' ? compression.data : '';
+    const code = compressionFieldOf(written);
+    if (!written || !declaresDeflateRaw(code)
+        || written !== withCompressionField(composedActionString, code)) {
+        throw new Error(
+            'The action encoded in the transaction does not match what you approved.');
+    }
+
+    const stored = typeof compression.rawData === 'string' ? compression.rawData : null;
+    if (stored !== null && stored.length > rawDataByteLen(suppliedRawData)) {
+        throw new Error(
+            'The action encoded in the transaction does not match what you approved.');
+    }
+
+    return { actionString: written, rawData: stored, compressed: true };
+}
 
 // UTF-8 byte length of a string, portable across the host (Node) and any
 // worker/browser build of core. Used to size the expected carrier-output count
@@ -49,15 +106,62 @@ function byteLen(s) {
     return str.length; // last-resort (ASCII-equivalent)
 }
 
+// Byte length of a rawData payload as the ENCODER will count it. It reads the
+// string with Buffer.from(rawData,'binary'), one character per byte, so the
+// count is the string length. Routing it through byteLen would double every
+// byte >= 0x80 (gated ciphertext, deflate output) and inflate the carrier
+// allowance, which loosens the tamper gate rather than tightening it.
+function rawDataByteLen(raw) {
+    if (raw == null) return 0;
+    if (typeof raw.byteLength === 'number') return raw.byteLength; // Buffer / TypedArray
+    return String(raw).length;
+}
+
+// The compiled-push byte count the encoder chunks into data carriers:
+// bitcoin.script.compile([actionString, rawData]), each push carrying its own
+// minimal length prefix. pushPrefixSize is imported rather than mirrored - it
+// is pinned against bitcoinjs in fileSizeLimits.test.js - and over-counting at
+// a chunk boundary only over-allows, which is safe by design (see
+// expectedCarrierAllowance).
+//
+// Transparent compression shrinks the stored payload, and the reported length
+// is CLAMPED to what the wallet handed over: the encoder is the artifact this
+// allowance polices, so it may only ever make the bound tighter, never wider.
+function compiledPayloadByteLen(actionString, raw, compression) {
+    const a = actionString == null ? 0 : byteLen(actionString);
+    if (raw == null) return a + pushPrefixSize(a);
+    let r = rawDataByteLen(raw);
+    const stored = compression && compression.compressed === true
+        ? Number(compression.storedLength)
+        : NaN;
+    if (Number.isFinite(stored) && stored >= 0) r = Math.min(r, stored);
+    return a + pushPrefixSize(a) + r + pushPrefixSize(r);
+}
+
 /**
+ * The INTERNAL compose result, host-side only.
+ *
+ * Distinct from the `HostComposeEnvelope` that crosses the messaging boundary
+ * (`composeActionForConfirm.js`): that one drops `encoderOpts` and
+ * `carrierScripts` and adds the exact fees, the projection and the decoded
+ * intent. Six fields below were absent from this list while the return already
+ * carried them, and four were typed non-null that the bare-payment lane nulls.
+ * The key set is asserted in `test/unit/flows/composeForConfirm.test.js`.
+ *
  * @typedef {Object} ComposedAction
- * @property {string} actionString
- * @property {string} action
- * @property {number|string} version
+ * @property {string|null} actionString        NULL on a bare native payment (there is no action)
+ * @property {string|null} action              NULL on a bare native payment
+ * @property {number|string|null} version      NULL on a bare native payment
+ * @property {boolean} bareNativePayment       true when the request carries no XChain content
  * @property {string} psbt                     the PSBT hex the modal previews and the signer signs
- * @property {string} encoding                 chosen by the encoder
+ * @property {string|null} encoding            chosen by the encoder; NULL on a bare native payment
  * @property {string[]} carrierScripts         P2SH/P2WSH redeem scripts create_tx committed to; [] off the chunk lanes
  * @property {object|null} quote               native-fee quote, when native-fee mode was active
+ * @property {boolean} payFeeInNativeCoin      read off the quote, not off encoderOpts (which strips it)
+ * @property {{ address: string, value: number|string }|null} deferredFeeOutput  protocol fee the reveal emits
+ * @property {Array<{ address: string, value: number|string }>} deferredOutputs  EVERY output the reveal emits
+ * @property {{ change: string|null, rawData: string|null }|null} revealOpts     what the reveal must be built with
+ * @property {object|null} oracleFeeQuote      Mode B dispenser oracle usage fee quote, when one was priced
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
  * @property {object} encoderOpts              the FINAL encoderOpts used to build the PSBT (fee + ADS folded in)
@@ -169,16 +273,28 @@ export async function composeForConfirm({
     // "address has no coin" failure actionable ("it needs about 20 DOGE"), and
     // this is the last frame that still has it. Stamp it on the way out so the
     // form's message can say the amount.
+    // Named rather than inlined so `revealOpts` below can state the change
+    // address the encoder was ACTUALLY given, defaults included.
+    const builtEncoderOpts = {
+        ...(source ? { sourceAddress: source, change: source } : {}),
+        ...finalEncoderOpts,
+    };
     let encoded;
     try {
         encoded = await sdk.encoder.createTx({
             ...(bareNativePayment ? {} : { data: createResult.actionString }),
-            ...(source ? { sourceAddress: source, change: source } : {}),
-            ...finalEncoderOpts,
+            ...builtEncoderOpts,
         });
     } catch (err) {
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
     }
+
+    // What the PSBT just built really carries, compression included. Everything
+    // below that describes these bytes - the confirm string, the carrier
+    // allowance, what the reveal is rebuilt from - reads THIS, not the request.
+    const carried = bareNativePayment
+        ? { actionString: null, rawData: builtEncoderOpts.rawData ?? null, compressed: false }
+        : carriedPayloadOf(createResult.actionString, builtEncoderOpts.rawData, encoded.compression);
 
     // Now that the encoder has answered, place the fee output.
     // A chunk encoding means the action rides a reveal, so the fee rides it too
@@ -205,6 +321,34 @@ export async function composeForConfirm({
         ? (Array.isArray(finalEncoderOpts.customOutputs) ? finalEncoderOpts.customOutputs.slice() : [])
         : [];
 
+    // The phase-2 REVEAL is built fresh by the submit path, from ITS OWN
+    // encoder opts - which on the prebuilt path are the submit flow's, not the
+    // ones that built these previewed bytes. So the commit's change went to the
+    // rotated internal address above and the reveal's surplus sweep (P2SH) or
+    // floor pad (P2WSH) went back to the spending address, defeating the
+    // rotation and reusing the address on chain. Carry what the reveal has to
+    // agree with, the same way the deferred outputs already ride along. Null off
+    // the chunk lane, where there is no reveal.
+    //
+    // rawData is the STORED payload, which after a compression pass is the
+    // deflated bytes and not the ones handed over. The reveal re-derives the
+    // carrier chunks from script.compile([actionString, rawData]) and must
+    // reproduce the commit's exactly; rebuilding it from the uncompressed
+    // payload under a compressed marker produces a carrier that hashes to
+    // nothing the commit created, so the commit is broadcast and can never be
+    // spent. Refuse instead of composing that, if the encoder compressed but
+    // withheld the bytes: unspendable-after-broadcast is not recoverable.
+    if (isChunkEncoding(encoded.encoding) && carried.compressed && carried.rawData === null) {
+        throw new Error(
+            'The action encoded in the transaction does not match what you approved.');
+    }
+    const revealOpts = isChunkEncoding(encoded.encoding)
+        ? {
+            change: builtEncoderOpts.change ?? null,
+            rawData: carried.rawData ?? builtEncoderOpts.rawData ?? null,
+        }
+        : null;
+
     const adsOutput = adsPlan.canSubmit
         ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }
         : null;
@@ -213,27 +357,74 @@ export async function composeForConfirm({
     // that), so the encoding is deliberately not taken from the response here:
     // passing it through would let the matcher wave through one OP_RETURN
     // output that this transaction must not contain. Null tightens the check.
+    // The expected set describes the phase-1 transaction as it actually is, so
+    // it must drop EVERY output the commit reserved and the reveal emits, not
+    // just the protocol fee. `deferredOutputs` above is that whole set (the
+    // chunk lane defers all of customOutputs), and it is subtracted here from
+    // the same values that decided the deferral, so the two cannot drift.
+    // Getting this wrong is now a rejection rather than a leak: the output-set
+    // check fails closed on an unconsumed requirement, so a chunk-lane action
+    // whose deferred outputs stayed in the expected set would be flagged as
+    // tamper on every deploy, large FILE, gated publish and Mode B dispenser.
+    const deferredFromExpected = [
+        ...deferredOutputs,
+        ...(deferredFeeOutput ? [deferredFeeOutput] : []),
+    ];
+    const expectedCustomOutputs = deferredFromExpected.reduce(
+        (opts, out) => withoutCustomOutput(opts, out),
+        finalEncoderOpts,
+    ).customOutputs;
+    // The action string these PSBT bytes carry: the wallet's composed string
+    // unless the encoder's transparent FILE compression rewrote the COMPRESSION
+    // field, in which case it is the string the encoder wrote and reported.
+    //
+    // Stating the composed string instead made every compressible FILE upload
+    // refuse itself as tampered. Re-deriving the written string LOCALLY was the
+    // withdrawn remedy: it clears the confirm check and leaves the reveal
+    // rebuilding from the uncompressed payload, so the commit broadcasts and
+    // nothing can spend it. What makes the substitution safe is that the stored
+    // payload now travels with it (`carried.rawData` -> `revealOpts.rawData`),
+    // so the reveal reproduces the commit's carrier byte for byte. The encoder's
+    // claim is verified against this wallet's own string in carriedPayloadOf,
+    // never taken on trust.
+    const encodedActionString = carried.actionString;
     const expectedOutputs = buildExpectedOutputs({
-        customOutputs: deferredFeeOutput
-            ? withoutCustomOutput(finalEncoderOpts, deferredFeeOutput).customOutputs
-            : finalEncoderOpts.customOutputs,
+        customOutputs: expectedCustomOutputs,
         encoding: bareNativePayment ? null : encoded.encoding,
         adsOutput,
         // D-24: a P2SH/P2WSH/MULTISIGN payload larger than one on-chain
         // chunk is carried by SEVERAL data-carrier outputs; the tamper check
-        // derives how many to allow from the action size, so a real contract
+        // derives how many to allow from the payload size, so a real contract
         // DEPLOY (or large FILE / gated publish) is not falsely flagged. Byte
         // length, not char length, since the base64 CODE can push the payload
         // past a chunk boundary that char length would under-count.
-        actionByteLen: bareNativePayment || !createResult?.actionString
+        //
+        // The encoder chunks the COMPILED push, script.compile([action, rawData]),
+        // so a payload-carrying action (FILE upload, artwork/TIS attach, gated
+        // publish, label sync) needs its rawData counted too. Sizing off the
+        // action alone allowed two carriers where a 2 KB file needs five, and
+        // checkOutputSet flagged the surplus three as outputs the user never
+        // approved - before the confirm modal could open.
+        payloadByteLen: bareNativePayment || !createResult?.actionString
             ? undefined
-            : byteLen(createResult.actionString),
+            // The STORED payload where compression rewrote it (carriedPayloadOf has
+            // already refused a report claiming more bytes than the wallet handed
+            // over), with the reported-length clamp below still standing as the
+            // second bound: the encoder is the artifact this allowance polices, so
+            // its own numbers may only ever tighten it.
+            : compiledPayloadByteLen(
+                encodedActionString,
+                carried.rawData ?? builtEncoderOpts.rawData,
+                encoded.compression),
     });
 
     return {
         // Null on the bare-payment path: there is no action, and callers must
         // branch rather than be handed a plausible-looking empty string.
-        actionString: bareNativePayment ? null : createResult.actionString,
+        // Post-compression, so it is the string these PSBT bytes really carry:
+        // it is what the confirm checks compare against and what the submit path
+        // re-declares on the prebuilt lane.
+        actionString: encodedActionString,
         action: bareNativePayment ? null : createResult.action,
         version: bareNativePayment ? null : createResult.version,
         bareNativePayment,
@@ -273,6 +464,9 @@ export async function composeForConfirm({
         // the submit path can emit them all on the reveal. Supersedes deferredFeeOutput,
         // which it contains; that field stays for callers built against alone.
         deferredOutputs,
+        // What the phase-2 reveal must be built with to agree with this
+        // commit. Null off the chunk lane.
+        revealOpts,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,

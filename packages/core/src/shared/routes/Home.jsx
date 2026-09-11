@@ -14,6 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
+import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
@@ -28,9 +29,78 @@ import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import { humanizeError } from '../utils/humanizeError.js';
+import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import styles from './Home.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// The verb the balance banner is written in, in one place: the humanized
+// message minted in the catch and the countdown re-rendered once a second have
+// to open with the same words or the banner changes voice as it ticks.
+const BALANCES_VERB = 'load balances';
+
+// What to wait when a 429 arrives with no `Retry-After` to read (an origin that
+// sent none, or the pinned SDK 0.15.1, which carries no seconds at all). One
+// poll interval's worth of patience: long enough that the re-load is not
+// another immediate request against a bucket that is still empty. Nothing
+// counts DOWN in that case, because the wallet would be inventing the number:
+// the banner says "a moment" and re-loads when this elapses.
+const RATE_LIMIT_FALLBACK_SECONDS = 15;
+
+/**
+ * The rate-limit wait a LANDED balance read is asking for, if any.
+ *
+ * `flows/balances.js` catches every per-address failure and returns it as the
+ * entry's `error` STRING with `balances: null`, deliberately, so one address
+ * that could not be read does not sink the whole wallet's numbers. That means a
+ * 429 never reaches the catch below: `getWalletBalances` RESOLVES, and the only
+ * evidence is in the entries. Read across chains and take the LONGEST wait any
+ * of them named, since a shorter one expiring first would re-load into a bucket
+ * another address is still waiting on.
+ *
+ * An entry also carries the failure TYPED (`errorCode`, `retryAfterSeconds`),
+ * copied straight off the SDK error, so those decide here and the mapper's
+ * message regex is only reached for an SDK that named neither: the pinned
+ * 0.15.x throws `EXPLORER_HTTP_429` with no seconds on it at all.
+ *
+ * @param {Record<string, Array<{ error?: string | null, errorCode?: string | null,
+ *   retryAfterSeconds?: number | null }>> | null | undefined} balancesByChain
+ * @returns {{ seconds: number | null } | null}  null when nothing was rate limited
+ */
+function rateLimitWaitFromBalances(balancesByChain) {
+    if (!balancesByChain || typeof balancesByChain !== 'object') return null;
+    let limited = false;
+    /** @type {number | null} */
+    let seconds = null;
+    for (const entries of Object.values(balancesByChain)) {
+        if (!Array.isArray(entries)) continue;
+        for (const entry of entries) {
+            const message = typeof entry?.error === 'string' ? entry.error : '';
+            if (!message) continue;
+            // Hand the mapper the typed fields the aggregator kept alongside
+            // the sentence; it keys on `code` first and the message last, so a
+            // named code and a named number decide without any re-parsing.
+            // `service` is stated rather than copied: a balance read is always
+            // an explorer read, and the mapper's rate-limit branch wants either
+            // the service or the "Explorer returned HTTP 429" prefix before it
+            // trusts the code, so without it the code alone would still fall
+            // back to the message.
+            const read = explorerReadFailure({
+                name: '',
+                code: entry.errorCode ?? undefined,
+                service: 'explorer',
+                message,
+                retryAfterSeconds: entry.retryAfterSeconds ?? undefined,
+            }, BALANCES_VERB);
+            if (!read || read.cause !== 'rate_limited') continue;
+            limited = true;
+            const named = read.retryAfterSeconds;
+            if (Number.isInteger(named) && (seconds === null || named > seconds)) seconds = named;
+        }
+    }
+    return limited ? { seconds } : null;
+}
 
 // Nothing pushes balance changes to the wallet (an incoming send, a mint
 // landing, a token someone else sent you), so Home has to poll for them.
@@ -142,8 +212,15 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [pendingAirdrops, setPendingAirdrops] = useState(
         /** @type {any[]} */ ([]),
     );
-    const [pendingCoinpays, setPendingCoinpays] = useState(
-        /** @type {any[]} */ ([]),
+    // Pending COINPAY obligations behind the "Payment due" resume cards.
+    // Read from the tree's shared scan rather than re-scanned here: Home used
+    // to fan one explorer read per address out of every 20 s balance poll, on
+    // top of the identical scan the shells' nav badge already runs (spec row
+    // 29). Under a CoinpayObligationsProvider (web, desktop, mobile) these
+    // rows ARE the badge's rows, refreshed on its 60 s cadence; the extension
+    // popup mounts no provider, so this call runs the only instance there.
+    const { obligations: pendingCoinpays } = useSharedCoinpayObligations(
+        activeWalletId, activeAccountId,
     );
     // Unfinished confirms (an UNSIGNED composed PSBT the popup
     // closed on). Same slot as the two cards above; nothing here has moved
@@ -157,6 +234,19 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [loadError, setLoadError] = useState(
         /** @type {string | null} */ (null),
     );
+    // A rate limit is the one load failure that comes with an end time, so it
+    // is the one the banner can count down instead of leaving the user to
+    // guess (rate-limits spec, M4). `rateLimitRetryAt` is the wall-clock ms the
+    // wait ends at; `rateLimitTickNow` is what makes the seconds on screen
+    // move, since the sentence is derived from the two rather than stored.
+    const [rateLimitRetryAt, setRateLimitRetryAt] = useState(
+        /** @type {number | null} */ (null),
+    );
+    const [rateLimitTickNow, setRateLimitTickNow] = useState(() => Date.now());
+    // Whether the origin actually named the seconds. When it did not, the wait
+    // still runs (a re-load has to happen) but the banner says "a moment"
+    // rather than counting down a number the wallet made up.
+    const [rateLimitNamedSeconds, setRateLimitNamedSeconds] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
     // Network filter can be controlled by the parent shell (web AppHeader
     // owns the toolbar filter button) or self-managed when the parent
@@ -235,6 +325,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // refresh would be noisy; the user explicitly opting Hide / dismissing
     // the toast counts as "they decided" for the rest of the session.
     const spamNudgedForWalletRef = useRef(/** @type {string | null} */ (null));
+    // One re-poll rule for this mount. The interval below already bounds how
+    // stale a balance can be, so a focus/visibilitychange re-poll only buys
+    // anything once the balances are older than that; without the rule an
+    // alt-tab (which fires both events) cost two full reads of every address
+    // inside one rate-limit period. See flows/pollThrottle.js.
+    const pollThrottleRef = useRef(flowsLib.createPollThrottle(BALANCE_POLL_INTERVAL_MS));
 
     useEffect(() => {
         let cancelled = false;
@@ -415,20 +511,41 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeWalletId, messaging]);
 
-    // Per-wallet load: balances, multisig indicator, pending airdrops,
-    // pending COINPAY obligations. `reset: true` (wallet/account switch,
+    // Per-wallet load: balances, multisig indicator, pending airdrops and
+    // unfinished confirms. `reset: true` (wallet/account switch,
     // manual reload key) flushes state to the loading-skeleton first;
     // `reset: false` (poll / focus refresh below) fetches quietly in the
     // background and only swaps state in once fresh data lands, so an
     // incoming token doesn't flash the whole screen back to a skeleton.
+    // Start (or restart) a rate-limit wait: the banner counts down from here
+    // and the effect below re-loads when it reaches zero.
+    const beginRateLimitWait = useCallback((secondsOrNull) => {
+        const named = Number.isInteger(secondsOrNull) && secondsOrNull > 0;
+        const seconds = named ? secondsOrNull : RATE_LIMIT_FALLBACK_SECONDS;
+        const now = Date.now();
+        setRateLimitNamedSeconds(named);
+        setRateLimitTickNow(now);
+        setRateLimitRetryAt(now + seconds * 1000);
+        setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(named ? seconds : null)}`);
+    }, []);
+
     const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
         if (reset) {
+            // A switch (or a manual reload) is about to replace everything on
+            // screen, so nothing an earlier wallet polled may hold off the
+            // re-polls that follow.
+            pollThrottleRef.current.reset();
+            // ...but the load about to run DOES take the in-flight slot, the
+            // way an event-driven one does. Without it a cold open that is
+            // still waiting (a 429's honoured Retry-After holds one request for
+            // up to 60 s) would be joined by the 20 s beat, which is the burst
+            // the limiter counted in the first place.
+            pollThrottleRef.current.start();
             setBalances(null);
             setBalancesFetchedAt(null);
             setActiveByChain({});
             setMultisig(null);
             setPendingAirdrops([]);
-            setPendingCoinpays([]);
             setConfirmSessions([]);
             setLoadError(null);
         }
@@ -447,14 +564,48 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 b = await messaging.getWalletBalances(walletId, accountId);
             }
             if (!isCancelled()) {
+                // Fresh balances: this is what restarts the re-poll window,
+                // whichever path asked for them.
+                pollThrottleRef.current.succeed();
                 setBalances(b);
                 setBalancesFetchedAt(Date.now());
+                // A read can LAND and still be rate limited: the aggregator
+                // reports a refused address as that entry's `error` string
+                // rather than throwing, so the banner is decided from what
+                // came back, on the poll path as well as the reset one. The
+                // balances that did land stay on screen either way.
+                const wait = rateLimitWaitFromBalances(b);
+                if (wait) {
+                    beginRateLimitWait(wait.seconds);
+                } else {
+                    // Balances landed clean, so whatever the last failure said
+                    // is no longer true. Cleared on the poll path too: a wallet
+                    // that recovered on its own used to keep the error banner
+                    // over correct balances until the next switch, and the
+                    // countdown promises the banner goes when the wait pays off.
+                    setLoadError(null);
+                    setRateLimitRetryAt(null);
+                }
             }
         } catch (err) {
+            // Release the window rather than move it: a blip must not pin the
+            // screen to stale balances for a whole interval.
+            pollThrottleRef.current.fail();
             // A silent poll that fails (e.g. a transient network blip)
             // should not stomp a screen the user is already looking at
             // with an error banner; only surface it on the reset path.
-            if (!isCancelled() && reset) setLoadError(err?.message || 'Failed to load balances.');
+            if (!isCancelled() && reset) {
+                // The raw SDK message used to go straight on screen here, URL
+                // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
+                // bcrt1q..."). humanizeError owns the wording for every shape
+                // this can arrive in.
+                // A THROWN failure is still possible (the vault, the messaging
+                // channel, a chain-wide fault), and it is the path that used to
+                // print the wire text.
+                const humanized = humanizeError(err, BALANCES_VERB);
+                if (humanized.cause === 'rate_limited') beginRateLimitWait(humanized.retryAfterSeconds ?? null);
+                else setLoadError(humanized.message);
+            }
         }
 
         if (typeof messaging.getActiveAddresses === 'function') {
@@ -494,38 +645,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             } catch { /* non-fatal */ }
         }
 
-        if (typeof messaging.getCoinpayObligationsForAddress === 'function') {
-            try {
-                const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                const pairs = [];
-                for (const [cId, addrs] of Object.entries(byChain || {})) {
-                    for (const a of addrs) pairs.push({ chainId: cId, address: a.address });
-                }
-                const results = await Promise.all(pairs.map((p) =>
-                    messaging.getCoinpayObligationsForAddress({
-                        chainId: p.chainId, address: p.address,
-                    })
-                        .then((resp) => ({ ...p, rows: extractObligationRows(resp) }))
-                        .catch(() => ({ ...p, rows: [] }))
-                ));
-                if (isCancelled()) return;
-                const obligations = [];
-                for (const r of results) {
-                    for (const row of r.rows) {
-                        if (!isPendingForPayer(row, r.address)) continue;
-                        obligations.push({
-                            chainId: r.chainId,
-                            address: r.address,
-                            orderMatchActionIndex: String(row.action_index ?? row.actionIndex),
-                            coinAmount: row.coin_amount,
-                            payeeAddress: row.payee_address || row.payeeAddress,
-                            expiration: row.expiration,
-                        });
-                    }
-                }
-                setPendingCoinpays(obligations);
-            } catch { /* non-fatal */ }
-        }
+        // No coinpay scan here on purpose. Before spec row 29 one sat between
+        // the airdrop read and the confirm read, costing one explorer read per
+        // address on every beat of this poll, duplicating the scan
+        // `useCoinpayObligations` already runs for the nav badge. The resume
+        // cards read that one scan through `useSharedCoinpayObligations` above.
 
         // Confirms the popup closed on. Extension-only in
         // practice (the store is chrome.storage.session), and the route
@@ -567,15 +691,44 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const walletId = activeWalletId;
         const accountId = activeAccountId || undefined;
 
+        const load = () => loadHomeData(walletId, accountId, {
+            reset: false, isCancelled: () => cancelled,
+        });
+
+        // The beat is not gated on the WINDOW: it is what keeps the window
+        // moving, since loadHomeData notes the success when balances land. It
+        // IS gated on the in-flight slot, and that is the whole of the change:
+        // a load can now sit for up to 60 s while the SDK waits out a
+        // `Retry-After`, and a 20 s beat firing through it would put three
+        // whole wallet loads against the bucket the first one is waiting on,
+        // which is how one 429 becomes three. Checked before `start()`, since
+        // `start()` claims the slot and its false answer also means "the window
+        // has not aged", which the beat must ignore.
         const poll = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            loadHomeData(walletId, accountId, { reset: false, isCancelled: () => cancelled });
+            if (pollThrottleRef.current.isInFlight()) return;
+            // Claim the slot the reset path's way. `start()` alone marks a
+            // load in flight only once the window has aged, and at beat time
+            // the window is younger than the interval by the previous load's
+            // own latency (the beat fires one interval after the previous
+            // BEAT; `succeed()` ran later, when that load landed), so a bare
+            // `start()` left the beat's load unmarked and the next beat
+            // stacked a second one on it. The window is re-keyed on this
+            // load's landing either way.
+            pollThrottleRef.current.reset();
+            pollThrottleRef.current.start();
+            load();
         };
 
         const intervalId = setInterval(poll, BALANCE_POLL_INTERVAL_MS);
+        // An alt-tab fires `focus` and `visibilitychange` together, so coming
+        // back to the wallet used to cost two loads. The first event after the
+        // balances have aged past one interval still fires at once; the rest
+        // of the burst rides the data the beat already has.
         const onVisibilityOrFocus = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            poll();
+            if (!pollThrottleRef.current.start()) return;
+            load();
         };
         window.addEventListener('focus', onVisibilityOrFocus);
         document.addEventListener('visibilitychange', onVisibilityOrFocus);
@@ -587,6 +740,47 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             document.removeEventListener('visibilitychange', onVisibilityOrFocus);
         };
     }, [activeWalletId, activeAccountId, loadHomeData]);
+
+    // Cancellation for the re-load the countdown fires, and it deliberately
+    // does NOT ride the ticking effect's own flag: reaching zero clears
+    // `rateLimitRetryAt`, which tears that effect down in the same commit, so a
+    // load cancelled by its own trigger would throw away the balances it just
+    // asked for and leave the banner up for good. Only a wallet or account
+    // switch (or an unmount) actually makes such a result stale.
+    const rateLimitReloadCancelled = useRef(false);
+    useEffect(() => {
+        rateLimitReloadCancelled.current = false;
+        return () => { rateLimitReloadCancelled.current = true; };
+    }, [activeWalletId, activeAccountId]);
+
+    // The rate-limit wait, ticking. While `rateLimitRetryAt` is set the banner
+    // re-renders once a second off the remaining time, and when it runs out the
+    // wallet re-loads BY ITSELF: "; retrying." in the copy is a promise, and a
+    // user who has already been told to wait must not also have to click. The
+    // re-load takes the throttle's in-flight slot the way the beat does, so the
+    // next beat does not land on top of it.
+    useEffect(() => {
+        if (rateLimitRetryAt === null || !activeWalletId) return undefined;
+        let stopped = false;
+        const walletId = activeWalletId;
+        const accountId = activeAccountId || undefined;
+        const id = setInterval(() => {
+            if (stopped) return;
+            const now = Date.now();
+            if (now < rateLimitRetryAt) {
+                setRateLimitTickNow(now);
+                return;
+            }
+            setRateLimitRetryAt(null);
+            setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(null)}`);
+            pollThrottleRef.current.start();
+            loadHomeData(walletId, accountId, {
+                reset: false,
+                isCancelled: () => rateLimitReloadCancelled.current,
+            });
+        }, 1000);
+        return () => { stopped = true; clearInterval(id); };
+    }, [rateLimitRetryAt, activeWalletId, activeAccountId, loadHomeData]);
 
     // Home does not lock, in either sense. The idle timer lives
     // in each shell's AppInner via `useAutoLockPolicy`, because this
@@ -704,6 +898,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         );
     }
 
+    // The banner text. While a rate-limit wait is running it is DERIVED, not
+    // read from state: the seconds have to shrink on every tick, and one string
+    // frozen in state at the moment of the failure cannot do that. The wording
+    // itself comes from the same helper the two submit mappers use, so the
+    // banner and the submit sentences cannot drift apart.
+    const rateLimitSecondsLeft = (rateLimitRetryAt === null || !rateLimitNamedSeconds)
+        ? null
+        : Math.max(0, Math.ceil((rateLimitRetryAt - rateLimitTickNow) / 1000));
+    const loadErrorText = rateLimitRetryAt === null
+        ? loadError
+        : `Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(rateLimitSecondsLeft)}`;
+
     // §20 / G041: signer-mode home variant. The wallet only signs PSBTs
     // pasted in from a paired Watcher wallet; balances, history, send,
     // and receive are not relevant. Render a stripped-down body with the
@@ -713,8 +919,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         return (
             <Screen variant={variant}>
                 <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
-                    {loadError ? (
-                        <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                    {loadErrorText ? (
+                        <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                     ) : null}
                     {/* §25.2 / Cluster J FOLLOWUP 2: shells that
                         mount the banner in their layout header say so with
@@ -740,11 +946,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     return (
         <Screen variant={variant}>
             <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
-                {loadError ? (
-                    <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                {loadErrorText ? (
+                    <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                 ) : null}
 
-                {balances === null && !loadError ? (
+                {balances === null && !loadErrorText ? (
                     <div role="status" aria-label="Loading balances">
                         <Skeleton.List rows={5} />
                     </div>
@@ -1088,24 +1294,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             ) : null}
         </Screen>
     );
-}
-
-function isPendingForPayer(row, address) {
-    if (!row || typeof row !== 'object') return false;
-    const status = String(row.coinpay_status || row.status || '').toLowerCase();
-    if (status !== 'pending_coinpay') return false;
-    const payer = row.payer_address || row.payerAddress;
-    return typeof payer === 'string' && payer === address;
-}
-
-function extractObligationRows(resp) {
-    if (!resp) return [];
-    if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    if (Array.isArray(resp.rows)) return resp.rows;
-    if (Array.isArray(resp.obligations)) return resp.obligations;
-    if (Array.isArray(resp.coinpay_obligations)) return resp.coinpay_obligations;
-    return [];
 }
 
 /**

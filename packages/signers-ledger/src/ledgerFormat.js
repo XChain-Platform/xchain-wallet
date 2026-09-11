@@ -99,7 +99,7 @@ function varint(n) {
  * Little-endian 8-byte encoding of a non-negative integer value.
  * Uses BigInt internally so values above 2^53 serialize correctly.
  *
- * @param {number} n
+ * @param {number|string|bigint} n   decomposePsbt emits an exact decimal string above 2^53-1
  * @returns {number[]}
  */
 function u64le(n) {
@@ -134,7 +134,7 @@ function bytesToHex(bytes) {
  * Serialize the outputs section of a Bitcoin tx: varint(count) +
  * for each output 8-byte LE value + varint(scriptLen) + script.
  *
- * @param {Array<{ value: number, scriptPubKeyHex: string }>} outputs
+ * @param {Array<{ value: number|string, scriptPubKeyHex: string }>} outputs
  * @returns {string}  hex
  */
 export function serializeOutputs(outputs) {
@@ -168,7 +168,7 @@ export function serializeOutputs(outputs) {
  * contexts where the txid is irrelevant.
  *
  * @param {number} vout
- * @param {number} value
+ * @param {number|string} value   satoshis; exact decimal string above 2^53-1
  * @param {string} scriptPubKeyHex
  * @returns {string}  raw tx hex
  */

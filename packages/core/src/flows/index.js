@@ -228,6 +228,10 @@ export {
     isEntryReplaceable,
     sendRbfRequest,
     replaceFromHistoryEntry,
+    cancelUndoSnapshot,
+    isCancelUndoable,
+    buildCancelUndo,
+    undoCancel,
     RbfNotSupportedError,
     RbfInvalidEntryError,
 } from './rbfReplace.js';
@@ -360,7 +364,15 @@ export {
     contractValidate,
     contractCheckCodeSize,
     contractSuggestGasLimit,
+    contractExportedMeta,
 } from './contractUtilities.js';
+export {
+    CONTRACT_META_REQUIRED,
+    normalizeMetaRead,
+    readExportedMeta,
+    preflightContractMeta,
+    metaNameOf,
+} from './contractMetaPreflight.js';
 export { dividendAction, holdersFor } from './dividendAction.js';
 export { createList } from './createList.js';
 export { airdropAction } from './airdropAction.js';
@@ -457,7 +469,16 @@ export {
     walletBalances,
     BALANCE_POLL_INTERVAL_MS,
 } from './balances.js';
+export { createPollThrottle } from './pollThrottle.js';
 export { livePendingTxs } from './pendingTxFeed.js';
+// A plain native-coin send carries no action, so the action feeds
+// never retire its record; the chain's UTXO set is its confirmation source.
+export {
+    isNativePendingTx,
+    nativeSendVerdict,
+    utxoListOf,
+    reconcileNativePendingTxs,
+} from './nativePendingConfirmation.js';
 export {
     verifyAddressBalance,
     verifyAddressAction,

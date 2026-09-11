@@ -94,9 +94,24 @@ assert.ok(/Network fee/.test(src),
 // Header title switches on stage.
 assert.ok(/Review swap/.test(src),
     'CrossChainSwapForm header title says "Review swap" in review/submitting stage');
-// Form-stage primary button label is "Review".
-assert.ok(/>\s*Review\s*<\/Button>/.test(src),
-    'CrossChainSwapForm form-stage primary button label is "Review"');
+// Form-stage primary button label: the action verb on the confirm lane,
+// "Review" only on the watcher lane that still has a review stage. The
+// same shape SwapForm carries, which is the point of migrating this form.
+assert.ok(/singleEncode \? 'Swap' : 'Review'/.test(src),
+    'CrossChainSwapForm labels its primary button "Swap" on the confirm lane');
+
+// §5.6 confirm lane: the cross-chain GET_ADDRESS is a destination on ANOTHER
+// chain, and the confirm page's output-set cross-check is the only thing
+// binding the address the user read to the bytes that get signed. SwapForm,
+// the other caller of this same action pair, has been on the lane for longer.
+assert.ok(/useActionConfirmFlow/.test(src),
+    'CrossChainSwapForm is on the shared confirm lane');
+assert.ok(/const singleEncode = !isWatcherMode/.test(src),
+    'CrossChainSwapForm single-encodes on every non-watcher lane, hardware included');
+assert.ok(/software: 'swapAction'[\s\S]{0,80}hardware: 'swapActionHw'/.test(src),
+    'CrossChainSwapForm dispatches Approve through useConfirmSubmit');
+assert.ok(/prebuiltPsbt,/.test(src),
+    'CrossChainSwapForm submits the previewed PSBT rather than rebuilding it');
 
 // --- App.jsx wiring (all three shells) ---
 

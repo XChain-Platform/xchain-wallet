@@ -560,10 +560,16 @@ assert.ok(
     /requestSingleInstanceLock|gotLock/.test(mainIndex),
     'main/index.js respects the single-instance lock',
 );
-// Renderer bundle is what loads (not renderer/index.html source).
+// Renderer bundle is what loads (not renderer/index.html source). Said in
+// two halves since §9.3.2 made that directory the trust root too: the
+// window loads APP_ROOT/index.html and APP_ROOT is renderer/dist.
 assert.ok(
-    /renderer['"],\s*['"]dist['"],\s*['"]index\.html['"]/.test(mainIndex),
-    'mainWindow.loadFile points at renderer/dist/index.html (packaged output)',
+    /const APP_ROOT = join\(here, ['"]\.\.['"], ['"]renderer['"], ['"]dist['"]\)/.test(mainIndex),
+    'main/index.js pins APP_ROOT to renderer/dist (packaged output)',
+);
+assert.ok(
+    /loadFile\(join\(APP_ROOT, ['"]index\.html['"]\)/.test(mainIndex),
+    'mainWindow.loadFile points at APP_ROOT/index.html, the dir the trust predicates use',
 );
 
 // --- 6. Dockerfile + scripts hygiene ----------------------------------

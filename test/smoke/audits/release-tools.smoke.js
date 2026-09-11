@@ -834,6 +834,31 @@ try {
         check('verify.sh catches a tampered artifact', tampered.status === 1,
             `${tampered.stdout}${tampered.stderr}`);
 
+        // A headerless manifest cannot answer for a release: strip the `# `
+        // lines and the hash rows still cover the artifacts perfectly, so
+        // --no-sig warns and exits 0 with --tag never consulted, and a
+        // checksum-only manifest built for another release satisfies a request
+        // for this one on the path deploy-web.sh runs before flipping a site.
+        //
+        // Pinned here is the half that must SURVIVE the refusal: the genuinely
+        // unanchored hash-only mode the warning exists to serve. The refusal
+        // itself ships with the verify.sh change, which is held back because
+        // editing that script moves it off the sha256 the release rehearsal pin
+        // records, and re-driving that rehearsal is an operator step on the
+        // release machine. Both halves land in the same change.
+        const bare = stage();
+        const barePath = join(bare, 'RELEASE_HASHES.txt');
+        const bareWrite = sh([VERIFY, '--input', bare, '--recompute'], { env });
+        check('fixture: --recompute writes the manifest to strip',
+            bareWrite.status === 0, bareWrite.stderr);
+        writeFileSync(barePath,
+            readFileSync(barePath, 'utf8').split('\n').filter((l) => !l.startsWith('#')).join('\n'));
+        const unasked = sh([VERIFY, '--input', bare, '--no-sig'], { env });
+        check('a bare hash check with no anchor requested still passes',
+            unasked.status === 0, `${unasked.stdout}${unasked.stderr}`);
+        check('and still says out loud that the manifest has no header',
+            /no header/.test(unasked.stderr), unasked.stderr);
+
         // verify.sh must be able to read what verify.sh writes. Found
         // 2026-08-02: `--recompute` wrote a manifest verify.sh then refused on
         // any tag, because the profile check keyed on a header line a recompute

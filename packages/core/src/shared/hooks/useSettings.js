@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { defaultRegistry, hydrateCustomChainsFromSettings } from '../../registry/index.js';
 
 // Each useSettings() instance loads its own snapshot, so a write made by
 // one component (e.g. the Settings panel) would leave another component's
@@ -63,6 +64,14 @@ export function useSettings() {
         setLoading(true);
         try {
             const next = await messaging.getSettings();
+            // The record carries the user-added chains, and this realm's
+            // registry may not know them yet: the host seeds only the
+            // instance it holds, and the popup, approval and desktop
+            // renderer realms each own a separate defaultRegistry(). A
+            // successful read is also the first moment the encrypted record
+            // is readable after unlock, so hydrating here reaches every shell
+            // without a per-entry boot hook (§9.7 Developer Mode).
+            try { hydrateCustomChainsFromSettings(defaultRegistry(), next); } catch { /* never fail a read */ }
             if (!aliveRef.current) return;
             setSettings(next);
             setError(null);

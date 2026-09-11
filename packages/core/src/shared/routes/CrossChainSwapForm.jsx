@@ -26,8 +26,11 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { activeSourceId } from '../addressSelection.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -294,6 +297,88 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
+    // The wire params, named once so the confirm lane and the watcher lane
+    // encode the same SWAP. GET_ADDRESS is the field this migration is for:
+    // it names a destination on ANOTHER chain, which only the confirm page's
+    // output-set cross-check binds to the bytes that get signed.
+    const swapParams = useMemo(() => ({
+        VERSION: '0',
+        GIVE_COIN: giveCoinTicker,
+        GIVE_TICK: giveTick.trim(),
+        ...(giveOwnership ? { GIVE_OWNERSHIP: '1' } : { GIVE_AMOUNT: String(giveAmount).trim() }),
+        GET_COIN: getCoinTicker,
+        GET_TICK: getTick.trim(),
+        ...(getOwnership ? { GET_OWNERSHIP: '1' } : { GET_AMOUNT: String(getAmount).trim() }),
+        GET_ADDRESS: (getAddress || '').trim(),
+        ...((() => {
+            if (expMode !== 'custom' || !expInput.trim()) return {};
+            const ms = Date.parse(expInput.trim());
+            return Number.isFinite(ms) ? { EXPIRATION: String(Math.floor(ms / 1000)) } : {};
+        })()),
+        ...(memo.trim() ? { MEMO: memo.trim() } : {}),
+    }), [giveCoinTicker, giveTick, giveOwnership, giveAmount, getCoinTicker, getTick,
+        getOwnership, getAmount, getAddress, expMode, expInput, memo]);
+
+    // §5.6: SwapForm already composes one PSBT host-side and approves it on
+    // the shared confirm page; the cross-chain variant now does the same.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const singleEncode = !isWatcherMode;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'swapAction',
+        hardware: 'swapActionHw',
+    });
+
+    // Compose, tamper-check and pre-flight run HOST-side; Approve signs the
+    // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
+    async function openConfirmScreen() {
+        const from = {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+        setSubmitError(null);
+        try {
+            const r = await actionConfirm.run({
+                chainId: giveChainId,
+                from,
+                actionData: { action: 'SWAP', params: swapParams },
+                encoderOpts: {
+                    payFeeInNativeCoin: nativeFee.flag || undefined,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                onApprove: (prebuiltPsbt) => submitConfirmed({
+                    walletId,
+                    chainId: giveChainId,
+                    from,
+                    params: swapParams,
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
+            setResult(r);
+            setPassword('');
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(submitFailureMessage(err, {
+                chainId: giveChainId,
+                coinTicker: giveTicker || '',
+                mandatory: nativeFee.mandatory,
+                fallback: err?.message || 'Sign failed.',
+            }));
+        }
+    }
+
     // Validate the form fields and advance to the review stage. The
     // actual sign/broadcast only fires from handleSubmit, which is
     // reachable only from the review screen.
@@ -310,6 +395,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         setFormError(null);
+        if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -324,22 +410,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         setStage('submitting');
         setSubmitError(null);
         try {
-            const params = {
-                VERSION: '0',
-                GIVE_COIN: giveCoinTicker,
-                GIVE_TICK: giveTick.trim(),
-                ...(giveOwnership ? { GIVE_OWNERSHIP: '1' } : { GIVE_AMOUNT: String(giveAmount).trim() }),
-                GET_COIN: getCoinTicker,
-                GET_TICK: getTick.trim(),
-                ...(getOwnership ? { GET_OWNERSHIP: '1' } : { GET_AMOUNT: String(getAmount).trim() }),
-                GET_ADDRESS: getAddress.trim(),
-                ...((() => {
-                    if (expMode !== 'custom' || !expInput.trim()) return {};
-                    const ms = Date.parse(expInput.trim());
-                    return Number.isFinite(ms) ? { EXPIRATION: String(Math.floor(ms / 1000)) } : {};
-                })()),
-                ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-            };
+            const params = swapParams;
             const base = {
                 walletId,
                 chainId: giveChainId,
@@ -442,6 +513,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     onDone={onBack}
                 />,
             );
+        }
+        // A queued result is SIGNED and not broadcast: the confirm lane
+        // resolves a transient broadcast failure that way, and the success
+        // copy below would report an escrow that is not open yet.
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain swap" />);
         }
         return wrap(
             <>
@@ -568,6 +645,31 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const chainIds = Object.entries(addressesByChain)
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
+
+    // Confirm page, rendered in place of the form; form state stays intact
+    // behind it, exactly as the picker screens below do.
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={giveDescriptor?.displayName || giveChainId}
+                feeText={feeEstimate?.coinAmount && giveTicker
+                    ? `Network fee: ${feeEstimate.coinAmount} ${giveTicker}`
+                    : undefined}
+                coinTicker={giveTicker || ''}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={giveChainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
+    }
 
     if (sourcePickerOpen) {
         return (
@@ -770,11 +872,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
+                    loading={actionConfirm.composing}
                     disabled={!!validationError
                         || !fromAddress
-                        || !giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount) || !getAddress}
+                        || !giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount) || !getAddress
+                        || actionConfirm.composing}
                 >
-                    Review
+                    {singleEncode ? 'Swap' : 'Review'}
                 </Button>
             </div>
         </form>,

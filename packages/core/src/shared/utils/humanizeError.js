@@ -25,7 +25,7 @@
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 
 /**
- * @typedef {'insufficient_funds' | 'network' | 'rejected' | 'backend_behind' | 'unknown'} HumanizedErrorCause
+ * @typedef {'insufficient_funds' | 'inputs_on_hold' | 'network' | 'rejected' | 'backend_behind' | 'rate_limited' | 'unknown'} HumanizedErrorCause
  */
 
 /**
@@ -33,6 +33,9 @@ import { explorerReadFailure } from '../../sdk/explorerErrors.js';
  * @property {string} message  plain-language, house-voice copy for display
  * @property {HumanizedErrorCause} cause  recognized cause key (for recovery logic)
  * @property {string} raw  the original error message, preserved for logs / detail
+ * @property {number|null} [retryAfterSeconds]  only on `rate_limited`: the wait the origin
+ *                                              asked for, in whole seconds, or null when it
+ *                                              named none. Home counts it down and re-loads
  */
 
 /**
@@ -56,7 +59,17 @@ export function humanizeError(err, verb = 'complete this') {
     // user - and a third ("Explorer request timed out") matched `network` and
     // blamed the user's own connection for a service-side timeout.
     const explorerRead = explorerReadFailure(err, verb);
-    if (explorerRead) return { message: explorerRead.message, cause: explorerRead.cause, raw };
+    if (explorerRead) {
+        const out = { message: explorerRead.message, cause: explorerRead.cause, raw };
+        // Only the rate-limit branch carries a number, and a caller that wants
+        // to count it down (Home) must not have to re-parse the sentence it was
+        // just handed. Absent on every other branch, so nothing else grows a
+        // field it would have to ignore.
+        if (explorerRead.retryAfterSeconds !== undefined) {
+            out.retryAfterSeconds = explorerRead.retryAfterSeconds;
+        }
+        return out;
+    }
 
     // D-160: the keyword chain below reads the message as EVIDENCE, which is
     // right for a wire error and wrong for one the wallet wrote for this exact
@@ -92,7 +105,20 @@ export function humanizeError(err, verb = 'complete this') {
     let cause = 'unknown';
     let message = `Couldn't ${verb}.`;
 
-    if (/insufficient|not enough|balance too low|inadequate funds|too low/.test(hay)) {
+    if (/reserved by a transaction built/.test(hay)) {
+        // The encoder holds every input a successful build selected for five
+        // minutes, and the wallet builds when the confirm modal opens, so a
+        // cancelled or otherwise un-broadcast confirm parks that coin. An address
+        // with few spendable outputs then runs out of candidates and the encoder
+        // reports the shortfall with the reserved inputs named. Read BEFORE the
+        // generic insufficient-funds branch: this message also says "insufficient
+        // funds", and "you don't have enough" plus a Use Max affordance sent a
+        // user holding 2,000 TDOGE in circles. Waiting fixes it; funding
+        // the address does not.
+        cause = 'inputs_on_hold';
+        message = `Couldn't ${verb}. Coins at this address are still on hold for a transaction `
+            + 'prepared in the last 5 minutes. Broadcast that transaction, or wait 5 minutes and try again.';
+    } else if (/insufficient|not enough|balance too low|inadequate funds|too low/.test(hay)) {
         cause = 'insufficient_funds';
         message = `Couldn't ${verb}. You don't have enough funds for this transaction.`;
     } else if (/network|timeout|timed out|econnrefused|econnreset|enotfound|etimedout|fetch failed|unreachable|offline|dns|no response/.test(hay)) {
