@@ -40,7 +40,7 @@ import {
     ZONE_RULES, RATE_LIMIT_SKIP_HOSTS, SBFM_ONLY_SKIP_HOSTS, ATTEMPTS_PER_CALL, COUNTING_PERIOD_SEC,
 } from '../../../tools/release/cold-open-profile.mjs';
 import { DEFAULT_SDK_NETWORK_OPTIONS } from '../../../packages/core/src/sdk/SDKRegistry.js';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_POLL_INTERVAL_MS, BALANCES_BATCH_MAX_ADDRESSES } from '../../../packages/core/src/flows/balances.js';
 import { COINPAY_BADGE_POLL_MS } from '../../../packages/core/src/shared/hooks/useCoinpayObligations.js';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 
@@ -94,9 +94,29 @@ assert.ok(
     fiveAddresses.total > oneAddress.total,
     'the fan-out must scale with addresses; a constant here means the count was restated',
 );
-const perAddressStep = (fiveAddresses.byStep['wallet-balances'] - oneAddress.byStep['wallet-balances'])
-    / (5 - 1) / oneAddress.chains.length;
-assert.ok(perAddressStep >= 2, 'each address costs at least a token read and a native-coin read');
+// One explorer read answers up to BALANCES_BATCH_MAX_ADDRESSES addresses, so a
+// chain costs its hub discovery plus one read per batch. Pin the step function,
+// not a floor: the marginal cost of an address inside a batch is zero.
+const balancesPerChain = (m) => m.byStep['wallet-balances'] / m.chains.length;
+const expectedPerChain = (n) => 1 + Math.ceil(n / BALANCES_BATCH_MAX_ADDRESSES);
+
+assert.equal(
+    balancesPerChain(oneAddress), expectedPerChain(1),
+    'one address costs one hub discovery plus one batched explorer read, per chain',
+);
+assert.equal(
+    balancesPerChain(fiveAddresses), expectedPerChain(5),
+    'five addresses fit one batch, so they cost exactly what a single address costs',
+);
+
+const pastOneBatch = await measureColdOpen({
+    networkKind: 'testnet',
+    addressesPerChain: BALANCES_BATCH_MAX_ADDRESSES + 1,
+});
+assert.equal(
+    balancesPerChain(pastOneBatch), expectedPerChain(BALANCES_BATCH_MAX_ADDRESSES + 1),
+    'one address past the batch size buys a SECOND read per chain, so none is dropped',
+);
 
 // Every measured request must land on a host a SHIPPED descriptor names. Same
 // property the demo gate pins: a profile of hosts the build stopped using
