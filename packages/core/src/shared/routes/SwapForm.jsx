@@ -33,6 +33,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -144,20 +145,24 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             typeof messaging.getActiveAddresses === 'function'
                 ? messaging.getActiveAddresses(walletId)
                 : Promise.resolve({}),
+            // Best-effort, like useActionForm: the last-used chain default
+            // needs the settings in the same load, never a beat later.
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
-                const first = Object.keys(byChain)[0];
-                if (!first) {
+                if (!Object.keys(byChain)[0]) {
                     setLoadError(
                         'No addresses on any chain yet. Use Receive to generate one before creating a swap.',
                     );
                     return;
                 }
                 // Don't clobber a caller-seeded chain (ManageToken sell flow).
-                setChainId((c) => c || first);
+                setChainId((c) => pickDefaultChainId(byChain, { explicitChainId: c, settings }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -337,6 +342,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setResult(res);
             setPassword('');
             setStage('done');
+            recordLastUsedChain(messaging, chainId);
         } catch (err) {
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
@@ -413,6 +419,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             }
             setResult(r);
             setStage('done');
+            recordLastUsedChain(messaging, chainId);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(

@@ -22,6 +22,7 @@ import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { tickerForCoin, explorerCoinCode } from '../../registry/coinTicker.js';
@@ -861,6 +862,10 @@ export function AddressList({
             if (!selected.record?.id || typeof messaging.setActiveAddress !== 'function') return;
             try {
                 await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id);
+                // Choosing an address is choosing its chain: the action forms
+                // open here next. Best-effort, and before the navigation so
+                // the write is in flight by the time Home mounts.
+                recordLastUsedChain(messaging, selected.chainId);
                 // Leave the addresses section entirely and return to Home. The
                 // active address is persisted before we navigate, so Home's
                 // fresh mount refetches balances against the new active address.

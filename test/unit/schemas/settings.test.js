@@ -719,6 +719,26 @@ describe('validateSettings', () => {
         expect(validateSettings(without).ok).toBe(true);
     });
 
+    // lastUsedChain: one chainId per network, the action forms' opening
+    // chain. Only the key set is checked; a chainId the registry no longer
+    // knows must stay readable and fall through at read time.
+    it('accepts a lastUsedChain slot per network, and a missing field', () => {
+        const s = createDefaultSettings();
+        expect(s.lastUsedChain).toEqual({});
+        expect(validateSettings({ ...s, lastUsedChain: { mainnet: 'dogecoin-mainnet', testnet: 'bitcoin-testnet' } }).ok).toBe(true);
+        expect(validateSettings({ ...s, lastUsedChain: { regtest: 'no-such-chain' } }).ok).toBe(true);
+        const { lastUsedChain, ...without } = s;
+        expect(validateSettings(without).ok).toBe(true);
+    });
+
+    it('rejects a lastUsedChain keyed by an unknown network or holding a non-string', () => {
+        const s = createDefaultSettings();
+        expect(validateSettings({ ...s, lastUsedChain: { devnet: 'bitcoin-mainnet' } }).ok).toBe(false);
+        expect(validateSettings({ ...s, lastUsedChain: { mainnet: '' } }).ok).toBe(false);
+        expect(validateSettings({ ...s, lastUsedChain: { mainnet: 7 } }).ok).toBe(false);
+        expect(validateSettings({ ...s, lastUsedChain: 'bitcoin-mainnet' }).ok).toBe(false);
+    });
+
     it('rejects invalid customChains when present', () => {
         const s = createDefaultSettings();
         expect(validateSettings({ ...s, customChains: ['not-an-object'] }).ok).toBe(false);

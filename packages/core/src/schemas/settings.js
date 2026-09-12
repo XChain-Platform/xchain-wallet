@@ -212,6 +212,7 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
  * @property {typeof WALLET_MODES[number]} [walletMode]                                                      v2-tolerant: `full` (default) signs + broadcasts here; `watcher` builds unsigned PSBTs for an air-gapped signer; `signer` accepts pasted PSBTs from a watcher and returns signed PSBTs (§20 / G039). Send / Home branch on this field in subsequent steps.
  * @property {{ walletMode: 'watcher' | 'signer', label: string, keySetId: string, keys: object[], sharedChainIds: string[], pairedAt: string } | null} [partnerPairing] v2-tolerant: §20.5. The verified other half of a watcher/signer pair, holding that partner's account-level PUBLIC key set (never any seed or private key). Written only by `flows.pairPartner` after `verifyPartnerPairing` proves both halves derive from one recovery phrase. null / absent = unpaired, which is the only valid state for a `full` wallet.
  * @property {typeof NETWORKS[number]} [activeNetwork]                                                     v2-tolerant: `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings > Network operation. Cross-network features are disabled while the filter is on.
+ * @property {Partial<Record<typeof NETWORKS[number], string>>} [lastUsedChain]                             v2-tolerant: the chainId the user last worked on, one slot per network so a testnet choice never becomes the mainnet default. Written when an address is made active and when an action form submits; read by the action forms as their opening chain when the caller names none (shared/chainSelection.js).
  * @property {object[]} [customChains]                                                                       v2-tolerant: user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
  * @property {boolean} [showFiatInHistory] v2-tolerant. When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
  * @property {{ enabled: boolean, start: string, end: string }} [quietHours] v2-tolerant. Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
@@ -323,6 +324,7 @@ export function createDefaultSettings() {
         walletMode: WALLET_MODE_DEFAULT,
         partnerPairing: null,
         activeNetwork: NETWORK_DEFAULT,
+        lastUsedChain: {},
         // Event sounds (§6 M4.2). Silent out of the box; every family's
         // sound comes from the palette default until the user picks one,
         // so an empty `perKind` is the fully-configured state, not a gap.
@@ -663,6 +665,19 @@ export function validateSettings(record) {
             'activeNetwork',
             isOneOf(r.activeNetwork, NETWORKS),
             `must be one of ${NETWORKS.join(', ')}`,
+        );
+    }
+    // One chainId per network. Only the key set is checked: a chain the
+    // registry has since dropped must not make the record unreadable, and
+    // the readers fall back on their own when the slot points nowhere.
+    if (r.lastUsedChain !== undefined) {
+        check(
+            errors,
+            'lastUsedChain',
+            isPlainObject(r.lastUsedChain)
+                && Object.entries(r.lastUsedChain).every(([network, chainId]) =>
+                    isOneOf(network, NETWORKS) && isNonEmptyString(chainId)),
+            `must map a network (${NETWORKS.join(', ')}) to a chainId when present`,
         );
     }
     if (r.showFiatInHistory !== undefined) {

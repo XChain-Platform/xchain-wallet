@@ -142,6 +142,7 @@ import {
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -367,23 +368,33 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         setDraftPending(false);
     }, [draft]);
 
+    // The settings read rides the address load so the last-used chain is
+    // known in the render that first shows the form. Best-effort: a host
+    // without `getSettings`, or a failed read, still yields a usable form.
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([byChain, loadedSettings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
-                const firstChain = Object.keys(byChain)[0];
-                if (!firstChain) {
+                if (!Object.keys(byChain)[0]) {
                     setLoadError(
                         'No addresses on any chain yet. Use Receive to generate one.',
                     );
                     return;
                 }
-                // §47 Cluster L FOLLOWUP 1: preserve a prefilled chainId
-                // if the route opened from a deep-link intent. Falls back
-                // to the first available chain when no prefill exists.
-                setChainId((prev) => prev || firstChain);
+                // §47 Cluster L FOLLOWUP 1: a chain already set (a prefill,
+                // a deep-link intent, a restored draft) is kept; otherwise
+                // the last-used chain, then the first available one.
+                setChainId((prev) => pickDefaultChainId(byChain, {
+                    explicitChainId: prev,
+                    settings: loadedSettings,
+                }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -1608,6 +1619,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             setDraftPending(false);
             setStage('done');
             haptic.success();
+            recordLastUsedChain(messaging, chainId);
         } catch (err) {
             // User rejection is a calm no-op: stay on the form untouched.
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) {
@@ -1687,6 +1699,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             setDraftPending(false);
             setStage('done');
             haptic.success();
+            recordLastUsedChain(messaging, chainId);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             const rawMsg = err?.message || '';
