@@ -357,10 +357,19 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             setError('Passwords do not match.');
             return;
         }
+        // A checked box with an empty field used to collapse to "no
+        // passphrase" and silently derive the passphrase-less wallet, the
+        // same wrong addresses the user was ticking the box to avoid. The
+        // box is a claim that a passphrase exists, so an empty one is a
+        // contradiction to refuse, not a default to fill in.
+        if (!isFreeWallet && showPassphrase && bip39Passphrase.length === 0) {
+            setError('Enter the BIP39 passphrase, or uncheck the box if this wallet does not use one.');
+            return;
+        }
         setError(null);
         setBusy(true);
         try {
-            const passphraseArg = !isFreeWallet && showPassphrase && bip39Passphrase.length > 0
+            const passphraseArg = !isFreeWallet && showPassphrase
                 ? bip39Passphrase
                 : '';
             if (mode === 'add') {

@@ -105,6 +105,12 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             setPasswordError('Passwords do not match.');
             return;
         }
+        // Same rule as the import screen: a checked box with nothing typed
+        // is a contradiction, not a wallet without a passphrase.
+        if (showPassphrase && bip39Passphrase.length === 0) {
+            setPasswordError('Enter the BIP39 passphrase, or uncheck the box to create a wallet without one.');
+            return;
+        }
         if (showPassphrase && bip39Passphrase !== bip39PassphraseConfirm) {
             setPasswordError('BIP39 passphrases do not match.');
             return;
