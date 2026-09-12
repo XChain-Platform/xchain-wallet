@@ -50,7 +50,7 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import {
     listMembers,
     ownerOffAllowList,
@@ -125,6 +125,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the source default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
@@ -189,7 +194,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [pickerGenerating, setPickerGenerating] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     // Source (SOURCE) picker: the QR icon on the Source field opens the
-    // wallet's own address list. A manual pick pins the source: the newest-receive /
+    // wallet's own address list. A manual pick pins the source: the active-address /
     // best-token-holder auto-selection effects stand down until the chain
     // changes.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -272,12 +277,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         setDraftPending(false);
     }, [draft]);
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId, activeAccountId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId, activeAccountId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId, activeAccountId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -300,7 +313,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [chainId, activeAccountId]);
 
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (!chainId || !addressesByChain || !activeByChain) return;
         const all = addressesByChain[chainId] || [];
         if (initialFromAddress) {
             const match = all.find((a) => a.address === initialFromAddress);
@@ -310,31 +323,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (all.some((a) => a.id === fromAddressId)) return;
             manualSourceRef.current = false;
         }
-        // role='dispenser' excluded: a freshly generated dispenser address
-        // is the newest external index, and SOURCE must stay a personal
-        // funding address (matches the activeAddress.js convention).
-        const addrs = all.filter(
-            (a) => a.source === 'hd' && a.role !== 'dispenser'
-                && externalIndexOf(a.derivationPath) !== null,
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain, initialFromAddress]);
+        // Same default as Send and every other spend-from-balance form: the
+        // chain's active address, else the newest HD external. role='dispenser'
+        // excluded: a freshly generated dispenser address is the newest external
+        // index, and SOURCE must stay a personal funding address.
+        const funding = all.filter((a) => a.role !== 'dispenser');
+        setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain, initialFromAddress]);
 
-    // Balance-resolve SOURCE: the newest-receive default above is a guess
+    // Balance-resolve SOURCE: the active-address default above is a guess
     // at where the token inventory lives. Once a ticker is entered, prefer
     // the account address (on the selected chain) that actually holds the
     // most of that tick, since SOURCE is what the escrow debits. Debounced
     // so typing the ticker doesn't fan out a balance query per keystroke;
-    // any failure leaves the newest-receive default untouched. Skipped when
+    // any failure leaves the default untouched. Skipped when
     // the source is pinned by an incoming `initialFromAddress`.
     useEffect(() => {
         const tick = ticker.trim().toUpperCase();
@@ -365,7 +367,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         if (holder) setFromAddressId(holder.id);
                     }
                 })
-                .catch(() => { /* keep the newest-receive default on failure */ });
+                .catch(() => { /* keep the active-address default on failure */ });
         }, 400);
         return () => { cancelled = true; clearTimeout(timer); };
     }, [ticker, chainId, addressesByChain, activeAccountId, walletId, messaging, initialFromAddress]);
@@ -639,6 +641,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // per chain/account, after validation so an invalid form consumes no
         // index. SOURCE (fromAddress) is unchanged. If the wallet build has
         // no derivation handler, fall back to opening on SOURCE.
+        //
+        // The derived address is threaded into `params` by hand: `actionParams`
+        // is memoized for the render this closure came from, and the confirm
+        // path below composes in the same tick, before any re-render could
+        // fold `dispenserGetAddress` in. Reading the memo here would submit
+        // the dispenser self-open and orphan the address just derived.
+        let params = actionParams;
         if (addressMode === 'new' && !dispenserGetAddress && typeof messaging.generateDispenserAddress === 'function') {
             try {
                 setDerivingGetAddress(true);
@@ -648,6 +657,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     chainId,
                 });
                 setDispenserGetAddress(addr);
+                if (addr?.address) params = { ...actionParams, GET_ADDRESS: addr.address };
             } catch (err) {
                 setFormError(err?.message || 'Could not derive a dispenser address.');
                 return;
@@ -655,7 +665,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 setDerivingGetAddress(false);
             }
         }
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) { openConfirmScreen(params); return; }
         setStage('review');
     }
 
@@ -687,7 +697,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
-    async function openConfirmScreen() {
+    // `params` is the wire param set to compose AND to sign on Approve; the
+    // caller passes it explicitly when it holds a GET_ADDRESS newer than the
+    // memoized `actionParams` (see handleReview).
+    async function openConfirmScreen(params = actionParams) {
         const from = {
             address: sourceAddress.address,
             publicKey: sourceAddress.publicKey,
@@ -701,7 +714,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: 'DISPENSER', params: actionParams },
+                actionData: { action: 'DISPENSER', params },
                 encoderOpts: {
                     payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
@@ -710,7 +723,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     walletId,
                     chainId,
                     from,
-                    params: actionParams,
+                    params,
                     payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
