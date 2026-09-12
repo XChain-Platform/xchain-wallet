@@ -290,11 +290,12 @@ export function ContractDetail({
                             {executions.map((row, i) => (
                                 <div key={String(row.action_index ?? i) + ':' + i} className={styles.entry}>
                                     <span className={styles.entryLabel}>
-                                        {row.method || row.METHOD || '(method)'} #{row.action_index ?? '?'}
+                                        {row.method || row.METHOD || row.method_name || row.action || '(method)'} #{row.action_index ?? '?'}
+                                        {' '}<ExecutionStatusPill status={row.status} />
                                     </span>
                                     <span className={styles.entryDescription}>
-                                        {row.source ? (
-                                            <>caller <AddressText address={String(row.source)} /> · </>
+                                        {row.gas_used !== undefined && row.gas_used !== null ? (
+                                            <>gas {row.gas_used} · </>
                                         ) : null}
                                         block {row.block_index || '?'}
                                     </span>
@@ -411,6 +412,27 @@ function BalancesTable({ balances }) {
     );
 }
 
+// Execution status -> pill class, reusing the statusPill idiom shared with
+// History.module.css: valid = succeeded, reverted = ran but rolled back,
+// invalid = malformed action. An unknown or missing status renders no pill
+// rather than implying success.
+function executionStatusPillClass(status) {
+    if (status === 'valid') return styles.statusPillSuccess;
+    if (status === 'reverted') return styles.statusPillError;
+    if (status === 'invalid') return styles.statusPillPending;
+    return null;
+}
+
+function ExecutionStatusPill({ status }) {
+    const pillClass = executionStatusPillClass(status);
+    if (!pillClass) return null;
+    return (
+        <span className={`${styles.statusPill} ${pillClass}`}>
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+        </span>
+    );
+}
+
 function Pagination({ page, total, pageSize, onChange }) {
     const hasNext = total === null
         ? pageSize >= 25  // heuristic when total is absent: a full page implies more
@@ -457,9 +479,17 @@ function stateKeyCount(state) {
 
 function toKeyValueEntries(state) {
     if (!state) return [];
-    // Shape A: { data: [{ key, value }, ...] }
+    // Shape A: { data: [{ key, value }, ...] } is the SDK's declared shape.
+    // { data: [{ state_key, state_value }, ...] } is what GET /contract/{idx}/state
+    // actually returns; state_value is a JSON-encoded scalar there, so it gets
+    // parsed once rather than passed through as raw escaped text.
     if (Array.isArray(state.data)) {
-        return state.data.map((row) => [String(row.key ?? row.KEY ?? ''), row.value ?? row.VALUE]);
+        return state.data.map((row) => {
+            const key = String(row.key ?? row.KEY ?? row.state_key ?? '');
+            if (row.value !== undefined) return [key, row.value];
+            if (row.VALUE !== undefined) return [key, row.VALUE];
+            return [key, parseStateValue(row.state_value ?? null)];
+        });
     }
     // Shape B: { state: { k: v, ... } }
     if (state.state && typeof state.state === 'object') {
@@ -470,6 +500,16 @@ function toKeyValueEntries(state) {
         return Object.entries(state);
     }
     return [];
+}
+
+function parseStateValue(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v !== 'string') return v;
+    try {
+        return JSON.parse(v);
+    } catch {
+        return v;
+    }
 }
 
 function renderStateValue(v) {
