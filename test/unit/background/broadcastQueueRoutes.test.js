@@ -449,6 +449,64 @@ describe('a settlement the vault refused survives the entry that owed it', () =>
             else globalThis.chrome = prior;
         }
     });
+
+    it('a write journaled while a flush awaits the vault survives that flush', async () => {
+        const records = memCollection();
+        await records.put(queuedRecord('p1'));
+        await records.put(queuedRecord('p2'));
+        // A vault that opens one record at a time and whose first write can be
+        // held open. Nothing serializes the host's routes, so the banner's list
+        // (which flushes) and a broadcast whose write the vault refuses (which
+        // journals) interleave exactly here: the journal gains a record while
+        // the flush is suspended inside the vault.
+        const open = new Set();
+        const firstPut = deferred();
+        let held = false;
+        const pendingTxs = {
+            ...records,
+            get: async (id) => {
+                if (!open.has(id)) throw new Error('VaultStateError: vault is closed');
+                return records.get(id);
+            },
+            put: async (rec) => {
+                if (!held) {
+                    held = true;
+                    await firstPut.promise;
+                }
+                return records.put(rec);
+            },
+        };
+        const h = makeHost({
+            entries: [entry('A', { pendingTxId: 'p1' }), entry('B', { pendingTxId: 'p2' })],
+            pendingTxs,
+            broadcastTx: vi.fn(async (hex) => String(hex).replace('hex-', 'tx-')),
+        });
+
+        // A's bytes land while the vault refuses the write, so the journal is
+        // the only thing that still knows what they did.
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+
+        // The banner lists; the flush reaches p1 and parks inside the vault write.
+        open.add('p1');
+        const flushing = h.list();
+        await vi.waitFor(() => expect(held).toBe(true));
+
+        // Mid-flush: B's bytes land, the vault refuses that write too, and the
+        // record is journaled while the flush above is still suspended.
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'B' })).ok).toBe(true);
+
+        firstPut.resolve();
+        await flushing;
+
+        // The flush drops only what it settled, so p2's owed write is still
+        // journaled and the next vault that takes it settles the record. A
+        // flush that installed its own survivors would have discarded it, and
+        // p2 would stay 'queued' with its bytes already on the chain.
+        open.add('p2');
+        await h.list();
+        expect(await records.get('p1')).toMatchObject({ status: 'broadcast', txid: 'tx-A' });
+        expect(await records.get('p2')).toMatchObject({ status: 'broadcast', txid: 'tx-B' });
+    });
 });
 
 describe('a failed rehydrate never lets the next mutation erase the persisted queue', () => {

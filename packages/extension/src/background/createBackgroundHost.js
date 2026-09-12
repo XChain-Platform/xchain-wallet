@@ -2724,8 +2724,12 @@ export function createBackgroundHost(deps) {
     async function flushOwedSettlements(vault) {
         if (owedSettlements.length === 0) return;
         try {
-            const kept = [];
-            let changed = false;
+            // The records this pass resolved, held by identity rather than by
+            // pendingTxId: `recordOwedSettlement` drops the old record for a
+            // PendingTx and pushes a fresh object, so identity distinguishes
+            // the record this loop settled from a newer write owed to the same
+            // PendingTx.
+            const settled = new Set();
             for (const owed of owedSettlements) {
                 let verdict;
                 if (owed.op === 'discard') {
@@ -2738,11 +2742,16 @@ export function createBackgroundHost(deps) {
                 } else {
                     verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
                 }
-                if (verdict === 'unreachable') kept.push(owed);
-                else changed = true;
+                if (verdict !== 'unreachable') settled.add(owed);
             }
-            if (!changed) return;
-            owedSettlements = kept;
+            if (settled.size === 0) return;
+            // Remove exactly what this pass settled, from the journal as it
+            // stands now. Installing the loop's own survivors instead would
+            // discard every record journaled during the awaits above — the
+            // routes that journal them run while this one is suspended (the
+            // banner's poll flushes; a broadcast the vault refuses records) —
+            // and the persist below would then write that loss to storage.
+            owedSettlements = owedSettlements.filter((s) => !settled.has(s));
             await persistOwedSettlements();
         } catch (_e) {
             // A journal that cannot drain stays as it is for the next route.

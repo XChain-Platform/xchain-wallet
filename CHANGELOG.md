@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
+- A broadcast whose record the locked vault refused is no longer forgotten when it lands while the queue is replaying an earlier one; the replay now clears only the writes it settled, so the transaction stops showing as unsent once the wallet is unlocked.
 - Home's 20-second balance poll no longer starts a second load while one is still waiting on the service.
 - History's 20-second beat and the payments-due badge's scan no longer start a second fetch while one is still waiting on the service.
 - A refused balance read carries its error code and the seconds the service asked for as fields on the entry, so Home reads them instead of parsing the message.
