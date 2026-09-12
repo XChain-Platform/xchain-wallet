@@ -1952,7 +1952,9 @@ export function createBackgroundHost(deps) {
     });
 
     // Delete an address record by id (e.g. an imported WIF the user no
-    // longer wants surfaced). Derived addresses can be re-derived later.
+    // longer wants surfaced). A derived address comes back through
+    // receive.getAddress, which re-derives the lowest index no record
+    // holds; the record's funds stay on chain meanwhile.
     host.register('addresses.delete', async (req, { vault }) => {
         const id = req?.id;
         if (!id) throw new Error('addresses.delete: id is required');
@@ -4658,13 +4660,18 @@ export function createBackgroundHost(deps) {
     // A native-coin send is invisible to every action feed, so this
     // read first reconciles the address's native sends against the chain's
     // UTXO set (retiring the ones a block holds, stamping the ones the
-    // mempool holds) and then lists what is still in flight. Best-effort:
-    // a tracker outage lists the records exactly as before.
+    // mempool holds). What the outputs cannot settle, and any action the
+    // feeds never retired, it then checks past the pending window against
+    // the wallet's own confirmed spends and the explorer's transaction
+    // record by hash, so a mined transaction is never left reading as lost.
+    // The listing that follows keeps the records so retired, as confirmed
+    // rows. Best-effort: a tracker or explorer outage lists the records
+    // exactly as before.
     host.register('pendingTxs.forAddress', async (req, { vault, chainRegistry, sdkRegistry }) => {
         let seenNow;
         try {
             ({ seenNow } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
-        } catch { /* the listing below must never depend on the tracker */ }
+        } catch { /* the listing below must never depend on the tracker or the explorer */ }
         return livePendingTxs({ ...req, vault, chainRegistry, seenNow });
     });
 

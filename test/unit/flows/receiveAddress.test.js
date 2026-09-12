@@ -171,6 +171,82 @@ describe('receiveAddress (§29.7)', () => {
     });
 });
 
+// Gap filling. A deleted HD record leaves a hole below the highest held
+// index; Generate must re-derive that hole (lowest unheld index) rather
+// than highest+1, or the deleted address and whatever it holds stay
+// unreachable until every higher address is deleted too.
+describe('receiveAddress fills the lowest unheld external index', () => {
+    function hdAt(indices, { accountId = 'acct-a', account = 0, change = 0 } = {}) {
+        return indices.map((i) => createAddress({
+            accountId,
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: `m/84'/0'/${account}'/${change}/${i}`,
+            address: `${accountId}_${change}_${i}`,
+            publicKey: `pub_${accountId}_${change}_${i}`,
+            role: change === 1 ? 'change' : 'receive',
+        }));
+    }
+
+    it('derives index 0 when 1..4 are held and 0 is missing', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hdAt([1, 2, 3, 4]) });
+        const rec = await receiveAddress(base(vault, makeSigner('software')));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
+        expect(rec.label).toBe('BTC Address #1');
+    });
+
+    it('derives index 5 when 0..4 are held', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hdAt([0, 1, 2, 3, 4]) });
+        const rec = await receiveAddress(base(vault, makeSigner('software')));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/5");
+        expect(rec.label).toBe('BTC Address #6');
+    });
+
+    it('with 0, 1, 3 held derives 2, then 4, then 5 on successive calls', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hdAt([0, 1, 3]) });
+        const signer = makeSigner('software');
+        const paths = [];
+        for (let i = 0; i < 3; i += 1) {
+            // eslint-disable-next-line no-await-in-loop -- order is the assertion
+            paths.push((await receiveAddress(base(vault, signer))).derivationPath);
+        }
+        expect(paths).toEqual([
+            "m/84'/0'/0'/0/2",
+            "m/84'/0'/0'/0/4",
+            "m/84'/0'/0'/0/5",
+        ]);
+        expect(signer.calls.map((c) => c.startIndex)).toEqual([2, 4, 5]);
+    });
+
+    it('ignores the change branch: an internal index 0 does not fill external 0', async () => {
+        const vault = makeVault({
+            accounts: [ACCOUNT_A],
+            addresses: [...hdAt([1, 2]), ...hdAt([0], { change: 1 })],
+        });
+        const rec = await receiveAddress(base(vault, makeSigner('software')));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
+    });
+
+    it('ignores another account: its index 0 does not fill this account', async () => {
+        const vault = makeVault({
+            accounts: [ACCOUNT_A, ACCOUNT_B],
+            addresses: [...hdAt([1, 2]), ...hdAt([0], { accountId: 'acct-b', account: 1 })],
+        });
+        const rec = await receiveAddress(base(vault, makeSigner('software'), { accountId: 'acct-a' }));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
+    });
+
+    it('a dispenser-role record at an index still counts as held', async () => {
+        const [disp] = hdAt([0]);
+        disp.role = 'dispenser';
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: [disp] });
+        const rec = await receiveAddress(base(vault, makeSigner('software')));
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/1");
+    });
+});
+
 // §17.6: a fresh HARDWARE receive address is confirmed on the device's
 // trusted screen (verify:true) before it is persisted, so a compromised
 // host cannot silently substitute a deposit address.

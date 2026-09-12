@@ -65,6 +65,50 @@ export function wifPrefixHint(descriptor) {
     return typeof v === 'number' ? (WIF_PREFIX_BY_VERSION[v] || null) : null;
 }
 
+const DERIVED_SOURCES = new Set(['hd', 'trezor', 'ledger']);
+
+/**
+ * Confirm-dialog copy for deleting one address, built only from what the
+ * list already holds: the record's source, the cached balances, the
+ * dispenser tag, the active pointer and how many addresses the chain has
+ * left. A derived key is described truthfully: it is not lost, and it
+ * comes back through Generate, which re-derives the lowest missing index
+ * before allocating a new one. An imported key really is gone.
+ *
+ * @param {object} opts
+ * @param {{ source?: string, derivationPath?: string | null, role?: string } | null | undefined} opts.record
+ * @param {string} opts.chainName
+ * @param {string[]} [opts.holdings]   formatted non-zero balances ("0.5 DOGE", "1,000 XCP")
+ * @param {boolean} [opts.hidden]      Privacy Mode: say funds exist without the amounts
+ * @param {boolean} [opts.active]      this is the chain's active address
+ * @param {boolean} [opts.last]        this is the chain's only address in the wallet
+ * @returns {string}
+ */
+export function deleteAddressMessage({ record, chainName, holdings = [], hidden = false, active = false, last = false }) {
+    const parts = [];
+    if (holdings.length > 0) {
+        parts.push(hidden ? 'It holds funds.' : `It holds ${holdings.join(', ')}.`);
+    }
+    if (record?.role === 'dispenser') {
+        parts.push('It runs a dispenser, which this wallet cannot show or manage while the address is gone.');
+    }
+    if (active) {
+        parts.push(`It is the active ${chainName} address; the lowest remaining address takes over.`);
+    }
+    if (last) {
+        parts.push(`It is the only ${chainName} address in this wallet, so ${chainName} leaves the wallet until you add one.`);
+    }
+    const derived = DERIVED_SOURCES.has(record?.source) && typeof record?.derivationPath === 'string';
+    if (derived) {
+        parts.push(`Its key comes from your recovery phrase, so it is not lost: Add address > Generate on ${chainName} re-derives the lowest missing address before any new one.`);
+    } else if (record?.source === 'watch-only') {
+        parts.push('A watch-only address can be added again from its address string.');
+    } else {
+        parts.push('An imported key is gone unless you have a separate backup.');
+    }
+    return parts.join(' ');
+}
+
 // Format a fiat value in the user's selected currency (symbol + amount),
 // e.g. "$32.10" / "¥3,200". The 3-letter code is appended by the caller.
 function formatFiatAmount(value, currency) {
@@ -247,6 +291,28 @@ export function AddressList({
         return nb
             ? `${formatAmount(nb.quantity, nb.divisibility)} ${nb.tick || nativeTick}`
             : `0 ${nativeTick}`;
+    };
+    // Every non-zero balance the cached wallet-balance read knows for a row,
+    // native first then tokens, formatted like the list ("0.5 DOGE",
+    // "1,000 XCP"). Feeds the delete confirm; no extra explorer read.
+    const holdingsFor = (row) => {
+        const entries = balancesByChain?.[row.chainId];
+        if (!Array.isArray(entries)) return [];
+        const wanted = String(row.address || '').toLowerCase();
+        const entry = entries.find((e) => String(e?.address || '').toLowerCase() === wanted);
+        const b = entry?.balances;
+        if (!b || typeof b !== 'object') return [];
+        const out = [];
+        const nonZero = (q) => /[1-9]/.test(String(q ?? ''));
+        if (b.native && nonZero(b.native.quantity)) {
+            const d = chainRegistry.get(row.chainId);
+            out.push(`${formatAmount(b.native.quantity, Number(b.native.divisibility ?? 8))} ${b.native.tick || tickerForCoin(d?.coin)}`);
+        }
+        for (const t of Array.isArray(b.tokens) ? b.tokens : []) {
+            if (!t?.tick || !nonZero(t.quantity)) continue;
+            out.push(`${formatAmount(t.quantity, Number(t.divisibility ?? 0))} ${t.tick}`);
+        }
+        return out;
     };
     // Formatted fiat value for a row, with the currency code (e.g. "$32.10 USD"),
     // or '' when there's no price/balance.
@@ -810,9 +876,22 @@ export function AddressList({
         };
         const removeAddress = async () => {
             if (!selected.record?.id) return;
+            // Deleting is allowed even for the active or only address on a
+            // chain: the active pointer falls back to the lowest remaining
+            // index on its own, and removing the last record is the only
+            // way to drop a chain from the wallet. The dialog says both.
+            const chainName = d?.displayName || selected.chainId;
+            const onChain = (addressesByChain[selected.chainId] || []).filter((a) => a?.id);
             if (!(await confirmDialog.confirm({
                 title: 'Delete this address?',
-                message: 'An imported key is gone unless you have a separate backup.',
+                message: deleteAddressMessage({
+                    record: selected.record,
+                    chainName,
+                    holdings: holdingsFor(selected),
+                    hidden: balancesHidden,
+                    active: isActiveRow(selected),
+                    last: onChain.length === 1,
+                }),
                 confirmLabel: 'Delete',
                 danger: true,
             }))) return;
