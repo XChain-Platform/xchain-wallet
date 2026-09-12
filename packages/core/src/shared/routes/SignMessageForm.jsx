@@ -33,7 +33,7 @@ import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -51,6 +51,11 @@ export function SignMessageForm({ walletId, onBack }) {
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
+    );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -90,12 +95,20 @@ export function SignMessageForm({ walletId, onBack }) {
         setDraftPending(false);
     }, [draft]);
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -111,22 +124,20 @@ export function SignMessageForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Default to the newest address on the active chain whenever the
-    // chain selector changes.
+    // Default to the same address Send and every action form start on
+    // whenever the chain selector changes: the chain's active address, else
+    // the newest HD external, else the first remaining record. A dispenser-
+    // delegated address is never the default; the user can still pick it.
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (!chainId || !addressesByChain || !activeByChain) return;
         const addrs = addressesByChain[chainId] || [];
         if (addrs.length === 0) {
             setAddressId(null);
             return;
         }
-        const sorted = [...addrs].sort((a, b) => {
-            const ai = (externalIndexOf(a.derivationPath) ?? -1);
-            const bi = (externalIndexOf(b.derivationPath) ?? -1);
-            return bi - ai;
-        });
-        setAddressId(sorted[0].id);
-    }, [chainId, addressesByChain]);
+        const own = addrs.filter((a) => a.role !== 'dispenser');
+        setAddressId(preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id);
+    }, [chainId, addressesByChain, activeByChain]);
 
     const chainOptions = useMemo(() => {
         if (!addressesByChain) return [];

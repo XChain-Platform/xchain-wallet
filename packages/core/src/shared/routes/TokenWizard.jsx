@@ -34,7 +34,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -53,8 +53,8 @@ const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE'
  *              advertised dividends, which every token supports.
  *   chain:     pick the chain to create the token on. Filtered to
  *              chains the wallet already has an address on (needs a
- *              fee-paying address). Auto-picks the newest external
- *              HD address on that chain.
+ *              fee-paying address). Defaults to the chain's active
+ *              address, else the newest external HD address.
  *   details:   template-specific fields. Custom exposes all ISSUE v0
  *              fields (ticker, supply, max-mint, decimals, description,
  *              lock flags, transfer-ownership).
@@ -76,6 +76,11 @@ export function TokenWizard({ walletId, onBack }) {
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the fee payer resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [stage, setStage] = useState(
@@ -90,7 +95,7 @@ export function TokenWizard({ walletId, onBack }) {
     );
     // Whether the user has chosen the signer by hand. The auto-pick effect
     // below re-runs whenever the chain changes and would otherwise walk a
-    // deliberate choice straight back to the newest address.
+    // deliberate choice straight back to the default address.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [sourceChosenFor, setSourceChosenFor] = useState(/** @type {string | null} */ (null));
 
@@ -145,12 +150,20 @@ export function TokenWizard({ walletId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -166,28 +179,19 @@ export function TokenWizard({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Auto-pick the highest external HD address on the current chain - but
-    // never over a choice the user made for THIS chain. A subtoken is only
-    // valid from the address that owns its parent, so re-picking behind the
-    // user is not a cosmetic reset here: it silently restores the signer whose
-    // action the chain refuses.
+    // Default the fee payer the way Send does: the chain's active address,
+    // else the newest HD external. A dispenser-delegated address is never
+    // the default, since it is a vending address rather than a funding one.
+    // Never re-pick over a choice the user made for THIS chain. A subtoken is
+    // only valid from the address that owns its parent, so re-picking behind
+    // the user is not a cosmetic reset here: it silently restores the signer
+    // whose action the chain refuses.
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (!chainId || !addressesByChain || !activeByChain) return;
         if (sourceChosenFor === chainId) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain, sourceChosenFor]);
+        const funding = (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser');
+        setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain, sourceChosenFor]);
 
     useEffect(() => {
         if (stage === 'preview') {

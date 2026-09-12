@@ -44,7 +44,7 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -78,6 +78,11 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
+    );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the source default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -152,12 +157,20 @@ export function IssueTokenForm({ walletId, onBack }) {
         setDraftPending(false);
     }, [draft]);
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -173,22 +186,14 @@ export function IssueTokenForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
+    // Same default as Send and every other spend-from-balance form: the
+    // chain's active address, else the newest HD external. A dispenser-
+    // delegated address is never the default; it vends rather than funds.
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain]);
+        if (!chainId || !addressesByChain || !activeByChain) return;
+        const funding = (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser');
+        setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain]);
 
     useEffect(() => {
         if (stage === 'review') {

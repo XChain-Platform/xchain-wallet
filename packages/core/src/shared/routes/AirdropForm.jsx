@@ -48,7 +48,7 @@ import {
 import { extractHolderRows } from '../utils/holderRows.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -129,6 +129,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
+    );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the source default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -216,12 +221,20 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -283,27 +296,22 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         return () => { cancelled = true; };
     }, [resumeId, hydrated, addressesByChain, walletId, messaging]);
 
-    // Default fromAddressId → preferred issuer address (when present)
-    // or the newest external HD address on the chosen chain.
+    // Default fromAddressId: the preferred issuer address when present,
+    // else the same default as Send and every other spend-from-balance
+    // form: the chain's active address, else the newest HD external. A
+    // dispenser-delegated address is never the default; it vends rather
+    // than funds.
     useEffect(() => {
-        if (!chainId || !addressesByChain || fromAddressId) return;
+        if (!chainId || !addressesByChain || !activeByChain || fromAddressId) return;
         const all = addressesByChain[chainId] || [];
         if (initialFromAddress) {
             const match = all.find((a) => a.address === initialFromAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
-        const addrs = all.filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        }
-    }, [chainId, addressesByChain, fromAddressId, initialFromAddress]);
+        const funding = all.filter((a) => a.role !== 'dispenser');
+        const picked = preferredSourceId(funding, activeByChain[chainId]);
+        if (picked) setFromAddressId(picked);
+    }, [chainId, addressesByChain, activeByChain, fromAddressId, initialFromAddress]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     // The chain the recipients have to be spendable ON. Passing it to

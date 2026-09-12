@@ -27,7 +27,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -85,6 +85,11 @@ export function PublishFileForm({ walletId, onBack }) {
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the source default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any>} */ ({}),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
 
@@ -112,12 +117,20 @@ export function PublishFileForm({ walletId, onBack }) {
         /** @type {{ chainId: string, tick: string, ownerAddress: string } | null} */ (null),
     );
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                setActiveByChain(active || {});
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
@@ -173,23 +186,19 @@ export function PublishFileForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [mode, ownedTokens, addressesByChain, messaging]);
 
-    // Signing address on the picked chain: newest external HD address
-    // (any funded address can publish a public FILE; same heuristic as
-    // AttachContentForm's file leg).
+    // Signing address on the picked chain: the same default as Send and
+    // every other spend-from-balance form (any funded address can publish
+    // a public FILE; same heuristic as AttachContentForm's file leg). The
+    // chain's active address, else the newest HD external, else the first
+    // remaining record (a hardware-only wallet). A dispenser-delegated
+    // address is never the default; it vends rather than funds.
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !chainId) return null;
         const all = addressesByChain[chainId] || [];
-        const hd = all.filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-        );
-        const pool = hd.length > 0 ? hd : all;
-        if (pool.length === 0) return null;
-        return [...pool].sort((a, b) => {
-            const ai = (externalIndexOf(a.derivationPath) ?? -1);
-            const bi = (externalIndexOf(b.derivationPath) ?? -1);
-            return bi - ai;
-        })[0];
-    }, [addressesByChain, chainId]);
+        const funding = all.filter((a) => a.role !== 'dispenser');
+        const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
+        return all.find((a) => a.id === picked) || null;
+    }, [addressesByChain, activeByChain, chainId]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 

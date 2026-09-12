@@ -76,7 +76,7 @@ import {
     XCW_PREFIX,
 } from '../../uri/psbtQr.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 
 function arrayBufferToHex(buf) {
     const view = new Uint8Array(buf);
@@ -213,6 +213,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
+    );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -395,12 +400,20 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         },
     });
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -416,21 +429,20 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Default to the newest address on the active chain.
+    // Default to the same address Send and every action form start on:
+    // the chain's active address, else the newest HD external, else the
+    // first remaining record. A dispenser-delegated address is never the
+    // default; the user can still pick it.
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (!chainId || !addressesByChain || !activeByChain) return;
         const addrs = addressesByChain[chainId] || [];
         if (addrs.length === 0) {
             setAddressId(null);
             return;
         }
-        const sorted = [...addrs].sort((a, b) => {
-            const ai = (externalIndexOf(a.derivationPath) ?? -1);
-            const bi = (externalIndexOf(b.derivationPath) ?? -1);
-            return bi - ai;
-        });
-        setAddressId(sorted[0].id);
-    }, [chainId, addressesByChain]);
+        const own = addrs.filter((a) => a.role !== 'dispenser');
+        setAddressId(preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id);
+    }, [chainId, addressesByChain, activeByChain]);
 
     // Re-parse whenever the user pastes a fresh blob OR switches chains
     // The same PSBT under a different chain's SDK can produce different
