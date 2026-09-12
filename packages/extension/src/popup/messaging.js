@@ -1663,6 +1663,17 @@ export function getPendingTxsForAddress(req) {
 }
 
 /**
+ * Remove a FAILED local send from History. The host refuses any record that
+ * is not `failed`, so this can never hide a send that is on the network.
+ *
+ * @param {{ pendingTxId: string }} req
+ * @returns {Promise<{ removed: boolean }>}
+ */
+export function dismissFailedPendingTx(req) {
+    return /** @type {any} */ (sendMessage('pendingTxs.dismissFailed', req));
+}
+
+/**
  * List LINK actions where `address` is the source. Backs the §23.5
  * cross-chain thread rendering : a LINK row pairs (coin1,
  * coin1_action_index) with (coin2, coin2_action_index), and the

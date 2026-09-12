@@ -48,6 +48,14 @@ const MEMPOOL_STAGE_COPY = {
         done: false,
         sub: 'You replaced this transaction with a higher-fee version',
     },
+    // The wallet's own verdict, not the network's: it gave up before the
+    // network took the send. The detail panel carries the recorded reason.
+    failed: {
+        label: 'Failed',
+        done: false,
+        warn: true,
+        sub: 'This send did not reach the network',
+    },
 };
 
 /**
@@ -115,11 +123,15 @@ export function TxStatusTimeline({
         : Number(meta?.confirmedAtMs ?? 0);
     const signedAt = Number(entry?.signedAt ?? 0);
     const confirmed = blockIndex > 0 || chainConfirmed;
-    // Only a blockless entry with a hash has a pending state to read. The
-    // guard matters: every historical row reaches this component with no
-    // pending metadata at all, and `pendingDisplayState` would answer
-    // 'awaiting-network' for it, which is true of nothing that is in a block.
-    const pendingState = !confirmed && txHash.length > 0
+    // A failed local record is the one blockless entry that may carry no
+    // hash: it died in compose or signing, before there was one.
+    const failed = !confirmed && meta?.failed === true;
+    // Only a blockless entry with a hash (or a recorded failure) has a
+    // pending state to read. The guard matters: every historical row reaches
+    // this component with no pending metadata at all, and
+    // `pendingDisplayState` would answer 'awaiting-network' for it, which is
+    // true of nothing that is in a block.
+    const pendingState = !confirmed && (txHash.length > 0 || failed)
         ? pendingDisplayState(entry, Date.now(), { seenWindowMs, droppedGraceMs })
         : null;
     const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
@@ -128,13 +140,14 @@ export function TxStatusTimeline({
 
     // Signed: a broadcast tx was necessarily signed first, so a present
     // txHash implies this stage is done. An explicit signedAt marks it
-    // done for a queued/pre-broadcast entry that has no hash yet.
+    // done for a queued/pre-broadcast entry that has no hash yet. A failure
+    // with no hash never got that far, and "waiting for you" would be a lie.
     const signed = signedAt > 0 || txHash.length > 0;
     const signedSub = signedAt > 0
         ? (relativeTime(signedAt) || 'Approved and signed')
         : (signed
             ? 'Approved and signed'
-            : 'Waiting for you to approve and sign');
+            : (failed ? 'Not reached: the send failed first' : 'Waiting for you to approve and sign'));
 
     // Indexed: the indexer has caught up to (or past) this action's block.
     // A supplied watermark decides it; without one, a confirmed row is
@@ -183,7 +196,7 @@ export function TxStatusTimeline({
             key: 'broadcast',
             label: 'Broadcast',
             done: txHash.length > 0,
-            sub: txHash || 'Not sent yet',
+            sub: txHash || (failed ? 'Never sent' : 'Not sent yet'),
         },
         {
             key: 'mempool',

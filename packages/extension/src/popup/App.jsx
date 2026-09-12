@@ -1716,6 +1716,7 @@ function AppInner() {
                             setUnlockedView('compose-message');
                         }}
                         onBack={formBack}
+                        onOpenBackup={() => openSettingsSection('backup')}
                     />
                 );
             }

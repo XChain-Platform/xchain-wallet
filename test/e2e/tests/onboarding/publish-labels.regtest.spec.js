@@ -50,12 +50,13 @@
 // (FOLLOWUP 2). A name that changed per publish would leave every earlier copy
 // unfindable.
 //
-// SCOPE NOTE, so nobody reads more into a green run than it earns: the restore
-// lane does not exist yet. `applyLabelSyncPayload` is exported and called by
-// nothing, and there is no fetch-by-discovery-name anywhere in `packages/*/src`.
-// That is a TRACKED deferral (FOLLOWUPS.md, "FOLLOWUP 2 - Fetch + decrypt +
-// apply on restore"), not a defect found here. This spec therefore proves the
-// publish half is sound and pins the two properties that lane will depend on.
+// SCOPE NOTE, so nobody reads more into a green run than it earns: this spec
+// covers the PUBLISH half only. The restore half (`restoreLabelSyncAfterImport`,
+// run by every import lane) is pinned by the unit suite
+// test/unit/flows/labelSyncRestore.test.js against an in-memory explorer; a
+// driven publish-then-reimport round trip on regtest is still owed. This spec
+// proves the publish half is sound and pins the two properties the restore
+// depends on: the payload carries the book, and the name is stable.
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \

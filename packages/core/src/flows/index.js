@@ -473,7 +473,7 @@ export {
     BALANCE_POLL_INTERVAL_MS,
 } from './balances.js';
 export { createPollThrottle } from './pollThrottle.js';
-export { livePendingTxs } from './pendingTxFeed.js';
+export { livePendingTxs, dismissFailedPendingTx } from './pendingTxFeed.js';
 // A plain native-coin send carries no action, so the action feeds
 // never retire its record; the chain's UTXO set is its confirmation source.
 export {
@@ -535,6 +535,9 @@ export {
     applyLabelSyncPayload,
     publishLabelsNow,
     fetchAndDecryptLabelSync,
+    restoreLabelSyncAfterImport,
+    labelSyncSearchChainIds,
+    LABEL_SYNC_RESTORE_CHAIN_TIMEOUT_MS,
     selectLabelSyncCandidates,
     createLabelSyncScheduler,
     NoFundedAddressError,

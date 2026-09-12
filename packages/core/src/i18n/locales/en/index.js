@@ -174,8 +174,17 @@ export const en = {
     'pending.row.replaced': 'replaced',
     'pending.row.confirmed': 'confirmed',
     'pending.row.generic': 'pending',
+    // The wallet gave up before the network took the send. Its own record is
+    // the only trace, so the row says so plainly rather than "pending".
+    'pending.row.failed': 'failed, never sent',
 
     'pending.detail.sectionLabel': 'Pending transaction',
+    'pending.detail.failedSectionLabel': 'Failed transaction',
+    'pending.detail.failed': 'Failed before it reached the network',
+    'pending.detail.failedHelp':
+        'This wallet could not complete the send. Nothing was broadcast, so no coins moved and no fee was paid. You can send again.',
+    'pending.detail.failedReason': 'Reason: {error}',
+    'pending.detail.dismissFailed': 'Remove from history',
     // A transaction this wallet proved into a block that no feed will ever
     // list: a plain coin transfer, or an action the service recorded nothing
     // for. Both say what the block settled and what it did not.

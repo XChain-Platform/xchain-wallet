@@ -148,13 +148,37 @@ describe('pendingTxToEntry', () => {
         expect(e.timestamp).toBe(Date.parse('2026-08-27T00:01:00.000Z'));
         expect(e.pending.firstSeenMs).toBe(Date.parse('2026-08-27T00:01:00.000Z'));
     });
-    it('drops a record that never reached the network', () => {
+    it('drops a record that has not been sent yet or is already indexed', () => {
         expect(fromLocal({ status: 'queued' })).toBeNull();
-        expect(fromLocal({ status: 'failed' })).toBeNull();
         expect(fromLocal({ status: 'indexed' })).toBeNull();
     });
-    it('drops a record with no txid: there is nothing to merge on', () => {
+    it('drops a live record with no txid: there is nothing to merge on', () => {
         expect(fromLocal({ txid: null })).toBeNull();
+    });
+    it('keeps a failed record as a Failed row, because nothing else will ever report it', () => {
+        const e = fromLocal({ status: 'failed', error: 'Insufficient funds' });
+        expect(e).not.toBeNull();
+        expect(e.pending.failed).toBe(true);
+        expect(e.pending.error).toBe('Insufficient funds');
+        expect(e.raw.status).toBe('failed');
+        expect(classifyEntryStatus(e)).toBe('failed');
+        expect(pendingDisplayState(e, NOW)).toBe('failed');
+    });
+    it('keeps a failed record with NO txid (it died in compose or signing), keyed by its own id', () => {
+        const e = fromLocal({ status: 'failed', txid: null, error: 'Fee estimate unavailable' });
+        expect(e).not.toBeNull();
+        expect(e.txHash).toBe('');
+        expect(e.key).toBe(`pending:${CHAIN}:ptx-ptx-1`);
+        expect(e.pending.pendingTxId).toBe('ptx-1');
+        expect(classifyEntryStatus(e)).toBe('failed');
+    });
+    it('dates a failure by the send, never by a mempool that never saw it', () => {
+        const e = fromLocal({ status: 'failed', txid: null, mempoolSeenAt: '2026-08-27T00:01:00.000Z' });
+        expect(e.timestamp).toBe(Date.parse('2026-08-27T00:00:10.000Z'));
+        expect(e.pending.firstSeenMs).toBe(Date.parse('2026-08-27T00:01:00.000Z'));
+    });
+    it('drops a failed record that has neither txid nor id: it has no identity to render', () => {
+        expect(fromLocal({ status: 'failed', txid: null, id: null })).toBeNull();
     });
     it('marks an RBF-replaced record and names its replacement', () => {
         const e = fromLocal({ status: 'rbf-replaced', rbfReplacement: 'FFEEDD' });
@@ -438,5 +462,32 @@ describe('a chain-confirmed local record', () => {
             pending: [local],
         });
         expect(replaced.pending).toHaveLength(0);
+    });
+});
+
+describe('failed local records in the merged list', () => {
+    it('keeps two txid-less failures apart instead of collapsing them on an empty hash', () => {
+        const a = fromLocal({ id: 'ptx-a', status: 'failed', txid: null, error: 'first' });
+        const b = fromLocal({ id: 'ptx-b', status: 'failed', txid: null, error: 'second' });
+        const merged = mergePendingEntries({ confirmed: [], pending: [a, b] });
+        expect(merged.pending).toHaveLength(2);
+        expect(merged.pending.map((e) => e.pending.error).sort()).toEqual(['first', 'second']);
+    });
+    it('lets the mempool overrule a "failed" broadcast that actually landed', () => {
+        // A permanent-looking broadcast error can still have gone through;
+        // the network row folds the local record in and the failure clears.
+        const local = fromLocal({ status: 'failed', txid: 'AABBCC', error: 'timeout' });
+        const merged = mergePendingEntries({ confirmed: [], pending: [fromMempool(), local] });
+        expect(merged.pending).toHaveLength(1);
+        expect(merged.pending[0].pending.failed).toBe(false);
+        expect(pendingDisplayState(merged.pending[0], NOW)).toBe('seen');
+    });
+    it('drops a failed record the confirmed feed already lists', () => {
+        const local = fromLocal({ status: 'failed', txid: 'AABBCC' });
+        const merged = mergePendingEntries({
+            confirmed: [{ chainId: CHAIN, txHash: 'aabbcc', blockIndex: 7707, actionIndex: '9' }],
+            pending: [local],
+        });
+        expect(merged.pending).toHaveLength(0);
     });
 });

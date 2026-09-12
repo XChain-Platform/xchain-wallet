@@ -1811,6 +1811,7 @@ function AppInner() {
                         onBack={formBack}
                         scanPrefill={contactScanPrefill}
                         onScanPrefillConsumed={() => setContactScanPrefill(null)}
+                        onOpenBackup={() => { setSettingsInitialSection('backup'); setUnlockedView('settings'); }}
                     />
                 );
             }

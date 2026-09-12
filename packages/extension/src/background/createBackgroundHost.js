@@ -49,6 +49,8 @@ const {
     renameWallet,
     renameAccount,
     importMnemonic,
+    restoreLabelSyncAfterImport,
+    labelSyncSearchChainIds,
     unlockWallet,
     receiveAddress,
     ensureNetworkAddresses,
@@ -290,6 +292,33 @@ const {
     getAirdropRecipients,
     createSignThrottle,
 } = flows;
+
+/**
+ * §19.5.2 restore half, run right after an import while the password is in
+ * scope, and never allowed to fail the import around it. The flow already
+ * swallows explorer errors per chain; this guard covers the rest (a vault
+ * write refused, a wallet record the flow cannot open) and turns it into a
+ * `null` the import screen reads as "nothing restored", not "import failed".
+ *
+ * @param {{ vault: any, walletId: string, password: unknown, bip39Passphrase?: unknown, chainIds?: unknown, sdkRegistry: any, onConflict: 'overwrite' | 'preserve' }} opts
+ */
+async function restoreLabelSyncBestEffort({ vault, walletId, password, bip39Passphrase, chainIds, sdkRegistry, onConflict }) {
+    if (typeof password !== 'string' || password.length === 0) return null;
+    try {
+        return await restoreLabelSyncAfterImport({
+            vault,
+            walletId,
+            password,
+            bip39Passphrase: typeof bip39Passphrase === 'string' ? bip39Passphrase : '',
+            chainIds: Array.isArray(chainIds) ? chainIds : [],
+            sdkRegistry,
+            onConflict,
+        });
+    } catch (err) {
+        console.error('[xchain-wallet/host] label-sync restore skipped:', err);
+        return null;
+    }
+}
 
 /**
  * Group a wallet's addresses by chainId. No SDK calls, no password:
@@ -985,11 +1014,21 @@ export function createBackgroundHost(deps) {
 
     host.register('wallet.import', async (req, { vault, chainRegistry, sdkRegistry }) => {
         const r = await importMnemonic({ ...req, vault, chainRegistry, sdkRegistry });
+        const labelSync = await restoreLabelSyncBestEffort({
+            vault,
+            walletId: r.wallet.id,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainIds: labelSyncSearchChainIds(chainRegistry, req?.activeChainIds),
+            sdkRegistry,
+            onConflict: 'overwrite',
+        });
         return {
             format: r.format,
             wallet: toSafeWallet(r.wallet),
             account: r.account,
             addresses: r.addresses,
+            labelSync,
         };
     });
 
@@ -1030,11 +1069,24 @@ export function createBackgroundHost(deps) {
                 });
             } catch { /* best-effort: fallback is per-op password prompt */ }
         }
+        // 'preserve': the vault already holds the other wallets' contacts and
+        // labels, and an added wallet's published copy must not overwrite a
+        // record the user edited here since.
+        const labelSync = await restoreLabelSyncBestEffort({
+            vault,
+            walletId: r.wallet.id,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainIds: labelSyncSearchChainIds(chainRegistry, activeChainIds),
+            sdkRegistry,
+            onConflict: 'preserve',
+        });
         return {
             format: r.format,
             wallet: toSafeWallet(r.wallet),
             account: r.account,
             addresses: r.addresses,
+            labelSync,
         };
     });
 
@@ -4673,6 +4725,14 @@ export function createBackgroundHost(deps) {
             ({ seenNow } = await flows.reconcileNativePendingTxs({ ...req, vault, chainRegistry, sdkRegistry }));
         } catch { /* the listing below must never depend on the tracker or the explorer */ }
         return livePendingTxs({ ...req, vault, chainRegistry, seenNow });
+    });
+
+    // "Remove from history" on a failed local send. The flow deletes only a
+    // record whose status is `failed`; anything live or queued is refused,
+    // so the route cannot make a send that is on the network disappear.
+    host.register('pendingTxs.dismissFailed', async (req, { vault }) => {
+        const removed = await flows.dismissFailedPendingTx({ vault, pendingTxId: req?.pendingTxId });
+        return { removed };
     });
 
     // §28.3 "Indexed" timeline stage: latest block the indexer has

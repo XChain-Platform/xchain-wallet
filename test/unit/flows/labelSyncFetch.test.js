@@ -385,3 +385,27 @@ describe('fetchAndDecryptLabelSync: argument guards', () => {
         expect(seed.every((b) => b === 7)).toBe(true);
     });
 });
+
+describe('fetchAndDecryptLabelSync: the wire form of a non-gated FILE', () => {
+    // The explorer serves a non-gated FILE in its STORED form, which for a
+    // label payload is the hex text the publish put on the wire. The first
+    // driven restore on regtest (2026-09-12) read 2066 hex characters, failed
+    // GCM on the text, and reported "never published".
+    it('decodes a payload the explorer serves as hex text', async () => {
+        const name = discoveryNameFor(SEED);
+        const bytes = await cipherFor(SEED, bodyWith('Hex wire'));
+        const hexText = Buffer.from(Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join(''), 'utf8');
+        const sdk = fakeSdk({ rows: [fileRow('41', name)], raws: { 41: hexText } });
+
+        const body = await fetchAndDecryptLabelSync({ sdk, seed: SEED });
+
+        expect(body?.labels?.[0]?.label).toBe('Hex wire');
+    });
+
+    it('still decodes a payload served as bytes', async () => {
+        const name = discoveryNameFor(SEED);
+        const sdk = fakeSdk({ rows: [fileRow('41', name)], raws: { 41: await cipherFor(SEED, bodyWith('Byte wire')) } });
+        const body = await fetchAndDecryptLabelSync({ sdk, seed: SEED });
+        expect(body?.labels?.[0]?.label).toBe('Byte wire');
+    });
+});

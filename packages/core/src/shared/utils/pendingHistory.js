@@ -62,6 +62,11 @@
  *                                          rejected). Outranks every other state
  * @property {number | null} confirmedBlockIndex  that block, when the proof named it
  * @property {number | null} confirmedAtMs  when the wallet learned of the block, ms
+ * @property {boolean} failed              the wallet gave up on this send before
+ *                                          the network took it: a compose, sign
+ *                                          or broadcast error. Local records only;
+ *                                          the entry may have no txHash at all
+ * @property {string | null} error         why, verbatim from the record, when failed
  */
 
 /**
@@ -108,15 +113,28 @@ export const DROPPED_GRACE_MS = 90000;
 const LIVE_PENDING_STATUSES = new Set(['broadcasting', 'broadcast', 'rbf-replaced']);
 
 /**
- * Statuses worth showing in History. Deliberately excludes the pre-broadcast
- * ones (composing / awaiting-signature / signed / queued: nothing has been
- * sent, and `queued` has its own banner), `indexed` (the confirmed entry is
- * the truth by then) and `failed` (never reached the network).
+ * Statuses that describe a send in flight. Deliberately excludes the
+ * pre-broadcast ones (composing / awaiting-signature / signed / queued:
+ * nothing has been sent, and `queued` has its own banner) and `indexed` (the
+ * confirmed entry is the truth by then). `failed` is not live either, but
+ * History shows it through `isFailedPendingStatus`: a send the wallet gave up
+ * on is the one outcome no explorer will ever report.
  *
  * @param {string} status
  */
 export function isLivePendingStatus(status) {
     return LIVE_PENDING_STATUSES.has(String(status || ''));
+}
+
+/**
+ * A record the wallet gave up on: compose, sign or broadcast threw and no
+ * queued retry exists. Shown in History as a failed row, txid or not, because
+ * a failure that never reached the network leaves no other trace anywhere.
+ *
+ * @param {string} status
+ */
+export function isFailedPendingStatus(status) {
+    return String(status || '') === 'failed';
 }
 
 /**
@@ -238,6 +256,8 @@ export function mempoolRowToEntry({ chainId, address, row, ownAddresses, observe
             chainConfirmed: false,
             confirmedBlockIndex: null,
             confirmedAtMs: null,
+            failed: false,
+            error: null,
         },
     };
 }
@@ -266,9 +286,13 @@ export function pendingTxToEntry({
     chainId, address, pendingTx, ownAddresses, observedAtMs, lastMempoolSeenMs = null,
 }) {
     const txHash = normalizeHash(pendingTx?.txid);
-    if (!txHash) return null;
+    const failed = isFailedPendingStatus(pendingTx?.status);
+    const pendingTxId = pendingTx?.id ? String(pendingTx.id) : null;
+    // A failed record may carry no txid at all (it died in compose or
+    // signing); its own id is then the only identity the row has.
+    if (!txHash && !(failed && pendingTxId)) return null;
     const chainConfirmed = isChainConfirmedRecord(pendingTx);
-    if (!isLivePendingStatus(pendingTx?.status) && !chainConfirmed) return null;
+    if (!failed && !isLivePendingStatus(pendingTx?.status) && !chainConfirmed) return null;
     const source = String(pendingTx?.fromAddress || '');
     const destinations = pendingTx?.toAddress ? [String(pendingTx.toAddress)] : [];
     const broadcastAtMs = isoToMs(pendingTx?.broadcastAt);
@@ -276,14 +300,21 @@ export function pendingTxToEntry({
     // lands the field is simply absent and the entry stays "awaiting network".
     const firstSeenMs = isoToMs(pendingTx?.mempoolSeenAt);
     const confirmedBlock = Number(pendingTx?.confirmedBlockIndex);
+    // A failure is dated by its last write (the failure stamp), else by
+    // when the send was started; never by the mempool, which never saw it.
+    const failedAtMs = failed
+        ? (isoToMs(pendingTx?.updatedAt) ?? broadcastAtMs ?? isoToMs(pendingTx?.createdAt))
+        : null;
     return {
-        key: pendingKeyFor(chainId, txHash),
+        key: pendingKeyFor(chainId, txHash || `ptx-${pendingTxId}`),
         chainId,
         address,
         actionIndex: '',
         action: String(pendingTx?.action || 'ACTION').toUpperCase(),
         blockIndex: 0,
-        timestamp: firstSeenMs ?? broadcastAtMs ?? observedAtMs,
+        timestamp: failed
+            ? (failedAtMs ?? observedAtMs)
+            : (firstSeenMs ?? broadcastAtMs ?? observedAtMs),
         txHash,
         source,
         raw: {
@@ -291,9 +322,15 @@ export function pendingTxToEntry({
             destination: destinations[0] || '',
             tick: pendingTx?.tick || '',
             amount: pendingTx?.amount == null ? '' : String(pendingTx.amount),
+            // `classifyEntryStatus` reads this field, so a failed local
+            // record lands in the same Failed bucket as an indexer-rejected
+            // action without every consumer learning a second rule.
+            ...(failed && { status: 'failed' }),
         },
         link: null,
         pending: {
+            failed,
+            error: failed && pendingTx?.error != null ? String(pendingTx.error) : null,
             origin: 'local',
             firstSeenMs,
             observedAtMs,
@@ -379,7 +416,9 @@ export function mergePendingEntries({ confirmed, pending }) {
     const byHash = new Map();
     for (const entry of Array.isArray(pending) ? pending : []) {
         if (!entry) continue;
-        const id = `${entry.chainId}:${entry.txHash}`;
+        // A failed record with no txid has only its own key for identity;
+        // keyed by an empty hash, every such failure would collapse into one.
+        const id = entry.txHash ? `${entry.chainId}:${entry.txHash}` : entry.key;
         if (confirmedHashes.has(id)) continue;
         const existing = byHash.get(id);
         if (!existing) {
@@ -436,12 +475,17 @@ export function mergePendingEntries({ confirmed, pending }) {
  * @param {{ pending?: PendingMeta }} entry
  * @param {number} nowMs
  * @param {{ seenWindowMs?: number, droppedGraceMs?: number }} [windows]
- * @returns {'confirmed' | 'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced'}
+ * `failed` is the wallet's own verdict, not the network's: it gave up before
+ * the network took the send. Only a proven block outranks it, since a
+ * "permanent" broadcast failure can still turn out to have landed.
+ *
+ * @returns {'confirmed' | 'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced' | 'failed'}
  */
 export function pendingDisplayState(entry, nowMs, windows) {
     const meta = entry?.pending;
     if (!meta) return 'awaiting-network';
     if (meta.chainConfirmed) return 'confirmed';
+    if (meta.failed) return 'failed';
     if (meta.replaced) return 'replaced';
 
     const seenWindowMs = Number(windows?.seenWindowMs) > 0
