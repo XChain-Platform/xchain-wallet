@@ -20,8 +20,11 @@
 // action-VALIDITY status, and a single order's getAction(...).state.status
 // does NOT promptly reflect a cancel, so "cancelled" is read from the
 // authoritative + immediate order_cancels table (getOrderCancelsForAddress)
-// and "expired" from the order's own EXPIRATION vs wall clock. Cancel/edit
-// are offered only while an order is open.
+// and "expired" from the order's own EXPIRATION vs wall clock. Neither
+// feed carries fills, so every order those two leave open is read once
+// through orders.detail, whose `state` block nets settled matches out of
+// give_remaining and reports `complete` once the order is fully filled.
+// Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
@@ -56,12 +59,76 @@ function isNativeGive(row) {
     return !row.give_tick || String(row.give_tick).length === 0;
 }
 
-function deriveStatus(item, cancelledKeys, nowSec) {
+// How many orders.detail reads are in flight at once while the open
+// subset is enriched; the whole batch is still one wait.
+const FILL_READ_CONCURRENCY = 6;
+
+const CLOSED_LABELS = Object.freeze({
+    filled: 'Filled',
+    cancelled: 'Cancelled',
+    expired: 'Expired',
+    invalid: 'Invalid',
+});
+
+// The lifecycle half of an order detail. `state.status` is the indexer's
+// latest order status (open / cancelling / cancelled / expiring / expired /
+// complete) and `state.give_remaining` is the give amount net of settled
+// matches, zeroed once the order is terminal. Null when the detail lacks
+// the block, so the caller falls back to the feeds alone.
+export function fillStateOf(detail) {
+    const state = detail && typeof detail === 'object' ? detail.state : null;
+    if (!state || typeof state !== 'object') return null;
+    return {
+        status: String(state.status || ''),
+        giveRemaining: state.give_remaining ?? null,
+    };
+}
+
+export function deriveStatus(item, cancelledKeys, nowSec) {
     if (cancelledKeys.has(item.key)) return 'cancelled';
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
+    const fill = item.fill;
+    if (fill) {
+        if (fill.status === 'complete') return 'filled';
+        if (fill.status === 'cancelled') return 'cancelled';
+        if (fill.status === 'expired') return 'expired';
+        const remaining = Number(fill.giveRemaining);
+        if (fill.status === 'open' && Number.isFinite(remaining) && remaining <= 0) return 'filled';
+    }
     const exp = Number(item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
+}
+
+// The give amount still on offer when an open order has been partly
+// filled; null when nothing has filled or the detail did not say.
+function partialRemaining(item) {
+    const fill = item.fill;
+    if (!fill || fill.status !== 'open') return null;
+    const remaining = Number(fill.giveRemaining);
+    const total = Number(item.row.give_amount);
+    if (!Number.isFinite(remaining) || !Number.isFinite(total)) return null;
+    if (remaining <= 0 || remaining >= total) return null;
+    return String(fill.giveRemaining);
+}
+
+// Read the open candidates' details a few at a time and return
+// key -> fill state. A failed or shapeless read leaves the order as the
+// feeds saw it rather than failing the whole list.
+async function readFillStates(messaging, candidates) {
+    const fills = new Map();
+    if (typeof messaging?.getOrderDetail !== 'function') return fills;
+    for (let i = 0; i < candidates.length; i += FILL_READ_CONCURRENCY) {
+        const slice = candidates.slice(i, i + FILL_READ_CONCURRENCY);
+        const details = await Promise.all(slice.map((it) => messaging
+            .getOrderDetail({ chainId: it.chainId, actionIndex: String(it.row.action_index) })
+            .catch(() => null)));
+        slice.forEach((it, j) => {
+            const fill = fillStateOf(details[j]);
+            if (fill) fills.set(it.key, fill);
+        });
+    }
+    return fills;
 }
 
 function fmtDate(unixSec) {
@@ -115,10 +182,13 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                     : Promise.resolve(null)),
             ]).then(([o, c]) => ({ p, orders: extractRows(o), cancels: extractRows(c) }))));
 
+            // The cancels feed also lists rejected ORDER_CANCEL attempts (a
+            // cancel sent against a filled order is recorded as invalid), and
+            // only an applied cancel closes the order.
             const cancelledKeys = new Set();
             for (const r of results) {
                 for (const c of r.cancels) {
-                    if (String(c.source) === r.p.owner.address) {
+                    if (String(c.source) === r.p.owner.address && String(c.status || 'valid') === 'valid') {
                         cancelledKeys.add(`${r.p.chainId}:${c.order_action_index}`);
                     }
                 }
@@ -138,7 +208,11 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             }
             all.sort((a, b) => Number(b.row.action_index || 0) - Number(a.row.action_index || 0));
             for (const it of all) it.cancelled = cancelledKeys.has(it.key);
-            setItems(all.map((it) => ({ ...it, cancelledKeys })));
+            // Only the orders the feeds still call open pay for a detail read.
+            const now = Math.floor(Date.now() / 1000);
+            const candidates = all.filter((it) => deriveStatus(it, cancelledKeys, now) === 'open');
+            const fills = await readFillStates(messaging, candidates);
+            setItems(all.map((it) => ({ ...it, cancelledKeys, fill: fills.get(it.key) || null })));
             setLoadError(null);
         } catch (err) {
             setLoadError(err?.message || 'Failed to load orders.');
@@ -220,10 +294,11 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
         const expText = fmtDate(it.row.expiration);
+        const remaining = partialRemaining(it);
         const consent = autopayByKey.get(it.key);
         const chip = status === 'open'
             ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
-            : <span className={`${L.chip} ${L.chipExpired}`}>{status === 'cancelled' ? 'Cancelled' : status === 'expired' ? 'Expired' : 'Invalid'}</span>;
+            : <span className={`${L.chip} ${L.chipExpired}`}>{CLOSED_LABELS[status] || 'Invalid'}</span>;
         return (
             <li key={it.key} className={L.row}>
                 <div className={L.rowMain}>
@@ -236,6 +311,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         {' · #'}{it.row.action_index}
                         {' · '}<AddressText address={it.owner.address} />
                     </div>
+                    {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
                     {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
                     {consent && isNativeGive(it.row) ? (
                         <label className={F.checkRow}>
