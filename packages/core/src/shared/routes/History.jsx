@@ -121,6 +121,23 @@ const PENDING_COPY = {
         headline: 'pending.detail.replaced',
         help: 'pending.detail.replacedHelp',
     },
+    // The block is proven and no explorer row will ever take the entry's
+    // place. The headline says what the block settled: a plain coin transfer
+    // has no action to speak of, an action-carrying transaction the service
+    // recorded nothing for had no effect beyond the coins it moved. Which
+    // one applies is `confirmedCopyFor`'s call, from the entry's own tick.
+    confirmed: {
+        row: 'pending.row.confirmed',
+        headline: 'pending.detail.confirmed',
+        help: 'pending.detail.confirmedHelp',
+    },
+};
+
+/** The `confirmed` copy for a transaction that carried an action the service did not record. */
+const CONFIRMED_NO_EFFECT_COPY = {
+    row: 'pending.row.confirmed',
+    headline: 'pending.detail.confirmedNoEffect',
+    help: 'pending.detail.confirmedNoEffectHelp',
 };
 
 /**
@@ -142,6 +159,33 @@ const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped']);
  */
 function pendingStateOf(entry) {
     return entry?.pending ? pendingDisplayState(entry, Date.now()) : null;
+}
+
+/**
+ * Did this local record move the chain's own coin and nothing else? The
+ * record's `tick` is the ticker the send moved; a plain transfer carries the
+ * native one, an action-carrying transaction carries a token's or none.
+ *
+ * @param {{ chainId?: string, raw?: { tick?: string } } | null | undefined} entry
+ */
+function isNativeCoinMovement(entry) {
+    const coin = coinOfChainId(entry?.chainId);
+    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    const tick = String(entry?.raw?.tick || '').toUpperCase();
+    return Boolean(nativeTicker) && tick === nativeTicker;
+}
+
+/**
+ * The copy for a pending state, with the one state that has two voices
+ * resolved: a confirmed entry speaks of a settled transfer or of an action
+ * that had no effect.
+ *
+ * @param {string} state
+ * @param {object} entry
+ */
+function pendingCopyFor(state, entry) {
+    if (state === 'confirmed' && !isNativeCoinMovement(entry)) return CONFIRMED_NO_EFFECT_COPY;
+    return PENDING_COPY[state];
 }
 
 /**
@@ -775,7 +819,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const tips = {};
         for (const e of entries) {
             if (!e || !e.chainId) continue;
-            const b = Number(e.blockIndex || 0);
+            // A record the wallet proved into a block names that block in
+            // its meta rather than in blockIndex; it is as real a lower
+            // bound for the tip as any explorer row.
+            const b = Number(e.blockIndex || e.pending?.confirmedBlockIndex || 0);
             if (b <= 0) continue;
             if (!(e.chainId in tips) || b > tips[e.chainId]) tips[e.chainId] = b;
         }
@@ -1958,8 +2005,9 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
  */
 function PendingDetailPanel({ entry, balancesHidden = false }) {
     const state = pendingStateOf(entry);
-    const copy = state ? PENDING_COPY[state] : null;
+    const copy = state ? pendingCopyFor(state, entry) : null;
     const warning = state != null && PENDING_WARNING_STATES.has(state);
+    const settled = state === 'confirmed';
     const meta = entry?.pending || null;
     const desc = describePendingAction(entry);
     const amountOf = (value) => (balancesHidden ? '•••••' : value);
@@ -1967,7 +2015,7 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
     return (
         <section
             className={`${styles.pendingPanel} ${warning ? styles.pendingPanelWarning : ''}`}
-            aria-label={t('pending.detail.sectionLabel')}
+            aria-label={t(settled ? 'pending.detail.confirmedSectionLabel' : 'pending.detail.sectionLabel')}
         >
             {copy ? (
                 <>
@@ -1977,8 +2025,18 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
             ) : null}
             {/* The honesty line (§7). A mempool sighting is not
                 acceptance: the indexer can still reject this action when
-                the block lands, so it renders in every pending state. */}
-            <p className={styles.pendingNotValidated}>{t('pending.detail.notValidated')}</p>
+                the block lands, so it renders in every pending state. A
+                proven block is the one thing that retires it, and the
+                block takes its place. */}
+            {settled ? (
+                meta?.confirmedBlockIndex ? (
+                    <p className={styles.pendingTiming}>
+                        {t('pending.detail.confirmedBlock', { block: meta.confirmedBlockIndex.toLocaleString() })}
+                    </p>
+                ) : null
+            ) : (
+                <p className={styles.pendingNotValidated}>{t('pending.detail.notValidated')}</p>
+            )}
 
             {meta?.firstSeenMs ? (
                 <p className={styles.pendingTiming}>
@@ -1998,7 +2056,12 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
                 </p>
             ) : null}
 
-            <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+            {/* A settled record with nothing decodable has nothing to
+                promise under this heading: "not reported yet" would say
+                more data is coming, and none is. */}
+            {settled && desc.kind === 'none' ? null : (
+                <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+            )}
             {desc.kind === 'send' || desc.kind === 'local' ? (
                 <ul className={styles.pendingOutputs}>
                     {desc.outputs.map((o, i) => (
@@ -2017,7 +2080,10 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
                     ))}
                 </ul>
             ) : null}
-            {desc.kind === 'local' ? (
+            {/* The note promises data the network has "not reported yet";
+                for a settled transaction nothing more is coming, so the
+                outputs stand on their own. */}
+            {desc.kind === 'local' && !settled ? (
                 <p className={styles.pendingHelp}>{t('pending.detail.localRecordNote')}</p>
             ) : null}
             {desc.kind === 'segments' ? (
@@ -2733,7 +2799,7 @@ function nativeAmountFieldOf(entry) {
 function PendingRowLabel({ entry }) {
     const state = pendingStateOf(entry);
     const warning = state != null && PENDING_WARNING_STATES.has(state);
-    const label = state ? t(PENDING_COPY[state].row) : t('pending.row.generic');
+    const label = state ? t(pendingCopyFor(state, entry).row) : t('pending.row.generic');
     return (
         <span
             className={`${styles.pendingLabel} ${warning ? styles.pendingLabelWarning : ''}`}

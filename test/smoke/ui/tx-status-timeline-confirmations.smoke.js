@@ -47,8 +47,9 @@ assert.ok(timelineSrc.indexOf("key: 'confirmed'") < timelineSrc.indexOf("key: 'i
     "'indexed' stage is rendered after 'confirmed'");
 // Indexed is done once the watermark reaches the block; a confirmed row
 // with no watermark still reads as indexed (the wallet only shows rows the
-// indexer returned).
-assert.ok(/const indexed = confirmed && \(watermark > 0 \? watermark >= blockIndex : true\)/.test(timelineSrc),
+// indexer returned), and so does one the wallet proved into a block itself,
+// which carries no block number to compare the watermark against.
+assert.ok(/const indexed = confirmed && \(watermark > 0 && blockIndex > 0 \? watermark >= blockIndex : true\)/.test(timelineSrc),
     'Indexed stage compares the watermark against the entry block with a confirmed fallback');
 // Signed is done from an explicit signedAt or an implied one (a txHash means
 // the tx was signed before broadcast).

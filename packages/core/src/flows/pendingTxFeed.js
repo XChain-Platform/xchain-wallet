@@ -23,7 +23,7 @@
 // material the renderer has no use for; History wants identity, status and
 // timing.
 
-import { isLivePendingStatus } from '../shared/utils/pendingHistory.js';
+import { isChainConfirmedRecord, isLivePendingStatus } from '../shared/utils/pendingHistory.js';
 
 /**
  * @typedef {Object} PendingTxSummary
@@ -45,6 +45,10 @@ import { isLivePendingStatus } from '../shared/utils/pendingHistory.js';
  * @property {boolean} networkSeenNow   the chain's UTXO set held this transaction
  *   at the moment of THIS read. A native send has no mempool row for
  *   History to refresh its sighting from, so the read carries the sighting.
+ * @property {boolean} chainConfirmed   this wallet proved a block carries the
+ *   transaction; the record is `indexed` with no explorer row to replace it
+ * @property {number | null} confirmedBlockIndex   that block, when the proof named it
+ * @property {string | null} confirmedAt
  */
 
 /**
@@ -53,6 +57,7 @@ import { isLivePendingStatus } from '../shared/utils/pendingHistory.js';
  * @returns {PendingTxSummary}
  */
 function summarize(record, networkSeenNow) {
+    const block = Number(record.confirmedBlockIndex);
     return {
         id: String(record.id),
         chain: String(record.chain),
@@ -70,6 +75,9 @@ function summarize(record, networkSeenNow) {
         tick: record.tick == null ? null : String(record.tick),
         amount: record.amount == null ? null : String(record.amount),
         networkSeenNow: networkSeenNow === true,
+        chainConfirmed: record.chainConfirmed === true,
+        confirmedBlockIndex: Number.isInteger(block) && block > 0 ? block : null,
+        confirmedAt: record.confirmedAt == null ? null : String(record.confirmedAt),
     };
 }
 
@@ -89,7 +97,9 @@ function summarize(record, networkSeenNow) {
  * "In flight" is `broadcasting` / `broadcast` / `rbf-replaced`: on the
  * network, not yet confirmed. `indexed` is excluded because by then the
  * explorer's confirmed entry is the better record of the same transaction,
- * and `failed` because it never reached the network at all.
+ * except for a record the wallet itself proved into a block
+ * (`chainConfirmed`): no explorer entry exists for that one, so it is listed
+ * as the confirmed row it is. `failed` never reached the network at all.
  *
  * A record whose chain the registry cannot resolve is matched on `chain`
  * alone, the same fallback `listQueuedBroadcasts` uses, so a custom chain
@@ -107,7 +117,7 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
     const out = [];
     for (const record of Array.isArray(all) ? all : []) {
         if (!record || !record.txid) continue;
-        if (!isLivePendingStatus(record.status)) continue;
+        if (!isLivePendingStatus(record.status) && !isChainConfirmedRecord(record)) continue;
         if (descriptor) {
             if (record.chain !== descriptor.coin) continue;
             if (record.network !== descriptor.networkKind) continue;

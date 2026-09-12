@@ -376,3 +376,67 @@ describe('compareMergedEntries', () => {
         expect(list.map((e) => e.actionIndex)).toEqual(['92', '91', '30']);
     });
 });
+
+// ---------------------------------------------------------------------------
+// A record the wallet itself proved into a block: still blockless in shape,
+// confirmed in every reading.
+// ---------------------------------------------------------------------------
+
+describe('a chain-confirmed local record', () => {
+    const settled = (over = {}) => fromLocal({
+        status: 'indexed',
+        chainConfirmed: true,
+        confirmedBlockIndex: 67881853,
+        confirmedAt: '2026-08-27T00:05:00.000Z',
+        broadcastAt: '2026-08-26T00:00:10.000Z',
+        ...over,
+    });
+
+    it('builds an entry although its status is indexed, carrying the proof in its meta', () => {
+        const e = settled();
+        expect(e).not.toBeNull();
+        expect(e.blockIndex).toBe(0);
+        expect(e.pending.chainConfirmed).toBe(true);
+        expect(e.pending.confirmedBlockIndex).toBe(67881853);
+        expect(e.pending.confirmedAtMs).toBe(Date.parse('2026-08-27T00:05:00.000Z'));
+        // An indexed record WITHOUT the proof is the explorer row's to show.
+        expect(fromLocal({ status: 'indexed' })).toBeNull();
+        // A live record carries no proof.
+        const live = fromLocal();
+        expect(live.pending.chainConfirmed).toBe(false);
+        expect(live.pending.confirmedBlockIndex).toBeNull();
+    });
+
+    it('reads as confirmed, outranking the warning states it would otherwise fall into', () => {
+        // Broadcast a day ago with no sighting: not-seen, were it not in a block.
+        const days = 24 * 3600 * 1000;
+        expect(pendingDisplayState(settled(), NOW + days)).toBe('confirmed');
+        expect(pendingDisplayState(settled({ mempoolSeenAt: '2026-08-26T00:01:00.000Z' }), NOW + days)).toBe('confirmed');
+        // A block wins over our own replacement attempt: the original is what got mined.
+        expect(pendingDisplayState(settled({ status: 'indexed', rbfReplacement: 'ff'.repeat(32) }), NOW)).toBe('confirmed');
+        // Inclusion without a named block is still inclusion.
+        expect(pendingDisplayState(settled({ confirmedBlockIndex: null }), NOW + days)).toBe('confirmed');
+    });
+
+    it('classifies as confirmed and is not offered for replacement', () => {
+        const e = settled();
+        expect(classifyEntryStatus(e)).toBe('confirmed');
+        expect(isEntryReplaceable(e)).toEqual({ ok: false, reason: 'Already confirmed.' });
+        expect(applyHistoryFilters([e], { statusSet: new Set(['confirmed']) })).toHaveLength(1);
+        expect(applyHistoryFilters([e], { statusSet: new Set(['pending']) })).toHaveLength(0);
+    });
+
+    it('carries the proof through a fold with a mempool row and yields to a confirmed feed row', () => {
+        const local = settled({ txid: 'AABBCC' });
+        const folded = mergePendingEntries({ confirmed: [], pending: [fromMempool(), local] });
+        expect(folded.pending).toHaveLength(1);
+        expect(folded.pending[0].pending.chainConfirmed).toBe(true);
+        expect(folded.pending[0].pending.confirmedBlockIndex).toBe(67881853);
+
+        const replaced = mergePendingEntries({
+            confirmed: [{ chainId: CHAIN, txHash: 'aabbcc', blockIndex: 7707, actionIndex: '9' }],
+            pending: [local],
+        });
+        expect(replaced.pending).toHaveLength(0);
+    });
+});

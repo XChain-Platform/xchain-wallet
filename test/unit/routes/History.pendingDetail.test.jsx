@@ -272,3 +272,67 @@ describe('History offers replacement only where it can still work', () => {
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
 });
+
+describe('History shows a transaction this wallet proved into a block as confirmed', () => {
+    /** Our own record, retired by the reconcile with the block it found. */
+    const settledLocal = (over = {}) => staleLocalSend({
+        id: 'ptx-settled',
+        status: 'indexed',
+        chainConfirmed: true,
+        confirmedBlockIndex: 67881853,
+        confirmedAt: new Date(Date.now() - 500000).toISOString(),
+        ...over,
+    });
+
+    it('reads an action the service recorded nothing for as confirmed with no effect, never as lost', async () => {
+        const { view } = mountHistory({
+            pendingTxs: [settledLocal({ action: 'COINPAY', actionSummary: 'Pay 5 LTC', tick: null, amount: null })],
+        });
+        await waitFor(() => expect(rowFor(view, 'confirmed')).toBeTruthy());
+        const label = view.container.querySelector('[data-pending-state="confirmed"]');
+        expect(label.textContent).toContain('confirmed');
+        expect(label.className).not.toMatch(/pendingLabelWarning/);
+        // The record is a day old with no sighting: without the proof this
+        // row would carry the not-seen warning.
+        expect(view.container.querySelector('[data-pending-state="not-seen"]')).toBeNull();
+
+        const region = await openRow(view, 'confirmed');
+        const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
+        expect(within(panel).getByText('Confirmed, no effect')).toBeTruthy();
+        expect(within(panel).getByText('Included in block 67,881,853')).toBeTruthy();
+        expect(region.textContent).not.toMatch(/not seen by the network/i);
+        expect(region.textContent).not.toMatch(/may never have reached/i);
+        expect(region.textContent).not.toMatch(/no longer in (the )?mempool/i);
+        expect(region.textContent).not.toContain('Pending, not yet validated by the service.');
+        // The timeline reads the same proof: the block is a done stage.
+        expect(within(region).getByText('Confirmed at block 67,881,853')).toBeTruthy();
+        // And a mined transaction is not offered a fee bump.
+        const more = within(region).queryByText('More');
+        if (more) fireEvent.click(more);
+        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Cancel transaction')).toBeNull();
+    });
+
+    it('reads a plain coin transfer as confirmed on the network, with its outputs and no pending note', async () => {
+        const { view } = mountHistory({
+            pendingTxs: [settledLocal({ actionSummary: 'Send 30 LTC', tick: 'LTC', amount: '30', confirmedBlockIndex: 7707 })],
+        });
+        const region = await openRow(view, 'confirmed');
+        const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
+        expect(within(panel).getByText('Confirmed on the network')).toBeTruthy();
+        expect(within(panel).getByText(`30 LTC to ${THEIRS}`)).toBeTruthy();
+        expect(within(panel).queryByText(/has not reported the transaction data yet/)).toBeNull();
+        expect(region.textContent).not.toMatch(/not seen by the network/i);
+    });
+
+    it('still reads as confirmed when only inclusion is known, without inventing a block', async () => {
+        const { view } = mountHistory({
+            pendingTxs: [settledLocal({ tick: 'LTC', amount: '30', confirmedBlockIndex: null })],
+        });
+        const region = await openRow(view, 'confirmed');
+        expect(within(region).getByText('Confirmed on the network')).toBeTruthy();
+        expect(region.textContent).not.toMatch(/Included in block/);
+        expect(region.textContent).not.toMatch(/Confirmed at block/);
+        expect(region.textContent).not.toMatch(/not seen by the network/i);
+    });
+});

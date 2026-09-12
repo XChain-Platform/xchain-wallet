@@ -172,9 +172,21 @@ export const en = {
     'pending.row.notSeen': 'not seen by network',
     'pending.row.dropped': 'no longer in mempool',
     'pending.row.replaced': 'replaced',
+    'pending.row.confirmed': 'confirmed',
     'pending.row.generic': 'pending',
 
     'pending.detail.sectionLabel': 'Pending transaction',
+    // A transaction this wallet proved into a block that no feed will ever
+    // list: a plain coin transfer, or an action the service recorded nothing
+    // for. Both say what the block settled and what it did not.
+    'pending.detail.confirmedSectionLabel': 'Confirmed transaction',
+    'pending.detail.confirmed': 'Confirmed on the network',
+    'pending.detail.confirmedHelp':
+        'A block carries this transaction. It moved coins only, so the service has no action to report for it.',
+    'pending.detail.confirmedNoEffect': 'Confirmed, no effect',
+    'pending.detail.confirmedNoEffectHelp':
+        'A block carries this transaction, and the service recorded no action for it. Any coins it moved have moved; nothing else took effect.',
+    'pending.detail.confirmedBlock': 'Included in block {block}',
     'pending.detail.awaitingNetwork': 'Broadcast, awaiting network',
     'pending.detail.seen': 'In the mempool, waiting for a block',
     'pending.detail.notSeen': 'Not seen by the network',

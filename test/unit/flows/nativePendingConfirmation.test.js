@@ -16,7 +16,10 @@ import {
     isNativePendingTx,
     nativeSendVerdict,
     utxoListOf,
+    spentByConfirmedSibling,
     reconcileNativePendingTxs,
+    INCLUSION_PROBE_AFTER_MS,
+    INCLUSION_PROBE_INTERVAL_MS,
 } from '../../../packages/core/src/flows/nativePendingConfirmation.js';
 
 const CHAIN_ID = 'litecoin-regtest';
@@ -121,14 +124,14 @@ describe('nativeSendVerdict', () => {
         const out = nativeSendVerdict({ txid: TXID, utxosByAddress: {
             [THEIRS]: [{ txid: TXID.toLowerCase(), vout: 0, confirmations: 1 }],
         } });
-        expect(out).toEqual({ verdict: 'confirmed', confirmations: 1 });
+        expect(out).toEqual({ verdict: 'confirmed', confirmations: 1, blockIndex: null });
     });
 
     it('is seen while the output exists with zero confirmations', () => {
         const out = nativeSendVerdict({ txid: TXID, utxosByAddress: {
             [THEIRS]: [{ txid: TXID, vout: 0, confirmations: 0 }],
         } });
-        expect(out).toEqual({ verdict: 'seen', confirmations: 0 });
+        expect(out).toEqual({ verdict: 'seen', confirmations: 0, blockIndex: null });
     });
 
     it('takes the deepest count when the tracker serves both stores during its cleanup window', () => {
@@ -136,23 +139,23 @@ describe('nativeSendVerdict', () => {
             [THEIRS]: [{ txid: TXID, vout: 0, confirmations: 0 }],
             [OURS]: [{ txid: TXID, vout: 1, confirmations: '3' }],
         } });
-        expect(out).toEqual({ verdict: 'confirmed', confirmations: 3 });
+        expect(out).toEqual({ verdict: 'confirmed', confirmations: 3, blockIndex: null });
     });
 
     it('is unknown when no answering address holds an output of it', () => {
         expect(nativeSendVerdict({ txid: TXID, utxosByAddress: {
             [THEIRS]: [{ txid: 'ff'.repeat(32), vout: 0, confirmations: 9 }],
-        } })).toEqual({ verdict: 'unknown', confirmations: null });
+        } })).toEqual({ verdict: 'unknown', confirmations: null, blockIndex: null });
         expect(nativeSendVerdict({ txid: TXID, utxosByAddress: {} }))
-            .toEqual({ verdict: 'unknown', confirmations: null });
+            .toEqual({ verdict: 'unknown', confirmations: null, blockIndex: null });
         expect(nativeSendVerdict({ txid: '', utxosByAddress: { [THEIRS]: [{ txid: TXID, confirmations: 1 }] } }))
-            .toEqual({ verdict: 'unknown', confirmations: null });
+            .toEqual({ verdict: 'unknown', confirmations: null, blockIndex: null });
     });
 
     it('ignores a malformed or negative count rather than reading it as a verdict', () => {
         expect(nativeSendVerdict({ txid: TXID, utxosByAddress: {
             [THEIRS]: [{ txid: TXID, confirmations: -1 }, { txid: TXID, confirmations: 'soon' }, null],
-        } })).toEqual({ verdict: 'unknown', confirmations: null });
+        } })).toEqual({ verdict: 'unknown', confirmations: null, blockIndex: null });
     });
 });
 
@@ -271,5 +274,276 @@ describe('reconcileNativePendingTxs', () => {
         expect(await reconcileNativePendingTxs({
             vault: vaultOf([record()]), chainRegistry: registry, chainId: CHAIN_ID, sdkRegistry: { get: () => ({}) },
         })).toEqual(nothing);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Past the pending window: what the outputs cannot settle is checked against
+// the vault's own confirmed spends and then by hash against the explorer.
+// ---------------------------------------------------------------------------
+
+const NOW = '2026-09-10T12:00:00.000Z';
+const NOW_MS = Date.parse(NOW);
+const iso = (msAgo) => new Date(NOW_MS - msAgo).toISOString();
+const OLD = INCLUSION_PROBE_AFTER_MS * 10;
+const YOUNG = Math.floor(INCLUSION_PROBE_AFTER_MS / 3);
+const COINPAY_TXID = 'f5183536'.padEnd(64, '0');
+
+/** Internal byte order, as a raw transaction carries a previous txid. */
+function reverseHex(hex) {
+    let out = '';
+    for (let i = hex.length - 2; i >= 0; i -= 2) out += hex.slice(i, i + 2);
+    return out;
+}
+const le = (n, bytes) => n.toString(16).padStart(bytes * 2, '0').match(/../g).reverse().join('');
+
+/** A minimal legacy transaction spending `prev:vout`, with one empty output. */
+function rawTxSpending(prev, vout) {
+    return '01000000'                          // version
+        + '01' + reverseHex(prev.toLowerCase()) + le(vout, 4) + '00' + 'ffffffff'
+        + '01' + le(1000, 8) + '00'            // one output, empty script
+        + '00000000';                          // locktime
+}
+
+/** A record for an action-carrying transaction: no `tick`, retired by no feed when rejected. */
+function coinpayRecord(over = {}) {
+    return record({
+        id: 'ptx-coinpay',
+        action: 'COINPAY',
+        actionSummary: 'Pay 5 DOGE for invoice 648',
+        txid: COINPAY_TXID,
+        tick: null,
+        amount: null,
+        toAddress: THEIRS,
+        broadcastAt: iso(OLD),
+        createdAt: iso(OLD + 1000),
+        mempoolSeenAt: iso(OLD - 30000),
+        ...over,
+    });
+}
+
+/**
+ * An SDK whose encoder answers UTXOs per address and whose explorer answers
+ * transaction lookups per txid (an Error value throws; `undefined` resolves
+ * to the empty record the explorer returns for a hash it never decoded).
+ */
+function sdkWith({ utxos = {}, tx = {}, utxoCalls = [], txCalls = [], explorer = true } = {}) {
+    const sdk = {
+        encoder: {
+            getUTXOs: async (address) => {
+                utxoCalls.push(address);
+                const a = utxos[address];
+                if (a instanceof Error) throw a;
+                return a === undefined ? { utxos: [] } : a;
+            },
+        },
+    };
+    if (explorer) {
+        sdk.getTransaction = async (query, type) => {
+            txCalls.push([query, type]);
+            const a = tx[query];
+            if (a instanceof Error) throw a;
+            return a === undefined ? { actions: [], tx_data: null } : a;
+        };
+    }
+    return { get: () => sdk };
+}
+
+const run = (vault, sdkRegistry, extra = {}) => reconcileNativePendingTxs({
+    vault, chainRegistry: registry, chainId: CHAIN_ID, address: OURS, sdkRegistry,
+    opts: { now: () => NOW, probeMemo: new Map(), ...extra },
+});
+
+describe('nativeSendVerdict names the block beside a confirmed output', () => {
+    it('reads the tracker height off the deepest confirmed output, and nothing off a mempool one', () => {
+        expect(nativeSendVerdict({ txid: TXID, utxosByAddress: {
+            [THEIRS]: [{ txid: TXID, vout: 0, confirmations: 2, height: 500 }],
+        } })).toEqual({ verdict: 'confirmed', confirmations: 2, blockIndex: 500 });
+        expect(nativeSendVerdict({ txid: TXID, utxosByAddress: {
+            [THEIRS]: [{ txid: TXID, vout: 0, confirmations: 0, height: 0 }],
+        } })).toEqual({ verdict: 'seen', confirmations: 0, blockIndex: null });
+        // A height the tracker did not serve is not invented.
+        expect(nativeSendVerdict({ txid: TXID, utxosByAddress: {
+            [THEIRS]: [{ txid: TXID, vout: 0, confirmations: 1 }],
+        } })).toEqual({ verdict: 'confirmed', confirmations: 1, blockIndex: null });
+    });
+});
+
+describe('spentByConfirmedSibling', () => {
+    it('proves the transactions a confirmed record of ours spends an output of', () => {
+        const child = record({ id: 'child', txid: 'cc'.repeat(32), status: 'indexed', txHex: rawTxSpending(TXID, 1) });
+        const out = spentByConfirmedSibling({ txids: [TXID, 'ee'.repeat(32)], siblings: [child] });
+        expect(out).toEqual(new Set([TXID.toLowerCase()]));
+    });
+
+    it('takes evidence only from an indexed record with hex that parses, never from the record itself', () => {
+        const spend = rawTxSpending(TXID, 0);
+        expect(spentByConfirmedSibling({ txids: [TXID], siblings: [
+            record({ id: 'live', txid: 'cc'.repeat(32), status: 'broadcast', txHex: spend }),
+            record({ id: 'junk', txid: 'dd'.repeat(32), status: 'indexed', txHex: 'not hex at all' }),
+            record({ id: 'bare', txid: 'ee'.repeat(32), status: 'indexed', txHex: null }),
+            // Its own txid in its own inputs would be a malformed transaction; it must not self-certify.
+            record({ id: 'self', txid: TXID, status: 'indexed', txHex: spend }),
+        ] })).toEqual(new Set());
+    });
+});
+
+describe('reconcileNativePendingTxs past the pending window', () => {
+    it('retires a native send whose outputs are all spent once the explorer names its block', async () => {
+        const vault = vaultOf([record({ broadcastAt: iso(OLD), createdAt: iso(OLD + 1000) })]);
+        const txCalls = [];
+        const out = await run(vault, sdkWith({
+            utxos: { [THEIRS]: { utxos: [] }, [OURS]: { utxos: [] } },
+            tx: { [TXID.toLowerCase()]: { tx_hash: TXID.toLowerCase(), block_index: 67881853, actions: [], tx_data: null } },
+            txCalls,
+        }));
+        expect(out.confirmed).toEqual(new Set([TXID.toLowerCase()]));
+        expect(txCalls).toEqual([[TXID.toLowerCase(), 'tx_hash']]);
+        const row = vault.rows[0];
+        expect(row.status).toBe('indexed');
+        expect(row.chainConfirmed).toBe(true);
+        expect(row.confirmedBlockIndex).toBe(67881853);
+        expect(row.confirmedAt).toBe(NOW);
+    });
+
+    it('leaves the record exactly as it was when the explorer names no block', async () => {
+        const before = record({ broadcastAt: iso(OLD), createdAt: iso(OLD + 1000) });
+        const vault = vaultOf([before]);
+        const txCalls = [];
+        const out = await run(vault, sdkWith({ txCalls }));
+        expect(txCalls.length).toBe(1);
+        expect(out.confirmed.size).toBe(0);
+        expect(vault.rows[0]).toEqual(before);
+    });
+
+    it('retires an action-carrying record with no tick and no action row once its block is named', async () => {
+        const vault = vaultOf([coinpayRecord()]);
+        const utxoCalls = [];
+        const txCalls = [];
+        const out = await run(vault, sdkWith({
+            tx: { [COINPAY_TXID]: { tx_hash: COINPAY_TXID, block_index: 67881869, actions: [], tx_data: 'COINPAY|0|648' } },
+            utxoCalls, txCalls,
+        }));
+        // Not a native send: the tracker is never asked about it.
+        expect(utxoCalls).toEqual([]);
+        expect(txCalls).toEqual([[COINPAY_TXID, 'tx_hash']]);
+        expect(out.confirmed).toEqual(new Set([COINPAY_TXID]));
+        const row = vault.rows[0];
+        expect(row.status).toBe('indexed');
+        expect(row.chainConfirmed).toBe(true);
+        expect(row.confirmedBlockIndex).toBe(67881869);
+    });
+
+    it('does not probe a record still inside the pending window', async () => {
+        const vault = vaultOf([
+            record({ broadcastAt: iso(YOUNG), createdAt: iso(YOUNG + 1000) }),
+            coinpayRecord({ broadcastAt: iso(YOUNG), createdAt: iso(YOUNG + 1000) }),
+        ]);
+        const txCalls = [];
+        const out = await run(vault, sdkWith({
+            tx: {
+                [TXID.toLowerCase()]: { block_index: 10, actions: [] },
+                [COINPAY_TXID]: { block_index: 11, actions: [] },
+            },
+            txCalls,
+        }));
+        expect(txCalls).toEqual([]);
+        expect(out.confirmed.size).toBe(0);
+        expect(vault.rows.every((r) => r.status === 'broadcast')).toBe(true);
+    });
+
+    it('leaves every record untouched and does not throw when the explorer fails or is absent', async () => {
+        const rows = [record({ broadcastAt: iso(OLD), createdAt: iso(OLD + 1000) }), coinpayRecord()];
+        const failing = vaultOf(rows);
+        const out = await run(failing, sdkWith({
+            tx: { [TXID.toLowerCase()]: new Error('ECONNRESET'), [COINPAY_TXID]: new Error('503') },
+        }));
+        expect(out).toEqual({ seenNow: new Set(), confirmed: new Set() });
+        expect(failing.rows).toEqual(rows);
+
+        const bare = vaultOf(rows);
+        await expect(run(bare, sdkWith({ explorer: false }))).resolves.toEqual({ seenNow: new Set(), confirmed: new Set() });
+        expect(bare.rows).toEqual(rows);
+    });
+
+    it('takes a confirmed spend of its own output as proof, before asking anyone', async () => {
+        const vault = vaultOf([
+            record({ broadcastAt: iso(OLD), createdAt: iso(OLD + 1000) }),
+            // Our later send, already confirmed by a feed, spending the change output.
+            record({
+                id: 'later', txid: 'cc'.repeat(32), fromAddress: 'mRotatedChange', toAddress: THEIRS,
+                status: 'indexed', confirmedAt: iso(1000), txHex: rawTxSpending(TXID, 1),
+            }),
+        ]);
+        const txCalls = [];
+        const out = await run(vault, sdkWith({ txCalls }));
+        expect(txCalls).toEqual([]);
+        expect(out.confirmed).toEqual(new Set([TXID.toLowerCase()]));
+        const row = vault.rows.find((r) => r.id === 'ptx-1');
+        expect(row.status).toBe('indexed');
+        expect(row.chainConfirmed).toBe(true);
+        // A descendant proves inclusion, not the block; none is invented.
+        expect(row.confirmedBlockIndex).toBeNull();
+    });
+
+    it('retires a send whose change a later send spent in the same pass the tracker settles that later send', async () => {
+        const CHILD = 'cc'.repeat(32);
+        const vault = vaultOf([
+            record({ broadcastAt: iso(OLD), createdAt: iso(OLD + 1000) }),
+            // Our later send, still reading broadcast in the vault, spends the change output.
+            record({
+                id: 'later', txid: CHILD, fromAddress: OURS, toAddress: THEIRS,
+                broadcastAt: iso(YOUNG), createdAt: iso(YOUNG + 1000), txHex: rawTxSpending(TXID, 1),
+            }),
+        ]);
+        const txCalls = [];
+        const out = await run(vault, sdkWith({
+            utxos: { [THEIRS]: { utxos: [{ txid: CHILD, vout: 0, confirmations: 2, height: 9001 }] } },
+            txCalls,
+        }));
+        expect(out.confirmed).toEqual(new Set([TXID.toLowerCase(), CHILD]));
+        expect(txCalls).toEqual([]);
+        expect(vault.rows.map((r) => r.status)).toEqual(['indexed', 'indexed']);
+        expect(vault.rows[0].confirmedBlockIndex).toBeNull();
+        expect(vault.rows[1].confirmedBlockIndex).toBe(9001);
+    });
+
+    it('retires a record plainly when the explorer holds a valid action for it, leaving that row to the feed', async () => {
+        const vault = vaultOf([coinpayRecord()]);
+        const out = await run(vault, sdkWith({
+            tx: { [COINPAY_TXID]: {
+                tx_hash: COINPAY_TXID, block_index: '67882092', tx_data: 'COINPAY|0|666',
+                actions: [{ action_index: '667', action: 'COINPAY', status: 'valid' }],
+            } },
+        }));
+        expect(out.confirmed).toEqual(new Set([COINPAY_TXID]));
+        const row = vault.rows[0];
+        expect(row.status).toBe('indexed');
+        expect(row.confirmedAt).toBe(NOW);
+        expect(row.chainConfirmed).toBeUndefined();
+        expect(row.confirmedBlockIndex).toBeUndefined();
+    });
+
+    it('asks the explorer about one hash at most once per interval', async () => {
+        const vault = vaultOf([coinpayRecord()]);
+        const txCalls = [];
+        const memo = new Map();
+        const sdk = sdkWith({ txCalls });
+        await run(vault, sdk, { probeMemo: memo });
+        await run(vault, sdk, { probeMemo: memo });
+        expect(txCalls.length).toBe(1);
+        const later = new Date(NOW_MS + INCLUSION_PROBE_INTERVAL_MS).toISOString();
+        await run(vault, sdk, { probeMemo: memo, now: () => later });
+        expect(txCalls.length).toBe(2);
+    });
+
+    it('stamps the block off the tracker when the outputs settle a young send', async () => {
+        const vault = vaultOf([record({ broadcastAt: iso(YOUNG), createdAt: iso(YOUNG + 1000) })]);
+        const out = await run(vault, sdkWith({
+            utxos: { [THEIRS]: { utxos: [{ txid: TXID.toLowerCase(), vout: 0, confirmations: 3, height: 7707 }] } },
+        }));
+        expect(out.confirmed).toEqual(new Set([TXID.toLowerCase()]));
+        expect(vault.rows[0].chainConfirmed).toBe(true);
+        expect(vault.rows[0].confirmedBlockIndex).toBe(7707);
     });
 });

@@ -201,3 +201,27 @@ describe('addressMempool', () => {
             .rejects.toThrow(/address is required/);
     });
 });
+
+describe('livePendingTxs keeps the records this wallet proved into a block', () => {
+    it('lists a chain-confirmed indexed record with its proof, and no other indexed record', async () => {
+        const out = await livePendingTxs({
+            vault: vaultOf([
+                record({ id: 'settled', txid: 'CC01', status: 'indexed', chainConfirmed: true,
+                    confirmedBlockIndex: 7707, confirmedAt: '2026-08-27T00:05:00.000Z' }),
+                record({ id: 'by-feed', txid: 'CC02', status: 'indexed', confirmedAt: '2026-08-27T00:05:00.000Z' }),
+                record({ id: 'no-block', txid: 'CC03', status: 'indexed', chainConfirmed: true, confirmedBlockIndex: null }),
+            ]),
+            chainRegistry: registry, chainId: CHAIN_ID,
+        });
+        expect(out.map((r) => r.txid).sort()).toEqual(['CC01', 'CC03']);
+        const settled = out.find((r) => r.txid === 'CC01');
+        expect(settled.chainConfirmed).toBe(true);
+        expect(settled.confirmedBlockIndex).toBe(7707);
+        expect(settled.confirmedAt).toBe('2026-08-27T00:05:00.000Z');
+        expect(out.find((r) => r.txid === 'CC03').confirmedBlockIndex).toBeNull();
+        // A live record carries the fields too, unset.
+        const live = await livePendingTxs({ vault: vaultOf([record()]), chainRegistry: registry, chainId: CHAIN_ID });
+        expect(live[0].chainConfirmed).toBe(false);
+        expect(live[0].confirmedBlockIndex).toBeNull();
+    });
+});

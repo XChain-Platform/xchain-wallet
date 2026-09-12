@@ -55,6 +55,13 @@
  * @property {string | null} pendingTxId
  * @property {boolean} replaced            superseded by an RBF replacement
  * @property {string | null} replacementTxHash
+ * @property {boolean} chainConfirmed      this wallet proved a block carries the
+ *                                          transaction and no explorer row exists
+ *                                          to take the entry's place (a plain
+ *                                          transfer, or an action the service
+ *                                          rejected). Outranks every other state
+ * @property {number | null} confirmedBlockIndex  that block, when the proof named it
+ * @property {number | null} confirmedAtMs  when the wallet learned of the block, ms
  */
 
 /**
@@ -110,6 +117,17 @@ const LIVE_PENDING_STATUSES = new Set(['broadcasting', 'broadcast', 'rbf-replace
  */
 export function isLivePendingStatus(status) {
     return LIVE_PENDING_STATUSES.has(String(status || ''));
+}
+
+/**
+ * An `indexed` record the wallet itself proved into a block. There is no
+ * confirmed entry to be the truth for it (nothing indexes a plain transfer or
+ * a rejected action), so it is the one `indexed` record History still shows.
+ *
+ * @param {{ status?: string, chainConfirmed?: boolean } | null | undefined} pendingTx
+ */
+export function isChainConfirmedRecord(pendingTx) {
+    return Boolean(pendingTx) && String(pendingTx.status || '') === 'indexed' && pendingTx.chainConfirmed === true;
 }
 
 /** @param {unknown} hash */
@@ -217,6 +235,9 @@ export function mempoolRowToEntry({ chainId, address, row, ownAddresses, observe
             pendingTxId: null,
             replaced: false,
             replacementTxHash: null,
+            chainConfirmed: false,
+            confirmedBlockIndex: null,
+            confirmedAtMs: null,
         },
     };
 }
@@ -224,6 +245,12 @@ export function mempoolRowToEntry({ chainId, address, row, ownAddresses, observe
 /**
  * Build a pending entry from a local PendingTx record. This is the entry the
  * user sees the instant a broadcast returns, before any mempool poll has run.
+ *
+ * A record the wallet itself proved into a block (`chainConfirmed`) builds an
+ * entry too, still blockless in shape so the pending detail branch renders
+ * it, but carrying the proof in its meta: that entry reads as confirmed
+ * everywhere, and is dropped by the merge below the moment the explorer
+ * lists the hash after all.
  *
  * @param {object} params
  * @param {string} params.chainId
@@ -240,13 +267,15 @@ export function pendingTxToEntry({
 }) {
     const txHash = normalizeHash(pendingTx?.txid);
     if (!txHash) return null;
-    if (!isLivePendingStatus(pendingTx?.status)) return null;
+    const chainConfirmed = isChainConfirmedRecord(pendingTx);
+    if (!isLivePendingStatus(pendingTx?.status) && !chainConfirmed) return null;
     const source = String(pendingTx?.fromAddress || '');
     const destinations = pendingTx?.toAddress ? [String(pendingTx.toAddress)] : [];
     const broadcastAtMs = isoToMs(pendingTx?.broadcastAt);
     // M2.2 records the network sighting on the record itself; until that row
     // lands the field is simply absent and the entry stays "awaiting network".
     const firstSeenMs = isoToMs(pendingTx?.mempoolSeenAt);
+    const confirmedBlock = Number(pendingTx?.confirmedBlockIndex);
     return {
         key: pendingKeyFor(chainId, txHash),
         chainId,
@@ -279,6 +308,11 @@ export function pendingTxToEntry({
             replacementTxHash: pendingTx?.rbfReplacement
                 ? normalizeHash(pendingTx.rbfReplacement)
                 : null,
+            chainConfirmed,
+            confirmedBlockIndex: chainConfirmed && Number.isInteger(confirmedBlock) && confirmedBlock > 0
+                ? confirmedBlock
+                : null,
+            confirmedAtMs: chainConfirmed ? isoToMs(pendingTx?.confirmedAt) : null,
         },
     };
 }
@@ -310,6 +344,11 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
             pendingTxId: localEntry.pending.pendingTxId,
             replaced: localEntry.pending.replaced,
             replacementTxHash: localEntry.pending.replacementTxHash,
+            // A block is the one thing a mempool row cannot know about; only
+            // our record can carry the proof, and it carries it across.
+            chainConfirmed: localEntry.pending.chainConfirmed === true,
+            confirmedBlockIndex: localEntry.pending.confirmedBlockIndex ?? null,
+            confirmedAtMs: localEntry.pending.confirmedAtMs ?? null,
         },
     };
 }
@@ -375,6 +414,8 @@ export function mergePendingEntries({ confirmed, pending }) {
  * network has never seen it.
  *
  * States, and each one is a claim the wallet can defend:
+ *   `confirmed`         this wallet proved a block carries it, and no
+ *                       explorer row exists to take the entry's place
  *   `awaiting-network`  we broadcast it; no mempool has reported it YET, and
  *                       not enough time has passed for that to be worrying
  *   `seen`              a mempool reported it; this is healthy pending
@@ -383,18 +424,24 @@ export function mergePendingEntries({ confirmed, pending }) {
  *                       confirmation, past the grace window
  *   `replaced`          we replaced it ourselves via RBF
  *
- * Note what is NOT here: "accepted", "confirmed", or anything implying the
- * indexer has validated the action. A mempool row is pre-validation and the
- * indexer can still reject it at confirmation (§7 honesty rule).
+ * `confirmed` is the one state that speaks of a block, and it is a fact
+ * about the transaction, not about any action: the service recorded none
+ * for it, or it never carried one. Nothing else here says "accepted" or
+ * implies the indexer validated anything. A mempool row is pre-validation
+ * and the indexer can still reject it at confirmation (§7 honesty rule).
+ *
+ * `confirmed` outranks `replaced` deliberately: if the transaction we tried
+ * to replace is the one a block took, the replacement is the dead one.
  *
  * @param {{ pending?: PendingMeta }} entry
  * @param {number} nowMs
  * @param {{ seenWindowMs?: number, droppedGraceMs?: number }} [windows]
- * @returns {'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced'}
+ * @returns {'confirmed' | 'awaiting-network' | 'seen' | 'not-seen' | 'dropped' | 'replaced'}
  */
 export function pendingDisplayState(entry, nowMs, windows) {
     const meta = entry?.pending;
     if (!meta) return 'awaiting-network';
+    if (meta.chainConfirmed) return 'confirmed';
     if (meta.replaced) return 'replaced';
 
     const seenWindowMs = Number(windows?.seenWindowMs) > 0

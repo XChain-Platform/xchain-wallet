@@ -84,6 +84,12 @@ export function isEntryReplaceable(entry) {
     if (Number(entry.blockIndex) !== 0) {
         return { ok: false, reason: 'Already confirmed.' };
     }
+    // A blockless entry in shape only: the wallet proved the block itself
+    // and keeps the entry so History can show it. Replacing it would bump
+    // the fee on a transaction that is already mined.
+    if (entry.pending?.chainConfirmed === true) {
+        return { ok: false, reason: 'Already confirmed.' };
+    }
     const action = String(entry.action || '').toUpperCase();
     const REPLACEABLE_ACTIONS = new Set([
         'SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP',
