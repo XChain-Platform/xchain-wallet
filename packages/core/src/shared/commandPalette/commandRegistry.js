@@ -228,6 +228,16 @@ export function buildCommands(ctx) {
         // screen. Titled for the address subject, since the token subject is
         // already reachable from the token it belongs to.
         { id: 'create-controller-bind', category: 'Create', title: 'Bind a controller', subtitle: 'Route this address\'s actions through a guard contract', keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LockIcon, run: go('controller-bind') },
+        // The two bridge surfaces. Authoring forms that open free-entry, like
+        // their neighbours here: the move form picks its own leg from the
+        // chain it is on, and the settings form carries the same token picker
+        // every other TokenAdminForm mode does, so neither needs a ref the
+        // palette cannot supply. Ungated: the bridge is not the DEX surface,
+        // and both forms report for themselves when a chain or a token cannot
+        // bridge. Filed under Create rather than Trade because a bridge move
+        // is not a trade; nobody is on the other side of it.
+        { id: 'create-bridge-move', category: 'Create', title: 'Move a token across chains', subtitle: 'Send a token to another chain and take the credit there', keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'], Icon: Icon.LinkIcon, run: go('bridge-move') },
+        { id: 'create-bridge-settings', category: 'Create', title: 'Bridge settings', subtitle: 'Choose which chains a token you issued can move to', keywords: ['bridge', 'chains', 'issuer', 'depth', 'confirmations', 'freeze', 'xbridge'], Icon: Icon.LinkIcon, run: go('bridge-settings') },
         { id: 'create-advanced', category: 'Create', title: 'Advanced action', subtitle: 'Author any action by hand', keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
     );
 

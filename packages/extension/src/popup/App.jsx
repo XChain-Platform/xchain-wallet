@@ -2107,6 +2107,7 @@ function AppInner() {
                         onCallbackSettings={() => openForm('callback-settings')}
                         onExecuteCallback={() => openForm('execute-callback')}
                         onAccessLists={() => openForm('access-lists')}
+                        onBridgeSettings={() => openForm('bridge-settings')}
                         onPauseToken={() => openForm('pause-token')}
                         onUpdateDescription={() => openForm('description')}
                         onAttachContent={() => openForm('attach-content')}
@@ -2142,7 +2143,7 @@ function AppInner() {
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
-                        entries={[...buildActionEntries({
+                        entries={buildActionEntries({
                             onIssue: () => setUnlockedView('issue'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
@@ -2178,6 +2179,12 @@ function AppInner() {
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
                             onCrossChainOrder: () => setUnlockedView('cross-chain-order'),
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
+                            // The two XBRIDGE surfaces. Both are catalogue
+                            // entries now, so the shell arms them the same way
+                            // as every other row instead of appending its own
+                            // copy of the label and description.
+                            onBridgeMove: () => setUnlockedView('bridge-move'),
+                            onBridgeSettings: () => setUnlockedView('bridge-settings'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,
@@ -2196,26 +2203,7 @@ function AppInner() {
                             // no Trezor factory (PairSignerForm gets
                             // pairTrezor={null}), so the entry must not offer
                             // one.
-                        }, { pairsTrezor: false }),
-                        // The two XBRIDGE surfaces. ActionsMenu takes its
-                        // entries as a prop precisely so a host can wire a
-                        // route of its own, and these are appended here rather
-                        // than added to ACTION_ENTRY_DEFS so the shared
-                        // catalogue is not edited from three shells at once.
-                        // Without an entry, the routes above are unreachable.
-                        {
-                            id: 'bridge-move',
-                            label: 'Move across chains',
-                            description: 'Move a token to another chain. The credit on the far chain cannot be undone or redirected.',
-                            onSelect: () => setUnlockedView('bridge-move'),
-                        },
-                        {
-                            id: 'bridge-settings',
-                            label: 'Bridge settings',
-                            description: 'Open a token you issued to the bridge, raise the confirmation depth it needs, or freeze both forever.',
-                            onSelect: () => setUnlockedView('bridge-settings'),
-                        },
-                        ]}
+                        }, { pairsTrezor: false })}
                         onBack={() => setUnlockedView('home')}
                     />
                 );
