@@ -23,9 +23,9 @@
 //          with tick = get_tick, amount = get_amount * fills,
 //          to = dispenser address. Password re-prompt + wrong-password
 //          handling + danger-aware hint about UTXO-chain buy race.
-//        - coin-paid lane → Pay Here panel with copy-address + copy-
-//          amount helpers and a note that native-coin send from this
-//          wallet is on the roadmap.
+//        - coin-paid lane → the same Buy stage sending the chain's native
+//          ticker (the flow builds the payment output), plus the Pay Here
+//          panel with copy-address + copy-amount helpers for another wallet.
 //   5. ActionsMenu "Browse dispensers" entry is registered; popup + web
 //      + desktop App.jsx track the 'dispenser-explorer' sub-route and
 //      tag dispenserRef with origin: 'explorer' vs 'list' so the
@@ -118,8 +118,11 @@ assert.ok(
     'token-paid buy invokes messaging.sendToken',
 );
 assert.ok(
-    /tick:\s*getTick/.test(detailSrc),
-    'token-paid buy sends GET_TICK',
+    // One buy request for both lanes: payTick is GET_TICK on a token-paid
+    // dispenser and the chain's native ticker on a coin-paid one.
+    /tick:\s*payTick/.test(detailSrc)
+        && /payTick = isTokenPaid \? getTick/.test(detailSrc),
+    'buy sends GET_TICK on the token lane and the native ticker on the coin lane',
 );
 assert.ok(
     /amount:\s*totalPayAmount/.test(detailSrc),
@@ -150,8 +153,8 @@ assert.ok(
     'pay-here panel exposes a copy-to-clipboard button',
 );
 assert.ok(
-    /any \{getCoin\} wallet\s*\n?\s*can trigger a fill/.test(detailSrc)
-        || /Native-coin sending from this wallet is on the roadmap/.test(detailSrc),
+    /Any \$\{getCoin\} wallet can trigger a fill/.test(detailSrc)
+        && /Paying from another \$\{getCoin\} wallet works too/.test(detailSrc),
     'pay-here panel calls out the bare-coin-payment UX expectation',
 );
 assert.ok(
@@ -202,5 +205,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: dispenser explorer smoke (DispenserExplorer §40.7.2 browse: token + address search modes + per-chain fan-out; DispenserDetail buyer surfaces: token-paid sendToken buy with fills multiplier + password re-prompt + UTXO-race warning, coin-paid pay-here panel with copy-to-clipboard + native-send roadmap note; ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list vs explorer nav in popup/web/desktop)',
+    'OK: dispenser explorer smoke (DispenserExplorer §40.7.2 browse: token + address search modes + per-chain fan-out; DispenserDetail buyer surfaces: token-paid sendToken buy with fills multiplier + password re-prompt + UTXO-race warning, coin-paid native-coin buy through the same stage plus the pay-here panel with copy-to-clipboard; ActionsMenu "Browse dispensers" entry + explorer sub-route + origin-tagged list vs explorer nav in popup/web/desktop)',
 );

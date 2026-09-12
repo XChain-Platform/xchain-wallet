@@ -130,19 +130,84 @@ export function dispenserLiveState(dispenser) {
  * fall back to the tick comparison, which over-reports rather than showing a
  * dispenser no history at all.
  *
+ * Every returned row carries a `valid` boolean beside the explorer's own
+ * `status`. The explorer serves refused dispenses too (a payment the list
+ * barred, a payer equal to the pay-to address), each with its attempted
+ * `give_amount` intact, and nothing moved on those. One flag here keeps the
+ * fills tab, the lifecycle timeline and the vended total agreeing on what
+ * counts; a row with no status at all is a fill from an explorer that
+ * predates the column and is taken as valid.
+ *
  * @param {any[]} rows              dispense rows as returned by the explorer
  * @param {string|number} actionIndex  the dispenser's action index
  * @param {{ give_tick?: string, get_tick?: string|null }} [dispenser] for the fallback
- * @returns {any[]} the rows belonging to this dispenser
+ * @returns {any[]} the rows belonging to this dispenser, each tagged `valid`
  */
 export function dispensesOfDispenser(rows, actionIndex, dispenser) {
     if (!Array.isArray(rows)) return [];
-    return rows.filter((d) => (
-        d?.dispenser_action_index != null
-            ? String(d.dispenser_action_index) === String(actionIndex)
-            : String(d?.get_tick || dispenser?.get_tick) === String(dispenser?.get_tick)
-                && String(d?.give_tick || dispenser?.give_tick) === String(dispenser?.give_tick)
-    ));
+    return rows
+        .filter((d) => (
+            d?.dispenser_action_index != null
+                ? String(d.dispenser_action_index) === String(actionIndex)
+                : String(d?.get_tick || dispenser?.get_tick) === String(dispenser?.get_tick)
+                    && String(d?.give_tick || dispenser?.give_tick) === String(dispenser?.give_tick)
+        ))
+        .map((d) => ({ ...d, valid: dispenseIsValid(d) }));
+}
+
+/**
+ * Did this dispense row move tokens? The indexer writes `valid` for a fill it
+ * honoured and `invalid: <reason>` for one it refused.
+ *
+ * @param {{ status?: string|null } | null | undefined} row
+ * @returns {boolean}
+ */
+export function dispenseIsValid(row) {
+    const status = String(row?.status ?? 'valid').trim().toLowerCase();
+    return status === '' || status === 'valid';
+}
+
+/**
+ * The reason an explorer attached to a refused dispense, without the
+ * `invalid:` prefix, or '' for a valid row or a bare `invalid`.
+ *
+ * @param {{ status?: string|null } | null | undefined} row
+ * @returns {string}
+ */
+export function dispenseInvalidReason(row) {
+    if (dispenseIsValid(row)) return '';
+    return String(row?.status ?? '').replace(/^\s*invalid\s*:?\s*/i, '').trim();
+}
+
+/**
+ * Total `give_amount` across the rows that actually dispensed, as an exact
+ * plain-decimal string; null when no row counts. Rows are the tagged output of
+ * dispensesOfDispenser, and a refused row contributes nothing however large
+ * its attempted amount was.
+ *
+ * Summed at a common decimal scale with BigInt: token amounts are decimal
+ * strings and float addition drifts on ordinary values ('0.1' + '0.2').
+ *
+ * @param {Array<{ valid?: boolean, give_amount?: string|number|null }>} rows
+ * @returns {string | null}
+ */
+export function vendedTotal(rows) {
+    if (!Array.isArray(rows)) return null;
+    const amounts = rows
+        .filter((d) => d && d.valid !== false)
+        .map((d) => String(d.give_amount ?? '').trim())
+        .filter((s) => /^\d+(\.\d+)?$/.test(s));
+    if (amounts.length === 0) return null;
+    const scale = Math.max(...amounts.map((s) => (s.split('.')[1] || '').length));
+    let sum = 0n;
+    for (const s of amounts) {
+        const [int, frac = ''] = s.split('.');
+        sum += BigInt(int + frac.padEnd(scale, '0'));
+    }
+    const digits = sum.toString().padStart(scale + 1, '0');
+    const cut = digits.length - scale;
+    const fracPart = digits.slice(cut).replace(/0+$/, '');
+    return fracPart ? `${digits.slice(0, cut)}.${fracPart}` : digits.slice(0, cut);
 }
 
 /**

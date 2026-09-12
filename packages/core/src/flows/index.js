@@ -254,6 +254,9 @@ export {
     dispenserByActionIndex,
     dispensesFor,
     dispensesOfDispenser,
+    dispenseIsValid,
+    dispenseInvalidReason,
+    vendedTotal,
     dispenserLiveState,
     dispenserLifecycleFor,
 } from './dispenserQueries.js';
@@ -477,8 +480,12 @@ export {
     isNativePendingTx,
     nativeSendVerdict,
     utxoListOf,
+    spentByConfirmedSibling,
     reconcileNativePendingTxs,
+    INCLUSION_PROBE_AFTER_MS,
+    INCLUSION_PROBE_INTERVAL_MS,
 } from './nativePendingConfirmation.js';
+export { inclusionOf, probeTxInclusion } from './txInclusionProbe.js';
 export {
     verifyAddressBalance,
     verifyAddressAction,

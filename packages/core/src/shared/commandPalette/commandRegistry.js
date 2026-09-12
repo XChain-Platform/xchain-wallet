@@ -168,6 +168,10 @@ export function buildCommands(ctx) {
             { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open atomic swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
         { id: 'nav-dispensers', category: 'Navigate', title: 'Dispensers', subtitle: 'Your dispensers', keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
+        // The buyer's side. 'Dispensers' above lists the ones this wallet
+        // opened; a buyer with no link in hand needs the search, which was
+        // reachable only through the Token Actions catalogue.
+        { id: 'nav-browse-dispensers', category: 'Navigate', title: 'Browse dispensers', subtitle: 'Find open dispensers by token or address', keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'], Icon: Icon.DollarIcon, run: go('dispenser-explorer') },
         { id: 'nav-my-tokens', category: 'Navigate', title: 'My Tokens', subtitle: 'Tokens you own', keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
         { id: 'nav-messaging', category: 'Navigate', title: 'Messaging', subtitle: 'Encrypted inbox', keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
         { id: 'nav-addresses', category: 'Navigate', title: 'Addresses', subtitle: 'Manage your addresses', keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
