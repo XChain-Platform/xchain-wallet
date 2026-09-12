@@ -31,7 +31,8 @@
 //
 //   IN:  the order book and the pair views (markets, market, markets-picker,
 //        market-activity), order authoring and management (create-order,
-//        my-orders), and the swap lane (swap, my-swaps, cross-chain-swap).
+//        my-orders, cross-chain-order), and the swap lane (swap, my-swaps,
+//        cross-chain-swap).
 //        These are the screens a reviewer reads as a trading venue.
 //   OUT: `coinpay` / `obligations`. They SETTLE an order that already matched.
 //        A user holds one seed across shells, so a match made on web can come
@@ -89,6 +90,7 @@ export const SURFACE_VIEWS = Object.freeze({
         'create-order',
         'my-orders',
         'cross-chain-swap',
+        'cross-chain-order',
     ]),
 });
 
@@ -116,6 +118,7 @@ export const SURFACE_MODULES = Object.freeze({
         'shared/routes/MySwapsView.jsx',
         'shared/routes/SwapForm.jsx',
         'shared/routes/CrossChainSwapForm.jsx',
+        'shared/routes/CrossChainOrderForm.jsx',
     ]),
 });
 

@@ -71,9 +71,9 @@ const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(
  * software/HW/watcher lanes (orderAction / orderActionHw / watcher
  * encode-only) with the single-encode confirm page for software.
  *
- * Same-chain only in v0 (GIVE_COIN = GET_COIN = the posting chain's coin),
- * matching PlaceOrderPanel; cross-chain GET (validator-federated) is a
- * separate lane not authored here.
+ * Same-chain only (GIVE_COIN = GET_COIN = the posting chain's coin),
+ * matching PlaceOrderPanel. An order whose GET side settles on another
+ * chain is authored by CrossChainOrderForm.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -591,6 +591,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                 chainRegistry={chainRegistry}
             />
+            <p className={styles.hint}>
+                Both sides of this order settle on {descriptor?.displayName || 'this chain'}. To get a token on another chain, use Cross-chain order.
+            </p>
 
             {fromAddress ? (
                 <AddressField

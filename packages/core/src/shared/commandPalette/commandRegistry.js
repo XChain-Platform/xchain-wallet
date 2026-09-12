@@ -244,6 +244,7 @@ export function buildCommands(ctx) {
         { id: 'trade-coinpay', category: 'Trade', title: 'Pay an order', subtitle: 'Settle a matched order', keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
         ...(hasDex ? [
             { id: 'trade-xchain-swap', category: 'Trade', title: 'Cross-chain swap', subtitle: 'Swap across chains', keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
+            { id: 'trade-xchain-order', category: 'Trade', title: 'Cross-chain order', subtitle: 'Limit order across chains', keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'], Icon: Icon.LinkIcon, run: go('cross-chain-order') },
         ] : []),
         { id: 'trade-xchain-templates', category: 'Trade', title: 'Cross-chain templates', subtitle: 'Prebuilt cross-chain flows', keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
     );

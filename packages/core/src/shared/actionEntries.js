@@ -200,6 +200,12 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         description: 'Open a swap that gives a token on one chain and gets a token on another. Both sides settle together (all-or-nothing) when a counterparty fills the offer.',
     },
     {
+        id: 'cross-chain-order',
+        handler: 'onCrossChainOrder',
+        label: 'Cross-chain order',
+        description: 'Place a limit order that gives a token on one chain and gets a token on another. Matched by the validator federation on a price-time book; can fill in parts.',
+    },
+    {
         id: 'cross-chain-templates',
         handler: 'onCrossChainTemplates',
         label: 'Cross-chain templates',

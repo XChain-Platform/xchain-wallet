@@ -80,14 +80,14 @@ describe('the command palette', () => {
 
     it('carries the DEX and trade commands by default', () => {
         const list = ids({});
-        for (const id of ['nav-markets', 'nav-my-orders', 'nav-my-swaps', 'trade-swap', 'trade-order', 'trade-xchain-swap']) {
+        for (const id of ['nav-markets', 'nav-my-orders', 'nav-my-swaps', 'trade-swap', 'trade-order', 'trade-xchain-swap', 'trade-xchain-order']) {
             expect(list).toContain(id);
         }
     });
 
     it('drops exactly those when the surface is absent', () => {
         const list = ids({ hasDexSurface: false });
-        for (const id of ['nav-markets', 'nav-my-orders', 'nav-my-swaps', 'trade-swap', 'trade-order', 'trade-xchain-swap']) {
+        for (const id of ['nav-markets', 'nav-my-orders', 'nav-my-swaps', 'trade-swap', 'trade-order', 'trade-xchain-swap', 'trade-xchain-order']) {
             expect(list).not.toContain(id);
         }
         // Settling a match that already happened is a payment the user owes, not

@@ -240,18 +240,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         const totalStr = total == null ? '' : String(total);
         /** @type {Record<string, string>} */
         // GIVE_COIN / GET_COIN are required by the indexer (order.js
-        // rejects a missing COIN network as invalid); same-chain orders
-        // always carry the panel's own chain, matching SwapForm.
-        //
-        // This hardcoded same-coin pair IS the wallet's ORDER
-        // boundary. The wire allows GIVE_COIN != GET_COIN (a cross-chain
-        // order escrows the GIVE side locally and settles through the
-        // validator federation via CROSS_SETTLE, ORDER.md "Notes"), and
-        // orderAction forwards params verbatim, so the flow layer would
-        // carry it. What is missing is authoring UI: no give-chain /
-        // get-chain split exists for ORDER the way CrossChainSwapForm has
-        // one for SWAP, and no GET_ADDRESS is resolved on a second chain.
-        // Cross-chain trading from the wallet is SWAP-only.
+        // rejects a missing COIN network as invalid). This panel trades a
+        // market that lives on ONE chain, so both sides carry the panel's
+        // own coin; an order whose GET side settles on another chain
+        // (federation-matched, CROSS_SETTLE) is authored by
+        // CrossChainOrderForm.
         const p = { VERSION: '0', GIVE_COIN: coinTicker, GET_COIN: coinTicker };
         if (side === 'buy') {
             p.GIVE_TICK = tick2;

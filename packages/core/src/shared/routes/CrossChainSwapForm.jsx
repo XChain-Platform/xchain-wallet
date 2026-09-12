@@ -28,7 +28,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { activeSourceId } from '../addressSelection.js';
+import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
@@ -677,7 +677,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 variant={variant}
                 title="From address"
                 walletId={walletId}
-                chainId={chainId}
+                chainId={giveChainId}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
