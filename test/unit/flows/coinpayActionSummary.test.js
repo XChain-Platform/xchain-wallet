@@ -35,7 +35,7 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
 vi.mock('../../../packages/core/src/flows/coinpayQueries.js', () => ({
     verifyCoinpayObligation: vi.fn(async () => ({
         payee_address: 'bc1qpayee',
-        coin_amount: '250000',
+        coin_amount: '0.0025',   // the explorer's decimal coin figure: 250000 base units
     })),
 }));
 
@@ -76,6 +76,19 @@ describe('coinpayAction pending-tx summary', () => {
     it('reads as plain English at coin scale with a ticker', async () => {
         await coinpayAction(opts());
         expect(summary()).toBe('Pay 0.0025 BTC for match #14');
+    });
+
+    it('[REGRESSION] reads a whole-coin obligation as coins, not base units', async () => {
+        // coin_amount "10" is ten coins; the old reader made it ten base units
+        // and the summary (and the payment under it) read 0.0000001.
+        vi.mocked(verifyCoinpayObligation).mockResolvedValueOnce({
+            payee_address: 'bc1qpayee',
+            coin_amount: '10',
+        });
+        await coinpayAction(opts({ coinAmount: '1000000000' }));
+        expect(summary()).toBe('Pay 10 BTC for match #14');
+        const output = vi.mocked(submitAction).mock.calls[0][0].encoderOpts.customOutputs[0];
+        expect(output).toEqual({ address: 'bc1qpayee', value: 1_000_000_000 });
     });
 
     it('carries no wire vocabulary at all', async () => {

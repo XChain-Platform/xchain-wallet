@@ -29,13 +29,16 @@ import { verifyCoinpayObligation } from '../../../packages/core/src/flows/coinpa
 const PAYER = 'mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn';       // BTC testnet
 const PAYEE = 'n2eMqTT929pb1RDNuqEnxdaLau1rxy3efi';       // BTC testnet
 const ATTACKER = 'mzBc4XEFSdzCDcTxAgf6EZXgsZWpztRhef';    // BTC testnet
+// The explorer serves the obligation's coin_amount as a decimal COIN figure;
+// the flow's coinAmount is the same debt in base units.
+const COIN_AMOUNT = '0.0025';
 const AMOUNT = 250000;
 
 const OBLIGATION = {
     action_index: '4242',
     payer_address: PAYER,
     payee_address: PAYEE,
-    coin_amount: AMOUNT,
+    coin_amount: COIN_AMOUNT,
     coinpay_status: 'pending_coinpay',
     expiration: 900000,
 };
@@ -200,6 +203,70 @@ describe('buildCoinpayPsbtRequest: the watcher build is verified too', () => {
     });
 });
 
+// A whole-coin debt arrives as a bare integer ("10" for ten coins). Read as
+// ten BASE units it builds a payee output of 0.0000001 coin, which confirms
+// and settles nothing because the indexer sees it short. Every shape of
+// coin_amount is coin units.
+describe('prepareCoinpay: a whole-coin obligation pays whole coins', () => {
+    const WHOLE = { ...OBLIGATION, coin_amount: '10' };
+    const FRACTIONAL = { ...OBLIGATION, coin_amount: '10.5' };
+
+    it('[REGRESSION] "10" builds a payee output of exactly 1000000000 base units', async () => {
+        const encoderCalls = [];
+        await buildCoinpayPsbtRequest({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry(WHOLE, { encoderCalls }),
+            coinAmount: 1_000_000_000,
+        });
+        expect(encoderCalls).toHaveLength(1);
+        expect(encoderCalls[0].customOutputs).toEqual([
+            { address: PAYEE, value: 1_000_000_000 },
+        ]);
+    });
+
+    it('"10.5" builds a payee output of exactly 1050000000 base units', async () => {
+        const encoderCalls = [];
+        await buildCoinpayPsbtRequest({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry(FRACTIONAL, { encoderCalls }),
+            coinAmount: 1_050_000_000,
+        });
+        expect(encoderCalls).toHaveLength(1);
+        expect(encoderCalls[0].customOutputs).toEqual([
+            { address: PAYEE, value: 1_050_000_000 },
+        ]);
+    });
+
+    it('[REGRESSION] refuses a caller that still passes the bare figure as base units', async () => {
+        // The old reader made 10 base units agree with a "10" obligation, so
+        // nothing rejected the short payment. Now the verifier owes ten coins.
+        const encoderCalls = [];
+        await expect(buildCoinpayPsbtRequest({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry(WHOLE, { encoderCalls }),
+            coinAmount: 10,
+        })).rejects.toThrow(/obligation owes 1000000000 base units, asked to sign 10\b/);
+        expect(encoderCalls).toHaveLength(0);
+        await expect(coinpayAction({
+            ...baseOpts,
+            sdkRegistry: fakeSdkRegistry(WHOLE),
+            coinAmount: 10,
+        })).rejects.toThrow(/amount mismatch for ORDER_MATCH #4242/);
+    });
+
+    it('a numeric whole-coin figure from the explorer is coin units too', async () => {
+        const row = await verifyCoinpayObligation({
+            sdkRegistry: fakeSdkRegistry({ ...OBLIGATION, coin_amount: 10 }),
+            chainId: 'bitcoin-testnet',
+            payerAddress: PAYER,
+            orderMatchActionIndex: '4242',
+            payeeAddress: PAYEE,
+            coinAmount: 1_000_000_000,
+        });
+        expect(row.coin_amount).toBe(10);
+    });
+});
+
 describe('verifyCoinpayObligation: accepts the honest payment', () => {
     it('returns the obligation row when everything agrees', async () => {
         const row = await verifyCoinpayObligation({
@@ -211,7 +278,7 @@ describe('verifyCoinpayObligation: accepts the honest payment', () => {
             coinAmount: AMOUNT,
         });
         expect(row.payee_address).toBe(PAYEE);
-        expect(row.coin_amount).toBe(AMOUNT);
+        expect(row.coin_amount).toBe(COIN_AMOUNT);
     });
 
     it('reads the row through a wrapped response envelope too', async () => {
@@ -237,6 +304,6 @@ describe('verifyCoinpayObligation: accepts the honest payment', () => {
             payeeAddress: PAYEE,
             coinAmount: AMOUNT,
         });
-        expect(row.coin_amount).toBe(AMOUNT);
+        expect(row.coin_amount).toBe(COIN_AMOUNT);
     });
 });

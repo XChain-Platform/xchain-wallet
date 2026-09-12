@@ -73,28 +73,24 @@ export function countdownText(secondsLeft) {
 }
 
 /**
- * The base-unit value of a CoinPay obligation's `coin_amount`, whichever
- * shape the explorer served it in.
+ * The base-unit value of a CoinPay obligation's `coin_amount`.
  *
- * THE TWO SHAPES ARE REAL, and assuming one of them broke the whole lane.
  * The indexer stores an obligation's COIN_AMOUNT as the match's own decimal
  * coin figure (`order_match.js`: `COIN_AMOUNT: nativeCoinAmount`) and the
- * explorer serves that column verbatim, so a 0.5 LTC debt arrives as `"0.5"`.
- * Every wallet reader assumed base units and rejected anything that was not
- * all digits, which was measured on Litecoin regtest 2026-07-29 to mean:
- * Payments due labelled the debt `0.5 base units` (a figure 100,000,000x
- * smaller than the truth, under the wrong unit); `autopayPolicy` cap 2
- * scored every obligation `amount-mismatch`, so auto-pay could never pay;
- * and `verifyCoinpayObligation` threw `unusable coin_amount`, so the manual
- * Pay path refused to sign. The lane could be entered and never settled.
+ * explorer serves that column verbatim: a 0.5 LTC debt arrives as `"0.5"`
+ * and a 10 DOGE debt as `"10"`, never `"10.00000000"`. The value is coin
+ * units in EVERY shape, so the 1e8 scale is unconditional. Reading a bare
+ * integer as base units pays a whole-coin debt at one hundred-millionth of
+ * its size: the transaction confirms, the indexer finds the payee output
+ * short and settles nothing, and the match expires.
  *
- * Accepts a plain integer (base units) or a plain decimal (coin units), and
+ * Accepts a plain non-negative decimal with at most 8 fractional digits and
  * NOTHING else - no hex, no octal, no exponent, no sign - because this feeds
  * a signing-path equality check where a lenient parse is a wrong payment.
- * A value with a fractional part is unambiguously coin units; a bare integer
- * stays base units, which is what every other caller of this module passes.
+ * Every caller in the wallet passes an obligation row's coin_amount; a real
+ * base-unit figure must not be routed through here.
  *
- * @param {unknown} raw
+ * @param {unknown} raw  obligation coin_amount (decimal coin string or number)
  * @returns {bigint | null}
  */
 export function obligationBaseUnits(raw) {
@@ -102,9 +98,9 @@ export function obligationBaseUnits(raw) {
     const s = String(raw).trim();
     const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
     if (!m) return null;
-    if (m[2] === undefined) return BigInt(m[1]);
-    if (m[2].length > 8) return null;
-    return BigInt(m[1]) * 100000000n + BigInt(m[2].padEnd(8, '0'));
+    const frac = m[2] ?? '';
+    if (frac.length > 8) return null;
+    return BigInt(m[1]) * 100000000n + BigInt(frac.padEnd(8, '0'));
 }
 
 /**

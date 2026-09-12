@@ -289,9 +289,10 @@ export function evaluateObligation({
     // Per-fill cap (cap 2): the obligation's coin_amount must equal the
     // match's coin-side fill exactly, and that fill must price out at
     // or under the consented GIVE/GET ratio.
-    // Either shape: current venues serve a decimal coin figure here, older
-    // ones base units. Rejecting the decimal scored every obligation
-    // "amount-mismatch", which made auto-pay inert rather than wrong.
+    // Both sides are decimal coin figures ("10" is ten coins) and both are
+    // read at the same 1e8 scale; reading either as base units scores every
+    // obligation "amount-mismatch", which makes auto-pay inert rather than
+    // wrong.
     const owedBase = obligationBaseUnits(obligation.coin_amount ?? obligation.coinAmount);
     const coinFillBase = decimalToBaseUnits(oriented.coinFill);
     if (owedBase === null || coinFillBase === null || owedBase !== coinFillBase) {

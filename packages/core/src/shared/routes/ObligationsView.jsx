@@ -190,9 +190,8 @@ function rowKey(o) {
 function ObligationRow({ row, onPay }) {
     const descriptor = chainRegistry.get(row.chainId);
     const ticker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
-    // The explorer serves this as a decimal coin figure, not base units; read
-    // it through the shape-tolerant parser or a 0.5 LTC debt renders as
-    // "0.5 base units" (see obligationBaseUnits).
+    // The explorer serves this as a decimal coin figure, never base units:
+    // "0.5" is half a coin and "10" is ten coins (see obligationBaseUnits).
     const coinText = baseUnitsToCoinText(obligationBaseUnits(row.coinAmount));
     const amountLabel = coinText != null
         ? `${coinText} ${ticker || 'coins'}`

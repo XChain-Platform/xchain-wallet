@@ -459,14 +459,12 @@ export class CoinpayAutopayWatcher {
 
     async _pay({ chainId, row, consent, matchIndex, signer }) {
         const payee = row.payee_address ?? row.payeeAddress;
-        // The explorer serves this as the match's DECIMAL coin figure, so it is
-        // converted ONCE here and every downstream use - the reservation hold,
-        // the caps ledger, the payment itself and the notification copy - reads
-        // base units. Taking the raw column threw `Cannot convert 0.5 to a
-        // BigInt` out of the hold computation below, and because that runs
-        // inside the poll cycle it killed the whole cycle: no obligation was
-        // ever evaluated, so an armed order simply never paid and the only
-        // trace was one console line a minute (measured on LTC regtest).
+        // The explorer serves this as the match's DECIMAL coin figure ("10" is
+        // ten coins), so it is converted ONCE here and every downstream use -
+        // the reservation hold, the caps ledger, the payment itself and the
+        // notification copy - reads base units. Taking the raw column into
+        // BigInt threw out of the hold computation and killed the whole poll
+        // cycle, so an armed order never paid.
         const amountBaseValue = obligationBaseUnits(row.coin_amount ?? row.coinAmount);
         if (amountBaseValue === null || amountBaseValue <= 0n) {
             await this._notifyOnce(matchIndex, 'unusable-amount', {

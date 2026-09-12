@@ -45,7 +45,7 @@ function obligationRow(over = {}) {
         payer_address: 'addr-payer',
         payee_address: 'addr-seller',
         coin: 'BTC',
-        coin_amount: '500000',
+        coin_amount: '0.005',     // the explorer's decimal coin figure: 500000 base units
         expiration: Math.floor(NOW / 1000) + 7000,
         block_index: 100,
         coinpay_status: 'pending_coinpay',
@@ -168,6 +168,26 @@ describe('happy path', () => {
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({ kind: 'coinpaid'.replace('coinpaid', 'coinpay-autopaid') }));
         // Broadcast alone never releases the hold.
         expect(ledger.release).not.toHaveBeenCalled();
+    });
+
+    it('[REGRESSION] pays a whole-coin obligation at coin scale, the figure the manual path signs', async () => {
+        // coin_amount "10" is ten coins. Read as ten BASE units it never
+        // matched the fill, so auto-pay never paid a whole-coin match.
+        const { registry } = makeSdkRegistry({
+            obligations: [obligationRow({ coin_amount: '10' })],
+            matches: [matchRow({ give_amount: '10', get_amount: '100' })],
+        });
+        const vault = makeVault({ consents: [consentRow({ giveCoinAmount: '100' })] });
+        const { watcher, ledger, coinpayAction } = makeWatcher({ vault, sdkRegistry: registry });
+        await watcher.pollOnce();
+
+        expect(coinpayAction).toHaveBeenCalledTimes(1);
+        expect(String(coinpayAction.mock.calls[0][0].coinAmount)).toBe('1000000000');
+        // The hold is coin-scale copy of the same base figure plus the fee.
+        expect(ledger.reserve).toHaveBeenCalledTimes(1);
+        expect(ledger.reserve.mock.calls[0][0].amount).toMatch(/^10(\.\d+)?$/);
+        const consent = vault.autopayStore.get('bitcoin-regtest::aa');
+        expect(consent.payments[0]).toMatchObject({ orderMatchActionIndex: '900', coinAmountBase: '1000000000' });
     });
 
     it('claims the payer lease on a clean vault and renews its own', async () => {
