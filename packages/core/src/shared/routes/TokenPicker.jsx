@@ -20,6 +20,7 @@ import {
     coinFromChainId,
 } from '../components/BalanceList.jsx';
 import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
+import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './TokenPicker.module.css';
 
@@ -216,6 +217,18 @@ export function TokenPicker({
                 return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
             });
         }
+        // A bridged copy is stored origin-rooted ('BTC.PEPECASH') and must not
+        // be listed by its wire name: on a picker the rooted string reads as a
+        // subasset of a token called BTC. Named here rather than in BalanceList
+        // so the rows' own `tick` (what a selection hands back, and what the
+        // action is composed against) is untouched - only the label moves.
+        // Search still matches the rooted form above, which is what someone
+        // pasting a ticker from the explorer will type.
+        next = next.map((r) => {
+            const { label, origin } = bridgeDisplayTick(r.tick, coinFromChainId(r.chainId));
+            if (!origin) return r;
+            return { ...r, displayName: `${label} (from ${origin})` };
+        });
         return sortByChainThenAsset(next);
     }, [allRows, networkFilter, kindFilter, tokenQueryTrim]);
 

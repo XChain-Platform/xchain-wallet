@@ -72,6 +72,12 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     XCALL: 'Cross-chain call',
     XEXEC: 'Cross-chain execution',
     CROSS_SETTLE: 'Cross-chain settlement',
+    // XBRIDGE is one verb over four user versions (lock / burn) plus the two
+    // mirror-injected settle legs, and a History row cannot tell them apart
+    // from the name alone. "Bridge transfer" is the only wording true of all
+    // six; the leg itself ("locked", "released") is on the action page, which
+    // reads the version. Unmapped this recases to "Xbridge".
+    XBRIDGE: 'Bridge transfer',
     // Lifecycle verbs the indexer emits when an open position closes out.
     // The user never authors them, but the vendored action manifest marks
     // each one indexerHandled + explorerRender, so they land in History

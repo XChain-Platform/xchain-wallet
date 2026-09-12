@@ -832,6 +832,28 @@ export function IssueTokenForm({ walletId, onBack }) {
                     {`Locking minting means the ${mintHeadroom} left under the cap can never be minted. Clear this box to mint it later.`}
                 </StatusMessage>
             ) : null}
+            {/* Bridgeability, the ISSUE format 7 fields (xchain-token-bridge.md
+                section 7). NOT set here, and the panel says so rather than
+                offering boxes that would silently do nothing: format 0 carries
+                no BRIDGE_CHAINS, MIN_DEPTH or LOCK_BRIDGE field, so the opt-in
+                is a separate owner-only action on an existing row. What belongs
+                on THIS screen is the one decision that is irreversible from
+                here: binding an address list to the token shuts the bridge door
+                for good in milestone 1. */}
+            <div className={styles.warnings}>
+                <p className={styles.hint}>
+                    Bridging is off. After the token exists you can open it to
+                    other chains from Manage Token, set how deep a lock must be
+                    buried before validators sign it, and freeze both settings for
+                    your holders.
+                </p>
+                <p className={styles.hint}>
+                    One thing to decide now: a token bound to an address allow-list
+                    or block-list cannot be bridged, and a bound list can never be
+                    cleared. If you may want this token on other chains, do not bind
+                    a list to it.
+                </p>
+            </div>
             <AddressField
                 label="Transfer ownership to (optional)"
                 icon="contacts"

@@ -660,6 +660,19 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <p className={styles.hint}>
                         These addresses become permanent public on-chain data once the list is published. There's no way to edit or delete an address out of a list later; forking (§ Fork &amp; edit) only creates a new list at a new index.
                     </p>
+                    {/* xchain-token-bridge-policy.md section 8, D9/milestone-1 refusal:
+                        an address list is the thing IssueTokenForm/TokenAdminForm point
+                        owners at to bind an allow-list or block-list, and that bind is
+                        the one decision that is final from THAT screen (a bound list can
+                        never be cleared, so the token can never open to the bridge in
+                        milestone 1). This form has no way to know whether a list will
+                        ever be bound, so the disclosure here is a heads-up rather than a
+                        block, in the same voice IssueTokenForm already uses. */}
+                    <p className={styles.hint}>
+                        If you later point a token&apos;s allow-list or block-list at this
+                        list, that token can never be bridged to another chain, and the
+                        binding itself can never be cleared once set.
+                    </p>
                 </>
             ) : (
                 <>

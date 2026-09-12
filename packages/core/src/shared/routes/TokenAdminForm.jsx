@@ -37,6 +37,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
+import { bridgeChainsList, coinDisplay as bridgeCoinDisplay } from './BridgeTick.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { LOCK_FLAGS } from '../utils/issueAdvancedFields.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -55,6 +56,10 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
+// Every chain the protocol runs on, as the tickers ISSUE v7's BRIDGE_CHAINS
+// carries. Derived from the same map above so a new chain lands in both at once.
+const PROTOCOL_COIN_TICKERS = Object.values(PROTOCOL_COIN_TICKER);
 
 // "Bitcoin" on mainnet, "Bitcoin regtest" elsewhere. The registry's
 // displayName is the same string on every network, which is exactly the
@@ -187,6 +192,17 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
     const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
+    // Bridgeability (mode === 'bridge-settings', ISSUE v7,
+    // xchain-token-bridge.md section 7). Three owner-set fields on the ORIGIN
+    // row: which destination chains this token may be locked to (default none),
+    // a raise-only confirmation depth the federation must honour for its locks,
+    // and a one-way freeze of both. `bridgeChainPicks` is a per-coin checkbox
+    // map because the wire field is a comma list and a free-text box invites a
+    // typo that reads as "no chains".
+    const [bridgeChainPicks, setBridgeChainPicks] = useState(/** @type {Record<string, boolean>} */ ({}));
+    const [bridgeMinDepth, setBridgeMinDepth] = useState('');
+    const [bridgeLock, setBridgeLock] = useState(false);
+    const [bridgePrefilled, setBridgePrefilled] = useState(false);
     const [password, setPassword] = useState('');
     // Lock-mode typed-confirmation gate. Locking is irreversible, so
     // the review stage requires the user to type LOCK before the Sign
@@ -289,7 +305,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // for the life of the form; `'lock'` can also be reached from the
     // free Actions menu, where `ticker` changes as the owner picks a
     // token and this hook simply refetches.
-    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' });
+    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' && mode !== 'bridge-settings' });
     const tokenLocks = assetInfo?.locks || {};
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
@@ -385,6 +401,48 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const listsChanged = mode === 'access-lists' && assetInfo != null && (
         (allowListIdx || null) !== (assetInfo.allowList || null)
         || (blockListIdx || null) !== (assetInfo.blockList || null)
+    );
+
+    // --- Bridgeability (ISSUE v7) ---------------------------------------
+    // Every protocol coin except the one this token is native to: a token
+    // cannot be bridged to the chain it already lives on.
+    const bridgeDestinations = useMemo(
+        () => PROTOCOL_COIN_TICKERS.filter((t) => t !== coinTicker),
+        [coinTicker],
+    );
+    // The token's current opt-in, as the origin row holds it. `null` means the
+    // venue does not report the field, and that is NOT "opted out": the form
+    // then prefills nothing and says it cannot read the current setting, rather
+    // than showing every box unchecked as if the issuer had cleared them.
+    const currentBridgeChains = useMemo(
+        () => bridgeChainsList(assetInfo?.bridgeChains ?? assetInfo?.bridge_chains ?? null),
+        [assetInfo],
+    );
+    const bridgeFrozen = !!(assetInfo?.lockBridge ?? assetInfo?.lock_bridge);
+    // Milestone 1 keeps policy and bridging mutually exclusive in both
+    // directions (token-bridge section 8): a token that has ever bound a list
+    // cannot opt in, and a list can never be cleared, so this is permanent
+    // until the policy-inheritance milestone lands.
+    const bridgePolicyBound = !!(assetInfo?.allowList || assetInfo?.blockList);
+    useEffect(() => {
+        if (mode !== 'bridge-settings' || !assetInfo || bridgePrefilled) return;
+        if (currentBridgeChains) {
+            const picks = {};
+            for (const coin of currentBridgeChains) picks[coin] = true;
+            setBridgeChainPicks(picks);
+        }
+        const depth = assetInfo.minDepth ?? assetInfo.min_depth ?? null;
+        if (depth !== null && depth !== undefined) setBridgeMinDepth(String(depth));
+        setBridgePrefilled(true);
+    }, [mode, assetInfo, bridgePrefilled, currentBridgeChains]);
+    const pickedBridgeChains = useMemo(
+        () => bridgeDestinations.filter((c) => bridgeChainPicks[c]),
+        [bridgeDestinations, bridgeChainPicks],
+    );
+    const bridgeChanged = mode === 'bridge-settings' && (
+        bridgeLock
+        || pickedBridgeChains.join(',') !== (currentBridgeChains || []).join(',')
+        || String(bridgeMinDepth).trim() !== String(assetInfo?.minDepth ?? assetInfo?.min_depth ?? '')
     );
 
     // Distribution gate (PC-03): CALLBACK config is only editable while
@@ -483,11 +541,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             blockListIdx,
             currentAllowList: assetInfo?.allowList || null,
             currentBlockList: assetInfo?.blockList || null,
+            bridgeChains: pickedBridgeChains,
+            currentBridgeChains,
+            bridgeMinDepth,
+            currentMinDepth: assetInfo?.minDepth ?? assetInfo?.min_depth ?? '',
+            bridgeLock,
         }),
         [mode, ticker, description, transferTo, maxMint, mintAddressMax,
          mintStartBlock, mintStopBlock, mintSupply, transferSupply, lockChecks,
          callbackBlock, callbackTick, callbackAmount,
-         allowListIdx, blockListIdx, assetInfo?.allowList, assetInfo?.blockList],
+         allowListIdx, blockListIdx, assetInfo?.allowList, assetInfo?.blockList,
+         pickedBridgeChains, currentBridgeChains, bridgeMinDepth, bridgeLock,
+         assetInfo?.minDepth, assetInfo?.min_depth],
     );
 
     const decoded = useMemo(() => {
@@ -586,6 +651,25 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         if (mode === 'access-lists') {
             if (!listsChanged) {
                 setFormError('Pick a different allow-list or block-list to apply. Leaving both unchanged does nothing.');
+                return;
+            }
+        }
+        if (mode === 'bridge-settings') {
+            if (bridgeFrozen) {
+                setFormError('Bridge settings are permanently frozen for this token (LOCK_BRIDGE). Neither the chain list nor the depth can change again.');
+                return;
+            }
+            if (bridgePolicyBound && pickedBridgeChains.length > 0) {
+                setFormError('A token bound to an allow-list or block-list cannot be opened to the bridge yet: the copy on the other chain would carry none of that policy. A list can never be cleared, so this token stays off the bridge until policy inheritance ships.');
+                return;
+            }
+            const depth = String(bridgeMinDepth).trim();
+            if (depth && !/^\d+$/.test(depth)) {
+                setFormError('Minimum confirmations must be a whole number of blocks.');
+                return;
+            }
+            if (!bridgeChanged) {
+                setFormError('Change a destination chain, the minimum confirmations, or the freeze before applying.');
                 return;
             }
         }
@@ -1308,6 +1392,82 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 </>
             ) : null}
 
+            {mode === 'bridge-settings' ? (
+                <>
+                    <p className={styles.hint}>
+                        Bridging lets holders lock {ticker || 'this token'} here and receive a
+                        copy of it on another chain. It is off until you turn it on, and only
+                        you can. Holders can always bring a copy back, even after you close a
+                        chain again.
+                    </p>
+                    {bridgeFrozen ? (
+                        <StatusMessage variant="status">
+                            These settings are frozen for good: this token's bridge
+                            configuration was locked and can never change again.
+                        </StatusMessage>
+                    ) : null}
+                    {bridgePolicyBound ? (
+                        <StatusMessage variant="status">
+                            {`${ticker || 'This token'} is bound to an address list, and a bridged copy `
+                                + 'would carry none of that policy on the other chain. It cannot be '
+                                + 'opened to the bridge yet, and because a bound list can never be '
+                                + 'cleared, that holds until policy inheritance ships.'}
+                        </StatusMessage>
+                    ) : null}
+                    {currentBridgeChains === null && assetInfo ? (
+                        <p className={styles.hint}>
+                            This venue does not report the token's current bridge setting, so
+                            nothing below is pre-filled. Applying will set it to exactly what
+                            you check here.
+                        </p>
+                    ) : null}
+                    <span className={styles.pickerLabel}>Destination chains</span>
+                    {bridgeDestinations.map((coin) => (
+                        <label key={coin} className={styles.checkRow}>
+                            <input
+                                type="checkbox"
+                                checked={!!bridgeChainPicks[coin]}
+                                disabled={bridgeFrozen || bridgePolicyBound}
+                                onChange={(e) => setBridgeChainPicks(
+                                    (prev) => ({ ...prev, [coin]: e.target.checked }),
+                                )}
+                            />
+                            {` ${bridgeCoinDisplay(coin)}`}
+                        </label>
+                    ))}
+                    <p className={styles.hint}>
+                        Unchecking every chain closes the door to NEW transfers. It never
+                        touches copies already out there, and holders can still bring those
+                        back.
+                    </p>
+                    <Input
+                        label="Minimum confirmations (optional)"
+                        hint="How deep a lock of this token must be buried on this chain before the validators will sign it. Raise-only: below the platform default it has no effect. A reorg after a copy is minted cannot be undone, so this is the price you set for that risk."
+                        value={bridgeMinDepth}
+                        onChange={(e) => setBridgeMinDepth(e.target.value)}
+                        disabled={bridgeFrozen}
+                        inputMode="numeric"
+                    />
+                    {!bridgeFrozen ? (
+                        <label className={styles.checkRow}>
+                            <input
+                                type="checkbox"
+                                checked={bridgeLock}
+                                onChange={(e) => setBridgeLock(e.target.checked)}
+                            />
+                            {' Freeze these settings permanently'}
+                        </label>
+                    ) : null}
+                    {bridgeLock ? (
+                        <StatusMessage variant="status">
+                            Freezing is one-way. Neither the chain list nor the minimum
+                            confirmations can ever be changed again, by you or by a future
+                            owner. That is the assurance a holder has against both.
+                        </StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"
@@ -1358,6 +1518,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
                         || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
                         || (mode === 'access-lists' && !listsChanged)
+                        || (mode === 'bridge-settings' && (
+                            bridgeFrozen
+                            || !bridgeChanged
+                            || (bridgePolicyBound && pickedBridgeChains.length > 0)
+                        ))
                         || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
                         || (mode === 'lock' && singleEncode && !typedConfirmOk)
                         || actionConfirm.composing}
@@ -1441,6 +1606,24 @@ function composeAdminParams(mode, form) {
         if (form.blockListIdx && form.blockListIdx !== form.currentBlockList) p.BLOCK_LIST = String(form.blockListIdx).trim();
         return p;
     }
+    if (mode === 'bridge-settings') {
+        // ISSUE v7 (token-bridge section 7). An EMPTY field means UNCHANGED
+        // here, not cleared: issue.js back-fills every empty field from the
+        // current row, which is why closing a token to the bridge takes the '-'
+        // sentinel and never an empty string. Getting that backwards would leave
+        // an issuer believing they had shut the door.
+        const p = { VERSION: '7', TICK };
+        const picks = form.bridgeChains || [];
+        const current = form.currentBridgeChains;
+        const nextList = picks.length > 0 ? picks.join(',') : '-';
+        if (current === null || nextList !== (current.length > 0 ? current.join(',') : '-')) {
+            p.BRIDGE_CHAINS = nextList;
+        }
+        const depth = String(form.bridgeMinDepth ?? '').trim();
+        if (depth !== '' && depth !== String(form.currentMinDepth ?? '')) p.MIN_DEPTH = depth;
+        if (form.bridgeLock) p.LOCK_BRIDGE = '1';
+        return p;
+    }
     // mode === 'transfer'
     return {
         VERSION: '0',
@@ -1456,6 +1639,7 @@ const MODE_LABEL = {
     'mint-settings': 'Mint settings',
     'callback-settings': 'Callback settings',
     'access-lists': 'Access lists',
+    'bridge-settings': 'Bridge settings',
 };
 
 const MODE_LABEL_LOWER = {
@@ -1465,6 +1649,7 @@ const MODE_LABEL_LOWER = {
     'mint-settings': 'mint settings update',
     'callback-settings': 'callback settings update',
     'access-lists': 'access lists update',
+    'bridge-settings': 'bridge settings update',
 };
 
 const MODE_DONE_TITLE = {
@@ -1474,6 +1659,7 @@ const MODE_DONE_TITLE = {
     'mint-settings': 'Mint settings updated',
     'callback-settings': 'Callback settings updated',
     'access-lists': 'Access lists updated',
+    'bridge-settings': 'Bridge settings updated',
 };
 
 // PC-04: current-member count of a LIST detail row (getListByActionIndex).
