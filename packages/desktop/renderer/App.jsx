@@ -73,6 +73,7 @@ import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
+import { BridgeMoveForm } from '@xchain-wallet/core/shared/routes/BridgeMoveForm.jsx';
 import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
 import { SleepForm } from '@xchain-wallet/core/shared/routes/SleepForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
@@ -213,7 +214,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -850,6 +851,10 @@ function AppInner() {
                     || unlockedView === 'mint-settings'
                     || unlockedView === 'callback-settings'
                     || unlockedView === 'access-lists'
+                    // ISSUE v7 bridgeability (BRIDGE_CHAINS / MIN_DEPTH /
+                    // LOCK_BRIDGE). Same form, one more mode, so it inherits the
+                    // ManageToken prefill and the shared Back behaviour.
+                    || unlockedView === 'bridge-settings'
                     || unlockedView === 'description'
                     || unlockedView === 'transfer')
                 && activeWalletId
@@ -861,6 +866,20 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
+                    />
+                );
+            }
+            // XBRIDGE move (lock on the origin chain, burn back everywhere
+            // else). The form picks the leg from the chain it is on, so the
+            // route hands it only the token context and lets it decide.
+            if (unlockedView === 'bridge-move' && activeWalletId) {
+                return (
+                    <BridgeMoveForm
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
                         onBack={formBack}
                     />
                 );
@@ -1987,7 +2006,7 @@ function AppInner() {
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
-                        entries={buildActionEntries({
+                        entries={[...buildActionEntries({
                             onIssue: () => setUnlockedView('issue'),
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
@@ -2032,7 +2051,26 @@ function AppInner() {
                             onSignMessage: () => setUnlockedView('sign-message'),
                             onVerifySignature: () => setUnlockedView('verify-signature'),
                             onSignPsbt: () => setUnlockedView('sign-psbt'),
-                        }, { pairsTrezor: true })}
+                        }, { pairsTrezor: true }),
+                        // The two XBRIDGE surfaces. ActionsMenu takes its
+                        // entries as a prop precisely so a host can wire a
+                        // route of its own, and these are appended here rather
+                        // than added to ACTION_ENTRY_DEFS so the shared
+                        // catalogue is not edited from three shells at once.
+                        // Without an entry, the routes above are unreachable.
+                        {
+                            id: 'bridge-move',
+                            label: 'Move across chains',
+                            description: 'Move a token to another chain. The credit on the far chain cannot be undone or redirected.',
+                            onSelect: () => setUnlockedView('bridge-move'),
+                        },
+                        {
+                            id: 'bridge-settings',
+                            label: 'Bridge settings',
+                            description: 'Open a token you issued to the bridge, raise the confirmation depth it needs, or freeze both forever.',
+                            onSelect: () => setUnlockedView('bridge-settings'),
+                        },
+                        ]}
                         onBack={() => setUnlockedView('home')}
                     />
                 );
