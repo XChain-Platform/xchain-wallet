@@ -19,6 +19,7 @@ import {
     CURRENT_VERSION,
     MULTISIG_SESSION_STATUSES,
 } from '../../../packages/core/src/schemas/multisigSigningSession.js';
+// --- test fixtures ---
 
 const PK_A = '02' + 'a'.repeat(64);
 const PK_B = '03' + 'b'.repeat(64);

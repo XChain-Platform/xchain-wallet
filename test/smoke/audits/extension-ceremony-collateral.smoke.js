@@ -218,6 +218,9 @@ if (existsSync(specPath)) {
 
     for (const m of block.matchAll(/`(claude\/[A-Za-z0-9_./-]+)`/g)) {
         pointers += 1;
+        // PLATFORM_ROOT, not `walletRoot/..`, for the reason given at specPath:
+        // one derivation, so an override cannot move the document without also
+        // moving the paths the document is checked against.
         if (!existsSync(join(PLATFORM_ROOT, m[1]))) missing.push(m[1]);
     }
 
@@ -552,6 +555,26 @@ for (const line of storeInstalledSteps) {
 function escapeRegExp(s) {
     return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+// --- 12. A command can resolve, run, exit 0, and measure the wrong thing -
+//
+// Sections 8, 10 and 11 ask what a linked PAGE says. This one is the same
+// question asked of a linked COMMAND, and the answer was worse, because a
+// command that measures the wrong artifact still exits 0 and prints a verdict.
+//
+// The disclosure's "before you tick anything" block said: run
+// `remote-code-audit.mjs`, and "the remote-code answer is a measurement rather
+// than a memory". Driven 2026-08-04: it exits 0 and reports the shipped bundle
+// clean. It defaults to packages/extension/dist, which is gitignored, was two
+// days old on the machine that ran it, and is built from whatever the shared
+// worktree happened to hold. The submission runbook's own build-provenance
+// phase refuses a locally built zip for upload in exactly those words. So the
+// ceremony verified one artifact and shipped another, on a store answer that
+// is permanent and public.
+//
+// The script already took an optional directory argument, so the fix was to
+// use it. This section holds both ends: the step must pass one, and the script
+// must still honour it. The second half is DRIVEN, not read, because "it
+// accepts a directory" is precisely the kind of claim that rots silently.
 
 const AUDIT = 'packages/extension/scripts/remote-code-audit.mjs';
 const auditSteps = disclosure.split('\n').filter((l) => /^[⬜✅]/.test(l) && /remote.code audit/i.test(l));

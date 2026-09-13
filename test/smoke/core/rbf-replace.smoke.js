@@ -97,6 +97,7 @@ await assert.rejects(
     }),
     /unknown strategy/,
 );
+// Happy path: passes through to messaging.replaceTx
 
 let captured = null;
 const fakeMessaging = {

@@ -101,6 +101,7 @@ assert.match(
     assert.ok(Number(ltcEntries[0].balances.native.quantity) > 0,
         'LTC native balance is non-zero');
 }
+// Empty input → empty output.
 
 assert.deepEqual(synthesizeDemoBalances({}), {}, 'empty input returns empty');
 assert.deepEqual(synthesizeDemoBalances(null), {}, 'null input returns empty');
@@ -131,6 +132,7 @@ assert.deepEqual(synthesizeDemoBalances(null), {}, 'null input returns empty');
     assert.ok(entries[0].timestamp > issueEntry.timestamp,
         'incoming SEND is more recent than ISSUE');
 }
+// Unknown chain → empty history (no fixture available).
 
 assert.deepEqual(
     synthesizeDemoHistory('imaginary-chain', 'whatever'),
@@ -141,6 +143,7 @@ assert.deepEqual(
 // Bad address → empty.
 assert.deepEqual(synthesizeDemoHistory('bitcoin-mainnet', ''), []);
 assert.deepEqual(synthesizeDemoHistory('bitcoin-mainnet', null), []);
+// synthesizeDemoLinks always returns [].
 
 assert.deepEqual(synthesizeDemoLinks(), []);
 

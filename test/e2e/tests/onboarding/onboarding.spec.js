@@ -88,6 +88,7 @@ test.describe('onboarding', () => {
     test('wrong password surfaces inline', async ({ page }) => {
         await createWallet(page, { password: 'rightpassword' });
         await lockWallet(page);
+        // Wrong password
 
         await page.getByLabel('Password').fill('WRONG');
         await page.getByRole('button', { name: 'Unlock' }).click();

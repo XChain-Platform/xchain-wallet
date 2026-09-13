@@ -50,6 +50,7 @@ describe('renameAccount', () => {
         const vault = makeVault([baseAccount]);
         await expect(renameAccount({ accountId: 'acct-1', name: '   ', vault }))
             .rejects.toThrow(/non-empty/);
+        // Unchanged.
         expect((await vault.accounts.get('acct-1')).name).toBe('Account 1');
     });
 
