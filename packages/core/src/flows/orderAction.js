@@ -31,7 +31,9 @@
 // order: both ORDER surfaces (PlaceOrderPanel, CreateOrderForm) hardcode
 // GIVE_COIN = GET_COIN = their own chain's coin, and neither resolves a
 // GET_ADDRESS on a second chain. The gap is the authoring UI, not this
-// flow; cross-chain trading from the wallet is SWAP-only.
+// flow; cross-chain trading from the wallet is SWAP-only. Widening it means
+// adding the give/get chain split and a second-chain GET_ADDRESS to the
+// authoring surfaces, not relaxing anything here.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';

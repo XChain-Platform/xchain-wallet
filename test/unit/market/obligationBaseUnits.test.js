@@ -26,6 +26,8 @@ import { obligationBaseUnits } from '../../../packages/core/src/market/obligatio
 
 describe('obligationBaseUnits', () => {
     it('[REGRESSION] reads the decimal coin figure the explorer actually serves', () => {
+        // The explorer serves the match's own decimal coin figure, so half a
+        // coin arrives as "0.5" and must not be refused for lacking all digits.
         expect(obligationBaseUnits('0.5')).toBe(50_000_000n);
         expect(obligationBaseUnits('0.50000000')).toBe(50_000_000n);
         expect(obligationBaseUnits('1.00000001')).toBe(100_000_001n);
@@ -38,6 +40,7 @@ describe('obligationBaseUnits', () => {
         expect(obligationBaseUnits('10')).toBe(1_000_000_000n);
         expect(obligationBaseUnits(10)).toBe(1_000_000_000n);
         expect(obligationBaseUnits('1')).toBe(100_000_000n);
+        // A figure that looks like base units is still coin units by contract.
         expect(obligationBaseUnits('50000000')).toBe(5_000_000_000_000_000n);
         expect(obligationBaseUnits(50_000_000)).toBe(5_000_000_000_000_000n);
         expect(obligationBaseUnits('0')).toBe(0n);
@@ -51,6 +54,8 @@ describe('obligationBaseUnits', () => {
     });
 
     it('refuses everything else, because this feeds a signing comparison', () => {
+        // Every shape below is one a lenient BigInt() or Number() would accept:
+        // hex, exponent, signs, a bare dot, embedded spaces, over-precision.
         for (const bad of ['0x10', '1e8', ' -1', '-1', '1.', '.5', '1.2.3', 'abc', '',
             null, undefined, {}, '1 000', '0.123456789']) {
             expect(obligationBaseUnits(bad), `accepted ${JSON.stringify(bad)}`).toBeNull();

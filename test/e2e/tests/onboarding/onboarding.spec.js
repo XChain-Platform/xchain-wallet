@@ -33,7 +33,7 @@ import {
     unlockWallet,
 } from '../../fixtures/wallet.js';
 
-// BIP39 test vector (known-good 12-word phrase).
+// BIP39 test vector from the SLIP-0039 spec (known-good 12-word phrase).
 const KNOWN_BIP39 =
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
@@ -50,9 +50,11 @@ test.describe('onboarding', () => {
     test('create → lock → unlock round-trip', async ({ page }) => {
         await createWallet(page, { name: 'E2E', password: 'password1234' });
 
+        // Home: reached after KDF + vault save
         await expect(nav(page).getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
 
         await lockWallet(page);
+        // Unlock round-trip: proves kdfParams persisted correctly
         await unlockWallet(page, 'password1234');
 
         await expect(lockButton(page)).toBeVisible();
@@ -66,6 +68,7 @@ test.describe('onboarding', () => {
         await page.getByLabel('Confirm password').fill('password1234');
         await page.getByRole('button', { name: 'Next' }).click();
 
+        // Mnemonic display stage
         await expect(page.getByRole('list', { name: 'Recovery phrase' })).toBeVisible();
         await page.getByLabel(/i have written down/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
@@ -86,6 +89,7 @@ test.describe('onboarding', () => {
     });
 
     test('wrong password surfaces inline', async ({ page }) => {
+        // Seed a wallet first.
         await createWallet(page, { password: 'rightpassword' });
         await lockWallet(page);
         // Wrong password
@@ -101,6 +105,7 @@ test.describe('onboarding', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
+        // Import takes a known-good phrase straight to an unlocked wallet.
         await page.getByLabel('Recovery phrase').fill(KNOWN_BIP39);
         await page.getByLabel('Wallet name').fill('Imported E2E');
         await page.getByLabel('Password', { exact: true }).fill('importpassword1');
@@ -115,6 +120,7 @@ test.describe('onboarding', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
+        // 13 words: not a valid BIP39 count.
         await page.getByLabel('Recovery phrase').fill('word '.repeat(13).trim());
         await page.getByLabel('Password', { exact: true }).fill('xxxxxxxxxx');
         await page.getByLabel('Confirm password').fill('xxxxxxxxxx');

@@ -11,7 +11,8 @@
 // Smoke for Phase 4: Step 8 of 23: STAKE authoring form (§42.7.1).
 //
 // Capability-staking model: form takes an amount + signing pubkey;
-// no tier picker, no chains selector.
+// no tier picker, no chains selector. A picker reappearing in the markup is
+// the regression this smoke exists to catch.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';

@@ -94,12 +94,18 @@ export function countdownText(secondsLeft) {
  * @returns {bigint | null}
  */
 export function obligationBaseUnits(raw) {
+    // An absent or empty coin_amount is an unreadable row, not a zero debt.
     if (raw == null || raw === '') return null;
     const s = String(raw).trim();
+    // Plain non-negative decimal only: no hex, octal, exponent or sign. A
+    // lenient parse here is a wrong payment, not a display glitch.
     const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
     if (!m) return null;
     const frac = m[2] ?? '';
+    // More than 8 fractional digits has no representation at coin scale.
     if (frac.length > 8) return null;
+    // The 1e8 scale is unconditional: coin_amount is coin units in every shape
+    // the explorer serves, so a bare "10" is ten coins, never ten base units.
     return BigInt(m[1]) * 100000000n + BigInt(frac.padEnd(8, '0'));
 }
 

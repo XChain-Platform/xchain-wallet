@@ -337,28 +337,37 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // the key material.
     function handleReview(event) {
         event.preventDefault();
+        // An order is signed from an address on THIS chain; without one there is
+        // nothing to spend from and nothing to receive into.
         if (!fromAddress) {
             setFormError('No address to sign from on this chain. Use Receive first.');
             return;
         }
+        // Both legs are required: an order with one side blank has no price.
         if (!price.trim() || !size.trim()) {
             setFormError('Price and size are required.');
             return;
         }
         const p = Number(price);
         const s = Number(size);
+        // Zero or negative would encode an order nothing can ever match.
         if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(s) || s <= 0) {
             setFormError('Price and size must be positive numbers.');
             return;
         }
+        // undefined means the custom date box holds something unparseable;
+        // null is the legitimate "never expires" preset and passes.
         if (expirationUnix === undefined) {
             setFormError('Pick a valid expiration date and time.');
             return;
         }
+        // An expiration already in the past is dead on arrival at the indexer.
         if (typeof expirationUnix === 'number' && expirationUnix <= Math.floor(Date.now() / 1000)) {
             setFormError('Expiration must be in the future.');
             return;
         }
+        // Auto-pay settles the match later, which needs the wallet reachable;
+        // the user acknowledges that before the order can be placed.
         if (ackRequired && !keepOpenAck) {
             setFormError('Acknowledge the auto-pay requirement (or turn auto-pay off) to continue.');
             return;

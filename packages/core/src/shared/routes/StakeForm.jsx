@@ -56,7 +56,8 @@ const CAPABILITY_LABELS = {
  * Capability-staking model: one STAKE action, no tier. The user enters
  * an amount and the signing pubkey; capabilities (price, cross_chain,
  * oracle_publish, attestation) auto-qualify when the pubkey's total
- * stake reaches each capability's MIN_STAKE.
+ * stake reaches each capability's MIN_STAKE. The thresholds live in the
+ * protocol, not in this form, so the form never names a number.
  *
  * Two modes:
  *   - "New stake" (VERSION 1): fresh pubkey. Indexer rejects if the
