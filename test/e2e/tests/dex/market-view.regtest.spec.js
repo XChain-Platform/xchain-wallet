@@ -319,7 +319,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
                 + `${noMemoTick}/XCHAIN is valid and open, its market row carries an ask, and the book `
                 + 'is empty. Fixed in xchain-explorer/src/db.js (getOrderInfoBatch + getOrderInfo now '
                 + 'LEFT JOIN index_memos, matching the 50 other joins in that file) and pinned by '
-                + 'test/unit/db.orderbook-memoless.test.js; rebuild the explorer image to run this '
+                + 'test/unit/db_orderbook_memoless.test.js; rebuild the explorer image to run this '
                 + 'lane.');
 
             expect(book.asks.length,

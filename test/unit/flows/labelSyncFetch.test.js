@@ -23,7 +23,7 @@
 //
 // The suite drives a fake SDK rather than an explorer: what is under test
 // is the wallet's selection and decrypt logic, and the explorer's own
-// by-name query mode is covered on its side (db.files-name-mode.test.js).
+// by-name query mode is covered on its side (db_files_name_mode.test.js).
 
 import { describe, it, expect, vi } from 'vitest';
 import {
