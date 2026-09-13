@@ -147,6 +147,18 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                             <span className={styles.meta}>
                                 {entry.chainId} · signed {ageString(entry.signedAt)}
                             </span>
+                            {/* A resumed claim is a send the wallet had already handed to
+                                the network when it was interrupted, so it may have landed.
+                                Saying so is the point of the flag: the row offers a re-send
+                                of the IDENTICAL bytes, which a node already holding them
+                                rejects as already known, and never a re-compose, which is
+                                the action on this path that can spend twice. */}
+                            {entry.resumedClaim ? (
+                                <span className={styles.meta}>
+                                    Sending was interrupted, so this may already have been
+                                    sent. Sending it again is safe and cannot pay twice.
+                                </span>
+                            ) : null}
                         </div>
                         <div className={styles.actions}>
                             <button
@@ -155,7 +167,9 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 onClick={() => broadcast(entry.id)}
                                 disabled={busyId === entry.id}
                             >
-                                {busyId === entry.id ? 'Broadcasting…' : 'Broadcast now'}
+                                {busyId === entry.id
+                                    ? 'Broadcasting…'
+                                    : (entry.resumedClaim ? 'Try sending again' : 'Broadcast now')}
                             </button>
                             <button
                                 type="button"
