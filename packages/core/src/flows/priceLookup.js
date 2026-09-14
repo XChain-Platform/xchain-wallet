@@ -368,7 +368,7 @@ function normalizeTick(tick) {
  * The explorer normalizes a row so tick1 is the requested base, but it
  * only does that when the request named both sides, so read whichever
  * orientation the row actually arrived in. `tickN_price` is the last
- * fill's price of tickN in the OTHER tick (indexer db.js getPrice).
+ * fill's price of tickN in the OTHER tick (indexer src/db/orders/market_reads.js getPrice).
  */
 function marketPriceOf(row, tick, quote) {
     const t1 = normalizeTick(row?.tick1);

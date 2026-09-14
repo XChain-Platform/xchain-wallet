@@ -159,7 +159,7 @@ export function orientMatch(matchRow, orderActionIndex) {
     const get = matchRow.get_action_index != null ? String(matchRow.get_action_index) : null;
     // THE TWO COLUMN FAMILIES ON THIS ROW DO NOT PAIR UP, and reading them as
     // if they did is what kept auto-pay from ever paying. From the indexer's
-    // own row construction (xchain-indexer db.js createOrderMatch):
+    // own row construction (xchain-indexer src/db/orders/match_rows.js createOrderMatch):
     //
     //     give_amount = data['MATCH_GIVE_AMOUNT']   // the TRIGGERING order's give
     //     get_amount  = data['MATCH_GET_AMOUNT']    // the TRIGGERING order's get
