@@ -21,7 +21,7 @@
 //   stage = 'done'        assembling DEPLOY broadcast.
 //
 // Resume is safe because of two consensus rules (xchain-indexer
-// actions/deploy.js): the assembler gathers chunks from THIS deployer for
+// actions/deploy/index.js): the assembler gathers chunks from THIS deployer for
 // THIS code_hash recorded at a LOWER action_index, and it dedups by
 // position with the lowest action_index winning. So a re-sent chunk is
 // wasteful but never corrupting, and a chunk from an earlier partial run

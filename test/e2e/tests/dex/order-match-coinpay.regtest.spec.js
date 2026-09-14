@@ -73,8 +73,8 @@ async function explorerJson(path) {
 /**
  * Asks the venue to quote the order wallet B is about to place.
  *
- * VENUE PRECONDITION, not a wallet assertion. An ORDER that fills on arrival
- * against a native-coin counterparty used to be quoted
+ * VENUE PRECONDITION, not a wallet assertion. An unfixed indexer quotes an ORDER
+ * that fills on arrival against a native-coin counterparty as
  * `valid:false, error:"pending_coinpay", xchainFee:null` - the verdict of the
  * MATCH it triggers rather than of the order itself - because the matcher is
  * handed the originating action's record and overwrites its STATUS and
@@ -83,7 +83,7 @@ async function explorerJson(path) {
  * action the chain accepts, which made the taker side of this whole lane
  * unreachable. Fixed in xchain-indexer (actions.js: the quoted action's own
  * verdict is captured before the matcher takes the record over) and pinned by
- * test/unit/feeQuotePrimaryVerdict.test.js, but a REGTEST VENUE runs a built
+ * test/unit/fees/fee_quote_primary_verdict.test.js, but a REGTEST VENUE runs a built
  * image, so this spec stays skipped until that image is rebuilt. Skipped LOUDLY
  * with the cause named, because a silent skip is how a suite reports coverage it
  * does not have.
@@ -278,8 +278,8 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             test.skip(quote?.valid === false && String(quote?.error).includes('pending_coinpay'),
                 'this venue\'s indexer still quotes an instantly-filling ORDER as its MATCH\'s '
                 + '"pending_coinpay" (valid:false, xchainFee:null), so the wallet cannot place the '
-                + 'taker side at all. Fixed in xchain-indexer/src/actions.js and pinned by '
-                + 'test/unit/feeQuotePrimaryVerdict.test.js; rebuild the regtest indexer image to '
+                + 'taker side at all. Fixed in xchain-indexer/src/actions/index.js and pinned by '
+                + 'test/unit/fees/fee_quote_primary_verdict.test.js; rebuild the regtest indexer image to '
                 + 'run this lane. Wallet A\'s order is left open on the venue by this skip.');
 
             const { main } = await openCreateOrder(page);

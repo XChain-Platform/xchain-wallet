@@ -130,7 +130,7 @@ export function fromBaseUnits(units, decimals = SCALE) {
  */
 export function unclaimedRewards({ rewards, claims } = {}) {
     // Every reward row the indexer writes lands on the 8dp grid (bcmulfloor at
-    // 8 in actions/price.js and attest.js), so nothing below is reachable from
+    // 8 in actions/price/index.js and attest/index.js), so nothing below is reachable from
     // today's data. It exists so a finer-precision reward type cannot arrive and
     // be miscounted in silence.
     //
