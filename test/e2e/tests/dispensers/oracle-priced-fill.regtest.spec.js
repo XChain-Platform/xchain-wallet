@@ -20,7 +20,7 @@
 // `/oraclefeequote` (packages/core/src/sdk/oracleFeePreflight.js).
 //
 // WHY THIS COULD NOT BE RUN THE DAY IT WAS WRITTEN. Every PRICE v1 publish is
-// inert for 24h (`PriceAggregator.js`, `effective_at = block_time + 86400`,
+// inert for 24h (`oracle/price_aggregator/single_ingest.js`, `effective_at = block_time + 86400`,
 // unconditional), and moving a shared venue's clock forward is forbidden by the
 // campaign venue contract §3.5. The feeds this spec uses were planted 2026-07-30
 // and matured 2026-07-31.

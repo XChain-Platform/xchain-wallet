@@ -17,7 +17,7 @@
 // Two facts drive every rule in here, and both surprise people:
 //
 //   1. EVERY publish is effective 24h after the block it lands in, the
-//      FIRST one for a pair included (xchain-hub PriceAggregator.js:383,
+//      FIRST one for a pair included (xchain-hub oracle/price_aggregator/single_ingest.js:149,
 //      unconditional). Updates are delayed so an operator cannot watch a
 //      payment arrive and rush a new price out under it; first publishes
 //      are delayed for consensus, because an immediately-effective row

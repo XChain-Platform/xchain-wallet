@@ -28,7 +28,7 @@ import {
 } from '../../../packages/core/src/registry/index.js';
 
 // A hub-style Ed25519 identity: raw 32-byte hex pubkey, hex signature over
-// the utf8 payload (mirrors xchain-hub src/ValidatorIdentity.js).
+// the utf8 payload (mirrors xchain-hub src/validators/identity.js).
 function makeIdentity() {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const spki = publicKey.export({ type: 'spki', format: 'der' });

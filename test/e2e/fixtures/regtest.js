@@ -1193,7 +1193,7 @@ export async function priceFamilyRefusal() {
  *
  * The Mode B dispenser lane settles against a PRICE v1 feed published by a
  * specific address, and a PRICE v1 publish is inert for 24 hours
- * (`PriceAggregator.js`, `effective_at = block_time + 86400`, unconditional).
+ * (`oracle/price_aggregator/single_ingest.js`, `effective_at = block_time + 86400`, unconditional).
  * So the ten feeds those specs use were planted on 2026-07-30 and matured the
  * next day, and the 2026-08-24 re-genesis removed them. **A spec cannot
  * make itself a replacement inside a run**: the earliest a fresh publish could

@@ -10,7 +10,7 @@
 
 // Campaign coverage map, "Dispensers": the USER-ORACLE fiat mode (Mode B), the
 // last undriven pricing lane on that surface - and the "My oracle" screen it
-// depends on, which nothing in 32 sessions had ever driven.
+// depends on, which no other spec drives.
 //
 // WHAT MODE B IS, and why it is not just Mode A with an extra field. A fiat
 // dispenser priced by the VALIDATOR federation (Mode A, already proven in
@@ -27,12 +27,12 @@
 //
 // THE CONSTRAINT THAT SHAPES THIS SPEC, and it is a consensus rule rather than
 // a harness limit: every PRICE v1 publish is inert for 24 HOURS. The hub sets
-// `effective_at = block_time + 86400` unconditionally (`PriceAggregator.js`),
+// `effective_at = block_time + 86400` unconditionally (`oracle/price_aggregator/single_ingest.js`),
 // and both the settlement path and the fee quote read only rows whose
 // effective_at has passed. So a Mode B dispenser CANNOT be created in the same
-// session that publishes the oracle it points at, on any venue, without moving
-// a shared chain's clock a day forward - which every other session on that
-// venue would inherit (campaign §3.5).
+// run that publishes the oracle it points at, on any venue, without moving a
+// shared chain's clock a day forward - which every other run on that venue
+// would inherit (campaign §3.5).
 //
 // So this spec drives the half that is reachable, and does it in a way that
 // leaves the other half one run away:
@@ -52,11 +52,11 @@
 //      field would answer identically at both.
 //
 // WHAT IT PLANTS. The quote is published for XCHAIN deliberately: XCHAIN is
-// free-mintable by any address on regtest, so a session running this venue
-// more than 24 hours later needs nothing from this one except the publishing
-// address (a public string, recorded in the campaign doc) to open a Mode B
-// dispenser and settle a fill against it. Publishing under a token this
-// session issued would have made the follow-up depend on a seed phrase.
+// free-mintable by any address on regtest, so a later run on this venue, more
+// than 24 hours out, needs nothing from this one except the publishing address
+// (a public string, recorded in the campaign doc) to open a Mode B dispenser
+// and settle a fill against it. Publishing under a locally issued token would
+// instead make that follow-up depend on a seed phrase.
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
@@ -91,7 +91,7 @@ const FIAT = 'USD';
 const VALUE = '1.50';
 /** A fraction, not a percentage: 1% of a Mode B dispenser's projected proceeds. */
 const USAGE_FEE = '0.01';
-/** The protocol's fixed maturation delay, in seconds (PriceAggregator.js). */
+/** The protocol's fixed maturation delay, in seconds (oracle/price_aggregator/single_ingest.js). */
 const ACTIVATION_DELAY_S = 86_400;
 /** Enough XCHAIN to escrow a dispenser with. */
 const MINT = 500;
