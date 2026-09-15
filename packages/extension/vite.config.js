@@ -71,7 +71,7 @@ const polyfillShimResolver = {
         if (source.startsWith('vite-plugin-node-polyfills/shims/')) {
             return shimRequire.resolve(source);
         }
-        // xchain-sdk/src/repl.js carries a top-level `require.main ===
+        // xchain-sdk/src/cli/repl.js carries a top-level `require.main ===
         // module` CLI-entry check that the commonjs transform leaves as a
         // bare `require`, which throws on load in a browser. The wallet
         // never uses the SDK REPL, so route the module to the repl browser
@@ -229,7 +229,7 @@ export default defineConfig({
             // creation never completes.
             https: httpBrowserShim,
             // repl is loaded transitively via xchain-sdk/index.js →
-            // src/repl.js. The wallet never calls startREPL, so the
+            // src/cli/repl.js. The wallet never calls startREPL, so the
             // shim throws loudly if anything does.
             repl: replBrowserShim,
             // Point the bare musig subpath at its real file (see note above).
