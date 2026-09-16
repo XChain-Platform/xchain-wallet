@@ -21,6 +21,7 @@ import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { unclaimedRewards } from '../../flows/stakingDashboard.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -162,7 +163,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // balance for the source address; upper bound for the editable
     // Amount field (partial claim/unstake).
     const [positions, setPositions] = useState(
-        /** @type {{ stakes: any[], rewards: any[] } | null} */ (null),
+        /** @type {{ stakes: any[], rewards: any[], claims: any[] } | null} */ (null),
     );
     useEffect(() => {
         const address = fromAddress?.address;
@@ -172,6 +173,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             try {
                 let stakes = [];
                 let rewards = [];
+                let claims = [];
                 if (isDemoWallet(walletId)) {
                     const demo = synthesizeDemoStaking(chainId);
                     // Demo stake rows carry no signing_pubkey; attribute them
@@ -182,9 +184,20 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 } else if (isUnstake) {
                     stakes = extractRows(await messaging.getStakesForAddress({ chainId, address }));
                 } else {
-                    rewards = extractRows(await messaging.getRewardsForAddress({ chainId, address }));
+                    // PC-47 (propagated from StakeDetail's splitRewards): the
+                    // rewards endpoint is a pure accrual ledger with no status
+                    // column, so "available" can only be computed against the
+                    // claim ledger too, via unclaimedRewards() below.
+                    const [r, c] = await Promise.all([
+                        messaging.getRewardsForAddress({ chainId, address }),
+                        typeof messaging.getRewardClaimsForAddress === 'function'
+                            ? messaging.getRewardClaimsForAddress({ chainId, address }).catch(() => null)
+                            : Promise.resolve(null),
+                    ]);
+                    rewards = extractRows(r);
+                    claims = extractRows(c);
                 }
-                if (!cancelled) setPositions({ stakes, rewards });
+                if (!cancelled) setPositions({ stakes, rewards, claims });
             } catch {
                 if (!cancelled) setPositions(null);
             }
@@ -225,12 +238,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 if (Number.isFinite(n)) total += n;
             }
         } else {
-            for (const r of positions.rewards) {
-                const status = String(r.status || '').toLowerCase();
-                if (status !== 'pending' && status !== 'unclaimed') continue;
-                const n = Number(r.amount ?? r.reward ?? 0);
-                if (Number.isFinite(n)) total += n;
-            }
+            // PC-47: accrual minus valid claims (unclaimedRewards), NOT a
+            // status filter - validator_rewards rows never carry `status`,
+            // so filtering on it always yielded 0 against real data (the
+            // same bug PC-47 fixed in StakeDetail's splitRewards).
+            const totals = unclaimedRewards({ rewards: positions.rewards, claims: positions.claims });
+            const n = Number(totals.unclaimed);
+            if (Number.isFinite(n)) total = n;
         }
         return total;
     }, [positions, isUnstake, signingPubkey]);
