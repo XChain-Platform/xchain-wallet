@@ -55,51 +55,15 @@
 // constant against itself).
 
 import { describe, it, expect } from 'vitest';
-import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { requireSdkDeep, sdkInstalled } from '../../helpers/sdkDeepPaths.js';
 import { BUNDLED_DESCRIPTORS, FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../../packages/core/src/registry/index.js';
 import { ADDRESS_PARAMS } from '../../../packages/core/src/shared/utils/addressValidation.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
-
-// Resolve the published package through a shell that actually declares the
-// `xchain-sdk` alias, falling back to a sibling checkout. Returns null when
-// neither exists, which the gate below turns into a loud failure under
-// XCHAIN_REQUIRE_SIBLINGS=1 and a skip on any other run.
-//
-// Anchoring at packages/core is wrong: it declares no such alias and
-// documents that it never will (packages/core/src/sdk/SDKRegistry.js). That
-// resolved only because the root .npmrc sets shamefully-hoist=true for an
-// unrelated vite shim reason, so narrowing that flag would have reddened the
-// drift-guards job on the resolution gate rather than on real drift. Each
-// shell carries its own node_modules/xchain-sdk link under either layout, so
-// anchoring there makes the resolution match what the comment claims. Same
-// reasoning as test/smoke/audits/linux-update-lanes.smoke.js, which anchors at
-// packages/desktop "which is what actually depends on it".
-//
-// All three shells pin the identical alias spec, so the order is arbitrary and
-// the probe exists only so a partially-installed shell falls through instead
-// of failing the run.
-const SDK_ANCHOR_SHELLS = ['web', 'extension', 'desktop'];
-const shellRequires = SDK_ANCHOR_SHELLS.map((shell) =>
-    createRequire(join(here, '..', '..', '..', 'packages', shell, 'package.json')));
-const sdkFile = (...parts) => {
-    const spec = `xchain-sdk/${parts.join('/')}`;
-    for (const requireFromShell of shellRequires) {
-        try {
-            return requireFromShell.resolve(spec);
-        } catch {
-            // Next shell; the sibling fallback below is the last resort.
-        }
-    }
-    const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
-    return existsSync(sibling) ? sibling : null;
-};
-
-const sdkNetworksPath = sdkFile('src', 'networks.js');
-const haveSdk = sdkNetworksPath !== null;
+// Resolve through test/helpers/sdkDeepPaths.js, which holds both the pre- and
+// post-0.19.0 spelling of every SDK module this guard reads. Presence is asked
+// of package.json, the one path an SDK structure pass cannot move, so an
+// absent SDK (the skip below) stays distinct from a module the SDK moved.
+const haveSdk = sdkInstalled();
 
 // Mainnet SLIP-44 slot per chain family: the parity anchor the descriptors,
 // signers, and backend all agree on, on EVERY network of the family. Sourced
@@ -130,16 +94,15 @@ describe('wallet descriptors vs xchain-sdk network params', () => {
         return;
     }
 
-    const require = createRequire(import.meta.url);
-    const { NETWORKS } = require(sdkNetworksPath);
+    const { NETWORKS } = requireSdkDeep('networks');
     // Backend-side coin-type anchor (SDK). FAMILY_SLIP44 is keyed by ticker with
     // a numeric value ({ BTC: 0 }); COIN_FULL_NAME bridges ticker -> full coin
     // name so it compares to the wallet's FAMILY_MAINNET_COIN_TYPE_SLOT (keyed
     // by full name with a quoted-string value { bitcoin: "0'" }).
-    const sdkDerivationPath = sdkFile('src', 'derivation.js');
-    const sdkCoinsPath = sdkFile('src', 'coins', 'index.js');
-    const { FAMILY_SLIP44 } = require(sdkDerivationPath);
-    const { COIN_FULL_NAME } = require(sdkCoinsPath);
+    // "derivation" has no shim bridging its two SDK spellings; the resolver
+    // holds both. "coins" is one path in both, the real registry module.
+    const { FAMILY_SLIP44 } = requireSdkDeep('derivation');
+    const { COIN_FULL_NAME } = requireSdkDeep('coins');
 
     // Cross-repo coin-type parity: bind the wallet's per-family mainnet slot to
     // the SDK's authoritative FAMILY_SLIP44 anchor, so a one-sided edit to

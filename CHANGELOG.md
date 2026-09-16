@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
+- Deep `xchain-sdk/src/...` paths are resolved through one inventory that knows both the pre- and post-0.19.0 module layouts and names the path when neither resolves, so an SDK file move no longer kills the testnet harness suite at collect time.
 - Contract detail renders state keys and decoded values from the explorer's real field names.
 - Execution history shows the method name, a valid/reverted/invalid marker and gas used.
 - A matched order owing a whole number of coins (10 DOGE, not 10.5) is now paid in full; the payment was built at one hundred-millionth of the debt, so it confirmed but never settled the match.

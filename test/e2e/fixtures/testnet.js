@@ -43,8 +43,7 @@
 import { expect } from '@playwright/test';
 import bitcoin from 'bitcoinjs-lib';
 import xchainSdk from 'xchain-sdk';
-import { coinPrefix } from 'xchain-sdk/src/endpoints.js';
-import { getNetwork } from 'xchain-sdk/src/networks.js';
+import { requireSdkDeep } from '../../helpers/sdkDeepPaths.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { joinEndpoint } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { gotoSection, openSettings } from './wallet.js';
@@ -52,6 +51,12 @@ import { REGTEST_COIN, expectConfirmModal, mintXchain, unlockAfterReload } from 
 import { priceVerdict } from './priceSeed.js';
 
 const { XChainSDK, WalletUtils } = xchainSdk;
+
+// Resolved, not statically imported: a static deep import of a path the SDK
+// moved fails at TRANSFORM time, which kills every importer of this fixture
+// rather than this line. Deep paths are registered in SDK_DEEP_PATHS.
+const { coinPrefix } = requireSdkDeep('endpoints');
+const { getNetwork } = requireSdkDeep('networks');
 
 export { expectConfirmModal, mintXchain, unlockAfterReload };
 
