@@ -42,6 +42,7 @@
         "test:e2e": "playwright test --config test/e2e/playwright.config.js",
         "test:e2e:headed": "playwright test --config test/e2e/playwright.config.js --headed",
         "test:e2e:regtest": "playwright test --config test/e2e/playwright.regtest.config.js",
+        "test:e2e:testnet": "playwright test --config test/e2e/playwright.testnet.config.js",
         "test:all": "pnpm test:unit && pnpm test:smoke && pnpm test:integration && pnpm test:boundary && pnpm test:chaos && pnpm test:fuzz && pnpm test:regression && pnpm test:security && pnpm test:a11y",
         "release:gate": "pnpm run ci && pnpm run test:e2e:regtest",
         "release:sign": "bash tools/release/sign.sh --tag v$(node -p \"require('./package.json').version\") --input release-artifacts/v$(node -p \"require('./package.json').version\")",
