@@ -19,6 +19,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import styles from './MyTokens.module.css';
 
 /**
@@ -241,7 +242,13 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                     </span>
                                     <span className={styles.rowText}>
                                         <span className={styles.rowTick}>
-                                            {row.tick}
+                                            {/* A bridged copy reads as its bare
+                                                name plus an origin badge; the
+                                                rooted wire name is on hover. */}
+                                            <BridgeOriginTick
+                                                tick={row.tick}
+                                                localCoin={coinFromChainId(row.chainId)}
+                                            />
                                             {row.locked ? (
                                                 <span className={styles.lockedBadge} title="Supply locked">
                                                     <Icon.LockIcon />

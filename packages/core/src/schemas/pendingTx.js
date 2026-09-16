@@ -74,6 +74,16 @@ export const PENDING_TX_STATUSES = /** @type {const} */ ([
  *          it holds this transaction (ISO). Null from creation until a mempool
  *          reports it, which is the whole point: null is the honest reading
  *          "broadcast, awaiting network", not "not yet checked"
+ * @property {boolean} [chainConfirmed]  the wallet itself proved a block
+ *          carries this transaction (from the coin's UTXO set, the explorer's
+ *          transaction record or a confirmed descendant), as opposed to an
+ *          action feed retiring it. Such a record has no explorer row to
+ *          stand in for it, so History keeps showing it as confirmed.
+ *          Additive and undefined-tolerant like the v2/v3 fields; absent
+ *          on every record until a reconcile writes it.
+ * @property {number | null} [confirmedBlockIndex]  the block that carries it,
+ *          when the proving source named one; null when only inclusion is
+ *          known (a confirmed descendant proves the parent is in SOME block)
  */
 
 /**
@@ -174,6 +184,21 @@ export function validatePendingTx(record) {
         'mempoolSeenAt',
         r.mempoolSeenAt === undefined || r.mempoolSeenAt === null || isIsoTimestamp(r.mempoolSeenAt),
         'must be null or an ISO timestamp',
+    );
+    // Inclusion proof, written only by the reconcile that found it. Same
+    // undefined-tolerance: no record carries either field until then.
+    check(
+        errors,
+        'chainConfirmed',
+        r.chainConfirmed === undefined || typeof r.chainConfirmed === 'boolean',
+        'must be a boolean',
+    );
+    check(
+        errors,
+        'confirmedBlockIndex',
+        r.confirmedBlockIndex === undefined || r.confirmedBlockIndex === null
+            || (Number.isInteger(r.confirmedBlockIndex) && r.confirmedBlockIndex > 0),
+        'must be null or a positive integer',
     );
     return result(errors);
 }

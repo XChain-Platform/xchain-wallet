@@ -61,12 +61,32 @@ function ChainCoinIcon({ chain }) {
  *   pre-filled, then calls onScanPrefillConsumed to clear it in the parent.
  * @param {() => void} [props.onScanPrefillConsumed]
  */
-export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed }) {
+export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed, onOpenBackup }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { showToast } = useToast();
     const confirmDialog = useConfirmModal();
+
+    // §19.5.2 publish nudge. Contacts live only in this device's vault, and
+    // the on-chain copy that survives a re-import is written only when the
+    // user publishes from Settings > Backup. Nothing on this screen said so,
+    // and a tester who added contacts, quit a browser that purges site data,
+    // and re-imported found them gone. The host's scheduler already counts
+    // unpublished edits; this reads that count and says it where the edits
+    // happen. Dismissal lasts for this visit only: the edits stay unpublished.
+    const [unpublished, setUnpublished] = useState(0);
+    const [nudgeDismissed, setNudgeDismissed] = useState(false);
+    const refreshUnpublished = useCallback(async () => {
+        if (typeof messaging?.labelSyncStatusRequest !== 'function') return;
+        try {
+            const s = await messaging.labelSyncStatusRequest();
+            const count = Number(s?.batch?.changeCount ?? s?.changeCount ?? 0);
+            setUnpublished(s?.due || s?.pending ? Math.max(1, count) : 0);
+        } catch {
+            // Locked or not wired: leave the nudge hidden rather than guess.
+        }
+    }, [messaging]);
 
     const [contacts, setContacts] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -115,7 +135,10 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         } catch (err) {
             setLoadError(err?.message || 'Failed to load contacts.');
         }
-    }, [messaging]);
+        // Every mutation on this screen ends in a reload, so this is the one
+        // place the unpublished count needs refreshing.
+        await refreshUnpublished();
+    }, [messaging, refreshUnpublished]);
 
     useEffect(() => { loadContacts(); }, [loadContacts]);
 
@@ -712,6 +735,27 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 />
                 <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
             </div>
+            {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
+                <StatusMessage
+                    id="contacts-publish-nudge"
+                    recovery={typeof onOpenBackup === 'function'
+                        ? { label: 'Open Backup', onAction: onOpenBackup }
+                        : { label: 'Dismiss', onAction: () => setNudgeDismissed(true) }}
+                >
+                    {unpublished === 1
+                        ? 'One contact change is only on this device.'
+                        : `${unpublished} contact changes are only on this device.`}
+                    {' '}Publish labels on-chain from Settings &gt; Backup so restoring from your seed brings them back.
+                    {typeof onOpenBackup === 'function' ? (
+                        <>
+                            {' '}
+                            <button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
+                                Not now
+                            </button>
+                        </>
+                    ) : null}
+                </StatusMessage>
+            ) : null}
             {contacts.length === 0 ? (
                 <div className={picker.emptyCard}>No contacts yet. Tap + to add one and label addresses across the inbox and history.</div>
             ) : filteredContacts.length === 0 ? (

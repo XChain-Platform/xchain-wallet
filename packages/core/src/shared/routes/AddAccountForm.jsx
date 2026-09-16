@@ -48,6 +48,9 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     const [name, setName] = useState('Account');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    // null = software (implicit); string = HW SignerRecord id. The
+    // SignerSelectForm hides itself when only software is available
+    // and emits onChange(null) once.
     const [signerId, setSignerId] = useState(/** @type {string | null} */ (null));
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const userEditedRef = useRef(false);
@@ -57,6 +60,9 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     useEffect(() => {
         setTimeout(() => nameRef.current?.focus(), 0);
     }, []);
+    // Default the name to "Account N+1" once we know the current count.
+    // If the user types something before the fetch returns, leave their
+    // edit alone.
 
     useEffect(() => {
         let cancelled = false;

@@ -1076,6 +1076,17 @@ export function getPendingTxsForAddress(req) {
     return /** @type {any} */ (sendMessage('pendingTxs.forAddress', req));
 }
 
+/**
+ * Remove a FAILED local send from History. The host refuses any record that
+ * is not `failed`, so this can never hide a send that is on the network.
+ *
+ * @param {{ pendingTxId: string }} req
+ * @returns {Promise<{ removed: boolean }>}
+ */
+export function dismissFailedPendingTx(req) {
+    return /** @type {any} */ (sendMessage('pendingTxs.dismissFailed', req));
+}
+
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getLinksForAddress(req) {
     return /** @type {any} */ (sendMessage('links.address', req));

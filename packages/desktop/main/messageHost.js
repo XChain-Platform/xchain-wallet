@@ -22,6 +22,8 @@
 // envelope, matching the extension shell's wire format so shared
 // `core/shared/routes/*` components work unchanged.
 
+// Workspace alias rather than a relative path: Vite, electron-builder and
+// the Node-level smoke tests all resolve it the same way.
 import { createBackgroundHost } from '@xchain-wallet/extension/src/background/createBackgroundHost.js';
 
 /**

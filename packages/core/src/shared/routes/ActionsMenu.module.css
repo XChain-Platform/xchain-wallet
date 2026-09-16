@@ -87,3 +87,33 @@
     margin-inline-end: auto;
     padding: 0 var(--xc-space-4);
 }
+
+/* Status pill idiom shared with History.module.css: a rounded, uppercase
+   tag tinted by outcome, using the theme's success/danger/warning tokens
+   so it reads correctly in both light and dark. */
+.statusPill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.statusPillSuccess {
+    background: color-mix(in srgb, var(--xc-success, #14b86c) 20%, transparent);
+    color: var(--xc-success, #14b86c);
+}
+
+.statusPillError {
+    background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
+    color: var(--xc-danger, #d93838);
+}
+
+.statusPillPending {
+    background: color-mix(in srgb, var(--xc-warning, #d99000) 20%, transparent);
+    color: var(--xc-warning, #d99000);
+}

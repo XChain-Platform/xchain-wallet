@@ -13,10 +13,13 @@
 // advances the index: "fresh address per open of the Receive screen"
 // per the spec's privacy posture.
 //
-// "Highest existing index" is computed from persisted Address records
-// (addresses that have been handed out). This doesn't check on-chain
-// usage; the UI layer can cross-reference SDK history if it wants to
-// reuse a pre-generated-but-unfunded address.
+// "Unused" means not held by a persisted Address record (an address that
+// has been handed out). The scan takes the LOWEST unheld index, not the
+// highest held plus one, so a deleted record at an interior index is
+// re-derived by the next Generate instead of being skipped forever with
+// whatever it holds. This doesn't check on-chain usage; the UI layer can
+// cross-reference SDK history if it wants to reuse a pre-generated-but-
+// unfunded address.
 
 import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
@@ -110,9 +113,10 @@ export async function receiveAddress({
         resolvedAccountIndex = accountIndex;
     }
 
-    // Find the highest external (change=0) index for this
-    // (account, chain, network, addressType) combination. -1 means "no
-    // addresses yet"; nextIndex starts at 0.
+    // Collect the external (change=0) indices held for this
+    // (account, chain, network, addressType) combination; nextIndex is the
+    // lowest one missing from 0 upward, so an empty set starts at 0 and a
+    // gap left by a deleted record is filled before the range grows.
     //
     // A counterwallet-legacy wallet derives m/0'/C/I for EVERY address
     // type, so its types share one index space and the addressType filter
@@ -120,7 +124,7 @@ export async function receiveAddress({
     // key already held at that index under another encoding.
     const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
-    let highest = -1;
+    const held = new Set();
     for (const a of allAddresses) {
         if (a.accountId !== account.id) continue;
         if (a.chain !== descriptor.coin) continue;
@@ -139,9 +143,10 @@ export async function receiveAddress({
         const change = parts[parts.length - 2];
         if (change !== '0') continue;
         const idx = Number(parts[parts.length - 1]);
-        if (Number.isFinite(idx) && idx > highest) highest = idx;
+        if (Number.isInteger(idx) && idx >= 0) held.add(idx);
     }
-    const nextIndex = highest + 1;
+    let nextIndex = 0;
+    while (held.has(nextIndex)) nextIndex += 1;
 
     const signer = providedSigner
         ? providedSigner

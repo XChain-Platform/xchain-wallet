@@ -35,14 +35,24 @@ export async function getBroadcastTxids(vault) {
  * Flip every PendingTx with this txid from 'broadcast' to 'indexed' and stamp
  * `confirmedAt`. No-op when nothing matches or it's already indexed.
  *
+ * `opts.inclusion` is set by the reconcile that proved the block itself
+ * rather than learning of an action: it marks the record `chainConfirmed`
+ * (and names the block when the source knew it) so History keeps a
+ * confirmed row for a transaction no explorer feed will ever list, a plain
+ * coin transfer or an action the service rejected. A feed-driven retire
+ * leaves both fields alone, because the explorer's own row takes over.
+ *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {string} txid
- * @param {{ now?: () => string }} [opts]  injectable ISO-timestamp source (tests)
+ * @param {{ now?: () => string, inclusion?: { blockIndex?: number | null } }} [opts]
+ *        `now` is the injectable ISO-timestamp source (tests)
  * @returns {Promise<boolean>}  true if a record changed
  */
 export async function markPendingTxIndexed(vault, txid, opts = {}) {
     if (!vault || !txid) return false;
     const stamp = typeof opts.now === 'function' ? opts.now : () => new Date().toISOString();
+    const inclusion = opts.inclusion && typeof opts.inclusion === 'object' ? opts.inclusion : null;
+    const block = Number(inclusion?.blockIndex);
     const matches = await vault.pendingTxs.findBy('txid', txid);
     let changed = false;
     for (const rec of matches) {
@@ -51,6 +61,10 @@ export async function markPendingTxIndexed(vault, txid, opts = {}) {
             ...rec,
             status: 'indexed',
             confirmedAt: rec.confirmedAt || stamp(),
+            ...(inclusion ? {
+                chainConfirmed: true,
+                confirmedBlockIndex: Number.isInteger(block) && block > 0 ? block : null,
+            } : {}),
         });
         changed = true;
     }

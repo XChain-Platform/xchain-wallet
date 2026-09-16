@@ -48,6 +48,14 @@ const MEMPOOL_STAGE_COPY = {
         done: false,
         sub: 'You replaced this transaction with a higher-fee version',
     },
+    // The wallet's own verdict, not the network's: it gave up before the
+    // network took the send. The detail panel carries the recorded reason.
+    failed: {
+        label: 'Failed',
+        done: false,
+        warn: true,
+        sub: 'This send did not reach the network',
+    },
 };
 
 /**
@@ -80,8 +88,10 @@ const MEMPOOL_STAGE_COPY = {
  * @param {object} props
  * @param {{ blockIndex: number, timestamp: number, txHash: string, action: string, signedAt?: number, pending?: import('../utils/pendingHistory.js').PendingMeta }} props.entry
  *        a merged History entry. `pending` is present only on a blockless one;
- *        every confirmed row arrives without it, which is why the mempool
- *        stage checks the block before it checks anything else.
+ *        every explorer-confirmed row arrives without it, which is why the
+ *        mempool stage checks the block before it checks anything else. The
+ *        one blockless entry that is nonetheless confirmed carries
+ *        `pending.chainConfirmed` (and `confirmedBlockIndex` when known).
  * @param {number} [props.chainTip] highest block index seen for the
  *        entry's chain. Used to render a confirmation count on
  *        confirmed rows. When omitted or <= entry.blockIndex - 1, the
@@ -101,15 +111,27 @@ export function TxStatusTimeline({
     entry, chainTip, indexerWatermark, seenWindowMs, droppedGraceMs,
 }) {
     const txHash = typeof entry?.txHash === 'string' ? entry.txHash : '';
-    const blockIndex = Number(entry?.blockIndex ?? 0);
-    const timestamp = Number(entry?.timestamp ?? 0);
+    // A record the wallet proved into a block itself stays blockless in
+    // shape (so the pending detail branch renders it) and carries the proof
+    // in its meta: the block when the source named one, and the bare fact
+    // of inclusion when only a confirmed descendant proved it.
+    const meta = entry?.pending || null;
+    const chainConfirmed = meta?.chainConfirmed === true;
+    const blockIndex = Number(entry?.blockIndex ?? 0) || (chainConfirmed ? Number(meta?.confirmedBlockIndex ?? 0) : 0);
+    const timestamp = Number(entry?.blockIndex ?? 0) > 0
+        ? Number(entry?.timestamp ?? 0)
+        : Number(meta?.confirmedAtMs ?? 0);
     const signedAt = Number(entry?.signedAt ?? 0);
-    const confirmed = blockIndex > 0;
-    // Only a blockless entry with a hash has a pending state to read. The
-    // guard matters: every historical row reaches this component with no
-    // pending metadata at all, and `pendingDisplayState` would answer
-    // 'awaiting-network' for it, which is true of nothing that is in a block.
-    const pendingState = !confirmed && txHash.length > 0
+    const confirmed = blockIndex > 0 || chainConfirmed;
+    // A failed local record is the one blockless entry that may carry no
+    // hash: it died in compose or signing, before there was one.
+    const failed = !confirmed && meta?.failed === true;
+    // Only a blockless entry with a hash (or a recorded failure) has a
+    // pending state to read. The guard matters: every historical row reaches
+    // this component with no pending metadata at all, and
+    // `pendingDisplayState` would answer 'awaiting-network' for it, which is
+    // true of nothing that is in a block.
+    const pendingState = !confirmed && (txHash.length > 0 || failed)
         ? pendingDisplayState(entry, Date.now(), { seenWindowMs, droppedGraceMs })
         : null;
     const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
@@ -118,26 +140,34 @@ export function TxStatusTimeline({
 
     // Signed: a broadcast tx was necessarily signed first, so a present
     // txHash implies this stage is done. An explicit signedAt marks it
-    // done for a queued/pre-broadcast entry that has no hash yet.
+    // done for a queued/pre-broadcast entry that has no hash yet. A failure
+    // with no hash never got that far, and "waiting for you" would be a lie.
     const signed = signedAt > 0 || txHash.length > 0;
     const signedSub = signedAt > 0
         ? (relativeTime(signedAt) || 'Approved and signed')
         : (signed
             ? 'Approved and signed'
-            : 'Waiting for you to approve and sign');
+            : (failed ? 'Not reached: the send failed first' : 'Waiting for you to approve and sign'));
 
     // Indexed: the indexer has caught up to (or past) this action's block.
     // A supplied watermark decides it; without one, a confirmed row is
     // treated as indexed because the wallet only ever displays rows the
-    // indexer has already returned.
-    const indexed = confirmed && (watermark > 0 ? watermark >= blockIndex : true);
-    const indexedSub = indexed
-        ? (watermark > 0
-            ? `Fully processed · the service has reached block ${watermark.toLocaleString()}`
-            : 'Fully processed and searchable')
-        : (confirmed
-            ? 'The service is still catching up to this block'
-            : 'Waiting to confirm before it can be processed');
+    // indexer has already returned. A block the wallet proved itself has
+    // no action for the service to index (a plain transfer, or one it
+    // recorded nothing for), so the stage says that rather than promising
+    // a searchable row that will never exist.
+    const indexed = confirmed && (watermark > 0 && blockIndex > 0 ? watermark >= blockIndex : true);
+    const indexedSub = chainConfirmed
+        ? (indexed
+            ? 'The service records no action for this transaction'
+            : 'The service is still catching up to this block')
+        : indexed
+            ? (watermark > 0
+                ? `Fully processed · the service has reached block ${watermark.toLocaleString()}`
+                : 'Fully processed and searchable')
+            : (confirmed
+                ? 'The service is still catching up to this block'
+                : 'Waiting to confirm before it can be processed');
     const confirmedSubBase = confirmed && timestamp > 0
         ? relativeTime(timestamp)
         : '';
@@ -166,7 +196,7 @@ export function TxStatusTimeline({
             key: 'broadcast',
             label: 'Broadcast',
             done: txHash.length > 0,
-            sub: txHash || 'Not sent yet',
+            sub: txHash || (failed ? 'Never sent' : 'Not sent yet'),
         },
         {
             key: 'mempool',
@@ -174,7 +204,7 @@ export function TxStatusTimeline({
         },
         {
             key: 'confirmed',
-            label: confirmed ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
+            label: confirmed && blockIndex > 0 ? `Confirmed at block ${blockIndex.toLocaleString()}` : 'Confirmed',
             done: confirmed,
             sub: confirmedSub,
         },

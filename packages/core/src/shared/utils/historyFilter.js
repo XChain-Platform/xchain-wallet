@@ -99,6 +99,9 @@ export function classifyEntryAction(entry, walletAddresses) {
  * - Failed wins when the row carries an explicit invalid / failed flag
  *   from the explorer.
  * - blockIndex > 0 → confirmed.
+ * - A blockless entry whose own record proves a block (`pending.chainConfirmed`)
+ *   → confirmed: the wallet retired it itself, and no explorer row will
+ *   ever arrive to say so in the usual way.
  * - Anything else → pending.
  */
 export function classifyEntryStatus(entry) {
@@ -108,6 +111,7 @@ export function classifyEntryStatus(entry) {
     if (statusField === 'invalid' || statusField === 'failed') return 'failed';
     if (raw.valid === 0 || raw.valid === false) return 'failed';
     if (Number(entry.blockIndex) > 0) return 'confirmed';
+    if (entry.pending?.chainConfirmed === true) return 'confirmed';
     return 'pending';
 }
 

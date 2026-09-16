@@ -88,6 +88,7 @@ function makeVault() {
 {
     const vault = makeVault();
     await vault.open();
+    // Seed two chain endpoints.
     await flows.updateSettings(vault, {
         sdkEndpoints: {
             'bitcoin-mainnet': {
@@ -100,6 +101,7 @@ function makeVault() {
             },
         },
     });
+    // Update only one chain.
     await flows.updateSettings(vault, {
         sdkEndpoints: {
             'bitcoin-mainnet': {

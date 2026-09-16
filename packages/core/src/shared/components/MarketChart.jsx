@@ -58,6 +58,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         () => PERIODS.find((p) => p.id === periodId) ?? PERIODS.find((p) => p.id === DEFAULT_PERIOD_ID),
         [periodId],
     );
+    // Lazy-init the chart once the container is mounted.
 
     useEffect(() => {
         let disposed = false;
@@ -105,6 +106,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             seriesRef.current = null;
         };
     }, [height]);
+    // Fetch matches whenever the pair changes.
 
     useEffect(() => {
         let cancelled = false;
@@ -126,6 +128,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo]);
+    // Rebucket + push into the series whenever rows or period change.
 
     useEffect(() => {
         if (!chartReady || !seriesRef.current) return;

@@ -15,7 +15,7 @@
 // This module exists to be REPLACED. `vite.config.js` aliases it to
 // `dex.hidden.jsx` in a build whose profile hides `dex`, and that twin imports
 // nothing, so MarketsList, MarketView, SwapForm, CreateOrderForm, MyOrdersView,
-// MySwapsView, CrossChainSwapForm and MarketActivity never enter the bundle at
+// MySwapsView, CrossChainSwapForm, CrossChainOrderForm and MarketActivity never enter the bundle at
 // all. The alternative - a boolean the app checks - leaves the code in the
 // artifact and relies on a bundler happening to shake it out, which is not
 // something a signed manifest can claim (§2.3).
@@ -36,6 +36,7 @@ import { MyOrdersView } from '@xchain-wallet/core/shared/routes/MyOrdersView.jsx
 import { MySwapsView } from '@xchain-wallet/core/shared/routes/MySwapsView.jsx';
 import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
+import { CrossChainOrderForm } from '@xchain-wallet/core/shared/routes/CrossChainOrderForm.jsx';
 import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.jsx';
 
 /**
@@ -179,6 +180,15 @@ export function renderDexRoute(unlockedView, ctx) {
             <CrossChainSwapForm
                 walletId={activeWalletId}
                 onBack={formBack}
+            />
+        );
+    }
+    if (unlockedView === 'cross-chain-order' && activeWalletId) {
+        return (
+            <CrossChainOrderForm
+                walletId={activeWalletId}
+                onBack={formBack}
+                onManageOrders={() => setUnlockedView('my-orders')}
             />
         );
     }

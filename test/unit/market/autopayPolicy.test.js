@@ -52,7 +52,7 @@ function scenario(over = {}) {
         payer_address: 'addr-payer',
         payee_address: 'addr-seller',
         coin: 'BTC',
-        coin_amount: '500000',    // 0.005 coin for a 100-token fill (exact ratio)
+        coin_amount: '0.005',     // the decimal coin figure, 500000 base, for a 100-token fill (exact ratio)
         expiration: NOW + 7000,
         block_index: 100,
         coinpay_status: 'pending_coinpay',
@@ -178,6 +178,25 @@ describe('evaluateObligation - happy path', () => {
         expect(d).toEqual({ action: 'pay', reason: 'ok', payAmountBase: '500000' });
     });
 
+    it('[REGRESSION] pays a whole-coin fill at coin scale, the same figure the manual path signs', () => {
+        // A 10-coin fill arrives as coin_amount "10" and give_amount "10".
+        // Reading the obligation as 10 BASE units scored it amount-mismatch
+        // against the 1e9-base fill, so auto-pay went manual on every
+        // whole-coin match.
+        const d = evaluateObligation(scenario({
+            consent: { giveCoinAmount: '100', getAmount: '1000' },
+            obligation: { coin_amount: '10' },
+            matchRow: { give_amount: '10', get_amount: '100' },
+        }));
+        expect(d).toEqual({ action: 'pay', reason: 'ok', payAmountBase: '1000000000' });
+        const fractional = evaluateObligation(scenario({
+            consent: { giveCoinAmount: '105', getAmount: '1000' },
+            obligation: { coin_amount: '10.5' },
+            matchRow: { give_amount: '10.5', get_amount: '100' },
+        }));
+        expect(fractional).toEqual({ action: 'pay', reason: 'ok', payAmountBase: '1050000000' });
+    });
+
     it('waits one block short of the confirm depth', () => {
         const d = evaluateObligation(scenario({ tipHeight: 100 })); // depth 1
         expect(d.action).toBe('wait');
@@ -274,14 +293,14 @@ describe('evaluateObligation - trust-anchor caps', () => {
     });
 
     it('refuses when the obligation amount disagrees with the match fill', () => {
-        const d = evaluateObligation(scenario({ obligation: { coin_amount: '500001' } }));
+        const d = evaluateObligation(scenario({ obligation: { coin_amount: '0.00500001' } }));
         expect(d).toEqual({ action: 'notify-manual', reason: 'amount-mismatch' });
     });
 
     it('refuses a fill priced above the consented GIVE/GET ratio', () => {
         // 100 tokens should cost 500000 base; a 600000 fill overpays.
         const d = evaluateObligation(scenario({
-            obligation: { coin_amount: '600000' },
+            obligation: { coin_amount: '0.006' },
             matchRow: { give_amount: '0.006' },
         }));
         expect(d).toEqual({ action: 'notify-manual', reason: 'price-exceeds-terms' });
@@ -289,12 +308,12 @@ describe('evaluateObligation - trust-anchor caps', () => {
 
     it('tolerates exactly one base unit of fill rounding, no more', () => {
         const okOne = evaluateObligation(scenario({
-            obligation: { coin_amount: '500001' },
+            obligation: { coin_amount: '0.00500001' },
             matchRow: { give_amount: '0.00500001' },
         }));
         expect(okOne.action).toBe('pay');
         const overTwo = evaluateObligation(scenario({
-            obligation: { coin_amount: '500002' },
+            obligation: { coin_amount: '0.00500002' },
             matchRow: { give_amount: '0.00500002' },
         }));
         expect(overTwo).toEqual({ action: 'notify-manual', reason: 'price-exceeds-terms' });
@@ -313,7 +332,7 @@ describe('evaluateObligation - trust-anchor caps', () => {
     it('holds the caps in exact integer math past 2^53 (DOGE-scale)', () => {
         const d = evaluateObligation(scenario({
             consent: { giveCoinAmount: '13000000000.00000001', getAmount: '1000' },
-            obligation: { coin_amount: '1300000000000000001' },
+            obligation: { coin_amount: '13000000000.00000001' },
             matchRow: { give_amount: '13000000000.00000001', get_amount: '1000' },
         }));
         expect(d).toEqual({ action: 'pay', reason: 'ok', payAmountBase: '1300000000000000001' });

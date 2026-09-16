@@ -8,14 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useActionForm (§40 / maintainability G6): the shared machinery every
-// single-action form (MINT, DESTROY, ISSUE, DIVIDEND, AIRDROP, …) used
-// to inline three near-identical times:
+// useActionForm: the shared machinery every single-action form (MINT,
+// DESTROY, ISSUE, DIVIDEND, AIRDROP and the rest) needs, in one place
+// rather than inlined per form:
 //
 //   1. Source loading + default selection. `getAddressesByChain`, the
-//      first-chain default (unless a token context locks the chain), and
-//      the chain's active (operating) address as the default source,
-//      falling back to the newest change-index-0 HD address.
+//      chain default (explicit, then last-used, then first; unless a
+//      token context locks the chain), and the chain's active (operating)
+//      address as the default source, falling back to the newest
+//      change-index-0 HD address.
 //   2. The `from` descriptor. The exact { address, publicKey,
 //      derivationPath, addressId, source, signerId } object handed to
 //      every submit path.
@@ -23,12 +24,10 @@
 //      `buildActionPsbtRequest`; hardware -> the form's `hw` method;
 //      software -> the form's `software` method (with the password).
 //
-// Copy-pasting these across ~24 forms meant any contract-level change
-// (a renamed field on `from`, a new dispatch branch, a payload key the
-// watcher path must forward) was a 24-file edit, and a mistake in any
-// one copy stayed invisible because the render tests never asserted the
-// emitted payload. Centralizing here makes the payload one testable
-// surface (see test/unit/routes-render.test.jsx Layer 4).
+// Held in one place, a contract-level change (a renamed field on `from`,
+// a new dispatch branch, a payload key the watcher path must forward) is
+// one edit rather than two dozen, and the emitted payload is a single
+// testable surface.
 //
 // The hook owns only the shared machinery; per-form state (ticker,
 // amount, stage, review copy) stays in the form. `submit()` builds and
@@ -42,6 +41,7 @@ import { useMessaging } from '../useMessaging.js';
 import { useSignerReady } from './useSignerReady.js';
 import { useWalletMode } from './useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -56,9 +56,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * @property {string} walletId
  * @property {string} action                       Protocol ACTION name ('MINT', 'DESTROY', …); forwarded to the watcher-mode encode call.
  * @property {ActionSubmitMethods} submitMethods
- * @property {string} [initialChainId]             When set with a token context, callers pass `lockedToken: true` so the loader won't overwrite it.
+ * @property {string} [initialChainId]             Open on this chain. Wins over the last-used chain and the first-key fallback.
  * @property {string} [initialFromAddress]         Pre-select this source address (by `address`) when it exists on the chosen chain.
- * @property {boolean} [lockedToken=false]         Chain is externally locked (ManageToken per-token context); don't auto-pick the first chain.
+ * @property {boolean} [lockedToken=false]         Chain is externally locked (ManageToken per-token context); the loader never touches it.
  * @property {string} [noAddressMessage]           loadError text shown when the wallet has zero addresses on any chain.
  */
 
@@ -100,10 +100,12 @@ export function useActionForm({
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     // Block 1a: load the account's addresses + the active-address map,
-    // default the chain. The active map is best-effort: a host that does
-    // not implement `getActiveAddresses`, or one whose call fails, must
-    // still yield a usable form, so that leg resolves to `{}` instead of
-    // rejecting the pair.
+    // default the chain. The active map and the settings read are
+    // best-effort: a host that does not implement `getActiveAddresses` or
+    // `getSettings`, or one whose call fails, must still yield a usable
+    // form, so those legs resolve to `{}` / null instead of rejecting.
+    // Settings ride the same load so the last-used chain is known in the
+    // render that first shows the form, never applied a beat later.
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -111,26 +113,34 @@ export function useActionForm({
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
-                const first = Object.keys(byChain)[0];
-                if (!first) {
+                if (!Object.keys(byChain)[0]) {
                     setLoadError(noAddressMessage);
                     return;
                 }
                 // Honor an externally-locked chain (token context) instead
-                // of clobbering it with the first-found chain.
-                if (!lockedToken) setChainId(first);
+                // of clobbering it with the picked chain.
+                if (!lockedToken) {
+                    setChainId(pickDefaultChainId(byChain, {
+                        explicitChainId: initialChainId,
+                        settings,
+                    }));
+                }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-        // noAddressMessage / lockedToken are read-once inputs; re-running on
-        // their (usually inline) identity would refetch pointlessly.
+        // noAddressMessage / lockedToken / initialChainId are read-once
+        // inputs; re-running on their (usually inline) identity would
+        // refetch pointlessly.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [walletId, messaging]);
 
@@ -212,18 +222,24 @@ export function useActionForm({
         const from = buildFrom();
         if (!chainId || !from) throw new Error('Pick a source address first.');
         const base = { walletId, chainId, from, params, ...(extraBase || {}) };
+        let result;
         if (isWatcherMode) {
-            return messaging.buildActionPsbtRequest({
+            result = await messaging.buildActionPsbtRequest({
                 chainId,
                 from,
                 actionData: { action, params },
                 ...(encoderOpts ? { encoderOpts } : {}),
             });
+        } else if (isHwSource) {
+            result = await messaging[submitMethods.hw]({ ...base, signerId: from.signerId });
+        } else {
+            result = await messaging[submitMethods.software]({ ...base, password });
         }
-        if (isHwSource) {
-            return messaging[submitMethods.hw]({ ...base, signerId: from.signerId });
-        }
-        return messaging[submitMethods.software]({ ...base, password });
+        // A submit that resolved is real activity on this chain: the next
+        // form opened without a chain of its own starts here. Not awaited;
+        // the write never rejects and the done screen must not wait on it.
+        recordLastUsedChain(messaging, chainId);
+        return result;
     }, [
         buildFrom, chainId, walletId, isWatcherMode, isHwSource,
         messaging, action, submitMethods,

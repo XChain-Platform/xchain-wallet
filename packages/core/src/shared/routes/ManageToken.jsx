@@ -68,6 +68,7 @@ const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'descri
  * @param {() => void} [props.onCallbackSettings]     edit ISSUE v4 callback config: CALLBACK_BLOCK / CALLBACK_TICK / CALLBACK_AMOUNT (PC-03; editable only pre-distribution)
  * @param {() => void} [props.onExecuteCallback]      force-recall all supply via CALLBACK (PC-03; owner-only, after CALLBACK_BLOCK)
  * @param {() => void} [props.onAccessLists]          set ISSUE v5 ALLOW_LIST / BLOCK_LIST access lists (PC-04)
+ * @param {() => void} [props.onBridgeSettings]       set ISSUE v7 BRIDGE_CHAINS / MIN_DEPTH, or freeze both with LOCK_BRIDGE (P19)
  * @param {() => void} [props.onPauseToken]           pause/resume the token via SLEEP v1 (PC-05)
  * @param {() => void} [props.onUpdateDescription]
  * @param {() => void} [props.onAttachContent]       attach on-chain artwork (FILE + owner-validated LINK)
@@ -98,6 +99,7 @@ export function ManageToken({
     onCallbackSettings,
     onExecuteCallback,
     onAccessLists,
+    onBridgeSettings,
     onPauseToken,
     onUpdateDescription,
     onAttachContent,
@@ -432,7 +434,13 @@ export function ManageToken({
     // the on-chain creator. Dispenser / Airdrop / Destroy operate on a
     // balance and don't have that constraint.
     const blockIssuerActions = isOwner === false;
-    /** @type {Array<{ id: string, label: string, Icon: any, onSelect: (() => void) | undefined, danger?: boolean }>} */
+    // ISSUE v7 LOCK_BRIDGE: consensus refuses any further BRIDGE_CHAINS /
+    // MIN_DEPTH edit once it is set, so the row stays visible and explains
+    // itself rather than vanishing. Only an explicit true freezes it: the
+    // projection leaves the flag null when the field is absent, which means
+    // "not known", and hiding the form on unknown would be a guess.
+    const bridgeFrozen = assetInfo?.lockBridge === true;
+    /** @type {Array<{ id: string, label: string, Icon: any, onSelect: (() => void) | undefined, danger?: boolean, disabled?: boolean, disabledReason?: string }>} */
     const actions = [
         // D-166: gated on the flag that actually forbids a MINT, not on the
         // coarse `locked` pill. That pill is an OR over description /
@@ -473,6 +481,20 @@ export function ManageToken({
         // PC-04 access lists (ISSUE v5). Owner-only; sets ALLOW_LIST /
         // BLOCK_LIST to published address lists.
         { id: 'access-lists', label: 'Access lists', Icon: Icon.TokenListIcon, onSelect: blockIssuerActions ? undefined : onAccessLists },
+        // P19 bridge settings (ISSUE v7). Owner-only, gated like the rows
+        // above; the only entry point into the bridge-settings mode of
+        // TokenAdminForm from the token itself, since the Actions catalogue
+        // opens that form with no token in hand. Frozen by LOCK_BRIDGE it
+        // renders disabled WITH the reason rather than disappearing: an
+        // issuer who set the flag needs to see that it is what stops them.
+        {
+            id: 'bridge-settings',
+            label: 'Bridge',
+            Icon: Icon.LinkIcon,
+            onSelect: blockIssuerActions ? undefined : onBridgeSettings,
+            disabled: bridgeFrozen,
+            disabledReason: 'Bridge settings are frozen for this token and can never change.',
+        },
         // PC-05: pause/resume the token (SLEEP v1). Owner-only; the form
         // handles LOCK_SLEEP + the resume path. Label follows current state.
         { id: 'pause-token', label: sleepState.paused ? 'Resume token' : 'Pause token', Icon: Icon.ClockIcon, onSelect: blockIssuerActions ? undefined : onPauseToken },
@@ -689,6 +711,11 @@ export function ManageToken({
                             key={a.id}
                             type="button"
                             className={`${styles.manageBtn} ${a.danger ? styles.manageBtnDanger : ''}`}
+                            // A row the protocol has frozen stays on screen and
+                            // says why on hover, instead of being filtered out
+                            // like an action this wallet simply cannot sign.
+                            disabled={!!a.disabled}
+                            title={a.disabled ? a.disabledReason : undefined}
                             onClick={a.onSelect}
                         >
                             <span className={styles.manageIcon} aria-hidden="true">
@@ -719,6 +746,8 @@ export function ManageToken({
                                             type="button"
                                             role="menuitem"
                                             className={`${styles.manageMoreItem} ${a.danger ? styles.manageMoreItemDanger : ''}`}
+                                            disabled={!!a.disabled}
+                                            title={a.disabled ? a.disabledReason : undefined}
                                             onClick={() => { setMoreOpen(false); a.onSelect(); }}
                                         >
                                             <span className={styles.manageMoreItemIcon} aria-hidden="true">

@@ -360,10 +360,13 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     function handleReview(event) {
         event.preventDefault();
+        // EXECUTE is signed from an address on this chain; without one there is
+        // nothing to pay the call's fee from.
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
         }
+        // The method name is the call itself; a blank one has no target.
         if (!method.trim()) {
             setFormError('Method name is required.');
             return;

@@ -61,6 +61,12 @@ const VERB_MAP = /** @type {Record<string, string>} */ ({
     SWAP: 'swap tokens',
     SWEEP: 'sweep balances',
     VOTE: 'cast votes',
+    // XBRIDGE is one wire name over both legs: a lock that credits another
+    // chain and a burn that releases the original back. Either way the grant
+    // is "take tokens off this chain to an address on another one", and it
+    // cannot be undone or redirected once applied, so the line says where the
+    // funds go rather than naming the mechanism.
+    XBRIDGE: 'move your tokens to another chain',
     // BTC-exclusive (staking + smart-contract sub-actions)
     COLLECT: 'collect staking rewards',
     DELEGATE: 'delegate stake',

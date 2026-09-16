@@ -23,7 +23,11 @@
 // material the renderer has no use for; History wants identity, status and
 // timing.
 
-import { isLivePendingStatus } from '../shared/utils/pendingHistory.js';
+import {
+    isChainConfirmedRecord,
+    isFailedPendingStatus,
+    isLivePendingStatus,
+} from '../shared/utils/pendingHistory.js';
 
 /**
  * @typedef {Object} PendingTxSummary
@@ -45,6 +49,13 @@ import { isLivePendingStatus } from '../shared/utils/pendingHistory.js';
  * @property {boolean} networkSeenNow   the chain's UTXO set held this transaction
  *   at the moment of THIS read. A native send has no mempool row for
  *   History to refresh its sighting from, so the read carries the sighting.
+ * @property {boolean} chainConfirmed   this wallet proved a block carries the
+ *   transaction; the record is `indexed` with no explorer row to replace it
+ * @property {number | null} confirmedBlockIndex   that block, when the proof named it
+ * @property {string | null} confirmedAt
+ * @property {string | null} error   why a `failed` record failed, verbatim from the record
+ * @property {string | null} updatedAt   the record's last write; a failed record's
+ *   failure time, since nothing writes it after that
  */
 
 /**
@@ -53,6 +64,7 @@ import { isLivePendingStatus } from '../shared/utils/pendingHistory.js';
  * @returns {PendingTxSummary}
  */
 function summarize(record, networkSeenNow) {
+    const block = Number(record.confirmedBlockIndex);
     return {
         id: String(record.id),
         chain: String(record.chain),
@@ -63,13 +75,18 @@ function summarize(record, networkSeenNow) {
         actionSummary: String(record.actionSummary || ''),
         txid: record.txid == null ? null : String(record.txid),
         status: String(record.status || ''),
+        error: record.error == null ? null : String(record.error),
         createdAt: String(record.createdAt || ''),
+        updatedAt: record.updatedAt == null ? null : String(record.updatedAt),
         broadcastAt: record.broadcastAt == null ? null : String(record.broadcastAt),
         mempoolSeenAt: record.mempoolSeenAt == null ? null : String(record.mempoolSeenAt),
         rbfReplacement: record.rbfReplacement == null ? null : String(record.rbfReplacement),
         tick: record.tick == null ? null : String(record.tick),
         amount: record.amount == null ? null : String(record.amount),
         networkSeenNow: networkSeenNow === true,
+        chainConfirmed: record.chainConfirmed === true,
+        confirmedBlockIndex: Number.isInteger(block) && block > 0 ? block : null,
+        confirmedAt: record.confirmedAt == null ? null : String(record.confirmedAt),
     };
 }
 
@@ -89,7 +106,16 @@ function summarize(record, networkSeenNow) {
  * "In flight" is `broadcasting` / `broadcast` / `rbf-replaced`: on the
  * network, not yet confirmed. `indexed` is excluded because by then the
  * explorer's confirmed entry is the better record of the same transaction,
- * and `failed` because it never reached the network at all.
+ * except for a record the wallet itself proved into a block
+ * (`chainConfirmed`): no explorer entry exists for that one, so it is listed
+ * as the confirmed row it is.
+ *
+ * `failed` is listed too, txid or not. It never reached the network, which
+ * is exactly why the user needs to see it: no explorer row will ever say
+ * the send did not happen, and a send that died in compose or signing has
+ * no txid at all. A tester asked for failed sends after a re-import wiped
+ * their vault; that wipe is not recoverable, but a failure with the vault
+ * intact was just as invisible without this.
  *
  * A record whose chain the registry cannot resolve is matched on `chain`
  * alone, the same fallback `listQueuedBroadcasts` uses, so a custom chain
@@ -106,8 +132,10 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
     const wanted = address ? String(address).toLowerCase() : null;
     const out = [];
     for (const record of Array.isArray(all) ? all : []) {
-        if (!record || !record.txid) continue;
-        if (!isLivePendingStatus(record.status)) continue;
+        if (!record) continue;
+        const failed = isFailedPendingStatus(record.status);
+        if (!record.txid && !failed) continue;
+        if (!failed && !isLivePendingStatus(record.status) && !isChainConfirmedRecord(record)) continue;
         if (descriptor) {
             if (record.chain !== descriptor.coin) continue;
             if (record.network !== descriptor.networkKind) continue;
@@ -115,8 +143,29 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
             continue;
         }
         if (wanted && String(record.fromAddress || '').toLowerCase() !== wanted) continue;
-        const seen = seenNow instanceof Set && seenNow.has(String(record.txid).toLowerCase());
+        const seen = Boolean(record.txid)
+            && seenNow instanceof Set
+            && seenNow.has(String(record.txid).toLowerCase());
         out.push(summarize(record, seen));
     }
     return out;
+}
+
+/**
+ * Remove one FAILED record from the vault (the "Remove from history" action
+ * on a failed row). Refuses anything else: a live or queued record has its
+ * own lanes, and deleting one here would make a send that is on the network
+ * vanish from the list.
+ *
+ * @param {{ vault: import('../storage/Vault.js').Vault, pendingTxId: string }} opts
+ * @returns {Promise<boolean>}   true when a record was removed
+ */
+export async function dismissFailedPendingTx({ vault, pendingTxId }) {
+    if (!vault) throw new Error('dismissFailedPendingTx: vault is required');
+    if (typeof pendingTxId !== 'string' || !pendingTxId) {
+        throw new Error('dismissFailedPendingTx: pendingTxId is required');
+    }
+    const existing = await vault.pendingTxs.get(pendingTxId);
+    if (!existing || !isFailedPendingStatus(existing.status)) return false;
+    return await vault.pendingTxs.delete(pendingTxId);
 }

@@ -89,15 +89,21 @@ export class BackupConflictError extends Error {
 }
 
 /**
- * The re-key could not open the backed-up wallet's own seal. Deliberately
- * distinct from a bad envelope password: the envelope already opened, so the
- * wrong one is the WALLET's, and the message has to name which.
+ * The re-key could not open the backed-up wallet's own seal.
+ *
+ * Distinct from a bad envelope password on purpose. If the envelope had
+ * not already opened we would never reach here, so "wrong password" on
+ * its own is the wrong thing to tell the user: it is the OTHER password
+ * - the one the wallet itself used on the device it came from - that is
+ * wrong, and the message has to say which.
  */
 export class BackupSeedPasswordError extends Error {
     /** @param {string} what   'seed' | 'imported key' | 'passphrase' */
     constructor(what) {
-        // Name the password BOX, not the function: the user is looking at three
-        // of them and needs to know which one to fix.
+        // The copy names the field, not the function. The user is
+        // looking at three password boxes, and this one is about the middle
+        // one; a message that opens with `importBackupFile:` tells them which
+        // function failed and nothing about which box to fix.
         super(
             `The backup file opened, but that is not the password of the wallet inside it (its `
             + `${what} stayed locked). The "${RESTORE_PASSWORD_LABELS.wallet}" field wants the `
@@ -290,9 +296,12 @@ export async function importBackupFile({
     // copy still sealed under the old device's password.
     decoded.wallet = migrateWallet(decoded.wallet);
 
-    // Re-seal key material under the device password BEFORE any write: an
-    // unopenable seal then throws at RESTORE time naming which password is
-    // wrong, with the vault untouched, not at the user's first signature.
+    // Re-seal the wallet's key material under this device's
+    // password BEFORE anything is written. Doing it here rather than at
+    // the shell means a seal we cannot open fails at RESTORE time, with
+    // a message naming which password is wrong, instead of at the user's
+    // first signature with no message at all. Nothing has touched the
+    // vault yet at this point, so the throw leaves it untouched.
     const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword });
 
     // §19.4: 'add' mode re-mints wallet / account / address ids so a restored
@@ -303,14 +312,17 @@ export async function importBackupFile({
         remintIdentifiers(decoded);
     }
 
-    // Collect conflicts up-front so onConflict='error' fails fast. 'add' mode
-    // skips the wallet / account / address ids just re-minted, leaving
-    // contacts and connectedSites as the only records that can still collide.
-
-    // Settings is exempt in 'add' mode: the vault-global singleton always
-    // exists, so an incoming record would always collide and fail every
-    // restore-alongside. A joining wallet does not redefine the vault's
-    // network / fee / privacy choices, so its settings are not applied.
+    // Collect conflicts up-front; onConflict='error' fails fast. Add
+    // mode skips the wallet / account / address collisions because we
+    // just re-minted those ids; only contacts / connectedSites can
+    // still conflict.
+    //
+    // Settings is exempt in 'add' mode: it is a vault-global singleton,
+    // so an initialized vault ALWAYS has one and the incoming record
+    // would always collide - which made every restore-alongside fail on
+    // the default onConflict='error'. The joining wallet does not get to
+    // redefine the vault's network / fee / privacy choices, so its
+    // settings are simply not applied (see the write below).
     const conflicts = await collectConflicts(
         vault, decoded, { skipWalletScoped: mode === 'add', skipSettings: mode === 'add' },
     );
@@ -347,10 +359,12 @@ export async function importBackupFile({
     await applyCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites', migrateConnectedSite);
     await applyCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs', migratePendingTx);
 
-    // Settings is a singleton, so overwrite/preserve covers the whole record.
-    // In 'add' mode the vault's own settings win even under 'overwrite': that
-    // flag resolves collisions for the wallet being restored, never the
-    // vault-wide configuration the user is currently running under.
+    // Settings is a singleton; overwrite/preserve decisions apply to
+    // the whole record. In 'add' mode the vault's own settings win even
+    // under onConflict='overwrite': that flag exists to resolve record
+    // collisions for the wallet being restored, not to hand a joining
+    // wallet the vault-wide network / fee / privacy configuration the
+    // user is currently running under.
     if (decoded.settings) {
         const existing = await vault.settings.get();
         if (!existing || (onConflict === 'overwrite' && mode !== 'add')) {
@@ -406,10 +420,14 @@ export class BackupPointerUnresolvedError extends Error {
  */
 
 /**
- * §15.4 QR-from-backup-pointer restore: resolve the pointer through the
- * shell-injected `resolveBackupContent`, then run the file lane's own
- * `importBackupFile` decrypt-and-merge. A pointer carries only a location, so
- * the envelope is still password-encrypted and the caller supplies its password.
+ * §15.4 QR-from-backup-pointer restore. Parses (or accepts) a backup
+ * pointer, hands it to the shell-injected `resolveBackupContent` to
+ * fetch the encrypted §19.4 envelope, then runs the exact same
+ * `importBackupFile` decrypt-and-merge path the file lane uses. The
+ * pointer only carries a location; the envelope is still
+ * password-encrypted, so the caller must supply the backup password
+ * just like the file lane.
+ *
  * @param {RestoreFromBackupPointerOpts} opts
  * @returns {Promise<RestoreFromBackupPointerResult>}
  */
@@ -487,10 +505,23 @@ async function collectConflicts(vault, payload, opts = {}) {
 }
 
 /**
- * Re-mint wallet / account / address ids in place so an `add`-mode import lands
- * alongside the vault's own, rewiring every field that references one.
- * Contacts / connectedSites / settings ids are global and stay as-is.
- * Exported for tests; production goes through `importBackupFile({mode:'add'})`.
+ * Re-mint wallet / account / address ids on the decoded payload so
+ * an `add`-mode import can land alongside what the vault already
+ * has. Mutates `decoded` in place. Updates every field that
+ * references one of the re-minted ids:
+ *
+ *   - wallet.id
+ *   - wallet.importedKeys[].addressId
+ *   - account.id, account.walletId
+ *   - address.id, address.accountId
+ *   - pendingTx.id    (kept independent; pending txs are address-scoped
+ *                     via `fromAddress`, not id-scoped)
+ *
+ * Contacts / connectedSites / settings ids stay as-is (they're global
+ * across wallets and there's nothing to disambiguate). Exported for
+ * test access; production callers go through `importBackupFile({mode:
+ * 'add'})`.
+ *
  * @param {BackupPayload} decoded
  */
 export function remintIdentifiers(decoded) {
@@ -535,9 +566,10 @@ export function remintIdentifiers(decoded) {
         }
     }
 
-    // PendingTxs: re-mint only the id so a re-import cannot collide.
-    // fromAddress is the canonical address STRING, not an id, so it survives
-    // the re-mint and the rest of the row stays untouched.
+    // PendingTxs: re-mint id so a re-import of the same backup doesn't
+    // collide; keep the rest of the row (fromAddress / txid / status)
+    // untouched. fromAddress is the canonical address string, not an
+    // id, so it survives the address-id re-mint.
     for (const ptx of decoded.pendingTxs ?? []) {
         if (ptx && typeof ptx.id === 'string') {
             ptx.id = randomUUID();

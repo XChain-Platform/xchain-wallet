@@ -26,6 +26,9 @@ import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
+import { coinFromChainId } from '../components/BalanceList.jsx';
+import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
+import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -198,7 +201,10 @@ export function TokenDetail({
     const header = (
         <PageHeader
             onBack={onBack}
-            title={displayName || tick}
+            // A bridged copy is titled by its bare name; the rooted wire form
+            // and the origin chain are both on the Details panel below, so the
+            // page never hides which asset this really is.
+            title={displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label}
             titleIcon={headerIconUrl ? (
                 <img
                     src={headerIconUrl}
@@ -796,8 +802,24 @@ function DetailsPanel({
                     </tr>
                     <tr className={styles.metaRow}>
                         <th scope="row">Ticker</th>
-                        <td>{tick}</td>
+                        <td>
+                            <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
+                        </td>
                     </tr>
+                    {/* A bridged copy is a claim on an asset held in escrow on
+                        another chain, and its holder should be able to read that
+                        off the page rather than infer it from a dot in the
+                        ticker. Native rows have no origin to name and get no
+                        row at all. */}
+                    {parseBridgedTick(tick, coinFromChainId(chainId)) ? (
+                        <tr className={styles.metaRow}>
+                            <th scope="row">Origin</th>
+                            <td>
+                                {`Native to ${coinDisplay(parseBridgedTick(tick, coinFromChainId(chainId)).origin)}`
+                                    + `, bridged here as ${tick}`}
+                            </td>
+                        </tr>
+                    ) : null}
                     <tr className={styles.metaRow}>
                         <th scope="row">Type</th>
                         <td>{kindLabel(kind)}</td>

@@ -168,6 +168,10 @@ export function buildCommands(ctx) {
             { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open atomic swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
         { id: 'nav-dispensers', category: 'Navigate', title: 'Dispensers', subtitle: 'Your dispensers', keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
+        // The buyer's side. 'Dispensers' above lists the ones this wallet
+        // opened; a buyer with no link in hand needs the search, which was
+        // reachable only through the Token Actions catalogue.
+        { id: 'nav-browse-dispensers', category: 'Navigate', title: 'Browse dispensers', subtitle: 'Find open dispensers by token or address', keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'], Icon: Icon.DollarIcon, run: go('dispenser-explorer') },
         { id: 'nav-my-tokens', category: 'Navigate', title: 'My Tokens', subtitle: 'Tokens you own', keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
         { id: 'nav-messaging', category: 'Navigate', title: 'Messaging', subtitle: 'Encrypted inbox', keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
         { id: 'nav-addresses', category: 'Navigate', title: 'Addresses', subtitle: 'Manage your addresses', keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
@@ -224,6 +228,16 @@ export function buildCommands(ctx) {
         // screen. Titled for the address subject, since the token subject is
         // already reachable from the token it belongs to.
         { id: 'create-controller-bind', category: 'Create', title: 'Bind a controller', subtitle: 'Route this address\'s actions through a guard contract', keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LockIcon, run: go('controller-bind') },
+        // The two bridge surfaces. Authoring forms that open free-entry, like
+        // their neighbours here: the move form picks its own leg from the
+        // chain it is on, and the settings form carries the same token picker
+        // every other TokenAdminForm mode does, so neither needs a ref the
+        // palette cannot supply. Ungated: the bridge is not the DEX surface,
+        // and both forms report for themselves when a chain or a token cannot
+        // bridge. Filed under Create rather than Trade because a bridge move
+        // is not a trade; nobody is on the other side of it.
+        { id: 'create-bridge-move', category: 'Create', title: 'Move a token across chains', subtitle: 'Send a token to another chain and take the credit there', keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'], Icon: Icon.LinkIcon, run: go('bridge-move') },
+        { id: 'create-bridge-settings', category: 'Create', title: 'Bridge settings', subtitle: 'Choose which chains a token you issued can move to', keywords: ['bridge', 'chains', 'issuer', 'depth', 'confirmations', 'freeze', 'xbridge'], Icon: Icon.LinkIcon, run: go('bridge-settings') },
         { id: 'create-advanced', category: 'Create', title: 'Advanced action', subtitle: 'Author any action by hand', keywords: ['advanced', 'raw', 'expert'], Icon: Icon.GearIcon, run: go('advanced') },
     );
 
@@ -240,6 +254,7 @@ export function buildCommands(ctx) {
         { id: 'trade-coinpay', category: 'Trade', title: 'Pay an order', subtitle: 'Settle a matched order', keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
         ...(hasDex ? [
             { id: 'trade-xchain-swap', category: 'Trade', title: 'Cross-chain swap', subtitle: 'Swap across chains', keywords: ['cross chain', 'bridge', 'atomic'], Icon: Icon.LinkIcon, run: go('cross-chain-swap') },
+            { id: 'trade-xchain-order', category: 'Trade', title: 'Cross-chain order', subtitle: 'Limit order across chains', keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'], Icon: Icon.LinkIcon, run: go('cross-chain-order') },
         ] : []),
         { id: 'trade-xchain-templates', category: 'Trade', title: 'Cross-chain templates', subtitle: 'Prebuilt cross-chain flows', keywords: ['cross chain', 'templates', 'parallel'], Icon: Icon.LinkIcon, run: go('cross-chain-templates') },
     );

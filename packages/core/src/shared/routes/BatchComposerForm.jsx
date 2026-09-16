@@ -52,7 +52,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -76,18 +76,14 @@ const FALLBACK_ACTIONS = [
 let nextRowId = 0;
 const newRowId = () => `brow-${++nextRowId}`;
 
-function pickDefaultAddressId(addrs) {
+// Default from-address for a chain: the same resolution Send uses (active
+// address, else newest HD external), never a dispenser-delegated address,
+// and the first remaining record when the chain holds no HD address at all
+// (a hardware-only wallet).
+function pickDefaultAddressId(addrs, activeEntry) {
     if (!Array.isArray(addrs) || addrs.length === 0) return null;
-    const hd = addrs.filter(
-        (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-    );
-    const pool = hd.length > 0 ? hd : addrs;
-    const sorted = [...pool].sort((a, b) => {
-        const ai = (externalIndexOf(a.derivationPath) ?? -1);
-        const bi = (externalIndexOf(b.derivationPath) ?? -1);
-        return bi - ai;
-    });
-    return sorted[0].id;
+    const funding = addrs.filter((a) => a.role !== 'dispenser');
+    return preferredSourceId(funding, activeEntry) || funding[0]?.id || addrs[0].id;
 }
 
 function blankRow() {
@@ -125,6 +121,10 @@ export function BatchComposerForm({ walletId, onBack }) {
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId]; `{}` when the host has none.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any>} */ ({}),
+    );
     const [actionsList, setActionsList] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -152,9 +152,14 @@ export function BatchComposerForm({ walletId, onBack }) {
             messaging.listActions
                 ? messaging.listActions({ chainId: chainRegistry.supportedChains()[0]?.id }).catch(() => null)
                 : Promise.resolve(null),
-        ]).then(([byChain, actions]) => {
+            // Best-effort: a host without the call still yields a usable form.
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ]).then(([byChain, actions, active]) => {
             if (cancelled) return;
             setAddressesByChain(byChain || {});
+            setActiveByChain(active || {});
             const raw = (Array.isArray(actions) && actions.length > 0) ? actions : FALLBACK_ACTIONS;
             setActionsList(raw.filter((a) => !EXCLUDED_ACTIONS.has(String(a).toUpperCase())));
             const chains = Object.entries(byChain || {})
@@ -165,7 +170,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                 return;
             }
             setChainId(chains[0]);
-            setFromAddressId(pickDefaultAddressId(byChain[chains[0]] || []));
+            setFromAddressId(pickDefaultAddressId(byChain[chains[0]] || [], active?.[chains[0]]));
         }).catch((err) => {
             if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
         });
@@ -513,7 +518,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                     onChange={(e) => {
                         const cid = e.target.value;
                         setChainId(cid);
-                        setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || []));
+                        setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || [], activeByChain[cid]));
                     }}
                 >
                     {chainsWithAddresses.map((cid) => {

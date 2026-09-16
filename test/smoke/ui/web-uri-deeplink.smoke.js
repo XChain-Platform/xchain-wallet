@@ -51,10 +51,12 @@ for (const field of ['address', 'amount', 'tick', 'chainId', 'memo']) {
     );
 }
 
-// --- 2. First-chain auto-select preserves prefilled chainId ------------
+// --- 2. Chain auto-select preserves prefilled chainId ------------------
+// The default chain is picked by the shared helper; a chain already set
+// (the prefill) must reach it as the explicit choice, which wins first.
 
 assert.ok(
-    /setChainId\(\(prev\)\s*=>\s*prev \|\| firstChain\)/.test(sendSrc),
+    /setChainId\(\(prev\)\s*=>\s*pickDefaultChainId\(byChain,\s*\{\s*explicitChainId:\s*prev\b/.test(sendSrc),
     'Send.useEffect for getAddressesByChain preserves a prefilled chainId',
 );
 

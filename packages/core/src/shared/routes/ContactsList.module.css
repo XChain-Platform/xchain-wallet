@@ -499,6 +499,22 @@
     font-size: var(--xc-text-sm);
 }
 
+/* "Not now" inside the publish nudge: reads as a link so the row keeps one
+   real button (Open Backup). */
+.linkButton {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--xc-tap-min);
+    background: transparent;
+    border: 0;
+    color: var(--xc-accent-primary);
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+}
+
+.linkButton:hover { text-decoration: underline; }
+
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
 @media (forced-colors: active) {

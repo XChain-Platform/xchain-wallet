@@ -240,18 +240,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         const totalStr = total == null ? '' : String(total);
         /** @type {Record<string, string>} */
         // GIVE_COIN / GET_COIN are required by the indexer (order.js
-        // rejects a missing COIN network as invalid); same-chain orders
-        // always carry the panel's own chain, matching SwapForm.
-        //
-        // This hardcoded same-coin pair IS the wallet's ORDER
-        // boundary. The wire allows GIVE_COIN != GET_COIN (a cross-chain
-        // order escrows the GIVE side locally and settles through the
-        // validator federation via CROSS_SETTLE, ORDER.md "Notes"), and
-        // orderAction forwards params verbatim, so the flow layer would
-        // carry it. What is missing is authoring UI: no give-chain /
-        // get-chain split exists for ORDER the way CrossChainSwapForm has
-        // one for SWAP, and no GET_ADDRESS is resolved on a second chain.
-        // Cross-chain trading from the wallet is SWAP-only.
+        // rejects a missing COIN network as invalid). This panel trades a
+        // market that lives on ONE chain, so both sides carry the panel's
+        // own coin; an order whose GET side settles on another chain
+        // (federation-matched, CROSS_SETTLE) is authored by
+        // CrossChainOrderForm.
         const p = { VERSION: '0', GIVE_COIN: coinTicker, GET_COIN: coinTicker };
         if (side === 'buy') {
             p.GIVE_TICK = tick2;
@@ -344,28 +337,37 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // the key material.
     function handleReview(event) {
         event.preventDefault();
+        // An order is signed from an address on THIS chain; without one there is
+        // nothing to spend from and nothing to receive into.
         if (!fromAddress) {
             setFormError('No address to sign from on this chain. Use Receive first.');
             return;
         }
+        // Both legs are required: an order with one side blank has no price.
         if (!price.trim() || !size.trim()) {
             setFormError('Price and size are required.');
             return;
         }
         const p = Number(price);
         const s = Number(size);
+        // Zero or negative would encode an order nothing can ever match.
         if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(s) || s <= 0) {
             setFormError('Price and size must be positive numbers.');
             return;
         }
+        // undefined means the custom date box holds something unparseable;
+        // null is the legitimate "never expires" preset and passes.
         if (expirationUnix === undefined) {
             setFormError('Pick a valid expiration date and time.');
             return;
         }
+        // An expiration already in the past is dead on arrival at the indexer.
         if (typeof expirationUnix === 'number' && expirationUnix <= Math.floor(Date.now() / 1000)) {
             setFormError('Expiration must be in the future.');
             return;
         }
+        // Auto-pay settles the match later, which needs the wallet reachable;
+        // the user acknowledges that before the order can be placed.
         if (ackRequired && !keepOpenAck) {
             setFormError('Acknowledge the auto-pay requirement (or turn auto-pay off) to continue.');
             return;

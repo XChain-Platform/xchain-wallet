@@ -193,6 +193,39 @@
     font-size: var(--xc-text-xs);
 }
 
+/* A refused dispense: the row stays so the attempt is visible, but the
+   amount is struck through because nothing moved, and the marker names
+   the indexer's reason. */
+.dispenseInvalid {
+    color: var(--xc-text-muted);
+}
+
+.dispenseInvalid .dispenseAmount {
+    text-decoration: line-through;
+    font-weight: 500;
+}
+
+.dispenseInvalidMarker {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--xc-space-1);
+    margin-inline-start: var(--xc-space-2);
+}
+
+.dispenseInvalidBadge {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
+    color: var(--xc-danger);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dispenseInvalidReason {
+    font-size: var(--xc-text-xs);
+}
+
 .dispenseEmpty {
     padding: var(--xc-space-5) var(--xc-space-3);
     text-align: center;

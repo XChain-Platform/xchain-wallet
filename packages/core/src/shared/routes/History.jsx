@@ -121,6 +121,31 @@ const PENDING_COPY = {
         headline: 'pending.detail.replaced',
         help: 'pending.detail.replacedHelp',
     },
+    // The block is proven and no explorer row will ever take the entry's
+    // place. The headline says what the block settled: a plain coin transfer
+    // has no action to speak of, an action-carrying transaction the service
+    // recorded nothing for had no effect beyond the coins it moved. Which
+    // one applies is `confirmedCopyFor`'s call, from the entry's own tick.
+    confirmed: {
+        row: 'pending.row.confirmed',
+        headline: 'pending.detail.confirmed',
+        help: 'pending.detail.confirmedHelp',
+    },
+    // The wallet gave up before the network took the send (compose, sign or
+    // broadcast threw). The only record of it is the wallet's own, so the
+    // row is the one place the user can learn the send never happened.
+    failed: {
+        row: 'pending.row.failed',
+        headline: 'pending.detail.failed',
+        help: 'pending.detail.failedHelp',
+    },
+};
+
+/** The `confirmed` copy for a transaction that carried an action the service did not record. */
+const CONFIRMED_NO_EFFECT_COPY = {
+    row: 'pending.row.confirmed',
+    headline: 'pending.detail.confirmedNoEffect',
+    help: 'pending.detail.confirmedNoEffectHelp',
 };
 
 /**
@@ -129,7 +154,7 @@ const PENDING_COPY = {
  * Healthy pending and "nothing has ever reported this" must not look
  * alike.
  */
-const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped']);
+const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped', 'failed']);
 
 /**
  * The pending state of an entry, or null when there is nothing to
@@ -142,6 +167,33 @@ const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped']);
  */
 function pendingStateOf(entry) {
     return entry?.pending ? pendingDisplayState(entry, Date.now()) : null;
+}
+
+/**
+ * Did this local record move the chain's own coin and nothing else? The
+ * record's `tick` is the ticker the send moved; a plain transfer carries the
+ * native one, an action-carrying transaction carries a token's or none.
+ *
+ * @param {{ chainId?: string, raw?: { tick?: string } } | null | undefined} entry
+ */
+function isNativeCoinMovement(entry) {
+    const coin = coinOfChainId(entry?.chainId);
+    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    const tick = String(entry?.raw?.tick || '').toUpperCase();
+    return Boolean(nativeTicker) && tick === nativeTicker;
+}
+
+/**
+ * The copy for a pending state, with the one state that has two voices
+ * resolved: a confirmed entry speaks of a settled transfer or of an action
+ * that had no effect.
+ *
+ * @param {string} state
+ * @param {object} entry
+ */
+function pendingCopyFor(state, entry) {
+    if (state === 'confirmed' && !isNativeCoinMovement(entry)) return CONFIRMED_NO_EFFECT_COPY;
+    return PENDING_COPY[state];
 }
 
 /**
@@ -713,8 +765,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     }));
                 }
                 for (const record of (r.pendingTxs || [])) {
-                    if (!record?.txid) continue;
-                    const key = `${r.chainId}:${String(record.txid).toLowerCase()}`;
+                    // A failed record may have no txid (it died before
+                    // signing); its own id then keys the observation memory.
+                    const identity = record?.txid || (record?.status === 'failed' && record?.id ? `ptx-${record.id}` : null);
+                    if (!identity) continue;
+                    const key = `${r.chainId}:${String(identity).toLowerCase()}`;
                     // A native send never has a mempool row above to refresh
                     // its sighting from; the host's own read of the UTXO set
                     // is that sighting, on the same clock.
@@ -724,7 +779,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         address: r.address,
                         pendingTx: record,
                         ownAddresses,
-                        observedAtMs: rememberObservedAt(r.chainId, record.txid, nowMs),
+                        observedAtMs: rememberObservedAt(r.chainId, identity, nowMs),
                         lastMempoolSeenMs: lastMempoolSeenRef.current.get(key) ?? null,
                     }));
                 }
@@ -733,7 +788,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             // Forget the observation times of transactions that are no longer
             // pending, so the map tracks the mempool rather than growing with
             // every transaction the wallet has ever made.
-            const liveKeys = new Set(merged.pending.map((e) => `${e.chainId}:${e.txHash}`));
+            const liveKeys = new Set(merged.pending.map((e) => (
+                `${e.chainId}:${e.txHash || `ptx-${e.pending?.pendingTxId}`}`.toLowerCase()
+            )));
             for (const key of [...observedAtRef.current.keys()]) {
                 if (!liveKeys.has(key)) observedAtRef.current.delete(key);
             }
@@ -775,7 +832,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const tips = {};
         for (const e of entries) {
             if (!e || !e.chainId) continue;
-            const b = Number(e.blockIndex || 0);
+            // A record the wallet proved into a block names that block in
+            // its meta rather than in blockIndex; it is as real a lower
+            // bound for the tip as any explorer row.
+            const b = Number(e.blockIndex || e.pending?.confirmedBlockIndex || 0);
             if (b <= 0) continue;
             if (!(e.chainId in tips) || b > tips[e.chainId]) tips[e.chainId] = b;
         }
@@ -1033,6 +1093,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             writeChainSet(HISTORY_CHAIN_FILTER_KEY, next);
             return next;
         });
+    };
+
+    // "Remove from history" on a failed local record. The host refuses
+    // anything but a failed record, so this cannot make a live send vanish.
+    // The row closes and the list re-reads; a refused or failed delete
+    // leaves the row in place, which is the honest outcome.
+    const dismissFailedPending = async (pendingTxId) => {
+        if (typeof messaging?.dismissFailedPendingTx !== 'function') return;
+        try {
+            await messaging.dismissFailedPendingTx({ pendingTxId });
+        } catch {
+            return;
+        }
+        selectedTxRef.current = null;
+        setSelectedKey(null);
+        setRefreshTick((n) => n + 1);
     };
 
     const onRowClick = (entry) => {
@@ -1376,6 +1452,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     verify={actionVerifyMap[entry.key]}
                                                     showFiatInHistory={showFiatInHistory}
                                                     fiatCurrency={fiatCurrency}
+                                                    onDismissFailed={dismissFailedPending}
                                                 />
                                             ))}
                                         </ul>
@@ -1400,6 +1477,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             verify={actionVerifyMap[entry.key]}
                             showFiatInHistory={showFiatInHistory}
                             fiatCurrency={fiatCurrency}
+                            onDismissFailed={dismissFailedPending}
                         />
                     );
                 })}
@@ -1412,7 +1490,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency }) {
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
     const [balancesHidden] = useBalancesHidden();
@@ -1663,7 +1741,11 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 be impossible to scroll past. Disappears of its own
                 accord when the confirmed entry replaces this one. */}
             {isPending ? (
-                <PendingDetailPanel entry={entry} balancesHidden={balancesHidden} />
+                <PendingDetailPanel
+                    entry={entry}
+                    balancesHidden={balancesHidden}
+                    onDismissFailed={onDismissFailed}
+                />
             ) : null}
 
             {/* Basic details hero: concise summary at the top of the
@@ -1956,10 +2038,12 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
  *
  * @param {{ entry: any, balancesHidden?: boolean }} props
  */
-function PendingDetailPanel({ entry, balancesHidden = false }) {
+function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) {
     const state = pendingStateOf(entry);
-    const copy = state ? PENDING_COPY[state] : null;
+    const copy = state ? pendingCopyFor(state, entry) : null;
     const warning = state != null && PENDING_WARNING_STATES.has(state);
+    const settled = state === 'confirmed';
+    const failed = state === 'failed';
     const meta = entry?.pending || null;
     const desc = describePendingAction(entry);
     const amountOf = (value) => (balancesHidden ? '•••••' : value);
@@ -1967,7 +2051,9 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
     return (
         <section
             className={`${styles.pendingPanel} ${warning ? styles.pendingPanelWarning : ''}`}
-            aria-label={t('pending.detail.sectionLabel')}
+            aria-label={t(settled
+                ? 'pending.detail.confirmedSectionLabel'
+                : failed ? 'pending.detail.failedSectionLabel' : 'pending.detail.sectionLabel')}
         >
             {copy ? (
                 <>
@@ -1977,8 +2063,36 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
             ) : null}
             {/* The honesty line (§7). A mempool sighting is not
                 acceptance: the indexer can still reject this action when
-                the block lands, so it renders in every pending state. */}
-            <p className={styles.pendingNotValidated}>{t('pending.detail.notValidated')}</p>
+                the block lands, so it renders in every pending state. A
+                proven block is the one thing that retires it, and the
+                block takes its place. A failure has nothing left to
+                validate; the recorded reason takes the line instead. */}
+            {settled ? (
+                meta?.confirmedBlockIndex ? (
+                    <p className={styles.pendingTiming}>
+                        {t('pending.detail.confirmedBlock', { block: meta.confirmedBlockIndex.toLocaleString() })}
+                    </p>
+                ) : null
+            ) : failed ? (
+                <>
+                    {meta?.error ? (
+                        <p className={styles.pendingNotValidated}>
+                            {t('pending.detail.failedReason', { error: meta.error })}
+                        </p>
+                    ) : null}
+                    {typeof onDismissFailed === 'function' && meta?.pendingTxId ? (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => onDismissFailed(meta.pendingTxId)}
+                        >
+                            {t('pending.detail.dismissFailed')}
+                        </Button>
+                    ) : null}
+                </>
+            ) : (
+                <p className={styles.pendingNotValidated}>{t('pending.detail.notValidated')}</p>
+            )}
 
             {meta?.firstSeenMs ? (
                 <p className={styles.pendingTiming}>
@@ -1998,7 +2112,12 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
                 </p>
             ) : null}
 
-            <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+            {/* A settled record with nothing decodable has nothing to
+                promise under this heading: "not reported yet" would say
+                more data is coming, and none is. */}
+            {settled && desc.kind === 'none' ? null : (
+                <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+            )}
             {desc.kind === 'send' || desc.kind === 'local' ? (
                 <ul className={styles.pendingOutputs}>
                     {desc.outputs.map((o, i) => (
@@ -2017,7 +2136,10 @@ function PendingDetailPanel({ entry, balancesHidden = false }) {
                     ))}
                 </ul>
             ) : null}
-            {desc.kind === 'local' ? (
+            {/* The note promises data the network has "not reported yet";
+                for a settled transaction nothing more is coming, so the
+                outputs stand on their own. */}
+            {desc.kind === 'local' && !settled ? (
                 <p className={styles.pendingHelp}>{t('pending.detail.localRecordNote')}</p>
             ) : null}
             {desc.kind === 'segments' ? (
@@ -2733,7 +2855,7 @@ function nativeAmountFieldOf(entry) {
 function PendingRowLabel({ entry }) {
     const state = pendingStateOf(entry);
     const warning = state != null && PENDING_WARNING_STATES.has(state);
-    const label = state ? t(PENDING_COPY[state].row) : t('pending.row.generic');
+    const label = state ? t(pendingCopyFor(state, entry).row) : t('pending.row.generic');
     return (
         <span
             className={`${styles.pendingLabel} ${warning ? styles.pendingLabelWarning : ''}`}
@@ -2822,7 +2944,7 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, onDismissFailed }) {
     const d = chainRegistry.get(entry.chainId);
     return (
         <li data-history-key={entry.key}>
@@ -2901,6 +3023,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     walletId={walletId}
                     showFiatInHistory={showFiatInHistory}
                     fiatCurrency={fiatCurrency}
+                    onDismissFailed={onDismissFailed}
                 />
             ) : null}
         </li>

@@ -12,7 +12,7 @@
 // (`livePendingTxs`) and the unconfirmed explorer rows (`addressMempool`).
 
 import { describe, it, expect } from 'vitest';
-import { livePendingTxs } from '../../../packages/core/src/flows/pendingTxFeed.js';
+import { livePendingTxs, dismissFailedPendingTx } from '../../../packages/core/src/flows/pendingTxFeed.js';
 import { addressMempool } from '../../../packages/core/src/flows/balances.js';
 
 const CHAIN_ID = 'litecoin-regtest';
@@ -64,8 +64,8 @@ describe('livePendingTxs', () => {
         expect(JSON.stringify(out)).not.toContain('cafebabe');
     });
 
-    it('excludes records that never reached the network or already confirmed', async () => {
-        const excluded = ['composing', 'awaiting-signature', 'signed', 'queued', 'indexed', 'failed'];
+    it('excludes records that have not been sent yet or are already confirmed', async () => {
+        const excluded = ['composing', 'awaiting-signature', 'signed', 'queued', 'indexed'];
         for (const status of excluded) {
             const out = await livePendingTxs({
                 vault: vaultOf([record({ status })]), chainRegistry: registry, chainId: CHAIN_ID,
@@ -74,11 +74,70 @@ describe('livePendingTxs', () => {
         }
     });
 
-    it('excludes a record with no txid: History has nothing to merge it on', async () => {
+    it('excludes a live record with no txid: History has nothing to merge it on', async () => {
         const out = await livePendingTxs({
             vault: vaultOf([record({ txid: null })]), chainRegistry: registry, chainId: CHAIN_ID,
         });
         expect(out).toHaveLength(0);
+    });
+
+    it('lists a failed record, with its reason, because no feed will ever report the failure', async () => {
+        const out = await livePendingTxs({
+            vault: vaultOf([record({ status: 'failed', error: 'Insufficient funds' })]),
+            chainRegistry: registry,
+            chainId: CHAIN_ID,
+        });
+        expect(out).toHaveLength(1);
+        expect(out[0].status).toBe('failed');
+        expect(out[0].error).toBe('Insufficient funds');
+        expect(out[0].networkSeenNow).toBe(false);
+    });
+
+    it('lists a failed record that has no txid at all (it died in compose or signing)', async () => {
+        const out = await livePendingTxs({
+            vault: vaultOf([record({ status: 'failed', txid: null, error: 'Fee estimate unavailable' })]),
+            chainRegistry: registry,
+            chainId: CHAIN_ID,
+            seenNow: new Set(['aabbcc']),
+        });
+        expect(out).toHaveLength(1);
+        expect(out[0].txid).toBeNull();
+        expect(out[0].id).toBe('ptx-1');
+        expect(out[0].networkSeenNow).toBe(false);
+    });
+});
+
+describe('dismissFailedPendingTx', () => {
+    function vaultWith(records) {
+        const store = new Map(records.map((r) => [r.id, r]));
+        return {
+            pendingTxs: {
+                get: async (id) => store.get(id) ?? null,
+                delete: async (id) => store.delete(id),
+                list: async () => [...store.values()],
+            },
+            _store: store,
+        };
+    }
+
+    it('removes a failed record and reports it', async () => {
+        const vault = vaultWith([record({ status: 'failed' })]);
+        expect(await dismissFailedPendingTx({ vault, pendingTxId: 'ptx-1' })).toBe(true);
+        expect(vault._store.size).toBe(0);
+    });
+
+    it('refuses anything that is not failed, so a live send cannot be hidden', async () => {
+        for (const status of ['broadcast', 'broadcasting', 'queued', 'indexed', 'rbf-replaced']) {
+            const vault = vaultWith([record({ status })]);
+            expect(await dismissFailedPendingTx({ vault, pendingTxId: 'ptx-1' }), status).toBe(false);
+            expect(vault._store.size, status).toBe(1);
+        }
+    });
+
+    it('is a no-op for an unknown id and rejects a missing one', async () => {
+        const vault = vaultWith([record({ status: 'failed' })]);
+        expect(await dismissFailedPendingTx({ vault, pendingTxId: 'nope' })).toBe(false);
+        await expect(dismissFailedPendingTx({ vault, pendingTxId: '' })).rejects.toThrow('pendingTxId is required');
     });
 
     it('keeps a replaced record so the superseded entry can say so', async () => {
@@ -199,5 +258,29 @@ describe('addressMempool', () => {
             .rejects.toThrow(/chainId is required/);
         await expect(addressMempool({ sdkRegistry, chainId: CHAIN_ID }))
             .rejects.toThrow(/address is required/);
+    });
+});
+
+describe('livePendingTxs keeps the records this wallet proved into a block', () => {
+    it('lists a chain-confirmed indexed record with its proof, and no other indexed record', async () => {
+        const out = await livePendingTxs({
+            vault: vaultOf([
+                record({ id: 'settled', txid: 'CC01', status: 'indexed', chainConfirmed: true,
+                    confirmedBlockIndex: 7707, confirmedAt: '2026-08-27T00:05:00.000Z' }),
+                record({ id: 'by-feed', txid: 'CC02', status: 'indexed', confirmedAt: '2026-08-27T00:05:00.000Z' }),
+                record({ id: 'no-block', txid: 'CC03', status: 'indexed', chainConfirmed: true, confirmedBlockIndex: null }),
+            ]),
+            chainRegistry: registry, chainId: CHAIN_ID,
+        });
+        expect(out.map((r) => r.txid).sort()).toEqual(['CC01', 'CC03']);
+        const settled = out.find((r) => r.txid === 'CC01');
+        expect(settled.chainConfirmed).toBe(true);
+        expect(settled.confirmedBlockIndex).toBe(7707);
+        expect(settled.confirmedAt).toBe('2026-08-27T00:05:00.000Z');
+        expect(out.find((r) => r.txid === 'CC03').confirmedBlockIndex).toBeNull();
+        // A live record carries the fields too, unset.
+        const live = await livePendingTxs({ vault: vaultOf([record()]), chainRegistry: registry, chainId: CHAIN_ID });
+        expect(live[0].chainConfirmed).toBe(false);
+        expect(live[0].confirmedBlockIndex).toBeNull();
     });
 });

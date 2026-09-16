@@ -22,6 +22,9 @@ const explodingVendor = {
     async getStatus() { throw new Error('SDK_NOT_INITIALIZED'); },
     async signMessage() { throw new Error('TRANSPORT_LOST'); },
 };
+// Mirror the wrapping pattern from TrezorSigner / LedgerSigner: catch
+// the vendor exception and re-throw as a SignerStatusError with a
+// stable message.
 
 function wrapVendorThrow(fn) {
     return async (...args) => {

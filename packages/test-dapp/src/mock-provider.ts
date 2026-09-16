@@ -98,7 +98,7 @@ export const DEFAULT_PROTOCOL_ACTIONS: readonly string[] = [
     'COLLECT', 'DELEGATE', 'DEPLOY', 'DEPOSIT', 'DESTROY', 'DISPENSER',
     'DIVIDEND', 'EXECUTE', 'FILE', 'ISSUE', 'LINK', 'LIST', 'MESSAGE', 'MINT',
     'ORDER', 'PRICE', 'SEND', 'SLEEP', 'STAKE', 'SWAP', 'SWEEP', 'UNSTAKE',
-    'VOTE', 'WITHDRAW',
+    'VOTE', 'WITHDRAW', 'XBRIDGE',
 ];
 export const DEFAULT_SIGNABLE_ACTIONS: readonly string[] = ['SEND', 'SWEEP'];
 

@@ -290,10 +290,11 @@ export async function verifyCoinpayObligation({
     // units, where Number() rounds BOTH sides and two different
     // amounts can collide after rounding. BigInt('...') throws on a
     // non-integer shape, which is exactly the unusable-amount case.
-    // The explorer serves this column as the match's DECIMAL coin figure on
-    // current venues and as base units on older ones; obligationBaseUnits
-    // accepts exactly those two shapes and nothing looser, because the
-    // equality below is what stops the wallet signing a wrong amount.
+    // The explorer serves this column as the match's DECIMAL coin figure in
+    // every shape ("10" is ten coins); obligationBaseUnits scales it by 1e8
+    // unconditionally and accepts nothing looser, because the equality below
+    // is what stops the wallet signing a wrong amount. A caller that still
+    // passes the raw figure as base units is refused here, not paid short.
     const trueAmount = obligationBaseUnits(row.coin_amount ?? row.coinAmount);
     if (trueAmount === null || trueAmount <= 0n) {
         throw new Error(

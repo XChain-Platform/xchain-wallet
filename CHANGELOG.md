@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A coin-priced dispenser now has a Buy control that pays the native coin from this wallet through the usual review and sign screen, with the pay-to address kept for buyers using another wallet.
+- Browse dispensers is in the command palette, found by "browse", "dispenser" or "buy".
+- A Cross-chain order form places a DEX limit order that gives a token on one chain and gets a token on another, matched by the validator federation and fillable in parts; Create order and the market panel stay same-chain and say so.
 - Home's balance poll and the pending-payments scan each read a chain's addresses in one batched explorer request instead of one or two per address, falling back to the per-address reads on an explorer or SDK that predates the batch route; the profiler reports both shapes.
 - The auto-pay watcher reads every source address's pending payments in one batched request per chain instead of one per address.
 - Label changes now queue an on-chain sync automatically and ask for the wallet password once per unlock, so renaming many addresses costs one publish instead of one each.
@@ -30,6 +33,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
+- Contract detail renders state keys and decoded values from the explorer's real field names.
+- Execution history shows the method name, a valid/reverted/invalid marker and gas used.
+- A matched order owing a whole number of coins (10 DOGE, not 10.5) is now paid in full; the payment was built at one hundred-millionth of the debt, so it confirmed but never settled the match.
+- The pay-for-matched-order confirm and review screens show the amount in coins with the ticker instead of the raw base-unit figure.
+- Auto-pay now pays a whole-coin match instead of handing it back for manual payment as an amount mismatch.
+- My orders lists a fully filled order under Closed as "Filled" with no Edit or Cancel, and shows what is left on a partly filled one.
+- My orders no longer calls an order "Cancelled" because of a cancel the network refused.
+- Add address > Generate re-derives the lowest missing address index instead of always the highest plus one, so a deleted derived address and its funds come back.
+- The delete-address confirm names the balance, tokens or dispenser the address holds and says how a derived address comes back, instead of only warning about imported keys.
+- Send, Swap and the forms on the shared action hook (Create Order, Mint, Sweep, Destroy, Sleep, Callback, Oracle) open on the chain the wallet last worked on (an address made active, an action submitted) instead of the chain of its oldest address; a chain passed in by a token context still wins, and the choice is kept per network.
+- Create Dispenser, Create Token and the batch and parallel composers default Source / Fee paid by to the chain's active address, like Send, and never to a dispenser-delegated address.
+- A dispenser created on a new dispenser address now opens on that address on the first submit instead of self-open on the source address.
+- Broadcast, Issue token, Create list, list forking, the official-tokens roster, Airdrop, Attach artwork, Advanced action, Link, Publish file, Sign message and Sign transaction default their From address to the chain's active address, like Send, and never to a dispenser-delegated address.
+- A refused dispense on the dispenser page is marked Invalid with its reason and no longer counts as a fill, in the Dispenses tab, the lifecycle timeline and the new Vended total.
+- A native-coin send whose outputs have all been spent, and an action the service recorded nothing for, no longer sit in History as "not seen by network" or "no longer in mempool" once a block carries them; they read as confirmed (with the block when known), the action one as "Confirmed, no effect".
+- Opening "Choose source address" on the cross-chain swap form no longer throws; the picker now seeds to the give chain, and a wallet with no active address on that chain no longer crashes the form when it falls back to the newest one.
 - Home's 20-second balance poll no longer starts a second load while one is still waiting on the service.
 - History's 20-second beat and the payments-due badge's scan no longer start a second fetch while one is still waiting on the service.
 - A refused balance read carries its error code and the seconds the service asked for as fields on the entry, so Home reads them instead of parsing the message.

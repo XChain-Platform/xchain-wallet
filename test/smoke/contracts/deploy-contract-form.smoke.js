@@ -80,7 +80,9 @@ for (const call of [
     assert.ok(formSrc.includes(call), `DeployContractForm calls ${call}`);
 }
 
-// Chain gate. a later change moved this off a hard-coded VM_COIN='bitcoin' and onto
+// Chain gate. The check reads the chain descriptor rather than a coin name, so
+// a chain gaining or losing DEPLOY moves this assertion with it.
+// A later change moved this off a hard-coded VM_COIN='bitcoin' and onto
 // the descriptor's supportedActions, which is the SAME list (registry/actions.js
 // builds it; DEPLOY sits in COMMON_ACTIONS today, so every bundled chain
 // qualifies) that decides where DEPLOY is offered everywhere else. Two copies

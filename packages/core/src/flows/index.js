@@ -254,6 +254,9 @@ export {
     dispenserByActionIndex,
     dispensesFor,
     dispensesOfDispenser,
+    dispenseIsValid,
+    dispenseInvalidReason,
+    vendedTotal,
     dispenserLiveState,
     dispenserLifecycleFor,
 } from './dispenserQueries.js';
@@ -470,15 +473,19 @@ export {
     BALANCE_POLL_INTERVAL_MS,
 } from './balances.js';
 export { createPollThrottle } from './pollThrottle.js';
-export { livePendingTxs } from './pendingTxFeed.js';
+export { livePendingTxs, dismissFailedPendingTx } from './pendingTxFeed.js';
 // A plain native-coin send carries no action, so the action feeds
 // never retire its record; the chain's UTXO set is its confirmation source.
 export {
     isNativePendingTx,
     nativeSendVerdict,
     utxoListOf,
+    spentByConfirmedSibling,
     reconcileNativePendingTxs,
+    INCLUSION_PROBE_AFTER_MS,
+    INCLUSION_PROBE_INTERVAL_MS,
 } from './nativePendingConfirmation.js';
+export { inclusionOf, probeTxInclusion } from './txInclusionProbe.js';
 export {
     verifyAddressBalance,
     verifyAddressAction,
@@ -528,6 +535,9 @@ export {
     applyLabelSyncPayload,
     publishLabelsNow,
     fetchAndDecryptLabelSync,
+    restoreLabelSyncAfterImport,
+    labelSyncSearchChainIds,
+    LABEL_SYNC_RESTORE_CHAIN_TIMEOUT_MS,
     selectLabelSyncCandidates,
     createLabelSyncScheduler,
     NoFundedAddressError,

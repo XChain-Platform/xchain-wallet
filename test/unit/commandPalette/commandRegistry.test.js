@@ -15,6 +15,7 @@ import {
     parseFreeformCommands,
     COMMAND_CATEGORIES,
 } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
+import { filterCommands } from '../../../packages/core/src/shared/commandPalette/fuzzyMatch.js';
 import { BITCOIN_ACTIONS } from '../../../packages/core/src/registry/actions.js';
 
 const findById = (list, id) => list.find((c) => c.id === id);
@@ -112,6 +113,29 @@ describe('buildCommands', () => {
             expect(hub.keywords, `"${word}" should find the betting hub`).toContain(word);
         }
         expect(findById(commands, 'nav-bet-oracle-console').keywords).toContain('resolve');
+    });
+
+    // The dispenser search (the buyer's entry point) was reachable only through
+    // the Token Actions catalogue: the palette carried the owner list and
+    // Create dispenser, and a search for "browse" or "dispenser" never surfaced
+    // it. A buyer who does not already hold a link to a dispenser finds one
+    // here, by the words they would type.
+    it('routes Browse dispensers to the dispenser-explorer view', () => {
+        const navigate = vi.fn();
+        const commands = buildCommands({ navigate });
+        const browse = findById(commands, 'nav-browse-dispensers');
+        expect(browse).toBeDefined();
+        expect(browse.title).toBe('Browse dispensers');
+        browse.run();
+        expect(navigate).toHaveBeenCalledWith('dispenser-explorer');
+    });
+
+    it('surfaces Browse dispensers for the searches "browse", "dispenser" and "buy"', () => {
+        const commands = buildCommands({ navigate() {} });
+        for (const query of ['browse', 'dispenser', 'buy']) {
+            const hits = filterCommands(commands, query).map((c) => c.id);
+            expect(hits, `"${query}" should find Browse dispensers`).toContain('nav-browse-dispensers');
+        }
     });
 
     it('omits verb commands whose handler the shell did not supply', () => {

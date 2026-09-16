@@ -209,8 +209,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [cancelResult, setCancelResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // Buy-one-fill state (token-paid lane only; coin-paid uses the
-    // instructions panel rather than a signed XChain SEND).
+    // Buy state, shared by the token-paid and coin-paid lanes.
     const [fills, setFills] = useState('1');
     const [buyStage, setBuyStage] = useState(
         /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
@@ -432,17 +431,20 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         });
     }, [cancelStage, cancelParams, chainId]);
 
-    // Buyer lanes:
-    //   - Token-paid (dispenser.get_tick non-empty): triggered by an
-    //     XChain SEND of GET_TICK to the dispenser address. Uses the
-    //     existing messaging.sendToken flow, so the wallet signs +
-    //     broadcasts through the standard pipeline.
-    //   - Coin-paid (dispenser.get_coin set, dispenser.get_tick empty):
-    //     triggered by a bare native-coin payment to the dispenser
-    //     address per DISPENSER.md ("no XChain action needed from the buyer").
-    //     The wallet doesn't yet have a bare-coin-send path, so this lane
-    //     renders a pay-here instruction panel that works with any native
-    //     coin wallet (including this one, via future native-send infra).
+    // Buyer lanes, both through messaging.sendToken so the wallet signs and
+    // broadcasts through the standard pipeline:
+    //   - Token-paid (dispenser.get_tick non-empty): an XChain SEND of
+    //     GET_TICK to the dispenser address.
+    //   - Coin-paid (dispenser.get_coin set, dispenser.get_tick empty): a
+    //     bare native-coin payment to the dispenser address per DISPENSER.md
+    //     ("no XChain action needed from the buyer"). Sending the chain's
+    //     native ticker through the same flow IS that payment: the flow
+    //     appends the real destination output and drops the empty action
+    //     (flows/nativePayment.js). A fiat-priced dispenser stays on the
+    //     pay-here panel, because the coin owed is fixed only when the payment
+    //     lands and the wallet cannot size it in advance.
+    //   The pay-here panel stays for coin-paid dispensers either way, for a
+    //   buyer paying from another wallet.
     const getTick = dispenser?.get_tick || '';
     const getCoin = dispenser?.get_coin || '';
     const getAmount = dispenser?.get_amount;
@@ -531,7 +533,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     );
     const isTokenPaid = Boolean(getTick) && !!getAmount;
     const isCoinPaid = !getTick && Boolean(getCoin) && !!getAmount;
-    const canBuyWithSend = isTokenPaid && buyerAddresses.length > 0 && !ownerAddress;
+    // What a buyer pays with: the payment token, or the chain's native coin.
+    // The native ticker comes from the chain descriptor, because it is what
+    // the send flow matches to recognise a native payment; the row's
+    // `get_coin` must agree, or this wallet cannot pay the dispenser at all.
+    const coinBuyable = isCoinPaid && !isFiatPriced && Boolean(feeCoinTicker)
+        && String(getCoin).toUpperCase() === feeCoinTicker;
+    const payTick = isTokenPaid ? getTick : (coinBuyable ? feeCoinTicker : '');
+    const canBuyWithSend = (isTokenPaid || coinBuyable) && buyerAddresses.length > 0 && !ownerAddress;
     const showPayHere = isCoinPaid && !ownerAddress;
 
     const fillsNum = useMemo(() => {
@@ -650,7 +659,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         walletId,
         chainId,
         address: canBuyWithSend ? buyerAddress?.address : null,
-        tick: getTick,
+        tick: payTick,
     });
 
     // Largest whole fill count the balance covers: floor(balance / price),
@@ -680,7 +689,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (!canBuyWithSend || !totalPayAmount || buyBalance == null) return null;
         const covered = compareAmounts(buyBalance, totalPayAmount);
         if (covered == null) return null;
-        const tickLabel = String(getTick || '').toUpperCase();
+        const tickLabel = String(payTick || '').toUpperCase();
         return {
             verdict: covered < 0 ? 'fail' : 'pass',
             restricted: true,
@@ -717,11 +726,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 : [],
             unverified: [{
                 check: 'dispenser_state',
-                reason: 'Only your payment-token balance was checked. The dispenser can still'
-                    + ' close or sell out before your payment confirms.',
+                reason: (isTokenPaid
+                    ? 'Only your payment-token balance was checked.'
+                    : `Only your ${tickLabel} balance was checked, and the network fee comes on top.`)
+                    + ' The dispenser can still close or sell out before your payment confirms.',
             }],
         };
-    }, [canBuyWithSend, totalPayAmount, buyBalance, getTick]);
+    }, [canBuyWithSend, totalPayAmount, buyBalance, payTick, isTokenPaid]);
     const buyUnderfunded = buyPreflight?.verdict === 'fail';
 
     const buyHw = isHwSource(buyerAddress);
@@ -736,12 +747,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (buyStage === 'submitting' || !buyerAddress) return;
         if (!buyHw && (!signerReady && buyPassword.length === 0)) return;
         if (buyHw && buyHwStatus !== 'available') return;
-        if (!isTokenPaid || !dispAddr || !totalPayAmount) return;
+        if (!payTick || !dispAddr || !totalPayAmount) return;
         // D-37: last gate before signing. The balance can also resolve (or
         // drop) while the review screen is open, so the check is repeated
         // here rather than trusted from the panel's disabled button.
         if (buyUnderfunded) {
-            setBuyError('Not enough of the payment token at this address.');
+            setBuyError(isTokenPaid
+                ? 'Not enough of the payment token at this address.'
+                : `Not enough ${payTick} at this address.`);
             return;
         }
         setBuyStage('submitting');
@@ -759,8 +772,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     signerId: buyerAddress.signerId,
                 },
                 to: dispAddr,
-                tick: getTick,
+                // The coin lane sends the native ticker: that is what makes
+                // the flow build a real payment output (see the lane note).
+                tick: payTick,
+                // Coin-scale, exact; the flow scales it to base units.
                 amount: totalPayAmount,
+                ...(feePerKb != null ? { feePerKb } : {}),
+                // History labels the pending record from this, so the buy
+                // reads as a buy and not as a plain send to a stranger.
+                actionSummary: `Buy ${fillsNum} fill${fillsNum === 1 ? '' : 's'} from dispenser #${actionIndex}:`
+                    + ` ${totalPayAmount} ${payTick}`
+                    + (totalReceive ? ` for ${totalReceive} ${giveTick || ''}`.trimEnd() : ''),
             };
             const res = buyHw
                 ? await messaging.sendAssetHw({ ...base, signerId: buyerAddress.signerId })
@@ -1257,7 +1279,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <>
                 <h2 className={styles.successTitle}>Buy submitted</h2>
                 <p className={styles.hint}>
-                    You paid {totalPayAmount} {getTick}. If the dispenser is still open
+                    You paid {totalPayAmount} {payTick}. If the dispenser is still open
                     when this confirms, you should receive {totalReceive} {giveTick}.
                 </p>
                 {txid ? (
@@ -1277,7 +1299,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return wrap(
             <form onSubmit={handleBuy} noValidate>
                 <p className={styles.summary}>
-                    Buy {fillsNum} fill{fillsNum === 1 ? '' : 's'}: pay {totalPayAmount} {getTick}
+                    Buy {fillsNum} fill{fillsNum === 1 ? '' : 's'}: pay {totalPayAmount} {payTick}
                     {' '}→ receive ~{totalReceive} {giveTick}
                 </p>
                 <dl className={styles.detailsList}>
@@ -1294,14 +1316,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <AddressText address={dispAddr || ''} />
                     </dd>
                     <dt className={styles.detailsLabel}>Per-fill price</dt>
-                    <dd className={styles.detailsValue}>{getAmount} {getTick}</dd>
+                    <dd className={styles.detailsValue}>{getAmount} {payTick}</dd>
                     <dt className={styles.detailsLabel}>Per-fill give</dt>
                     <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     <dt className={styles.detailsLabel}>Your balance</dt>
                     <dd className={styles.detailsValue}>
                         {buyBalance == null
                             ? 'Checking…'
-                            : `${formatWithThousands(buyBalance)} ${String(getTick).toUpperCase()}`}
+                            : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()}`}
                     </dd>
                 </dl>
                 {buyPreflight ? (
@@ -1317,6 +1339,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     no {giveTick} is released. This is a normal risk when buying on
                     these chains.
                 </p>
+                {feeSelector}
                 <SignCredentials
                         unlocked={signerReady}
                     fromAddress={buyerAddress}
@@ -1423,8 +1446,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // to source do not fill; the coin arrives as a plain transfer).
     const dispAddress = dispenser?.address || dispenser?.get_address;
     // D-38: a fill belongs to this dispenser only when it names it (see
-    // dispensesOfDispenser for why ticks cannot decide it).
+    // dispensesOfDispenser for why ticks cannot decide it). Each row arrives
+    // tagged `valid`; a refused dispense stays in the list so the attempt is
+    // visible, but counts for nothing.
     const matchingDispenses = flowsLib.dispensesOfDispenser(dispenses, actionIndex, dispenser);
+    const validDispenseCount = matchingDispenses.filter((d) => d.valid).length;
+    const vendedSoFar = flowsLib.vendedTotal(matchingDispenses);
 
     // PC-21: one chronological lifecycle timeline (newest first) merging
     // dispenses with the refill/edit, close, and expire events.
@@ -1441,6 +1468,53 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     ]
         .map((e) => ({ ...e, sortKey: Number(e.row.block_index ?? e.row.timestamp ?? e.row.action_index ?? 0) }))
         .sort((a, b) => b.sortKey - a.sortKey);
+
+    // Allow/block-list warnings, rendered once: in the Buy section when this
+    // wallet can pay, otherwise in the pay-here panel.
+    const listWarnings = (
+        <>
+            {/*
+              * D-148: this used to say "Any {coin} wallet can trigger a
+              * fill" unconditionally, and for a dispenser carrying an
+              * allow- or block-list that is the opposite of the truth.
+              * The gate runs in dispense.js AFTER the coin has moved -
+              * a dispenser is triggered by a BARE payment - so a buyer
+              * the list refuses is out the trigger price and the miner
+              * fee and receives nothing. Measured on Litecoin regtest:
+              * 5,005,460 sats for a refused fill, unrecoverable.
+              */}
+            {currentAllowList || currentBlockList ? (
+                <p role="alert" className={styles.warning}>
+                    <strong>This dispenser is restricted.</strong>{' '}
+                    {currentAllowList
+                        ? `Only addresses on list #${currentAllowList} can trigger a fill.`
+                        : ''}
+                    {currentAllowList && currentBlockList ? ' ' : ''}
+                    {currentBlockList
+                        ? `Addresses on list #${currentBlockList} are barred from triggering it.`
+                        : ''}
+                    {' '}A payment from an address it refuses is <strong>not returned</strong>:
+                    the {payTick || getCoin} is spent, the dispense is recorded invalid, and nothing
+                    comes back.
+                </p>
+            ) : null}
+            {/*
+              * D-162: the line above used to end "Check you are on the
+              * right side of the list before sending", which hands the
+              * buyer a lookup the wallet can do itself off the read the
+              * list picker already makes. Two verdicts, and the first
+              * does not depend on who pays: a dispenser whose own
+              * pay-to address is off its allow-list sells to nobody
+              * (D-161 from the other side), so no amount of checking
+              * your own membership helps. Silent when the read failed
+              * or the answer is "you are fine" - the generic warning
+              * above still stands on its own.
+              */}
+            {buyerListNotice ? (
+                <p role="alert" className={styles.warning}>{buyerListNotice}</p>
+            ) : null}
+        </>
+    );
 
     return wrap(
         <>
@@ -1485,6 +1559,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                     {formatNum(String(remainingFills))} left
                                 </span>
                             ) : null}
+                        </dd>
+                    </>
+                ) : null}
+                {vendedSoFar != null ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Vended</dt>
+                        <dd className={styles.detailsValue} data-testid="vended-total">
+                            {formatNum(vendedSoFar)} {giveTick || ''} in {validDispenseCount} fill{validDispenseCount === 1 ? '' : 's'}
                         </dd>
                     </>
                 ) : null}
@@ -1647,21 +1729,27 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <ul className={local.dispenseList}>
                     {lifecycleTimeline.length === 0 ? (
                         <li><div className={local.dispenseEmpty}>No lifecycle events yet.</div></li>
-                    ) : lifecycleTimeline.slice(0, 40).map((e) => (
-                        <li key={`${e.kind}-${e.row.action_index}`}>
-                            <div className={local.dispenseRow}>
-                                <span className={local.dispenseAmount}>{LIFECYCLE_LABEL[e.kind] || e.kind}</span>
-                                <span className={local.dispensePaid}>
-                                    {e.kind === 'dispense'
-                                        ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
-                                        : (e.row.expiration ? `expires ${e.row.expiration}` : `#${e.row.action_index}`)}
-                                </span>
-                                <span className={local.dispenseWhen}>
-                                    {e.row.block_index ? `block ${e.row.block_index}` : ''}
-                                </span>
-                            </div>
-                        </li>
-                    ))}
+                    ) : lifecycleTimeline.slice(0, 40).map((e) => {
+                        const refused = e.kind === 'dispense' && !e.row.valid;
+                        return (
+                            <li key={`${e.kind}-${e.row.action_index}`}>
+                                <div className={`${local.dispenseRow} ${refused ? local.dispenseInvalid : ''}`}>
+                                    <span className={local.dispenseAmount}>
+                                        {refused ? 'Dispense refused' : (LIFECYCLE_LABEL[e.kind] || e.kind)}
+                                    </span>
+                                    <span className={local.dispensePaid}>
+                                        {e.kind === 'dispense'
+                                            ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
+                                            : (e.row.expiration ? `expires ${e.row.expiration}` : `#${e.row.action_index}`)}
+                                        {refused ? <InvalidMarker row={e.row} /> : null}
+                                    </span>
+                                    <span className={local.dispenseWhen}>
+                                        {e.row.block_index ? `block ${e.row.block_index}` : ''}
+                                    </span>
+                                </div>
+                            </li>
+                        );
+                    })}
                 </ul>
             ) : (
             <ul className={local.dispenseList}>
@@ -1672,12 +1760,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
                     return (
                         <li key={String(d.action_index)}>
-                            <div className={local.dispenseRow}>
+                            <div className={`${local.dispenseRow} ${d.valid ? '' : local.dispenseInvalid}`}>
                                 <span className={local.dispenseAmount}>
                                     {formatNum(d.give_amount)} {d.give_tick || giveTick || ''}
                                 </span>
                                 <span className={local.dispensePaid}>
                                     {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}`.trim() : ''}
+                                    {d.valid ? null : <InvalidMarker row={d} />}
                                 </span>
                                 <span className={local.dispenseWhen}>
                                     {relativeTime(d.timestamp || d.block_time)}
@@ -1693,9 +1782,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
                     <p className={styles.successLabel}>Buy from this dispenser</p>
                     <p className={styles.hint}>
-                        Send {getAmount} {getTick} per fill. Tokens dispense when the SEND
-                        confirms and the dispenser is still open.
+                        {isTokenPaid
+                            ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
+                            : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
+                        {' '}confirms and the dispenser is still open.
                     </p>
+                    {listWarnings}
                     {buyerAddresses.length > 1 ? (
                         <label style={{ display: 'block', marginBottom: '0.5rem' }}>
                             <span className={styles.detailsLabel}>Pay from</span>
@@ -1735,8 +1827,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </div>
                     <p className={styles.hint} data-testid="buy-balance">
                         {buyBalance == null
-                            ? `Checking your ${String(getTick).toUpperCase()} balance…`
-                            : `${formatWithThousands(buyBalance)} ${String(getTick).toUpperCase()} available`}
+                            ? `Checking your ${String(payTick).toUpperCase()} balance…`
+                            : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
                     </p>
                     {buyPreflight ? (
                         <PreflightPanel
@@ -1748,7 +1840,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <Button
                         variant="primary"
                         onClick={() => setBuyStage('confirm')}
-                        disabled={fillsNum <= 0 || !buyerAddress || !dispAddr || buyUnderfunded}
+                        disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr || buyUnderfunded}
                     >
                         Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
                     </Button>
@@ -1758,46 +1850,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {showPayHere ? (
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
                     <p className={styles.successLabel}>Pay to buy</p>
-                    {/*
-                      * D-148: this used to say "Any {coin} wallet can trigger a
-                      * fill" unconditionally, and for a dispenser carrying an
-                      * allow- or block-list that is the opposite of the truth.
-                      * The gate runs in dispense.js AFTER the coin has moved -
-                      * a dispenser is triggered by a BARE payment - so a buyer
-                      * the list refuses is out the trigger price and the miner
-                      * fee and receives nothing. Measured on Litecoin regtest:
-                      * 5,005,460 sats for a refused fill, unrecoverable.
-                      */}
-                    {currentAllowList || currentBlockList ? (
-                        <p role="alert" className={styles.warning}>
-                            <strong>This dispenser is restricted.</strong>{' '}
-                            {currentAllowList
-                                ? `Only addresses on list #${currentAllowList} can trigger a fill.`
-                                : ''}
-                            {currentAllowList && currentBlockList ? ' ' : ''}
-                            {currentBlockList
-                                ? `Addresses on list #${currentBlockList} are barred from triggering it.`
-                                : ''}
-                            {' '}A payment from an address it refuses is <strong>not returned</strong>:
-                            the {getCoin} is spent, the dispense is recorded invalid, and nothing
-                            comes back.
-                        </p>
-                    ) : null}
-                    {/*
-                      * D-162: the line above used to end "Check you are on the
-                      * right side of the list before sending", which hands the
-                      * buyer a lookup the wallet can do itself off the read the
-                      * list picker already makes. Two verdicts, and the first
-                      * does not depend on who pays: a dispenser whose own
-                      * pay-to address is off its allow-list sells to nobody
-                      * (D-161 from the other side), so no amount of checking
-                      * your own membership helps. Silent when the read failed
-                      * or the answer is "you are fine" - the generic warning
-                      * above still stands on its own.
-                      */}
-                    {buyerListNotice ? (
-                        <p role="alert" className={styles.warning}>{buyerListNotice}</p>
-                    ) : null}
+                    {canBuyWithSend ? null : listWarnings}
                     <p className={styles.hint}>
                         This dispenser accepts bare {getCoin} payments.
                         {currentAllowList || currentBlockList
@@ -1878,8 +1931,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>
                     <p className={styles.hint}>
-                        Native-coin sending from this wallet is on the roadmap; for now,
-                        use any {getCoin} wallet to trigger the dispense.
+                        {canBuyWithSend
+                            ? `Paying from another ${getCoin} wallet works too: send the amount above to this address.`
+                            : isFiatPriced
+                                ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
+                                : `No spendable ${getCoin} address in this wallet on this chain; use any ${getCoin} wallet to trigger the dispense.`}
                     </p>
                 </section>
             ) : null}
@@ -1976,6 +2032,19 @@ function DetailRow({ label, value }) {
             <dt className={styles.detailsLabel}>{label}</dt>
             <dd className={styles.detailsValue}>{value}</dd>
         </>
+    );
+}
+
+// The marker a refused dispense carries in both lists: the word, then the
+// indexer's reason when it gave one, so the attempt stays visible without
+// reading as a fill.
+function InvalidMarker({ row }) {
+    const reason = flowsLib.dispenseInvalidReason(row);
+    return (
+        <span className={local.dispenseInvalidMarker} data-testid="dispense-invalid">
+            <span className={local.dispenseInvalidBadge}>Invalid</span>
+            {reason ? <span className={local.dispenseInvalidReason}>{reason}</span> : null}
+        </span>
     );
 }
 

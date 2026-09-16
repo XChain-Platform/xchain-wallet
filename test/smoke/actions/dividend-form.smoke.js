@@ -189,6 +189,7 @@ await assert.rejects(
     async () => flows.holdersFor({ sdkRegistry: {}, chainId: 'bitcoin-mainnet' }),
     /holdersFor: tick is required/,
 );
+// Positive path for holdersFor: invokes sdk.getHolders(tick, opts).
 
 {
     let called = null;

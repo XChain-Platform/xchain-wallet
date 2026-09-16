@@ -102,6 +102,10 @@ import exampleTis from './demoExampleTis.json' with { type: 'json' };
  * @property {string | null} callbackBlock                ISSUE v4 `CALLBACK_BLOCK`: earliest block CALLBACK may fire, null when unset (PC-03)
  * @property {string | null} allowList                    ISSUE v5 `ALLOW_LIST`: LIST action index of the address allow-list gating this tick, null when unset (PC-04)
  * @property {string | null} blockList                    ISSUE v5 `BLOCK_LIST`: LIST action index of the address block-list gating this tick, null when unset (PC-04)
+ * @property {string | null} bridgeChains                 ISSUE v7 `BRIDGE_CHAINS`: the issuer's opt-in destination list, still in its wire form (a comma list, or the '-' sentinel for "opted out"); null when the field is absent, which means UNKNOWN and not "none"
+ * @property {string | null} minDepth                     ISSUE v7 `MIN_DEPTH`: issuer-raised confirmation depth before a lock is bridged, null when unset (the coin's own resolveConfirmations then stands alone)
+ * @property {boolean | null} lockBridge                  ISSUE v7 `LOCK_BRIDGE`: BRIDGE_CHAINS and MIN_DEPTH frozen forever; null when the field is absent (unknown), never guessed false
+ * @property {boolean | null} bridged                     set by the first applied XBRIDGE lock and never cleared: a copy of this token exists on another chain; null when the field is absent (unknown)
  * @property {number | null} marketPrice                 coin-denominated price, null if unset
  * @property {number | null} marketFloor                 coin-denominated floor, null if unset
  * @property {number | null} divisibility                token decimals (0-8); null when the explorer doesn't expose this field
@@ -838,6 +842,34 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         ? String(listsRaw.allow) : null;
     const blockList = (listsRaw.block != null && String(listsRaw.block) !== '')
         ? String(listsRaw.block) : null;
+    // Bridge fields (ISSUE v7, xchain-token-bridge.md section 8 / the bridge
+    // policy spec). Each is read from where the explorer's getToken grouping
+    // loop actually puts it: every `lock_*` column is folded into `locks`, so
+    // LOCK_BRIDGE arrives as `locks.bridge`, while `bridge_chains`, `min_depth`
+    // and `bridged` match no group prefix and land in `info`. The flat column
+    // name at the row root is accepted as a fallback for dev/demo rows that
+    // never went through the explorer's grouping.
+    //
+    // Absence is UNKNOWN, and unknown stays null rather than collapsing to a
+    // default: bridgeDestinationError makes no claim on a null bridgeChains but
+    // refuses the move on an empty one, and a lockBridge guessed false would
+    // offer an edit consensus has already frozen. Nothing here is defaulted.
+    const bridgeChainsRaw = row?.info?.bridge_chains ?? row?.bridge_chains ?? null;
+    // Kept in its wire form, not pre-split: '-' means "opted out" and '' means
+    // "never set", a distinction bridgeChainsList() owns and an array would
+    // erase (String([]) === '' reads as unknown).
+    const bridgeChains = (bridgeChainsRaw != null && String(bridgeChainsRaw).trim() !== '')
+        ? String(bridgeChainsRaw).trim() : null;
+    const minDepthRaw = row?.info?.min_depth ?? row?.min_depth ?? null;
+    const minDepth = (minDepthRaw != null && String(minDepthRaw).trim() !== '')
+        ? String(minDepthRaw).trim() : null;
+    // TINYINT(1) on the wire. Read the explorer's own convention (=="1") so a
+    // string "1", a number 1 and a driver-native true all answer true, and
+    // anything else present answers false; only absence answers null.
+    const lockBridgeRaw = lockMap.bridge ?? row?.info?.lock_bridge ?? row?.lock_bridge ?? null;
+    const lockBridge = lockBridgeRaw == null ? null : truthyFlag(lockBridgeRaw);
+    const bridgedRaw = row?.info?.bridged ?? row?.bridged ?? null;
+    const bridged = bridgedRaw == null ? null : truthyFlag(bridgedRaw);
     const marketPrice = isFiniteNum(row?.market?.price) ? row.market.price : null;
     const marketFloor = isFiniteNum(row?.market?.floor) ? row.market.floor : null;
     // Divisibility lives at the top of the indexer row (or, in legacy
@@ -906,6 +938,10 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         callbackBlock,
         allowList,
         blockList,
+        bridgeChains,
+        minDepth,
+        lockBridge,
+        bridged,
         marketPrice,
         marketFloor,
         divisibility,
@@ -930,6 +966,13 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
 
 function isFiniteNum(v) {
     return typeof v === 'number' && Number.isFinite(v);
+}
+
+// A TINYINT(1) flag as it can arrive over the wire: MariaDB's driver gives a
+// number, the explorer's JSON gives a string, a hand-built dev row gives a
+// boolean. Only `true` / 1 / "1" is set; every other present value is false.
+function truthyFlag(v) {
+    return v === true || v === 1 || String(v).trim() === '1';
 }
 
 /**

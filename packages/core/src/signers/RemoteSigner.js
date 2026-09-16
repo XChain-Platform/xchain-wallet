@@ -117,11 +117,17 @@ export class RemoteSigner extends Signer {
     }
 
     async signPsbt(params) {
-        // Refuse HERE rather than let it travel and fail at the device, and refuse
-        // in the SAME words the device signers use: the shells register a concrete
-        // LedgerSigner/TrezorSigner as the live signer, so this transport is not
-        // always in the path. See assertCannotSignEnvelopeReveal for why the guard
-        // covers envelopeReveal and not the post-broadcast `reveal` flag.
+        // A Taproot envelope reveal is a BIP341 script-path spend, and no shipping
+        // hardware firmware signs one through this transport. Refuse HERE rather
+        // than let it travel and fail at the device: by then the caller may already
+        // have broadcast the commit, and completing only the commit strands the
+        // funds. Refuse in the SAME words the device signers use, because the
+        // shells register a concrete LedgerSigner/TrezorSigner as the live signer
+        // and this transport is not always in the path. The signer-capability gate
+        // (flows/signerCapability.js) should keep hardware off this path entirely;
+        // this is the backstop for when it does not. See
+        // assertCannotSignEnvelopeReveal for why the guard covers envelopeReveal
+        // and not the post-broadcast `reveal` flag.
         assertCannotSignEnvelopeReveal(this._id, params);
         const res = await this._callOrThrow('signPsbt', params);
         if (!res || typeof res.txHex !== 'string' || typeof res.txid !== 'string') {

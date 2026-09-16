@@ -27,7 +27,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -90,6 +90,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the source default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
 
@@ -131,12 +136,20 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                setActiveByChain(active || {});
                 if (!byChain || !(byChain[chainId] || []).length) {
                     setLoadError('No address on this chain yet. Use Receive to generate one first.');
                 }
@@ -162,28 +175,22 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }, [messaging, chainId, tick]);
 
     // Signing address: the token's owner when the wallet holds it
-    // (the LINK is only honoured from the owner), else the newest
-    // external HD address so the FILE leg still works.
+    // (the LINK is only honoured from the owner), else the same default
+    // as Send and every other spend-from-balance form so the FILE leg
+    // still works: the chain's active address, else the newest HD
+    // external, else the first remaining record (a hardware-only wallet).
+    // A dispenser-delegated address is never the default.
     useEffect(() => {
-        if (!addressesByChain || fromAddressId) return;
+        if (!addressesByChain || !activeByChain || fromAddressId) return;
         const all = addressesByChain[chainId] || [];
         if (issuerAddress) {
             const match = all.find((a) => a.address === issuerAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
-        const hd = all.filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-        );
-        const pool = hd.length > 0 ? hd : all;
-        if (pool.length > 0) {
-            const sorted = [...pool].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        }
-    }, [addressesByChain, chainId, fromAddressId, issuerAddress]);
+        const funding = all.filter((a) => a.role !== 'dispenser');
+        const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
+        if (picked) setFromAddressId(picked);
+    }, [addressesByChain, activeByChain, chainId, fromAddressId, issuerAddress]);
 
     useEffect(() => {
         if (stage === 'review-file' || stage === 'review-link'

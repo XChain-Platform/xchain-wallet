@@ -191,6 +191,19 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     chainTip={chainTip}
                     indexerWatermark={indexerWatermark}
                     walletId={walletId}
+                    onDismissFailed={typeof messaging?.dismissFailedPendingTx === 'function'
+                        ? async (pendingTxId) => {
+                            // The record is gone once this resolves, so the
+                            // page has nothing left to show: back to the list,
+                            // which re-reads on focus.
+                            try {
+                                await messaging.dismissFailedPendingTx({ pendingTxId });
+                            } catch {
+                                return;
+                            }
+                            if (typeof onBack === 'function') onBack();
+                        }
+                        : undefined}
                 />
             </div>
         </Screen>

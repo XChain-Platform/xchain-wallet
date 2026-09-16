@@ -376,45 +376,7 @@ export async function publishLabelsNow({
         : await defaultPickFromAddress({ vault, walletId, descriptor });
     if (!fromAddress) throw new NoFundedAddressError(walletId, chainId);
 
-    // Decrypt mnemonic, derive seed for the commitment key. Both buffers
-    // are zeroed in the finally so they never outlive this scope.
-    // retainMasterKey hands back a fresh copy of the derived master key
-    // (ours to zero, unlike a signer's) so a stored passphrase (§15.6) can
-    // be opened without a second Argon2id round.
-    let sessionMasterKey = null;
-    const plaintext = await decryptWalletSeed({
-        password,
-        encryptedSeed: wallet.encryptedSeed,
-        kdfParams: wallet.kdfParams,
-        aad: wallet.aad,
-        retainMasterKey: (k) => { sessionMasterKey = k; },
-    });
-    let seed;
-    let passphraseBytes = null;
-    try {
-        const mnemonic = new TextDecoder().decode(plaintext);
-        // The stored passphrase always wins. A non-null encryptedPassphrase
-        // means the 25th word was captured once at setup; deriving from a
-        // caller-supplied bip39Passphrase instead (the old typed-at-unlock
-        // path) would silently compute the WRONG commitment key and publish
-        // labels under the wrong address, so the stored value overrides
-        // whatever the caller passed, ignoring it entirely.
-        let effectivePassphrase = bip39Passphrase;
-        if (wallet.encryptedPassphrase != null) {
-            passphraseBytes = await decryptWalletPassphrase({
-                masterKey: sessionMasterKey,
-                encryptedPassphrase: wallet.encryptedPassphrase,
-            });
-            effectivePassphrase = new TextDecoder().decode(passphraseBytes);
-        }
-        seed = format === 'counterwallet-legacy'
-            ? counterwalletMnemonicToSeedBytes(mnemonic)
-            : await bip39MnemonicToSeed(mnemonic, effectivePassphrase);
-    } finally {
-        plaintext.fill(0);
-        if (passphraseBytes) passphraseBytes.fill(0);
-        if (sessionMasterKey) sessionMasterKey.fill(0);
-    }
+    const seed = await deriveLabelSyncSeed({ wallet, password, bip39Passphrase });
 
     let payload;
     try {
@@ -476,6 +438,292 @@ export async function publishLabelsNow({
         sizeBytes,
         fromAddress: fromAddress.address,
     };
+}
+
+/**
+ * Open a software wallet's seed for the commitment key. Every buffer on the
+ * way there (plaintext mnemonic, stored passphrase, master key) is zeroed
+ * before this returns; the seed itself is the caller's to zero.
+ *
+ * The stored passphrase always wins. A non-null encryptedPassphrase means
+ * the 25th word was captured once at setup; deriving from a caller-supplied
+ * bip39Passphrase instead (the old typed-at-unlock path) would silently
+ * compute the WRONG commitment key and publish labels under the wrong name,
+ * or fail to find them on restore, so the stored value overrides whatever
+ * the caller passed. retainMasterKey hands back a fresh copy of the derived
+ * master key (ours to zero, unlike a signer's) so that passphrase can be
+ * opened without a second Argon2id round.
+ *
+ * @param {{ wallet: import('../schemas/wallet.js').Wallet, password: string, bip39Passphrase?: string }} opts
+ * @returns {Promise<Uint8Array>}
+ */
+async function deriveLabelSyncSeed({ wallet, password, bip39Passphrase = '' }) {
+    const format = wallet.format ?? 'bip39';
+    let sessionMasterKey = null;
+    const plaintext = await decryptWalletSeed({
+        password,
+        encryptedSeed: wallet.encryptedSeed,
+        kdfParams: wallet.kdfParams,
+        aad: wallet.aad,
+        retainMasterKey: (k) => { sessionMasterKey = k; },
+    });
+    let passphraseBytes = null;
+    try {
+        const mnemonic = new TextDecoder().decode(plaintext);
+        let effectivePassphrase = bip39Passphrase;
+        if (wallet.encryptedPassphrase != null) {
+            passphraseBytes = await decryptWalletPassphrase({
+                masterKey: sessionMasterKey,
+                encryptedPassphrase: wallet.encryptedPassphrase,
+            });
+            effectivePassphrase = new TextDecoder().decode(passphraseBytes);
+        }
+        return format === 'counterwallet-legacy'
+            ? counterwalletMnemonicToSeedBytes(mnemonic)
+            : await bip39MnemonicToSeed(mnemonic, effectivePassphrase);
+    } finally {
+        plaintext.fill(0);
+        if (passphraseBytes) passphraseBytes.fill(0);
+        if (sessionMasterKey) sessionMasterKey.fill(0);
+    }
+}
+
+/**
+ * @typedef {Object} RestoreLabelSyncOpts
+ * @property {import('../storage/Vault.js').Vault} vault
+ * @property {string} walletId                the wallet importMnemonic just persisted
+ * @property {string} password
+ * @property {string} [bip39Passphrase]
+ * @property {string[]} chainIds              chains to search; the publish went to one of the wallet's active chains
+ * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
+ * @property {'overwrite' | 'preserve'} [onConflict]   default 'overwrite'; a fresh import has nothing to preserve
+ * @property {number} [maxCandidates]
+ * @property {number} [perChainTimeoutMs]  default LABEL_SYNC_RESTORE_CHAIN_TIMEOUT_MS; a chain past it is reported as an error
+ */
+
+/** How long one chain's explorer may take before the restore stops waiting on it. */
+export const LABEL_SYNC_RESTORE_CHAIN_TIMEOUT_MS = 15_000;
+
+/**
+ * The chains a restore should search: the wallet's active chains first, then
+ * every other chain the registry knows. A publish lands on one chain of the
+ * network the user was on at the time, and a fresh import always starts on
+ * mainnet, so a search limited to the active set would miss a payload
+ * published on testnet (the tester's case) until the user happened to switch
+ * networks and re-import. The searches run concurrently under a per-chain
+ * timeout, so the extra chains cost one round trip, not one each.
+ *
+ * @param {{ supportedChains?: () => Array<{ id: string }> } | null | undefined} chainRegistry
+ * @param {string[]} [activeChainIds]
+ * @returns {string[]}
+ */
+export function labelSyncSearchChainIds(chainRegistry, activeChainIds = []) {
+    const out = [];
+    const seen = new Set();
+    const add = (id) => {
+        if (typeof id !== 'string' || id.length === 0 || seen.has(id)) return;
+        seen.add(id);
+        out.push(id);
+    };
+    for (const id of Array.isArray(activeChainIds) ? activeChainIds : []) add(id);
+    let known = [];
+    try {
+        known = typeof chainRegistry?.supportedChains === 'function' ? chainRegistry.supportedChains() : [];
+    } catch {
+        known = [];
+    }
+    for (const d of Array.isArray(known) ? known : []) add(d?.id);
+    return out;
+}
+
+/**
+ * @typedef {Object} RestoreLabelSyncResult
+ * @property {boolean} restored               a payload authenticated and was applied
+ * @property {'wif-only' | 'no-chains' | null} skipped   why no search ran, when none did
+ * @property {string | null} chainId          chain the applied payload came from
+ * @property {string | null} updatedAt        the applied payload's own timestamp
+ * @property {string[]} searchedChainIds      chains the search actually reached
+ * @property {Array<{ chainId: string, message: string }>} errors   chains whose explorer read threw
+ * @property {number} addressesUpdated
+ * @property {number} addressesSkipped
+ * @property {number} addressesMissing
+ * @property {number} contactsAdded
+ * @property {number} contactsUpdated
+ * @property {number} contactsSkipped
+ */
+
+const EMPTY_APPLY = {
+    addressesUpdated: 0,
+    addressesSkipped: 0,
+    addressesMissing: 0,
+    contactsAdded: 0,
+    contactsUpdated: 0,
+    contactsSkipped: 0,
+};
+
+/**
+ * §19.5.2 step 5, the restore half: after a from-seed import, look for the
+ * labels + contacts this wallet published earlier and write them into the
+ * fresh vault. A wallet's contacts live only in the vault, and a browser
+ * that purges site data on quit erases the vault along with the wallet; a
+ * tester re-imported from seed and found every contact gone, because the
+ * publish half shipped without anyone calling this.
+ *
+ * The search covers every chain the caller names: a publish lands on ONE
+ * chain and the user does not have to remember which. When more than one
+ * chain answers (the user published on two chains at different times) the
+ * payload with the newest `updatedAt` wins, since each publish carries the
+ * whole address book.
+ *
+ * BEST-EFFORT BY CONTRACT. This runs inside the import, and an import that
+ * has already persisted the wallet must not fail because an explorer was
+ * unreachable. Explorer and network errors are collected per chain in
+ * `errors` and never thrown; a chain whose SDK is missing or lacks the FILE
+ * reads is skipped silently. Only invalid arguments throw. A wif-only wallet
+ * has no seed to derive the commitment key from and is reported as skipped.
+ *
+ * @param {RestoreLabelSyncOpts} opts
+ * @returns {Promise<RestoreLabelSyncResult>}
+ */
+export async function restoreLabelSyncAfterImport({
+    vault,
+    walletId,
+    password,
+    bip39Passphrase = '',
+    chainIds,
+    sdkRegistry,
+    onConflict = 'overwrite',
+    maxCandidates = LABEL_SYNC_MAX_CANDIDATES,
+    perChainTimeoutMs = LABEL_SYNC_RESTORE_CHAIN_TIMEOUT_MS,
+}) {
+    if (!vault) throw new Error('restoreLabelSyncAfterImport: vault is required');
+    if (typeof walletId !== 'string' || walletId.length === 0) {
+        throw new Error('restoreLabelSyncAfterImport: walletId is required');
+    }
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('restoreLabelSyncAfterImport: password is required');
+    }
+    if (!Array.isArray(chainIds)) {
+        throw new Error('restoreLabelSyncAfterImport: chainIds must be an array');
+    }
+    if (!sdkRegistry || typeof sdkRegistry.get !== 'function') {
+        throw new Error('restoreLabelSyncAfterImport: sdkRegistry with get() is required');
+    }
+
+    const base = {
+        restored: false,
+        skipped: /** @type {'wif-only' | 'no-chains' | null} */ (null),
+        chainId: /** @type {string | null} */ (null),
+        updatedAt: /** @type {string | null} */ (null),
+        searchedChainIds: /** @type {string[]} */ ([]),
+        errors: /** @type {Array<{ chainId: string, message: string }>} */ ([]),
+        ...EMPTY_APPLY,
+    };
+
+    const wallet = await vault.wallets.get(walletId);
+    if (!wallet) throw new WalletNotFoundError(walletId);
+    if ((wallet.format ?? 'bip39') === 'wif-only') {
+        return { ...base, skipped: 'wif-only' };
+    }
+    const uniqueChainIds = [...new Set(chainIds.filter((id) => typeof id === 'string' && id.length > 0))];
+    if (uniqueChainIds.length === 0) {
+        return { ...base, skipped: 'no-chains' };
+    }
+
+    // One commitment key for every chain: the seed is opened once and the
+    // key is zeroed on the way out whatever happens in between.
+    const seed = await deriveLabelSyncSeed({ wallet, password, bip39Passphrase });
+    let commitmentKey;
+    try {
+        commitmentKey = computeLabelSyncCommitmentKey(seed);
+    } finally {
+        seed.fill(0);
+    }
+
+    /** @type {{ chainId: string, body: import('../crypto/labelSync.js').LabelSyncBody } | null} */
+    let newest = null;
+    try {
+        // Every chain at once, each under its own clock: the search now spans
+        // every network the registry knows, and an explorer that is down for
+        // this venue (mainnet's, from a regtest box) must cost one timeout,
+        // not one per chain in sequence.
+        const searches = [];
+        for (const chainId of uniqueChainIds) {
+            let sdk;
+            try {
+                sdk = sdkRegistry.get(chainId);
+            } catch {
+                sdk = null;
+            }
+            if (!sdk || typeof sdk.getFiles !== 'function' || typeof sdk.getGatedFileRaw !== 'function') {
+                continue;
+            }
+            base.searchedChainIds.push(chainId);
+            searches.push(
+                withTimeout(
+                    fetchAndDecryptLabelSync({ sdk, commitmentKey, maxCandidates }),
+                    perChainTimeoutMs,
+                    `explorer did not answer within ${Math.round(perChainTimeoutMs / 1000)}s`,
+                ).then(
+                    (body) => ({ chainId, body, error: null }),
+                    (err) => ({ chainId, body: null, error: err && err.message ? String(err.message) : String(err) }),
+                ),
+            );
+        }
+        for (const r of await Promise.all(searches)) {
+            if (r.error !== null) {
+                base.errors.push({ chainId: r.chainId, message: r.error });
+                continue;
+            }
+            if (!r.body) continue;
+            if (!newest || isoToMs(r.body.updatedAt) > isoToMs(newest.body.updatedAt)) {
+                newest = { chainId: r.chainId, body: r.body };
+            }
+        }
+    } finally {
+        commitmentKey.fill(0);
+    }
+
+    if (!newest) return base;
+
+    const applied = await applyLabelSyncPayload({
+        vault,
+        walletId,
+        payload: newest.body,
+        onConflict,
+    });
+    return {
+        ...base,
+        ...applied,
+        restored: true,
+        chainId: newest.chainId,
+        updatedAt: typeof newest.body.updatedAt === 'string' ? newest.body.updatedAt : null,
+    };
+}
+
+/** An unparseable or missing timestamp sorts oldest, never ahead of a real one. */
+function isoToMs(iso) {
+    const ms = Date.parse(String(iso ?? ''));
+    return Number.isFinite(ms) ? ms : -Infinity;
+}
+
+/**
+ * Settle `promise` or reject with `message` after `ms`. The timer is cleared
+ * either way so a fast answer does not leave a handle behind.
+ *
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @param {string} message
+ * @returns {Promise<T>}
+ */
+function withTimeout(promise, ms, message) {
+    if (!Number.isFinite(ms) || ms <= 0) return promise;
+    let timer;
+    const clock = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+    return Promise.race([promise, clock]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -602,27 +850,29 @@ export async function fetchAndDecryptLabelSync({
         );
 
         for (const row of candidates) {
-            let ciphertext;
+            let served;
             try {
                 // Same endpoint serves gated and non-gated FILE bytes
                 // (/{COIN}/api/file/{index}/raw); the SDK method is named for
                 // its first caller. A label payload is never gated.
-                ciphertext = toBytes(await sdk.getGatedFileRaw(String(row.actionIndex)));
+                served = toBytes(await sdk.getGatedFileRaw(String(row.actionIndex)));
             } catch {
                 // One unreadable row must not sink the restore: a later
                 // candidate may still be the wallet's own payload.
                 continue;
             }
-            if (!ciphertext || ciphertext.length === 0) continue;
-            // Anyone can publish arbitrary bytes under this name. Refuse to
-            // spend AES work on anything larger than a payload could legally be.
-            if (ciphertext.length > ENVELOPE_MAX_PAYLOAD) continue;
-            try {
-                return await decodeLabelSyncPayload(key, ciphertext);
-            } catch {
-                // Failed GCM auth (or a foreign payload version) means the row
-                // is not ours. That is the expected miss, not an error.
-                continue;
+            if (!served || served.length === 0) continue;
+            for (const ciphertext of ciphertextForms(served)) {
+                // Anyone can publish arbitrary bytes under this name. Refuse to
+                // spend AES work on anything larger than a payload could legally be.
+                if (ciphertext.length > ENVELOPE_MAX_PAYLOAD) continue;
+                try {
+                    return await decodeLabelSyncPayload(key, ciphertext);
+                } catch {
+                    // Failed GCM auth (or a foreign payload version) means the row
+                    // is not ours. That is the expected miss, not an error.
+                    continue;
+                }
             }
         }
         return null;
@@ -683,7 +933,47 @@ function toBytes(value) {
     if (ArrayBuffer.isView(value)) {
         return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     }
+    if (typeof value === 'string') return new TextEncoder().encode(value);
     return null;
+}
+
+/**
+ * The ciphertexts one served body might be, most likely first.
+ *
+ * The explorer's raw route serves a NON-gated FILE in its stored form, and
+ * the decoder stores a FILE's payload as the hex text the publish put on the
+ * wire (`rawData: bytesToHex(ciphertext)`), so what comes back for a label
+ * payload is 2N ASCII hex characters, not N bytes. Measured on regtest
+ * 2026-09-12: the first driven restore found its row, read 2066 bytes of hex
+ * text, failed GCM on the text and reported "never published". A gated FILE
+ * takes a different column and comes back as bytes, and a future explorer
+ * may decode before serving, so both forms are tried: the hex decoding first
+ * when the body reads as hex, then the bytes as served. A real ciphertext
+ * (random 12-byte IV, then AES output) is never all hex digits at any length
+ * a payload can have, so the decode never shadows a byte-form answer.
+ *
+ * @param {Uint8Array} served
+ * @returns {Uint8Array[]}
+ */
+function ciphertextForms(served) {
+    const forms = [];
+    if (served.length >= 2 && served.length % 2 === 0) {
+        let hex = true;
+        for (let i = 0; i < served.length; i += 1) {
+            const c = served[i];
+            const isHex = (c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x46) || (c >= 0x61 && c <= 0x66);
+            if (!isHex) { hex = false; break; }
+        }
+        if (hex) {
+            const out = new Uint8Array(served.length / 2);
+            for (let i = 0; i < out.length; i += 1) {
+                out[i] = parseInt(String.fromCharCode(served[2 * i], served[2 * i + 1]), 16);
+            }
+            forms.push(out);
+        }
+    }
+    forms.push(served);
+    return forms;
 }
 
 // --- Auto-sync scheduler (§19.5.2 cadence rules) -------------------------

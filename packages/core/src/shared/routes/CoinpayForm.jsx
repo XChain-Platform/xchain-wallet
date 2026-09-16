@@ -23,7 +23,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
-import { obligationBaseUnits } from '../../market/obligationStatus.js';
+import { baseUnitsToCoinText, obligationBaseUnits } from '../../market/obligationStatus.js';
 import { classifyObligation } from '../../market/obligationStatus.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -192,6 +192,10 @@ export function CoinpayForm({
             expiration: Number.isFinite(expiration) ? expiration : null,
         };
     }, [selected]);
+    // Display copy for the amount: coin scale with the ticker, matching the
+    // Payments-due card. summary.coinAmount is base units and must never be
+    // shown next to the ticker as if it were coins.
+    const amountLabel = coinAmountLabel(summary?.coinAmount, coinTicker);
 
     // Network fee: Low / Normal / Fast / Custom, editable via FeeSelector on
     // the obligation-confirm stage. `feeEstimate` backs the slider readout and
@@ -403,7 +407,7 @@ export function CoinpayForm({
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Pay {summary.coinAmount} {coinTicker || 'base units'} to complete
+                    Pay {amountLabel} to complete
                     matched order #{summary.actionIndex}.
                 </p>
                 <dl className={styles.detailsList}>
@@ -425,7 +429,7 @@ export function CoinpayForm({
                     />
                     <DetailRow
                         label="Amount"
-                        value={`${summary.coinAmount} ${coinTicker || 'base units'}`}
+                        value={amountLabel}
                     />
                     {coinpayExpiryText(summary.expiration) ? (
                         <DetailRow label="Expires" value={coinpayExpiryText(summary.expiration)} />
@@ -577,7 +581,7 @@ export function CoinpayForm({
                         </dd>
                         <dt className={styles.detailsLabel}>Amount</dt>
                         <dd className={styles.detailsValue}>
-                            {summary.coinAmount} {coinTicker || 'base units'}
+                            {amountLabel}
                         </dd>
                         {coinpayExpiryText(summary.expiration) ? (
                             <>
@@ -631,23 +635,31 @@ function DetailRow({ label, value }) {
     );
 }
 
-// Parse a server-supplied base-unit coin amount into a safe positive
-// integer, or null. Rejects non-integer shapes and values past
-// Number.MAX_SAFE_INTEGER so a large-DOGE obligation can't be rounded
-// into a wrong native-coin output.
+// Parse an obligation's coin_amount into a safe positive base-unit
+// integer, or null. Rejects values past Number.MAX_SAFE_INTEGER so a
+// large-DOGE obligation can't be rounded into a wrong native-coin output.
 function safeBaseUnitAmount(raw) {
-    // The explorer serves an obligation's coin_amount as the match's DECIMAL
-    // coin figure on current venues and as base units on older ones, so parse
-    // both shapes through the one canonical reader (obligationBaseUnits) and
-    // keep this function's own contract: a positive, exactly-representable
-    // base-unit NUMBER, or null. Rejecting the decimal is what left the Pay
-    // screen refusing every real obligation with "a coin amount too large to
-    // pay safely" - D-137.
+    // The explorer serves the obligation's coin_amount as the match's DECIMAL
+    // coin figure in every shape ("10" is ten coins), so it goes through the
+    // one canonical reader (obligationBaseUnits) and this function keeps its
+    // own contract: a positive, exactly-representable base-unit NUMBER, or
+    // null.
     const base = obligationBaseUnits(raw);
     if (base === null || base <= 0n) return null;
     const n = Number(base);
     if (!Number.isSafeInteger(n)) return null;
     return n;
+}
+
+// Coin-scale copy for a base-unit amount, with the ticker: "10 DOGE" for
+// 1000000000. Falls back to a labelled base-unit figure rather than a
+// coin-labelled wrong number when the amount cannot be converted.
+function coinAmountLabel(baseUnits, coinTicker) {
+    if (baseUnits == null) return null;
+    const coinText = baseUnitsToCoinText(String(baseUnits));
+    return coinText != null
+        ? `${coinText} ${coinTicker || 'coins'}`
+        : `${baseUnits} base units`;
 }
 
 function isPendingForPayer(row, address) {

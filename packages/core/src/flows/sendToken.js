@@ -84,6 +84,7 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
  * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
+ * @property {string} [actionSummary]                 PendingTx label in place of the generic "Send X TICK to ..." (a dispenser purchase names the dispenser so History reads as a buy)
  * @property {import('../signers/Signer.js').Signer} [signer]    pre-built signer (RemoteSigner for HW)
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
@@ -143,10 +144,13 @@ export async function sendToken(opts) {
     }
 
     const gatedTail = gatedPlan ? ' + gated unlock key handoff' : '';
+    const summary = typeof opts.actionSummary === 'string' && opts.actionSummary.trim()
+        ? opts.actionSummary.trim()
+        : summarizeSendLegs(legs);
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: legs[0].to,
-        actionSummary: `${summarizeSendLegs(legs)}${gatedTail}`,
+        actionSummary: `${summary}${gatedTail}`,
     };
 
     // D-9: a native-coin send must pay the recipient a real output; the SEND

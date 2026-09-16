@@ -23,7 +23,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -76,6 +76,10 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId]; `{}` when the host has none.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any>} */ ({}),
+    );
     const [actionsList, setActionsList] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -95,10 +99,15 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
         Promise.all([
             messaging.getAddressesByChain(walletId),
             messaging.listActions({ chainId: getAnyChainId() }).catch(() => null),
+            // Best-effort: a host without the call still yields a usable form.
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
         ])
-            .then(([byChain, actions]) => {
+            .then(([byChain, actions, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                setActiveByChain(active || {});
                 if (Array.isArray(actions) && actions.length > 0) {
                     setActionsList(actions);
                 } else {
@@ -129,7 +138,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                     setRows(initialRows.map((r) => ({
                         id: newRowId(),
                         chainId: r.chainId,
-                        fromAddressId: pickDefaultAddressId(byChain[r.chainId] || []),
+                        fromAddressId: pickDefaultAddressId(byChain[r.chainId] || [], active?.[r.chainId]),
                         action: r.action,
                         paramsJson: JSON.stringify(r.params || {}, null, 2),
                         status: 'pending',
@@ -137,7 +146,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                         error: null,
                     })));
                 } else {
-                    setRows([blankRow(chains[0], byChain)]);
+                    setRows([blankRow(chains[0], byChain, active)]);
                 }
             })
             .catch((err) => {
@@ -159,7 +168,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
 
     const addRow = () => {
         if (chainsWithAddresses.length === 0) return;
-        setRows((rs) => [...rs, blankRow(chainsWithAddresses[0], addressesByChain)]);
+        setRows((rs) => [...rs, blankRow(chainsWithAddresses[0], addressesByChain, activeByChain)]);
     };
 
     const removeRow = (index) => {
@@ -480,6 +489,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                             row={row}
                             chainIds={chainsWithAddresses}
                             addressesByChain={addressesByChain}
+                            activeByChain={activeByChain}
                             actionsList={actionsList}
                             onChange={(patch) => updateRow(i, patch)}
                             onRemove={() => removeRow(i)}
@@ -510,7 +520,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
     );
 }
 
-function RowEditor({ index, row, chainIds, addressesByChain, actionsList, onChange, onRemove, canRemove }) {
+function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, actionsList, onChange, onRemove, canRemove }) {
     const descriptor = row.chainId ? chainRegistry.get(row.chainId) : null;
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
 
@@ -536,7 +546,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, actionsList, onChan
                         const newAddrs = (addressesByChain[cid] || []);
                         onChange({
                             chainId: cid,
-                            fromAddressId: pickDefaultAddressId(newAddrs),
+                            fromAddressId: pickDefaultAddressId(newAddrs, activeByChain?.[cid]),
                         });
                     }}
                 >
@@ -677,12 +687,12 @@ function StatusPill({ status }) {
  * }} Row
  */
 
-function blankRow(chainId, addressesByChain) {
+function blankRow(chainId, addressesByChain, activeByChain) {
     const addrs = (addressesByChain && addressesByChain[chainId]) || [];
     return {
         id: newRowId(),
         chainId,
-        fromAddressId: pickDefaultAddressId(addrs),
+        fromAddressId: pickDefaultAddressId(addrs, activeByChain?.[chainId]),
         action: '',
         paramsJson: '{\n  "VERSION": "0"\n}',
         status: 'pending',
@@ -691,18 +701,14 @@ function blankRow(chainId, addressesByChain) {
     };
 }
 
-function pickDefaultAddressId(addrs) {
+// Default from-address for a chain: the same resolution Send uses (active
+// address, else newest HD external), never a dispenser-delegated address,
+// and the first remaining record when the chain holds no HD address at all
+// (a hardware-only wallet).
+function pickDefaultAddressId(addrs, activeEntry) {
     if (!Array.isArray(addrs) || addrs.length === 0) return null;
-    const hd = addrs.filter(
-        (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-    );
-    const pool = hd.length > 0 ? hd : addrs;
-    const sorted = [...pool].sort((a, b) => {
-        const ai = (externalIndexOf(a.derivationPath) ?? -1);
-        const bi = (externalIndexOf(b.derivationPath) ?? -1);
-        return bi - ai;
-    });
-    return sorted[0].id;
+    const funding = addrs.filter((a) => a.role !== 'dispenser');
+    return preferredSourceId(funding, activeEntry) || funding[0]?.id || addrs[0].id;
 }
 
 function parseParamsJson(json) {

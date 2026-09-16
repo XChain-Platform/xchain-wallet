@@ -73,6 +73,7 @@ import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
 import { TokenAdminForm } from '@xchain-wallet/core/shared/routes/TokenAdminForm.jsx';
+import { BridgeMoveForm } from '@xchain-wallet/core/shared/routes/BridgeMoveForm.jsx';
 import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
 import { SleepForm } from '@xchain-wallet/core/shared/routes/SleepForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
@@ -137,6 +138,7 @@ import { ProjectRosterForm } from '@xchain-wallet/core/shared/routes/ProjectRost
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { BatchComposerForm } from '@xchain-wallet/core/shared/routes/BatchComposerForm.jsx';
 import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
+import { CrossChainOrderForm } from '@xchain-wallet/core/shared/routes/CrossChainOrderForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
 import { MultisigCreate } from '@xchain-wallet/core/shared/routes/MultisigCreate.jsx';
 import { MultisigSigningSession } from '@xchain-wallet/core/shared/routes/MultisigSigningSession.jsx';
@@ -212,7 +214,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -849,6 +851,10 @@ function AppInner() {
                     || unlockedView === 'mint-settings'
                     || unlockedView === 'callback-settings'
                     || unlockedView === 'access-lists'
+                    // ISSUE v7 bridgeability (BRIDGE_CHAINS / MIN_DEPTH /
+                    // LOCK_BRIDGE). Same form, one more mode, so it inherits the
+                    // ManageToken prefill and the shared Back behaviour.
+                    || unlockedView === 'bridge-settings'
                     || unlockedView === 'description'
                     || unlockedView === 'transfer')
                 && activeWalletId
@@ -860,6 +866,20 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
+                        onBack={formBack}
+                    />
+                );
+            }
+            // XBRIDGE move (lock on the origin chain, burn back everywhere
+            // else). The form picks the leg from the chain it is on, so the
+            // route hands it only the token context and lets it decide.
+            if (unlockedView === 'bridge-move' && activeWalletId) {
+                return (
+                    <BridgeMoveForm
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        initialChainId={prefillChainId}
+                        initialTick={prefillTick}
                         onBack={formBack}
                     />
                 );
@@ -1318,6 +1338,15 @@ function AppInner() {
                     <CrossChainSwapForm
                         walletId={activeWalletId}
                         onBack={() => setUnlockedView('actions')}
+                    />
+                );
+            }
+            if (unlockedView === 'cross-chain-order' && activeWalletId) {
+                return (
+                    <CrossChainOrderForm
+                        walletId={activeWalletId}
+                        onBack={() => setUnlockedView('actions')}
+                        onManageOrders={() => setUnlockedView('my-orders')}
                     />
                 );
             }
@@ -1949,6 +1978,7 @@ function AppInner() {
                         onCallbackSettings={() => openForm('callback-settings')}
                         onExecuteCallback={() => openForm('execute-callback')}
                         onAccessLists={() => openForm('access-lists')}
+                        onBridgeSettings={() => openForm('bridge-settings')}
                         onPauseToken={() => openForm('pause-token')}
                         onUpdateDescription={() => openForm('description')}
                         onAttachContent={() => openForm('attach-content')}
@@ -2011,7 +2041,14 @@ function AppInner() {
                             onParallel: () => setUnlockedView('parallel-compose'),
                             onBatch: () => setUnlockedView('batch-compose'),
                             onCrossChainSwap: () => setUnlockedView('cross-chain-swap'),
+                            onCrossChainOrder: () => setUnlockedView('cross-chain-order'),
                             onCrossChainTemplates: () => setUnlockedView('cross-chain-templates'),
+                            // The two XBRIDGE surfaces. Both are catalogue
+                            // entries now, so the shell arms them the same way
+                            // as every other row instead of appending its own
+                            // copy of the label and description.
+                            onBridgeMove: () => setUnlockedView('bridge-move'),
+                            onBridgeSettings: () => setUnlockedView('bridge-settings'),
                             onMultisigCreate: hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined,
                             onMultisigSign: hasBtcAddress ? () => setUnlockedView('multisig-sign') : undefined,
                             onCoSignerAccounts: hasBtcAddress ? () => setUnlockedView('cosigner-accounts') : undefined,

@@ -28,7 +28,7 @@ import {
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -84,6 +84,11 @@ export function LinkForm({ walletId, onBack }) {
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the source default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [chain1Id, setChain1Id] = useState(/** @type {string | null} */ (null));
@@ -109,12 +114,20 @@ export function LinkForm({ walletId, onBack }) {
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
     );
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
+                setActiveByChain(active || {});
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
@@ -136,28 +149,22 @@ export function LinkForm({ walletId, onBack }) {
     const submitChainId = submitOn === 'chain1' ? chain1Id : chain2Id;
 
     // The signing address must belong to the chain we're submitting
-    // the LINK on. Reset fromAddressId when submitChainId changes.
+    // the LINK on. Reset fromAddressId when submitChainId changes, to the
+    // same default as Send and every other spend-from-balance form: the
+    // chain's active address, else the newest HD external, else the first
+    // remaining record (a hardware-only wallet). A dispenser-delegated
+    // address is never the default; it vends rather than funds.
     useEffect(() => {
-        if (!addressesByChain || !submitChainId) {
+        if (!addressesByChain || !activeByChain || !submitChainId) {
             setFromAddressId(null);
             return;
         }
-        const addrs = addressesByChain[submitChainId] || [];
-        const hd = addrs.filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
+        const all = addressesByChain[submitChainId] || [];
+        const funding = all.filter((a) => a.role !== 'dispenser');
+        setFromAddressId(
+            preferredSourceId(funding, activeByChain[submitChainId]) || funding[0]?.id || all[0]?.id || null,
         );
-        const pool = hd.length > 0 ? hd : addrs;
-        if (pool.length > 0) {
-            const sorted = [...pool].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [submitChainId, addressesByChain]);
+    }, [submitChainId, addressesByChain, activeByChain]);
 
     const fromAddress = useMemo(() => {
         if (!addressesByChain || !fromAddressId || !submitChainId) return null;

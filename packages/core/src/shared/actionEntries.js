@@ -200,10 +200,33 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         description: 'Open a swap that gives a token on one chain and gets a token on another. Both sides settle together (all-or-nothing) when a counterparty fills the offer.',
     },
     {
+        id: 'cross-chain-order',
+        handler: 'onCrossChainOrder',
+        label: 'Cross-chain order',
+        description: 'Place a limit order that gives a token on one chain and gets a token on another. Matched by the validator federation on a price-time book; can fill in parts.',
+    },
+    {
         id: 'cross-chain-templates',
         handler: 'onCrossChainTemplates',
         label: 'Cross-chain templates',
         description: 'Pre-baked multi-chain flows: launch token + metadata, bridge token pair, cross-chain airdrop. Pre-fills the Parallel composer.',
+    },
+    // The two XBRIDGE surfaces (ISSUE v7 settings, and the move itself).
+    // They shipped as entries appended by each shell after this list, which
+    // is the same triplication this module exists to end: three copies of a
+    // description are three chances to drift. Seated beside the other
+    // cross-chain rows, where a user already looks for "another chain".
+    {
+        id: 'bridge-move',
+        handler: 'onBridgeMove',
+        label: 'Move across chains',
+        description: 'Move a token to another chain. The credit on the far chain cannot be undone or redirected.',
+    },
+    {
+        id: 'bridge-settings',
+        handler: 'onBridgeSettings',
+        label: 'Bridge settings',
+        description: 'Open a token you issued to the bridge, raise the confirmation depth it needs, or freeze both forever.',
     },
     {
         id: 'multisig-create',

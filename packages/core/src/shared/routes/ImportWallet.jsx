@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useToast } from '../components/ToastHost.jsx';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 // The flows this screen calls throw function-prefixed preconditions
@@ -41,6 +42,26 @@ const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
 const NO_BACKUP_CONTENT_MESSAGE = 'Pick a backup file, paste its contents, or scan a backup pointer.';
 
 /**
+ * One line for the toast after an import, or null when there is nothing to
+ * say. Only a restore that actually wrote something earns a message: a seed
+ * that never published, a chain that was unreachable, and a payload whose
+ * every record already matched all read as "nothing restored" to the user.
+ *
+ * @param {{ restored?: boolean, contactsAdded?: number, contactsUpdated?: number, addressesUpdated?: number } | null | undefined} labelSync
+ * @returns {string | null}
+ */
+export function labelSyncRestoredMessage(labelSync) {
+    if (!labelSync || labelSync.restored !== true) return null;
+    const contacts = Number(labelSync.contactsAdded || 0) + Number(labelSync.contactsUpdated || 0);
+    const labels = Number(labelSync.addressesUpdated || 0);
+    if (contacts === 0 && labels === 0) return null;
+    const parts = [];
+    if (contacts > 0) parts.push(contacts === 1 ? '1 contact' : `${contacts} contacts`);
+    if (labels > 0) parts.push(labels === 1 ? '1 address label' : `${labels} address labels`);
+    return `Restored ${parts.join(' and ')} from your published labels.`;
+}
+
+/**
  * Import an existing wallet via mnemonic. Accepts BIP39 (12/15/18/21/24
  * words) and Counterwallet-legacy (12 words). The core
  * `importMnemonic` flow auto-detects format.
@@ -67,6 +88,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     useProtectedScreen();
 
     const { messaging, shell } = useMessaging();
+    const { showToast } = useToast();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
@@ -357,20 +379,35 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             setError('Passwords do not match.');
             return;
         }
+        // A checked box with an empty field used to collapse to "no
+        // passphrase" and silently derive the passphrase-less wallet, the
+        // same wrong addresses the user was ticking the box to avoid. The
+        // box is a claim that a passphrase exists, so an empty one is a
+        // contradiction to refuse, not a default to fill in.
+        if (!isFreeWallet && showPassphrase && bip39Passphrase.length === 0) {
+            setError('Enter the BIP39 passphrase, or uncheck the box if this wallet does not use one.');
+            return;
+        }
         setError(null);
         setBusy(true);
         try {
-            const passphraseArg = !isFreeWallet && showPassphrase && bip39Passphrase.length > 0
+            const passphraseArg = !isFreeWallet && showPassphrase
                 ? bip39Passphrase
                 : '';
+            let result;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                await messaging.addImportedWallet({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
+                result = await messaging.addImportedWallet({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
             } else {
-                await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
+                result = await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
             }
+            // §19.5.2: the shells run the label-sync restore inside the import
+            // and report what came back. Say so once; silence when nothing was
+            // published is the ordinary case and needs no message.
+            const restoredMessage = labelSyncRestoredMessage(result?.labelSync);
+            if (restoredMessage) showToast({ message: restoredMessage });
             onImported();
         } catch (err) {
             setError(userFacingMessage(err, 'Failed to import wallet.'));

@@ -55,6 +55,13 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
     'UNSTAKE',
     'VOTE',
     'WITHDRAW',
+    // XBRIDGE is authorable on EVERY chain even though each user-broadcast
+    // version is chain-restricted: v0 (lock XCHAIN) and v3 (lock a general
+    // token) run on the asset's origin chain, v1 and v4 (burn back) run
+    // everywhere else. These lists advertise what a chain's protocol accepts,
+    // not which leg a given chain offers, so the action belongs in the common
+    // set and BridgeMoveForm picks the version from the chain it is on.
+    'XBRIDGE',
 ]);
 
 // What stays Bitcoin-only, and why each one does.

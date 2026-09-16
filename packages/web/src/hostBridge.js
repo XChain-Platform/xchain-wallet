@@ -999,15 +999,60 @@ export async function importMnemonicLocal(req) {
         });
         startNotifications();
         await meta.save({ kdfParams });
+        // §19.5.2 restore half: bring back the labels + contacts this seed
+        // published earlier. Runs after sdkBound() so the explorer endpoints
+        // are resolved, and after the wallet is fully persisted so a dead
+        // explorer can only cost the restore, never the import.
+        const labelSync = await restoreLabelSyncBestEffort({
+            flowsNs,
+            vault: v,
+            walletId: result.wallet.id,
+            password,
+            bip39Passphrase,
+            chainIds: typeof flowsNs.labelSyncSearchChainIds === 'function'
+                ? flowsNs.labelSyncSearchChainIds(chainRegistry, activeChainIds)
+                : activeChainIds,
+        });
         // `walletId` rides along because the fresh-install caller may need to
         // keep working with the wallet it just made: the pairing lane
         // imports the shared phrase here and then asks the host to derive that
         // wallet's pairing payload, which is addressed BY id. Without it the
         // lane imported the phrase and then dead-ended on "the shell returned
         // no wallet id" - a hard stop after the wallet already existed.
-        return { format: result.format, walletName: result.wallet.name, walletId: result.wallet.id };
+        return {
+            format: result.format,
+            walletName: result.wallet.name,
+            walletId: result.wallet.id,
+            labelSync,
+        };
     } finally {
         masterKey.fill(0);
+    }
+}
+
+/**
+ * Run the §19.5.2 restore without letting it fail the import around it.
+ * The flow already swallows explorer errors per chain; this guard covers
+ * the rest (a vault write refused, a wallet record the flow cannot open)
+ * and turns it into a `null` result the import screen reads as "nothing
+ * restored" rather than "the import failed".
+ *
+ * @param {{ flowsNs: any, vault: any, walletId: string, password: string, bip39Passphrase: string, chainIds: string[] }} opts
+ */
+async function restoreLabelSyncBestEffort({ flowsNs, vault: v, walletId, password, bip39Passphrase, chainIds }) {
+    if (typeof flowsNs?.restoreLabelSyncAfterImport !== 'function') return null;
+    try {
+        return await flowsNs.restoreLabelSyncAfterImport({
+            vault: v,
+            walletId,
+            password,
+            bip39Passphrase,
+            chainIds,
+            sdkRegistry,
+        });
+    } catch (err) {
+        console.error('[xchain-wallet/web] label-sync restore skipped:', err);
+        return null;
     }
 }
 

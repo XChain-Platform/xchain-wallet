@@ -44,7 +44,7 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -78,6 +78,11 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
+    );
+    // getActiveAddresses()[chainId], loaded in the same batch as the
+    // address list so the source default resolves once, not fallback-then-swap.
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, any> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -152,12 +157,20 @@ export function IssueTokenForm({ walletId, onBack }) {
         setDraftPending(false);
     }, [draft]);
 
+    // The active map is best-effort: a host without `getActiveAddresses`, or
+    // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -173,22 +186,14 @@ export function IssueTokenForm({ walletId, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
+    // Same default as Send and every other spend-from-balance form: the
+    // chain's active address, else the newest HD external. A dispenser-
+    // delegated address is never the default; it vends rather than funds.
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
-        const addrs = (addressesByChain[chainId] || []).filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain]);
+        if (!chainId || !addressesByChain || !activeByChain) return;
+        const funding = (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser');
+        setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -827,6 +832,28 @@ export function IssueTokenForm({ walletId, onBack }) {
                     {`Locking minting means the ${mintHeadroom} left under the cap can never be minted. Clear this box to mint it later.`}
                 </StatusMessage>
             ) : null}
+            {/* Bridgeability, the ISSUE format 7 fields (xchain-token-bridge.md
+                section 7). NOT set here, and the panel says so rather than
+                offering boxes that would silently do nothing: format 0 carries
+                no BRIDGE_CHAINS, MIN_DEPTH or LOCK_BRIDGE field, so the opt-in
+                is a separate owner-only action on an existing row. What belongs
+                on THIS screen is the one decision that is irreversible from
+                here: binding an address list to the token shuts the bridge door
+                for good in milestone 1. */}
+            <div className={styles.warnings}>
+                <p className={styles.hint}>
+                    Bridging is off. After the token exists you can open it to
+                    other chains from Manage Token, set how deep a lock must be
+                    buried before validators sign it, and freeze both settings for
+                    your holders.
+                </p>
+                <p className={styles.hint}>
+                    One thing to decide now: a token bound to an address allow-list
+                    or block-list cannot be bridged, and a bound list can never be
+                    cleared. If you may want this token on other chains, do not bind
+                    a list to it.
+                </p>
+            </div>
             <AddressField
                 label="Transfer ownership to (optional)"
                 icon="contacts"

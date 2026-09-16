@@ -148,13 +148,37 @@ describe('pendingTxToEntry', () => {
         expect(e.timestamp).toBe(Date.parse('2026-08-27T00:01:00.000Z'));
         expect(e.pending.firstSeenMs).toBe(Date.parse('2026-08-27T00:01:00.000Z'));
     });
-    it('drops a record that never reached the network', () => {
+    it('drops a record that has not been sent yet or is already indexed', () => {
         expect(fromLocal({ status: 'queued' })).toBeNull();
-        expect(fromLocal({ status: 'failed' })).toBeNull();
         expect(fromLocal({ status: 'indexed' })).toBeNull();
     });
-    it('drops a record with no txid: there is nothing to merge on', () => {
+    it('drops a live record with no txid: there is nothing to merge on', () => {
         expect(fromLocal({ txid: null })).toBeNull();
+    });
+    it('keeps a failed record as a Failed row, because nothing else will ever report it', () => {
+        const e = fromLocal({ status: 'failed', error: 'Insufficient funds' });
+        expect(e).not.toBeNull();
+        expect(e.pending.failed).toBe(true);
+        expect(e.pending.error).toBe('Insufficient funds');
+        expect(e.raw.status).toBe('failed');
+        expect(classifyEntryStatus(e)).toBe('failed');
+        expect(pendingDisplayState(e, NOW)).toBe('failed');
+    });
+    it('keeps a failed record with NO txid (it died in compose or signing), keyed by its own id', () => {
+        const e = fromLocal({ status: 'failed', txid: null, error: 'Fee estimate unavailable' });
+        expect(e).not.toBeNull();
+        expect(e.txHash).toBe('');
+        expect(e.key).toBe(`pending:${CHAIN}:ptx-ptx-1`);
+        expect(e.pending.pendingTxId).toBe('ptx-1');
+        expect(classifyEntryStatus(e)).toBe('failed');
+    });
+    it('dates a failure by the send, never by a mempool that never saw it', () => {
+        const e = fromLocal({ status: 'failed', txid: null, mempoolSeenAt: '2026-08-27T00:01:00.000Z' });
+        expect(e.timestamp).toBe(Date.parse('2026-08-27T00:00:10.000Z'));
+        expect(e.pending.firstSeenMs).toBe(Date.parse('2026-08-27T00:01:00.000Z'));
+    });
+    it('drops a failed record that has neither txid nor id: it has no identity to render', () => {
+        expect(fromLocal({ status: 'failed', txid: null, id: null })).toBeNull();
     });
     it('marks an RBF-replaced record and names its replacement', () => {
         const e = fromLocal({ status: 'rbf-replaced', rbfReplacement: 'FFEEDD' });
@@ -374,5 +398,96 @@ describe('compareMergedEntries', () => {
     it('leaves the confirmed order exactly as History has always had it', () => {
         const list = [conf(3, 30), conf(9, 91), conf(9, 92)].sort(compareMergedEntries);
         expect(list.map((e) => e.actionIndex)).toEqual(['92', '91', '30']);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// A record the wallet itself proved into a block: still blockless in shape,
+// confirmed in every reading.
+// ---------------------------------------------------------------------------
+
+describe('a chain-confirmed local record', () => {
+    const settled = (over = {}) => fromLocal({
+        status: 'indexed',
+        chainConfirmed: true,
+        confirmedBlockIndex: 67881853,
+        confirmedAt: '2026-08-27T00:05:00.000Z',
+        broadcastAt: '2026-08-26T00:00:10.000Z',
+        ...over,
+    });
+
+    it('builds an entry although its status is indexed, carrying the proof in its meta', () => {
+        const e = settled();
+        expect(e).not.toBeNull();
+        expect(e.blockIndex).toBe(0);
+        expect(e.pending.chainConfirmed).toBe(true);
+        expect(e.pending.confirmedBlockIndex).toBe(67881853);
+        expect(e.pending.confirmedAtMs).toBe(Date.parse('2026-08-27T00:05:00.000Z'));
+        // An indexed record WITHOUT the proof is the explorer row's to show.
+        expect(fromLocal({ status: 'indexed' })).toBeNull();
+        // A live record carries no proof.
+        const live = fromLocal();
+        expect(live.pending.chainConfirmed).toBe(false);
+        expect(live.pending.confirmedBlockIndex).toBeNull();
+    });
+
+    it('reads as confirmed, outranking the warning states it would otherwise fall into', () => {
+        // Broadcast a day ago with no sighting: not-seen, were it not in a block.
+        const days = 24 * 3600 * 1000;
+        expect(pendingDisplayState(settled(), NOW + days)).toBe('confirmed');
+        expect(pendingDisplayState(settled({ mempoolSeenAt: '2026-08-26T00:01:00.000Z' }), NOW + days)).toBe('confirmed');
+        // A block wins over our own replacement attempt: the original is what got mined.
+        expect(pendingDisplayState(settled({ status: 'indexed', rbfReplacement: 'ff'.repeat(32) }), NOW)).toBe('confirmed');
+        // Inclusion without a named block is still inclusion.
+        expect(pendingDisplayState(settled({ confirmedBlockIndex: null }), NOW + days)).toBe('confirmed');
+    });
+
+    it('classifies as confirmed and is not offered for replacement', () => {
+        const e = settled();
+        expect(classifyEntryStatus(e)).toBe('confirmed');
+        expect(isEntryReplaceable(e)).toEqual({ ok: false, reason: 'Already confirmed.' });
+        expect(applyHistoryFilters([e], { statusSet: new Set(['confirmed']) })).toHaveLength(1);
+        expect(applyHistoryFilters([e], { statusSet: new Set(['pending']) })).toHaveLength(0);
+    });
+
+    it('carries the proof through a fold with a mempool row and yields to a confirmed feed row', () => {
+        const local = settled({ txid: 'AABBCC' });
+        const folded = mergePendingEntries({ confirmed: [], pending: [fromMempool(), local] });
+        expect(folded.pending).toHaveLength(1);
+        expect(folded.pending[0].pending.chainConfirmed).toBe(true);
+        expect(folded.pending[0].pending.confirmedBlockIndex).toBe(67881853);
+
+        const replaced = mergePendingEntries({
+            confirmed: [{ chainId: CHAIN, txHash: 'aabbcc', blockIndex: 7707, actionIndex: '9' }],
+            pending: [local],
+        });
+        expect(replaced.pending).toHaveLength(0);
+    });
+});
+
+describe('failed local records in the merged list', () => {
+    it('keeps two txid-less failures apart instead of collapsing them on an empty hash', () => {
+        const a = fromLocal({ id: 'ptx-a', status: 'failed', txid: null, error: 'first' });
+        const b = fromLocal({ id: 'ptx-b', status: 'failed', txid: null, error: 'second' });
+        const merged = mergePendingEntries({ confirmed: [], pending: [a, b] });
+        expect(merged.pending).toHaveLength(2);
+        expect(merged.pending.map((e) => e.pending.error).sort()).toEqual(['first', 'second']);
+    });
+    it('lets the mempool overrule a "failed" broadcast that actually landed', () => {
+        // A permanent-looking broadcast error can still have gone through;
+        // the network row folds the local record in and the failure clears.
+        const local = fromLocal({ status: 'failed', txid: 'AABBCC', error: 'timeout' });
+        const merged = mergePendingEntries({ confirmed: [], pending: [fromMempool(), local] });
+        expect(merged.pending).toHaveLength(1);
+        expect(merged.pending[0].pending.failed).toBe(false);
+        expect(pendingDisplayState(merged.pending[0], NOW)).toBe('seen');
+    });
+    it('drops a failed record the confirmed feed already lists', () => {
+        const local = fromLocal({ status: 'failed', txid: 'AABBCC' });
+        const merged = mergePendingEntries({
+            confirmed: [{ chainId: CHAIN, txHash: 'aabbcc', blockIndex: 7707, actionIndex: '9' }],
+            pending: [local],
+        });
+        expect(merged.pending).toHaveLength(0);
     });
 });

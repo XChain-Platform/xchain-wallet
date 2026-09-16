@@ -69,6 +69,8 @@ describe('chaos/backend/save-failure', () => {
         });
         backend.failNextSave = true;
         await expect(v.wallets.put(w)).rejects.toThrow();
+        // Retry; backend will succeed this time. The write should
+        // land cleanly with the same record.
         await v.wallets.put(w);
         await v.close();
 
