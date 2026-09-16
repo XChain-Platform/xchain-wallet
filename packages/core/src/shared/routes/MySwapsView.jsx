@@ -18,7 +18,11 @@
 // getAction(...).state.status does NOT promptly reflect a cancel, so
 // "cancelled" is read from the authoritative + immediate swap_cancels
 // table (getSwapCancelsForAddress) and "expired" from the swap's own
-// EXPIRATION vs wall clock. Cancel/edit are offered only while open.
+// EXPIRATION vs wall clock. Unlike the order list, the swap list feed
+// (getSwapsForAddress) carries the indexer's lifecycle status inline as
+// `swap_status` on every row, so "settled" needs no separate detail read:
+// a 'complete' row is shown as Settled. Cancel/edit are offered only
+// while open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
@@ -47,9 +51,20 @@ function sideLabel(tick, coin, amount, ownership) {
     return `${amount ?? ''} ${unit}`.trim();
 }
 
-function deriveStatus(item, cancelledKeys, nowSec) {
+const CLOSED_LABELS = Object.freeze({
+    settled: 'Settled',
+    cancelled: 'Cancelled',
+    expired: 'Expired',
+    invalid: 'Invalid',
+});
+
+export function deriveStatus(item, cancelledKeys, nowSec) {
     if (cancelledKeys.has(item.key)) return 'cancelled';
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
+    const swapStatus = String(item.row.swap_status || '').toLowerCase().trim();
+    if (swapStatus === 'complete') return 'settled';
+    if (swapStatus === 'cancelled') return 'cancelled';
+    if (swapStatus === 'expired') return 'expired';
     const exp = Number(item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
@@ -186,7 +201,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         const expText = fmtDate(it.row.expiration);
         const chip = status === 'open'
             ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
-            : <span className={`${L.chip} ${L.chipExpired}`}>{status === 'cancelled' ? 'Cancelled' : status === 'expired' ? 'Expired' : 'Invalid'}</span>;
+            : <span className={`${L.chip} ${L.chipExpired}`}>{CLOSED_LABELS[status] || 'Invalid'}</span>;
         return (
             <li key={it.key} className={L.row}>
                 <div className={L.rowMain}>
