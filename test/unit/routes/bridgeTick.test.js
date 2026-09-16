@@ -213,9 +213,8 @@ describe('xbridgeActionString', () => {
     // when the sibling checkout is absent, the ActionManifestConformance
     // convention.
     it('field order matches xchain-sdk formats.js exactly', (ctx) => {
-        const formats = process.env.XCHAIN_SDK_DIR
-            ? join(process.env.XCHAIN_SDK_DIR, 'src', 'formats.js')
-            : join(process.cwd(), '..', 'xchain-sdk', 'src', 'formats.js');
+        const sdkDir = process.env.XCHAIN_SDK_DIR || join(process.cwd(), '..', 'xchain-sdk');
+        let formats = join(sdkDir, 'src', 'formats.js');
         if (!existsSync(formats)) {
             if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') {
                 throw new Error(`XCHAIN_REQUIRE_SIBLINGS=1 but xchain-sdk formats.js not found at ${formats}`);
@@ -223,7 +222,16 @@ describe('xbridgeActionString', () => {
             ctx.skip();
             return;
         }
-        const src = readFileSync(formats, 'utf8');
+        let src = readFileSync(formats, 'utf8');
+        // Since the SDK's structure pass, src/formats.js is a one-line re-export
+        // shim over src/protocol/formats.js kept for deep-importing consumers.
+        // The table this test reads lives behind it, so follow the shim to the
+        // module it names instead of regexing an XBRIDGE block out of a require.
+        const shim = src.match(/module\.exports\s*=\s*require\('(\.\/[^']+)'\)/);
+        if (shim) {
+            formats = join(sdkDir, 'src', shim[1]);
+            src = readFileSync(formats, 'utf8');
+        }
         const block = src.match(/XBRIDGE:\s*\{([\s\S]*?)\}/);
         expect(block, 'xchain-sdk formats.js has no XBRIDGE block').toBeTruthy();
         /** @type {Record<string, string[]>} */
