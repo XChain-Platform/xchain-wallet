@@ -20,6 +20,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { unclaimedRewards } from '../../flows/stakingDashboard.js';
 import dashStyles from './ActionsMenu.module.css';
 import formStyles from './IssueTokenForm.module.css';
 
@@ -55,6 +56,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const [stakes, setStakes] = useState(/** @type {Section} */ (empty()));
     const [delegations, setDelegations] = useState(/** @type {Section} */ (empty()));
     const [rewards, setRewards] = useState(/** @type {Section} */ (empty()));
+    const [rewardClaims, setRewardClaims] = useState(/** @type {Section} */ (empty()));
     const [broadcasts, setBroadcasts] = useState(/** @type {Section} */ (empty()));
     const [validators, setValidators] = useState(/** @type {Section} */ (empty()));
 
@@ -72,6 +74,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
         bind(setStakes, messaging.getStakesForAddress({ chainId, address }));
         bind(setDelegations, messaging.getDelegationsForAddress({ chainId, address }));
         bind(setRewards, messaging.getRewardsForAddress({ chainId, address }));
+        bind(setRewardClaims, messaging.getRewardClaimsForAddress({ chainId, address }));
         bind(setBroadcasts, messaging.getBroadcastsForAddress({ chainId, address }));
         bind(setValidators, messaging.getValidatorsForChain({ chainId }));
         return () => { cancelled = true; };
@@ -100,7 +103,10 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
         return v2[0] || null;
     }, [broadcasts.rows]);
 
-    const { pending, lifetime } = useMemo(() => splitRewards(rewards.rows), [rewards.rows]);
+    const { pending, lifetime } = useMemo(
+        () => splitRewards(rewards.rows, rewardClaims.rows),
+        [rewards.rows, rewardClaims.rows],
+    );
     const recentRewards = useMemo(
         () => [...rewards.rows].sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0)).slice(0, 10),
         [rewards.rows],
@@ -116,7 +122,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
         <PageHeader onBack={onBack} backLabel="Back to staking" title="Operator dashboard" />
     );
 
-    const allLoading = stakes.loading || delegations.loading || rewards.loading
+    const allLoading = stakes.loading || delegations.loading || rewards.loading || rewardClaims.loading
         || broadcasts.loading || validators.loading;
 
     return (
@@ -183,7 +189,11 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     )}
                 </Section>
 
-                <Section title="Rewards trajectory" loading={rewards.loading} error={rewards.error}>
+                <Section
+                    title="Rewards trajectory"
+                    loading={rewards.loading || rewardClaims.loading}
+                    error={rewards.error || rewardClaims.error}
+                >
                     <p className={dashStyles.entryDescription} style={{ margin: 0 }}>
                         <strong>Pending:</strong> {pending} XCP · <strong>Lifetime:</strong> {lifetime} XCP
                     </p>
@@ -480,17 +490,9 @@ function formatAmount(stake) {
     return String(stake?.amount ?? stake?.AMOUNT ?? stake?.quantity ?? 'N/A');
 }
 
-function splitRewards(rows) {
-    let pending = 0;
-    let lifetime = 0;
-    for (const r of rows) {
-        const amt = Number(r.amount ?? r.AMOUNT ?? r.reward ?? 0);
-        if (!Number.isFinite(amt)) continue;
-        const status = String(r.status || '').toLowerCase();
-        if (status === 'pending' || status === 'unclaimed') pending += amt;
-        lifetime += amt;
-    }
-    return { pending, lifetime };
+export function splitRewards(rows, claims) {
+    const totals = unclaimedRewards({ rewards: rows, claims });
+    return { pending: totals.unclaimed, lifetime: totals.accrued };
 }
 
 function formatRewardAmount(row) {

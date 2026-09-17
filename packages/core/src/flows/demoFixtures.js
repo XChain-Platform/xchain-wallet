@@ -710,8 +710,9 @@ const DEMO_STAKING_BY_CHAIN = {
                 block_index: 12_412,
             },
         ],
-        // Two claimed + one pending; splitRewards() sums all three for
-        // "Lifetime" (80.25) and only the pending one for "Pending" (12.5).
+        // Accrual ledger only: without separate demo claim rows,
+        // unclaimedRewards() reports all 80.25 as unclaimed. reward_claims,
+        // not these legacy display statuses, supply the subtraction.
         rewards: [
             { action_index: 'demo-reward-3', amount: 12.5, status: 'pending', block_index: 12_470 },
             { action_index: 'demo-reward-2', amount: 40, status: 'claimed', block_index: 12_300 },

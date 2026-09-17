@@ -157,10 +157,12 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         stakes: stakes.map((s) => ({ ...s, _ownerAddress: owner })),
                         delegations,
                         rewards,
+                        rewardClaims: [],
                         contractStakes: contract.stakes.map((s) => ({ ...s, _ownerAddress: owner })),
                         contractUnstakes: contract.unstakes.map((u) => ({ ...u, _ownerAddress: owner })),
                     }),
                     rewards,
+                    rewardClaims: [],
                     error: null,
                 };
             }
@@ -490,21 +492,26 @@ function StakeRow({ row, cooldown, onSelect }) {
  * rows. Each row carries the `ref` handed to `onOpenStake` and a
  * prebuilt lowercase search haystack.
  */
-function buildRows({ chainId, stakes, delegations, rewards, contractStakes, contractUnstakes }) {
+export function buildRows({
+    chainId,
+    stakes,
+    delegations,
+    rewards,
+    rewardClaims,
+    contractStakes,
+    contractUnstakes,
+}) {
     /** @type {any[]} */
     const rows = [];
 
     // Pending (unclaimed) rewards surface as a per-row chip on the
     // validator rows they belong to; rewards are validator-specific so
     // the list root itself stays kind-neutral.
-    let pendingRewards = 0;
-    for (const r of (rewards || [])) {
-        const amt = Number(r.amount ?? r.AMOUNT ?? r.reward ?? 0);
-        if (!Number.isFinite(amt)) continue;
-        const status = String(r.status || '').toLowerCase();
-        if (status === 'pending' || status === 'unclaimed') pendingRewards += amt;
-    }
-    const rewardLabel = pendingRewards > 0
+    const { unclaimed: pendingRewards } = unclaimedRewards({
+        rewards,
+        claims: rewardClaims,
+    });
+    const rewardLabel = pendingRewards !== '0'
         ? `+${formatWithThousands(String(pendingRewards))} XCHAIN reward`
         : null;
 
