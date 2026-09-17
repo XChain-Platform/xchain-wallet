@@ -102,7 +102,9 @@ import {
     createMetaBackend,
     installNativeWipeHook,
     installNativeScreenGuard,
+    usingNativeVault,
 } from './storage/backends.js';
+import { requestPersistentStorage } from './storage/storagePersistence.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
@@ -825,6 +827,16 @@ export async function getSessionStatus() {
         // A provider that cannot install must not stop the wallet from
         // opening: the password form is the path that always works.
     }
+    // Browser only: ask for the persistent storage bucket so the vault is
+    // not best-effort data the browser may evict. Not awaited: Firefox
+    // answers with a prompt, and the session status must not wait on it.
+    try {
+        if (!usingNativeVault()) void requestPersistentStorage();
+    } catch (_err) {
+        // A native shell whose plugin never registered throws here; the
+        // storage backend below raises the same VaultUnavailableError on
+        // purpose, so nothing is lost by ignoring it at this point.
+    }
     const storage = createStorageBackend();
     // A throw here is deliberate and must NOT be caught into a default. On a
     // native shell `load()` distinguishes "no wallet" from "locked keystore"
@@ -832,6 +844,26 @@ export async function getSessionStatus() {
     // which is the whole point. Swallowing it would report no-wallet and
     // offer to create one over the top of the vault that is still there.
     const blob = await storage.load();
+    if (blob === null && !usingNativeVault()) {
+        // The browser split: the blob lives in IndexedDB, the kdfParams meta
+        // in localStorage, and only the create/import lanes write them (blob
+        // first, meta second), so meta with no blob is never a half-finished
+        // create. It means a wallet was set up on this origin and the
+        // IndexedDB side has since been removed from outside the app (an
+        // eviction, a clear-on-exit, a cleaner). Reported 2026-09-16 by two
+        // users as "it asked for my recovery phrase again": the silent
+        // no-wallet answer put them on the create screen with no hint that
+        // the browser, not the wallet, had done it. Throwing here routes them
+        // to the VaultUnavailable screen for `evicted` instead.
+        let meta = null;
+        try {
+            meta = /** @type {any} */ (await createMetaBackend().load());
+        } catch (_err) {
+            // Unreadable meta says nothing either way; fall through to the
+            // factual no-wallet answer rather than inventing an eviction.
+        }
+        if (meta && meta.kdfParams) throw new storageLib.VaultEvictedError();
+    }
     const hasWallet = blob !== null;
     const hasSession = host !== null;
     return {

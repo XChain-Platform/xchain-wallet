@@ -78,20 +78,30 @@ assert.match(
     + ' it through the `storage` barrel, not through backend.js directly',
 );
 
-// The destructive escape is offered for exactly one kind. Asserted here as
+// The destructive escape is offered for exactly two kinds, the ones where
+// the user cannot proceed without it: a corrupt blob, and a blob the
+// browser evicted while the meta record stayed behind. Asserted here as
 // well as in the unit test because this is the property whose regression is
 // worst: an erase button on a LOCKED vault destroys a wallet that was never
 // damaged, to fix a device the user had simply not unlocked.
 const screenSrc = read('packages', 'core', 'src', 'shared', 'routes', 'VaultUnavailable.jsx');
-assert.match(
-    screenSrc,
-    /kind === 'corrupt' && !wipeOpen/,
-    'the escape link is gated on corrupt alone',
+const escapeSet = screenSrc.match(/const OFFERS_ESCAPE = new Set\(\[([^\]]*)\]\)/);
+assert.ok(escapeSet, 'the escape kinds are declared once, as OFFERS_ESCAPE');
+const escapeKinds = escapeSet[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean).sort();
+assert.deepEqual(
+    escapeKinds,
+    ['corrupt', 'evicted'],
+    'the escape is offered for corrupt and evicted alone, never locked or unavailable',
 );
 assert.match(
     screenSrc,
-    /kind === 'corrupt' && wipeOpen/,
-    'the wipe panel is gated on corrupt alone',
+    /offersEscape && !wipeOpen/,
+    'the escape link is gated on the declared escape kinds',
+);
+assert.match(
+    screenSrc,
+    /offersEscape && wipeOpen/,
+    'the wipe panel is gated on the declared escape kinds',
 );
 assert.match(
     screenSrc,
@@ -104,5 +114,6 @@ console.log(
     + ' failure with vaultErrorKind at the catch and render the shared'
     + ' VaultUnavailable screen, non-vault errors still fall back to Loading,'
     + ' vaultErrorKind is exported from the storage barrel, and the destructive'
-    + ' escape is gated on corrupt alone behind the type-WIPE confirmation)',
+    + ' escape is gated on corrupt and evicted alone behind the type-WIPE'
+    + ' confirmation)',
 );

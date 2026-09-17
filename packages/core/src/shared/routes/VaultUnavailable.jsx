@@ -37,6 +37,15 @@
 //               without it.
 //   unavailable the backend could not be reached at all. Retry; do not
 //               offer to erase a vault we were not even able to look at.
+//   evicted     the encrypted store is gone but the vault's meta record is
+//               still here, so a wallet WAS set up on this device and the
+//               browser (not the wallet) removed it: storage eviction,
+//               Safari's seven-day purge, clear-on-exit, a cleaner. Two
+//               users reported this on 2026-09-16 as "it asked for my
+//               recovery phrase again". Retry first, because a store that
+//               reads empty once may be a transient; the escape stays
+//               behind the WIPE gate because it also drops the meta, and
+//               a blob that DID come back could never be opened without it.
 //
 // The erase path deliberately reuses the Locked screen's type-WIPE gate
 // rather than inventing a lighter one. A user reading this screen has just
@@ -67,11 +76,46 @@ const COPY = {
         body: "This device's secure storage could not be reached, so the wallet"
             + ' was not opened. This is usually temporary.',
     },
+    evicted: {
+        title: 'This browser removed your wallet’s data',
+        body: 'A wallet was set up in this browser, but the browser has since'
+            + ' deleted its encrypted data. The wallet did not do this: browsers'
+            + ' clear site data when storage runs low, when a clear-on-exit or'
+            + ' privacy setting is on, when a cleanup tool runs, and Safari'
+            + ' clears it after seven days without a visit. Install the wallet'
+            + ' app or add this site to your home screen to stop it happening'
+            + ' again.',
+    },
+};
+
+/** The kinds where the user genuinely cannot proceed without the escape. */
+const OFFERS_ESCAPE = new Set(['corrupt', 'evicted']);
+
+/** The escape panel's copy, per kind: what is being removed and why. */
+const WIPE_COPY = {
+    corrupt: {
+        region: 'Remove the damaged wallet data',
+        note: 'This removes the damaged wallet data from this device so'
+            + ' you can import your wallet again. It changes nothing on'
+            + ' the blockchain. Without your recovery phrase it cannot be'
+            + ' undone.',
+        button: 'Remove damaged data',
+        failed: 'Could not remove the damaged wallet data.',
+    },
+    evicted: {
+        region: 'Clear what is left of the old wallet',
+        note: 'This clears the remaining record of the old wallet on this'
+            + ' device so you can import your wallet again from its recovery'
+            + ' phrase. It changes nothing on the blockchain. If you would'
+            + ' rather check first whether the data comes back, use Try again.',
+        button: 'Clear and start over',
+        failed: 'Could not clear the old wallet data.',
+    },
 };
 
 /**
  * @param {object} props
- * @param {'corrupt' | 'locked' | 'unavailable'} props.kind
+ * @param {'corrupt' | 'locked' | 'unavailable' | 'evicted'} props.kind
  * @param {string} [props.detail]      the raw error, kept for support
  * @param {() => void} [props.onRetry] defaults to reloading the app
  * @param {() => Promise<void>} [props.wipe] injectable for tests
@@ -80,6 +124,8 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const copy = COPY[kind] || COPY.unavailable;
+    const offersEscape = OFFERS_ESCAPE.has(kind);
+    const wipeCopy = WIPE_COPY[kind] || WIPE_COPY.corrupt;
 
     const [wipeOpen, setWipeOpen] = useState(false);
     const [confirmText, setConfirmText] = useState('');
@@ -100,7 +146,7 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
             await wipe();
             if (typeof window !== 'undefined') window.location.reload();
         } catch (err) {
-            setWipeError(err?.message || 'Could not remove the damaged wallet data.');
+            setWipeError(err?.message || wipeCopy.failed);
             setBusy(false);
         }
     }
@@ -127,12 +173,13 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                     Try again
                 </Button>
 
-                {/* Offered for `corrupt` alone. On `locked` the vault is
-                    perfectly intact and the user simply has not unlocked their
-                    device; on `unavailable` we could not read the vault, so we
-                    are in no position to call it damaged. Erasing in either
-                    case would destroy a working wallet to fix nothing. */}
-                {kind === 'corrupt' && !wipeOpen ? (
+                {/* Offered for `corrupt` and `evicted` alone. On `locked` the
+                    vault is perfectly intact and the user simply has not
+                    unlocked their device; on `unavailable` we could not read
+                    the vault, so we are in no position to call it damaged.
+                    Erasing in either case would destroy a working wallet to
+                    fix nothing. */}
+                {offersEscape && !wipeOpen ? (
                     <button
                         type="button"
                         className={styles.escapeLink}
@@ -144,12 +191,12 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                     </button>
                 ) : null}
 
-                {kind === 'corrupt' && wipeOpen ? (
+                {offersEscape && wipeOpen ? (
                     <div
                         id="vault-unavailable-wipe-panel"
                         className={styles.wipeConfirm}
                         role="region"
-                        aria-label="Remove the damaged wallet data"
+                        aria-label={wipeCopy.region}
                     >
                         <p className={styles.wipeWarning}>
                             <strong>
@@ -157,12 +204,7 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                                 or an encrypted backup file to hand.
                             </strong>
                         </p>
-                        <p className={styles.wipeNote}>
-                            This removes the damaged wallet data from this device so
-                            you can import your wallet again. It changes nothing on
-                            the blockchain. Without your recovery phrase it cannot be
-                            undone.
-                        </p>
+                        <p className={styles.wipeNote}>{wipeCopy.note}</p>
                         <Input
                             type="text"
                             label="Type WIPE to confirm"
@@ -180,7 +222,7 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                             loading={busy}
                             disabled={busy || confirmText.trim().toUpperCase() !== 'WIPE'}
                         >
-                            Remove damaged data
+                            {wipeCopy.button}
                         </Button>
                         <Button
                             type="button"
