@@ -110,6 +110,10 @@ export function TokenWizard({ walletId, onBack }) {
     const [maxMint, setMaxMint] = useState('');
     const [lockOnCreate, setLockOnCreate] = useState(false);
     const [transferTo, setTransferTo] = useState('');
+    // Where the initial mint lands (ISSUE TRANSFER_SUPPLY). Separate from
+    // ownership: the chain keeps the minted units with the issuer unless this
+    // is set, which the standalone form learned from a testnet report.
+    const [transferSupplyTo, setTransferSupplyTo] = useState('');
     const [imageUrl, setImageUrl] = useState('');         // collectible + edition
     const [parentToken, setParentToken] = useState('');   // subtoken only
     // Edition-only public-mint window fields.
@@ -280,6 +284,7 @@ export function TokenWizard({ walletId, onBack }) {
             description,
             lockOnCreate,
             transferTo,
+            transferSupplyTo,
             imageUrl,
             parentToken,
             perAddressMax,
@@ -288,7 +293,7 @@ export function TokenWizard({ walletId, onBack }) {
             advanced,
         }),
         [template, name, supply, maxMint, divisible, description,
-         lockOnCreate, transferTo, imageUrl, parentToken,
+         lockOnCreate, transferTo, transferSupplyTo, imageUrl, parentToken,
          perAddressMax, mintStartBlock, mintStopBlock, advanced],
     );
 
@@ -590,6 +595,7 @@ export function TokenWizard({ walletId, onBack }) {
             maxMint, setMaxMint,
             lockOnCreate, setLockOnCreate,
             transferTo, setTransferTo,
+            transferSupplyTo, setTransferSupplyTo,
             imageUrl, setImageUrl,
             parentToken, setParentToken,
             perAddressMax, setPerAddressMax,
@@ -882,6 +888,9 @@ const TEMPLATE_COMPOSERS = {
             p.LOCK_MINT = '1';
         }
         if (form.transferTo) p.TRANSFER = form.transferTo.trim();
+        // seedSupply above always mints the whole supply here, so a
+        // destination for it is never a dead field on this template.
+        if (form.transferSupplyTo && p.MINT_SUPPLY) p.TRANSFER_SUPPLY = form.transferSupplyTo.trim();
         // PC-06: the advanced disclosure's lock matrix, callback trio,
         // and access lists. Applied last so an explicitly checked flag
         // and the `lockOnCreate` shortcut converge on the same '1'
@@ -1065,6 +1074,7 @@ const TEMPLATE_FIELDS = {
     custom: {
         name: true, displayName: true, supply: true, divisible: true,
         description: true, maxMint: true, lockOnCreate: true, transferTo: true,
+        transferSupplyTo: true,
     },
 };
 
@@ -1078,6 +1088,7 @@ function renderDetailsStage({
     maxMint, setMaxMint,
     lockOnCreate, setLockOnCreate,
     transferTo, setTransferTo,
+    transferSupplyTo, setTransferSupplyTo,
     imageUrl, setImageUrl,
     parentToken, setParentToken,
     perAddressMax, setPerAddressMax,
@@ -1230,9 +1241,20 @@ function renderDetailsStage({
             {show.transferTo ? (
                 <Input
                     label="Transfer ownership to (optional)"
-                    hint="Leave blank to keep control."
+                    hint="Leave blank to keep control. This hands over the right to manage the token; the minted tokens stay with the issuing address unless you also send them below."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                />
+            ) : null}
+            {show.transferSupplyTo ? (
+                <Input
+                    label="Send the initial mint to (optional)"
+                    hint="Leave blank to keep the minted tokens at the issuing address."
+                    value={transferSupplyTo}
+                    onChange={(e) => setTransferSupplyTo(e.target.value)}
                     autoComplete="off"
                     autoCapitalize="none"
                     autoCorrect="off"

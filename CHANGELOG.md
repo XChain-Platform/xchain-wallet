@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
+- Opening History from a token now lists only that token's activity instead of the whole parent chain, in the web app and the extension; the native coin's page still shows its plain transfers.
+- Manage Token's activity View all no longer throws on click.
+- The issue form and the wizard's Custom template offer a separate address for the initial mint, and the ownership field now says the minted tokens stay with the issuer unless sent there.
 - Deep `xchain-sdk/src/...` paths are resolved through one inventory that knows both the pre- and post-0.19.0 module layouts and names the path when neither resolves, so an SDK file move no longer kills the testnet harness suite at collect time.
 - Contract detail renders state keys and decoded values from the explorer's real field names.
 - Execution history shows the method name, a valid/reverted/invalid marker and gas used.
