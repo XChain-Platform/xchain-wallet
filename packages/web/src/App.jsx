@@ -50,6 +50,7 @@ import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccou
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
+import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -314,7 +315,7 @@ function AppInner() {
     // visit (e.g. entering from TokenDetail then re-entering from the
     // home menu should return to home, not back to TokenDetail).
     const [historyReturnTo, setHistoryReturnTo] = useState(
-        /** @type {'home' | 'token-detail'} */ ('home'),
+        /** @type {'home' | 'token-detail' | 'manage-token'} */ ('home'),
     );
     // Selected entry for the standalone ActionDetail view (mirror of
     // popup wiring). Set on row click in History or in Home's Activity
@@ -2143,9 +2144,12 @@ function AppInner() {
                             setUnlockedView('receive');
                         }}
                         onViewActivity={() => {
-                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
-                            setHistoryInitialQuery('');
-                            setHistoryInitialChainCoin(coin);
+                            // Chain scope plus the tick as the search term for a
+                            // token; chain scope alone for the native coin. See
+                            // historyEntryScope.js for why neither half is enough.
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
@@ -2220,11 +2224,13 @@ function AppInner() {
                             setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
                         }}
                         onViewActivity={() => {
-                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
-                            setHistoryInitialQuery('');
-                            setHistoryInitialTickFilter(tokenDetailRef.tick);
-                            setHistoryInitialNetworkFilter(coin || 'all');
-                            setHistoryInitialFocus({ kind: 'tick', value: tokenDetailRef.tick });
+                            // The same hop TokenDetail makes. This block used to call
+                            // two setters that never existed, so the click threw.
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
+                            setHistoryInitialFocus(null);
+                            setHistoryReturnTo('manage-token');
                             setUnlockedView('history');
                         }}
                     />

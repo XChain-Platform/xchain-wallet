@@ -60,6 +60,7 @@ import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccou
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
+import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
@@ -2048,12 +2049,12 @@ function AppInner() {
                             setUnlockedView('receive');
                         }}
                         onViewActivity={() => {
-                            // Scope History by coin family (e.g. 'bitcoin')
-                            // rather than pre-filling the search box with
-                            // the tick ticker.
-                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
-                            setHistoryInitialQuery('');
-                            setHistoryInitialChainCoin(coin);
+                            // Chain scope plus the tick as the search term for a
+                            // token; chain scope alone for the native coin. See
+                            // historyEntryScope.js for why neither half is enough.
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
@@ -2131,9 +2132,9 @@ function AppInner() {
                             setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
                         }}
                         onViewActivity={() => {
-                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
-                            setHistoryInitialQuery('');
-                            setHistoryInitialChainCoin(coin);
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
                             setHistoryReturnTo('home');
                             setUnlockedView('history');
                         }}
