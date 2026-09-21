@@ -70,6 +70,21 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
     return 'open';
 }
 
+// A cancel row only cancels its swap when the indexer marked the cancel
+// itself valid; an invalid SWAP cancel action leaves the swap open.
+export function collectCancelledKeys(results) {
+    const keys = new Set();
+    for (const r of results) {
+        for (const c of r.cancels) {
+            if (String(c.status || 'valid') !== 'valid') continue;
+            if (String(c.source) === r.p.owner.address) {
+                keys.add(`${r.p.chainId}:${c.swap_action_index}`);
+            }
+        }
+    }
+    return keys;
+}
+
 function fmtDate(unixSec) {
     const n = Number(unixSec);
     if (!Number.isFinite(n) || n <= 0) return null;
@@ -120,14 +135,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     : Promise.resolve(null)),
             ]).then(([s, c]) => ({ p, swaps: extractRows(s), cancels: extractRows(c) }))));
 
-            const cancelledKeys = new Set();
-            for (const r of results) {
-                for (const c of r.cancels) {
-                    if (String(c.source) === r.p.owner.address) {
-                        cancelledKeys.add(`${r.p.chainId}:${c.swap_action_index}`);
-                    }
-                }
-            }
+            const cancelledKeys = collectCancelledKeys(results);
             const seen = new Set();
             const all = [];
             for (const r of results) {
