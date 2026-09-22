@@ -65,16 +65,49 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 SIB="$(cd .. && pwd)"
 
 FAILED=""
+# >>> ci-tier (generated block; re-run the tier wirer to update) >>>
+# Tier classes. A push grades the FAST tier only: the unit job, the pin and
+# drift guards, and the structure and hygiene checks the hook runs before it
+# dispatches. The tiers named below (coverage re-runs, perf scenarios) are
+# skipped when the gate sets CI_TIER=fast, and each skip is recorded so the
+# closing verdict can never claim a green it did not earn. Nothing stops
+# being graded: a scheduled sweep re-runs this same script with CI_TIER=full
+# on every repo every three hours and before any release or deploy, and a
+# red there is tracked down and fixed first. CI_TIER is unset for a hand
+# run, so a bare `npm run ci:full` still runs every tier as it always did.
+CI_TIER_FULL_ONLY=(
+  "coverage ratchet (test:unit:coverage)"
+  "e2e: Playwright browsers"
+  "e2e suite (test:e2e)"
+)
+DEFERRED=""
+ci_tier_deferred() {
+  [ "${CI_TIER:-full}" = "fast" ] || return 1
+  local t
+  for t in ${CI_TIER_FULL_ONLY[@]+"${CI_TIER_FULL_ONLY[@]}"}; do
+    if [ "$t" = "$1" ]; then
+      DEFERRED="$DEFERRED [$1]"
+      echo; echo "ci:full ===== $1 DEFERRED (CI_TIER=fast, runs in the full sweep) ====="
+      return 0
+    fi
+  done
+  return 1
+}
+# <<< ci-tier <<<
+# >>> ci-tier timer (generated block; re-run the tier wirer to update) >>>
 run_tier() {
+  ci_tier_deferred "$1" && return 0  # ci-tier guard (generated)
   local name="$1"; shift
+  local __ci_tier_t0=$SECONDS
   echo; echo "ci:full ===== $name ====="
   if "$@"; then
-    echo "ci:full ----- $name PASS"
+    echo "ci:full ----- $name PASS ($(( SECONDS - __ci_tier_t0 ))s)"
   else
     FAILED="$FAILED [$name]"
-    echo "ci:full ----- $name FAIL"
+    echo "ci:full ----- $name FAIL ($(( SECONDS - __ci_tier_t0 ))s)"
   fi
 }
+# <<< ci-tier timer <<<
 need_sib() {
   local s
   for s in "$@"; do
@@ -162,8 +195,20 @@ run_tier "audit: production dependencies" pnpm audit --prod --audit-level=high
 echo "ci:full: SKIPPED-BY-DESIGN verdict: tools/release/run-verdict.mjs classifies a GitHub Actions run's jobs by run_id through the Actions API; no such run exists on a venue, and the per-tier PASS/FAIL lines above are the local statement of the same finding."
 
 echo
+# >>> ci-tier summary (generated) >>>
+echo "ci:full: tier class ${CI_TIER:-full}"
+if [ -n "${DEFERRED:-}" ]; then
+  echo "ci:full: DEFERRED to the full sweep:$DEFERRED"
+fi
+# <<< ci-tier summary <<<
 if [ -n "$FAILED" ]; then
   echo "ci:full: RED tiers:$FAILED"
   exit 1
 fi
-echo "ci:full: all tiers green (same set GitHub CI runs)"
+# >>> ci-tier verdict (generated) >>>
+if [ "${CI_TIER:-full}" = "fast" ]; then
+  echo "ci:full: all FAST tiers green; the DEFERRED tiers above were NOT graded here"
+else
+  echo "ci:full: all tiers green (same set GitHub CI runs)"
+fi
+# <<< ci-tier verdict <<<
