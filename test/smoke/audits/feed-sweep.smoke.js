@@ -550,7 +550,7 @@ const V2 = {
 //
 // Deliberately a COPY rather than an import, on the grounds
 // store-version-monitor.mjs states for its own: this file is deployed
-// standalone as /opt/xchain/feed-sweep.mjs, and an import reaching into
+// standalone on the release host, and an import reaching into
 // packages/web makes it unloadable there. A copy is only safe if something
 // proves the two agree, so this does - including the cap, which the app
 // applies before it parses and which therefore is part of the same rule.
