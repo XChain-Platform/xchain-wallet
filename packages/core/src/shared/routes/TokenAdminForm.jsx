@@ -43,7 +43,8 @@ import { LOCK_FLAGS } from '../utils/issueAdvancedFields.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
@@ -155,6 +156,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const [activeByChain, setActiveByChain] = useState(
+        /** @type {Record<string, { id?: string, address?: string }> | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
@@ -222,12 +226,26 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default). Settings
+    // ride the same load so the last-used chain is known in the render that
+    // first shows the form, never applied a beat later.
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
+                setActiveByChain(active || {});
                 const first = Object.keys(byChain)[0];
                 if (!first) {
                     setLoadError(
@@ -235,7 +253,17 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     );
                     return;
                 }
-                if (!lockedToken) setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key opened every token-admin action on the wallet's
+                // OLDEST chain forever. Open on the last-used chain instead,
+                // behind a caller-seeded one (a token context) and ahead of
+                // the first-key fallback, exactly as Send and Swap do.
+                if (!lockedToken) {
+                    setChainId((prev) => pickDefaultChainId(byChain, {
+                        explicitChainId: prev,
+                        settings,
+                    }));
+                }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -244,29 +272,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }, [walletId, messaging]);
 
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (!chainId || !addressesByChain || !activeByChain) return;
         const all = addressesByChain[chainId] || [];
         // When the caller knows which address must sign (e.g. issuer
-        // address from ManageToken), prefer that. Falls through to the
-        // standard "newest HD-derived receive-chain address" otherwise.
+        // address from ManageToken), prefer that.
         if (initialFromAddress) {
             const match = all.find((a) => a.address === initialFromAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
-        const addrs = all.filter(
-            (a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null,
-        );
-        if (addrs.length > 0) {
-            const sorted = [...addrs].sort((a, b) => {
-                const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                return bi - ai;
-            });
-            setFromAddressId(sorted[0].id);
-        } else {
-            setFromAddressId(null);
-        }
-    }, [chainId, addressesByChain, initialFromAddress]);
+        // Otherwise the same default as Send and every other spend-from-balance
+        // form: the chain's active address, else the newest HD external. The
+        // hand-rolled newest-index sort this replaces ignored the active address
+        // entirely, so a wallet that had just generated a receive address paid
+        // the fee from an empty one. role='dispenser' excluded: a delegated
+        // address vends rather than funds, and must never be a default payer.
+        const funding = all.filter((a) => a.role !== 'dispenser');
+        setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
+    }, [chainId, addressesByChain, activeByChain, initialFromAddress]);
 
     useEffect(() => {
         if (stage === 'review') {

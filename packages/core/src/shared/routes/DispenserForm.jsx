@@ -51,6 +51,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import {
     listMembers,
     ownerOffAllowList,
@@ -277,8 +278,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         setDraftPending(false);
     }, [draft]);
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -286,8 +288,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId, activeAccountId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
@@ -298,7 +303,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     );
                     return;
                 }
-                if (!lockedToken) setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key opened every dispenser on the wallet's OLDEST
+                // chain forever. Open on the last-used chain instead, behind
+                // a caller-seeded one (a token context) and ahead of the
+                // first-key fallback, exactly as Send and Swap do.
+                if (!lockedToken) {
+                    setChainId((prev) => pickDefaultChainId(byChain, {
+                        explicitChainId: prev,
+                        settings,
+                    }));
+                }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');

@@ -49,6 +49,7 @@ import { extractHolderRows } from '../utils/holderRows.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -221,8 +222,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -230,8 +232,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
@@ -242,7 +247,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     );
                     return;
                 }
-                if (!resumeId && !lockedToken) setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key airdropped on the wallet's OLDEST chain forever.
+                // Open on the last-used chain instead, behind a caller-seeded
+                // one (a token context; a resumed airdrop sets its own chain
+                // from the pending record) and ahead of the first-key
+                // fallback, exactly as Send and Swap do.
+                if (!resumeId && !lockedToken) {
+                    setChainId((prev) => pickDefaultChainId(byChain, {
+                        explicitChainId: prev,
+                        settings,
+                    }));
+                }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
