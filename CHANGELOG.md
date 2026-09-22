@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
+- History now orders transactions from different chains by when they happened, so a Dogecoin send no longer sits above newer Bitcoin ones because Dogecoin counts its blocks higher.
 - Opening History from a token now lists only that token's activity instead of the whole parent chain, in the web app and the extension; the native coin's page still shows its plain transfers.
 - Manage Token's activity View all no longer throws on click.
 - The issue form and the wizard's Custom template offer a separate address for the initial mint, and the ownership field now says the minted tokens stay with the issuer unless sent there.
