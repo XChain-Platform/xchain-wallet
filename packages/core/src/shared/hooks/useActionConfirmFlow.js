@@ -172,6 +172,11 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 // concurrent window that moved the accumulator between compose
                 // and Approve booked a donation this transaction never made.
                 adsDonation: { included: !!composed.adsPlan?.canSubmit },
+                // The encoder's compression report for these exact bytes, so
+                // the success screen can state the size actually stored on
+                // chain. Dropping it here left the Publish file result silent
+                // about a payload the encoder had shrunk to a quarter.
+                compression: composed.compression || null,
             }, composed),
         })
     ), [confirmAction, messaging, settings, walletId]);

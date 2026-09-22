@@ -165,6 +165,7 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
  * @property {object} encoderOpts              the FINAL encoderOpts used to build the PSBT (fee + ADS folded in)
+ * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not compress
  */
 
 /**
@@ -471,5 +472,14 @@ export async function composeForConfirm({
         adsPlan,
         expectedOutputs,
         encoderOpts: finalEncoderOpts,
+        // The encoder's transparent-compression report, so the submit path can
+        // hand it back to the success screen. Every non-watcher publish now
+        // goes through this lane, and the result envelope is the only route
+        // from here to `storedSizeSummary`; without it the screen silently
+        // shows nothing, which hides the one number the feature exists to
+        // surface (how many bytes the user actually paid to store). Already
+        // validated above by `carriedPayloadOf`, which refuses a report that
+        // contradicts the approved action, so carrying it widens nothing.
+        compression: encoded.compression ?? null,
     };
 }

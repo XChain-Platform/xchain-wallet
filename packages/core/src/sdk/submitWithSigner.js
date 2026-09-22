@@ -131,6 +131,7 @@ export class HardwareChunkLaneError extends Error {
  * @property {Array<{ address: string, value: string | number }>} [deferredOutputs]
  * @property {{ change?: string | null, rawData?: string | null } | null} [revealOpts]  what the compose built the commit with, so the phase-2 reveal agrees
  * @property {{ included: boolean } | null} [adsDonation]  whether THESE bytes carry the ADS donation
+ * @property {{ compressed: boolean, data?: string, rawData?: string } | null} [compression]  the encoder's transparent-compression report for these bytes, carried so the result can state the size actually stored on chain
  */
 
 /**
@@ -238,7 +239,16 @@ export async function submitWithSigner({
             version: prebuiltPsbt.version,
         };
         effectiveEncoderOpts = encoderOpts;
-        encoded = { psbt: prebuiltPsbt.psbtHex, encoding: prebuiltPsbt.encoding };
+        // The compression report rides along when compose produced one, so the
+        // result carries it exactly as the live-encode branch does. The result
+        // builder below only sets `compression` when `encoded.compression`
+        // exists, so omitting it here is what made the report vanish on the
+        // lane every non-watcher publish now takes.
+        encoded = {
+            psbt: prebuiltPsbt.psbtHex,
+            encoding: prebuiltPsbt.encoding,
+            ...(prebuiltPsbt.compression ? { compression: prebuiltPsbt.compression } : {}),
+        };
         // The fee output is already baked into the prebuilt PSBT (composeForConfirm
         // ran applyNativeFeePreflight before building), so no quote is recomputed here.
         preflight = { quote: null };
