@@ -111,6 +111,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOOL_ROOT="$(cd "$HERE/../.." && pwd)"
 # shellcheck source=tools/release/lib.sh
 source "$HERE/lib.sh"
 
@@ -329,6 +330,28 @@ if [[ -n "$DIRT" ]]; then
     exit 1
 fi
 
+# --- Signing-control source ---------------------------------------------
+#
+# Select this ONCE for both controls named by §7.5. Production reads the
+# artifact profile and dev-mock gate from the pristine tag tree. Only a
+# --staging rehearsal reads both from the invoking tool tree, because it
+# exercises the next release's controls against the previous release's bytes.
+# Deriving both concrete paths here, then making them readonly, prevents a
+# mixed run whose profile comes from one tree and executable gate from another.
+SIGNING_CONTROL_ROOT="$(xr_signing_control_root \
+    "$RELEASE_SET" "$REPO_ROOT" "$TOOL_ROOT")" || exit 2
+SIGNING_CONTROL_TREE="tag"
+if [[ "$RELEASE_SET" == "staging" ]]; then
+    SIGNING_CONTROL_TREE="tool"
+fi
+EXPECTED_ARTIFACTS="$SIGNING_CONTROL_ROOT/tools/release/expected-artifacts.txt"
+DEV_MOCK_CHECK="$SIGNING_CONTROL_ROOT/tools/build-reproduce/check-no-dev-mock.sh"
+readonly SIGNING_CONTROL_ROOT SIGNING_CONTROL_TREE EXPECTED_ARTIFACTS DEV_MOCK_CHECK
+
+echo "sign.sh: signing controls come from the $SIGNING_CONTROL_TREE tree" >&2
+echo "  artifact profile: $EXPECTED_ARTIFACTS" >&2
+echo "  dev-mock gate:    $DEV_MOCK_CHECK" >&2
+
 # --- Dev-mock gate ------------------------------------------------------
 #
 # Refuse to sign if a shell bundle leaked the dev-mock SDK fallback
@@ -337,27 +360,6 @@ fi
 # "the gate passed" must never produce the same release. The old warning
 # path meant a rename or a bad checkout silently downgraded signing to
 # unchecked.
-DEV_MOCK_CHECK="$REPO_ROOT/tools/build-reproduce/check-no-dev-mock.sh"
-DEV_MOCK_GATE_TREE="release"
-# The same rehearsal exception the artifact list takes further down, for the
-# same reason and under the same operator answer (`dq7`, 2026-08-07): a
-# rehearsal exercises the CURRENT tooling against the LAST release's bytes.
-#
-# It is needed here as well as there, and that is not an expansion of the
-# answer but the whole of it: a staging run that got its artifact list from
-# the tools and its dev-mock gate from the tag still cannot be signed,
-# because a tag predating `--artifacts` reports OK having read nothing and
-# the receipt check below refuses it - correctly. Measured in that exact
-# order against `v0.336.0` before this was written.
-#
-# `enforced` stays honest under this, which is the property that matters:
-# the receipt check is untouched, so the word is written only if a gate
-# really opened staged bundles and said how many. What changes is WHICH
-# copy of the gate gets the chance to read them, and only for `--staging`.
-if [[ "$RELEASE_SET" == "staging" ]]; then
-    DEV_MOCK_GATE_TREE="tool"
-    DEV_MOCK_CHECK="$(cd "$HERE/../.." && pwd)/tools/build-reproduce/check-no-dev-mock.sh"
-fi
 DEV_MOCK_STATE="enforced"
 if [[ "${SIGN_SKIP_DEV_MOCK_CHECK:-0}" == "1" ]]; then
     # The escape hatch survives for artifact sets with no dist tree (a
@@ -392,23 +394,16 @@ else
     # The gate now refuses a scan that covers nothing, so reaching the line
     # after this one means at least one shipped bundle was really read.
     #
-    # EXCEPT THAT IT IS NOT THIS SCRIPT'S GATE (S38). This file comes
-    # from whichever checkout invoked it; $DEV_MOCK_CHECK comes from --repo,
-    # which is the tree at the release tag. Those are routinely different
-    # trees, deliberately: --repo exists so a current sign.sh can sign an
-    # older tag's artifacts, and that is how the only signed manifest this
-    # project has published was made (v0.336.0, --lane android, by a sign.sh
-    # that tag does not contain).
+    # EXCEPT THAT IT IS NOT NECESSARILY THIS SCRIPT'S GATE (S38). Production
+    # gets $DEV_MOCK_CHECK from --repo at the release tag, while staging gets
+    # it from the invoking tool tree. Those trees are routinely different:
+    # --repo exists so a current sign.sh can sign an older tag's artifacts.
     #
-    # So the empty-scan refusal above is a property of the TAG's copy of the
-    # gate, and every tag cut before it was written carries a copy that does
-    # not take --artifacts at all. Driven against v0.336.0: the flag is
-    # ignored, the pristine clone's absent dist/ trees are scanned instead,
-    # three SKIP lines and `OK` come back, exit 0 - and `enforced` goes into
-    # the SIGNED header on a scan that read zero bytes. That is the exact
-    # defect the empty-scan refusal was built to end, arriving from the one
-    # direction it cannot see, and the desktop updater refuses any release
-    # whose header is not exactly `enforced`, so the word carries weight.
+    # That means production must verify the TAG's gate receipt, while staging
+    # must verify the TOOL tree's receipt. A tag predating --artifacts ignores
+    # the flag, scans the pristine clone's absent dist/ trees and reports OK
+    # having read nothing. The receipt check closes that hole without erasing
+    # the §7.5 source exception selected above.
     #
     # Requiring the gate's RECEIPT rather than its exit status is what closes
     # it, and the receipt is derived rather than a proxy: only a gate that
@@ -418,7 +413,7 @@ else
     # Named on every run, not only on a refusal: which of the two trees the
     # gate came from is the single fact this whole section turns on, and a
     # signing log that does not say it leaves a reader inferring it.
-    echo "  gate ($DEV_MOCK_GATE_TREE tree): $DEV_MOCK_CHECK" >&2
+    echo "  gate ($SIGNING_CONTROL_TREE tree): $DEV_MOCK_CHECK" >&2
     DEV_MOCK_INPUT="$(cd "$INPUT_DIR" && pwd)"
     DEV_MOCK_OUT=""
     if ! DEV_MOCK_OUT="$( cd "$REPO_ROOT" && bash "$DEV_MOCK_CHECK" --artifacts "$DEV_MOCK_INPUT" 2>&1 )"; then
@@ -431,15 +426,15 @@ else
     if ! printf '%s\n' "$DEV_MOCK_OUT" | grep -qE '^OK - [1-9][0-9]* bundle\(s\) scanned'; then
         echo "sign.sh: the dev-mock gate exited 0 without saying it read anything." >&2
         echo "  Gate script: $DEV_MOCK_CHECK" >&2
-        echo "  That script comes from --repo ($REPO_ROOT), the tree at $TAG," >&2
-        echo "  while this sign.sh comes from the checkout you invoked. A gate" >&2
-        echo "  predating --artifacts ignores the flag, scans the pristine" >&2
-        echo "  clone's absent dist/ trees, and reports OK having read nothing." >&2
+        echo "  It came from the $SIGNING_CONTROL_TREE tree selected for this" >&2
+        echo "  $RELEASE_SET run: $SIGNING_CONTROL_ROOT" >&2
+        echo "  A gate without the artifact receipt did not prove that it opened" >&2
+        echo "  the staged bundles, whatever exit status it returned." >&2
         echo "  Refusing to sign: 'the gate could not run' and 'the gate passed'" >&2
         echo "  must never produce the same release, and this header is what" >&2
         echo "  the desktop updater reads as proof the gate ran." >&2
-        echo "  Fix: sign a tag whose own tools/build-reproduce/check-no-dev-mock.sh" >&2
-        echo "  takes --artifacts, or set SIGN_SKIP_DEV_MOCK_CHECK=1 deliberately," >&2
+        echo "  Fix the selected tree's check-no-dev-mock.sh so it takes" >&2
+        echo "  --artifacts, or set SIGN_SKIP_DEV_MOCK_CHECK=1 deliberately," >&2
         echo "  which records SKIPPED in the header instead of claiming enforced." >&2
         exit 1
     fi
@@ -568,10 +563,11 @@ fi
 # path cannot sign ANY tag older than its newest check, and it says so in
 # a language nobody reading a ceremony runbook can act on.
 #
-# The rule below distinguishes DATA from CODE, which the two-tree design
-# had never had to. `expected-artifacts.txt` and `shipped-lanes.txt` stay
-# tag-side unconditionally: they are what that release DECLARED it ships,
-# and a newer list could excuse a lane the tag never built. A probe is not
+# The rule below distinguishes declarations from executable probes. For
+# production, `expected-artifacts.txt` and `shipped-lanes.txt` stay tag-side:
+# they are what that release DECLARED it ships, and a newer list could excuse
+# a lane the tag never built. Staging moves only the artifact profile and the
+# dev-mock gate together through SIGNING_CONTROL_ROOT above. A probe is not
 # a declaration - it opens the staged bytes and reports what it found - so
 # where a release predates one, the alternative to running this checkout's
 # copy is running NO check at all, and this file's own doctrine is that a
@@ -579,12 +575,10 @@ fi
 # wherever it exists, so no release that carries a check is ever judged by
 # a different one, and the fallback is announced rather than silent.
 #
-# The dev-mock gate is deliberately NOT given this fallback: it is the one
-# gate whose answer is a word in the signed header, and requiring the
-# TAG's copy to produce that word is what S38 closed. A tag that
-# cannot run it is refused, and `prepare-resign-tag.sh` exists to cut one
-# that can.
-TOOL_ROOT_FOR_GATES="$(cd "$HERE/../.." && pwd)"
+# The dev-mock gate is deliberately NOT given this fallback. Production uses
+# the tag copy and staging uses the tool copy, as one choice coupled to the
+# artifact profile. Neither mode may fall back independently.
+TOOL_ROOT_FOR_GATES="$TOOL_ROOT"
 gate_script() {
     local rel="$1"
     if [[ -f "$REPO_ROOT/$rel" ]]; then
@@ -608,43 +602,13 @@ gate_script() {
 }
 
 # --- Artifact-set gate --------------------------------------------------
-EXPECTED="$REPO_ROOT/tools/release/expected-artifacts.txt"
+EXPECTED="$EXPECTED_ARTIFACTS"
 LANES="$REPO_ROOT/tools/release/shipped-lanes.txt"
 
-# A REHEARSAL READS ITS RULES FROM THE TOOLS, NOT FROM THE TAG (§7.5,
-# frontier row 101, operator answer `dq7` 2026-08-07). This is the one
-# deliberate exception to the line above and it is narrow on purpose.
-#
-# A PRODUCTION manifest is a public claim about a released tree, so its gate
-# data has to be the data that tree shipped with - otherwise a newer list
-# could excuse a lane the tag never built, or demand one it could not have.
-# That is why $REPO_ROOT is the default and stays the default.
-#
-# A rehearsal is the opposite thing. It exists to exercise the tooling that
-# will cut the NEXT release, against the LAST release's bytes, and its
-# manifest never leaves the staging feed: publish.sh refuses a `--staging`
-# target without the `.staging-feed` marker and a production target with it,
-# in both directions. Reading the staging profile from the tag makes the
-# rehearsal permanently one release behind its own tooling, which is not a
-# delay but a dead end - measured 2026-08-07 against `v0.336.0`, whose
-# `expected-artifacts.txt` declares no staging rows at all, so `--staging`
-# refused at the only tag that exists and would refuse the same way at every
-# tag cut before the profile that describes it.
-#
-# The tag still decides everything a signature is ABOUT: the pristine-clone
-# check, the tag/version agreement and the artifacts themselves are
-# untouched by this. What moves is only which file lists the shapes a
-# rehearsal set may contain.
-if [[ "$RELEASE_SET" == "staging" ]]; then
-    TOOL_ROOT="$(cd "$HERE/../.." && pwd)"
-    if [[ "$TOOL_ROOT" != "$REPO_ROOT" ]]; then
-        echo "sign.sh: REHEARSAL - reading the artifact list from the TOOL tree" >&2
-        echo "  tools:   $TOOL_ROOT/tools/release/expected-artifacts.txt" >&2
-        echo "  release: $REPO_ROOT (still gates the tag, the tree and the bytes)" >&2
-    fi
-    EXPECTED="$TOOL_ROOT/tools/release/expected-artifacts.txt"
-    LANES="$TOOL_ROOT/tools/release/shipped-lanes.txt"
-fi
+# The source exception was resolved once above. The tag still anchors the
+# pristine checkout, version and artifact bytes in both modes. The lane roster
+# remains tag-owned and is used only by production because --staging and
+# --lane are mutually exclusive below.
 
 # GATE_EXPECTED is what every artifact-level gate below is pointed at. It
 # is the committed list for a full release, and a per-run scope derived
