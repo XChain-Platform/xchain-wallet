@@ -85,6 +85,15 @@
     padding: var(--xc-space-1) 0 var(--xc-space-2);
 }
 
+/* One-line rule statement above a tab's content. Muted and small: it
+   explains the tab without competing with the rows. */
+.tabNote {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    line-height: 1.5;
+    margin: 0 0 var(--xc-space-3);
+}
+
 .placeholder {
     background: var(--xc-surface);
     border: 1px dashed var(--xc-border-strong);

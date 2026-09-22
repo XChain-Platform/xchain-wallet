@@ -38,10 +38,17 @@ import styles from './HomeTabs.module.css';
  * Top-level tabbed view for Home.
  *
  *   Coins    - native rows (BTC / LTC / DOGE / …) only
- *   Tokens   - non-native, divisible (issuance tokens, stablecoins, …)
- *   NFTs     - non-native, indivisible (divisibility === 0)
+ *   Tokens   - every non-native tick, divisible or not
+ *   NFTs     - the subset of Tokens matching the protocol collectible
+ *              rule (DECIMALS = 0 AND LOCK_MAX_SUPPLY = 1)
  *   History  - chronological transaction stream (placeholder)
  *   DeFi     - staking, dispensers, contracts (placeholder)
+ *
+ * The Tokens and NFTs descriptions above were stale until 2026-09-22 and
+ * are the reason the tab read as arbitrary: they described a divisible /
+ * indivisible split the code stopped implementing. NFTs is a subset of
+ * Tokens, not its complement, and the rule is now stated on screen too
+ * rather than left for the user to infer.
  *
  * Network filter applies across every tab so flipping `BTC` filters
  * all tabs to BTC at once. Filter state owned here so it persists
@@ -212,19 +219,30 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 ) : null}
 
                 {active === 'nfts' ? (
-                    <CollectiblesView
-                        rows={nfts}
-                        emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
-                        emptyBody={networkFilter === 'all'
-                            ? 'Indivisible tokens (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
-                            : undefined}
-                        onReceive={networkFilter === 'all' ? onReceive : undefined}
-                        onSelectToken={onSelectToken}
-                        pinnedKeys={pinnedKeys}
-                        onTogglePin={onTogglePin}
-                        hiddenKeys={hiddenKeys}
-                        onToggleHide={onToggleHide}
-                    />
+                    <>
+                        {/* The rule, on screen. A user holding six ticks under
+                            Tokens and two here cannot otherwise tell why, and
+                            guessing "the ones with pictures" is wrong: artwork
+                            plays no part in it. Wording tracks
+                            protocol/NFT_Standard.md. */}
+                        <p className={styles.tabNote}>
+                            A tick appears here when it can never be split and its supply can
+                            never grow. Everything you hold, collectible or not, is also under Tokens.
+                        </p>
+                        <CollectiblesView
+                            rows={nfts}
+                            emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
+                            emptyBody={networkFilter === 'all'
+                                ? 'Indivisible tokens with a permanently locked supply (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
+                                : undefined}
+                            onReceive={networkFilter === 'all' ? onReceive : undefined}
+                            onSelectToken={onSelectToken}
+                            pinnedKeys={pinnedKeys}
+                            onTogglePin={onTogglePin}
+                            hiddenKeys={hiddenKeys}
+                            onToggleHide={onToggleHide}
+                        />
+                    </>
                 ) : null}
 
                 {active === 'activity' ? (
