@@ -59,8 +59,8 @@ const MINT = 1000;
 /** The escrowed token side. */
 const GIVE_TOKENS = 100;
 /** The ask, in native coin, and the exact amount the obligation will demand. */
-const ASK = '0.5';
-const ASK_SATS = 50_000_000;
+const ASK = '1';
+const ASK_SATS = 100_000_000;
 const COIN = REGTEST_COIN.replace(/^R/, '');
 
 async function explorerJson(path) {
@@ -214,7 +214,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
-    test('two crossing orders match, and the coin side owes a payment it can make from the wallet', async ({ page }) => {
+    test('two crossing orders match, and a whole-coin payment settles at the full amount', async ({ page }) => {
         let maker;
         let taker;
         let makerOrder;
@@ -355,9 +355,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
             // The debt must be named in COIN units. Reading it as base units is
             // D-137: the explorer serves a decimal here, and a wallet that
-            // demanded all digits labelled a 0.5 LTC debt "0.5 base units".
+            // demanded all digits labelled a 1 LTC debt "1 base unit".
             await expect(pending, 'the queue does not name the amount owed in coin units')
-                .toContainText(new RegExp(`0\\.5\\s*${COIN}`));
+                .toContainText(new RegExp(`(^|\\s)${ASK}(?:\\.0+)?\\s*${COIN}(?=\\s|$)`));
             await expect(pending, 'the queue labels the debt in the wrong unit (D-137)')
                 .not.toContainText(/base units/);
 
