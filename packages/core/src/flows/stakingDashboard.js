@@ -211,12 +211,24 @@ export function cooldownStatus({ unstake, height, coin } = {}) {
  * Plain-language countdown for a releasing position. Returns null when there
  * is nothing meaningful to say, so the caller keeps its existing text.
  *
+ * The matured wording forks on `kind`. Validator (capability) unstakes wait
+ * on a manual COLLECT-style step, so "Ready to withdraw" is accurate there.
+ * Contract positions have no such step - per contract-staking.md the
+ * block-end sweep credits the staker back automatically and "there is no
+ * intermediate 'release' action" - so telling a contract holder something
+ * is waiting on THEM would be wrong even though the wallet's own height
+ * read can outrun the indexer's sweep and show `matured` before the row's
+ * status flips to `completed`.
+ *
  * @param {CooldownStatus} status
+ * @param {'validator' | 'contract'} [kind]
  * @returns {string | null}
  */
-export function cooldownText(status) {
+export function cooldownText(status, kind) {
     if (!status) return null;
-    if (status.state === 'matured') return 'Ready to withdraw';
+    if (status.state === 'matured') {
+        return kind === 'contract' ? 'Released automatically' : 'Ready to withdraw';
+    }
     if (status.state !== 'releasing') return null;
     const blocks = status.blocksRemaining;
     const plural = blocks === 1 ? 'block' : 'blocks';

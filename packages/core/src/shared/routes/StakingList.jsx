@@ -22,7 +22,7 @@ import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
-import { unclaimedRewards, cooldownStatus, cooldownText } from '../../flows/stakingDashboard.js';
+import { unclaimedRewards, cooldownStatus, cooldownText, toBaseUnits } from '../../flows/stakingDashboard.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakingList.module.css';
 
@@ -430,7 +430,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                                 unstake: { cooldown_end_block: row.cooldownEndBlock },
                                 height: heightByChain[row.chainId],
                                 coin: chainRegistry.get(row.chainId)?.coin,
-                            }))}
+                            }), row.kind)}
                             onSelect={() => onOpenStake(row.ref)}
                         />
                     ))}
@@ -547,14 +547,30 @@ export function buildRows({
         const idx = String(s.target_contract_index ?? '?');
         const addr = String(s._ownerAddress || '');
         const tick = s.tick || '?';
-        // A matching unstake still before its cooldown end means part of
-        // this position is releasing; flag the whole row as cooldown.
         const matchingUnstakes = (contractUnstakes || []).filter(
             (u) => String(u.target_contract_index ?? '') === idx,
         );
-        const inCooldown = matchingUnstakes.length > 0;
+        // The indexer marks an unstake `completed` once the block-end sweep has
+        // credited the coins back, so a completed row describes a release that
+        // has ALREADY happened. Counting those as cooldown pinned a finished
+        // position at "Ready to withdraw" forever, and the stake row it sat on
+        // still carried the original amount, so the list claimed coins were
+        // staked that were already spendable.
+        const releasing = matchingUnstakes.filter((u) => !isReleasedUnstake(u));
+        const released = matchingUnstakes.filter(isReleasedUnstake);
+        // Nothing still releasing and the completed rows account for the whole
+        // position: it is over. The explorer keeps serving the stake row (its
+        // own status stays `valid` and its amount unchanged), so dropping it
+        // here is the only way the list stops showing a stake that is not one.
+        // Anything short of full coverage keeps the row, because a partial
+        // release leaves a real remaining stake.
+        if (releasing.length === 0 && released.length > 0
+            && coversWholeStake(released, s.amount)) continue;
+        // A matching unstake still before its cooldown end means part of
+        // this position is releasing; flag the whole row as cooldown.
+        const inCooldown = releasing.length > 0;
         // Soonest maturity wins: it is the next thing that becomes withdrawable.
-        const cooldownEndBlock = matchingUnstakes
+        const cooldownEndBlock = releasing
             .map((u) => Number(u.cooldown_end_block))
             .filter((n) => Number.isFinite(n) && n > 0)
             .sort((a, b) => a - b)[0] ?? null;
@@ -587,6 +603,10 @@ export function buildRows({
             (s) => String(s.target_contract_index ?? '') === idx,
         );
         if (hasStakeRow) continue;
+        // Already swept back to the owner: there is no position left to show.
+        // Without this an orphan unstake row renders as a permanent cooldown
+        // for coins that are spendable again.
+        if (isReleasedUnstake(u)) continue;
         const addr = String(u._ownerAddress || '');
         const tick = u.tick || '?';
         rows.push({
@@ -611,6 +631,43 @@ export function buildRows({
     }
 
     return rows;
+}
+
+/**
+ * Has this unstake already been swept back to the owner?
+ *
+ * `completed` is the indexer's own verdict after the block-end sweep, not a
+ * countdown the wallet has to run itself. Per contract-staking.md release is
+ * automatic and "there is no intermediate 'release' action", so a completed
+ * row means the coins are spendable again and nothing is owed to the user.
+ *
+ * @param {{ status?: unknown } | null | undefined} unstake
+ */
+function isReleasedUnstake(unstake) {
+    return String(unstake?.status || '').toLowerCase() === 'completed';
+}
+
+/**
+ * Do these completed unstakes account for the whole staked amount?
+ *
+ * Compared in base units so a decimal string never rounds its way to a false
+ * "fully released". Fails CLOSED: any amount that cannot be parsed exactly
+ * returns false and the position keeps its row, because hiding a stake that
+ * still exists is far worse than showing one that has ended.
+ *
+ * @param {Array<{ amount?: unknown }>} completed
+ * @param {unknown} stakeAmount
+ */
+function coversWholeStake(completed, stakeAmount) {
+    const staked = toBaseUnits(stakeAmount);
+    if (staked === null) return false;
+    let sum = 0n;
+    for (const u of completed) {
+        const units = toBaseUnits(u?.amount);
+        if (units === null) return false;
+        sum += units;
+    }
+    return sum >= staked;
 }
 
 // Comma-grouped display amount; non-numeric input (missing amounts)

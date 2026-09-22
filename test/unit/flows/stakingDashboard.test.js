@@ -197,6 +197,22 @@ describe('cooldownText', () => {
         expect(cooldownText({ state: 'matured' })).toBe('Ready to withdraw');
     });
 
+    it('keeps "Ready to withdraw" for a matured validator (capability) row', () => {
+        // Validator/capability unstakes wait on a manual COLLECT-style step,
+        // so telling the holder it is ready for them to act is accurate.
+        expect(cooldownText({ state: 'matured' }, 'validator')).toBe('Ready to withdraw');
+    });
+
+    it('never says "Ready to withdraw" for a matured contract row', () => {
+        // Contract release is automatic (contract-staking.md: "there is no
+        // intermediate 'release' action"), so wording that implies a manual
+        // withdraw step would be wrong even though the wallet's own height
+        // read can call it `matured` before the indexer's sweep has run.
+        const text = cooldownText({ state: 'matured' }, 'contract');
+        expect(text).not.toBe('Ready to withdraw');
+        expect(text).toBe('Released automatically');
+    });
+
     it('counts blocks, with an approximate date when one can be estimated', () => {
         const withDate = cooldownText(cooldownStatus({
             unstake: { cooldown_end_block: 1010 }, height: 1000, coin: 'bitcoin',
