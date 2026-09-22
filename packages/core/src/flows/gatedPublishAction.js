@@ -255,6 +255,17 @@ async function prepareGatedPublish(opts, caller) {
     };
     const encoderOpts = {
         pubkey: source.publicKey,
+        // Select funding UTXOs BY ADDRESS and return change to the spender.
+        // Without `change` the encoder refuses to build as soon as the
+        // leftover clears dust, with "Transaction would burn significant
+        // satoshis as fees. Please provide a change address" - it will not
+        // silently burn it - so a funded address with one large UTXO fails
+        // every time. The public FILE lane never hit this because its confirm
+        // lane injects the pair; BATCH is fee-quote denied by design, so the
+        // gated form has no confirm lane and always builds live here.
+        // Mirrors linkAction.js / advancedAction.js / composeForConfirm.js.
+        sourceAddress: source.address,
+        change: source.address,
         rawData: ciphertext.toString('binary'),
         ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
     };

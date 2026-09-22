@@ -245,6 +245,51 @@ describe('gatedPublishAction composition', () => {
     });
 });
 
+// --- Issue #37: the encoder refuses to build without a change address ---
+// fee_settlement.js throws CHANGE_ADDRESS_REQUIRED as soon as the leftover
+// clears dust and no `change` was supplied; it will not silently burn it as
+// fee. So a funded address with one large UTXO fails every time, which is
+// what made Encrypted & token-gated publishing unusable from both signer
+// kinds while the public lane worked.
+//
+// The public FILE lane never hit this because its confirm lane injects the
+// pair. BATCH is fee-quote denied by design, so the gated form has no confirm
+// lane and always builds live here, which is why this flow has to supply them
+// itself. `change` is set to the spender so submitAction can then rotate the
+// self-change default onto a fresh internal address.
+describe('gated publish funding (issue #37)', () => {
+    it('selects funding by address and returns change to the spender', async () => {
+        const opts = makeOpts();
+        await gatedPublishAction(opts);
+
+        const { encoderOpts } = vi.mocked(submitAction).mock.calls[0][0];
+        expect(encoderOpts.sourceAddress).toBe(opts.from.address);
+        expect(encoderOpts.change).toBe(opts.from.address);
+    });
+
+    it('still carries the ciphertext and pubkey alongside the funding pair', async () => {
+        // Guards the shape of the fix rather than only its presence: adding
+        // the pair must not displace what the encoder already needed.
+        const opts = makeOpts();
+        await gatedPublishAction(opts);
+
+        const { encoderOpts } = vi.mocked(submitAction).mock.calls[0][0];
+        expect(encoderOpts.pubkey).toBe(opts.from.publicKey);
+        expect(typeof encoderOpts.rawData).toBe('string');
+        expect(encoderOpts.rawData.length).toBeGreaterThan(0);
+    });
+
+    it('supplies the pair on the watcher path too', async () => {
+        // buildGatedPublishPsbtRequest shares prepareGatedPublish, so the
+        // encode-only lane must carry the same funding instructions.
+        await buildGatedPublishPsbtRequest(makeOpts());
+        const call = vi.mocked(buildActionPsbt).mock.calls[0][0];
+        const opts = makeOpts();
+        expect(call.encoderOpts?.sourceAddress ?? call.sourceAddress).toBe(opts.from.address);
+        expect(call.encoderOpts?.change ?? call.change).toBe(opts.from.address);
+    });
+});
+
 describe('buildGatedPublishPsbtRequest (watcher path)', () => {
     it('runs the same composition and returns the PSBT request + keyHash', async () => {
         const vault = makeVault();
