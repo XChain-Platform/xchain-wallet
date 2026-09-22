@@ -305,6 +305,8 @@ export async function messageAction(opts) {
         actionData: { action: 'MESSAGE', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
@@ -378,6 +380,8 @@ export async function handshakeAction(opts) {
         actionData: { action: 'MESSAGE', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
