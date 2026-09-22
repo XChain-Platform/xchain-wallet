@@ -56,8 +56,13 @@ import { FileMetaBackend, metaPathFor } from './meta.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
-import { isHttpUrl, shouldBlockNavigation, isTrustedSenderEvent } from './security.js';
-import { attachHidPermissions, observeHidFrames } from './permissions.js';
+import {
+    isHttpUrl,
+    shouldBlockNavigation,
+    isTrustedSenderEvent,
+    isTrezorConnectBridgeWindowOpen,
+} from './security.js';
+import { attachHidPermissions, attachHidDenial, observeHidFrames } from './permissions.js';
 import {
     attachDeepLinkHandlers,
     registerProtocolClients,
@@ -156,9 +161,56 @@ function kickChainRegistrySync() {
 // to the OS browser), blocks any navigation outside APP_ROOT (the
 // packaged renderer directory, not merely the file:// scheme), and
 // refuses `<webview>` embedding. See security.js for the pure predicates.
+//
+// §40.12: dedicated, non-default Electron session for the
+// hosted Trezor Connect script (see
+// security.js#isTrezorConnectBridgeWindowOpen and
+// renderer/signerFactories/trezorFactory.js). Created lazily on first
+// pairing/sign attempt and explicitly wired to `attachHidDenial` below -
+// never to `attachHidPermissions` - so `hid` is refused through every
+// handler Electron offers, regardless of what origin the hosted script
+// reports. A bare (non-`persist:`) partition name is in-memory only:
+// nothing the hosted script does here survives a relaunch.
+let trezorConnectSession = null;
+function getTrezorConnectSession() {
+    if (!trezorConnectSession) {
+        trezorConnectSession = session.fromPartition('trezor-connect-isolated');
+        attachHidDenial(trezorConnectSession);
+    }
+    return trezorConnectSession;
+}
+
 function hardenWebContents(contents) {
     if (!contents || typeof contents.setWindowOpenHandler !== 'function') return;
-    contents.setWindowOpenHandler(({ url }) => {
+    contents.setWindowOpenHandler(({ url, frameName }) => {
+        // §40.12: the one narrow exception to "deny every
+        // window.open". Only the app's own trusted renderer (never the
+        // bridge window itself; see isTrezorConnectBridgeWindowOpen) may
+        // open the isolated Trezor Connect bridge, and only into the
+        // dedicated no-HID session above, with no preload attached.
+        if (isTrezorConnectBridgeWindowOpen(frameName, contents.getURL(), APP_ROOT)) {
+            return {
+                action: 'allow',
+                overrideBrowserWindowOptions: {
+                    width: 420,
+                    height: 640,
+                    title: 'Trezor Connect',
+                    autoHideMenuBar: true,
+                    webPreferences: {
+                        session: getTrezorConnectSession(),
+                        contextIsolation: true,
+                        nodeIntegration: false,
+                        sandbox: true,
+                        // No `preload` key. The default window.open child
+                        // would otherwise inherit this app's preload (and
+                        // therefore xchainWalletBridge /
+                        // xchainWalletSignerBridge) the same way any other
+                        // window.open child does; the hosted Trezor Connect
+                        // script gets a DOM and nothing else.
+                    },
+                },
+            };
+        }
         // Open real external links in the user's browser, never in a
         // preload-bearing Electron window.
         if (isHttpUrl(url)) {
@@ -188,7 +240,18 @@ function hardenWebContents(contents) {
     // Watching for the subframe here is what lets it: the packaged
     // renderer has no iframes, so one appearing switches the HID grant off
     // for as long as this webContents lives.
-    observeHidFrames(contents);
+    //
+    // §40.12: the Trezor Connect bridge's own session (above) is
+    // explicitly denied `hid` via `attachHidDenial`, so there is no
+    // HID-granted session here for a subframe to poison. observeHidFrames'
+    // guard is a single module-level singleton shared by every webContents
+    // (permissions.js); feeding it the bridge's own legitimate internal
+    // Trezor iframe would switch off Ledger HID access in the MAIN window
+    // too, as a side effect of merely pairing a Trezor. Skip it for
+    // exactly the bridge session.
+    if (contents.session !== trezorConnectSession) {
+        observeHidFrames(contents);
+    }
 }
 
 function liveWindows() {
