@@ -101,9 +101,7 @@ export default defineConfig({
         // steady-state cost and the blast radius. See `maxForks` above for why
         // the ceiling is now computed rather than fixed at 8.
         pool: 'forks',
-        poolOptions: {
-            forks: { maxForks },
-        },
+        maxWorkers: maxForks,
         // Carries the instrumentation flag into the test processes, where
         // test/helpers/testEnvSpeed.js turns it into a multiplier for the
         // ceilings that bound real CPU work.

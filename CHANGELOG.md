@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A batch can compose a parent token and its sub-tokens in one action.
 
 ### Changed
+- The test runner moves to Vitest 4.1.11, closing the @vitest/mocker path-traversal advisory (GHSA-82fw-gwwq-j7x9) that affected development only.
 - The wallet moves to xchain-sdk 0.15.3, whose deploy workflow resolves a chunked contract through the explorer.
 - Release tooling transcribes the zone's current edge rules: the API hosts are rate limited per client over 10-second windows instead of skipped.
 - Contracts are named by the name, version and description their own source exports, shown as "Escrow v1.0.0 (C:BTC:12)" in history, the contracts list and the contract page, with the description on the contract page.
