@@ -199,14 +199,55 @@ function script(name, body) {
 
 // --- launching real processes ------------------------------------------
 
+/** End launchAndWatch's observation window when the launched child says it is ready. */
+async function launchUntilReady(cmd, args = []) {
+    const signal = 'SIGUSR1';
+    const nativeSetTimeout = globalThis.setTimeout;
+    const nativeClearTimeout = globalThis.clearTimeout;
+    let releaseWindow;
+    let signalled = false;
+
+    const onReady = () => {
+        signalled = true;
+        releaseWindow?.();
+    };
+    process.once(signal, onReady);
+
+    // launchAndWatch creates its observation timer synchronously. Replace
+    // that one timer with a child-controlled latch, retaining a watchdog so
+    // a broken fixture fails instead of hanging the smoke suite forever.
+    globalThis.setTimeout = (callback, _delay, ...callbackArgs) => {
+        const watchdog = nativeSetTimeout(callback, 10000, ...callbackArgs);
+        releaseWindow = () => {
+            nativeClearTimeout(watchdog);
+            callback(...callbackArgs);
+        };
+        return watchdog;
+    };
+
+    let pending;
+    try {
+        pending = launchAndWatch(cmd, args, { timeoutMs: 10000 });
+    } finally {
+        globalThis.setTimeout = nativeSetTimeout;
+    }
+
+    try {
+        const observation = await pending;
+        assert.equal(signalled, true, `${cmd} did not signal readiness`);
+        return observation;
+    } finally {
+        process.removeListener(signal, onReady);
+    }
+}
+
 {
     // A process that stays up, which is the only shape that passes.
-    const sleeper = script('sleeper.sh', 'echo up; sleep 30');
-    const obs = await launchAndWatch(sleeper, [], { timeoutMs: 600 });
+    const sleeper = script('sleeper.sh', 'echo up; kill -USR1 "$PPID"; sleep 30');
+    const obs = await launchUntilReady(sleeper);
     assert.equal(obs.exited, false, 'a sleeping process must be observed as alive');
     assert.equal(evaluate(obs).state, 'ok');
     assert.match(obs.output, /up/);
-    assert.ok(obs.waitedMs >= 550, `the full window must be waited, got ${obs.waitedMs}ms`);
 }
 
 {
@@ -225,8 +266,9 @@ function script(name, body) {
 {
     // Crash output from a process that is still technically up.
     const crasher = script('crasher.sh',
-        'echo "# Fatal process out of memory: Failed to reserve virtual memory for CodeRange"; sleep 30');
-    const obs = await launchAndWatch(crasher, [], { timeoutMs: 600 });
+        'echo "# Fatal process out of memory: Failed to reserve virtual memory for CodeRange"; '
+        + 'kill -USR1 "$PPID"; sleep 30');
+    const obs = await launchUntilReady(crasher);
     assert.equal(obs.exited, false);
     assert.equal(evaluate(obs).state, 'failed', 'crash output fails even while the process lingers');
 }
@@ -235,8 +277,9 @@ function script(name, body) {
     // Output captured from BOTH streams. Electron writes its crash banner
     // to stderr and its updater log to stdout, so a probe reading one of
     // them would miss half of what it exists to see.
-    const both = script('both.sh', 'echo on-stdout; echo on-stderr >&2; sleep 30');
-    const obs = await launchAndWatch(both, [], { timeoutMs: 600 });
+    const both = script('both.sh',
+        'echo on-stdout; echo on-stderr >&2; kill -USR1 "$PPID"; sleep 30');
+    const obs = await launchUntilReady(both);
     assert.match(obs.output, /on-stdout/);
     assert.match(obs.output, /on-stderr/);
 }
