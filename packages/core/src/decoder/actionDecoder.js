@@ -728,6 +728,7 @@ function decodeFile(p, chainSuffix) {
     const name = str(p.NAME);
     const type = str(p.TYPE);
     const title = str(p.TITLE);
+    const memo = str(p.MEMO);
     const gate = str(p.GATE_TICKER);
     return {
         summary: `Publish file ${name || '?'}${chainSuffix}${gate ? ` (gated by ${gate})` : ''}`,
@@ -735,10 +736,20 @@ function decodeFile(p, chainSuffix) {
             { label: 'Name', value: name },
             { label: 'Type', value: type },
             ...(title ? [{ label: 'Title', value: title }] : []),
+            // The memo is committed on-chain and is public forever, so the one
+            // screen the user checks before signing has to show it. Every other
+            // memo-carrying action renders this row; FILE was the outlier.
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ...(gate ? [{ label: 'Gate token', value: gate }] : []),
             ...(str(p.ENCRYPTION_METHOD) ? [{ label: 'Encryption', value: str(p.ENCRYPTION_METHOD) }] : []),
         ],
         warnings: [
+            // Defensive: the form refuses both characters before Confirm, but a
+            // decoder that reads a memo states the same rule as its siblings
+            // rather than trusting one caller's validation.
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
             ...(!name ? ['File name is empty.'] : []),
             'File contents are permanent and public on the blockchain (encrypted if gated).',
         ],
@@ -751,6 +762,7 @@ function decodeLink(p, chainSuffix) {
     const idx1 = str(p.COIN1_ACTION_INDEX);
     const coin2 = str(p.COIN2);
     const idx2 = str(p.COIN2_ACTION_INDEX);
+    const memo = str(p.MEMO);
     return {
         summary: `Link ${coin1 || '?'} action #${idx1 || '?'} to ${coin2 || '?'} action #${idx2 || '?'}${chainSuffix}`,
         details: [
@@ -758,8 +770,12 @@ function decodeLink(p, chainSuffix) {
             { label: 'Action 1', value: idx1 ? `#${idx1}` : '' },
             { label: 'Chain 2', value: coin2 },
             { label: 'Action 2', value: idx2 ? `#${idx2}` : '' },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
             ...(!coin1 || !coin2 ? ['Both chains must be specified.'] : []),
         ],
     };
