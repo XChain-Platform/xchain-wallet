@@ -87,6 +87,10 @@ export function useConfirmAction() {
     const [report, setReport] = useState(null);
     const [error, setError] = useState(null);
     const [acknowledged, setAcknowledged] = useState(() => new Set());
+    // Surface the spender as state so the confirm page can NAME it. It always
+    // arrived on confirm() and lived only in optsRef, which that page cannot
+    // read, so the page shipped without the legacy stage's From row.
+    const [source, setSource] = useState(null);
 
     // Release the singleton (and abort in-flight work) when the owning
     // component unmounts while still holding it - a form navigated away
@@ -191,6 +195,7 @@ export function useConfirmAction() {
         const controller = new AbortController();
         abortRef.current = controller;
         optsRef.current = { ...args, reservationId: null };
+        setSource(args.source ?? null);
         setError(null);
         setReport(null);
         setComposed(null);
@@ -471,7 +476,7 @@ export function useConfirmAction() {
 
     return {
         confirm, approve, reject, acknowledge,
-        phase, composing, composed, report, error, acknowledged,
+        phase, composing, composed, report, error, acknowledged, source,
         // Approve is allowed when every non-overridable error is absent AND
         // every overridable error the report carries has been acknowledged.
         canApprove: canApproveWithReport(report, acknowledged),

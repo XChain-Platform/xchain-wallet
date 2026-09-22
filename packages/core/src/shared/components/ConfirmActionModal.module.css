@@ -52,6 +52,29 @@
     color: var(--xc-text-muted);
 }
 
+/* The From row (#40). Label and address on one line, the address in the
+   monospace treatment AddressText already applies, so a user comparing it
+   against their address list is comparing like with like. */
+.sourceRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-2);
+    margin: 0;
+}
+
+.sourceLabel {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    flex: none;
+}
+
+.sourceValue {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    margin: 0;
+    min-width: 0;
+}
+
 /* §5.3.4 in-page error (e.g. a bad password), sitting directly above the
    credentials it refers to. */
 .error {

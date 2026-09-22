@@ -588,6 +588,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 payload={resolvedPayload}
                 decoded={intent.decoded}
                 intentLoading={intent.loading}
+                // #40: the address this window will spend from. Already
+                // resolved above for the balance preview and the pre-flight
+                // call; it was never shown to the user deciding whether to
+                // approve.
+                sourceAddress={previewBalances.fromAddress}
             />
 
             {/* §5.6 slice 4: the shared PSBT panel enumerates every
@@ -712,7 +717,7 @@ function coSignPreviewDecodedFrom(coSignPreview) {
     return { action: preview.action, params: preview.params || {} };
 }
 
-function SignSummary({ kind, payload, decoded, intentLoading }) {
+function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = null }) {
     const inner = payload?.payload || {};
     switch (kind) {
         case 'signMessage':
@@ -768,6 +773,16 @@ function SignSummary({ kind, payload, decoded, intentLoading }) {
                         >
                             {decoded.summary}
                         </p>
+                        {/* #40: "From", not "Signer" as the signMessage case
+                            above says, because this one spends. A dApp picks
+                            the account, the user did not, so the window that
+                            asks for approval has to name it. */}
+                        {sourceAddress ? (
+                            <>
+                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>From</p>
+                                <pre className={shared.summaryValue} data-testid="sign-approval-source">{sourceAddress}</pre>
+                            </>
+                        ) : null}
                         {decoded.details.length > 0 ? (
                             <details className={styles.details}>
                                 <summary className={styles.detailsToggle}>

@@ -126,6 +126,14 @@ export function ActionConfirmScreen({
     // that is not a bet or a resolve) comes back untouched.
     const decoded = withOutcomeLabels(composed?.decoded, outcomeLabels);
 
+    // #40: the spender, taken from the confirm hook rather than from a new
+    // prop on all ~38 calling forms. Every form already passes `from` into
+    // useActionConfirmFlow.run, which forwards it as `source`; the hook now
+    // keeps it, so the row appears on every action surface at once and a new
+    // form cannot forget to opt in. hwSource is the fallback for the same
+    // value in record form, so a device signer is not the one case left blank.
+    const sourceAddress = confirmAction.source || hwSource?.address || null;
+
     return (
         <ConfirmActionModal
             screenVariant={screenVariant}
@@ -157,6 +165,7 @@ export function ActionConfirmScreen({
             // simulation still wins, for surfaces that have a better one.
             simulation={simulation || composed?.simulation || null}
             error={confirmAction.error}
+            sourceAddress={sourceAddress}
             chainLabel={chainLabel}
             feeText={exactFeeText || feeText}
             credentialsReady={credsComplete}

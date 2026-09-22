@@ -27,7 +27,7 @@
 // click handler's tick, before any await.
 
 import { useState, useCallback } from 'react';
-import { Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
@@ -70,6 +70,13 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   blocking alert INSTEAD of the credentials + Approve, for requests the wallet
  *   will not sign at all. Distinct from a pre-flight error, which the user may
  *   acknowledge; a refusal has no override.
+ * @param {string|null} [props.sourceAddress]: the ONE address that signs and pays
+ *   (#40). ACTION VARIANT ONLY, and the restriction is the whole design: an action
+ *   is composed from a single spender, so naming it is always correct, while a
+ *   caller-supplied PSBT may spend several owned addresses at once. That case is
+ *   already served better by the psbt variant's input enumeration, which marks
+ *   which inputs the wallet owns; collapsing it to one From line would be a lie
+ *   dressed as a disclosure. Pass nothing on the psbt and message variants.
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
@@ -78,6 +85,7 @@ export function ConfirmActionModal({
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
     psbtPanel = null, messageText, refusal = null, headline,
+    sourceAddress = null,
 }) {
     const headlineText = headline !== undefined
         ? headline
@@ -167,6 +175,23 @@ export function ConfirmActionModal({
                         <pre className={styles.messageText} data-testid="confirm-message-text">
                             {messageText}
                         </pre>
+                    ) : null}
+
+                    {/* WHO PAYS, above what happens (#40). The wallet holds
+                        several addresses per chain and the form's From picker
+                        is gone by the time this page renders, so without this
+                        row the only hint of the spender is a balance debit the
+                        user would have to match against their address list.
+                        The legacy review stage this page replaced always had
+                        it; the single-encode page dropped it. Action variant
+                        only - see the sourceAddress prop doc. */}
+                    {variant === 'action' && sourceAddress ? (
+                        <dl className={styles.sourceRow} data-testid="confirm-source">
+                            <dt className={styles.sourceLabel}>From</dt>
+                            <dd className={styles.sourceValue}>
+                                <AddressText address={sourceAddress} highlight />
+                            </dd>
+                        </dl>
                     ) : null}
 
                     {variant === 'action' && decoded ? (
