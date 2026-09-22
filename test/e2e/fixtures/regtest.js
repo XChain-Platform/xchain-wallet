@@ -21,12 +21,12 @@
 //
 // The dev server runs the mock because it is TOLD to
 // (`VITE_XCHAIN_REAL_SDK=0`, pinned in `playwright.config.js`), not
-// because the real SDK fails to load there. It used to be the latter -
+// because the real SDK fails to load there. Without the pin, vite's
+// pre-bundling of the SDK makes the dev server a real-SDK-against-mainnet
+// venue, where every compose fails "unreachable" (before pre-bundling,
 // vite dev threw `require is not defined` on the CJS import and
-// `resolveSdkFactory` caught it - and when vite learned to pre-bundle
-// the SDK that venue silently became a real-SDK-against-mainnet venue,
-// where every compose fails "unreachable". Same venue as before, chosen
-// on purpose now.
+// `resolveSdkFactory` caught it, which is how the mock got chosen by
+// accident rather than on purpose).
 //
 // `playwright.regtest.config.js` serves a `vite preview` of the
 // PRODUCTION build instead, which rollup bundles the CJS into - the
@@ -48,7 +48,7 @@
 //   ssh -N -L 18080:localhost:18080 -L 10000:localhost:10000 \
 //          -L 3023:localhost:3023 -L 3025:localhost:3025 \
 //          -L 3223:localhost:3223 -L 3225:localhost:3225 \
-//          -L 3123:localhost:3123 -L 3125:localhost:3125 jdog@localhost
+//          -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
 //
 // `assertVenueReachable()` (called from global setup) fails once, fast,
 // with that command in the message, rather than letting every spec die
@@ -259,7 +259,8 @@ export async function assertVenueReachable() {
     const hint =
         `Regtest venue (${REGTEST_COIN}) unreachable. Open the tunnels:\n`
         + `  ssh -N -L 18080:localhost:18080 -L ${VENUE.encoderPort}:localhost:${VENUE.encoderPort} `
-        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} jdog@localhost`;
+        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} `
+        + '"$XC_REGTEST_SSH_HOST"';
 
     let status;
     try {
@@ -288,12 +289,8 @@ export async function assertVenueReachable() {
     }
 }
 
-/**
- * The venue host the tunnels already go to, and the SSH identity used to reach
- * it. Overridable for a stack that lives somewhere else; never a credential,
- * just a host, and the key is the operator's own agent.
- */
-const SSH_HOST = process.env.XC_REGTEST_SSH_HOST || 'jdog@localhost';
+/** Required SSH destination for the regtest rail. */
+const SSH_HOST = process.env.XC_REGTEST_SSH_HOST?.trim();
 
 /**
  * Whether this run may write a price snapshot at all.
@@ -324,6 +321,10 @@ const PRICE_SEED_SUPPRESSED =
  * spec drives the write itself, through this same credential-free path.
  */
 export async function runInIndexer(script, timeoutMs = 60_000) {
+    if (!SSH_HOST) {
+        throw new Error('XC_REGTEST_SSH_HOST must be set to the regtest rail SSH destination');
+    }
+
     const args = [
         '-o', 'BatchMode=yes',
         '-o', 'ConnectTimeout=10',
