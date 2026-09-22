@@ -1654,6 +1654,9 @@ function AppInner() {
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
                         initialMode={contractRef.initialMode}
+                        initialTick={contractRef.initialTick}
+                        initialSigningPubkey={contractRef.initialSigningPubkey}
+                        initialFromAddress={contractRef.initialFromAddress}
                         onBack={() => {
                             // Return to whichever flow opened the form: the
                             // staking list (new-stake picker), the position's
@@ -1731,23 +1734,31 @@ function AppInner() {
                         address={stakingRef.address}
                         contractActionIndex={stakingRef.contractActionIndex}
                         onUnstake={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'unstake',
+                                    // Seed the form from THIS position (xchain-wallet#34)
+                                    // instead of letting it fall back to XCHAIN/blank/default-address.
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
                             : () => setUnlockedView('staking-unstake')}
                         onDelegate={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'delegate',
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
@@ -1756,12 +1767,15 @@ function AppInner() {
                         onClaimRewards={() => setUnlockedView('staking-claim')}
                         onOpenOperatorDashboard={() => setUnlockedView('operator-dashboard')}
                         onStakeMore={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'stake',
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }

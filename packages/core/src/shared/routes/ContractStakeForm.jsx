@@ -83,9 +83,21 @@ function extractRows(resp) {
  * @param {string} props.chainId
  * @param {string|number} props.contractActionIndex - target contract being staked TO
  * @param {'stake'|'unstake'|'delegate'} [props.initialMode] - preselect the action radio (e.g. a staking position's Unstake quick action)
+ * @param {string} [props.initialTick] - preseed the token field from a staking position (xchain-wallet#34); falls back to 'XCHAIN' when absent
+ * @param {string} [props.initialSigningPubkey] - preseed the signing pubkey field from a staking position (xchain-wallet#34); falls back to blank when absent
+ * @param {string} [props.initialFromAddress] - preseed From with this address when it is one of the wallet's own addresses on `chainId` (xchain-wallet#34); falls back to the chain's active/newest address like every other spend-from-balance form
  * @param {() => void} props.onBack
  */
-export function ContractStakeForm({ walletId, chainId, contractActionIndex, initialMode, onBack }) {
+export function ContractStakeForm({
+    walletId,
+    chainId,
+    contractActionIndex,
+    initialMode,
+    initialTick,
+    initialSigningPubkey,
+    initialFromAddress,
+    onBack,
+}) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -104,8 +116,11 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
     // stake, the most common operation)
     const [mode, setMode] = useState(/** @type {'stake'|'unstake'|'delegate'} */ (initialMode || 'stake'));
     const [amount, setAmount] = useState('');
-    const [signingPubkey, setSigningPubkey] = useState('');
-    const [tick, setTick] = useState('XCHAIN');
+    // Seeded once from the position that opened this form (xchain-wallet#34);
+    // a one-shot default via the useState initializer, same as every other
+    // initial* prop in this repo - it never re-fights a later user edit.
+    const [signingPubkey, setSigningPubkey] = useState(initialSigningPubkey || '');
+    const [tick, setTick] = useState(initialTick || 'XCHAIN');
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [password, setPassword] = useState('');
@@ -129,9 +144,15 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                // Stake from the chain's active address (else newest HD
+                const onChain = byChain?.[chainId] || [];
+                // The position that opened this form wins when its address is
+                // still one of ours on this chain (xchain-wallet#34); otherwise
+                // stake from the chain's active address (else newest HD
                 // external), matching Send.
-                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                const seeded = initialFromAddress
+                    ? onChain.find((a) => a.address === initialFromAddress)
+                    : null;
+                const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
                     setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
                     return;

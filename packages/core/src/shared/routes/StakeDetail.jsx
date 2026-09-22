@@ -50,12 +50,12 @@ const ADDRESS_CELL_STYLE = { overflowWrap: 'anywhere' };
  * @param {string} props.chainId
  * @param {string} props.address
  * @param {string} [props.contractActionIndex]  contract kind only
- * @param {() => void} [props.onUnstake]
- * @param {() => void} [props.onDelegate]
+ * @param {(position?: { tick?: string, signingPubkey?: string }) => void} [props.onUnstake]  contract kind gets the position's tick + signing pubkey (xchain-wallet#34)
+ * @param {(position?: { tick?: string, signingPubkey?: string }) => void} [props.onDelegate]  contract kind gets the position's tick + signing pubkey (xchain-wallet#34)
  * @param {() => void} [props.onRevokeDelegation]
  * @param {() => void} [props.onClaimRewards]
  * @param {() => void} [props.onOpenOperatorDashboard]
- * @param {() => void} [props.onStakeMore]     contract kind: add stake
+ * @param {(position?: { tick?: string, signingPubkey?: string }) => void} [props.onStakeMore]     contract kind: add stake, gets the position's tick (xchain-wallet#34)
  * @param {() => void} [props.onOpenContract]  contract kind: open ContractDetail
  * @param {() => void} props.onBack
  */
@@ -202,6 +202,15 @@ export function StakeDetail({
     }, [contractStakes]);
     const contractTick = contractStakes[0]?.tick || contractUnstakes[0]?.tick || '';
     const inCooldown = contractUnstakes.length > 0;
+
+    // Quick actions hand the position's token + signing pubkey to the caller
+    // so a shell can seed ContractStakeForm from THIS position instead of
+    // letting the form fall back to its own generic defaults (XCHAIN, blank
+    // pubkey) - a position on a non-XCHAIN token otherwise lands the user on
+    // a form that does not match what they clicked (xchain-wallet#34).
+    const contractPositionSeed = kind === 'contract'
+        ? { tick: contractTick, signingPubkey: contractStakes[0]?.signing_pubkey || '' }
+        : null;
 
     const header = (
         <PageHeader
@@ -380,7 +389,7 @@ export function StakeDetail({
                     <button
                         type="button"
                         className={local.quickAction}
-                        onClick={onStakeMore}
+                        onClick={() => onStakeMore?.(contractPositionSeed)}
                         disabled={!onStakeMore}
                         title="Stake more into this contract"
                     >
@@ -390,7 +399,7 @@ export function StakeDetail({
                     <button
                         type="button"
                         className={local.quickAction}
-                        onClick={onUnstake}
+                        onClick={() => onUnstake?.(contractPositionSeed)}
                         disabled={!onUnstake || contractStakes.length === 0}
                         title="Start unstaking (cooldown applies)"
                     >
@@ -400,7 +409,7 @@ export function StakeDetail({
                     <button
                         type="button"
                         className={local.quickAction}
-                        onClick={onDelegate}
+                        onClick={() => onDelegate?.(contractPositionSeed)}
                         disabled={!onDelegate || contractStakes.length === 0}
                         title="Rotate the position's signing key"
                     >
