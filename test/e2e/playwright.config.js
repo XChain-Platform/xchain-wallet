@@ -58,6 +58,7 @@ export default defineConfig({
     // contention, so both budgets do too.
     timeout: budget.timeout,
     expect: { timeout: budget.expectTimeout },
+    globalSetup: './global-setup.ci.js',
     reporter: process.env.CI
         ? [['github'], ['html', { open: 'never' }]]
         : 'list',
