@@ -12,7 +12,8 @@
 // service worker. Shells talk to core flows via typed messages:
 //
 //     request  = { type: string, request: unknown }
-//     response = { ok: true, result } | { ok: false, error: { name, message } }
+//     response = { ok: true, result }
+//              | { ok: false, error: { name, message, code?, retryAfterMs?, burst?, windowMs? } }
 //
 // Core flows are registered as handlers against message types. The host
 // catches synchronous and async errors and serializes them into the

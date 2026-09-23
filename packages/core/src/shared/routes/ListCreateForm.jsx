@@ -422,7 +422,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     Once it's indexed you can view it from My Lists and reference it from an airdrop, gate, dispenser, or order.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}><code className={styles.txid}>{String(txid || 'n/a')}</code></dd>
                 </dl>
                 <div className={styles.actions}>

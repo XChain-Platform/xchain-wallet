@@ -397,27 +397,27 @@ if [[ "$STAGING" -eq 0 ]]; then
         node "$HERE/release-record.mjs" assert --tag "$TAG" >&2
     fi
 
-    # THE §7.5 REHEARSAL IS A DESKTOP INSTRUMENT, by its own data:
-    # rehearsal-matrix.mjs declares eight lanes and every one of them is
-    # win/mac/linux. What it proves is that electron-updater walks a
-    # published pointer to a binary and swaps it on real hardware. A
-    # partial release covering only store lanes contains no such lane, so
-    # demanding a rehearsal record of it is demanding evidence about lanes
-    # that are not in the release - the same shape as the two checks above,
-    # a third time.
+    # THIS WAIVER IS NARROWER THAN THE MATRIX. rehearsal-matrix.mjs declares
+    # the direct Android lane (android-direct) beside the eight desktop
+    # lanes, and `rehearse.mjs assert` demands a result for it from any
+    # release carrying an APK. A partial release whose lanes have no
+    # electron-updater feed skips that assert here, and a store-lane partial
+    # is the shape that ships the APK. Nothing stages such a release on the
+    # staging feed the direct probe reads (sign.sh keeps APKs out of a
+    # staging set, and --staging is refused above for a partial), so the
+    # assert has no record to read for it yet.
     #
-    # SAID OUT LOUD RATHER THAN SKIPPED, because the direct APK does have
-    # an update path of its own (its `latest.json` feed) and NOTHING
-    # rehearses it. Waiving quietly here would turn "we have not built that
-    # rehearsal yet" into "this release was rehearsed", which is the exact
+    # SAID OUT LOUD RATHER THAN SKIPPED. Waiving quietly here would turn
+    # "not rehearsed" into "this release was rehearsed", which is the exact
     # substitution §7.5 exists to prevent.
     if [[ -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
-        echo "publish.sh: §7.5 rehearsal NOT REQUIRED for lane(s) $COVERAGE_LANES," \
+        echo "publish.sh: §7.5 rehearsal NOT REQUIRED here for lane(s) $COVERAGE_LANES," \
              "and NOT PERFORMED." >&2
-        echo "  The rehearsal matrix declares desktop lanes only, so there is no" >&2
-        echo "  lane in this release for it to probe. Note what that leaves" >&2
-        echo "  uncovered: the direct APK's own update feed has never been" >&2
-        echo "  rehearsed by anything. This release is unrehearsed, not proven." >&2
+        echo "  These lanes ship no electron-updater feed. rehearse.mjs can probe" >&2
+        echo "  the direct APK lane (android-direct) and demands it of an APK, but" >&2
+        echo "  nothing stages this release on the staging feed for that probe to" >&2
+        echo "  read, so its update feed was not rehearsed for this release." >&2
+        echo "  This release is unrehearsed, not proven." >&2
     else
         if [[ -z "$REHEARSAL_RECORD" ]]; then
             REHEARSAL_RECORD="$(cd "$INPUT_DIR/.." && pwd)/REHEARSAL-$TAG.json"

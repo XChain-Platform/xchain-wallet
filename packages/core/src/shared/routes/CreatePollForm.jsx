@@ -447,7 +447,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     it closes at block {endBlock}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}>

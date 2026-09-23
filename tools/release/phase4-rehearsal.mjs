@@ -58,8 +58,10 @@ const WALLET_ROOT = resolve(HERE, '..', '..');
 export const PIN_PATH = join(WALLET_ROOT, 'docs', 'phase4-rehearsal-pin.json');
 
 // The files a Phase 4 run's behaviour actually depends on, split by which tree
-// supplies them. Anything added here becomes something the drift check can
-// notice; anything left out is drift nobody will see.
+// supplies them. Anything left out is drift nobody will see. The script side
+// is gated against the pin. The repo side is the tag's copy, which sign.sh
+// binds to the tag commit, so only a rehearsal at a newer tag can re-pin it:
+// `check` reports its divergence from this checkout and does not fail on it.
 export const SCRIPT_PATH_FILES = [
     'tools/release/sign.sh',
     'tools/release/verify.sh',
@@ -229,8 +231,10 @@ function usage() {
       it did not just watch.
 
   check [--against <ref>] [--pin <file>]
-      Has the signing path moved since the pinned observation? Exits 1
-      naming every file that changed, 3 if there is no pin at all.
+      Has the script side of the signing path moved since the pinned
+      observation? Exits 1 naming every file that changed, 3 if there is
+      no pin at all. Repo-side (tag tree) divergence is reported, not
+      gated: only a rehearsal at a newer tag can re-pin it.
 
 Exit codes: 0 clean, 1 drift or a failed probe, 2 usage, 3 no pin.`);
 }
@@ -353,7 +357,32 @@ export function drift({ pinFile = PIN_PATH, against = 'HEAD' } = {}) {
     const behind = moved.length > 0 && resolvable
         && !isAncestor(WALLET_ROOT, pin.scriptRef, against);
 
-    return { ok: moved.length === 0 || behind, missing: false, moved, behind, pin };
+    return {
+        ok: moved.length === 0 || behind, missing: false, moved, behind,
+        repoDiverged: repoDivergence(pin), pin,
+    };
+}
+
+/** Repo-side files whose copy in this checkout differs from the tag tree the rehearsal read. */
+export function repoDivergence(pin) {
+    const now = contentHashes(WALLET_ROOT, REPO_PATH_FILES);
+    return REPO_PATH_FILES
+        .map((p) => ({ path: p, pinned: pin.repoPath?.[p] ?? null, now: now[p] }))
+        .filter((m) => m.pinned !== m.now);
+}
+
+// Say what the gate did not compare, so a green line never claims the repo side.
+function reportRepoSide(d) {
+    if (!d.repoDiverged.length) {
+        console.log(`[phase4-rehearsal] repo side: ${REPO_PATH_FILES.length} files match the tag tree `
+            + `the rehearsal read (${String(d.pin.repoRef).slice(0, 8)}).`);
+        return;
+    }
+    console.log(`[phase4-rehearsal] NOTE, not gated: ${d.repoDiverged.length} of ${REPO_PATH_FILES.length} `
+        + `repo-side files differ from the tag tree the rehearsal read (${String(d.pin.repoRef).slice(0, 8)}, `
+        + `tag ${d.pin.tag}): ${d.repoDiverged.map((m) => m.path).join(', ')}.`
+        + '\n  The next tag\'s ceremony reads this checkout\'s copies, which no rehearsal has run against.'
+        + '\n  Re-drive and re-pin against that tag once it is cut.');
 }
 
 function cmdCheck(argv) {
@@ -373,14 +402,16 @@ function cmdCheck(argv) {
         return 0;
     }
     if (d.ok) {
-        console.log(`[phase4-rehearsal] OK: the signing path at ${against} is byte-identical to the `
-            + `rehearsal pinned at ${String(d.pin.scriptRef).slice(0, 8)} `
+        console.log(`[phase4-rehearsal] OK: the ${SCRIPT_PATH_FILES.length} script-side signing-path files `
+            + `at ${against} are byte-identical to the rehearsal pinned at ${String(d.pin.scriptRef).slice(0, 8)} `
             + `(reached '${d.pin.reached}', observed ${d.pin.observedAt}).`);
+        reportRepoSide(d);
         return 0;
     }
     console.error(`[phase4-rehearsal] STALE: the signing path has moved since the rehearsal pinned at `
         + `${String(d.pin.scriptRef).slice(0, 8)}:`);
     for (const m of d.moved) console.error(`  ${m.path}`);
+    reportRepoSide(d);
     console.error('\n  The recorded observation no longer describes the tooling ceremony Phase 4 would'
         + '\n  run, so "Phase 4 is rehearsed" is a claim about a tree that has moved on. Re-drive the'
         + '\n  rehearsal and re-pin it, or record in the release record why these changes cannot affect'

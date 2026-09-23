@@ -403,6 +403,7 @@ export function unpairPartnerRequest() {
 /**
  * §30.4 / G088: read-only PSBT decompose for the paste-in form.
  * @param {{ chainId: string, psbtHex: string }} opts
+ * @returns {Promise<import('@xchain-wallet/extension/src/background/createBackgroundHost.js').ParsedPsbtResult>}
  */
 export function parsePsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));

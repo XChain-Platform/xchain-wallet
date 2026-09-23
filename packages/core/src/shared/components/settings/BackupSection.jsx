@@ -958,7 +958,7 @@ function PublishLabelsReport({ result, onDone }) {
                 ✓ Labels published
             </div>
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
-                <dt style={ROW_HINT}>Txid</dt>
+                <dt style={ROW_HINT}>Transaction ID</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
                 <dt style={ROW_HINT}>Chain</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.chainId || '-'}</dd>

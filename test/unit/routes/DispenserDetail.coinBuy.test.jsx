@@ -141,6 +141,22 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(screen.getByText(/You paid 6 DOGE/)).toBeInTheDocument();
     });
 
+    it('shows a failed buy in house copy, not the encoder wording', async () => {
+        const messaging = mount(COIN_PAID);
+        messaging.sendToken.mockRejectedValueOnce(new Error('no spendable UTXOs found for the funding address'));
+        await screen.findByText(/10 DOGE available/);
+        const buy = await buyButton();
+        await waitFor(() => expect(buy).toBeEnabled());
+        fireEvent.click(buy);
+        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        const sign = await screen.findByRole('button', { name: /Sign buy/ });
+        await waitFor(() => expect(sign).toBeEnabled());
+        fireEvent.click(sign);
+
+        expect(await screen.findByText(/This address has no DOGE to spend/)).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/no spendable UTXOs/);
+    });
+
     it('blocks a fill count the native balance cannot cover', async () => {
         // 10 DOGE buys 5 fills, not 6.
         mount(COIN_PAID);

@@ -462,7 +462,7 @@ export function checkReachabilityRequest(opts) {
  * §30.4 / G088: read-only PSBT decompose for the paste-in form preview.
  *
  * @param {{ chainId: string, psbtHex: string }} opts
- * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt }>}
+ * @returns {Promise<import('@xchain-wallet/extension/src/background/createBackgroundHost.js').ParsedPsbtResult>}
  */
 export function parsePsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));

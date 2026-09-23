@@ -66,6 +66,12 @@ describe('sleepAction', () => {
         await expect(sleepAction(opts({ VERSION: '1', RESUME_BLOCK: '0' }))).rejects.toThrow(/TICK/);
     });
 
+    it('forwards the host auto-enqueue hook to submitAction', async () => {
+        const onBroadcastFailure = vi.fn();
+        await sleepAction(opts({ VERSION: '0', RESUME_BLOCK: '900000' }, { onBroadcastFailure }));
+        expect(vi.mocked(submitAction).mock.calls[0][0].onBroadcastFailure).toBe(onBroadcastFailure);
+    });
+
     it('accepts RESUME_BLOCK 0 (resume now)', async () => {
         await sleepAction(opts({ VERSION: '1', RESUME_BLOCK: '0', TICK: 'JDOG' }));
         expect(submitAction).toHaveBeenCalled();

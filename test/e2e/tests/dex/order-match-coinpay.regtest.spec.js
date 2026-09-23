@@ -412,11 +412,11 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     // Two mechanisms have been ruled OUT already, so do not start there:
     //   - the web-shell acknowledgement gate (the run ticks it and the success
     //     screen confirms "Auto-pay is armed");
-    //   - a missing signer for the payer wallet: `wallet.create` did not adopt
-    //     the created wallet into the signer pool while `wallet.add.import`
-    //     did, which is fixed and pinned (test/smoke/core/
-    //     wallet-create-signer-adoption.smoke.js) - and the lane still did not
-    //     pay, so that was a real gap but not this one.
+    //   - a missing signer for the payer wallet: the Add Wallet create screen
+    //     persists through `wallet.add.import`, which adopts the new wallet
+    //     into the signer pool (pinned by test/smoke/core/
+    //     wallet-create-signer-adoption.smoke.js), and the lane still does not
+    //     pay.
     // NEXT PROBE, cheapest first: CoinpayAutopayWatcher is constructed with
     // `logger: console`, so run this spec with a console listener attached and
     // read its own verdict - `evaluateObligation` returns a NAMED reason

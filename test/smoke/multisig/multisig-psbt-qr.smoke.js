@@ -260,6 +260,19 @@ for (const status of MULTISIG_SESSION_STATUSES) {
         `STATUS_LABELS covers the "${status}" session status (#3881)`);
 }
 
+// The local-sign success line names the contribution in plain words, never
+// the flow's contributionKind enum ("round-1-nonce").
+const signFlow = readFileSync(join(core, 'src', 'flows', 'multisigSignLocally.js'), 'utf8');
+const contributionKinds = [...signFlow.matchAll(/contributionKind: '([^']+)'/g)].map((m) => m[1]);
+assert.ok(contributionKinds.length >= 3, 'found the contribution kinds multisigSignLocally returns');
+assert.ok(!/\$\{[^}]*contributionKind[^}]*\}/.test(route.replace(/contributionLabel\([^)]*\)/g, '')),
+    'success line renders the contribution through contributionLabel(), never the raw enum');
+const contributionLabelMap = (route.match(/const CONTRIBUTION_LABELS = \{([\s\S]*?)\};/) || [])[1] || '';
+for (const kind of contributionKinds) {
+    assert.ok(contributionLabelMap.includes(`'${kind}'`),
+        `CONTRIBUTION_LABELS covers the "${kind}" contribution kind`);
+}
+
 // The same pass, one layer out: `collector` and `envelope` are the names of
 // CODE objects (createXcwCollector, encodeMultisigEnvelope), and the screen
 // teaches the user neither. "chunk" and "frame" are exempt on purpose - the

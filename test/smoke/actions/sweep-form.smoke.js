@@ -79,7 +79,7 @@ const host = read('packages', 'extension', 'src', 'background', 'createBackgroun
 assert.match(host, /host.register\('sweep.preview'/, 'preview host route registered');
 assert.match(host, /registerHwHandler\('action.sweep.hw', sweepToken\)/, 'HW sweep route registered');
 assert.match(host, /host.register\('gatedKeys.copyToWallet'/, 'key re-scope route registered');
-assert.match(host, /sweepToken\(\{ \.\.\.req, signer: await sessionSigner\(req, vault, signerPool\), vault, chainRegistry, sdkRegistry, reservationLedger \}\)/,
+assert.match(host, /sweepToken\(\{ \.\.\.req, signer: await sessionSigner\(req, vault, signerPool\), vault, chainRegistry, sdkRegistry, reservationLedger, onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\) \}\)/,
     'software sweep route passes the shared reservation ledger');
 
 for (const shell of [

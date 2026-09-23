@@ -522,7 +522,7 @@ export function CreateBetFeedForm({
                     and it is yours to resolve after betting closes.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <p className={styles.hint}>

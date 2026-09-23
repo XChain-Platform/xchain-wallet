@@ -202,12 +202,12 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /onBroadcastFailure: walletId\s*\?\s*async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \}/.test(bg),
-    'action.send onBroadcastFailure awaits ensureQueueLoaded before pushing',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(bg),
+    'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing',
 );
 assert.ok(
-    /const onBroadcastFailure = walletId\s*\?\s*async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \}/.test(bg),
-    'registerHwHandler injects an ensureQueueLoaded-awaiting onBroadcastFailure',
+    !/async \(entry\) => \{ pushQueueEntry\(/.test(bg),
+    'no route builds its own hook that skips the rehydrate',
 );
 
 // --- 6. Eager load at construction -------------------------------------

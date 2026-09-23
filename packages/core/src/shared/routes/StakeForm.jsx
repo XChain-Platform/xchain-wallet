@@ -477,7 +477,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     Stake broadcast. Activation takes effect after 6 BTC blocks.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
                 </dl>
                 <div className={styles.actions}>

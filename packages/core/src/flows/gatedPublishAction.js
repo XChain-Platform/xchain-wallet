@@ -308,6 +308,7 @@ export async function gatedPublishAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
     return { ...result, keyHash };
 }

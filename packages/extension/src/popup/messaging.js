@@ -597,7 +597,7 @@ export function checkReachabilityRequest(opts) {
  * commits a password.
  *
  * @param {{ chainId: string, psbtHex: string }} opts
- * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt }>}
+ * @returns {Promise<import('../background/createBackgroundHost.js').ParsedPsbtResult>}
  */
 export function parsePsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));

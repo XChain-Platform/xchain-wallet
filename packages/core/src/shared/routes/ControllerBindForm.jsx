@@ -458,7 +458,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     {verb} broadcast. The network will apply the controller change shortly.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '-')}</dd>
                 </dl>
                 <div className={styles.actions}>

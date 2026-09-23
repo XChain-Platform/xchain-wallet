@@ -111,7 +111,7 @@ export function getSettings() {
  * swap for a drain transaction.
  *
  * @param {{ chainId: string, psbtHex: string }} opts
- * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt, action: object | null, actionDecodeReason: string | null }>}
+ * @returns {Promise<import('../background/createBackgroundHost.js').ParsedPsbtResult>}
  */
 export function parsePsbt(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));

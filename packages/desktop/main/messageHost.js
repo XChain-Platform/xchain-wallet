@@ -36,7 +36,7 @@ import { createBackgroundHost } from '@xchain-wallet/extension/src/background/cr
  * @property {(settings: object, ctx: { sdkRegistry: object }) => Promise<void>} [onPrivacySettingsChanged]  Desktop-only: re-applies egress routing after a settings.update touching `privacy`
  *
  * @typedef {{ type: string, request?: unknown }} IpcMessage
- * @typedef {{ ok: true, result: unknown } | { ok: false, error: { name: string, message: string } }} IpcResponse
+ * @typedef {import('@xchain-wallet/extension/src/background/MessageHost.js').MessageResponse} IpcResponse   the host's own envelope, so the error's code and THROTTLED hints stay declared across IPC
  */
 
 /**

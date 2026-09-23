@@ -90,6 +90,7 @@ function submitVote(opts, builderName, buildInput, summary) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }
 

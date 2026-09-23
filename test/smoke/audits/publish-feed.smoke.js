@@ -628,11 +628,11 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     assert.match(readFileSync(join(partial, 'RELEASE_HASHES.txt'), 'utf8'),
         /^# coverage: partial$/m, 'the fixture really is a partial manifest');
 
-    // NO rehearsal record is written for this release, deliberately. The
-    // §7.5 matrix declares eight lanes and all eight are desktop, so a
-    // store-lane release has nothing there to probe - and the point of this
-    // case is that publish.sh must not demand a record about lanes the
-    // release does not contain.
+    // NO rehearsal record is written for this release, deliberately. This
+    // pins the current waiver: a partial release with no electron-updater
+    // lane publishes without `rehearse.mjs assert`, even though it carries
+    // an APK whose android-direct lane that assert would demand, and it
+    // must say so rather than pass quietly.
     const target = makeTarget('feed-partial');
     const r = await run(['--input', partial, '--tag', TAG, '--target', target,
         '--no-edge-verify']);
@@ -641,7 +641,11 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
     assert.match(r.out, /rehearsal NOT REQUIRED[\s\S]*NOT PERFORMED/,
         'the waived rehearsal is stated, not silent');
     assert.match(r.out, /unrehearsed, not proven/,
-        'and it names what stays uncovered: the direct APK feed nothing rehearses');
+        'and it names what stays uncovered: the direct APK feed this path does not rehearse');
+    assert.match(r.out, /android-direct/,
+        'and it names the matrix lane the waiver skips, rather than claiming none exists');
+    assert.doesNotMatch(r.out, /desktop lanes only/,
+        'the matrix declares the direct Android lane, so the waiver must not say otherwise');
     assert.match(r.out, /PARTIAL release/,
         'and says out loud that the channel assertion was answered from the '
         + 'signed manifest rather than from pointers that do not exist');

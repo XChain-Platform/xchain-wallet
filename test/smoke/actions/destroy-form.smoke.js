@@ -165,7 +165,7 @@ assert.ok(
     'background host registers action.destroy',
 );
 assert.ok(
-    /destroyToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /destroyToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry,\s*onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)\s*\}\)/.test(bg),
     'action.destroy handler forwards deps to destroyToken',
 );
 

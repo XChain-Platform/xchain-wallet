@@ -153,7 +153,7 @@ assert.ok(
 assert.ok(
     /Encrypted size/.test(bs)
         && /Discovery name/.test(bs)
-        && /Txid/.test(bs),
+        && /Transaction ID/.test(bs),
     'PublishLabelsReport surfaces txid + size + discovery name',
 );
 

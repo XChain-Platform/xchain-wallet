@@ -87,7 +87,7 @@ const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
     /**
      * @param {{ type: string, request?: unknown }} message
-     * @returns {Promise<{ ok: true, result: unknown } | { ok: false, error: { name: string, message: string } }>}
+     * @returns {Promise<import('./main/messageHost.js').IpcResponse>}   type-only: this sandboxed preload may require nothing but electron
      */
     sendMessage(message) {
         return ipcRenderer.invoke(MESSAGE_CHANNEL, message);

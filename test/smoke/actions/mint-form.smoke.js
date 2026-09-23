@@ -223,7 +223,7 @@ assert.ok(
     'background host registers action.mint',
 );
 assert.ok(
-    /mintToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /mintToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry,\s*onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)\s*\}\)/.test(bg),
     'action.mint handler forwards deps to mintToken',
 );
 

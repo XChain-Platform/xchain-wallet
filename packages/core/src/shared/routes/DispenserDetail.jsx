@@ -39,6 +39,7 @@ import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
     buyerListMessage,
     buyerListVerdict,
@@ -742,6 +743,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const onBuyHwStatusChange = useCallback(({ status }) => setBuyHwStatus(status), []);
     const onCancelHwStatusChange = useCallback(({ status }) => setCancelHwStatus(status), []);
 
+    // Turn a failed sign into house copy; the thrown text survives only as the fallback.
+    const submitFailureText = (err, fallback) => (err?.name === 'InvalidPasswordError'
+        ? 'Incorrect password.'
+        : submitFailureMessage(err, {
+            chainId, coinTicker: feeCoinTicker, mandatory: nativeFee.mandatory,
+            fallback: err?.message || fallback,
+        }));
+
     async function handleBuy(event) {
         event.preventDefault();
         if (buyStage === 'submitting' || !buyerAddress) return;
@@ -791,12 +800,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setBuyPassword('');
             setBuyStage('done');
         } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setBuyError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : err?.message || 'Buy failed.',
-            );
+            setBuyError(submitFailureText(err, 'Buy failed.'));
             setBuyStage('confirm');
             if (!buyHw) {
                 buyPasswordRef.current?.focus();
@@ -851,12 +855,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setPassword('');
             setRefillStage('done');
         } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setRefillError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : err?.message || 'Refill failed.',
-            );
+            setRefillError(submitFailureText(err, 'Refill failed.'));
             setRefillStage('confirm');
             if (!cancelHw) {
                 passwordRef.current?.focus();
@@ -889,13 +888,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
         const alTrim = editAllowList.trim();
         if (alTrim) {
-            if (!/^\d+$/.test(alTrim)) { setEditError('Allow list must be a LIST action index (digits only).'); return; }
+            if (!/^\d+$/.test(alTrim)) { setEditError('Allow list must be a list number (digits only).'); return; }
             params.ALLOW_LIST = alTrim;
             changedLists = true;
         }
         const blTrim = editBlockList.trim();
         if (blTrim) {
-            if (!/^\d+$/.test(blTrim)) { setEditError('Block list must be a LIST action index (digits only).'); return; }
+            if (!/^\d+$/.test(blTrim)) { setEditError('Block list must be a list number (digits only).'); return; }
             params.BLOCK_LIST = blTrim;
             changedLists = true;
         }
@@ -941,12 +940,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setPassword('');
             setEditStage('done');
         } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setEditError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : err?.message || 'Edit failed.',
-            );
+            setEditError(submitFailureText(err, 'Edit failed.'));
             setEditStage('confirm');
             if (!cancelHw) {
                 passwordRef.current?.focus();
@@ -996,12 +990,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setCancelStage('done');
             onCanceled?.();
         } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setCancelError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : err?.message || 'Cancel failed.',
-            );
+            setCancelError(submitFailureText(err, 'Cancel failed.'));
             setCancelStage('confirm');
             if (!cancelHw) {
                 passwordRef.current?.focus();
@@ -1215,7 +1204,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Allow list"
                     inputMode="numeric"
-                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a LIST action index to limit who can trigger this dispenser.`}
+                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser.`}
                     value={editAllowList}
                     onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1223,7 +1212,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Block list"
                     inputMode="numeric"
-                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a LIST action index to bar addresses from triggering it.`}
+                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it.`}
                     value={editBlockList}
                     onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"

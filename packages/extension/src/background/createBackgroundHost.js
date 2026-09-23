@@ -43,7 +43,6 @@ import { resolveBackupPointerContent } from './backupPointerResolver.js';
 
 const {
     importedAddressIdsFor,
-    createWallet,
     createAccount,
     activateChain,
     renameWallet,
@@ -703,6 +702,22 @@ function toSafeWallet(w) {
 }
 
 /**
+ * What the `psbt.parse` handler below answers. Declared once here so every
+ * shell's wrapper points at it rather than restating a subset.
+ *
+ * @typedef {object} ParsedPsbtResult
+ * @property {import('../../../core/src/signers/types.js').DecomposedPsbt} decomposed
+ * @property {ParsedPsbtAction | null} action   the XChain action carried inside, best-effort; null when it could not be read
+ * @property {string | null} actionDecodeReason   why `action` is null (a decoder punt or failure); null when it decoded
+ *
+ * @typedef {object} ParsedPsbtAction
+ * @property {string} actionString
+ * @property {string | null} action
+ * @property {number | null} version
+ * @property {object | null} params
+ */
+
+/**
  * @typedef {object} DiagnosticEnv
  * @property {'extension' | 'web' | 'desktop'} [shell]
  * @property {string} [userAgent]
@@ -986,61 +1001,12 @@ export function createBackgroundHost(deps) {
         return { exists: (await vault.wallets.get(id)) !== null };
     });
 
-    host.register('wallet.create', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const r = await createWallet({ ...req, vault, chainRegistry, sdkRegistry });
-        // Same adoption as wallet.add.import below, and for a sharper reason
-        // than "no password on accounts": a wallet CREATED inside an open
-        // session had no signer in the pool, so anything that must sign
-        // WITHOUT a prompt silently could not. PC-16 auto-pay is exactly that
-        // - CoinpayAutopayWatcher asks getSigner(walletId), gets null, and
-        // classifies the wallet unsignable - while the order form's success
-        // screen promises "matches on this order will be paid automatically
-        // while a wallet holding it is unlocked". Measured on LTC regtest: an
-        // armed order matched, the obligation sat pending for ten minutes with
-        // the wallet open and unlocked, and no COINPAY was ever sent.
-        if (signerPool && req?.password) {
-            try {
-                await signerPool.unlockOne({
-                    wallet: r.wallet,
-                    password: req.password,
-                    bip39Passphrase: req.bip39Passphrase,
-                    chainRegistry,
-                    sdkRegistry,
-                });
-            } catch { /* best-effort: fallback is per-op password prompt */ }
-        }
-        return {
-            mnemonic: r.mnemonic,
-            wallet: toSafeWallet(r.wallet),
-            account: r.account,
-            addresses: r.addresses,
-        };
-    });
-
-    host.register('wallet.import', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        const r = await importMnemonic({ ...req, vault, chainRegistry, sdkRegistry });
-        const labelSync = await restoreLabelSyncBestEffort({
-            vault,
-            walletId: r.wallet.id,
-            password: req?.password,
-            bip39Passphrase: req?.bip39Passphrase,
-            chainIds: labelSyncSearchChainIds(chainRegistry, req?.activeChainIds),
-            sdkRegistry,
-            onConflict: 'overwrite',
-        });
-        return {
-            format: r.format,
-            wallet: toSafeWallet(r.wallet),
-            account: r.account,
-            addresses: r.addresses,
-            labelSync,
-        };
-    });
-
-    // Add a wallet to an already-open vault. Distinct from `wallet.import`
-    // (which the pre-host listener intercepts and rejects when a vault
-    // already exists). Same flow underneath; the difference is which
-    // path is reachable in which session state.
+    // Add a wallet to an already-open vault; the Add Wallet create and import
+    // screens both land here. `wallet.create` / `wallet.import` are not
+    // registered on this host: they are the pre-host fresh-install lane
+    // (sessionMeta PRE_HOST_MESSAGE_TYPES), which the extension and desktop
+    // transports divert before the host sees them and web answers in-page,
+    // so a copy here could never run.
     host.register('wallet.add.import', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         // Seed from the vault's active chain set, not the mainnet
         // constant. A wallet added while the app sits on regtest/testnet
@@ -1062,7 +1028,8 @@ export function createBackgroundHost(deps) {
         });
         // Stash the new wallet's signer in the pool while the password
         // is in scope: keeps "no password on accounts" working for
-        // the wallet that was just added.
+        // the wallet that was just added, and lets auto-pay, which signs
+        // with no prompt, act for it (getSigner(walletId) is null otherwise).
         if (signerPool && req?.password) {
             try {
                 await signerPool.unlockOne({
@@ -2103,23 +2070,15 @@ export function createBackgroundHost(deps) {
 
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const walletId = req?.walletId;
         return sendToken({
             ...req,
             signer: await sessionSigner(req, vault, signerPool),
             vault,
             chainRegistry,
             sdkRegistry,
-            // Cluster G FOLLOWUP 1: auto-enqueue on broadcast failure.
-            // The signed hex would otherwise vanish; pushing it onto the
-            // queue lets the user retry from the QueuedBroadcastBanner
-            // once reachability returns. Await ensureQueueLoaded first
-            // so the persisted queue (FOLLOWUP 2) has been rehydrated
-            // before this push lands: otherwise a fast Send after a
-            // worker restart would race the load and orphan prior items.
-            onBroadcastFailure: walletId
-                ? async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); }
-                : undefined,
+            // Auto-enqueue on broadcast failure: the signed hex would otherwise
+            // vanish, and the queue lets the user retry from the banner.
+            onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId),
         });
     });
 
@@ -2657,6 +2616,11 @@ export function createBackgroundHost(deps) {
     // the snapshot implies a load that already succeeded, and that latches
     // `queueLoaded` so no further merge happens.
     //
+    // One exception: `restoreQueueFromVault` also runs in that window, and it
+    // rebuilds a PendingTx the blob may already hold under a different entry
+    // id. Entries naming the same `pendingTxId` are one transaction, so the
+    // live entry stays and takes the ADS verdict only the blob copy carries.
+    //
     // That argument covers one process only. Across a reload it does not hold:
     // a retirement whose persistQueue write was refused leaves the entry in the
     // blob, and the next boot merges it back in. `reconcileRestoredEntries`
@@ -2673,11 +2637,27 @@ export function createBackgroundHost(deps) {
                 continue;
             }
             const held = new Set(live.map((e) => e.id));
+            const byPendingTx = new Map(live.filter((e) => e.pendingTxId).map((e) => [e.pendingTxId, e]));
+            const missing = [];
+            for (const e of restorable) {
+                if (held.has(e.id)) continue;
+                const twin = e.pendingTxId ? byPendingTx.get(e.pendingTxId) : null;
+                if (twin) adoptSnapshotVerdict(twin, e);
+                else missing.push(e);
+            }
             // Persisted entries were signed before anything this process
             // queued, so they go in front to keep the list oldest-first.
-            const missing = restorable.filter((e) => !held.has(e.id));
             if (missing.length > 0) live.unshift(...missing);
         }
+    }
+    // Copy the blob copy's ADS verdict onto a vault-rebuilt twin of the same
+    // bytes; a rebuild carries none, and booking nothing under-counts it.
+    function adoptSnapshotVerdict(live, persisted) {
+        const verdict = persisted.adsCommit;
+        if (live.adsCommit || live.signedTxHex !== persisted.signedTxHex) return;
+        if (!verdict || typeof verdict !== 'object') return;
+        if (typeof verdict.chainId !== 'string' || typeof verdict.donationIncluded !== 'boolean') return;
+        live.adsCommit = { chainId: verdict.chainId, donationIncluded: verdict.donationIncluded };
     }
     async function ensureQueueLoaded() {
         if (queueLoaded || !broadcastQueueStorage) {
@@ -2867,8 +2847,8 @@ export function createBackgroundHost(deps) {
             // phantom write becomes real, or nothing here is durable and the
             // journal survives for the next pass. Keeping the records costs
             // nothing, because replay is safe to repeat - the patch lane is
-            // idempotent and the discard lane no-ops on a record that already
-            // left 'queued'. A vault that exposes no save() keeps the old
+            // idempotent and the discard lane no-ops on a record that is
+            // already gone or terminal. A vault that exposes no save() keeps the old
             // behaviour rather than holding its journal forever.
             if (typeof vault?.save === 'function') {
                 try {
@@ -3003,6 +2983,13 @@ export function createBackgroundHost(deps) {
      * Nothing else reads a 'queued' record, so without this the signed bytes
      * are unreachable from every surface the user has.
      *
+     * It runs while the blob is unreadable too, which is when the blob is worth
+     * least. Nothing is written back in that window (persistQueue stays gated
+     * on `queueLoaded`); the merge collapses a rebuilt entry into its blob twin
+     * by `pendingTxId` once the read recovers. The settlement journal is unread
+     * in that window as well, so a record it owes a write to can come back
+     * until the read recovers, the replay lands, and the reconcile drops it.
+     *
      * TWO STATUSES COME BACK, AND THEY COME BACK DIFFERENTLY LABELLED.
      * 'queued' is the record as the signing flow left it: signed, never sent.
      * 'broadcasting' is the claim the broadcast route stamps before the bytes
@@ -3042,7 +3029,7 @@ export function createBackgroundHost(deps) {
      * @param {string} walletId
      */
     async function restoreQueueFromVault(vault, chainRegistry, walletId) {
-        if (!queueLoaded || recoveredWallets.has(walletId)) return;
+        if (recoveredWallets.has(walletId)) return;
         let owned;
         let queued;
         let claimed = [];
@@ -3173,6 +3160,21 @@ export function createBackgroundHost(deps) {
         await persistQueue();
     }
     /**
+     * The `onBroadcastFailure` hook every signing action route hands its flow:
+     * signed bytes whose broadcast failed transiently join the queue now,
+     * beside the PendingTx submitAction stamped 'queued', rather than only
+     * after the next worker restart rebuilds them without their ADS verdict.
+     * Awaits the rehydrate first so a push racing a worker restart cannot
+     * orphan the persisted entries.
+     *
+     * @param {string | undefined} walletId
+     * @returns {((entry: any) => Promise<void>) | undefined}
+     */
+    function enqueueOnBroadcastFailure(walletId) {
+        if (typeof walletId !== 'string' || !walletId) return undefined;
+        return async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); };
+    }
+    /**
      * Push a signed-but-unbroadcast tx onto the per-walletId queue.
      * Cluster G FOLLOWUP 1: used both by the action.* handlers' auto-
      * enqueue path (when `submitAction` reports a `BroadcastFailedError`)
@@ -3217,8 +3219,8 @@ export function createBackgroundHost(deps) {
                 : {}),
         };
         getQueue(walletId).push(stored);
-        // Fire-and-forget: onBroadcastFailure callers (action.send /
-        // registerHwHandler) intentionally don't await pushQueueEntry,
+        // Fire-and-forget: onBroadcastFailure callers (every signing
+        // action route) intentionally don't await pushQueueEntry,
         // so we can't make it a Promise. The persist runs in the
         // background; load + restart guarantees consistency on next boot.
         void persistQueue();
@@ -3257,13 +3259,17 @@ export function createBackgroundHost(deps) {
         if (typeof signedTxHex !== 'string' || !signedTxHex) {
             throw new Error('broadcast.queue.enqueue: signedTxHex is required');
         }
-        return pushQueueEntry(walletId, {
+        const stored = pushQueueEntry(walletId, {
             chainId,
             signedTxHex,
             summary: req?.summary,
             signedAt: req?.signedAt,
             txid: req?.txid,
         });
+        // This lane names no PendingTx, so the blob is its only durable copy:
+        // the write lands before the renderer is told the bytes are queued.
+        await persistQueue();
+        return stored;
     });
     /**
      * Settle the PendingTx half of a queued broadcast once the host queue has
@@ -3537,8 +3543,11 @@ export function createBackgroundHost(deps) {
         if (idx >= 0) q.splice(idx, 1);
         await persistQueue();
         // Retire the PendingTx half too, through the same idempotent helper the
-        // core lane's Discard uses (it deletes only a record still 'queued').
-        if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+        // core lane's Discard uses (it deletes a record still 'queued', or one
+        // an interrupted claim left at 'broadcasting'). A broadcast of this
+        // entry still in flight owns its record, so the discard leaves it be.
+        const inFlight = inFlightQueueBroadcasts.has(`${req?.walletId}:${req?.id}`);
+        if (!inFlight && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
             try {
                 await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
             } catch (_e) {
@@ -3886,13 +3895,8 @@ export function createBackgroundHost(deps) {
             }
             const signer = buildRemoteSigner(descriptor, transport);
             const { password: _password, ...rest } = req;
-            // Cluster G FOLLOWUP 1: auto-enqueue on broadcast failure
-            // for HW lanes too. Same shape as the action.send path;
-            // ensureQueueLoaded keeps the persisted queue intact.
-            const walletId = req?.walletId;
-            const onBroadcastFailure = walletId
-                ? async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); }
-                : undefined;
+            // Auto-enqueue on broadcast failure for HW lanes too.
+            const onBroadcastFailure = enqueueOnBroadcastFailure(req?.walletId);
             // reservationLedger rides along for flows with post-broadcast
             // cleanup (sweepToken's PC-34 force-close leg); other flows
             // ignore the extra option.
@@ -3975,7 +3979,7 @@ export function createBackgroundHost(deps) {
     host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         // reservationLedger: PC-34 force-close interplay (ORDERS=1 releases
         // the swept address's auto-pay holds alongside its consents).
-        return sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, reservationLedger });
+        return sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, reservationLedger, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-34: API-derived indicative preview of what a SWEEP would move
@@ -3985,20 +3989,20 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return issueToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return issueToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.mint', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return mintToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return mintToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.destroy', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return destroyToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return destroyToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-03: CALLBACK force-recall (owner-only, after CALLBACK_BLOCK).
     host.register('action.callback', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return callbackAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return callbackAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-03: token holder distribution summary (backs the ISSUE v4
@@ -4016,7 +4020,7 @@ export function createBackgroundHost(deps) {
 
     // PC-05: SLEEP (pause a tick / self-lock an address).
     host.register('action.sleep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return sleepAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return sleepAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-05: current pause state of a tick or address (latest SLEEP row).
@@ -4025,12 +4029,12 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.broadcast', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return broadcastAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return broadcastAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-30: publish a PRICE v1 user oracle quote.
     host.register('action.oraclePrice', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return oraclePriceAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return oraclePriceAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-30: this address's published oracle feeds, each with its live and
@@ -4047,7 +4051,7 @@ export function createBackgroundHost(deps) {
 
     // PC-32: write ADDRESS v0 on-chain preferences (all three fields, always).
     host.register('action.addressPrefs', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return addressPreferencesAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return addressPreferencesAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-32: the address's current effective preferences (consensus fold of
@@ -4057,24 +4061,24 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return dispenserAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return dispenserAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // §41.3.4 ORDER / §41.3.5 CANCEL: DEX signing lanes.
     host.register('action.order', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return orderAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return orderAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
     host.register('action.cancelOrder', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return cancelOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return cancelOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
     // §41.3.5 ORDER v2 edit (EXPIRATION / ALLOW_LIST / BLOCK_LIST).
     host.register('action.editOrder', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return editOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return editOrder({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // §41.4 COINPAY: buyer-side settlement for token/native-coin matches.
     host.register('action.coinpay', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return coinpayAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return coinpayAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
     // Encode-only COINPAY for §20 watcher mode. A dedicated route rather
     // than the generic `action.psbt`, because the payee and amount must be
@@ -4130,18 +4134,18 @@ export function createBackgroundHost(deps) {
 
     // §41.5 SWAP: atomic token-pair swap (no COINPAY follow-up).
     host.register('action.swap', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return swapAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return swapAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // §42.8.1 LINK: anchor two existing actions across chains.
     host.register('action.link', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return linkAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return linkAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // FILE: public on-chain file upload (NFT artwork attachment;
     // the AttachContentForm pairs it with an owner-validated LINK).
     host.register('action.file', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return fileAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return fileAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // Project registry: current roster lookup (ProjectRosterForm prefill).
@@ -4172,7 +4176,7 @@ export function createBackgroundHost(deps) {
     // encode-only variant backs watcher mode; composition is shared so
     // the two paths cannot drift (flows/gatedPublishAction.js).
     host.register('action.gatedPublish', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return gatedPublishAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return gatedPublishAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
     host.register('action.gatedPublish.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return buildGatedPublishPsbtRequest({ ...req, vault, chainRegistry, sdkRegistry });
@@ -4239,7 +4243,7 @@ export function createBackgroundHost(deps) {
 
     // §41.7.3 Compose: MESSAGE action signing + recipient pubkey lookup.
     host.register('action.message', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return messageAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return messageAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // §5.6 slice 3: compose-for-confirm for MESSAGE. MESSAGE is the one
@@ -4288,7 +4292,7 @@ export function createBackgroundHost(deps) {
         return { ...composed, messageParams: params };
     });
     host.register('messaging.handshake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return handshakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return handshakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
     host.register('messaging.pubkey', async (req, { sdkRegistry }) => {
         return getRecipientPubkey({ ...req, sdkRegistry });
@@ -4414,19 +4418,19 @@ export function createBackgroundHost(deps) {
     // suggest-gas buttons.
 
     host.register('action.deploy', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return deployAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return deployAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.execute', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return executeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return executeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.deposit', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return depositAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return depositAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.withdraw', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return withdrawAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return withdrawAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // §42.7 Staking: four read-only explorer passthroughs backing
@@ -4458,41 +4462,41 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.stake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return stakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return stakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.unstake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return unstakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return unstakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.collect', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return collectAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return collectAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.delegate', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return delegateAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return delegateAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.revokeDelegation', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return revokeDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return revokeDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // VOTE governance authoring (v0 create poll, v1 cast ballot, v3 delegate / clear).
     // Software-signed passthroughs; the .hw twins are registered via registerHwHandler above.
     host.register('action.createPoll', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return createPollAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return createPollAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.castBallot', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return castBallotAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return castBallotAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.delegateVote', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return delegateVoteAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return delegateVoteAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.clearVoteDelegation', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return clearVoteDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return clearVoteDelegationAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // VOTE governance reads (no signing): poll list / detail / frozen results / ballots.
@@ -4517,19 +4521,19 @@ export function createBackgroundHost(deps) {
     // a place-bet differ on the wire only by AMOUNT, and the messaging boundary
     // is not a place to let that distinction be inferred.
     host.register('action.createMarket', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return createMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return createMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.placeBet', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return placeBetAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return placeBetAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.resolveMarket', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return resolveMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return resolveMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.cancelMarket', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return cancelMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return cancelMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // Compose a BET through the SDK's own builder HOST-side, so the confirm page
@@ -4633,7 +4637,7 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.contractStake', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return contractStakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return contractStakeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('broadcasts.forAddress', async (req, { sdkRegistry }) => {
@@ -4779,6 +4783,7 @@ export function createBackgroundHost(deps) {
             vault,
             chainRegistry,
             sdkRegistry,
+            onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId),
             waitForTxid: (txid, o) => sdk.waitForAction(txid, o),
         });
     });
@@ -4808,7 +4813,7 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return dividendAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return dividendAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('holders.forTick', async (req, { sdkRegistry }) => {
@@ -4821,11 +4826,11 @@ export function createBackgroundHost(deps) {
     // (b) confirm the LIST on the AIRDROP review screen.
 
     host.register('action.createList', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return createList({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     host.register('actions.byTxid', async (req, { sdkRegistry }) => {
@@ -4960,7 +4965,7 @@ export function createBackgroundHost(deps) {
     // which runs the SDK's validator before signing.
 
     host.register('action.advanced', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return advancedAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry });
+        return advancedAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
     // PC-36: assemble a BATCH's COMMAND string from queued sub-actions (read-

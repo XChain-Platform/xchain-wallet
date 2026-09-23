@@ -580,7 +580,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         : 'Claim broadcast. Pending rewards will be credited after the network records the action.'}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '(pending)')}</dd>
                 </dl>
                 <div className={styles.actions}>

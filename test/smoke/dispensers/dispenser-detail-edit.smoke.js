@@ -42,7 +42,9 @@ assert.match(src, /params\.BLOCK_LIST = blTrim;/, 'edit can set BLOCK_LIST');
 
 // Future-expiration guard + numeric LIST index validation.
 assert.match(src, /Expiration must be a future date and time\./, 'rejects a past expiration');
-assert.match(src, /LIST action index \(digits only\)/, 'validates list index is numeric');
+assert.match(src, /Allow list must be a list number \(digits only\)/, 'validates allow-list index is numeric');
+assert.match(src, /Block list must be a list number \(digits only\)/, 'validates block-list index is numeric');
+assert.doesNotMatch(src, /LIST action index/, 'list copy names a list number, not the wire opcode');
 
 // Edit requires at least one changed field (no empty no-op edits).
 assert.match(src, /Change at least one field to submit an edit\./, 'blocks a no-op edit');

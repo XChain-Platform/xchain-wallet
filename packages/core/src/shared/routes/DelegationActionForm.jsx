@@ -376,7 +376,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                         : 'Revocation broadcast. The signing key will stop voting on your behalf once the network records the action.'}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}>

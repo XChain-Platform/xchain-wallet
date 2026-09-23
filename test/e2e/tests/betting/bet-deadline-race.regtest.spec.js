@@ -605,7 +605,7 @@ test.describe('BET deadline race', () => {
             //
             // Read the definition element, NOT the card's text. `textContent`
             // concatenates the <dt> and <dd> with no separator, the label is
-            // "Txid", and **"Txid" ends in a hex digit** - so a /[0-9a-f]{64}/
+            // "Transaction ID", and **it ends in a hex digit ("D")** - so a /[0-9a-f]{64}/i
             // over the whole card matches one character early and yields a txid
             // that is off by one at both ends. That cost this spec a full run,
             // reported as "the bet never reached the chain" while the receipt on

@@ -936,7 +936,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     + 'once the recipient list has confirmed.');
                 return;
             }
-            if (!txid) throw new Error('LIST broadcast did not return a txid.');
+            if (!txid) throw new Error('Recipient list broadcast did not return a transaction ID.');
             const record = schemasLib.createPendingAirdrop({
                 walletId,
                 chainId,
@@ -957,7 +957,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             if (isUserRejection(err)) return;
             setSubmitError(submitFailureMessage(err, {
                 chainId,
-                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'LIST broadcast failed.',
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Recipient list broadcast failed.',
             }));
         }
     }
@@ -994,7 +994,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 setSubmitError(SIGNED_NOT_BROADCAST_MESSAGE);
                 return;
             }
-            if (!txid) throw new Error('AIRDROP broadcast did not return a txid.');
+            if (!txid) throw new Error('Airdrop broadcast did not return a transaction ID.');
             setAirdropTxid(txid);
             if (pendingId) {
                 try {
@@ -1010,7 +1010,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             if (isUserRejection(err)) return;
             setSubmitError(submitFailureMessage(err, {
                 chainId,
-                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'AIRDROP broadcast failed.',
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Airdrop broadcast failed.',
             }));
         }
     }
@@ -1043,7 +1043,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 ? await messaging.createListHw({ ...base, signerId: fromAddress.signerId })
                 : await messaging.createList({ ...base, password });
             const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('LIST broadcast did not return a txid.');
+            if (!txid) throw new Error('Recipient list broadcast did not return a transaction ID.');
             const record = schemasLib.createPendingAirdrop({
                 walletId,
                 chainId,
@@ -1069,7 +1069,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'LIST broadcast failed.',
+                        fallback: err?.message || 'Recipient list broadcast failed.',
                     }),
             );
             if (!hw) {
@@ -1109,7 +1109,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 ? await messaging.airdropActionHw({ ...base, signerId: fromAddress.signerId })
                 : await messaging.airdropAction({ ...base, password });
             const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('AIRDROP broadcast did not return a txid.');
+            if (!txid) throw new Error('Airdrop broadcast did not return a transaction ID.');
             setAirdropTxid(txid);
             if (pendingId) {
                 try {
@@ -1130,7 +1130,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'AIRDROP broadcast failed.',
+                        fallback: err?.message || 'Airdrop broadcast failed.',
                     }),
             );
             if (!hw) {

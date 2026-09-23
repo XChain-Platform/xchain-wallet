@@ -676,6 +676,7 @@ export async function deployChunkedRun(opts) {
                 stamp.catch(() => {});
             }
         },
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 
     // Phase 1: carriers, in order, each indexed before the next.

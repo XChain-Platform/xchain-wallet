@@ -541,7 +541,7 @@ export function ContractStakeForm({
                     The transaction was broadcast; the network will record it shortly.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '(pending)')}</dd>
                 </dl>
                 <div className={styles.actions}>

@@ -39,6 +39,15 @@ const STATUS_LABELS = {
 };
 const statusLabel = (s) => STATUS_LABELS[s] || s;
 
+// Humanize the local-sign contribution kind; the flow's enum stays wire vocabulary.
+// Covers every contributionKind flows/multisigSignLocally.js returns.
+const CONTRIBUTION_LABELS = {
+    'round-1-nonce': 'Round 1 reply',
+    'round-2-partial': 'Round 2 signature',
+    'classical-signature': 'Signature',
+};
+const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
+
 /**
  * §22.3 + §42.9 multisig sign-screen tracker (Phase 4 Step 19).
  *
@@ -299,7 +308,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 password:  signPassword,
             });
             setSignResult(
-                `Contributed ${result?.contributionKind || 'signature'} from ${shortPk(result?.pubkey || '')}.`,
+                `${contributionLabel(result?.contributionKind)} from ${shortPk(result?.pubkey || '')} added.`,
             );
             setSignPassword('');
             await refreshActive(active.id);

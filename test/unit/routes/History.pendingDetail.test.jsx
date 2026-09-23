@@ -176,7 +176,7 @@ describe('History pending detail branch', () => {
         const region = await openRow(view, 'seen');
         const panel = panelIn(region);
         expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
-        expect(within(panel).getByText('In the mempool, waiting for a block')).toBeTruthy();
+        expect(within(panel).getByText('Held by the network, waiting for a block')).toBeTruthy();
         // Nothing on the page may claim acceptance before an indexer has
         // seen the block: a mempool row is pre-validation.
         expect(region.textContent).not.toMatch(/\bAccepted\b/);

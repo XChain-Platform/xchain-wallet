@@ -334,7 +334,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             <>
                 <p className={styles.summary}>Ballot cast. It counts once the network records the action; weight is measured at the poll's close block.</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>

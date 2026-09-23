@@ -128,6 +128,7 @@ export async function sweepToken(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 
     // PC-34 force-close interplay: ORDERS=1 cancels every open ORDER

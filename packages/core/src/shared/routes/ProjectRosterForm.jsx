@@ -341,7 +341,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 ? await messaging.createListHw({ ...base, signerId: fromAddress.signerId })
                 : await messaging.createList({ ...base, password });
             const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('LIST broadcast did not return a txid.');
+            if (!txid) throw new Error('List broadcast did not return a transaction ID.');
             setListTxid(txid);
             setPassword('');
             setStage('wait-index');
@@ -393,7 +393,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 ? await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId })
                 : await messaging.linkAction({ ...base, password });
             const txid = res?.txid || res?.broadcast?.txid;
-            if (!txid) throw new Error('LINK broadcast did not return a txid.');
+            if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
             setLinkTxid(txid);
             setPassword('');
             setStage('done');
@@ -403,7 +403,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 isBadPassword
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
-                        chainId, coinTicker, fallback: err?.message || 'LINK broadcast failed.',
+                        chainId, coinTicker, fallback: err?.message || 'Cross-chain link broadcast failed.',
                     }),
             );
             if (!hw) {
