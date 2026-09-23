@@ -17,8 +17,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { siblingCheckout, skipOrFail } from '../../helpers/siblingCheckout.js';
 
 import {
     prepareGatedSend,
@@ -490,14 +491,13 @@ describe('PC-29 unlock-threshold lane', () => {
         const FIXTURE = resolve('test/fixtures/gate-min-amount-vectors.json');
         const vectors = JSON.parse(readFileSync(FIXTURE, 'utf8'));
 
-        it('is byte-identical to the canonical xchain-sdk copy', () => {
-            const sibling = resolve('../xchain-sdk/test/fixtures/gate-min-amount-vectors.json');
-            if (!existsSync(sibling)) {
-                if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1')
-                    throw new Error('sibling xchain-sdk fixture missing');
-                return;
-            }
-            expect(readFileSync(sibling, 'utf8')).toBe(readFileSync(FIXTURE, 'utf8'));
+        it('is byte-identical to the canonical xchain-sdk copy', (ctx) => {
+            const SDK_FIXTURE = process.env.XCHAIN_SDK_DIR
+                ? join(process.env.XCHAIN_SDK_DIR, 'test', 'fixtures', 'gate-min-amount-vectors.json')
+                : resolve('../xchain-sdk/test/fixtures/gate-min-amount-vectors.json');
+            const sibling = siblingCheckout(process.cwd(), SDK_FIXTURE);
+            if (!skipOrFail(ctx, sibling, 'the gate-min-amount-vectors fixture byte-identity guard')) return;
+            expect(readFileSync(sibling.path, 'utf8')).toBe(readFileSync(FIXTURE, 'utf8'));
         });
 
         for (const vec of vectors.pack_threshold) {
@@ -520,14 +520,13 @@ describe('PC-29 unlock-threshold lane', () => {
         // precisely because a value with more places cannot be represented in the
         // fixed-scale BigInt comparison here. If the two drift, the two sides disagree
         // on the last digit of a threshold neither considers malformed.
-        it('the fixed comparison scale matches the protocol constant', () => {
-            const sibling = resolve('../xchain-sdk/src/protocol/constants.js');
-            if (!existsSync(sibling)) {
-                if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1')
-                    throw new Error('sibling xchain-sdk protocol constants missing');
-                return;
-            }
-            const src = readFileSync(sibling, 'utf8');
+        it('the fixed comparison scale matches the protocol constant', (ctx) => {
+            const SDK_CONSTANTS = process.env.XCHAIN_SDK_DIR
+                ? join(process.env.XCHAIN_SDK_DIR, 'src', 'protocol', 'constants.js')
+                : resolve('../xchain-sdk/src/protocol/constants.js');
+            const sibling = siblingCheckout(process.cwd(), SDK_CONSTANTS);
+            if (!skipOrFail(ctx, sibling, 'the THRESHOLD_SCALE cross-repo constant guard')) return;
+            const src = readFileSync(sibling.path, 'utf8');
             const m = /THRESHOLD_SCALE\s*[:=]\s*(\d+)/.exec(src);
             expect(m, 'THRESHOLD_SCALE not found in the sibling protocol constants').toBeTruthy();
             // Read this side from the source rather than importing a private const.
