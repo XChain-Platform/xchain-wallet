@@ -732,7 +732,7 @@ if (docsAvailable()) {
     // The shared non-determinism floor moved up to a document-level section
     // when the four per-shell docs merged, so it is checked on the page
     // rather than inside the Desktop section.
-    assert.ok(reproDoc.includes('Non-determinism sources addressed across every shell'),
+    assert.ok(reproDoc.includes('Non-determinism sources addressed across desktop, extension, and web'),
         'the reproducible-builds doc keeps its shared non-determinism section');
 } else {
     console.log('SKIP (partial): desktop-packaging smoke - the reproducible-build recipe half needs the '
