@@ -16,10 +16,16 @@
 // `THROTTLED` shape and a `retryAfterMs` hint until the oldest entry
 // falls out of the window.
 //
-// The throttle is intentionally process-scoped (one instance per
-// background). State resets across service-worker restarts. That is
-// acceptable for a rate limit: an attacker who can crash the SW also
-// cannot sign anything because the wallet never caches the password.
+// One throttle instance per background. Bucket state lives in memory and
+// survives a restart only when the host persists it: `onPersist` fires on
+// every mutation, and `initialState` / `seed()` restore a saved snapshot.
+// The extension background wires both through
+// packages/extension/src/background/signThrottleStorage.js, so an MV3
+// service-worker restart does not hand a rate-limited origin a fresh
+// burst. The one gap is the window before that async load resolves, when
+// checks run against an empty bucket. Signing itself survives a restart
+// (see packages/extension/src/background/signingSecretSession.js), which
+// is why the buckets must too.
 //
 // Why this exists:
 //   1. A site granted `canSignMessage: true` (saved permanent) could

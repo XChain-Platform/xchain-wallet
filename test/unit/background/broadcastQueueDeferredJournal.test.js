@@ -69,10 +69,10 @@ function adsSettings() {
  * reads refuse. `withJournal: false` drops the journal verbs from the adapter,
  * which is the negative control: the same outage, with nothing able to replay.
  */
-function makeJournalHost({ withJournal = true } = {}) {
+function makeJournalHost({ withJournal = true, seedSettlements = [] } = {}) {
     let readable = false;
     let queues = { [W]: [] };
-    let settlements = [];
+    let settlements = JSON.parse(JSON.stringify(seedSettlements));
     const settlementSaves = [];
     const journalVerbs = {
         loadSettlements: async () => {
@@ -188,5 +188,40 @@ describe('a settlement owed during a storage outage reaches the journal on recov
         // how that assertion is known not to be vacuous.
         expect(h.settlementSaves).toEqual([]);
         expect(h.journal()).toEqual([]);
+    });
+});
+
+describe('the journal cap evicts the oldest owed write after a recovered merge', () => {
+    const LIMIT = 50;
+    const preBoot = Array.from({ length: LIMIT }, (_unused, i) => ({
+        id: `s-old-${i}`, walletId: W, pendingTxId: `old-${i}`, op: 'discard', recordedAt: i + 1,
+    }));
+
+    it('keeps the records owed during the outage and drops the pre-boot front', async () => {
+        const h = makeJournalHost({ seedSettlements: preBoot });
+        const first = await queueThroughFailedSend(h, { pendingTxId: 'new-1' });
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: first })).ok).toBe(true);
+        await h.settle();
+
+        h.recover();
+        await h.call('broadcast.queue.list', { walletId: W });
+        await h.settle();
+
+        // The merge write-back already holds the bound, with this boot's record kept.
+        const merged = h.journal().map((s) => s.pendingTxId);
+        expect(merged.length).toBe(LIMIT);
+        expect(merged).toContain('new-1');
+        expect(merged).not.toContain('old-0');
+
+        // One more owed write: the cap must take the next-oldest pre-boot record.
+        const second = await queueThroughFailedSend(h, { pendingTxId: 'new-2' });
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: second })).ok).toBe(true);
+        await h.settle();
+
+        const after = h.journal().map((s) => s.pendingTxId);
+        expect(after.length).toBe(LIMIT);
+        expect(after.slice(-2)).toEqual(['new-1', 'new-2']);
+        expect(after).not.toContain('old-1');
+        expect(after[0]).toBe('old-2');
     });
 });

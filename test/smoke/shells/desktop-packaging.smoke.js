@@ -56,10 +56,9 @@
 //      packageManager field; SOURCE_DATE_EPOCH handling; reproduce.sh
 //      is executable.
 //
-//   7. CSP: renderer/index.html allow-lists connect.trezor.io in
-//      script-src (hosted Trezor Connect global build, loaded instead
-//      of bundling T-RSL @trezor/connect-web) + frame-src (its signing
-//      iframe); connect-src stays 'self'.
+//   7. CSP: renderer/index.html admits no remote origin: script-src
+//      'self', frame-src 'none', connect-src 'self'. Trezor Connect
+//      runs only in the isolated bridge window, under its own policy.
 //
 //   8. The hosted desktop reproducible-build recipe has its key sections.
 
@@ -677,11 +676,11 @@ const rendererCsp = Object.fromEntries(
 // comes from packages/web/src/csp.js), so this literal is its only reviewer.
 const EXPECTED_RENDERER_CSP = {
     'default-src': ["'self'"],
-    'script-src': ["'self'", 'https://connect.trezor.io'],
+    'script-src': ["'self'"],
     'style-src': ["'self'", "'unsafe-inline'"],
     'img-src': ["'self'", 'data:', 'blob:'],
     'connect-src': ["'self'"],
-    'frame-src': ['https://connect.trezor.io'],
+    'frame-src': ["'none'"],
 };
 
 assert.deepEqual(
@@ -698,11 +697,12 @@ for (const [name, sources] of Object.entries(EXPECTED_RENDERER_CSP)) {
     );
 }
 
-// The two allowances that are deliberate, restated so the deepEqual above is
-// read as a decision rather than as whatever the file happened to say:
-// connect.trezor.io is allowed in script-src and frame-src for the hosted
-// Trezor Connect build and its signing iframe (no bundled @trezor/*), and
-// connect-src stays 'self' because the wallet's own code never fetches from it.
+// The posture, restated so the deepEqual above is read as a decision rather
+// than as whatever the file happened to say: this window holds the preload
+// bridges and the WebHID grant, so it admits no remote script or frame. The
+// hosted Trezor Connect build (no bundled @trezor/*) runs only in the bridge
+// window trezorFactory.js opens on its own preload-free session, and
+// frame-src 'none' is what keeps the subframe guard's no-iframe premise true.
 
 // --- 8. The desktop reproducible-build recipe -------------------------
 //
@@ -763,5 +763,5 @@ function makeFakeApp() {
 }
 
 console.log(
-    'OK: desktop packaging smoke (Step 19 §40.12 / §51: electron-builder config (appId, protocols, asar, reproducibility flags, mac/win/linux targets, env-driven signing, electron-updater generic provider at downloads.xchain.io); Tier-1/Tier-2 URI scheme registration (xchain always, bitcoin/litecoin/dogecoin opt-in); BIP21 classification of coin URIs, xchain: pass-through, malformed URI handling; electron-updater wiring (dev-mode short-circuit, event forwarding, error handling); main/index.js delegates to protocol.js + updater.js; Dockerfile with digest-pinned base + SHA256-pinned Node + UID-mapped user; build.sh + reproduce.sh with SOURCE_DATE_EPOCH derivation + frozen lockfile + SHA256 manifest; CSP frame-src allowlists connect.trezor.io; the hosted desktop repro recipe documents the verification protocol)',
+    'OK: desktop packaging smoke (Step 19 §40.12 / §51: electron-builder config (appId, protocols, asar, reproducibility flags, mac/win/linux targets, env-driven signing, electron-updater generic provider at downloads.xchain.io); Tier-1/Tier-2 URI scheme registration (xchain always, bitcoin/litecoin/dogecoin opt-in); BIP21 classification of coin URIs, xchain: pass-through, malformed URI handling; electron-updater wiring (dev-mode short-circuit, event forwarding, error handling); main/index.js delegates to protocol.js + updater.js; Dockerfile with digest-pinned base + SHA256-pinned Node + UID-mapped user; build.sh + reproduce.sh with SOURCE_DATE_EPOCH derivation + frozen lockfile + SHA256 manifest; renderer CSP admits no remote script or frame; the hosted desktop repro recipe documents the verification protocol)',
 );

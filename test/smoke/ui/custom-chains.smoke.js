@@ -299,6 +299,13 @@ const registryIndexSrc = readFileSync(join(wsRoot, 'packages/core/src/registry/i
 assert.match(registryIndexSrc, /export \{ hydrateCustomChainsFromSettings \}/,
     'registry barrel exports hydrateCustomChainsFromSettings');
 
+// Background host: its vault seed runs the same helper, so a change to what
+// counts as a seedable descriptor cannot reach the UI realms and miss the host.
+assert.match(hostSrc, /registry\.hydrateCustomChainsFromSettings\(chainRegistry, settings\)/,
+    'background host seed delegates to the shared core helper');
+assert.doesNotMatch(hostSrc, /chainRegistry\.addCustom\(descriptor\)/,
+    'background host keeps no private copy of the install loop');
+
 // Popup + desktop renderer + web: the shared settings hook hydrates on every
 // successful read, which is also the first readable moment after unlock.
 const useSettingsSrc = readFileSync(

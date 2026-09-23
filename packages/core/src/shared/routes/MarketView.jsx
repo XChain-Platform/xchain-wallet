@@ -53,6 +53,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.tick1
  * @param {string} props.tick2
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onSwap] renders the reverse-pair control; reopens the market with tick1/tick2 flipped
  */
 export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) {
     const { messaging, shell } = useMessaging();

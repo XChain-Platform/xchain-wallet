@@ -53,7 +53,9 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
  *
  * `ComposedAction` is the INTERNAL shape composeForConfirm returns; the
  * envelope below drops two of its fields (`encoderOpts`, `carrierScripts` -
- * host-side build material the popup neither needs nor can act on) and adds
+ * host-side build material the popup neither needs nor can act on), carries
+ * every other one (the envelope-shape tests hold each `ComposedAction`
+ * property to "carried or on the drop list"), and adds
  * twelve the compose step never had (the fee lane, the deferred reveal set,
  * the exact fees, the projection, the decoded intent). Declaring it as
  * `ComposedAction & { tamperVerified: true }` was wrong in both directions at
@@ -79,8 +81,10 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
  * @property {{ address: string, value: number|string }|null} deferredFeeOutput  protocol-fee output the reveal emits
  * @property {Array<{ address: string, value: number|string }>} deferredOutputs  every output the reveal emits
  * @property {{ change: string|null, rawData: string|null }|null} revealOpts     what the reveal must be built with
+ * @property {object|null} oracleFeeQuote    Mode B dispenser oracle usage fee quote; NULL when none was priced
  * @property {object} adsPlan                resolved ADS plan
  * @property {ReturnType<typeof import('./confirmChecks.js').buildExpectedOutputs>} expectedOutputs
+ * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not report one
  * @property {number|null} networkFeeSats    exact miner fee of the built bytes; NULL when not derivable
  * @property {number|null} protocolFeeSats   protocol fee in the native coin; NULL in XCHAIN-fee mode
  * @property {string|null} xchainFee         protocol fee in XCHAIN; NULL in native mode / unquotable
@@ -360,8 +364,16 @@ export async function composeActionForConfirm({
         // this is the one slice the submit path cannot re-derive, because it
         // builds the reveal fresh from opts that never saw the rotated change.
         revealOpts: composed.revealOpts || null,
+        // The oracle usage fee a Mode B dispenser pays as a real coin output,
+        // which neither fee line nor the projection covers; the confirm screen
+        // names it from this quote.
+        oracleFeeQuote: composed.oracleFeeQuote || null,
         adsPlan: composed.adsPlan,
         expectedOutputs: composed.expectedOutputs,
+        // The encoder's compression report for these bytes: the submit path
+        // hands it to the success screen's stored-size line, and this envelope
+        // is its only route there.
+        compression: composed.compression || null,
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT
         // does not carry every input value. Never a rate estimate.
         networkFeeSats,

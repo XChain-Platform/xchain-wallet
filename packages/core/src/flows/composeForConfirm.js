@@ -31,6 +31,7 @@
 
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
+import { EnvelopeConfirmLaneError, isEnvelopePair } from '../sdk/submitWithSigner.js';
 import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativeFeeLane.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
@@ -288,6 +289,17 @@ export async function composeForConfirm({
         });
     } catch (err) {
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
+    }
+
+    // Refuse a TAPROOT envelope before the modal opens: this lane hands the
+    // signer ONE PSBT, and only submitWithSigner's live-encode branch signs a
+    // reveal and records the commit, so the commit alone would strand coin.
+    // Keyed off the encoder's answer, so an envelope it selects unasked is caught too.
+    if (isEnvelopePair(encoded)) {
+        throw new EnvelopeConfirmLaneError({
+            action: actionData?.action || 'action',
+            encoding: typeof encoded.encoding === 'string' ? encoded.encoding : 'TAPROOT',
+        });
     }
 
     // What the PSBT just built really carries, compression included. Everything

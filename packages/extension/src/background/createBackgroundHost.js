@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { flows, schemas } from '@xchain-wallet/core';
+import { flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
@@ -842,20 +842,10 @@ export function createBackgroundHost(deps) {
         customChainsSeedPromise = (async () => {
             try {
                 const settings = await vault.settings.get();
-                const list = Array.isArray(settings?.customChains) ? settings.customChains : [];
-                for (const descriptor of list) {
-                    try {
-                        if (!descriptor || typeof descriptor !== 'object') continue;
-                        if (typeof descriptor.id !== 'string') continue;
-                        if (chainRegistry.has(descriptor.id)) continue;
-                        chainRegistry.addCustom(descriptor);
-                    } catch {
-                        // Per-descriptor failures (corrupt persisted record,
-                        // descriptor invalid against the current validator)
-                        // are skipped silently: the boot path must not crash
-                        // on a single bad row.
-                    }
-                }
+                // Share the UI realms' install loop; it skips a corrupt or
+                // invalid row rather than throwing, so one bad row never
+                // crashes the boot path.
+                registry.hydrateCustomChainsFromSettings(chainRegistry, settings);
                 // Last statement in the try, so a throwing read never latches.
                 customChainsSeeded = true;
             } catch {
@@ -920,9 +910,10 @@ export function createBackgroundHost(deps) {
     // The throttle is constructed with onPersist wired to the storage
     // adapter; bucket state is hydrated asynchronously via the throttle's
     // `seed()` method as soon as the load resolves. While hydration is
-    // pending, the throttle accepts requests against an empty bucket;
-    // worst case a first-request-after-SW-restart slips through, no
-    // worse than today's reset-on-restart behavior.
+    // pending, the throttle checks requests against an empty bucket, so up
+    // to one burst can slip through right after an SW restart; `seed()`
+    // then merges the restored timestamps with those live ones. That
+    // pending window is the one gap in otherwise persistent bucket state.
     const signThrottle = createSignThrottle({
         getLimits: () => cachedThrottleLimits || {},
         onPersist: signThrottleStorage
@@ -2779,16 +2770,28 @@ export function createBackgroundHost(deps) {
     const OWED_SETTLEMENT_LIMIT = 50;
     /** @type {Array<{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt: number }>} */
     let owedSettlements = [];
+    // Cap the journal so a vault that never reopens cannot grow the stored blob
+    // without bound. Positional: the array is kept oldest-first, so the front goes.
+    function capOwedSettlements() {
+        if (owedSettlements.length > OWED_SETTLEMENT_LIMIT) {
+            owedSettlements = owedSettlements.slice(-OWED_SETTLEMENT_LIMIT);
+        }
+    }
     function mergeOwedSettlements(persisted) {
         if (!Array.isArray(persisted) || persisted.length === 0) return;
         const held = new Set(owedSettlements.map((s) => s.pendingTxId));
+        const restored = [];
         for (const owed of persisted) {
             if (!owed || typeof owed !== 'object') continue;
             if (typeof owed.pendingTxId !== 'string' || !owed.pendingTxId) continue;
             if (held.has(owed.pendingTxId)) continue;
             held.add(owed.pendingTxId);
-            owedSettlements.push({ ...owed });
+            restored.push({ ...owed });
         }
+        // Persisted records go in front: persistOwedSettlements refuses while
+        // `queueLoaded` is false, so the blob predates everything this process holds.
+        owedSettlements = [...restored, ...owedSettlements];
+        capOwedSettlements();
     }
     // Write the journal to the queue's own storage key. The wallet wipe clears
     // the local store by enumerated key, so a key of its own would outlive the
@@ -2818,11 +2821,7 @@ export function createBackgroundHost(deps) {
             ...(patch ? { patch } : {}),
             recordedAt: Date.now(),
         });
-        // Cap the journal so a vault that never reopens cannot grow the stored
-        // blob without bound; the oldest owed write goes first.
-        if (owedSettlements.length > OWED_SETTLEMENT_LIMIT) {
-            owedSettlements = owedSettlements.slice(-OWED_SETTLEMENT_LIMIT);
-        }
+        capOwedSettlements();
         void persistOwedSettlements();
     }
     /**

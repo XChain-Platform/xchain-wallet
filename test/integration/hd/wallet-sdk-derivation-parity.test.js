@@ -48,8 +48,9 @@
 // silence away, not an unconditional failure.
 //
 // Note: xchain-sdk's coin data (src/coins/*.js) carries no SLIP-44 /
-// coin-type field, but src/derivation.js exposes FAMILY_SLIP44 as the
-// backend-side coin-type anchor precisely so this suite has a real SDK value
+// coin-type field, but src/protocol/derivation.js (pre-0.19.0:
+// src/derivation.js) exposes FAMILY_SLIP44 as the backend-side coin-type
+// anchor precisely so this suite has a real SDK value
 // to assert the wallet's FAMILY_MAINNET_COIN_TYPE_SLOT against (the coin-type
 // leg below binds the two across repos, rather than checking the wallet
 // constant against itself).

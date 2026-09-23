@@ -32,6 +32,7 @@ import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
+import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -77,6 +78,8 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   already served better by the psbt variant's input enumeration, which marks
  *   which inputs the wallet owns; collapsing it to one From line would be a lie
  *   dressed as a disclosure. Pass nothing on the psbt and message variants.
+ * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
+ *   read off the composed envelope (the oracle usage fee)
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
@@ -85,7 +88,7 @@ export function ConfirmActionModal({
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
     psbtPanel = null, messageText, refusal = null, headline,
-    sourceAddress = null,
+    sourceAddress = null, nativeTicker = '',
 }) {
     const headlineText = headline !== undefined
         ? headline
@@ -115,6 +118,11 @@ export function ConfirmActionModal({
     // payment has no protocol fee at all.
     const protocolFee = (variant === 'action' && !preflightNotApplicable)
         ? xchainProtocolFeeLine({ report, composed })
+        : null;
+    // A Mode B dispenser's oracle usage fee: a coin output in these bytes that
+    // neither fee line covers. Action variant only, for the reason above.
+    const oracleFee = variant === 'action'
+        ? oracleUsageFeeLine({ composed, ticker: nativeTicker })
         : null;
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
@@ -226,6 +234,10 @@ export function ConfirmActionModal({
                         the other (the same rule the delta rows follow). */}
                     {protocolFee ? (
                         <div className={styles.fee} data-testid="confirm-protocol-fee">{protocolFee.text}</div>
+                    ) : null}
+
+                    {oracleFee ? (
+                        <div className={styles.fee} data-testid="confirm-oracle-fee">{oracleFee.text}</div>
                     ) : null}
 
                     {/* Fail-closed refusal (§5.5): no credentials, no Approve,

@@ -104,6 +104,41 @@ export class HardwareChunkLaneError extends Error {
 }
 
 /**
+ * Thrown BEFORE anything is signed when a single-encode (prebuilt) compose
+ * resolved to a TAPROOT envelope.
+ *
+ * The prebuilt lane carries exactly one PSBT, so the envelope's reveal and its
+ * recovery record have no route to the signer; signing the commit alone spends
+ * coin into a script nothing can open. Typed and `userFacing` so the forms
+ * render the refusal instead of "Couldn't send."
+ */
+export class EnvelopeConfirmLaneError extends Error {
+    /** @param {{ action: string, encoding: string }} fields */
+    constructor({ action, encoding }) {
+        super(`This ${action} is too large for one transaction: the network carries it as a `
+            + `${encoding} pair, a commit plus a revealing transaction that must be signed before `
+            + 'the first is broadcast. This confirm screen can carry only one transaction, and '
+            + 'broadcasting only the first would spend coin into a script that nothing can open '
+            + 'and record no action at all. Reduce it to a size that fits one transaction.');
+        this.name = 'EnvelopeConfirmLaneError';
+        this.userFacing = true;
+        this.action = action;
+        this.encoding = encoding;
+    }
+}
+
+/**
+ * Whether an encoder answer (or a prebuilt PSBT) is a TAPROOT commit/reveal pair.
+ *
+ * @param {{ encoding?: unknown, revealPsbt?: unknown, envelope?: unknown } | null | undefined} built
+ * @returns {boolean}
+ */
+export function isEnvelopePair(built) {
+    if (!built || typeof built !== 'object') return false;
+    return built.encoding === 'TAPROOT' || Boolean(built.revealPsbt) || Boolean(built.envelope);
+}
+
+/**
  * @typedef {Object} SubmitEncoderOpts
  * @property {string} pubkey                 hex; caller-supplied (we do NOT derive from the signer)
  * @property {string} [change]               change address
@@ -229,6 +264,14 @@ export async function submitWithSigner({
     // surplus sweep went back to the spending address (D-9 rotation, defeated).
     let revealOpts = null;
     if (prebuiltPsbt) {
+        // Refuse an envelope here too: this branch rebuilds `encoded` without a
+        // reveal, so the pair branch below could never fire for it.
+        if (isEnvelopePair(prebuiltPsbt)) {
+            throw new EnvelopeConfirmLaneError({
+                action: actionData.action,
+                encoding: typeof prebuiltPsbt.encoding === 'string' ? prebuiltPsbt.encoding : 'TAPROOT',
+            });
+        }
         // Preserve the phase events submitAction's lifecycle tracker consumes,
         // but do NO rebuild: the PSBT is the one the user approved.
         onProgress('creating', { action: actionData.action });

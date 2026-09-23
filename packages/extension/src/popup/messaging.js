@@ -1575,6 +1575,14 @@ export function cancelMarketActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.cancelMarket.hw', opts));
 }
 
+/**
+ * Compose a BET action through the allow-listed sdk.betting.*Params builder
+ * host-side, so the confirm page previews the wire params the encoder will see.
+ * Resolves with the same envelope as composeForConfirm plus those params.
+ *
+ * @param {object} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { betParams: object }>}
+ */
 export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
 }
@@ -2337,21 +2345,33 @@ export function signerReady(opts) {
 export function messageAction(opts) {
     return /** @type {any} */ (sendMessage('action.message', opts));
 }
-// §5.6 slice 3: encrypt host-side, then compose the one PSBT over that
-// ciphertext (MESSAGE params cannot be built client-side).
-// Compose a VOTE through the SDK's own sdk.voting.*Params builder
-// host-side, so the confirm page previews the wire params the encoder will
-// actually see instead of a client-side mirror of that encoding.
 // Switch network AND derive the first address on each of its chains,
 // so a switch cannot leave the wallet with no addresses and no way to make one.
 export function setActiveNetwork(opts) {
     return /** @type {any} */ (sendMessage('settings.setActiveNetwork', opts));
 }
 
+/**
+ * Compose a VOTE through the SDK's own sdk.voting.*Params builder
+ * host-side, so the confirm page previews the wire params the encoder will
+ * actually see instead of a client-side mirror of that encoding. Resolves with
+ * the same envelope as composeForConfirm plus the params the encoder saw.
+ *
+ * @param {object} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { voteParams: object }>}
+ */
 export function composeVoteForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.vote.composeForConfirm', opts));
 }
 
+/**
+ * §5.6 slice 3: encrypt host-side, then compose the one PSBT over that
+ * ciphertext (MESSAGE params cannot be built client-side). Resolves with the
+ * same envelope as composeForConfirm plus the params the encoder saw.
+ *
+ * @param {object} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { messageParams: object }>}
+ */
 export function composeMessageForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.message.composeForConfirm', opts));
 }

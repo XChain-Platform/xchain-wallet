@@ -85,6 +85,32 @@ describe('confirm screen protocol-fee disclosure', () => {
         expect(screen.queryByTestId('confirm-protocol-fee')).toBeNull();
     });
 
+    it('names a priced oracle usage fee as its own line', () => {
+        render(<ConfirmActionModal {...base({
+            composed: { psbt: 'x', networkFeeSats: 1176, oracleFeeQuote: { requiredFeeSats: 1500, belowDust: false } },
+            nativeTicker: 'BTC',
+        })} />);
+        const row = screen.getByTestId('confirm-oracle-fee');
+        expect(row.textContent).toMatch(/^Oracle usage fee: 0\.000015 BTC /);
+        expect(screen.getByTestId('confirm-protocol-fee').textContent).not.toMatch(/oracle/i);
+    });
+
+    it('draws no oracle line when the quote appended no output', () => {
+        for (const oracleFeeQuote of [null, { requiredFeeSats: 300, belowDust: true }, { requiredFeeSats: 0 }, { requiredFeeSats: 'n/a' }]) {
+            render(<ConfirmActionModal {...base({ composed: { psbt: 'x', oracleFeeQuote }, nativeTicker: 'BTC' })} />);
+            expect(screen.queryByTestId('confirm-oracle-fee')).toBeNull();
+            cleanup();
+        }
+    });
+
+    it('draws no oracle line on a caller-supplied PSBT', () => {
+        render(<ConfirmActionModal {...base({
+            variant: 'psbt', psbtPanel: <div />,
+            composed: { psbt: 'x', oracleFeeQuote: { requiredFeeSats: 1500 } },
+        })} />);
+        expect(screen.queryByTestId('confirm-oracle-fee')).toBeNull();
+    });
+
     it('does not claim an XCHAIN fee on a bare native payment', () => {
         // No XChain action, so no protocol fee at all.
         render(<ConfirmActionModal {...base({

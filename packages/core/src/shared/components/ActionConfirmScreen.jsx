@@ -168,6 +168,7 @@ export function ActionConfirmScreen({
             sourceAddress={sourceAddress}
             chainLabel={chainLabel}
             feeText={exactFeeText || feeText}
+            nativeTicker={ticker}
             credentialsReady={credsComplete}
             credentials={(
                 <>

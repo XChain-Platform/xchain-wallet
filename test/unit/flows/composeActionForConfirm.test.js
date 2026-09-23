@@ -516,6 +516,74 @@ describe('composeActionForConfirm host envelope shape', () => {
         expect(composed).not.toHaveProperty('carrierScripts');
     });
 
+    // The key-set test above is symmetric, so a ComposedAction field missing
+    // from BOTH the typedef and the return passes it. This one reads the
+    // producer's typedef and holds every field to "carried or dropped on purpose".
+    const DROPPED = [
+        'encoderOpts',     // ADS-folded build opts; host-side only
+        'carrierScripts',  // consumed by the host tamper check
+    ];
+
+    function composedActionKeys() {
+        const src = readFileSync(
+            join(process.cwd(), 'packages', 'core', 'src', 'flows', 'composeForConfirm.js'), 'utf8');
+        const start = src.indexOf('@typedef {Object} ComposedAction');
+        expect(start).toBeGreaterThan(-1);
+        const block = src.slice(start, src.indexOf('*/', start));
+        return [...block.matchAll(/^\s*\*\s*@property\s+\{.+\}\s+(\w+)/gm)].map((m) => m[1]);
+    }
+
+    it('carries every ComposedAction field that is not dropped on purpose', async () => {
+        const producer = composedActionKeys();
+        expect(producer.length).toBeGreaterThan(10);
+        for (const k of DROPPED) expect(producer, `DROPPED names a non-field ${k}`).toContain(k);
+        const h = makeHarness();
+        const composed = await composeActionForConfirm(ARGS(h));
+        const documented = documentedEnvelopeKeys();
+        const missing = producer.filter((k) => !DROPPED.includes(k)
+            && !(documented.includes(k) && Object.hasOwn(composed, k)));
+        expect(missing, 'ComposedAction fields the envelope silently drops').toEqual([]);
+    });
+
+    it('carries the encoder compression report the success screen reads', async () => {
+        const report = { compressed: false, rawLength: 4000, storedLength: 4000, reason: 'not-smaller' };
+        const h = makeHarness();
+        h.sdk.encoder.createTx = vi.fn(async () => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN', compression: report }));
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.compression).toEqual(report);
+    });
+
+    it('carries a null compression report when the encoder reported none', async () => {
+        const composed = await composeActionForConfirm(ARGS(makeHarness()));
+        expect(composed.compression).toBe(null);
+    });
+
+    it('carries the oracle usage fee quote a Mode B dispenser priced', async () => {
+        const quote = { valid: true, requiredFeeSats: 1500, belowDust: false, oracleAddress: 'oracle1' };
+        const h = makeHarness({
+            outputs: [
+                { address: null, scriptPubKeyHex: '6a20deadbeef', scriptType: 'unknown', value: 0 },
+                { address: 'oracle1', scriptPubKeyHex: '0014aa', scriptType: 'p2wpkh', value: 1500 },
+                { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 100 },
+            ],
+        });
+        h.sdk.explorer = { getOracleFeeQuote: vi.fn(async () => quote) };
+        const composed = await composeActionForConfirm({
+            ...ARGS(h),
+            actionData: {
+                action: 'DISPENSER',
+                params: { GIVE_ESCROW: '10', ORACLE_ADDRESS: 'oracle1', FIAT_CODE: 'USD' },
+            },
+        });
+        expect(h.sdk.explorer.getOracleFeeQuote).toHaveBeenCalled();
+        expect(composed.oracleFeeQuote).toEqual(quote);
+    });
+
+    it('carries a null oracle quote on an action that owes none', async () => {
+        const composed = await composeActionForConfirm(ARGS(makeHarness()));
+        expect(composed.oracleFeeQuote).toBe(null);
+    });
+
     // The nullability the shell declarations denied. A bare native payment has
     // no XChain action at all, so three of the fields the shells typed as
     // plain strings are null on the wallet's commonest operation.

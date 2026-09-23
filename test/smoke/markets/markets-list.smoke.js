@@ -149,6 +149,15 @@ for (const [shell, appPath] of [
         /unlockedView === 'market'/.test(app),
         `${shell} App reserves 'market' sub-route for the detail view (Step 2)`,
     );
+    const marketsListMount = (app.match(/<MarketsList\b[\s\S]*?\/>/) || [''])[0];
+    assert.ok(
+        /\bonChangeAsset=\{\(\) => setUnlockedView\('markets-picker'\)\}/.test(marketsListMount),
+        `${shell} App arms onChangeAsset on MarketsList; without it the asset selector is a live button with no effect`,
+    );
+    assert.ok(
+        /unlockedView === 'markets-picker'/.test(app),
+        `${shell} App owns the 'markets-picker' destination route`,
+    );
     assert.ok(
         /onMarkets=\{(?:DEX_SURFACE_ENABLED && )?activeWalletId/.test(app),
         `${shell} App threads onMarkets into Home`,

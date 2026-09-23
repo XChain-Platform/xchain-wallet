@@ -53,6 +53,10 @@ assert.match(form, /SignCredentials/, 'standard signing surface used');
 const formCode = form.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
 assert.doesNotMatch(formCode, /GATE_MIN_AMOUNT|threshold/i,
     'PublishFileForm delegates the PC-29 threshold to GatedPublishForm');
+// The confirm lane composes one PSBT with no Taproot reveal, so the cap must be
+// the legacy compiled ceiling and no envelope encoding may be requested.
+assert.doesNotMatch(formCode, /encoding:\s*'(TAPROOT|AUTO)'/,
+    'public publish cap is sized from the encoding the compose actually requests');
 
 // ---- Encoding-aware limits module --------------------------------------
 const limits = read('packages', 'core', 'src', 'flows', 'fileSizeLimits.js');

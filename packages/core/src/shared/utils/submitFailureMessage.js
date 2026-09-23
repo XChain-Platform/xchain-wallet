@@ -95,6 +95,9 @@ export function isWatcherChunkLane(err) {
     // pre-dispatch because the injected hardware/remote signer cannot sign
     // the reveal (submitWithSigner.js#HardwareChunkLaneError).
     if (e.name === 'HardwareChunkLaneError') return true;
+    // Same shape: a single-encode compose refused a TAPROOT envelope it cannot
+    // carry (submitWithSigner.js#EnvelopeConfirmLaneError).
+    if (e.name === 'EnvelopeConfirmLaneError') return true;
     return /too large for one transaction: the network carries it as a/.test(String(e.message || ''));
 }
 

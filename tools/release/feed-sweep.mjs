@@ -76,6 +76,7 @@ export const FINDINGS = {
     UNCOVERED: 'a published file no manifest covers by name',
     MISMATCH: 'a published file whose bytes match no manifest hash for its name',
     'POINTER-UNPARSEABLE': 'an update-info yml that does not parse',
+    'POINTER-UNREADABLE': 'a JSON pointer the shipped client discards (oversized, or a version it will not parse)',
     'POINTER-DANGLING': 'a pointer naming a file that is not on the feed',
     'POINTER-HASH': "a pointer's sha512 does not match the bytes it names",
     'POINTER-UNCOVERED': 'a pointer names a file no signed manifest covers',

@@ -50,10 +50,10 @@
 // verify coverage without duplicating the constants.
 //
 // The handlers are origin-gated, not only vendor-gated. The renderer CSP
-// allow-lists `https://connect.trezor.io` in `script-src` AND `frame-src`,
-// so remote third-party content really does run inside the HID-granted
-// session; a vendor-only device handler would hand that frame a paired
-// Ledger. Electron also grants device access from a STORED device
+// admits no remote origin today, but a device grant is session-wide across
+// windows and this guard must not depend on that policy staying narrow: a
+// vendor-only device handler would hand any remote frame that did appear a
+// paired Ledger. Electron also grants device access from a STORED device
 // permission without re-running the request handler, so the request path
 // cannot cover the device path.
 //
@@ -129,17 +129,19 @@
 // connect.trezor.io script running as first-party code in the
 // HID-granted session) is closed there, not by this module. This
 // module's own guard is unchanged and was never what held that path shut.
-// Dropping `connect.trezor.io` from the main renderer CSP's now-unused
-// `frame-src`/`script-src` allowance (renderer/index.html) is a follow-up
-// outside this file's scope.
+// The main renderer CSP (renderer/index.html) admits no remote origin:
+// `script-src 'self'` and `frame-src 'none'`.
 //
-// The check handler narrows `hid` alone and leaves every other permission
-// at the session default. The shared UI it hosts reads and writes the
-// clipboard, offers a camera QR scanner and asks for notification
-// permission, so a blanket default-deny across the check handler takes
-// working features out of the shipped wallet. A wider permission posture
-// is its own change with its own coverage, not a side effect of the
-// WebHID gate.
+// Outside `hid` the two generic callbacks take opposite answers, on
+// purpose. The check handler returns `true` for every other permission,
+// to every origin and frame in the session: an unconditional grant on the
+// check path, which the shared UI's clipboard writes and its
+// `Notification.permission` read rely on. The request handler refuses
+// every other permission, so anything that has to PROMPT is off in this
+// shell, including the QR scanner's camera (`media`) and
+// `Notification.requestPermission()`. Narrowing the check side is its own
+// change, verified against a live Electron session, not a side effect of
+// the WebHID gate.
 
 import { isRemoteFrameUrl } from './security.js';
 
@@ -271,8 +273,8 @@ export function attachHidPermissions(session, opts) {
         // live gates are the check handler and `select-hid-device` below.
         //
         // Judge the REQUESTING FRAME, not its embedder: `getURL()` reports the
-        // top-level window, which would let a connect.trezor.io subframe
-        // asking for `hid` inherit the verdict of the app page hosting it.
+        // top-level window, which would let a remote subframe asking for
+        // `hid` inherit the verdict of the app page hosting it.
         // Every other permission stays default-deny.
         if (permission === 'hid') {
             const url = requestingFrameUrl(webContents, details);
@@ -283,9 +285,9 @@ export function attachHidPermissions(session, opts) {
     });
 
     session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-        // `hid` is the one permission this module owns. Everything else
-        // keeps the session default so the clipboard, the QR scanner and
-        // the notification prompt keep working.
+        // `hid` is the one permission this module owns. Everything else is
+        // granted on this path; the request handler above still refuses
+        // anything that must prompt (see the header).
         if (permission !== 'hid') return true;
         return isAppHidCheck(details, requestingOrigin, appRoot);
     });
@@ -478,9 +480,9 @@ export function isAppHidSelect(details, appRoot) {
  * deliberately one-sided, in the same posture as `isRemoteFrameUrl`:
  * reject what is provably remote, never guess about what is unknown.
  *
- * That is enough for the path this exists to close. The remote content
- * the CSP admits is `https://connect.trezor.io`, an http(s) tuple origin,
- * and any such origin is rejected here.
+ * That is enough for the path this exists to close. The renderer CSP
+ * admits no remote origin, and any http(s) tuple origin that appears
+ * anyway is rejected here.
  *
  * @param {unknown} origin   the `details.origin` Electron passes in
  * @returns {boolean}        true means refuse the device grant
