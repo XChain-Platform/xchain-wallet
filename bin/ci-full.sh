@@ -141,6 +141,13 @@ need_sib xchain-documentation
 # the pre-push hook used to run on its own.
 run_tier "test (pnpm run ci)" pnpm run ci
 
+# --- regression suite --------------------------------------------------
+# test:regression is not part of any ci.yml job's `pnpm run ci` bundle, so
+# nothing else in this script or the workflow ever ran it; a pinned past
+# defect could regress and every gate would still say green. Run it here so
+# this script stays the one place that runs every tier this repo has.
+run_tier "regression suite (test:regression)" pnpm test:regression
+
 # --- job: drift-guards -----------------------------------------------------
 # No sibling checkout, matching the workflow: since DD6 the shells consume the
 # published @dankest-llc/xchain-sdk, so the installed package is the SDK a
