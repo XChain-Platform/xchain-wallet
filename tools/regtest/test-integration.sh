@@ -20,16 +20,19 @@
 # suite (mock backend, jsdom - see test/integration/README.md) and must
 # stay that way so `pnpm ci` needs no Docker / regtest stack.
 #
-# This driver is the lane FOLLOWUP-2 asked for: the honest
-# signed -> broadcast -> mined -> indexed -> read-back round-trip that
-# can only run against a live upstream regtest stack. It removes the
-# manual "bring the stack up first" step by gating on wait-ready.sh
-# before handing off to the E2E round-trip, failing fast (with the
-# bootstrap diagnostic) instead of running against a half-up stack and
-# producing confusing failures.
+# The honest signed -> broadcast -> mined -> indexed -> read-back round
+# trip that can only run against a live upstream regtest stack. It removes
+# the manual "bring the stack up first" step by gating on wait-ready.sh
+# before handing off to the regtest and extension E2E suites, failing fast
+# (with the bootstrap diagnostic) instead of running against a half-up
+# stack and producing confusing failures.
+#
+# The extension suite's test collection is validated before either suite
+# runs: a load error or an empty match leaves those specs silently absent
+# from every run that reaches this far, which is worse than a red test.
 #
 # Usage:
-#   pnpm test:integration:regtest              # gate + run the round-trip
+#   pnpm test:integration:regtest              # gate + run both suites
 #   pnpm test:integration:regtest -- --headed  # extra args pass through
 #
 # Environment (consumed by wait-ready.sh):
@@ -47,5 +50,22 @@ cd "${REPO_ROOT}"
 echo "[test-integration] gating on a healthy upstream regtest stack ..."
 bash "${SCRIPT_DIR}/wait-ready.sh"
 
-echo "[test-integration] stack ready - running the regtest round-trip suite"
-exec pnpm exec playwright test --config test/e2e/playwright.config.js "$@"
+echo "[test-integration] stack ready - validating extension test collection"
+if ! EXTENSION_COLLECTION="$(pnpm exec playwright test --list \
+    --config test/e2e/playwright.extension.config.js 2>&1)"; then
+    printf '%s\n' "${EXTENSION_COLLECTION}" >&2
+    echo "[test-integration] extension collection failed to load" >&2
+    exit 1
+fi
+printf '%s\n' "${EXTENSION_COLLECTION}"
+if ! grep -Eq '^Total: [1-9][0-9]* tests? in [1-9][0-9]* files?$' \
+    <<<"${EXTENSION_COLLECTION}"; then
+    echo "[test-integration] extension collection is empty" >&2
+    exit 1
+fi
+
+echo "[test-integration] running the regtest round-trip suite"
+pnpm exec playwright test --config test/e2e/playwright.regtest.config.js "$@"
+
+echo "[test-integration] running the extension suite"
+exec pnpm exec playwright test --config test/e2e/playwright.extension.config.js "$@"
