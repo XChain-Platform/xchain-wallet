@@ -15,8 +15,10 @@
 // slice, so adding an action everywhere-but-the-wallet (or vice versa) fails loud.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { siblingCheckout, skipOrFail } from '../helpers/siblingCheckout.js';
 import {
     COMMON_ACTIONS,
     BTC_EXCLUSIVE_ACTIONS,
@@ -25,8 +27,9 @@ import {
 } from '../../packages/core/src/registry/actions.js';
 import MANIFEST from '../fixtures/action-manifest.json';
 
-// vitest anchors its root to the wallet repo, so cwd is the repo root.
-const VENDORED = join(process.cwd(), 'test', 'fixtures', 'action-manifest.json');
+// Resolve from this file, not cwd, so the guard holds wherever vitest is launched.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const VENDORED = join(HERE, '..', 'fixtures', 'action-manifest.json');
 
 function manifestSlice(flag) {
     return Object.entries(MANIFEST.actions).filter(([, v]) => v[flag]).map(([k]) => k).sort();
@@ -67,12 +70,14 @@ describe('ACTION manifest conformance: wallet walletForm set @regression', () =>
         }
     });
 
-    // IDENTITY: vendored copy must match canonical (skip when sibling absent).
+    // IDENTITY: vendored copy must match canonical. Refuses an absent docs
+    // checkout and a lane symlink into a live main checkout alike.
     it('vendored test/fixtures/action-manifest.json is byte-identical to canonical', (ctx) => {
         const DOCS = process.env.XCHAIN_DOCS_DIR
             ? join(process.env.XCHAIN_DOCS_DIR, 'protocol', 'action-manifest.json')
-            : join(process.cwd(), '..', 'xchain-documentation', 'protocol', 'action-manifest.json');
-        if (!existsSync(DOCS)) { if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') throw new Error('XCHAIN_REQUIRE_SIBLINGS=1 but canonical action-manifest.json not found at ' + DOCS); ctx.skip(); return; }
+            : join(HERE, '..', '..', '..', 'xchain-documentation', 'protocol', 'action-manifest.json');
+        const docs = siblingCheckout(HERE, DOCS);
+        if (!skipOrFail(ctx, docs, 'the canonical action-manifest.json byte-identity guard')) return;
         expect(readFileSync(VENDORED, 'utf8'),
             'vendored action-manifest.json drifted from canonical; edit ' +
             'xchain-documentation/protocol/action-manifest.json and re-vendor all copies.'
