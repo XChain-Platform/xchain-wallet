@@ -23,6 +23,7 @@
 
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
+import { createServer as createTlsServer } from 'node:https';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
     from 'node:fs';
@@ -607,63 +608,212 @@ function serve(dir, { missing = null, wrongLength = null } = {}) {
 // replaces the pointer check with is strictly stronger for these lanes: a
 // pointer is an unsigned file in the directory, and this is inside the
 // signature.
-{
-    const partial = join(work, 'release-partial');
-    mkdirSync(partial, { recursive: true });
-    writeFileSync(join(partial, 'xchain-wallet-v0.333.1.apk'), buildApk());
-    writeFileSync(join(partial, 'xchain-wallet-android-v0.333.1.aab'), 'aab-bytes');
-    // Written through lib.sh with a lane set, so the fixture is the same shape
-    // `sign.sh --lane android` produces rather than a hand-rolled header.
+
+/**
+ * A partial release signed for one lane, the shape `sign.sh --lane <lane>`
+ * produces: the scope and header come from lib.sh, not a hand-rolled copy.
+ */
+function makePartial(name, lane, artifacts) {
+    const dir = join(work, name);
+    const scope = join(work, `scope-${name}.txt`);
+    mkdirSync(dir, { recursive: true });
+    for (const [file, body] of Object.entries(artifacts)) writeFileSync(join(dir, file), body);
     execFileSync('bash', ['-c',
         `. "${join(root, 'tools/release/lib.sh')}" && `
         + `scope=$(xr_lane_scope "${join(root, 'tools/release/shipped-lanes.txt')}" `
-        + `"${join(root, 'tools/release/expected-artifacts.txt')}" android) && `
-        + `printf '%s\\n' "$scope" > "${join(work, 'scope-android.txt')}" && `
-        + `xr_write_manifest "${partial}" "${TAG}" "${'0'.repeat(40)}" `
-        + `"2026-07-31T00:00:00Z" "enforced" "${join(work, 'scope-android.txt')}" "android"`],
+        + `"${join(root, 'tools/release/expected-artifacts.txt')}" ${lane}) && `
+        + `printf '%s\\n' "$scope" > "${scope}" && `
+        + `xr_write_manifest "${dir}" "${TAG}" "${'0'.repeat(40)}" `
+        + `"2026-07-31T00:00:00Z" "enforced" "${scope}" "${lane}"`],
     { env: process.env });
     execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
-        join(partial, 'RELEASE_HASHES.txt')], { env: { ...process.env, GNUPGHOME: gnupg } });
+        join(dir, 'RELEASE_HASHES.txt')], { env: { ...process.env, GNUPGHOME: gnupg } });
+    return dir;
+}
 
+const APK_NAME = 'xchain-wallet-v0.333.1.apk';
+const partial = makePartial('release-partial', 'android', {
+    [APK_NAME]: buildApk(),
+    'xchain-wallet-android-v0.333.1.aab': 'aab-bytes',
+});
+const ABSENT_RECORD = join(work, 'REHEARSAL-never-written.json');
+
+{
     assert.match(readFileSync(join(partial, 'RELEASE_HASHES.txt'), 'utf8'),
         /^# coverage: partial$/m, 'the fixture really is a partial manifest');
 
-    // NO rehearsal record is written for this release, deliberately. This
-    // pins the current waiver: a partial release with no electron-updater
-    // lane publishes without `rehearse.mjs assert`, even though it carries
-    // an APK whose android-direct lane that assert would demand, and it
-    // must say so rather than pass quietly.
+    // THE ANDROID PARTIAL IS THE PATH THAT SHIPS THE APK, so it is the one the
+    // android-direct rehearsal exists for. Its lane has no electron-updater
+    // feed, and that does not waive the gate: with no record it is refused
+    // before a byte moves.
     const target = makeTarget('feed-partial');
+    const r = await run(['--input', partial, '--tag', TAG, '--target', target,
+        '--no-edge-verify', '--rehearsal', ABSENT_RECORD]);
+    assert.equal(r.status, 1, `an APK partial with no rehearsal record is refused:\n${r.out}`);
+    assert.match(r.out, /no rehearsal record/);
+    assert.doesNotMatch(r.out, /rehearsal NOT REQUIRED/,
+        'the waiver must not fire for a lane that ships the direct APK');
+    assert.equal(existsSync(join(target, 'android', APK_NAME)), false, 'and nothing was uploaded');
+
+    // A record from a desktop-only rehearsal does not cover it either.
+    const noDirect = writeRehearsalRecord(partial, { manifestFrom: partial, 'direct-lanes': [] });
+    const d = await run(['--input', partial, '--tag', TAG, '--target', target,
+        '--no-edge-verify', '--rehearsal', noDirect]);
+    assert.equal(d.status, 1, 'a record with no android-direct result is refused');
+    assert.match(d.out, /no result for lane android-direct/);
+}
+
+{
+    // With a passing android-direct result bound to THIS manifest it publishes,
+    // and says which half of the lane is still unproven.
+    writeRehearsalRecord(partial, { manifestFrom: partial });
+    const target = makeTarget('feed-partial-rehearsed');
     const r = await run(['--input', partial, '--tag', TAG, '--target', target,
         '--no-edge-verify']);
 
-    assert.equal(r.status, 0, `a pointerless partial release publishes:\n${r.out}`);
-    assert.match(r.out, /rehearsal NOT REQUIRED[\s\S]*NOT PERFORMED/,
-        'the waived rehearsal is stated, not silent');
-    assert.match(r.out, /unrehearsed, not proven/,
-        'and it names what stays uncovered: the direct APK feed this path does not rehearse');
-    assert.match(r.out, /android-direct/,
-        'and it names the matrix lane the waiver skips, rather than claiming none exists');
-    assert.doesNotMatch(r.out, /desktop lanes only/,
-        'the matrix declares the direct Android lane, so the waiver must not say otherwise');
+    assert.equal(r.status, 0, `a rehearsed pointerless partial release publishes:\n${r.out}`);
+    assert.match(r.out, /checking the §7\.5 rehearsal record/);
+    assert.match(r.out, /install-over[\s\S]*unrehearsed, not proven/,
+        'the install-over half, which no device has watched, is named rather than implied');
     assert.match(r.out, /PARTIAL release/,
         'and says out loud that the channel assertion was answered from the '
         + 'signed manifest rather than from pointers that do not exist');
-    assert.ok(existsSync(join(target, 'android', 'xchain-wallet-v0.333.1.apk')),
-        'the APK still routes to android/');
+    assert.ok(existsSync(join(target, 'android', APK_NAME)), 'the APK still routes to android/');
     assert.equal(existsSync(join(target, 'android', 'xchain-wallet-android-v0.333.1.aab')), false,
         'and the store-bound .aab is still refused');
+    assert.equal(existsSync(join(target, 'android', 'latest.json')), false,
+        'a production publish leaves the direct feed pointer to the release owner');
+}
 
-    // The staging feed is the DESKTOP update rehearsal venue (§7.5): it exists
-    // to prove electron-updater walks a pointer to a binary. A lane with no
-    // pointer has nothing to rehearse there, so asking for it is a mistake
-    // worth naming rather than a no-op to allow.
+{
+    // A store lane that ships no direct artifact still takes the waiver, said
+    // out loud. Proves the new condition is a narrowing, not "always demand".
+    const ios = makePartial('release-ios', 'ios', { 'xchain-wallet-ios-v0.333.1.ipa': 'ipa-bytes' });
+    const r = await run(['--input', ios, '--tag', TAG, '--target', makeTarget('feed-ios'),
+        '--no-edge-verify', '--rehearsal', ABSENT_RECORD]);
+    assert.equal(r.status, 0, `a store-only partial publishes without a record:\n${r.out}`);
+    assert.match(r.out, /rehearsal NOT REQUIRED[\s\S]*NOT PERFORMED/);
+    assert.match(r.out, /no artifact any\s+direct lane/);
+    assert.match(r.out, /unrehearsed, not proven/);
+
+    const s = await run(['--input', ios, '--tag', TAG, '--target',
+        makeTarget('feed-ios-staging', { staging: true }), '--staging', '--no-edge-verify']);
+    assert.equal(s.status, 2, `--staging with a store-only partial is refused:\n${s.out}`);
+    assert.match(s.out, /nothing to rehearse/);
+}
+
+writeRehearsalRecord(prodRelease);
+
+/** Run a node tool without blocking the event loop the served feed needs. */
+function runNode(script, args, env = {}) {
+    return new Promise((resolve) => {
+        const child = spawn(process.execPath, [script, ...args], {
+            env: { ...process.env, GNUPGHOME: gnupg, CI: '', GITHUB_ACTIONS: '', ...env },
+        });
+        let out = '';
+        child.stdout.on('data', (b) => { out += b; });
+        child.stderr.on('data', (b) => { out += b; });
+        child.on('close', (status) => resolve({ status, out }));
+    });
+}
+
+// ------------------ the direct lane, staged and rehearsed end to end
+//
+// The APK has no rehearsal twin (its client hard-codes the production feed),
+// so the SAME signed partial is staged, with android/latest.json written last,
+// and `rehearse.mjs run --lane android-direct` then drives the shipped client
+// against it. The throwaway key stands in for K1 through `--pinned-key`, which
+// is exactly why `assert` refuses the resulting record for a real publish.
+{
     const stagingTarget = makeTarget('feed-partial-staging', { staging: true });
     const s = await run(['--input', partial, '--tag', TAG, '--target', stagingTarget,
         '--staging', '--no-edge-verify']);
-    assert.notEqual(s.status, 0, `--staging with a partial release is refused:\n${s.out}`);
-    assert.match(s.out, /staging/i, 'and the refusal says why');
+    assert.equal(s.status, 0, `the android partial stages:\n${s.out}`);
+    assert.ok(existsSync(join(stagingTarget, 'android', APK_NAME)), 'the APK is staged');
+    assert.ok(existsSync(join(stagingTarget, 'RELEASE_HASHES', `${TAG}.txt.asc`)),
+        'with its signed manifest');
+    const feedFile = join(stagingTarget, 'android', 'latest.json');
+    assert.deepEqual(JSON.parse(readFileSync(feedFile, 'utf8')), { version: '0.333.1' });
+    assert.equal(statSync(feedFile).mode & 0o044, 0o044, 'the feed pointer is world-readable');
+    assert.ok(s.out.indexOf('android/latest.json naming')
+        > s.out.indexOf('uploading the signed manifest'),
+    'the feed pointer goes up after the APK and the manifest it sends a user to');
+    assert.equal(existsSync(join(stagingTarget, 'android', 'xchain-wallet-android-v0.333.1.aab')),
+        false, 'the store-bound .aab stays off the staging feed too');
+}
 
+/**
+ * Serve a directory over TLS with a throwaway certificate for 127.0.0.1, or
+ * null when openssl is absent. updateVerify.js refuses a plain-http feed, and
+ * `rehearse.mjs run` takes no fetch override, so the CLI needs real https.
+ */
+function serveTls(dir) {
+    const cert = join(work, 'tls-cert.pem');
+    const key = join(work, 'tls-key.pem');
+    const made = spawnSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt',
+        'ec_paramgen_curve:prime256v1', '-nodes', '-keyout', key, '-out', cert, '-days', '1',
+        '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { encoding: 'utf8' });
+    if (made.status !== 0) return Promise.resolve(null);
+    const server = createTlsServer({ cert: readFileSync(cert), key: readFileSync(key) }, (req, res) => {
+        const file = resolvePath(dir, decodeURIComponent(req.url.replace(/^\/+/, '')));
+        if (!file.startsWith(resolvePath(dir) + sep) || !existsSync(file) || !statSync(file).isFile()) {
+            res.writeHead(404);
+            res.end();
+            return;
+        }
+        res.writeHead(200);
+        res.end(readFileSync(file));
+    });
+    return new Promise((resolve) => {
+        server.listen(0, '127.0.0.1', () => resolve({
+            server, cert, base: `https://127.0.0.1:${server.address().port}`,
+        }));
+    });
+}
+
+{
+    const stagingTarget = join(work, 'feed-partial-staging');
+    const keyFile = join(work, 'smoke-key.asc');
+    writeFileSync(keyFile, execFileSync('gpg', ['--armor', '--export', SMOKE_FPR],
+        { env: { ...process.env, GNUPGHOME: gnupg } }));
+    const out = join(work, 'REHEARSAL-staged.json');
+    const rehearse = join(root, 'tools', 'release', 'rehearse.mjs');
+    const tls = await serveTls(stagingTarget);
+    assert.ok(tls, 'openssl is required to stand up the https staging feed this case reads');
+    const r = await runNode(rehearse, ['run', '--feed', `${tls.base}/`, '--tag', TAG,
+        '--channel', 'staging', '--prod-input', partial, '--lane', 'android-direct',
+        '--previous-tag', 'v0.333.0', '--prod-feed', tls.base, '--repo', root,
+        '--pinned-key', keyFile, '--pinned-fingerprint', SMOKE_FPR, '--out', out],
+    { NODE_EXTRA_CA_CERTS: tls.cert });
+    tls.server.close();
+
+    assert.equal(r.status, 0, `the staged direct lane rehearses:\n${r.out}`);
+    const record = JSON.parse(readFileSync(out, 'utf8'));
+    assert.deepEqual(record.lanes, [], '--lane android-direct probes no desktop lane');
+    const [direct] = record['direct-lanes'];
+    assert.equal(direct.id, 'android-direct');
+    assert.ok(direct.ok, `android-direct passes: ${direct.failed} ${direct.reason}`);
+    assert.equal(direct.checks.version, '0.333.1');
+    assert.equal(direct.checks.previousInstall, '0.333.1', 'an install on 0.333.0 is told about it');
+    assert.equal(direct.selected, APK_NAME);
+    assert.equal(direct.checks.signedManifest, 'ok');
+
+    const assertOn = (file) => spawnSync(process.execPath, [rehearse, 'assert', '--record', file,
+        '--tag', TAG, '--prod-input', partial], { encoding: 'utf8' });
+    const a = assertOn(out);
+    assert.equal(a.status, 1, 'a record made with a stand-in key never clears a real publish');
+    assert.match(a.stderr, /pinned-key override/);
+
+    // The override is its ONLY problem: the same observation without it is
+    // what a K1 run records, and it clears the gate publish.sh runs.
+    const k1Shaped = join(work, 'REHEARSAL-staged-k1-shaped.json');
+    writeFileSync(k1Shaped, JSON.stringify({ ...record, 'pinned-key-override': null }));
+    const b = assertOn(k1Shaped);
+    assert.equal(b.status, 0, `the staged observation covers the partial release:\n${b.stderr}`);
+    assert.match(b.stdout, /^ok {3}rehearsal v0\.333\.1: 0 lane\(s\) probed \+ 1 direct/);
+}
+
+{
     // And the guard has not been widened into "no pointers is fine". A FULL
     // release with no pointers is still the empty-or-wrong directory the
     // original message describes, and must still be refused.

@@ -28,7 +28,9 @@
 #   --tag <vX.Y.Z>      the release being published
 #   --target <path>     local path or rsync host:path for wallet/
 #   --public-base <url> where that target is served from, for the edge check
-#   --staging           publish the rehearsal set to the staging feed (§7.5)
+#   --staging           publish to the staging feed (§7.5): a desktop rehearsal
+#                       set, or a direct-lane partial release (`sign.sh --lane
+#                       android`) as signed, with its feed pointer written last
 #   --rehearsal <file>  the passing rehearsal record for this release
 #   --release-record <file>  the §6 release record for this release
 #   --no-edge-verify    skip the edge check; must be typed, never defaulted
@@ -306,17 +308,6 @@ if [[ -n "$REHEARSAL_OS" && "$STAGING" -ne 1 ]]; then
     exit 2
 fi
 
-if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
-    echo "publish.sh: --staging is not available for a partial release." >&2
-    echo "  This manifest covers: $COVERAGE_LANES" >&2
-    echo "  The staging feed exists to rehearse the DESKTOP update path (§7.5):" >&2
-    echo "  publish a pointer, let electron-updater walk it to a binary, and" >&2
-    echo "  prove the swap on real hardware. A lane with no channel pointer has" >&2
-    echo "  nothing to rehearse there, so this is a mistake worth naming rather" >&2
-    echo "  than a no-op to allow." >&2
-    exit 2
-fi
-
 # WHICH PARTIAL RELEASE IS THIS? Until 2026-08-11 the question did not
 # exist, because every lane `sign.sh --lane` could name was a store lane
 # and every store lane ships without a channel pointer. So "partial"
@@ -339,6 +330,53 @@ if [[ -n "$COVERAGE_LANES" ]]; then
     if xr_lanes_have_updater_feed "$LANES" $COVERAGE_LANES; then
         COVERAGE_HAS_UPDATER=1
     fi
+fi
+
+# THE FEED COLUMN ANSWERS THE POINTER QUESTION, NOT THE REHEARSAL ONE. The
+# android lane is `store-only` because it publishes no electron-updater
+# pointer, and it also ships the sideloaded APK, whose own feed
+# (`android/latest.json`) rehearsal-matrix.mjs declares as the android-direct
+# lane. So the matrix is asked which direct lanes these lanes ship for, by the
+# same format rule `rehearse.mjs assert` applies to the release directory.
+# yes / no / unknown; only a clean "no" may waive anything below.
+COVERAGE_DIRECT="no"
+DIRECT_FEEDS=""
+if [[ -n "$COVERAGE_LANES" ]]; then
+    direct_rc=0
+    # shellcheck disable=SC2086
+    DIRECT_FEEDS="$(node "$HERE/rehearsal-matrix.mjs" --direct-lanes-for "$LANES" $COVERAGE_LANES)" \
+        || direct_rc=$?
+    case "$direct_rc" in
+        0) COVERAGE_DIRECT="yes" ;;
+        1) COVERAGE_DIRECT="no" ;;
+        *) COVERAGE_DIRECT="unknown"; DIRECT_FEEDS="" ;;
+    esac
+fi
+
+# A DIRECT-LANE PARTIAL IS STAGED AS SIGNED. The APK has no rehearsal twin:
+# its client hard-codes the production feed URL, so the staging feed carries
+# the production bytes and manifest, and `rehearse.mjs run --lane
+# android-direct` reads them there before any production publish. Every other
+# partial is refused: a desktop lane is rehearsed from a set signed with
+# `sign.sh --staging`, and a store lane has no feed of ours to rehearse.
+if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
+    if [[ "$COVERAGE_HAS_UPDATER" -eq 1 || "$COVERAGE_DIRECT" != "yes" ]]; then
+        echo "publish.sh: --staging is not available for this partial release." >&2
+        echo "  This manifest covers: $COVERAGE_LANES" >&2
+        echo "  The staging feed takes a desktop rehearsal set (sign.sh --staging," >&2
+        echo "  never a partial) or a partial release whose lanes ship only a" >&2
+        echo "  direct lane's artifact (sign.sh --lane android). These lanes are" >&2
+        if [[ "$COVERAGE_HAS_UPDATER" -eq 1 ]]; then
+            echo "  electron-updater lanes, so sign their rehearsal set instead." >&2
+        elif [[ "$COVERAGE_DIRECT" == "unknown" ]]; then
+            echo "  unreadable to rehearsal-matrix.mjs (see above), so nothing is staged." >&2
+        else
+            echo "  store lanes with no feed of ours, so there is nothing to rehearse." >&2
+        fi
+        exit 2
+    fi
+    echo "publish.sh: staging the direct lane(s) of partial release $TAG as signed:" >&2
+    printf '%s\n' "$DIRECT_FEEDS" | sed 's/^/  /' >&2
 fi
 
 # Are these the bytes for the feed we are about to write to? The
@@ -397,27 +435,24 @@ if [[ "$STAGING" -eq 0 ]]; then
         node "$HERE/release-record.mjs" assert --tag "$TAG" >&2
     fi
 
-    # THIS WAIVER IS NARROWER THAN THE MATRIX. rehearsal-matrix.mjs declares
-    # the direct Android lane (android-direct) beside the eight desktop
-    # lanes, and `rehearse.mjs assert` demands a result for it from any
-    # release carrying an APK. A partial release whose lanes have no
-    # electron-updater feed skips that assert here, and a store-lane partial
-    # is the shape that ships the APK. Nothing stages such a release on the
-    # staging feed the direct probe reads (sign.sh keeps APKs out of a
-    # staging set, and --staging is refused above for a partial), so the
-    # assert has no record to read for it yet.
+    # THE WAIVER COVERS EXACTLY THE LANES THE MATRIX DOES NOT. A partial
+    # release is asked for a rehearsal record when any of its lanes has an
+    # electron-updater feed OR ships a direct lane's artifact, so the
+    # android partial, the one path that puts an APK on the feed, meets
+    # `rehearse.mjs assert` and its android-direct demand. Its record comes
+    # from staging this same signed set (`--staging`, above) and running
+    # `rehearse.mjs run --lane android-direct` against it.
     #
     # SAID OUT LOUD RATHER THAN SKIPPED. Waiving quietly here would turn
     # "not rehearsed" into "this release was rehearsed", which is the exact
     # substitution §7.5 exists to prevent.
-    if [[ -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 ]]; then
-        echo "publish.sh: §7.5 rehearsal NOT REQUIRED here for lane(s) $COVERAGE_LANES," \
+    if [[ -n "$COVERAGE_LANES" && "$COVERAGE_HAS_UPDATER" -eq 0 && "$COVERAGE_DIRECT" == "no" ]]; then
+        echo "publish.sh: §7.5 rehearsal NOT REQUIRED for lane(s) $COVERAGE_LANES," \
              "and NOT PERFORMED." >&2
-        echo "  These lanes ship no electron-updater feed. rehearse.mjs can probe" >&2
-        echo "  the direct APK lane (android-direct) and demands it of an APK, but" >&2
-        echo "  nothing stages this release on the staging feed for that probe to" >&2
-        echo "  read, so its update feed was not rehearsed for this release." >&2
-        echo "  This release is unrehearsed, not proven." >&2
+        echo "  These lanes ship no electron-updater feed and no artifact any" >&2
+        echo "  direct lane in rehearsal-matrix.mjs distributes, so the matrix" >&2
+        echo "  declares nothing in this release to probe: the store is their" >&2
+        echo "  update channel. This release is unrehearsed, not proven." >&2
     else
         if [[ -z "$REHEARSAL_RECORD" ]]; then
             REHEARSAL_RECORD="$(cd "$INPUT_DIR/.." && pwd)/REHEARSAL-$TAG.json"
@@ -528,6 +563,27 @@ for rel in "${BINARIES[@]}"; do
     fi
 done
 
+# THE DIRECT FEED POINTER, staging only. It names this version to every
+# install that reads it, so it goes up LAST and only beside exactly one APK:
+# a feed naming a version nobody can download is an alarm with no exit.
+DIRECT_POINTERS=()
+if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
+    apk_count=0
+    for rel in "${BINARIES[@]}"; do
+        if [[ "${rel#./}" == *.apk ]]; then apk_count=$((apk_count + 1)); fi
+    done
+    if [[ "$apk_count" -ne 1 || ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "publish.sh: refusing to stage a direct feed for $TAG over $apk_count .apk file(s)." >&2
+        echo "  The direct lane is exactly one universal APK, and its feed names a" >&2
+        echo "  plain vMAJOR.MINOR.PATCH; anything else stages a notice for a" >&2
+        echo "  download that is not there." >&2
+        exit 1
+    fi
+    while read -r _lane feed; do
+        if [[ -n "$feed" ]]; then DIRECT_POINTERS+=("$feed"); fi
+    done <<< "$DIRECT_FEEDS"
+fi
+
 # A desktop release with no channel pointer installs nobody. Nothing
 # downstream would fail: the artifacts land, the manifest verifies, the
 # feed looks healthy, and every wallet in the field simply never hears
@@ -594,6 +650,9 @@ else
     echo "  3. edge check skipped: local target, nothing fronts it" >&2
 fi
 echo "  4. ${#YMLS[@]} channel pointer(s), LAST" >&2
+if [[ ${#DIRECT_POINTERS[@]} -gt 0 ]]; then
+    echo "  4b. direct feed pointer(s) naming ${TAG#v}, LAST: ${DIRECT_POINTERS[*]}" >&2
+fi
 echo "  5. purge the edge cache for those pointer paths" >&2
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -743,6 +802,21 @@ for rel in "${YMLS[@]}"; do
     echo "publish.sh: uploading $name (channel pointer, last)" >&2
     copy_to "$INPUT_DIR/$name" "$BASE/desktop/$name"
 done
+
+# --- Phase 3b: the direct feed pointer, LAST (staging only) -------------
+#
+# The one field the shipped client reads. Written world-readable before the
+# copy, because copy_to preserves mode and mktemp creates 0600.
+if [[ ${#DIRECT_POINTERS[@]} -gt 0 ]]; then
+    feed_body="$(mktemp)"
+    printf '{"version": "%s"}\n' "${TAG#v}" > "$feed_body"
+    chmod 644 "$feed_body"
+    for feed in "${DIRECT_POINTERS[@]}"; do
+        echo "publish.sh: uploading $feed naming ${TAG#v} (direct feed pointer, last)" >&2
+        copy_to "$feed_body" "$BASE/$feed"
+    done
+    rm -f "$feed_body"
+fi
 
 # --- Phase 4: purge the pointers from the edge --------------------------
 #
