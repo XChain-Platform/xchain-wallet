@@ -23,12 +23,18 @@
 // a seed-only restore cannot tell which external addresses were
 // dispensers.
 //
-// Allocation is CONTIGUOUS: "next index" is one past the highest
-// persisted change=0 index for the tuple across ALL roles, so it never
-// collides with a receive address and never leaves a gap.
+// "Next index" fills the lowest change=0 index across ALL roles that has
+// no persisted Address record AND was never funded on-chain, so it never
+// collides with a receive address. This is NOT the same rule as
+// receiveAddress.js's plain lowest-missing-index reuse: a dispenser
+// address can hold real escrowed value, so a gap left by a deleted
+// dispenser that the chain shows was actually used stays permanently
+// skipped, the same way the highest-index-plus-one scan this replaces
+// already treated every gap, rather than being handed to a second
+// dispenser that a buyer or explorer may still have on record.
 //
-// Structurally a twin of receiveAddress.js; the only differences are the
-// role tag and the default label.
+// Structurally a twin of receiveAddress.js; the differences are the role
+// tag, the default label, and this funded-gap check.
 
 import { createAddress } from '../schemas/address.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
@@ -36,6 +42,35 @@ import { unlockWallet } from './unlockWallet.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
+
+/**
+ * Whether the chain shows any history at all for `address`, i.e. it was
+ * funded at some point even if its balance is zero now. Missing explorer
+ * support or a probe failure fails CLOSED: without an answer the flow
+ * cannot prove the gap is safe, so it is treated as used and the index
+ * range grows past it instead of risking a dispenser address that was
+ * already issued once before.
+ *
+ * @param {import('../sdk/SDKRegistry.js').XChainSDKLike} sdk
+ * @param {string} address
+ * @returns {Promise<boolean>}
+ */
+async function addressEverFunded(sdk, address) {
+    if (!sdk || !sdk.explorer || typeof sdk.explorer.getHistory !== 'function') return true;
+    let history;
+    try {
+        history = await sdk.explorer.getHistory(address, 'address', { limit: 1 });
+    } catch {
+        return true;
+    }
+    if (Array.isArray(history)) return history.length > 0;
+    if (history && typeof history === 'object') {
+        if (Array.isArray(history.data)) return history.data.length > 0;
+        if (typeof history.count === 'number') return history.count > 0;
+    }
+    if (typeof history === 'number') return history > 0;
+    return false;
+}
 
 /**
  * @typedef {Object} DispenserAddressOpts
@@ -112,10 +147,12 @@ export async function dispenserAddress({
     }
 
     // Scan the account's external (change=0) addresses for this
-    // (account, chain, network, addressType) tuple. Two accumulators:
-    //   highest        -> the max change=0 index across ALL roles (-1 if
-    //                     none); nextIndex is one past it, so a dispenser
-    //                     never collides with a personal receive index.
+    // (account, chain, network, addressType) tuple. Accumulators:
+    //   held           -> every change=0 index across ALL roles that has a
+    //                     persisted record right now.
+    //   highest        -> the max of `held` (-1 if none); a dispenser
+    //                     never allocates past its own index space, so
+    //                     nothing beyond `highest` needs a gap check.
     //   dispenserCount -> how many of those are already dispensers, used
     //                     only for the human "Dispenser #N" default label.
     // A counterwallet-legacy wallet derives m/0'/C/I for EVERY address
@@ -125,6 +162,7 @@ export async function dispenserAddress({
     // the exact collision the "never collides" note above rules out.
     const sharedIndexSpace = await indexSpaceSharedForWallet(vault, walletId);
     const allAddresses = await vault.addresses.list();
+    const held = new Set();
     let highest = -1;
     let dispenserCount = 0;
     for (const a of allAddresses) {
@@ -146,9 +184,11 @@ export async function dispenserAddress({
         if (change !== '0') continue;
         if (a.role === 'dispenser') dispenserCount += 1;
         const idx = Number(parts[parts.length - 1]);
-        if (Number.isFinite(idx) && idx > highest) highest = idx;
+        if (Number.isInteger(idx) && idx >= 0) {
+            held.add(idx);
+            if (idx > highest) highest = idx;
+        }
     }
-    const nextIndex = highest + 1;
 
     const signer = providedSigner
         ? providedSigner
@@ -165,7 +205,31 @@ export async function dispenserAddress({
     const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
     try {
-        const [derived] = await signer.getAddresses({
+        // Fill the lowest gap below `highest` whose address the chain has
+        // never funded; a gap the chain shows was actually used stays
+        // skipped, same as `held`, so the range grows past it instead.
+        const sdk = sdkRegistry.get(chainId);
+        let nextIndex = null;
+        let candidate = null;
+        for (let i = 0; i < highest; i += 1) {
+            if (held.has(i)) continue;
+            const [gapAddress] = await signer.getAddresses({
+                chainId,
+                accountIndex: resolvedAccountIndex,
+                change: 0,
+                startIndex: i,
+                count: 1,
+                addressType: type,
+            });
+            if (!(await addressEverFunded(sdk, gapAddress.address))) {
+                nextIndex = i;
+                candidate = gapAddress;
+                break;
+            }
+        }
+        if (nextIndex === null) nextIndex = highest + 1;
+
+        const [derived] = candidate ? [candidate] : await signer.getAddresses({
             chainId,
             accountIndex: resolvedAccountIndex,
             change: 0,
