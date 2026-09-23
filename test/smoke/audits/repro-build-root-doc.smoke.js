@@ -74,7 +74,7 @@ const requiredHeadings = [
     '## What this protects against',
     '## What this does not protect against',
     '## Two halves of the property',
-    '## Non-determinism sources addressed across desktop, extension, and web',
+    '## Non-determinism sources addressed across every shell',
 ];
 for (const heading of requiredHeadings) {
     assert.ok(docSrc.includes(heading), `repro doc has heading: ${heading}`);
