@@ -289,8 +289,8 @@ export async function assertVenueReachable() {
     }
 }
 
-/** Required SSH destination for the regtest rail. */
-const SSH_HOST = process.env.XC_REGTEST_SSH_HOST?.trim();
+/** SSH destination for the regtest rail. */
+const SSH_HOST = process.env.XC_REGTEST_SSH_HOST?.trim() || 'dankserver';
 
 /**
  * Whether this run may write a price snapshot at all.
@@ -321,10 +321,6 @@ const PRICE_SEED_SUPPRESSED =
  * spec drives the write itself, through this same credential-free path.
  */
 export async function runInIndexer(script, timeoutMs = 60_000) {
-    if (!SSH_HOST) {
-        throw new Error('XC_REGTEST_SSH_HOST must be set to the regtest rail SSH destination');
-    }
-
     const args = [
         '-o', 'BatchMode=yes',
         '-o', 'ConnectTimeout=10',
