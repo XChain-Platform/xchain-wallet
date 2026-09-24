@@ -49,11 +49,13 @@ const desktopDir = join(wsRoot, 'packages', 'desktop');
 const rendererIndex = join(desktopDir, 'renderer', 'dist', 'index.html');
 
 if (!existsSync(rendererIndex)) {
-    console.log('SKIP: desktop-renders smoke - no renderer build at '
+    const required = process.env.XCHAIN_REQUIRE_DESKTOP_RENDER === '1';
+    const message = `${required ? 'FAIL' : 'SKIP'}: desktop-renders smoke - no renderer build at `
         + `${rendererIndex}. This gate launches the REAL app, so it needs the `
         + 'bundle the app loads. Run `pnpm --filter @xchain-wallet/desktop run '
-        + 'build:renderer` first.');
-    process.exit(0);
+        + 'build:renderer` first.';
+    console[required ? 'error' : 'log'](message);
+    process.exit(required ? 1 : 0);
 }
 
 if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
