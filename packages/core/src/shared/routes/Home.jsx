@@ -1069,6 +1069,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         multisig={isBtc ? multisig : null}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}
+                        onHistory={onHistory}
                         onSelectToken={onSelectToken}
                         onSelectEntry={onSelectEntry}
                         pinnedKeys={new Set(pinnedTokens)}

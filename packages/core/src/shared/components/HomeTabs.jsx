@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useMemo, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
@@ -63,9 +63,10 @@ import styles from './HomeTabs.module.css';
  * @param {string} [props.multisigChainId]
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip; used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
+ * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  */
-export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings }) {
+export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings }) {
     const [active, setActive] = useState('coins');
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
@@ -256,8 +257,18 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         />
                     ) : (
                         <Placeholder
-                            title="Recent activity"
-                            body="Sends, receives, sign events, broadcasts, multisig rounds, and approval grants will surface here, newest first. For the full chronological feed today, open History from the Pancake menu."
+                            title="Activity feed not built yet"
+                            body="History has your complete chronological feed."
+                            action={(
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={onHistory}
+                                    disabled={!onHistory}
+                                >
+                                    Open History
+                                </Button>
+                            )}
                         />
                     )
                 ) : null}
@@ -281,11 +292,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     );
 }
 
-function Placeholder({ title, body }) {
+function Placeholder({ title, body, action = null }) {
     return (
         <div className={styles.placeholder}>
             <div className={styles.placeholderTitle}>{title}</div>
             <p className={styles.placeholderBody}>{body}</p>
+            {action ? <div className={styles.placeholderAction}>{action}</div> : null}
         </div>
     );
 }
@@ -700,4 +712,3 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
         </ul>
     );
 }
-

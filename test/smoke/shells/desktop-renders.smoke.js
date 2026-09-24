@@ -56,14 +56,10 @@ if (!existsSync(rendererIndex)) {
     process.exit(0);
 }
 
-// Electron needs a display server. On a headless Linux runner without xvfb
-// the launch itself fails, which is an environment fact and not a verdict on
-// the app - so it is named out loud rather than reported as a pass.
 if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
-    console.log('SKIP: desktop-renders smoke - Electron needs a display and this '
-        + 'host has neither DISPLAY nor WAYLAND_DISPLAY. Run under xvfb-run to '
-        + 'include this gate.');
-    process.exit(0);
+    console.error('FAIL: desktop-renders smoke - Electron has neither DISPLAY nor '
+        + 'WAYLAND_DISPLAY. Invoke this gate through xvfb-run on a headless Linux host.');
+    process.exit(1);
 }
 
 const { _electron: electron } = await import('@playwright/test');

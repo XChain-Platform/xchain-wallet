@@ -283,28 +283,20 @@ function forwardDeepLink(event) {
     if (!target.isFocused()) target.focus();
 }
 
-// THE SDK THIS SHELL ACTUALLY USES, and it was the dev mock until.
+// The real SDK, adapted once at load. The extension and the web shell start
+// their registry on the dev mock and swap in the factory `resolveSdkFactory`
+// returns, because a service worker must register its handlers before
+// anything can be awaited. A main process has no such constraint, so it
+// imports the SDK statically (as `sdkStatic.js` does for the worker) and the
+// dev mock is not reachable from this shell at all. That matters here more
+// than anywhere: `main/` ships in app.asar as unbundled source, so nothing
+// tree-shakes a mock out of it. sdk-wiring.smoke.js walks this file's import
+// graph and fails if any module in it carries the mock implementation.
 //
-// The extension and the web shell both build their registry on
-// `createDevMockSdk` synchronously - a service worker has to register its
-// handlers before anything can be awaited - and then REPLACE it with the real
-// factory once `resolveSdkFactory` settles. This shell only ever did the
-// first half. Nothing swapped, `SDKRegistry` has no fallback of its own, and
-// so every SDK instance the main process handed out was the stub: fabricated
-// addresses out of `mockDeriveAddress`, and `signPsbt` / `importWIF` /
-// `signMessage` / `broadcastTx` throwing "Dev SDK stub". It shipped that way.
-//
-// There is no reason for the two-step here. A main process is not a service
-// worker: nothing forces a synchronous registry, so the real SDK is imported
-// statically and adapted once, the way `sdkStatic.js` does it for the shell
-// that genuinely cannot. That removes the mock from this shell entirely
-// rather than racing it.
-//
-// FAILING HERE IS THE POINT. A wallet whose SDK did not load cannot derive,
-// sign or broadcast, and the one behaviour that must never happen is
-// continuing on a mock that answers every call with plausible nonsense. The
-// other two shells say this in as many words in their own resolver; on this
-// path a bad export shape stops the app at startup instead.
+// A missing or reshaped SDK export stops the app at startup. A wallet that
+// cannot derive, sign or broadcast must not carry on against a mock that
+// answers every call with plausible fake data; the other two shells enforce
+// the same rule inside their resolver.
 const XChainSDK = sdkModule?.XChainSDK
     ?? sdkModule?.default?.XChainSDK
     ?? sdkModule?.default;

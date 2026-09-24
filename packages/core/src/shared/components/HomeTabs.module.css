@@ -117,6 +117,12 @@
     text-align: justify;
 }
 
+.placeholderAction {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--xc-space-3);
+}
+
 /* Demo activity / defi list: single rounded card with row dividers,
    matching the Tokens / Coins list layout so all five tabs share the
    same visual rhythm. */
