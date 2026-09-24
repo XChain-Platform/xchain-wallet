@@ -213,7 +213,10 @@ test.describe('the PC-26 gated SEND guard', () => {
         await test.step('the issuer publishes a gated file against the tick', async () => {
             await gotoPalette(issuer, 'Publish file');
             await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
-            await issuer.getByRole('button', { name: new RegExp(`^${TICK}\\b`) }).click();
+            // PublishFileForm pins role="listitem" on this owned-token row (it
+            // sits inside a role="list" container), so it answers to
+            // 'listitem', not 'button', in the accessibility tree.
+            await issuer.getByRole('listitem', { name: new RegExp(`^${TICK}\\b`) }).click();
 
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('File to publish')).toBeVisible({ timeout: 30_000 });
@@ -255,7 +258,11 @@ test.describe('the PC-26 gated SEND guard', () => {
 
             // The 'ready' readiness banner: the issuer holds the pack key it
             // just minted for itself, so the handoff attaches silently.
-            await expect(issuer.getByText(/unlock key will be securely attached/))
+            // StatusMessage renders variant="status" as role="status"; scoped
+            // by role rather than bare text since a role query only ever
+            // considers the div that carries the role, never an unrelated
+            // element that happens to share a substring.
+            await expect(issuer.getByRole('status').filter({ hasText: /unlock key will be securely attached/ }))
                 .toBeVisible({ timeout: 30_000 });
 
             await mainButton(issuer, 'Send').click();
@@ -281,11 +288,16 @@ test.describe('the PC-26 gated SEND guard', () => {
             await holder.getByLabel('To', { exact: true }).fill(issuerAddr);
             await holder.getByRole('textbox', { name: /^Amount/ }).fill(HOLDER_FORWARD_AMOUNT);
 
-            await expect(holder.getByText(/this wallet holds none of its unlock keys/))
+            // Both the 'blocked' banner (a raw role="alert" div) and, after
+            // submit, the formError StatusMessage (role="alert" too) are
+            // scoped by role and narrowed by `filter`, so a second alert
+            // present at the same time (there is none here, but the pattern
+            // must hold regardless) cannot make this locator ambiguous.
+            await expect(holder.getByRole('alert').filter({ hasText: /this wallet holds none of its unlock keys/ }))
                 .toBeVisible({ timeout: 30_000 });
 
             await mainButton(holder, 'Send').click();
-            await expect(holder.getByText(/Recover the keys below before sending\./))
+            await expect(holder.getByRole('alert').filter({ hasText: /Recover the keys below before sending\./ }))
                 .toBeVisible({ timeout: 15_000 });
             // The client refusal must stop the compose entirely - no modal, no
             // broadcast, nothing for the chain to even see.
@@ -299,10 +311,15 @@ test.describe('the PC-26 gated SEND guard', () => {
             await selectVenueChain(holder);
             await holder.getByLabel('Action').selectOption('SEND');
 
-            await expect(holder.getByText(/a bare SEND of it will be rejected/))
-                .toBeVisible({ timeout: 15_000 });
-
+            // The tick-specific "HAS active gated content" line only renders
+            // once `useGatedTickNotice` has a TICK to check (it is debounced
+            // and reads the explorer), so TICK must be filled in first - the
+            // generic "Token-gated content rule" copy above it is the only
+            // part that shows before that.
             await holder.getByRole('textbox', { name: 'TICK', exact: true }).fill(TICK);
+            await expect(holder.getByRole('alert').filter({ hasText: /a bare SEND of it will be rejected/ }))
+                .toBeVisible({ timeout: 30_000 });
+
             await holder.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(BYPASS_AMOUNT);
             await holder.getByRole('textbox', { name: 'DESTINATION', exact: true }).fill(issuerAddr);
 

@@ -178,7 +178,10 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
         await test.step('the publish form never offers the unlock-threshold field on this chain', async () => {
             await gotoPalette(issuer, 'Publish file');
             await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
-            await issuer.getByRole('button', { name: new RegExp(`^${TICK}\\b`) }).click();
+            // PublishFileForm pins role="listitem" on this owned-token row (it
+            // sits inside a role="list" container), so it answers to
+            // 'listitem', not 'button', in the accessibility tree.
+            await issuer.getByRole('listitem', { name: new RegExp(`^${TICK}\\b`) }).click();
 
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('File to publish')).toBeVisible({ timeout: 30_000 });
@@ -237,8 +240,11 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             // small would be the one send guaranteed to fall under any real
             // publisher's threshold and clear as a plain, key-less SEND - so
             // seeing 'ready' here, rather than no banner at all, is exactly
-            // the inertness this spec is testing.
-            await expect(issuer.getByText(/unlock key will be securely attached/))
+            // the inertness this spec is testing. StatusMessage renders
+            // variant="status" as role="status"; scoped by role rather than
+            // bare text so an unrelated element sharing a substring can never
+            // make this locator ambiguous.
+            await expect(issuer.getByRole('status').filter({ hasText: /unlock key will be securely attached/ }))
                 .toBeVisible({ timeout: 30_000 });
 
             await mainButton(issuer, 'Send').click();

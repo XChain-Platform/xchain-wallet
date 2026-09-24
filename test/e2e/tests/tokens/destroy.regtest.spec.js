@@ -165,10 +165,18 @@ test.describe('DESTROY on regtest', () => {
         await test.step('fill the Destroy form and reach the confirm screen', async () => {
             await gotoPalette(page, 'Destroy');
             const main = page.getByRole('main');
-            await expect(main.getByText('Destroy is irreversible.')).toBeVisible({ timeout: 30_000 });
+            // Scoped by role (the warning sits in a raw role="alert" div)
+            // rather than bare text, matching the rest of this suite's
+            // convention for alert-region content.
+            await expect(main.getByRole('alert').filter({ hasText: 'Destroy is irreversible.' }))
+                .toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await selectDestroyToken(page, TICK);
-            await main.getByLabel('Amount', { exact: true }).fill(String(DESTROY_AMOUNT));
+            // AmountField composes the label as "Amount (TICK)" once a token
+            // is selected (packages/core/src/shared/components/AmountField.jsx),
+            // so a bare exact "Amount" label never matches; anchor on the
+            // prefix the way the Send form's own amount field is addressed.
+            await main.getByRole('textbox', { name: /^Amount/ }).fill(String(DESTROY_AMOUNT));
             await main.getByRole('button', { name: 'Destroy', exact: true }).click();
 
             await expectConfirmModal(page, 'the DESTROY');
