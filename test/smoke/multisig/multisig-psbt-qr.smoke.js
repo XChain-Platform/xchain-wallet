@@ -201,7 +201,7 @@ assert.throws(
 assert.ok(MultisigEnvelopeError.prototype instanceof Error,
     'MultisigEnvelopeError extends Error');
 
-// Sign-screen route: round labels + QR + paste inbox
+// Sign-screen route: step labels + QR + paste inbox
 
 const routePath = join(sharedRoutes, 'MultisigSigningSession.jsx');
 assert.ok(existsSync(routePath), 'MultisigSigningSession.jsx exists');
@@ -209,12 +209,12 @@ const route = readFileSync(routePath, 'utf8');
 
 assert.ok(/AnimatedQrFrames/.test(route),
     'route renders the animated-QR component');
-assert.ok(/Round 1.{0,2}Collect cosigner replies/.test(route),
-    'route labels the §22.3 nonce round in plain language: "Round 1: Collect cosigner replies"');
-assert.ok(/Round 2.{0,2}Collect signatures/.test(route),
-    'route uses §22.3 "Round 2: Collect signatures" label for MuSig2 partial round');
+assert.ok(/Step 1.{0,2}Collect cosigner replies/.test(route),
+    'route labels the §22.3 nonce step in plain language: "Step 1: Collect cosigner replies"');
+assert.ok(/Step 2.{0,2}Collect signatures/.test(route),
+    'route uses §22.3 "Step 2: Collect signatures" label for MuSig2 partial step');
 assert.ok(/Collect signatures/.test(route),
-    'route uses single-round "Collect signatures" label for P2SH/P2WSH');
+    'route uses single-step "Collect signatures" label for P2SH/P2WSH');
 assert.ok(/Export transaction QR|Scan cosigner reply/.test(route),
     'route surfaces both export + paste-inbox controls');
 assert.ok(/buildRequestEnvelope|buildFinalizedEnvelope/.test(route),
@@ -246,10 +246,10 @@ const routeCopy = route
     .replace(/\bcontributeMultisigNonce\b|\bpublicNonceHex\b|\baggregatedSchnorrSig\b|\baggNonce\b/g, '')
     .replace(/'collecting-nonces'/g, '');
 
-assert.ok(!/Round 1 nonce from/.test(routeCopy),
-    'paste-inbox results say "Round 1 reply", not "Round 1 nonce" (#3879)');
+assert.ok(!/Step 1 nonce from/.test(routeCopy),
+    'paste-inbox results say "Step 1 reply", not "Step 1 nonce" (#3879)');
 assert.ok(!/aggregated Schnorr signature/.test(routeCopy),
-    'round-2 progress hint reads " (combined)" like round 1, with no scheme name (#3880)');
+    'step-2 progress hint reads " (combined)" like step 1, with no scheme name (#3880)');
 assert.ok(!/\{'? ?·'? ?'\}\{(?:s|active)\.status\}|\{' · status: '\}/.test(route),
     'session status renders through statusLabel(), never as the raw enum token (#3881)');
 assert.ok(/const STATUS_LABELS = \{([\s\S]*?)\};/.test(route),
