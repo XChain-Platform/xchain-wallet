@@ -34,6 +34,7 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -95,8 +96,12 @@ export function SignMessageForm({ walletId, onBack }) {
         setDraftPending(false);
     }, [draft]);
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default). This
+    // reads its own settings snapshot rather than the `useSettings()` one
+    // above (kept for the draft TTL), so the chain default resolves in the
+    // same batch as the address list instead of racing that hook's own load.
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -104,19 +109,29 @@ export function SignMessageForm({ walletId, onBack }) {
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, chainSettings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
-                const first = Object.keys(byChain)[0];
-                if (!first) {
+                if (Object.keys(byChain || {}).length === 0) {
                     setLoadError(
                         'No addresses on any chain yet. Use Receive to generate one before signing.',
                     );
                     return;
                 }
-                setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key opened Sign message on the wallet's OLDEST chain
+                // forever. Open on the last-used chain instead, ahead of the
+                // first-key fallback, exactly as Send does. A restored draft
+                // (restoreDraft) still overrides this afterward.
+                setChainId((prev) => pickDefaultChainId(byChain, {
+                    explicitChainId: prev,
+                    settings: chainSettings,
+                }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');

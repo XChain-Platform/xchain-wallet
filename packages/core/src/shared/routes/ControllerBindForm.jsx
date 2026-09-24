@@ -30,6 +30,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -109,19 +110,28 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([byChain, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 // D-153: opened WITHOUT a token (the address-controller lane),
-                // there is no chain to inherit, so default to the first chain
-                // the wallet has an address on - the same rule `useActionForm`
-                // applies to every other free-entry form. Without it the form
-                // renders its "no address on this chain" error over a wallet
-                // that has plenty, because `chainId` is simply undefined.
+                // there is no chain to inherit, so default to the last-used
+                // chain, else the first chain the wallet has an address on -
+                // the same rule `useActionForm` applies to every other
+                // free-entry form. `byChain` is in address-creation order, so
+                // the first-key fallback alone opened the address-controller
+                // lane on the wallet's OLDEST chain forever. Without a chain
+                // at all here the form renders its "no address on this
+                // chain" error over a wallet that has plenty, because
+                // `chainId` is simply undefined.
                 let cid = chainId;
                 if (!cid) {
-                    cid = Object.keys(byChain || {})[0];
+                    cid = pickDefaultChainId(byChain, { settings });
                     if (!cid) {
                         setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
                         return;

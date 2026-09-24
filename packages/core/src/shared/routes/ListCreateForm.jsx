@@ -31,6 +31,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { classifyTickItems, tickLookupVerdict } from '../utils/listTickItems.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -116,8 +117,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -125,14 +127,20 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
-                const first = Object.keys(byChain || {})[0];
-                if (!chainId && first) setChainId(first);
-                if (!first) setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                // Open on the last-used chain, behind a caller-seeded one and
+                // ahead of the first-key fallback: `byChain` is in address-
+                // creation order, so its first key is the wallet's OLDEST chain.
+                const picked = pickDefaultChainId(byChain, { explicitChainId: chainId, settings });
+                if (!chainId && picked) setChainId(picked);
+                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };

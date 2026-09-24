@@ -23,6 +23,7 @@
 //   TICKS       - a token list only counted lines, so an unknown TICK the
 //                 network leaves out was never reported.
 //   PASSWORD    - "enter your password twice" showed on an unlocked wallet.
+//   CHAIN       - Create list opened on the wallet's oldest chain.
 //
 // Each block mounts the real screen, since every defect was in what the
 // screen rendered or sent, not in a helper.
@@ -371,3 +372,19 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
     });
 });
 
+describe('ListCreateForm chain default', () => {
+    it('opens on the last-used chain, not the first-created one', async () => {
+        const messaging = mount(ListCreateForm, { walletId: 'w', onBack() {} }, messagingWith({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet', lastUsedChain: { mainnet: DOGE } }),
+        }));
+        const button = await screen.findByRole('button', { name: /^Network: / });
+        await waitFor(() => expect(button.getAttribute('aria-label') || button.textContent).toMatch(/^Network: Dogecoin/));
+        expect(messaging.getSettings).toHaveBeenCalled();
+    });
+
+    it('falls back to the first chain when nothing was used yet', async () => {
+        mount(ListCreateForm, { walletId: 'w', onBack() {} }, messagingWith());
+        const button = await screen.findByRole('button', { name: /^Network: / });
+        expect(button.getAttribute('aria-label') || button.textContent).toMatch(/^Network: Bitcoin/);
+    });
+});
