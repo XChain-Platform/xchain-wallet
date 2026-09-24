@@ -111,9 +111,18 @@ async function gotoMoreActions(page) {
 // both in sibling spans inside the one button), so an `exact` match on the
 // label alone can never resolve. Anchored at the start instead, on a prefix
 // no other entry in the catalogue shares.
+//
+// The click itself is scoped to the `<main>` landmark ActionsMenu renders
+// into (`Screen.jsx`), not just `page`, because a wallet the test named
+// "Batch Composer Wallet" or "Parallel Composer Wallet" (see
+// onboardFundedWallet below) also matches these same prefixes as the
+// accessible name of `LeftNav.jsx`'s wallet-switcher button, which lives
+// outside `<main>` in the sidebar - the prefix alone can't tell the two
+// buttons apart, so the search is narrowed to the landmark instead.
 async function gotoBatchComposer(page) {
     await gotoMoreActions(page);
-    await page.getByRole('button', { name: /^Batch/ }).click();
+    const menu = page.getByRole('main');
+    await menu.getByRole('button', { name: /^Batch/ }).click();
     const main = page.getByRole('main');
     await expect(main.getByLabel('Chain'), 'the Batch composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
@@ -121,7 +130,8 @@ async function gotoBatchComposer(page) {
 
 async function gotoParallelComposer(page) {
     await gotoMoreActions(page);
-    await page.getByRole('button', { name: /^Parallel cross-chain actions/ }).click();
+    const menu = page.getByRole('main');
+    await menu.getByRole('button', { name: /^Parallel cross-chain actions/ }).click();
     const main = page.getByRole('main');
     await expect(main.getByLabel('Chain'), 'the Parallel composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
