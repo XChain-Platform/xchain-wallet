@@ -290,7 +290,7 @@ export async function assertVenueReachable() {
 }
 
 /** SSH destination for the regtest rail. */
-const SSH_HOST = process.env.XC_REGTEST_SSH_HOST?.trim() || 'dankserver';
+const SSH_HOST = process.env.XC_REGTEST_SSH_HOST?.trim() || 'localhost';
 
 /**
  * Whether this run may write a price snapshot at all.
