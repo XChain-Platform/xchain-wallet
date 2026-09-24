@@ -37,7 +37,7 @@ import * as branding from '../../branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import {
@@ -309,7 +309,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             messaging.getAddressesByChain(walletId)
                 .then((byChain) => (cancelled ? null : byChain))
                 .catch(() => null),
-        ]).then(([realResp, addrsByChain]) => {
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ]).then(([realResp, addrsByChain, activeByChain]) => {
             let resp = realResp;
             if (isDemo && !cancelled) {
                 const first = (addrsByChain?.[chainId] || [])[0]?.address;
@@ -337,20 +340,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 // Pre-populate the buyer-address picker with this wallet's
                 // HD addresses on the dispenser's chain. Non-HD (watch-
                 // only) addresses are filtered out because they can't
-                // sign. The default is the newest external address,
-                // matching the convention used by Send / MintForm.
+                // sign. The default is the chain's active address, else
+                // the newest external address, as Send does.
                 const spendable = onChain.filter(
                     (a) => a.source === 'hd'
                         && externalIndexOf(a.derivationPath) !== null,
                 );
                 setBuyerAddresses(spendable);
                 if (spendable.length > 0) {
-                    const sorted = [...spendable].sort((a, b) => {
-                        const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                        const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                        return bi - ai;
-                    });
-                    setBuyerAddressId(sorted[0].id);
+                    setBuyerAddressId(preferredSourceId(spendable, activeByChain?.[chainId]));
                 }
             }
             setLoading(false);
