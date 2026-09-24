@@ -19,3 +19,8 @@ unzip
 # Demanding it would make the suite unrunnable on every Linux venue in the pool
 # to satisfy a call none of them reaches.
 -ditto
+# codesign is the same class of FALSE POSITIVE as ditto: Apple's signing tool,
+# macOS only, and both spawns in audits/macos-signing-required.smoke.js sit
+# behind a `process.platform === 'darwin'` guard. No Linux venue has it or
+# reaches it.
+-codesign
