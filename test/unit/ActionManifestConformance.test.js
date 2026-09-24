@@ -73,8 +73,8 @@ describe('ACTION manifest conformance: wallet walletForm set @regression', () =>
     // IDENTITY: vendored copy must match canonical. Refuses an absent docs
     // checkout and a lane symlink into a live main checkout alike.
     it('vendored test/fixtures/action-manifest.json is byte-identical to canonical', (ctx) => {
-        const DOCS = process.env.XCHAIN_DOCS_DIR
-            ? join(process.env.XCHAIN_DOCS_DIR, 'protocol', 'action-manifest.json')
+        const DOCS = process.env.XCHAIN_DOCS_ROOT
+            ? join(process.env.XCHAIN_DOCS_ROOT, 'protocol', 'action-manifest.json')
             : join(HERE, '..', '..', '..', 'xchain-documentation', 'protocol', 'action-manifest.json');
         const docs = siblingCheckout(HERE, DOCS);
         if (!skipOrFail(ctx, docs, 'the canonical action-manifest.json byte-identity guard')) return;

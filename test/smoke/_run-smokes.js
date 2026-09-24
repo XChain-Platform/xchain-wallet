@@ -29,6 +29,22 @@ import { noteWorkspaceLinkage } from './_workspace-linkage.js';
 const here = dirname(fileURLToPath(import.meta.url));        // .../test/smoke
 const wsRoot = join(here, '..', '..');                        // .../xchain-wallet
 
+const SKIP_LINE_RE = /^(?:SKIP(?:PED)?\b|.*\.smoke\.js:\s+SKIPPED\b)/i;
+
+export function isSmokeSkipOutput(output) {
+    return String(output).split(/\r?\n/).some((line) => SKIP_LINE_RE.test(line.trim()));
+}
+
+export function formatSmokeSummary(passed, skipped) {
+    const lines = [`${passed} smoke(s) passed / ${skipped.length} skipped`];
+    lines.push(...skipped.map((name) => `SKIP ${name}`));
+    return lines.join('\n');
+}
+
+export function smokeRunFailed(failures, skipped, env = process.env) {
+    return failures > 0 || (env.XCHAIN_REQUIRE_SIBLINGS === '1' && skipped.length > 0);
+}
+
 /**
  * Say ONCE, before anything runs, when this checkout is the kind of venue that
  * produces failures which are not in the code (frontier row 73).
@@ -92,10 +108,6 @@ function venueNotes() {
     return notes;
 }
 
-for (const note of venueNotes()) {
-    console.log(`VENUE: ${note}\n`);
-}
-
 function* walkSmokes(dir) {
     for (const name of readdirSync(dir).sort()) {
         const full = join(dir, name);
@@ -108,44 +120,65 @@ function* walkSmokes(dir) {
     }
 }
 
-const smokes = [...walkSmokes(here)];
-
-// Name the docs checkout these smokes are about to read, once, before any of
-// them runs. Two dozen of them assert on the sibling's CONTENT, and
-// it is a shared long-lived tree, so its ordinary uncommitted-and-behind state
-// silently moves verdicts in both directions. The venue notes above describe
-// the same hazard for THIS process; the flag is what keeps every child smoke
-// from re-announcing it, since they are separate processes and cannot see
-// each other's notice.
-noteDocsTreeState();
-process.env.XCHAIN_DOCS_TREE_NOTED = '1';
-
-// Name the node_modules tree the workspace specifiers resolve through when it
-// belongs to a different checkout. A borrowed node_modules makes a
-// run a hybrid of two trees, which is how a correct signer bridge was measured
-// red at an origin/master worktree and filed as a regression. Said here because
-// the smokes are separate processes and cannot see each other's notice; the
-// flag tells them so.
-noteWorkspaceLinkage();
-process.env.XCHAIN_WORKSPACE_LINKAGE_NOTED = '1';
-
-let failures = 0;
-for (const fullPath of smokes) {
-    const display = fullPath.slice(here.length + 1);
-    const start = Date.now();
-    const result = spawnSync(process.execPath, [fullPath], {
-        stdio: 'inherit',
-        cwd: wsRoot,
-    });
-    const ms = Date.now() - start;
-    if (result.status !== 0) {
-        failures += 1;
-        console.error(`FAIL ${display} (${ms}ms, exit ${result.status})`);
+export function runSmokes() {
+    for (const note of venueNotes()) {
+        console.log(`VENUE: ${note}\n`);
     }
+
+    const smokes = [...walkSmokes(here)];
+
+    // Name the docs checkout these smokes are about to read, once, before any of
+    // them runs. Two dozen of them assert on the sibling's CONTENT, and
+    // it is a shared long-lived tree, so its ordinary uncommitted-and-behind state
+    // silently moves verdicts in both directions. The venue notes above describe
+    // the same hazard for THIS process; the flag is what keeps every child smoke
+    // from re-announcing it, since they are separate processes and cannot see
+    // each other's notice.
+    noteDocsTreeState();
+    process.env.XCHAIN_DOCS_TREE_NOTED = '1';
+
+    // Name the node_modules tree the workspace specifiers resolve through when it
+    // belongs to a different checkout. A borrowed node_modules makes a
+    // run a hybrid of two trees, which is how a correct signer bridge was measured
+    // red at an origin/master worktree and filed as a regression. Said here because
+    // the smokes are separate processes and cannot see each other's notice; the
+    // flag tells them so.
+    noteWorkspaceLinkage();
+    process.env.XCHAIN_WORKSPACE_LINKAGE_NOTED = '1';
+
+    let failures = 0;
+    const skipped = [];
+    for (const fullPath of smokes) {
+        const display = fullPath.slice(here.length + 1);
+        const start = Date.now();
+        const result = spawnSync(process.execPath, [fullPath], {
+            stdio: ['inherit', 'pipe', 'pipe'],
+            encoding: 'utf8',
+            maxBuffer: 16 * 1024 * 1024,
+            cwd: wsRoot,
+        });
+        const ms = Date.now() - start;
+        if (result.stdout) process.stdout.write(result.stdout);
+        if (result.stderr) process.stderr.write(result.stderr);
+        if (result.status !== 0) {
+            failures += 1;
+            console.error(`FAIL ${display} (${ms}ms, exit ${result.status})`);
+        } else if (isSmokeSkipOutput(`${result.stdout || ''}\n${result.stderr || ''}`)) {
+            skipped.push(display);
+        }
+    }
+
+    const passed = smokes.length - failures - skipped.length;
+    console.log(`\n${formatSmokeSummary(passed, skipped)}`);
+
+    if (failures > 0) {
+        console.error(`${failures} / ${smokes.length} smoke(s) failed`);
+    }
+    if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1' && skipped.length > 0) {
+        console.error(`${skipped.length} smoke(s) skipped under XCHAIN_REQUIRE_SIBLINGS=1`);
+    }
+    if (smokeRunFailed(failures, skipped)) process.exit(1);
 }
 
-if (failures > 0) {
-    console.error(`\n${failures} / ${smokes.length} smoke(s) failed`);
-    process.exit(1);
-}
-console.log(`\n${smokes.length} smoke(s) passed`);
+const invokedPath = process.argv[1] ? realpathSync(process.argv[1]) : '';
+if (invokedPath === realpathSync(fileURLToPath(import.meta.url))) runSmokes();
