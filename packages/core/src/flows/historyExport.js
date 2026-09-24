@@ -21,6 +21,11 @@
 // output. Default behaviour matches the pre-FOLLOWUP shape (all fields
 // in EXPORT_COLUMNS order), so existing callers keep working without
 // touching the call site.
+//
+// A confirmed entry's `timestamp` is unix seconds; a pending entry's is
+// unix milliseconds (see `entryTimeMs` in pendingHistory.js).
+
+import { entryTimeMs } from '../shared/utils/pendingHistory.js';
 
 export const EXPORT_COLUMNS = /** @type {const} */ ([
     'chainId',
@@ -51,9 +56,8 @@ function pickColumns(columns) {
 
 function valueFor(entry, column) {
     if (column === 'iso') {
-        return Number.isFinite(entry?.timestamp) && entry.timestamp > 0
-            ? new Date(entry.timestamp * 1000).toISOString()
-            : '';
+        const ms = entryTimeMs(entry);
+        return ms !== null ? new Date(ms).toISOString() : '';
     }
     return entry?.[column];
 }
@@ -90,9 +94,8 @@ export function entriesToJson(entries, meta) {
             const row = {};
             for (const c of cols) {
                 if (c === 'iso') {
-                    row.iso = Number.isFinite(e?.timestamp) && e.timestamp > 0
-                        ? new Date(e.timestamp * 1000).toISOString()
-                        : null;
+                    const ms = entryTimeMs(e);
+                    row.iso = ms !== null ? new Date(ms).toISOString() : null;
                 } else {
                     row[c] = e?.[c];
                 }
@@ -112,6 +115,9 @@ export function entriesToJson(entries, meta) {
  * outside the window (or with no timestamp) are dropped. Either
  * bound can be null/undefined to leave that side open.
  *
+ * `timestamp` is normalized to seconds via `entryTimeMs` before
+ * comparing against `fromTs`/`toTs`.
+ *
  * @param {Array<{ timestamp?: number }>} entries
  * @param {{ fromTs?: number | null, toTs?: number | null }} range
  */
@@ -121,8 +127,9 @@ export function filterEntriesByDateRange(entries, range = {}) {
     const to = Number.isFinite(range?.toTs) ? Number(range.toTs) : null;
     if (from === null && to === null) return arr.slice();
     return arr.filter((e) => {
-        const ts = Number(e?.timestamp);
-        if (!Number.isFinite(ts) || ts <= 0) return false;
+        const ms = entryTimeMs(e);
+        if (ms === null) return false;
+        const ts = ms / 1000;
         if (from !== null && ts < from) return false;
         if (to !== null && ts > to) return false;
         return true;
