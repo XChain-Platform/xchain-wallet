@@ -35,6 +35,7 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { classifyTickItems, tickLookupVerdict } from '../utils/listTickItems.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -371,6 +372,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
+        // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
+        const memoTooLong = memoLengthError(trimmedMemo);
+        if (memoTooLong) { setFormError(memoTooLong); return false; }
         if (listType === '2') {
             if (recipients.valid.length === 0) { setFormError('Add at least one valid address.'); return false; }
         } else {

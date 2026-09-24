@@ -27,6 +27,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -386,6 +387,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return; }
+        // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
+        const memoTooLong = memoLengthError(trimmedMemo);
+        if (memoTooLong) { setFormError(memoTooLong); return; }
         setFormError(null);
         setStage('review-1');
     }
