@@ -530,7 +530,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     it's indexed you'll sign one more transaction linking it
                     to {tick}. {hw
                         ? 'You will confirm on your hardware device twice.'
-                        : 'You will enter your password twice.'}
+                        : signerReady ? 'You will approve each one; the wallet is unlocked, so no password is needed.' : 'You will enter your password twice.'}
                 </p>
                 <SignCredentials
                     unlocked={signerReady}

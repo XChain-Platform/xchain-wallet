@@ -1311,7 +1311,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     {' '}list; once it's indexed, step 2 signs the AIRDROP
                     that references it. {hw
                         ? 'You will confirm on your hardware device twice.'
-                        : 'You will enter your password twice.'}
+                        : signerReady ? 'You will approve each one; the wallet is unlocked, so no password is needed.' : 'You will enter your password twice.'}
                 </p>
                 {/* On the single-encode path the credentials live on
                     the confirm page, so this stage stays a pure recipient

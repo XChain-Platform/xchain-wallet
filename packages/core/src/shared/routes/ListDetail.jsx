@@ -22,11 +22,16 @@ const chainRegistry = registryLib.defaultRegistry();
  *
  * Membership and fork-lineage both come from a single read,
  * `messaging.getListByActionIndex` (`sdk.getAction(actionIndex)`):
- * the explorer's LIST detail row already carries `list` (the full
- * current membership snapshot for this exact action_index, not just
- * this edit's delta) and, for a v1 fork, `edits` (the delta this fork
- * applied, each item tagged valid/invalid) plus `list_action_index`
- * (the parent it forked from).
+ * the explorer's LIST detail row carries `list` (the membership this
+ * exact action_index was written with), `edits` (each item it sent,
+ * tagged valid/invalid) plus `list_action_index` (the parent a fork
+ * came from), and `state`: whether list-edit resolution is active and,
+ * when it is, `current_list`, the membership every reference to this
+ * list now resolves to, taken from edit `membership_action_index`.
+ * Under resolution that is the current membership and `list` is only
+ * what the action was created with; before it, `list` IS what a
+ * reference to this index uses. An explorer without `state` is shown
+ * as "members as published", which is true under either rule.
  *
  * "Used by": AIRDROP/DISPENSER/ORDER/ISSUE all reference a list by
  * ACTION_INDEX (`list_action_index`, `allow_list`, `block_list`), but
@@ -43,7 +48,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.chainId
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
- * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[] }) => void} props.onFork
+ * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null }) => void} props.onFork
  */
 export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
     const { messaging, shell } = useMessaging();
@@ -68,6 +73,18 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
     const isFork = data ? (data.list_action_index != null && data.list_action_index !== '') : false;
     const items = useMemo(() => (Array.isArray(data?.list) ? data.list : []), [data]);
     const edits = useMemo(() => (Array.isArray(data?.edits) ? data.edits : []), [data]);
+    // Items the network recorded invalid and left out (an unknown TICK, a
+    // malformed or wrong-network ADDRESS); the LIST itself stays valid.
+    const rejected = useMemo(() => edits.filter((e) => e?.status && e.status !== 'valid'), [edits]);
+    // true / false from the explorer, null when it does not report the flag.
+    const state = data?.state && typeof data.state === 'object' ? data.state : null;
+    const resolution = state && typeof state.edit_resolution_active === 'boolean'
+        ? state.edit_resolution_active : null;
+    const currentItems = useMemo(
+        () => (resolution === true && Array.isArray(state?.current_list) ? state.current_list : null),
+        [resolution, state],
+    );
+    const membershipIndex = state?.membership_action_index != null ? String(state.membership_action_index) : null;
 
     const header = (
         <PageHeader onBack={onBack} title={isTick ? 'Token list' : 'Address list'} />
@@ -114,18 +131,43 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                 ) : null}
             </dl>
 
-            <h3 className={styles.successLabel}>Current members ({items.length})</h3>
-            {items.length === 0 ? (
-                <p className={styles.hint}>This list has no members.</p>
+            {currentItems ? (
+                <>
+                    <h3 className={styles.successLabel}>Current members ({currentItems.length})</h3>
+                    <p className={styles.hint}>
+                        {membershipIndex && membershipIndex !== String(actionIndex)
+                            ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
+                            : `No edits yet. Everything that references #${actionIndex} uses these members.`}
+                    </p>
+                    <MemberList items={currentItems} isTick={isTick} />
+                    <h3 className={styles.successLabel}>As created ({items.length})</h3>
+                    <p className={styles.hint}>The members this action was published with.</p>
+                    <MemberList items={items} isTick={isTick} />
+                </>
             ) : (
-                <ul className={styles.detailsList} style={{ display: 'block' }}>
-                    {items.map((item, i) => (
-                        <li key={i} style={{ padding: '2px 0' }}>
-                            {isTick ? <code>{item}</code> : <AddressText address={item} truncate={false} />}
-                        </li>
-                    ))}
-                </ul>
+                <>
+                    <h3 className={styles.successLabel}>
+                        {resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
+                    </h3>
+                    <MemberList items={items} isTick={isTick} />
+                </>
             )}
+
+            {!isFork && rejected.length > 0 ? (
+                <>
+                    <h3 className={styles.successLabel}>Left out by the network ({rejected.length})</h3>
+                    <p className={styles.hint}>
+                        These items were sent but are not on the list: the network checks each item on its own.
+                    </p>
+                    <ul className={styles.detailsList} style={{ display: 'block' }}>
+                        {rejected.map((e, i) => (
+                            <li key={i} style={{ padding: '2px 0' }}>
+                                <code>{e.tick ?? e.address}</code>{` (${e.status})`}
+                            </li>
+                        ))}
+                    </ul>
+                </>
+            ) : null}
 
             {isFork && edits.length > 0 ? (
                 <>
@@ -153,11 +195,39 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
             <div className={styles.actions}>
                 <Button
                     variant="primary"
-                    onClick={() => onFork({ chainId, actionIndex, type: String(data.type), items })}
+                    onClick={() => onFork({
+                        chainId,
+                        actionIndex,
+                        type: String(data.type),
+                        // An edit applies to the membership a reference resolves
+                        // to, so fork from the current members under resolution.
+                        items: currentItems || items,
+                        editResolutionActive: resolution,
+                    })}
                 >
                     Fork &amp; edit
                 </Button>
             </div>
         </>,
+    );
+}
+
+/**
+ * One membership block: ticks as code, addresses in full.
+ *
+ * @param {{ items: string[], isTick: boolean }} props
+ */
+function MemberList({ items, isTick }) {
+    if (items.length === 0) {
+        return <p className={styles.hint}>This list has no members.</p>;
+    }
+    return (
+        <ul className={styles.detailsList} style={{ display: 'block' }}>
+            {items.map((item, i) => (
+                <li key={i} style={{ padding: '2px 0' }}>
+                    {isTick ? <code>{item}</code> : <AddressText address={item} truncate={false} />}
+                </li>
+            ))}
+        </ul>
     );
 }

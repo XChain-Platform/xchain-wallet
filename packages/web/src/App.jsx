@@ -1307,6 +1307,12 @@ function AppInner() {
                         listRef={listForkRef}
                         onBack={() => setUnlockedView('list-detail')}
                         onDone={() => { setListForkRef(null); setUnlockedView('lists'); }}
+                        // Each consumer's own edit screen; Back from it lands on My Lists.
+                        repointHandlers={{
+                            'issue-lists': () => { setFormReturnView('lists'); setUnlockedView('access-lists'); },
+                            'dispenser-lists': () => { setDispensersBackTo('lists'); setUnlockedView('dispensers-list'); },
+                            'order-lists': DEX_SURFACE_ENABLED ? () => setUnlockedView('my-orders') : undefined,
+                        }}
                     />
                 );
             }

@@ -86,6 +86,10 @@ assert.ok(detailSrc.includes('messaging.getListByActionIndex'),
     'ListDetail calls messaging.getListByActionIndex');
 assert.ok(/data\.list\b/.test(detailSrc), 'ListDetail reads membership from data.list');
 assert.ok(/data\.edits\b/.test(detailSrc), 'ListDetail reads the fork delta from data.edits');
+// Under list-edit resolution a reference resolves to the newest valid edit,
+// so the current membership is state.current_list, not the as-created list.
+assert.ok(/data\?\.state\b/.test(detailSrc) && /current_list/.test(detailSrc),
+    'ListDetail reads the resolved membership from data.state.current_list');
 assert.ok(/no reverse lookup/.test(detailSrc),
     'ListDetail states plainly that no list-to-consumer reverse lookup exists');
 assert.ok(/onFork/.test(detailSrc), 'ListDetail exposes a Fork & edit action');
@@ -102,12 +106,16 @@ assert.ok(/Not available in watcher mode/.test(forkSrc),
     'ListForkForm blocks watcher mode only for the two-leg (add+remove) case');
 assert.ok(/REPOINT_TARGETS/.test(forkSrc), 'ListForkForm defines the repoint-rail consumer classes');
 assert.ok(/stays live everywhere it is referenced/.test(forkSrc),
-    'ListForkForm shows the unconditional "old list stays live" warning');
+    'ListForkForm keeps the "old list stays live" warning for chains without list-edit resolution');
+assert.ok(/editResolutionActive/.test(forkSrc),
+    'ListForkForm branches its copy on list-edit resolution');
 for (const pcItem of ['PC-04', 'PC-19', 'PC-17']) {
     assert.ok(forkSrc.includes(pcItem), `ListForkForm's repoint rail references ${pcItem}`);
 }
-assert.ok(/built: false/.test(forkSrc),
-    'ListForkForm renders the repoint targets as disabled (none of PC-04/17/19 ship an edit surface yet)');
+// TokenAdminForm access-lists, DispenserDetail list edit and MyOrdersView
+// Edit all exist, so no repoint target is stubbed out any more.
+assert.ok(!/built: false/.test(forkSrc),
+    'ListForkForm marks every repoint target built (PC-04/17/19 ship their edit screens)');
 
 // --- Core flow: listsForSource ---
 
@@ -190,6 +198,8 @@ for (const [shell, appPath] of [
     for (const view of ["'lists'", "'list-detail'", "'list-create'", "'list-fork'"]) {
         assert.ok(app.includes(view), `${shell} tracks ${view} sub-route`);
     }
+    assert.ok(/repointHandlers=\{\{[\s\S]*'issue-lists'[\s\S]*'dispenser-lists'[\s\S]*'order-lists'/.test(app),
+        `${shell} App.jsx wires the fork repoint rail to each consumer's edit screen`);
 }
 
 console.log(
