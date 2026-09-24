@@ -106,9 +106,14 @@ async function gotoMoreActions(page) {
     await page.getByRole('button', { name: 'More actions', exact: true }).click();
 }
 
+// Each catalogue entry's accessible name is its label immediately followed
+// by its own description, with no separating space (`ActionsMenu.jsx` puts
+// both in sibling spans inside the one button), so an `exact` match on the
+// label alone can never resolve. Anchored at the start instead, on a prefix
+// no other entry in the catalogue shares.
 async function gotoBatchComposer(page) {
     await gotoMoreActions(page);
-    await page.getByRole('button', { name: 'Batch', exact: true }).click();
+    await page.getByRole('button', { name: /^Batch/ }).click();
     const main = page.getByRole('main');
     await expect(main.getByLabel('Chain'), 'the Batch composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
@@ -116,7 +121,7 @@ async function gotoBatchComposer(page) {
 
 async function gotoParallelComposer(page) {
     await gotoMoreActions(page);
-    await page.getByRole('button', { name: 'Parallel cross-chain actions', exact: true }).click();
+    await page.getByRole('button', { name: /^Parallel cross-chain actions/ }).click();
     const main = page.getByRole('main');
     await expect(main.getByLabel('Chain'), 'the Parallel composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
