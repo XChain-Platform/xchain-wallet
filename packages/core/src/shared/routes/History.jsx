@@ -378,8 +378,10 @@ function pendingAmountAnnotation(entry) {
  * Wallet addresses are resolved up-front via
  * `messaging.getAddressesByChain(walletId)`. Per (chain, address) we
  * fan out two parallel reads (`getAddressHistory` + `getLinksForAddress`)
- * and merge into a flat `entries` list with `linkIdx` pointing at
- * matching entries when both sides happen to be in the wallet's
+ * and merge into a flat `entries` list. A LINK is recorded on-chain by
+ * the broadcasting side only, so each row's `link` is threaded from
+ * whichever side of the pairing we saw, and applies to BOTH the local
+ * action and its peer action when the peer is also in the wallet's
  * history (typical case: cross-chain LINK between two addresses owned
  * by the same wallet).
  *
@@ -705,18 +707,36 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             // the slot for itself.
             throttle.succeed();
             // Build a (chainId, action_index) -> link record map so
-            // history rows can identify their peer cheaply.
+            // history rows can identify their peer cheaply. The protocol
+            // records a LINK on the broadcasting chain only, so the peer
+            // side is threaded here too, keyed off the SAME link row.
+            // The local key is always set (it is that chain's own LINK
+            // record); the peer key is set only when absent, so a chain's
+            // own LINK always wins over another chain's guess about it,
+            // regardless of which perAddrResults entry runs first.
             /** @type {Map<string, { peerChainId: string | null, peerCoinTicker: string, peerActionIndex: string, linkActionIndex: string }>} */
             const linkMap = new Map();
             for (const r of perAddrResults) {
                 for (const link of r.links) {
                     const sides = sidesFromLink(link, r.chainId);
                     if (!sides) continue;
+                    const linkActionIndex = String(link.action_index ?? link.actionIndex ?? '');
                     linkMap.set(keyFor(sides.local.chainId, sides.local.actionIndex), {
                         peerChainId: sides.peer.chainId,
                         peerCoinTicker: sides.peer.coinTicker,
                         peerActionIndex: String(sides.peer.actionIndex),
-                        linkActionIndex: String(link.action_index ?? link.actionIndex ?? ''),
+                        linkActionIndex,
+                    });
+                    // Peer chain unresolved (e.g. not a chain this wallet
+                    // supports): nothing to key the peer entry on.
+                    if (sides.peer.chainId == null) continue;
+                    const peerKey = keyFor(sides.peer.chainId, sides.peer.actionIndex);
+                    if (linkMap.has(peerKey)) continue;
+                    linkMap.set(peerKey, {
+                        peerChainId: sides.local.chainId,
+                        peerCoinTicker: sides.local.coinTicker,
+                        peerActionIndex: String(sides.local.actionIndex),
+                        linkActionIndex,
                     });
                 }
             }
