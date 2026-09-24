@@ -53,10 +53,21 @@ assert.match(form, /SignCredentials/, 'standard signing surface used');
 const formCode = form.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
 assert.doesNotMatch(formCode, /GATE_MIN_AMOUNT|threshold/i,
     'PublishFileForm delegates the PC-29 threshold to GatedPublishForm');
-// The confirm lane composes one PSBT with no Taproot reveal, so the cap must be
-// the legacy compiled ceiling and no envelope encoding may be requested.
-assert.doesNotMatch(formCode, /encoding:\s*'(TAPROOT|AUTO)'/,
-    'public publish cap is sized from the encoding the compose actually requests');
+// The confirm lane carries the envelope's commit, reveal and recovery record, so
+// the public lane offers the envelope again. The cap and the compose must agree:
+// both keyed off the same envelopeAvailable, and AUTO sent with the signer's
+// tapscript capability asserted rather than assumed.
+assert.match(formCode, /maxPublicFileBytes\([\s\S]{0,120}envelopeAvailable \? \{ encoding: 'TAPROOT' \} : \{\}/,
+    'public publish cap is the envelope ceiling exactly when the envelope is offered');
+assert.match(formCode,
+    /envelopeAvailable\s*\?\s*\{ encoding: 'AUTO', options: flowsLib\.encoderSignerOptions\(fromAddress\) \}/,
+    'confirm-lane compose requests AUTO with the signer capability when the envelope is offered');
+assert.match(formCode, /!isWatcherMode\s*&&\s*flowsLib\.signerSupportsTapscript\(fromAddress\)\s*&&\s*descriptor\?\.addressTypes\?\.includes\('p2tr'\)/,
+    'envelope offered only to a tapscript-capable signer on a Taproot chain off the watch-only lane');
+assert.equal((formCode.match(/encoding: 'AUTO'/g) || []).length, 1,
+    'AUTO is requested on one lane only: the watch-only PSBT cannot carry a reveal');
+assert.doesNotMatch(formCode, /encoding:\s*'TAPROOT'\s*,/,
+    'the form never forces TAPROOT; AUTO chooses it from the payload and the signer');
 
 // ---- Encoding-aware limits module --------------------------------------
 const limits = read('packages', 'core', 'src', 'flows', 'fileSizeLimits.js');

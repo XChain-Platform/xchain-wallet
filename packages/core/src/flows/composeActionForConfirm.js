@@ -81,6 +81,8 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
  * @property {{ address: string, value: number|string }|null} deferredFeeOutput  protocol-fee output the reveal emits
  * @property {Array<{ address: string, value: number|string }>} deferredOutputs  every output the reveal emits
  * @property {{ change: string|null, rawData: string|null }|null} revealOpts     what the reveal must be built with
+ * @property {string|null} revealPsbt       TAPROOT envelope reveal PSBT built against `psbt`; NULL off the envelope lane
+ * @property {object|null} envelope         TAPROOT recovery record the submit path persists before the commit; NULL off the envelope lane
  * @property {object|null} oracleFeeQuote    Mode B dispenser oracle usage fee quote; NULL when none was priced
  * @property {object} adsPlan                resolved ADS plan
  * @property {ReturnType<typeof import('./confirmChecks.js').buildExpectedOutputs>} expectedOutputs
@@ -364,6 +366,11 @@ export async function composeActionForConfirm({
         // this is the one slice the submit path cannot re-derive, because it
         // builds the reveal fresh from opts that never saw the rotated change.
         revealOpts: composed.revealOpts || null,
+        // A TAPROOT envelope's reveal and recovery record. Approve signs the reveal
+        // and persists the record before the commit goes out, and refuses the
+        // commit when either is missing, so dropping them here refuses every envelope.
+        revealPsbt: composed.revealPsbt || null,
+        envelope: composed.envelope || null,
         // The oracle usage fee a Mode B dispenser pays as a real coin output,
         // which neither fee line nor the projection covers; the confirm screen
         // names it from this quote.

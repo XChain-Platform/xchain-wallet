@@ -31,7 +31,7 @@
 
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
-import { EnvelopeConfirmLaneError, isEnvelopePair } from '../sdk/submitWithSigner.js';
+import { assertCompleteEnvelope, isEnvelopePair } from '../sdk/submitWithSigner.js';
 import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativeFeeLane.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
@@ -162,6 +162,8 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @property {{ address: string, value: number|string }|null} deferredFeeOutput  protocol fee the reveal emits
  * @property {Array<{ address: string, value: number|string }>} deferredOutputs  EVERY output the reveal emits
  * @property {{ change: string|null, rawData: string|null }|null} revealOpts     what the reveal must be built with
+ * @property {string|null} revealPsbt          TAPROOT envelope reveal PSBT built against `psbt`; NULL off the envelope lane
+ * @property {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string, internalPubkey?: string, tapleafHash: string }|null} envelope  TAPROOT recovery record; NULL off the envelope lane
  * @property {object|null} oracleFeeQuote      Mode B dispenser oracle usage fee quote, when one was priced
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
@@ -291,16 +293,11 @@ export async function composeForConfirm({
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
     }
 
-    // Refuse a TAPROOT envelope before the modal opens: this lane hands the
-    // signer ONE PSBT, and only submitWithSigner's live-encode branch signs a
-    // reveal and records the commit, so the commit alone would strand coin.
-    // Keyed off the encoder's answer, so an envelope it selects unasked is caught too.
-    if (isEnvelopePair(encoded)) {
-        throw new EnvelopeConfirmLaneError({
-            action: actionData?.action || 'action',
-            encoding: typeof encoded.encoding === 'string' ? encoded.encoding : 'TAPROOT',
-        });
-    }
+    // A TAPROOT envelope rides this lane as a pair: the commit PSBT, the reveal
+    // PSBT and the recovery record all go to the signer, and a pair missing one
+    // is refused before the modal opens. Keyed off the encoder's answer, not the request.
+    assertCompleteEnvelope(encoded, actionData?.action);
+    const envelope = isEnvelopePair(encoded) ? encoded.envelope : null;
 
     // What the PSBT just built really carries, compression included. Everything
     // below that describes these bytes - the confirm string, the carrier
@@ -383,10 +380,19 @@ export async function composeForConfirm({
         ...deferredOutputs,
         ...(deferredFeeOutput ? [deferredFeeOutput] : []),
     ];
-    const expectedCustomOutputs = deferredFromExpected.reduce(
+    const remainingCustomOutputs = deferredFromExpected.reduce(
         (opts, out) => withoutCustomOutput(opts, out),
         finalEncoderOpts,
     ).customOutputs;
+    // The envelope's commit output pays the tapscript the reveal spends. It is
+    // expected at the exact address and value the recovery record names, so the
+    // output-set check refuses a commit that funds anything else.
+    const expectedCustomOutputs = envelope
+        ? [
+            ...(Array.isArray(remainingCustomOutputs) ? remainingCustomOutputs : []),
+            { address: envelope.commitAddress, value: envelope.commitValue },
+        ]
+        : remainingCustomOutputs;
     // The action string these PSBT bytes carry: the wallet's composed string
     // unless the encoder's transparent FILE compression rewrote the COMPRESSION
     // field, in which case it is the string the encoder wrote and reported.
@@ -480,6 +486,12 @@ export async function composeForConfirm({
         // What the phase-2 reveal must be built with to agree with this
         // commit. Null off the chunk lane.
         revealOpts,
+        // TAPROOT only: the reveal the encoder built against `psbt`, signed
+        // byte-identically on Approve before the commit is broadcast.
+        revealPsbt: envelope ? encoded.revealPsbt : null,
+        // TAPROOT only: the recovery record the submit path persists before the
+        // commit goes out, since the key-path cancel cannot be rebuilt without it.
+        envelope,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,
