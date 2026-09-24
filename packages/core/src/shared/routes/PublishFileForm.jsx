@@ -60,7 +60,8 @@ function latin1Of(bytes) {
  *     from anyone but the tick's issuer (FILE.md anti-spam rule).
  *
  * Size limits are encoding-aware (flows/fileSizeLimits.js): the ceiling
- * is the 8192-byte compiled ACTION push (consensus) minus this upload's
+ * is the 8192-byte compiled ACTION push (consensus), or the Taproot envelope
+ * ceiling where the envelope is available, minus this upload's
  * actual metadata overhead, computed live - not the old flat 7000-byte
  * guess. The PC-29 unlock-threshold field intentionally does NOT appear
  * here yet; it ships with PC-29 behind its flag-day activation height.
@@ -235,12 +236,34 @@ export function PublishFileForm({ walletId, onBack }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Size the ceiling from the encoding the compose actually requests (PC-28).
-    // The single-encode confirm lane carries one PSBT and has no Taproot reveal,
-    // so it composes under the legacy compiled ceiling; advertising the envelope
-    // ceiling here would let the user pick a file that lane cannot build.
+    // Can this publish actually ride a Taproot envelope? All three must hold,
+    // and each rules out a different disaster.
+    //
+    // The SIGNER half (§6): a reveal that cannot be signed strands the commit, so
+    // hardware never qualifies (flows/signerCapability.js).
+    //
+    // The LANE half: only the confirm lane carries the commit, its reveal and the
+    // recovery record to Approve. The watch-only lane builds one unsigned PSBT
+    // with no reveal, so it stays on the legacy ceiling.
+    //
+    // The CHAIN half: offering a 390 KB ceiling on a chain with no Taproot would
+    // let the user pick a file the encoder cannot carry, and they would find out
+    // at submit. `p2tr` in addressTypes is the descriptor's own statement that the
+    // chain does Taproot: BTC yes, DOGE never (no segwit at all). LTC is
+    // protocol-capable, but its descriptor still reserves p2tr, so the wallet
+    // stays conservative there until that lands rather than guessing ahead.
+    const envelopeAvailable = Boolean(
+        !isWatcherMode
+        && flowsLib.signerSupportsTapscript(fromAddress)
+        && descriptor?.addressTypes?.includes('p2tr'),
+    );
+
+    // Size the ceiling from the encoding the compose actually requests (PC-28):
+    // the envelope ceiling when the compose asks for AUTO below, the legacy
+    // compiled ceiling otherwise.
     const publicCapFor = (name, type) => flowsLib.maxPublicFileBytes(
         { name, type, title, memo },
+        envelopeAvailable ? { encoding: 'TAPROOT' } : {},
     );
 
     useEffect(() => {
@@ -315,7 +338,15 @@ export function PublishFileForm({ walletId, onBack }) {
                     rawData,
                     payFeeInNativeCoin: nativeFee.flag || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
+                    // Opt in to size-aware selection, and ASSERT the signer's
+                    // tapscript capability rather than letting AUTO assume it: AUTO
+                    // reaches for the envelope only when that flag is true.
+                    ...(envelopeAvailable
+                        ? { encoding: 'AUTO', options: flowsLib.encoderSignerOptions(fromAddress) }
+                        : {}),
                 },
+                // prebuiltPsbt carries the envelope's reveal and recovery record
+                // when AUTO chose TAPROOT, so Approve signs both composed PSBTs.
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
@@ -754,9 +785,16 @@ export function PublishFileForm({ walletId, onBack }) {
                             Up to about {capHint.toLocaleString()} bytes with the
                             current title and memo. The ceiling is exact per
                             upload: shorter names and titles leave a little more
-                            room for the file itself. Files are compressed
-                            automatically when that makes them smaller, so what
-                            lands on-chain is often less than the file size.
+                            room for the file itself.
+                            {envelopeAvailable
+                                ? ' This chain and account support the compact Taproot'
+                                  + ' encoding, which is what makes the larger ceiling'
+                                  + ' possible. Files are compressed automatically when'
+                                  + ' that makes them smaller, so what lands on-chain is'
+                                  + ' often well under the size shown here.'
+                                : ' Files are compressed automatically when that makes'
+                                  + ' them smaller, so what lands on-chain is often less'
+                                  + ' than the file size.'}
                         </p>
                     )}
 

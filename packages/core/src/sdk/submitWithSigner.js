@@ -104,22 +104,24 @@ export class HardwareChunkLaneError extends Error {
 }
 
 /**
- * Thrown BEFORE anything is signed when a single-encode (prebuilt) compose
- * resolved to a TAPROOT envelope.
+ * Thrown BEFORE anything is signed when a TAPROOT envelope arrives without all
+ * three of its parts: the commit, the reveal and the recovery record.
  *
- * The prebuilt lane carries exactly one PSBT, so the envelope's reveal and its
- * recovery record have no route to the signer; signing the commit alone spends
- * coin into a script nothing can open. Typed and `userFacing` so the forms
- * render the refusal instead of "Couldn't send."
+ * The confirm lane carries the pair from compose to Approve, so a part can go
+ * missing on the way (an older host envelope, a reveal under the wrong label).
+ * Signing the commit alone spends coin into a script nothing can open, and a
+ * commit with no recovery record cannot be cancelled. Typed and `userFacing`
+ * so the forms render the refusal instead of "Couldn't send."
  */
 export class EnvelopeConfirmLaneError extends Error {
     /** @param {{ action: string, encoding: string }} fields */
     constructor({ action, encoding }) {
         super(`This ${action} is too large for one transaction: the network carries it as a `
             + `${encoding} pair, a commit plus a revealing transaction that must be signed before `
-            + 'the first is broadcast. This confirm screen can carry only one transaction, and '
-            + 'broadcasting only the first would spend coin into a script that nothing can open '
-            + 'and record no action at all. Reduce it to a size that fits one transaction.');
+            + 'the first is broadcast. The revealing transaction or its recovery record did not '
+            + 'arrive with the commit, and broadcasting only the first would spend coin into a '
+            + 'script that nothing can open and record no action at all, so nothing was signed. '
+            + 'Try again.');
         this.name = 'EnvelopeConfirmLaneError';
         this.userFacing = true;
         this.action = action;
@@ -136,6 +138,42 @@ export class EnvelopeConfirmLaneError extends Error {
 export function isEnvelopePair(built) {
     if (!built || typeof built !== 'object') return false;
     return built.encoding === 'TAPROOT' || Boolean(built.revealPsbt) || Boolean(built.envelope);
+}
+
+/**
+ * Whether an envelope pair carries everything needed to sign and recover it:
+ * the TAPROOT label, the reveal PSBT, and the recovery record the key-path
+ * cancel is rebuilt from (commit outpoint, value, address and tapleaf hash).
+ *
+ * @param {{ encoding?: unknown, revealPsbt?: unknown, envelope?: any } | null | undefined} built
+ * @returns {boolean}
+ */
+export function isCompleteEnvelope(built) {
+    if (!isEnvelopePair(built)) return false;
+    const env = built.envelope;
+    return built.encoding === 'TAPROOT'
+        && typeof built.revealPsbt === 'string' && built.revealPsbt.length > 0
+        && !!env && typeof env === 'object'
+        && typeof env.commitTxid === 'string' && env.commitTxid.length > 0
+        && Number.isInteger(env.commitVout) && env.commitVout >= 0
+        && env.commitValue != null
+        && typeof env.commitAddress === 'string' && env.commitAddress.length > 0
+        && typeof env.tapleafHash === 'string' && env.tapleafHash.length > 0;
+}
+
+/**
+ * Refuse an envelope pair that is missing a part, before anything is signed.
+ *
+ * @param {object} built   an encoder answer or a prebuilt PSBT
+ * @param {string} action
+ */
+export function assertCompleteEnvelope(built, action) {
+    if (isEnvelopePair(built) && !isCompleteEnvelope(built)) {
+        throw new EnvelopeConfirmLaneError({
+            action: action || 'action',
+            encoding: typeof built.encoding === 'string' ? built.encoding : 'TAPROOT',
+        });
+    }
 }
 
 /**
@@ -167,6 +205,8 @@ export function isEnvelopePair(built) {
  * @property {{ change?: string | null, rawData?: string | null } | null} [revealOpts]  what the compose built the commit with, so the phase-2 reveal agrees
  * @property {{ included: boolean } | null} [adsDonation]  whether THESE bytes carry the ADS donation
  * @property {{ compressed: boolean, data?: string, rawData?: string } | null} [compression]  the encoder's transparent-compression report for these bytes, carried so the result can state the size actually stored on chain
+ * @property {string | null} [revealPsbt]  TAPROOT only: the reveal PSBT composed with `psbtHex`, signed byte-identically before the commit is broadcast
+ * @property {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string, internalPubkey?: string, tapleafHash: string } | null} [envelope]  TAPROOT only: the recovery record persisted before the commit is broadcast
  */
 
 /**
@@ -264,14 +304,9 @@ export async function submitWithSigner({
     // surplus sweep went back to the spending address (D-9 rotation, defeated).
     let revealOpts = null;
     if (prebuiltPsbt) {
-        // Refuse an envelope here too: this branch rebuilds `encoded` without a
-        // reveal, so the pair branch below could never fire for it.
-        if (isEnvelopePair(prebuiltPsbt)) {
-            throw new EnvelopeConfirmLaneError({
-                action: actionData.action,
-                encoding: typeof prebuiltPsbt.encoding === 'string' ? prebuiltPsbt.encoding : 'TAPROOT',
-            });
-        }
+        // An envelope rides this branch whole or not at all: a commit whose
+        // reveal or recovery record was lost on the way is refused unsigned.
+        assertCompleteEnvelope(prebuiltPsbt, actionData.action);
         // Preserve the phase events submitAction's lifecycle tracker consumes,
         // but do NO rebuild: the PSBT is the one the user approved.
         onProgress('creating', { action: actionData.action });
@@ -291,6 +326,11 @@ export async function submitWithSigner({
             psbt: prebuiltPsbt.psbtHex,
             encoding: prebuiltPsbt.encoding,
             ...(prebuiltPsbt.compression ? { compression: prebuiltPsbt.compression } : {}),
+            // The composed reveal and recovery record, so the envelope steps
+            // below sign and persist them exactly as on the live-encode branch.
+            ...(isEnvelopePair(prebuiltPsbt)
+                ? { revealPsbt: prebuiltPsbt.revealPsbt, envelope: prebuiltPsbt.envelope }
+                : {}),
         };
         // The fee output is already baked into the prebuilt PSBT (composeForConfirm
         // ran applyNativeFeePreflight before building), so no quote is recomputed here.
@@ -473,6 +513,8 @@ export async function submitWithSigner({
     // manufactures a stranded-funds event, not an error message". So the reveal is
     // signed HERE, while nothing is on chain and a throw costs only an error, and
     // the recovery record is persisted before either transaction goes out (§3.5).
+    // On the prebuilt branch assertCompleteEnvelope above has already refused a
+    // pair missing its reveal or record, so a pair here always has both.
     const envelopePair = Boolean(encoded && encoded.revealPsbt);
     let envelopeRevealSigned = null;
 
