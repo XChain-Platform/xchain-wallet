@@ -293,8 +293,14 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await forkRow.click();
-            await expect(page.getByText(`Forked from #${listActionIndex}`, { exact: false }))
-                .toBeVisible({ timeout: 30_000 });
+            // "Forked from" lives in a <dt> and "#N (...)" in the sibling <dd>
+            // (ListDetail.jsx), two DOM nodes with no text of their own in
+            // common, so this locates the label then reads its own value
+            // rather than searching for one node holding both.
+            const forkedFromValue = page.locator('dt:has-text("Forked from") + dd');
+            await expect(forkedFromValue,
+                `ListDetail for fork #${forkActionIndex} does not name #${listActionIndex} as its parent`)
+                .toContainText(`#${listActionIndex}`, { timeout: 30_000 });
         });
 
         await test.step('the project roster: publish a token list and link it to the project', async () => {
