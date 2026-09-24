@@ -60,6 +60,21 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual dry run: validates the job graph and the unsigned build lanes
+  # (verify-tag, build-unsigned, desktop-linux) without a signed tag. The
+  # release-signing environment's deployment-branch policy only admits the
+  # v* tag pattern, so a dispatch from a branch cannot reach it regardless
+  # of this input; the signing lanes are skipped outright below rather than
+  # left to block on an approval that can never come.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: >-
+          Always true: dispatch never carries a v* tag, so this can only
+          run the unsigned lanes. Kept as an explicit input so the run is
+          never mistaken for a real release in the Actions UI.
+        type: boolean
+        default: true
 
 # Never cancel a release build in flight. The default cancel-in-progress
 # from ci.yml is wrong here: a half-built release that looks merely
@@ -103,6 +118,7 @@ jobs:
       # closed and no v* tag existed, so this line is the first thing the
       # first tag bought.
       - name: Restore the annotated tag object (checkout flattens it)
+        if: github.event_name == 'push'
         run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
 
       # §8, tag control. The remotes are shared with a second coder,
@@ -121,6 +137,7 @@ jobs:
       # no release can run at all. That is deliberate. A gate that defaults
       # to "allow" when unconfigured is not a gate.
       - name: Tag must be GPG-signed by the release maintainer
+        if: github.event_name == 'push'
         run: |
           set -euo pipefail
           KEY="tools/release/tag-signing-key.asc"
@@ -163,16 +180,26 @@ jobs:
         id: check
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          VERSION="v$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "$VERSION" ]; then
-            echo "::error::tag $TAG does not match package.json version $VERSION"
-            echo "The tag must be pinned to the commit whose version it names;"
-            echo "a mismatch means the tag was cut from the wrong SHA (§6 step 2)."
-            exit 1
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="v$(node -p "require('./package.json').version")"
+            if [ "$TAG" != "$VERSION" ]; then
+              echo "::error::tag $TAG does not match package.json version $VERSION"
+              echo "The tag must be pinned to the commit whose version it names;"
+              echo "a mismatch means the tag was cut from the wrong SHA (§6 step 2)."
+              exit 1
+            fi
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "Building ${VERSION} at $(git rev-parse HEAD)"
+          else
+            # workflow_dispatch: no tag exists to check against, so nothing
+            # here is signed and nothing downstream that needs the
+            # release-signing environment will start. Named DRYRUN so its
+            # artifact filenames can never collide with a real release build.
+            VERSION="DRYRUN-$(node -p "require('./package.json').version")-$(git rev-parse --short HEAD)"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "Dry run ${VERSION} at $(git rev-parse HEAD), no tag involved"
           fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Building ${VERSION} at $(git rev-parse HEAD)"
 
       # §6 STEP 1, AS A GATE.
       #
@@ -194,6 +221,7 @@ jobs:
       # and costs one API call. `actions: read` is job-scoped rather than
       # granted at the top of the file: no other job needs it.
       - name: Tag commit must have a green CI run (§6 step 1)
+        if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/release/verify-validated-commit.mjs --sha "$(git rev-parse HEAD)"
@@ -555,6 +583,10 @@ jobs:
 
   desktop-macos:
     needs: verify-tag
+    # The environment's deployment-branch policy already blocks this job
+    # from a non-tag ref; this makes a dry-run dispatch skip it outright
+    # rather than sit waiting on an approval that can never come.
+    if: github.event_name == 'push'
     runs-on: macos-latest
     environment: release-signing
     env:
@@ -743,6 +775,7 @@ jobs:
 
   desktop-windows:
     needs: verify-tag
+    if: github.event_name == 'push'
     runs-on: windows-latest
     environment: release-signing
     env:
@@ -912,6 +945,7 @@ jobs:
   # never stored as a repo secret (§5).
   mobile-ios:
     needs: verify-tag
+    if: github.event_name == 'push'
     runs-on: macos-latest
     environment: release-signing
     env:
