@@ -17,9 +17,12 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
+import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { tickerForCoin, isProtocolCoinTicker } from '../../registry/coinTicker.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -44,6 +47,13 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+// The chains a quote's COIN may name. COIN is the priced token's chain, not
+// the publishing chain: a DOGE transaction may publish a BTC token's price.
+const PRICE_COINS = Array.from(new Set(chainRegistry.coins().map(tickerForCoin)))
+    .filter(isProtocolCoinTicker);
+
+const UNCHECKED_CONSUMERS = Object.freeze({ supported: false, dispensers: Object.freeze([]) });
 
 // The 12 fiats the protocol prices in (xchain-indexer config FIATS, mirrored
 // in the SDK's VALID_FIAT_CODES). A publish naming anything else is rejected
@@ -112,6 +122,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         isHwSource,
         hwStatus,
         onHwStatusChange,
+        buildFrom,
         submit,
     } = useActionForm({
         walletId,
@@ -129,6 +140,11 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     // authoritative price check runs at submit via applyNativeFeePreflight.
     const nativeFee = useNativeFee(coinTicker);
 
+    // Empty until the user picks, so the quote's COIN follows the publishing
+    // chain by default and keeps following it across a chain switch.
+    const [coinPick, setCoinPick] = useState('');
+    const priceCoin = coinPick || coinTicker;
+    const crossChain = !!(priceCoin && coinTicker && priceCoin !== coinTicker);
     const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
     const [fiat, setFiat] = useState('USD');
     const [value, setValue] = useState('');
@@ -142,7 +158,6 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Feeds this address already publishes. Reloaded after a successful
     // publish so the new quote shows up in its pending state rather than
@@ -191,10 +206,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     const tick = ticker.trim().toUpperCase();
     const currentFeed = useMemo(() => {
-        if (!feeds || !tick || !coinTicker) return null;
-        const key = `${coinTicker}/${tick}/${fiat}`;
+        if (!feeds || !tick || !priceCoin) return null;
+        const key = `${priceCoin}/${tick}/${fiat}`;
         return feeds.find((f) => f.key === key) || null;
-    }, [feeds, tick, fiat, coinTicker]);
+    }, [feeds, tick, fiat, priceCoin]);
 
     // "Prior published value" for the deviation check is the newest quote on
     // this pair, pending included. A pending row is what the pair is about to
@@ -202,6 +217,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     // second correction made inside the same 24h window.
     const priorQuote = currentFeed ? (currentFeed.pending || currentFeed.live) : null;
     const isFirstPublish = !currentFeed;
+    // The deviation basis may be a quote still maturing, and nothing sells at
+    // a pending price, so the wording must not call it current.
+    const hasLiveQuote = !!currentFeed?.live;
+    const priorLabel = priorQuote && priorQuote === currentFeed?.pending ? 'Pending price' : 'Current price';
     const deviationPct = quoteDeviationPct(priorQuote?.value, value.trim());
     const needsTypedConfirm = deviationPct != null
         && Math.abs(deviationPct) > DEVIATION_TYPED_CONFIRM_PCT;
@@ -210,10 +229,14 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     // Consumers of the exact pair being republished, which is the set that
     // actually reprices. Dispensers on this address's other feeds are
     // unaffected and would be noise on the confirm screen.
+    // The lookup reads the publishing chain's dispensers only. A quote for
+    // another chain's token is read by dispensers on THAT chain, so an empty
+    // answer here would be an all-clear nobody checked.
+    const consumerView = crossChain ? UNCHECKED_CONSUMERS : consumers;
     const pairConsumers = useMemo(() => {
-        if (!consumers?.supported || !tick) return [];
-        return consumers.dispensers.filter((d) => String(d.give_tick || '').toUpperCase() === tick);
-    }, [consumers, tick]);
+        if (!consumerView?.supported || !tick) return [];
+        return consumerView.dispensers.filter((d) => String(d.give_tick || '').toUpperCase() === tick);
+    }, [consumerView, tick]);
 
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
@@ -233,7 +256,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
         const p = { VERSION: '1' };
-        if (coinTicker) p.COIN = coinTicker;
+        if (priceCoin) p.COIN = priceCoin;
         if (tick) p.TICK = tick;
         if (fiat) p.FIAT = fiat;
         const v = value.trim();
@@ -243,7 +266,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         const m = memo.trim();
         if (m) p.MEMO = m;
         return p;
-    }, [coinTicker, tick, fiat, value, fee, memo]);
+    }, [priceCoin, tick, fiat, value, fee, memo]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -252,18 +275,15 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         });
     }, [stage, actionParams, chainId]);
 
-    useEffect(() => {
-        if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
-    }, [stage]);
-
     const prefillFromFeed = useCallback((feed) => {
+        setCoinPick(feed.coin && feed.coin !== coinTicker ? feed.coin : '');
         setTicker(feed.tick);
         setFiat(feed.fiat);
         const source = feed.pending || feed.live;
         setValue(source?.value ? String(source.value) : '');
         setFee(source?.fee ? String(source.fee) : '');
         setFormError(null);
-    }, []);
+    }, [coinTicker]);
 
     function guardBeforeSign() {
         if (!chainId || !fromAddress) { setFormError('Pick a publishing address first.'); return false; }
@@ -284,25 +304,62 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         return true;
     }
 
+    // Sign through the shared confirm page, so the network pre-flight runs
+    // before a price nobody can withdraw for 24 hours. Watcher mode never
+    // signs, so it keeps the local review stage and builds an unsigned tx.
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    // Approve reads the ref, so it signs with the latest keystrokes.
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+
+    async function openConfirm() {
+        const from = buildFrom();
+        if (!chainId || !from) return;
+        const params = actionParams;
+        const feeOpts = { payFeeInNativeCoin: nativeFee.flag, ...(feePerKb != null ? { feePerKb } : {}) };
+        setSubmitError(null);
+        try {
+            const res = await actionConfirm.run({
+                chainId,
+                from,
+                actionData: { action: 'PRICE', params },
+                encoderOpts: feeOpts,
+                // useActionForm's dispatch picks the software or device lane and
+                // records the last-used chain; prebuiltPsbt pins the signed bytes.
+                onApprove: (prebuiltPsbt) => submit({
+                    params,
+                    password: passwordValueRef.current,
+                    extraBase: { ...feeOpts, prebuiltPsbt },
+                }),
+            });
+            setResult(res);
+            setPassword('');
+            setReloadToken((t) => t + 1);
+            setStage('done');
+        } catch (err) {
+            if (isUserRejection(err)) return;
+            setFormError(submitFailureMessage(err, {
+                chainId,
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publishing the price failed.',
+            }));
+        }
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!guardBeforeSign()) return;
         setFormError(null);
         setTypedConfirm('');
-        // Always the legacy review stage, never the one-tap confirm modal: the
-        // deviation check, the consumer list, and the 24h-no-undo statement all
-        // have to sit in front of the signature, and none of them fits a modal
-        // whose contents are the decoded action alone.
+        if (!isWatcherMode) { openConfirm(); return; }
         setStage('review');
     }
 
     const hwSignerInfo = useSignerInfo({ walletId, signerId: isHwSource ? fromAddress?.signerId : null });
 
+    // Watcher lane only: encode an unsigned PRICE for a Signer-mode wallet.
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
-        if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         if (!typedConfirmOk) return;
         setStage('submitting');
         setSubmitError(null);
@@ -320,17 +377,14 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 },
             });
             setResult(res);
-            setPassword('');
             setReloadToken((t) => t + 1);
             setStage('done');
         } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
+            setSubmitError(submitFailureMessage(err, {
                 chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Publishing the price failed.',
             }));
             setStage('review');
-            if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         }
     }
 
@@ -348,11 +402,62 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         </Screen>
     );
 
+    // The oracle-only facts that must sit in front of the signature on both
+    // lanes: the 24h rail, the deviation gate and the dispensers that reprice.
+    const publishNotes = (
+        <OraclePublishNotes
+            isFirstPublish={isFirstPublish}
+            hasLiveQuote={hasLiveQuote}
+            priorQuote={priorQuote}
+            priorLabel={priorLabel}
+            fiat={fiat}
+            tick={tick}
+            deviationPct={deviationPct}
+            needsTypedConfirm={needsTypedConfirm}
+            typedConfirm={typedConfirm}
+            onTypedConfirmChange={setTypedConfirm}
+            consumers={consumerView}
+            pairConsumers={pairConsumers}
+            crossChain={crossChain}
+            priceCoin={priceCoin}
+        />
+    );
+
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId) return wrap(<p className={styles.hint}>Loading…</p>);
 
+    if (actionConfirm.open) {
+        const credsReady = isHwSource ? hwStatus === 'available' : (signerReady || password.length > 0);
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                // Approve also waits on the typed PUBLISH when the move is large.
+                credentialsReady={typedConfirmOk && credsReady}
+                extraCredentials={publishNotes}
+                hwSource={isHwSource ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                hwSignerInfo={hwSignerInfo}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        // Signed but not broadcast yet: nothing is priced, so no success copy.
+        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} what="price publish" />);
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
@@ -386,71 +491,16 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                     <dt className={styles.detailsLabel}>Publishing as</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
-                    <DetailRow label="Token" value={`${coinTicker}:${tick}`} />
-                    <DetailRow label="New price" value={`${value.trim()} ${fiat}`} />
-                    {priorQuote ? (
-                        <DetailRow
-                            label="Current price"
-                            value={`${priorQuote.value} ${fiat}${deviationPct != null ? ` (${fmtPct(deviationPct)})` : ''}`}
-                        />
-                    ) : null}
-                    {fee.trim() ? (
-                        <DetailRow label="Usage fee" value={`${fee.trim()} of a dispenser's projected proceeds`} />
-                    ) : null}
+                    {/* The decoder's rows, so Memo and the fee as a percent show
+                        here exactly as they will on any other confirm surface. */}
+                    {(decoded?.details || []).map((d) => <DetailRow key={d.label} label={d.label} value={d.value} />)}
                     <DetailRow
                         label="Network fee"
                         value={feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
                     />
                 </dl>
 
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        <strong>
-                            {isFirstPublish
-                                ? 'This is the first price for this pair, and it will not price anything for 24 hours.'
-                                : 'This price takes effect in 24 hours and cannot be withdrawn before then.'}
-                        </strong>{' '}
-                        {isFirstPublish
-                            ? 'A dispenser pointed at this oracle before then cannot settle at all; every attempt is recorded invalid. Publish a day before you need buyers.'
-                            : 'The current price keeps selling until this one matures, and the only way to correct a mistake is another publish, which also takes 24 hours.'}
-                    </p>
-                </div>
-
-                {needsTypedConfirm ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
-                            <strong>That is a {fmtPct(deviationPct)} move</strong> from your last published
-                            price of {priorQuote?.value} {fiat}. Check the decimal point before signing.
-                        </p>
-                    </div>
-                ) : null}
-
-                {consumers && !consumers.supported ? (
-                    <p className={styles.hint}>
-                        Could not check which dispensers use this oracle, so this list may be
-                        incomplete. Treat the publish as if buyers are watching.
-                    </p>
-                ) : pairConsumers.length > 0 ? (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
-                            {pairConsumers.length} open dispenser{pairConsumers.length === 1 ? '' : 's'} price
-                            {pairConsumers.length === 1 ? 's' : ''} {tick} from this oracle and will sell at the
-                            new price once it takes effect:
-                        </p>
-                        <ul>
-                            {pairConsumers.slice(0, 5).map((d) => (
-                                <li key={d.action_index} className={styles.hint}>
-                                    <AddressText address={d.address || d.source} /> · {d.give_amount} {tick} per dispense
-                                </li>
-                            ))}
-                        </ul>
-                        {pairConsumers.length > 5 ? (
-                            <p className={styles.hint}>and {pairConsumers.length - 5} more.</p>
-                        ) : null}
-                    </div>
-                ) : (
-                    <p className={styles.hint}>No open dispensers price {tick} from this oracle right now.</p>
-                )}
+                {publishNotes}
 
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
@@ -458,52 +508,20 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     </div>
                 ) : null}
 
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                        Signer-mode wallet, then broadcast from a Full-mode wallet.
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-                {(isWatcherMode || isHwSource) && submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
-
-                {needsTypedConfirm ? (
-                    <Input
-                        label="Type PUBLISH to confirm"
-                        hint={`This changes your published price by ${fmtPct(deviationPct)} and cannot be undone for 24 hours.`}
-                        value={typedConfirm}
-                        onChange={(e) => setTypedConfirm(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                ) : null}
+                <p className={styles.hint}>
+                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                </p>
+                {submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
 
                 <div className={styles.actions}>
                     <Button
                         type="submit"
                         variant={needsTypedConfirm ? 'danger' : 'primary'}
                         loading={stage === 'submitting'}
-                        disabled={!typedConfirmOk || (
-                            isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        )}
+                        disabled={!typedConfirmOk}
                     >
-                        {isWatcherMode ? 'Create unsigned transaction'
-                            : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Publish price'}
+                        Create unsigned transaction
                     </Button>
                 </div>
             </form>,
@@ -523,10 +541,11 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         );
     }
 
-    const consumerCountFor = (feedTick) => {
-        if (!consumers?.supported) return null;
+    // Counts only this chain's own-coin feeds, for the same reason as consumerView.
+    const consumerCountFor = (feed) => {
+        if (!consumers?.supported || feed.coin !== coinTicker) return null;
         return consumers.dispensers.filter(
-            (d) => String(d.give_tick || '').toUpperCase() === String(feedTick).toUpperCase(),
+            (d) => String(d.give_tick || '').toUpperCase() === String(feed.tick).toUpperCase(),
         ).length;
     };
 
@@ -534,18 +553,16 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         <form onSubmit={handleReview} noValidate>
             <p className={styles.hint}>
                 An oracle publishes what one unit of a token is worth in a traditional currency.
-                Dispensers can then price in that currency, and a buyer pays in {coinTicker || 'the chain coin'} at
+                Dispensers can then price in that currency, and a buyer pays in {priceCoin || 'the chain coin'} at
                 the going rate. Anyone can run one; whoever opens a dispenser against your oracle
                 pays you the usage fee you set below.
             </p>
 
             {/*
-              * A PRICE quote is scoped to ONE chain: the tick it prices lives on
-              * this chain, and only dispensers on this chain can read it. The
-              * publishing-address picker below is chain-scoped too, so without
-              * this the form publishes on whichever chain the wallet happens to
-              * list first and offers no way to say otherwise (D-145, the same
-              * fault D-133 fixed on the order form).
+              * Pick the PUBLISHING chain: it decides which address signs, pays
+              * the fee and becomes the oracle's identity. The priced token's
+              * chain is the separate COIN field below, and dispensers on any
+              * chain may read this oracle, so the two need not match.
               */}
             <NetworkField
                 value={chainId}
@@ -580,11 +597,11 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 <ul>
                     {feeds.map((f) => {
                         const countdown = activationCountdownText(f.pending?.secondsUntilEffective);
-                        const count = consumerCountFor(f.tick);
+                        const count = consumerCountFor(f);
                         return (
                             <li key={f.key} className={styles.hint}>
                                 <button type="button" onClick={() => prefillFromFeed(f)}>
-                                    {f.tick} in {f.fiat}
+                                    {f.coin && f.coin !== coinTicker ? `${f.coin}:` : ''}{f.tick} in {f.fiat}
                                 </button>
                                 {': '}
                                 {f.live
@@ -603,9 +620,19 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             {feedsError ? <p className={styles.hint}>{feedsError}</p> : null}
 
             <p className={styles.successLabel}>Publish a price</p>
+            <Select
+                label="Token's chain"
+                hint={crossChain
+                    ? `Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`
+                    : 'The chain the priced token lives on. It can differ from the publishing chain.'}
+                value={priceCoin}
+                onChange={(e) => setCoinPick(e.target.value === coinTicker ? '' : e.target.value)}
+            >
+                {PRICE_COINS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
             <Input
                 label="Token ticker"
-                hint={`The token you are pricing. It lives on ${descriptor?.displayName || chainId}.`}
+                hint={`The ${priceCoin} token you are pricing.`}
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                 autoComplete="off"
@@ -669,9 +696,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     type="submit"
                     variant="primary"
                     block
-                    disabled={!fromAddress || !tick || !value.trim()}
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !tick || !value.trim() || actionConfirm.composing}
                 >
-                    Preview
+                    {isWatcherMode ? 'Preview' : 'Publish price'}
                 </Button>
             </div>
         </form>,
@@ -683,6 +711,94 @@ function DetailRow({ label, value }) {
         <>
             <dt className={styles.detailsLabel}>{label}</dt>
             <dd className={styles.detailsValue}>{value}</dd>
+        </>
+    );
+}
+
+/**
+ * The oracle-specific facts shown in front of the signature: when the quote
+ * takes effect, the typed confirm for a large move, and which dispensers will
+ * reprice. Rendered on the confirm page and on the watcher review alike.
+ */
+function OraclePublishNotes({
+    isFirstPublish, hasLiveQuote, priorQuote, priorLabel, fiat, tick, deviationPct,
+    needsTypedConfirm, typedConfirm, onTypedConfirmChange,
+    consumers, pairConsumers, crossChain, priceCoin,
+}) {
+    return (
+        <>
+            {priorQuote ? (
+                <dl className={styles.detailsList}>
+                    <DetailRow
+                        label={priorLabel}
+                        value={`${priorQuote.value} ${fiat}${deviationPct != null ? ` (${fmtPct(deviationPct)})` : ''}`}
+                    />
+                </dl>
+            ) : null}
+
+            <div role="alert" className={styles.warnings}>
+                <p className={styles.warning}>
+                    <strong>
+                        {isFirstPublish
+                            ? 'This is the first price for this pair, and it will not price anything for 24 hours.'
+                            : 'This price takes effect in 24 hours and cannot be withdrawn before then.'}
+                    </strong>{' '}
+                    {isFirstPublish
+                        ? 'A dispenser pointed at this oracle before then cannot settle at all; every attempt is recorded invalid. Publish a day before you need buyers.'
+                        : hasLiveQuote
+                            ? 'The current price keeps selling until this one matures, and the only way to correct a mistake is another publish, which also takes 24 hours.'
+                            : 'Nothing sells on this pair yet: your earlier price is still pending and takes effect first, then this one replaces it. The only way to correct a mistake is another publish, which also takes 24 hours.'}
+                </p>
+            </div>
+
+            {needsTypedConfirm ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        <strong>That is a {fmtPct(deviationPct)} move</strong> from your last published
+                        price of {priorQuote?.value} {fiat}. Check the decimal point before signing.
+                    </p>
+                </div>
+            ) : null}
+
+            {consumers && !consumers.supported ? (
+                <p className={styles.hint}>
+                    Could not check which dispensers use this oracle, so this list may be
+                    incomplete. Treat the publish as if buyers are watching.
+                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this chain.` : ''}
+                </p>
+            ) : pairConsumers.length > 0 ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>
+                        {pairConsumers.length} open dispenser{pairConsumers.length === 1 ? '' : 's'} price
+                        {pairConsumers.length === 1 ? 's' : ''} {tick} from this oracle and will sell at the
+                        new price once it takes effect:
+                    </p>
+                    <ul>
+                        {pairConsumers.slice(0, 5).map((d) => (
+                            <li key={d.action_index} className={styles.hint}>
+                                <AddressText address={d.address || d.source} /> · {d.give_amount} {tick} per dispense
+                            </li>
+                        ))}
+                    </ul>
+                    {pairConsumers.length > 5 ? (
+                        <p className={styles.hint}>and {pairConsumers.length - 5} more.</p>
+                    ) : null}
+                </div>
+            ) : (
+                <p className={styles.hint}>No open dispensers price {tick} from this oracle right now.</p>
+            )}
+
+            {needsTypedConfirm ? (
+                <Input
+                    label="Type PUBLISH to confirm"
+                    hint={`This changes your published price by ${fmtPct(deviationPct)} and cannot be undone for 24 hours.`}
+                    value={typedConfirm}
+                    onChange={(e) => onTypedConfirmChange(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            ) : null}
         </>
     );
 }
