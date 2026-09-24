@@ -31,6 +31,7 @@ import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './Home.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -996,25 +997,34 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
                 {pendingCoinpays.length > 0 && onResumeCoinpay ? (
                     <div role="group" aria-label="Pending payments due">
-                        {pendingCoinpays.map((rec) => (
-                            <button
-                                key={`${rec.chainId}-${rec.orderMatchActionIndex}`}
-                                type="button"
-                                className={styles.pendingAirdropCard}
-                                onClick={() => onResumeCoinpay({
-                                    chainId: rec.chainId,
-                                    address: rec.address,
-                                    orderMatchActionIndex: rec.orderMatchActionIndex,
-                                })}
-                            >
-                                <span className={styles.pendingAirdropTitle}>
-                                    Payment due: pay {rec.coinAmount} to complete matched order #{rec.orderMatchActionIndex}
-                                </span>
-                                <span className={styles.pendingAirdropHint}>
-                                    Sign to finish paying for your matched order.
-                                </span>
-                            </button>
-                        ))}
+                        {pendingCoinpays.map((rec) => {
+                            // rec.coinAmount is the explorer's own decimal coin
+                            // figure (not base units; see obligationStatus.js), so
+                            // it prints as-is - only the ticker was missing, left
+                            // it reading as a bare number with no unit.
+                            const chainDescriptor = chainRegistry.get(rec.chainId);
+                            const ticker = chainDescriptor ? tickerForCoin(chainDescriptor.coin) : '';
+                            return (
+                                <button
+                                    key={`${rec.chainId}-${rec.orderMatchActionIndex}`}
+                                    type="button"
+                                    className={styles.pendingAirdropCard}
+                                    onClick={() => onResumeCoinpay({
+                                        chainId: rec.chainId,
+                                        address: rec.address,
+                                        orderMatchActionIndex: rec.orderMatchActionIndex,
+                                    })}
+                                >
+                                    <span className={styles.pendingAirdropTitle}>
+                                        Payment due: pay {rec.coinAmount} to complete matched order #{rec.orderMatchActionIndex}
+                                        {ticker ? ` (${ticker})` : ''}
+                                    </span>
+                                    <span className={styles.pendingAirdropHint}>
+                                        Sign to finish paying for your matched order.
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
                 ) : null}
 

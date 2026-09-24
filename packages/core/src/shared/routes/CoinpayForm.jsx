@@ -512,6 +512,15 @@ export function CoinpayForm({
                                 && String(selected.obligation.action_index) === String(row.obligation.action_index);
                             const d = chainRegistry.get(row.chainId);
                             const t = d ? PROTOCOL_COIN_TICKER[d.coin] : '';
+                            // Same canonical reader the confirm/review stages use
+                            // (amountLabel below): coin_amount is the explorer's
+                            // decimal coin figure, and echoing it verbatim skips
+                            // the normalization (e.g. trailing-zero stripping)
+                            // that reader does. Falls back to the raw figure only
+                            // when the row can't be parsed at all.
+                            const rowAmountLabel = coinAmountLabel(
+                                safeBaseUnitAmount(row.obligation.coin_amount), t,
+                            ) ?? `${row.obligation.coin_amount} ${t || 'base units'}`;
                             return (
                                 <li key={`${row.chainId}-${row.obligation.action_index}`}>
                                     <button
@@ -540,7 +549,7 @@ export function CoinpayForm({
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                                            Pay {row.obligation.coin_amount} {t || 'base units'} →{' '}
+                                            Pay {rowAmountLabel} →{' '}
                                             <AddressText address={row.obligation.payee_address} />
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>

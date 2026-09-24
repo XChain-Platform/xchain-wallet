@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Playwright config for the TESTNET venue: the wallet's production build
-// against the public Bitcoin testnet through the platform's public explorer
-// and encoder (testnet-validator-network.md, rows 16 and 20).
+// Scaffold for a future TESTNET Playwright venue. No `*.testnet.spec.js`
+// files are checked in, so this config currently collects zero tests and
+// must not be cited as testnet coverage.
 //
-// THE PRODUCTION BUILD IS THE POINT, for the same reason the regtest config
-// gives: these specs sign and broadcast, the dev server serves a mock SDK that
-// cannot, and a stale `dist/` would report on yesterday's wallet. `vite build`
-// runs on every launch.
+// Once matching specs exist, they run the production build against the public
+// Bitcoin testnet through the configured explorer and encoder. `vite build`
+// runs on every launch because the development server uses a mock SDK that
+// cannot sign and broadcast.
 //
 // NO `--disable-web-security` HERE, and that is a difference from regtest, not
 // an omission. The regtest explorer sends no CORS headers for a local preview
@@ -24,9 +24,8 @@
 // real service under real browser origin rules; relaxing them would test a
 // browser nobody ships.
 //
-// Every spec on this venue waits for real blocks (ten minutes apart on a good
-// day, longer on a quiet one), which is what the timeouts below are sized to.
-// A spec that needs an activation delay sets its own budget on top.
+// The timeouts are reserved for specs that wait for public-chain blocks. A
+// spec that needs an activation delay must set its own budget on top.
 
 import { defineConfig, devices } from '@playwright/test';
 
