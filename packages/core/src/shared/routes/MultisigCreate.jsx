@@ -274,7 +274,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <p className={styles.hint}>
                     The shared address now appears on the Receive screen. Spending
                     from it opens a signing session where each cosigner approves in
-                    turn, in the app or by scanning the round's QR code.
+                    turn, in the app or by scanning the transaction QR code.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
