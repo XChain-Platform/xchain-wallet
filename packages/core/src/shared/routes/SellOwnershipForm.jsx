@@ -28,7 +28,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -101,8 +101,13 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+        ])
+            .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 const all = (byChain || {})[chainId] || [];
@@ -115,12 +120,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     if (match) { setFromAddressId(match.id); return; }
                 }
                 const hd = all.filter((a) => a.source === 'hd' && externalIndexOf(a.derivationPath) !== null);
-                const pick = (hd.length > 0 ? hd : all).slice().sort((a, b) => {
-                    const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                    const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                    return bi - ai;
-                })[0];
-                setFromAddressId(pick.id);
+                const pool = hd.length > 0 ? hd : all;
+                setFromAddressId(preferredSourceId(pool, active?.[chainId]) || pool[0].id);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');

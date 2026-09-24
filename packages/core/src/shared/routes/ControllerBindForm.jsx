@@ -29,7 +29,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
@@ -112,11 +112,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         let cancelled = false;
         Promise.all([
             messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
             typeof messaging.getSettings === 'function'
                 ? Promise.resolve(messaging.getSettings()).catch(() => null)
                 : Promise.resolve(null),
         ])
-            .then(([byChain, settings]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 // D-153: opened WITHOUT a token (the address-controller lane),
@@ -145,12 +148,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     setLoadError('No address on this chain to sign from. Use Receive to generate one first.');
                     return;
                 }
-                const sorted = [...addrs].sort((a, b) => {
-                    const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                    const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                    return bi - ai;
-                });
-                setFromAddressId(sorted[0].id);
+                setFromAddressId(preferredSourceId(addrs, active?.[cid]));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
