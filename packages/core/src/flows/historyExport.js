@@ -49,10 +49,17 @@ function pickColumns(columns) {
     return out.length > 0 ? out : EXPORT_COLUMNS.slice();
 }
 
+function timestampToSeconds(timestamp) {
+    const value = Number(timestamp);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value >= 1e12 ? value / 1000 : value;
+}
+
 function valueFor(entry, column) {
     if (column === 'iso') {
-        return Number.isFinite(entry?.timestamp) && entry.timestamp > 0
-            ? new Date(entry.timestamp * 1000).toISOString()
+        const timestamp = timestampToSeconds(entry?.timestamp);
+        return timestamp !== null
+            ? new Date(timestamp * 1000).toISOString()
             : '';
     }
     return entry?.[column];
@@ -90,8 +97,9 @@ export function entriesToJson(entries, meta) {
             const row = {};
             for (const c of cols) {
                 if (c === 'iso') {
-                    row.iso = Number.isFinite(e?.timestamp) && e.timestamp > 0
-                        ? new Date(e.timestamp * 1000).toISOString()
+                    const timestamp = timestampToSeconds(e?.timestamp);
+                    row.iso = timestamp !== null
+                        ? new Date(timestamp * 1000).toISOString()
                         : null;
                 } else {
                     row[c] = e?.[c];
@@ -121,8 +129,8 @@ export function filterEntriesByDateRange(entries, range = {}) {
     const to = Number.isFinite(range?.toTs) ? Number(range.toTs) : null;
     if (from === null && to === null) return arr.slice();
     return arr.filter((e) => {
-        const ts = Number(e?.timestamp);
-        if (!Number.isFinite(ts) || ts <= 0) return false;
+        const ts = timestampToSeconds(e?.timestamp);
+        if (ts === null) return false;
         if (from !== null && ts < from) return false;
         if (to !== null && ts > to) return false;
         return true;
