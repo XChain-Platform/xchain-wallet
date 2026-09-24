@@ -266,7 +266,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const listActionIndex = String(created.action_index);
 
             await gotoPalette(page, 'My Lists');
-            const listRow = page.getByRole('button', { name: `Open address list #${listActionIndex}` });
+            const listRow = page.getByRole('listitem', { name: `Open address list #${listActionIndex}` });
             await expect(listRow, `the list just published (#${listActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await listRow.click();
@@ -289,7 +289,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const forkActionIndex = String(forked.action_index);
 
             await gotoPalette(page, 'My Lists');
-            const forkRow = page.getByRole('button', { name: `Open address list #${forkActionIndex}` });
+            const forkRow = page.getByRole('listitem', { name: `Open address list #${forkActionIndex}` });
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await forkRow.click();
