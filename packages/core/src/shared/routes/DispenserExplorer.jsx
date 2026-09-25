@@ -13,6 +13,7 @@ import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, Statu
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -77,8 +78,11 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         event.preventDefault();
         const q = query.trim();
         if (!q) return;
-        if (searchMode === 'token' && !/^[A-Za-z0-9.^]+$/.test(q)) {
-            setRowsByChain({ _error: { rows: [], error: 'Token search accepts A–Z, 0–9, period, or ^TICK_ID.' } });
+        const tokenError = searchMode === 'token'
+            ? tickerReferenceError(q, { noun: 'Token search', allowRef: true })
+            : null;
+        if (tokenError) {
+            setRowsByChain({ _error: { rows: [], error: tokenError } });
             setLastQueried(q);
             return;
         }

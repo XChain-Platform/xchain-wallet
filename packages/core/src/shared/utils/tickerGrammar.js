@@ -139,3 +139,57 @@ export function tickerGrammarError(value, { noun = 'Ticker', allowDot = false } 
 export function isAuthorableTicker(value, options) {
     return tickerGrammarError(value, options) === null;
 }
+
+/** The `^<ACTION_INDEX>` form a referencing field may take instead of a name. */
+const TICK_ID_RE = /^\^\d+$/;
+
+/**
+ * The reason `value` cannot name an EXISTING ticker, or null when it can.
+ *
+ * THE DEFECT THIS CLOSES. The surfaces that act on a token somebody else
+ * already coined (dispenser, mint, destroy, admin, dividend, airdrop, the
+ * dispenser explorer's token search) each carried their own
+ * `/^[A-Za-z0-9.]+$/`, so a holder of `FLAM1N-H0T-CHEET0S` was told the name
+ * was not a ticker while the chain had been serving it for weeks. A field that
+ * REFERENCES a name must take everything the chain could have coined: the full
+ * allowlist above, dots as levels, and, where the form says so, the `^ID` form.
+ *
+ * The caret keeps its authoring rule for the same reason as above: a caret
+ * NAME half-exists on chain, so nothing here lets a user aim an action at one.
+ * The `^123` id form is a different thing and is opened by `allowRef`, because
+ * the indexer resolves it on every TICK field.
+ *
+ * @param {unknown} value raw field contents; trimmed here, once
+ * @param {{ noun?: string, allowRef?: boolean }} [options]
+ * @returns {string|null}
+ */
+export function tickerReferenceError(value, { noun = 'Ticker', allowRef = false } = {}) {
+    const tick = String(value ?? '').trim();
+
+    if (!tick) return `${noun} is required.`;
+
+    if (allowRef && TICK_ID_RE.test(tick)) return null;
+
+    if (tick.length > MAX_TICKER_LENGTH)
+        return `${noun} cannot be longer than ${MAX_TICKER_LENGTH} characters.`;
+
+    if (tick.includes('^')) {
+        return allowRef
+            ? `${noun} can be a name, or ^ followed by the token's number (^123).`
+            : `${noun} cannot contain ^. That form is reserved for token IDs.`;
+    }
+
+    if (tick.startsWith('.') || tick.endsWith('.'))
+        return `${noun} cannot start or end with a dot.`;
+
+    const segments = tick.split('.');
+    if (segments.some((segment) => segment === ''))
+        return `${noun} cannot have an empty level between dots.`;
+
+    if (segments.some((segment) => !SEGMENT_RE.test(segment))) {
+        return `${noun} can only use letters, numbers, dots and ~!@#$%&*()_+-={}[]:<>?`
+            + (allowRef ? ', or a ^ID.' : '.');
+    }
+
+    return null;
+}

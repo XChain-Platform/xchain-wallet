@@ -209,7 +209,15 @@ describe('validateAdvancedIssueFields', () => {
     it('rejects a malformed callback ticker', () => {
         expect(validateAdvancedIssueFields({
             callbackTick: 'BAD TICK', callbackAmount: '1', callbackBlock: '900100',
-        }, OK)).toMatch(/valid ticker/i);
+        }, OK)).toMatch(/^Callback token can only use/);
+    });
+
+    it('accepts a callback ticker carrying a symbol the chain allows', () => {
+        // The callback tick REFERENCES an existing token, so it takes the
+        // chain's whole allowlist; a hyphen was refused here before.
+        expect(validateAdvancedIssueFields({
+            callbackTick: 'FLAM1N-H0T-CHEET0S', callbackAmount: '1', callbackBlock: '900100',
+        }, OK)).toBeNull();
     });
 
     it('rejects a non-positive callback payout', () => {

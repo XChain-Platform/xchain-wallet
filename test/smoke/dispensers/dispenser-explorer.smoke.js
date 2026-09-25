@@ -82,8 +82,8 @@ assert.ok(
     'explorer offers an "All chains" option that fans out per-chain',
 );
 assert.ok(
-    /Token search accepts A–Z, 0–9, period, or \^TICK_ID/.test(explorerSrc),
-    'explorer validates token input shape',
+    /tickerReferenceError\(q, \{ noun: 'Token search', allowRef: true \}\)/.test(explorerSrc),
+    'explorer validates token input shape through the shared reference grammar',
 );
 assert.ok(
     /Search by token ticker to find open dispensers/.test(explorerSrc),

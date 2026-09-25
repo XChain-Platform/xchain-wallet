@@ -46,6 +46,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -597,8 +598,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setFormError('Ticker is required.');
             return;
         }
-        if (!/^[A-Za-z0-9.]+$/.test(ticker.trim())) {
-            setFormError('Ticker must be A–Z, 0–9 (subtokens may include a period).');
+        const tickerError = tickerReferenceError(ticker);
+        if (tickerError) {
+            setFormError(tickerError);
             return;
         }
         if (mode === 'description' && !description.trim()) {
@@ -650,8 +652,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Callback block must be a whole block height at or after the current block.');
                 return;
             }
-            if (callbackTick && !/^[A-Za-z0-9.]+$/.test(String(callbackTick).trim())) {
-                setFormError('Callback token must be a valid ticker.');
+            const callbackTickError = callbackTick
+                ? tickerReferenceError(callbackTick, { noun: 'Callback token' })
+                : null;
+            if (callbackTickError) {
+                setFormError(callbackTickError);
                 return;
             }
             if (callbackAmount && !(Number(callbackAmount) > 0)) {

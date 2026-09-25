@@ -123,9 +123,12 @@ assert.ok(
     /Per-unit amount must be a positive number/.test(src),
     'validation: zero amount',
 );
+// Both ticker fields go through the shared reference grammar (the chain's full
+// TICK_CHARACTERS plus the ^ID form), not a local A-Z regex.
 assert.ok(
-    /accepts A–Z, 0–9, period, or \^TICK_ID/.test(src),
-    'validation: ticker regex',
+    /tickerReferenceError\(tick, \{ noun: 'Holder-of ticker', allowRef: true \}\)/.test(src)
+        && /tickerReferenceError\(dividendTick, \{ noun: 'Dividend ticker', allowRef: true \}\)/.test(src),
+    'validation: ticker grammar',
 );
 assert.ok(
     /Memo cannot contain \| or ;/.test(src),
