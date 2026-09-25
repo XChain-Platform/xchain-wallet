@@ -81,6 +81,7 @@ let win;
 try {
     win = await app.firstWindow();
     win.on('pageerror', (err) => pageErrors.push(String(err)));
+    await win.waitForURL((url) => url.protocol === 'file:', { timeout: 30_000 });
     await win.waitForLoadState('domcontentloaded');
 
     // The mount is asynchronous, so poll rather than sleep a fixed amount:
