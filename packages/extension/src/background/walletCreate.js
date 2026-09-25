@@ -107,6 +107,7 @@ export async function handleWalletImport(request, deps) {
         name = 'Imported Wallet',
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+        origin,
     } = /** @type {any} */ (request);
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
@@ -129,6 +130,7 @@ export async function handleWalletImport(request, deps) {
             activeChainIds,
             name,
             bip39Passphrase,
+            origin,
             kdfParams,
         });
         await vault.save();

@@ -55,6 +55,10 @@ const DEFAULT_ORIGIN_BY_FORMAT = {
     'counterwallet-legacy': 'imported-freewallet',
 };
 
+// 'created' is the Create screen: it generates the phrase in-app and then
+// persists it through this flow, so the seed's origin is not an import.
+const ALLOWED_ORIGINS = new Set(['created', 'imported-mnemonic', 'imported-freewallet', 'imported-xchain-backup']);
+
 /**
  * Trim, collapse internal whitespace, lowercase. Users paste from many
  * sources (PDFs, SMS, handwriting OCR); the canonical validators expect
@@ -89,7 +93,7 @@ export function detectMnemonicFormat(normalized) {
  * @property {'bip39' | 'counterwallet-legacy'} [format]       auto-detect if omitted
  * @property {string} [name]                                   default 'Imported Wallet'
  * @property {string} [bip39Passphrase]                        BIP39 only; rejected on Counterwallet
- * @property {'imported-mnemonic' | 'imported-freewallet' | 'imported-xchain-backup'} [origin]  default derived from format
+ * @property {'created' | 'imported-mnemonic' | 'imported-freewallet' | 'imported-xchain-backup'} [origin]  default derived from format
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
  */
 
@@ -135,6 +139,9 @@ export async function importMnemonic({
     }
     if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
         throw new Error('importMnemonic: mnemonic is required');
+    }
+    if (origin !== undefined && !ALLOWED_ORIGINS.has(origin)) {
+        throw new Error(`importMnemonic: unsupported origin "${origin}"`);
     }
 
     const normalized = normalizeMnemonic(mnemonic);
