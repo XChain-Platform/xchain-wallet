@@ -112,6 +112,19 @@ export function TokenPicker({
     const kindFilter = kindFilterProp ?? kindFilterLocal;
     const setKindFilter = onKindFilterChangeProp ?? setKindFilterLocal;
 
+    // Open with the caret in the search box (xchain-wallet#57): a user who
+    // starts typing a ticker straight away otherwise types into the page, and
+    // the global `g`-leader shortcuts took "MGRTEST" as `g r` and left the form
+    // for Receive. Skipped on a touch screen, where focusing would raise the
+    // keyboard over the list the user came to scroll.
+    const searchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    useEffect(() => {
+        const coarse = typeof window !== 'undefined'
+            && typeof window.matchMedia === 'function'
+            && window.matchMedia('(pointer: coarse)').matches;
+        if (!coarse) searchRef.current?.focus();
+    }, []);
+
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
@@ -374,6 +387,7 @@ export function TokenPicker({
             ) : null}
             <div className={styles.toolbar}>
                 <input
+                    ref={searchRef}
                     type="text"
                     className={styles.search}
                     placeholder="Search"
