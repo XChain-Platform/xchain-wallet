@@ -103,6 +103,17 @@ export async function createMultisigConfig(opts) {
         }
     });
 
+    // At most one cosigner may be this wallet's own key: signMultisigLocally
+    // signs for a single local cosigner, so a second one could never add its
+    // signature and a threshold that needs it would leave the funds stuck.
+    const localCount = opts.cosigners.filter((c) => c.origin === 'local').length;
+    if (localCount > 1) {
+        throw new Error(
+            `createMultisigConfig: only one cosigner can be this wallet's own key (found ${localCount}). ` +
+            'Add the other keys as external cosigners from the wallet or device that holds them.',
+        );
+    }
+
     // For taproot-musig2 we aggregate keys via the SDK's BIP327 module
     // and stash the resulting x-only aggregate pubkey in the
     // scriptTemplate. P2SH/P2WSH skip this step; the redeem script is

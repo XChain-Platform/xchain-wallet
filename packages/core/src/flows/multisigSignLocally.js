@@ -21,8 +21,8 @@
 //
 // The local cosigner is identified by the wallet's `MultisigConfig`.
 // Exactly one cosigner is expected to have `origin === 'local'`
-// and a `localSignerId`; that cosigner's `derivationPath` is what we
-// hand to the signer.
+// and a `localSignerId` (createMultisigConfig refuses a second); that
+// cosigner's `derivationPath` is what we hand to the signer.
 //
 // Hardware signers throw a clear "Update firmware to use MuSig2 on
 // this device" error per §22.3; the flow surfaces that to the
