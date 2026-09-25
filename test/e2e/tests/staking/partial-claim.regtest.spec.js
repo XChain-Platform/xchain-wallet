@@ -344,6 +344,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await claimBtn.click();
 
             const main = page.getByRole('main');
+            await expect(main.getByText(`${Number(REWARD_AMOUNT)} XCHAIN available`))
+                .toBeVisible({ timeout: 30_000 });
             await failBroadcast(page, 'permanent');
             await amountField(main).fill(PARTIAL_CLAIM);
             await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
