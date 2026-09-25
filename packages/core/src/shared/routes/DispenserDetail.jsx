@@ -40,6 +40,7 @@ import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { dispenserPriceFloor } from '../../flows/dispenserDustFloor.js';
 import {
     buyerListMessage,
     buyerListVerdict,
@@ -542,10 +543,81 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const canBuyWithSend = (isTokenPaid || coinBuyable) && buyerAddresses.length > 0 && !ownerAddress;
     const showPayHere = isCoinPaid && !ownerAddress;
 
+    // A coin-paid dispenser can be priced below the chain's dust floor (one
+    // opened before the create form refused that, or by another client), and the
+    // indexer still fills floor(paid / GET_AMOUNT) times - so the smallest
+    // payment a buyer can send is many fills, and asking for fewer builds a
+    // payment every node refuses. Gated on `coinBuyable` alone: that already
+    // excludes FIAT-priced rows (GET_AMOUNT 0) and token-paid ones, which is
+    // the only lane this floor applies to.
+    const priceFloor = useMemo(
+        () => (coinBuyable ? dispenserPriceFloor({ coin: descriptor?.coin, getAmount }) : null),
+        [coinBuyable, descriptor, getAmount],
+    );
+    const minFills = priceFloor ? priceFloor.minFills : 1;
+
     const fillsNum = useMemo(() => {
         const n = Number(String(fills).trim());
         return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
     }, [fills]);
+
+    // Default Fills to the floor the first time a dispenser needing one loads,
+    // so a buyer who never learns dispensers can be priced under dust does not
+    // find out by broadcasting a refused payment. Keyed to the load, not just
+    // to `minFills`, so a buyer who edits Fills back down is not overridden a
+    // second time by the same value recomputing.
+    const fillsDefaultedForRef = useRef(/** @type {string | null} */ (null));
+    useEffect(() => {
+        const loadKey = `${actionIndex}:${reloadKey}`;
+        if (loading || minFills <= 1 || fillsDefaultedForRef.current === loadKey) return;
+        fillsDefaultedForRef.current = loadKey;
+        setFills(String(minFills));
+    }, [actionIndex, reloadKey, loading, minFills]);
+
+    // True only when NO fill count helps: the dispenser's entire remaining
+    // escrow can't reach the floor, so every payment it could still pay out
+    // is refused regardless of what the buyer types.
+    const dispenserPricedBelowFloor = useMemo(() => {
+        if (!priceFloor || minFills <= 1 || remainingFills == null) return false;
+        return remainingFills < BigInt(minFills);
+    }, [priceFloor, minFills, remainingFills]);
+
+    // The blocking message, in the same style as Send.jsx's dustBlock: either
+    // a per-buy dust violation the buyer fixes by raising Fills, or, when the
+    // dispenser can't be bought from at any fill count, a fixed refusal.
+    const buyDustBlock = useMemo(() => {
+        if (!priceFloor || minFills <= 1) return null;
+        if (dispenserPricedBelowFloor) {
+            return 'This dispenser cannot be bought from as priced: every payment it can '
+                + `still pay out prices below the ${priceFloor.floor} ${feeCoinTicker} minimum `
+                + 'the network will relay.';
+        }
+        if (fillsNum > 0 && fillsNum < minFills) {
+            return `Buying fewer than ${minFills} fills builds a payment under `
+                + `${priceFloor.floor} ${feeCoinTicker}, which every node refuses. Enter at `
+                + `least ${minFills} fills to buy from this dispenser.`;
+        }
+        return null;
+    }, [priceFloor, minFills, dispenserPricedBelowFloor, fillsNum, feeCoinTicker]);
+
+    // Retract the refusal once Fills clears it, identity-matched against what
+    // this guard itself pushed (mirrors Send.jsx's dustErrorRef) so an
+    // unrelated submit failure sitting in buyError is never wiped out from
+    // under the buyer.
+    const buyDustErrorRef = useRef(/** @type {string | null} */ (null));
+    useEffect(() => {
+        if (buyDustBlock) return;
+        const pushed = buyDustErrorRef.current;
+        buyDustErrorRef.current = null;
+        setBuyError((prev) => (prev !== null && prev === pushed ? null : prev));
+    }, [buyDustBlock]);
+
+    // The plain-language line shown whenever a purchase floor applies at all,
+    // even before Fills holds an invalid value.
+    const minFillsNotice = (priceFloor && minFills > 1 && !dispenserPricedBelowFloor)
+        ? `The smallest purchase is ${minFills} fills (${priceFloor.minPayment} ${feeCoinTicker}): `
+            + `${feeCoinTicker} payments under ${priceFloor.floor} ${feeCoinTicker} are refused by every node.`
+        : null;
 
     const totalPayAmount = useMemo(() => {
         if (!getAmount || fillsNum <= 0) return null;
@@ -762,6 +834,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setBuyError(isTokenPaid
                 ? 'Not enough of the payment token at this address.'
                 : `Not enough ${payTick} at this address.`);
+            return;
+        }
+        // Same D-37 reasoning: the Buy button is already disabled on this, but
+        // the review screen can sit open while Fills or the escrow change.
+        if (buyDustBlock) {
+            buyDustErrorRef.current = buyDustBlock;
+            setBuyError(buyDustBlock);
             return;
         }
         setBuyStage('submitting');
@@ -1350,7 +1429,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         type="submit"
                         variant="primary"
                         loading={buyStage === 'submitting'}
-                        disabled={buyUnderfunded
+                        disabled={buyUnderfunded || Boolean(buyDustBlock)
                             || (buyHw ? buyHwStatus !== 'available' : (!signerReady && buyPassword.length === 0))}
                     >
                         {buyHw
@@ -1812,6 +1891,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             Max
                         </Button>
                     </div>
+                    {minFillsNotice ? (
+                        <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
+                    ) : null}
+                    {buyDustBlock ? (
+                        <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
+                    ) : null}
                     <p className={styles.hint} data-testid="buy-balance">
                         {buyBalance == null
                             ? `Checking your ${String(payTick).toUpperCase()} balance…`
@@ -1827,7 +1912,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <Button
                         variant="primary"
                         onClick={() => setBuyStage('confirm')}
-                        disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr || buyUnderfunded}
+                        disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr
+                            || buyUnderfunded || Boolean(buyDustBlock)}
                     >
                         Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
                     </Button>

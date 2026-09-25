@@ -59,6 +59,7 @@ import {
     ownerOffAllowListMessage,
 } from '../../flows/allowListSelfCheck.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useDispenserPriceFloor, PRICE_BELOW_FLOOR_ERROR } from '../hooks/useDispenserPriceFloor.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -396,6 +397,15 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const priceNotes = useDispenserPriceFloor({
+        coin: descriptor?.coin, coinTicker, payWith, triggerPrice, giveAmount, fiatCode, fiatAmount, oracleAddress,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
+    // Retract the Review refusal once the price clears the floor; any other
+    // error in the slot is left alone.
+    useEffect(() => {
+        if (!priceNotes.block) setFormError((prev) => (prev === PRICE_BELOW_FLOOR_ERROR ? null : prev));
+    }, [priceNotes.block]);
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -639,6 +649,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         }
         if (trig && Number(trig) < 0) {
             setFormError('Trigger price cannot be negative.');
+            return;
+        }
+        if (priceNotes.block) {
+            setFormError(PRICE_BELOW_FLOOR_ERROR);
             return;
         }
         if (oracle && !fiatCode) {
@@ -1296,6 +1310,18 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     autoComplete="off"
                 />
             )}
+            <StatusMessage
+                variant="error"
+                recovery={priceNotes.bundle ? {
+                    label: `Sell ${priceNotes.bundle.giveAmount} per fill at ${priceNotes.bundle.getAmount} ${coinTicker}`,
+                    onAction: () => {
+                        setGiveAmount(priceNotes.bundle.giveAmount);
+                        setTriggerPrice(priceNotes.bundle.getAmount);
+                    },
+                } : undefined}
+            >
+                {priceNotes.block}
+            </StatusMessage>
 
             {payWith === 'coin' ? (
                 <button
@@ -1331,6 +1357,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         onChange={(e) => setFiatAmount(e.target.value)}
                         autoComplete="off"
                     />
+                    <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
                     <Input
                         label="Oracle address (optional)"
                         hint="User-oracle (PRICE v1) address for fiat pricing. Requires a fiat currency. If the oracle charges a usage fee you pay it once, now, from this transaction; the amount scales with the escrow you lock. Paste the full address, not a ^id reference."
