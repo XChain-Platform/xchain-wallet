@@ -27,7 +27,7 @@ import {
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/counterwallet.js';
 import { sha256 } from '@noble/hashes/sha2';
-import { accountXpub, derive, hdKeyFromSeed, zeroDerivedKey } from '../crypto/hd.js';
+import { accountXpub, derive, hdKeyFromSeed, masterFingerprint, zeroDerivedKey } from '../crypto/hd.js';
 import { encodeWif } from '../crypto/wif.js';
 import {
     NotImplementedError,
@@ -820,6 +820,18 @@ export class SoftwareSigner extends Signer {
             throw new Error(`SoftwareSigner.getAccountXpub: invalid path "${path}"`);
         }
         return accountXpub(hdKeyFromSeed(this._unlocked.seed), path);
+    }
+
+    /**
+     * BIP32 master key fingerprint of the unlocked seed (§22.2 cosigner
+     * record). Optional across the Signer interface like getAccountXpub:
+     * hardware signers report theirs through their own transport.
+     *
+     * @returns {Promise<string>}   8 lowercase hex chars
+     */
+    async getMasterFingerprint() {
+        this._assertUnlocked();
+        return masterFingerprint(hdKeyFromSeed(this._unlocked.seed));
     }
 }
 

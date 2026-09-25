@@ -344,6 +344,7 @@ export {
 export { searchPlatformTokens } from './searchTokens.js';
 export { listOwnedTokens } from './listOwnedTokens.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
+export { getMultisigCosignerInfo, deriveCosignerKeys } from './multisigCosignerInfo.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {
     startMultisigSigningSession,

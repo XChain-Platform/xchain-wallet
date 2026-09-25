@@ -83,6 +83,20 @@ describe('buildCommands', () => {
         expect(findById(explicitNoVm, 'nav-staking')).toBeDefined();
     });
 
+    // The actions menu listed Create multisig and Multisig signing, but a
+    // palette search for "multisig" found nothing.
+    it('finds both multisig surfaces for "multisig" behind the Bitcoin gate', () => {
+        const navigate = vi.fn();
+        const btc = buildCommands({ navigate, hasBtcAddress: true });
+        const ids = filterCommands(btc, 'multisig').map((c) => c.id);
+        expect(ids).toEqual(expect.arrayContaining(['nav-multisig-create', 'nav-multisig-sign']));
+        findById(btc, 'nav-multisig-create').run();
+        expect(navigate).toHaveBeenCalledWith('multisig-create');
+
+        const noBtc = buildCommands({ navigate() {} });
+        expect(findById(noBtc, 'nav-multisig-create')).toBeUndefined();
+    });
+
     // The betting views shipped with no palette entry at all, so the only route
     // to them was More -> More actions -> Betting: two clicks deep in a
     // catalogue, for a surface whose whole point is coming back to check a

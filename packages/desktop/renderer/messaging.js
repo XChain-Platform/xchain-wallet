@@ -1128,6 +1128,16 @@ export function createMultisigConfig(req) {
     return /** @type {any} */ (sendMessage('multisig.create', req));
 }
 
+/**
+ * §22.2 cosigner fields for one of the wallet's own addresses: master
+ * fingerprint, account xpub, derivation path and pubkey. Public data only.
+ *
+ * @param {{ walletId: string, addressId: string }} req
+ */
+export function getMultisigCosignerInfo(req) {
+    return /** @type {any} */ (sendMessage('multisig.cosignerInfo', req));
+}
+
 // §22 / P4 passive co-signer (agent account) management.
 /** @param {object} req */
 export function provisionCoSignerAccount(req) {

@@ -184,6 +184,7 @@ const {
     searchPlatformTokens,
     listOwnedTokens,
     createMultisigConfig,
+    getMultisigCosignerInfo,
     receiveMultisigAddress,
     listMultisigReceiveAddresses,
     startMultisigSigningSession,
@@ -4688,6 +4689,24 @@ export function createBackgroundHost(deps) {
     // a MultisigConfig onto the chosen Wallet record's `multisig` slot.
     host.register('multisig.create', async (req, { vault, sdkRegistry }) => {
         return createMultisigConfig({ ...req, vault, sdkRegistry });
+    });
+
+    // §22.2 cosigner fields (master fingerprint, account xpub, path, pubkey)
+    // for one of the wallet's own addresses. Reads the pooled signer of the
+    // unlocked session only, so this route never carries a password.
+    host.register('multisig.cosignerInfo', async (req, { vault, signerPool }) => {
+        const signer = signerPool && typeof signerPool.get === 'function'
+            ? signerPool.get(req?.walletId)
+            : null;
+        if (!signer) {
+            throw new Error('This wallet\'s keys are not unlocked in this session. Lock and unlock the wallet, then try again, or enter the fingerprint by hand.');
+        }
+        return getMultisigCosignerInfo({
+            vault,
+            walletId: req?.walletId,
+            addressId: req?.addressId,
+            signer,
+        });
     });
 
     host.register('multisig.receiveAddress', async (req, { vault, sdkRegistry }) => {
