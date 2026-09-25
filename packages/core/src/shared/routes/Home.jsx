@@ -17,6 +17,7 @@ import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
+import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
@@ -210,6 +211,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [balancesFetchedAt, setBalancesFetchedAt] = useState(
         /** @type {number | null} */ (null),
     );
+    // What every row consumer reads: the balances plus each shown address's
+    // open-offer escrow, so a token escrowed in full keeps its row.
+    const balancesView = useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging });
     const [pendingAirdrops, setPendingAirdrops] = useState(
         /** @type {any[]} */ ([]),
     );
@@ -373,9 +377,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const el = document.activeElement?.closest?.('[data-balance-key]');
         const key = el?.getAttribute('data-balance-key');
         if (!key || !balances) return null;
-        const rows = buildBalanceRows(balances, chainRegistry, activeByChain);
+        const rows = buildBalanceRows(balancesView, chainRegistry, activeByChain);
         return rows.find((r) => `${r.chainId}:${r.tick}` === key) || null;
-    }, [balances, activeByChain]);
+    }, [balancesView, activeByChain]);
 
     useScreenShortcuts({
         enabled: !settingsOpen,
@@ -426,7 +430,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     useEffect(() => {
         if (!balances || !activeWalletId) return;
         if (spamNudgedForWalletRef.current === activeWalletId) return;
-        const rows = buildBalanceRows(balances, chainRegistry, activeByChain);
+        const rows = buildBalanceRows(balancesView, chainRegistry, activeByChain);
         const candidates = detectSpamCandidates(rows);
         const hiddenSet = new Set(hiddenTokens);
         const fresh = candidates.filter((k) => !hiddenSet.has(k));
@@ -446,7 +450,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 });
             },
         });
-    }, [balances, activeByChain, activeWalletId, hiddenTokens, messaging, showToast]);
+    }, [balancesView, activeByChain, activeWalletId, hiddenTokens, messaging, showToast]);
 
     // Load the wallets list once. The user picks the active one via
     // HeaderSettingsButton → onSwitchWallet → setActiveWalletId →
@@ -1057,7 +1061,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {balances ? (
                     <HomeTabs
                         chainRegistry={chainRegistry}
-                        balances={balances}
+                        balances={balancesView}
                         activeByChain={activeByChain}
                         balancesFetchedAt={balancesFetchedAt}
                         walletId={activeWalletId}

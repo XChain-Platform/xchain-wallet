@@ -14,6 +14,7 @@ import { MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
+import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -313,6 +314,11 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                             ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
                             : formatAmount(row.quantity, row.divisibility)}
                 </div>
+                {row.escrowed ? (
+                    <div className={styles.fiat} data-testid="balance-escrowed">
+                        {balancesHidden ? '•••' : `+ ${row.escrowed} in escrow`}
+                    </div>
+                ) : null}
                 <div className={styles.fiat}>
                     {balancesHidden
                         ? '•••'
@@ -388,6 +394,9 @@ export function detectSpamCandidates(rows) {
     const flagged = [];
     for (const r of rows || []) {
         if (!r || r.kind === 'native') continue;
+        // A token held in the user's own open offers is theirs, however little
+        // is left free: that is the row escrow exists to keep on screen.
+        if (r.escrowed) continue;
         const q = safeBigInt(r.quantity);
         if (q === 0n) {
             flagged.push(`${r.chainId}:${r.tick}`);
@@ -430,6 +439,7 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
  */
 export function isSmallBalanceRow(row) {
     if (!row) return false;
+    if (row.escrowed) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
@@ -544,6 +554,8 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                     acc.quantity += safeBigInt(a.quantity);
                 }
             }
+
+            if (Array.isArray(b.escrow)) addEscrowRows(tokenAcc, b.escrow, { chainId, descriptor });
         }
 
         // Q-1 residual. Two distinct cases, and neither is a zero:
@@ -635,6 +647,27 @@ export function buildPlatformTokenRow(chainId, tick, meta, chainRegistry) {
         imageUrl: meta?.imageUrl || null,
     });
     return { ...row, quantity: row.quantity.toString() };
+}
+
+// Fold an address's open-offer escrow (`balances.escrow`, merged in by Home
+// from flows/escrowedTokens.js) into its token rows. The explorer's balance
+// read drops a zero FREE balance, so a token escrowed in full has no row yet
+// and gets one here at quantity 0; its divisibility is unknown until a balance
+// arrives, and only matters for that zero. `escrowed` stays a plain decimal
+// string because offer amounts come back human-scaled, not atomic.
+function addEscrowRows(tokenAcc, escrow, { chainId, descriptor }) {
+    for (const e of escrow) {
+        if (!e || typeof e.tick !== 'string' || !e.amount) continue;
+        let acc = tokenAcc.get(e.tick);
+        if (!acc) {
+            acc = mkRow({
+                kind: 'token', chainId, descriptor, tick: e.tick, displayName: e.tick,
+                divisibility: (String(e.amount).split('.')[1] || '').length, fiatRate: null,
+            });
+            tokenAcc.set(e.tick, acc);
+        }
+        acc.escrowed = addPlainDecimals(acc.escrowed || '0', e.amount);
+    }
 }
 
 function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fiatRate, imageUrl }) {

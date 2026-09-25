@@ -754,6 +754,11 @@ export function sweepPreview(req) {
     return /** @type {any} */ (sendMessage('sweep.preview', req));
 }
 
+/** @param {{ chainId: string, address: string }} req Home: per-tick escrow in this address's own open offers */
+export function getEscrowedTokens(req) {
+    return /** @type {any} */ (sendMessage('balances.escrowed', req));
+}
+
 /** @param {{ fromWalletId: string, toWalletId: string, chainId?: string }} req PC-34 migrate gate: re-scope stored gated keys to the target wallet (counts only) */
 export function copyGatedKeysToWallet(req) {
     return /** @type {any} */ (sendMessage('gatedKeys.copyToWallet', req));
