@@ -68,6 +68,7 @@ const {
     buildCoinpayPsbtRequest,
     sweepToken,
     sweepPreview,
+    escrowedTokens,
     issueToken,
     mintToken,
     destroyToken,
@@ -3986,6 +3987,12 @@ export function createBackgroundHost(deps) {
     // (balances / ownerships / open offers + escrow / gated ticks).
     host.register('sweep.preview', async (req, { sdkRegistry }) => {
         return sweepPreview({ sdkRegistry, chainId: req.chainId, address: req.address });
+    });
+
+    // Home: tokens this address holds in its own open offers, which the
+    // explorer's free-balance read leaves out (a fully escrowed token vanished).
+    host.register('balances.escrowed', async (req, { sdkRegistry }) => {
+        return escrowedTokens({ sdkRegistry, chainId: req.chainId, address: req.address });
     });
 
     host.register('action.issue', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {

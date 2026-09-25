@@ -170,12 +170,16 @@ run_tier "drift: wallet<->hub chain-registry snapshot" \
   node bin/sync-chain-registry.mjs --check
 
 # --- job: build ------------------------------------------------------------
-# The three gates after the build can only be checked against a real dist/, so
+# The four gates after the build can only be checked against a real dist/, so
 # they live here and not in the test job. The heap bump is not optional: `-r`
 # builds the web SPA as one large synchronous graph and a stock old-space
-# aborts partway, which took these three gates down with it.
+# aborts partway, which took these four gates down with it.
 run_tier "build: all packages" \
   env NODE_OPTIONS=--max-old-space-size=6144 pnpm -r --if-present build
+run_tier "build: desktop renderer boots and reaches wired Settings" \
+  env XCHAIN_REQUIRE_DESKTOP_RENDER=1 \
+  xvfb-run --auto-servernum \
+  node test/smoke/shells/desktop-renders.smoke.js
 run_tier "build: no dev-mock SDK in the shipped bundles" \
   bash tools/build-reproduce/check-no-dev-mock.sh
 run_tier "build: no bundled @trezor code in the shipped bundles" \

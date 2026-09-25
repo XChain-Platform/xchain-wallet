@@ -814,28 +814,64 @@ export async function warmFeeQuote({ action, params, source, feeOutputSats }, ti
     if (feeOutputSats !== undefined) q.set('feeOutputSats', String(feeOutputSats));
     const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/feequote?${q.toString()}`;
 
+    return readQuote(url, { action, timeoutMs });
+}
+
+/**
+ * Sorts one fee-quote body into what the caller should do next.
+ *
+ * verdict: the chain answered. A string `status` is the venue's own word and
+ *   `valid: true` is a priced quote. A refusal always carries a named status,
+ *   so it lands here too and is returned, never retried.
+ * retry: a transient the venue clears on its own (the explorer's indexer-hop
+ *   `UPSTREAM_ERROR`, or a 5xx with no body worth reading).
+ * unreadable: anything else, notably an error body with a `code` and no
+ *   `status`. It is not a verdict and must never be read as a refusal.
+ *
+ * @param {any} body
+ * @param {number} httpStatus
+ * @returns {'verdict'|'retry'|'unreadable'}
+ */
+export function classifyQuote(body, httpStatus = 200) {
+    if (body && typeof body === 'object') {
+        if (body.valid === true || typeof body.status === 'string') return 'verdict';
+        if (body.code === 'UPSTREAM_ERROR') return 'retry';
+    }
+    if (httpStatus >= 500) return 'retry';
+    return 'unreadable';
+}
+
+const UNREADABLE_RE_ASKS = 3;
+
+/**
+ * Asks `url` until the quote classifies as a verdict. Transients are re-asked
+ * until the deadline; an unreadable body is re-asked a few times and then
+ * returned so the caller can see exactly what came back.
+ *
+ * @param {string} url
+ * @param {{ action: string, timeoutMs: number, fetchImpl?: typeof fetch, pauseMs?: number }} opts
+ */
+export async function readQuote(url, { action, timeoutMs, fetchImpl = fetch, pauseMs = 1_000 }) {
     const deadline = Date.now() + timeoutMs;
     let last = null;
+    let unreadable = 0;
     while (Date.now() < deadline) {
+        let kind = 'retry';
         try {
-            const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-            last = await res.json();
-            // `valid` is the only success signal that matters: a 200 carrying
-            // `valid: false` means the venue really cannot price this action
-            // (a stale oracle), which is a different problem and must NOT be
-            // retried into a timeout - so return it and let the spec assert.
-            if (last && last.valid === true) return last;
-            if (last && last.code !== 'UPSTREAM_ERROR') return last;
+            const res = await fetchImpl(url, { signal: AbortSignal.timeout(30_000) });
+            last = await res.json().catch(() => null);
+            kind = classifyQuote(last, res.status);
         } catch {
             // Transport-level blip; same treatment as an UPSTREAM_ERROR.
         }
-        await new Promise((r) => setTimeout(r, 1_000));
+        if (kind === 'verdict') return last;
+        if (kind === 'unreadable' && ++unreadable >= UNREADABLE_RE_ASKS) return last;
+        await new Promise((r) => setTimeout(r, pauseMs));
     }
     throw new Error(
-        `fee quote for ${action} never came back valid within ${timeoutMs}ms. Every attempt was `
-        + `UPSTREAM_ERROR (the explorer's 5s indexer-hop timeout,) rather than an`
-        + `invalid quote, so this is venue state and not a wallet defect - last: `
-        + `${JSON.stringify(last)}`,
+        `fee quote for ${action} never came back within ${timeoutMs}ms. Every attempt was a `
+        + 'transient (the explorer 5s indexer-hop timeout or a transport error), so this is '
+        + `venue state and not a wallet defect - last: ${JSON.stringify(last)}`,
     );
 }
 

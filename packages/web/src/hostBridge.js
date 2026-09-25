@@ -1079,6 +1079,7 @@ export async function importMnemonicLocal(req) {
         name = 'Imported Wallet',
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+        origin,
     } = req;
 
     const meta = createMetaBackend();
@@ -1115,6 +1116,7 @@ export async function importMnemonicLocal(req) {
             activeChainIds,
             name,
             bip39Passphrase,
+            origin,
             kdfParams,
         });
         await v.save();

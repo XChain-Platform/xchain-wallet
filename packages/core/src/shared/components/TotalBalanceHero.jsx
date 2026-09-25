@@ -130,10 +130,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const showMeta = hasChange || hasUnpriced || hasSync;
 
     return (
-        <section className={styles.hero} aria-label="Total balance">
+        // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
+        // "Total balance" read as the whole wallet while the wallet's other
+        // addresses went uncounted (xchain-wallet#57). The label says what the
+        // figure is.
+        <section className={styles.hero} aria-label="Active address balance">
             <div className={styles.row}>
                 <span className={styles.label}>
-                    Total balance
+                    Active address balance
                     {filterLabel ? (
                         <span className={styles.scope}>· {filterLabel}</span>
                     ) : null}

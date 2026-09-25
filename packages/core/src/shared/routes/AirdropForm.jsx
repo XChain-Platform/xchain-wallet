@@ -51,6 +51,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -758,8 +759,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             setFormError('Token is required.');
             return;
         }
-        if (!/^[A-Za-z0-9.^]+$/.test(token.trim())) {
-            setFormError('Token ticker accepts A–Z, 0–9, period, or ^TICK_ID.');
+        const tokenError = tickerReferenceError(token, { noun: 'Token ticker', allowRef: true });
+        if (tokenError) {
+            setFormError(tokenError);
             return;
         }
         const amt = String(amountPer).trim();

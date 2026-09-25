@@ -49,6 +49,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { extractHolderRows } from '../utils/holderRows.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -362,16 +363,18 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError('Holder-of token is required.');
             return;
         }
-        if (!/^[A-Za-z0-9.^]+$/.test(tick.trim())) {
-            setFormError('Holder-of ticker accepts A–Z, 0–9, period, or ^TICK_ID.');
+        const tickError = tickerReferenceError(tick, { noun: 'Holder-of ticker', allowRef: true });
+        if (tickError) {
+            setFormError(tickError);
             return;
         }
         if (!dividendTick.trim()) {
             setFormError('Dividend ticker is required.');
             return;
         }
-        if (!/^[A-Za-z0-9.^]+$/.test(dividendTick.trim())) {
-            setFormError('Dividend ticker accepts A–Z, 0–9, period, or ^TICK_ID.');
+        const dividendTickError = tickerReferenceError(dividendTick, { noun: 'Dividend ticker', allowRef: true });
+        if (dividendTickError) {
+            setFormError(dividendTickError);
             return;
         }
         const amt = String(amount).trim();
