@@ -38,7 +38,8 @@ assert.match(src, /Array\.isArray\(parsed\)/, 'rejects non-arrays');
 
 // Counts + status + error rendering
 assert.match(src, /contact\$\{count === 1 \? '' : 's'\}/, 'pluralises contact count');
-assert.match(src, /Imported \$\{imported\}/, 'reports imported count');
+assert.match(src, /setImportResult\(\{ imported, failures \}\)/, 'stores the imported count');
+assert.match(src, /Imported \$\{importResult\.imported\}/, 'reports imported count');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

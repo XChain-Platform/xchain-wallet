@@ -26,7 +26,11 @@ const webMsgPath = join(wsRoot, 'packages', 'web', 'src', 'messaging.js');
 const src = readFileSync(sectionPath, 'utf8');
 
 // useMessaging + exportBackupFile call
-assert.match(src, /import \{ useMessaging \}/, 'imports useMessaging');
+assert.match(
+    src,
+    /import \{[^}]*\buseMessaging\b[^}]*\} from '\.\.\/\.\.\/useMessaging\.js';/,
+    'imports useMessaging',
+);
 assert.match(
     src,
     /messaging\.exportBackupFile\(\{[\s\S]+?walletId:\s*activeWallet\.id/,

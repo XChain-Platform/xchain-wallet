@@ -91,10 +91,14 @@ const helper = popupApp.slice(
 assert.ok(helper.length > 0, 'openSettingsSection is defined before the palette commands');
 assert.ok(
     /sectionId === 'connected-sites'/.test(helper)
-    && /setUnlockedView\('connected-sites'\)/.test(helper),
+    && /palette\.navigate\('connected-sites'\)/.test(helper),
     "openSettingsSection routes 'connected-sites' to the top-level view, not into Settings",
 );
-const cutoff = helper.indexOf("setUnlockedView('settings')");
+assert.ok(
+    /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*setUnlockedView/.test(popupApp),
+    'popup palette navigation forwards connected-sites to setUnlockedView',
+);
+const cutoff = helper.indexOf("palette.navigate('settings')");
 assert.ok(
     cutoff > helper.indexOf("sectionId === 'connected-sites'"),
     'the connected-sites branch returns BEFORE the generic Settings deep-link',
@@ -107,7 +111,7 @@ assert.ok(
     'popup imports and uses sitesToCommands',
 );
 assert.ok(
-    /sitesToCommands\(paletteSites, \{ openConnectedSites: \(\) => setUnlockedView\('connected-sites'\) \}\)/.test(popupApp),
+    /sitesToCommands\(paletteSites, \{ openConnectedSites: \(\) => palette\.navigate\('connected-sites'\) \}\)/.test(popupApp),
     'popup wires site commands to the standalone route',
 );
 assert.ok(
