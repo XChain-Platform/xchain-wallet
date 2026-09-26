@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: flows/contractUtilities. Pure wrappers over sdk.contracts.* used
+// Unit: flows/contractUtilities. Pure wrappers over the SDK contract tools used
 // by the DEPLOY authoring tools (validate / code-size / suggest-gas).
 // They resolve the chain-scoped SDK from the registry, forward the code,
 // and guard required args.
@@ -24,6 +24,23 @@ function mkRegistry(contracts) {
 }
 
 describe('flows/contractUtilities contractValidate', () => {
+    it('preserves rich lint findings from the SDK validation surface', async () => {
+        const result = {
+            valid: true,
+            errors: [],
+            warnings: [{ rule: 'float-literal', message: 'decimal literal', line: 3, severity: 'warning' }],
+            authoritative: false,
+        };
+        const validateContract = vi.fn(() => result);
+        const contracts = { validate: vi.fn() };
+        const reg = { get: vi.fn(() => ({ validateContract, contracts })) };
+
+        await expect(contractValidate({ sdkRegistry: reg, chainId: 'bitcoin-regtest', code: 'return 0.5;' }))
+            .resolves.toBe(result);
+        expect(validateContract).toHaveBeenCalledWith('return 0.5;');
+        expect(contracts.validate).not.toHaveBeenCalled();
+    });
+
     it('resolves the chain SDK and forwards the code to validate', async () => {
         const contracts = { validate: vi.fn(async () => ({ valid: true, warnings: [] })) };
         const reg = mkRegistry(contracts);

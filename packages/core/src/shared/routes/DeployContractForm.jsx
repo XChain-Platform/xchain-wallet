@@ -59,6 +59,46 @@ function coinLabel(c) {
     return String(c).charAt(0).toUpperCase() + String(c).slice(1);
 }
 
+function positiveInteger(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function nonNegativeInteger(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 0 ? number : null;
+}
+
+function diagnosticLocation(value, message) {
+    const object = value && typeof value === 'object' ? value : {};
+    const location = object.location?.start || object.loc?.start || object.location || object.loc || {};
+    let line = positiveInteger(object.line ?? location.line);
+    let column = nonNegativeInteger(object.column ?? object.col ?? location.column);
+    if (!line) {
+        const words = message.match(/\bline\s+(\d+)(?:\D+column\s+(\d+))?/i);
+        const parser = message.match(/\((\d+):(\d+)\)/);
+        line = positiveInteger(words?.[1] ?? parser?.[1]);
+        column = column ?? nonNegativeInteger(words?.[2] ?? parser?.[2]);
+    }
+    return { line, column };
+}
+
+function normalizeValidationDiagnostics(value) {
+    const entries = Array.isArray(value) ? value : (value == null ? [] : [value]);
+    return entries.map((entry) => {
+        const object = entry && typeof entry === 'object' ? entry : {};
+        const message = humanizeDeployDiagnostic(entry).message;
+        const { line, column } = diagnosticLocation(entry, message);
+        const identifier = object.ruleId || object.rule || object.code || null;
+        const identifierLabel = object.ruleId || object.rule ? 'Rule' : (object.code ? 'Code' : null);
+        return { message, line, column, identifier, identifierLabel };
+    }).filter((entry) => entry.message);
+}
+
+function countLabel(count, noun) {
+    return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
 /**
  * DEPLOY authoring form: §42.6.
  *
@@ -70,7 +110,7 @@ function coinLabel(c) {
  *   Gas limit:          [ input, auto-suggested ]
  *   Constructor params: [ pipe-delimited ]
  *
- *   [Validate code]   sdk.contracts.validate
+ *   [Validate code]   sdk.validateContract (legacy: sdk.contracts.validate)
  *   [Estimate size]   sdk.contracts.checkCodeSize
  *   [Suggest gas]     sdk.contracts.suggestGasLimit
  *
@@ -145,8 +185,9 @@ export function DeployContractForm({ walletId, onBack }) {
     const [password, setPassword] = useState('');
 
     const [validation, setValidation] = useState(
-        /** @type {{ ok: boolean, msg: string, warnings?: string[] } | null} */ (null),
+        /** @type {{ ok: boolean, msg: string, warnings: object[], errors: object[] } | null} */ (null),
     );
+    const codeRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
     const [sizeInfo, setSizeInfo] = useState(
         /** @type {{ bytes: number, withinLimit: boolean } | null} */ (null),
     );
@@ -402,14 +443,80 @@ export function DeployContractForm({ walletId, onBack }) {
         setFormError(null);
         try {
             const res = await messaging.validateContractCode({ chainId, code });
+            const warnings = normalizeValidationDiagnostics(res?.warnings);
             if (res?.valid) {
-                setValidation({ ok: true, msg: 'Syntax OK.', warnings: res.warnings });
+                setValidation({ ok: true, msg: 'Syntax OK.', warnings, errors: [] });
             } else {
-                setValidation({ ok: false, msg: humanizeDeployDiagnostic(res?.error).message || 'Validation failed.' });
+                const rawErrors = Array.isArray(res?.errors) && res.errors.length > 0
+                    ? res.errors
+                    : res?.error;
+                setValidation({
+                    ok: false,
+                    msg: 'Validation failed.',
+                    warnings,
+                    errors: normalizeValidationDiagnostics(rawErrors),
+                });
             }
         } catch (e) {
-            setValidation({ ok: false, msg: humanizeDeployDiagnostic(e).message || 'Validation failed.' });
+            setValidation({
+                ok: false,
+                msg: 'Validation failed.',
+                warnings: [],
+                errors: normalizeValidationDiagnostics(e),
+            });
         }
+    }
+
+    function moveToCodeLine(line) {
+        const textarea = codeRef.current;
+        if (!textarea || !line) return;
+        let offset = 0;
+        for (let current = 1; current < line; current += 1) {
+            const newline = code.indexOf('\n', offset);
+            if (newline < 0) break;
+            offset = newline + 1;
+        }
+        textarea.focus();
+        textarea.setSelectionRange(offset, offset);
+    }
+
+    function renderDiagnostics(entries, kind) {
+        if (entries.length === 0) return null;
+        return (
+            <ul
+                className={kind === 'error' ? styles.validationErrors : styles.validationWarnings}
+                aria-label={`Validation ${kind}s`}
+            >
+                {entries.map((entry, index) => {
+                    const meta = [
+                        entry.line ? `Line ${entry.line}` : null,
+                        entry.column !== null ? `Column ${entry.column}` : null,
+                        entry.identifier ? `${entry.identifierLabel} ${entry.identifier}` : null,
+                    ].filter(Boolean).join(', ');
+                    const content = (
+                        <>
+                            <span className={styles.validationMessage}>{entry.message}</span>
+                            {meta ? <span className={styles.validationMeta}>{meta}</span> : null}
+                        </>
+                    );
+                    return (
+                        <li key={`${entry.message}-${index}`} className={styles.validationItem}>
+                            {entry.line ? (
+                                <button
+                                    type="button"
+                                    className={styles.validationLink}
+                                    onClick={() => moveToCodeLine(entry.line)}
+                                >
+                                    {content}
+                                </button>
+                            ) : (
+                                <div className={styles.validationText}>{content}</div>
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
+        );
     }
 
     async function handleCheckSize() {
@@ -1098,6 +1205,7 @@ export function DeployContractForm({ walletId, onBack }) {
             <label className={styles.pickerLabel}>
                 Code source
                 <textarea
+                    ref={codeRef}
                     value={code}
                     onChange={(e) => {
                         setCode(e.target.value);
@@ -1152,15 +1260,21 @@ export function DeployContractForm({ walletId, onBack }) {
                 stall). Per-leg progress is recorded in the pendingDeploy
                 record, which is what the resume banner reads. */}
             {validation ? (
-                <p
-                    role={validation.ok ? undefined : 'alert'}
-                    className={validation.ok ? styles.summary : styles.error}
-                >
-                    {validation.msg}
-                    {validation.warnings && validation.warnings.length > 0 ? (
-                        <> ({validation.warnings.length} warning(s))</>
-                    ) : null}
-                </p>
+                <div role={validation.ok ? undefined : 'alert'}>
+                    <p className={validation.ok ? styles.summary : styles.error}>
+                        {validation.msg}
+                        {validation.errors.length > 0 || validation.warnings.length > 0 ? (
+                            <> ({[
+                                validation.errors.length > 0
+                                    ? countLabel(validation.errors.length, 'error') : null,
+                                validation.warnings.length > 0
+                                    ? countLabel(validation.warnings.length, 'warning') : null,
+                            ].filter(Boolean).join(', ')})</>
+                        ) : null}
+                    </p>
+                    {renderDiagnostics(validation.errors, 'error')}
+                    {renderDiagnostics(validation.warnings, 'warning')}
+                </div>
             ) : null}
             {sizeInfo ? (
                 <p
