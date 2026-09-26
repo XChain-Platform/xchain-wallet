@@ -29,6 +29,10 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 const formPath = join(sharedRoutes, 'OperatorDashboard.jsx');
 assert.ok(existsSync(formPath), 'OperatorDashboard.jsx exists');
 const src = readFileSync(formPath, 'utf8');
+const publisherPath = join(core, 'src', 'shared', 'components', 'OperatorPublisherMode.jsx');
+assert.ok(existsSync(publisherPath), 'OperatorPublisherMode.jsx exists');
+const publisherSrc = readFileSync(publisherPath, 'utf8');
+const surfaceSrc = `${src}\n${publisherSrc}`;
 
 assert.ok(/export function OperatorDashboard\b/.test(src),
     'OperatorDashboard is a named export');
@@ -45,7 +49,7 @@ for (const call of [
     assert.ok(src.includes(call), `OperatorDashboard calls ${call}`);
 }
 
-// Five expected sections rendered.
+// Six expected sections rendered.
 for (const heading of [
     'Staking status',
     'Delegation chain',
@@ -54,20 +58,28 @@ for (const heading of [
     'Publishing activity',
     'Publisher mode',
 ]) {
-    assert.ok(src.includes(heading), `OperatorDashboard renders "${heading}" section`);
+    assert.ok(surfaceSrc.includes(heading), `OperatorDashboard renders "${heading}" section`);
 }
 
 // Publisher mode v3 BROADCAST quick-compose: pre-fills feed, rapid value entry.
-assert.ok(/VERSION:\s*['"]3['"]/.test(src),
+assert.ok(/VERSION:\s*['"]3['"]/.test(publisherSrc),
     'PublisherMode submits VERSION=3 (feed-result BROADCAST)');
-assert.ok(/BROADCAST_ACTION_INDEX/.test(src),
+assert.ok(/BROADCAST_ACTION_INDEX/.test(publisherSrc),
     'PublisherMode references BROADCAST_ACTION_INDEX (v3 feed pointer)');
-assert.ok(/messaging\.broadcastAction\b/.test(src),
-    'PublisherMode calls messaging.broadcastAction');
-assert.ok(/messaging\.broadcastActionHw\b/.test(src),
-    'PublisherMode branches HW vs software signing');
-assert.ok(/setValue\(''\)/.test(src),
+assert.ok(/useOwnerActionLane/.test(publisherSrc),
+    'PublisherMode uses the shared owner-action lane');
+assert.ok(/software:\s*['"]broadcastAction['"]/.test(publisherSrc),
+    'PublisherMode selects the software broadcast method through the owner-action lane');
+assert.ok(/hardware:\s*['"]broadcastActionHw['"]/.test(publisherSrc),
+    'PublisherMode selects the hardware broadcast method through the owner-action lane');
+assert.ok(/ActionConfirmScreen/.test(publisherSrc),
+    'PublisherMode renders the shared confirm screen');
+assert.ok(/WatcherResultPanel/.test(publisherSrc),
+    'PublisherMode renders an unsigned watcher result');
+assert.ok(/setValue\(''\)/.test(publisherSrc),
     'PublisherMode clears the value input on success for rapid successive entry');
+assert.ok(/action_format/.test(src) && !/\.version\b|\.VERSION\b/.test(src),
+    'OperatorDashboard reads the BROADCAST action_format field');
 
 // Auto-find self in validator roster by signing pubkey.
 assert.ok(/signing_pubkey|SIGNING_PUBKEY/.test(src),
