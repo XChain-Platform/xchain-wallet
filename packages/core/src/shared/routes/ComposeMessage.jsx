@@ -495,7 +495,20 @@ export function ComposeMessage({
     function handleReview(event) {
         event.preventDefault();
         if (stage !== 'form') return;
-        if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
+        // Require a source on the selected delivery network.
+        if (!fromAddress || !chainId) {
+            setSubmitError('No signing address is available on this delivery network.');
+            return;
+        }
+        // Require the two fields that define the message.
+        if (!toAddress.trim()) {
+            setSubmitError('Enter a recipient address.');
+            return;
+        }
+        if (!message.trim()) {
+            setSubmitError('Write a message to send.');
+            return;
+        }
         if (addressInvalid) return;
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
@@ -961,14 +974,9 @@ export function ComposeMessage({
                     block
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress
-                        || !toAddress.trim()
-                        || addressInvalid
-                        || !message.trim()
-                        || actionConfirm.composing
-                        || (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking'))}
+                    disabled={actionConfirm.composing}
                 >
-                    Send message
+                    {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
                 </Button>
             </div>
         </form>,

@@ -222,6 +222,10 @@ export function BackupSection({ activeWallet }) {
     }
 
     async function runPublish({ chainId, password }) {
+        // Require a chain with a source address for the FILE action.
+        if (!chainId) { setPublishError('Choose a chain with an address to publish labels.'); return; }
+        // Require the wallet credential before preparing encrypted labels.
+        if (!password) { setPublishError('Enter your wallet password to publish labels.'); return; }
         if (typeof messaging?.prepareLabelsRequest !== 'function') {
             setPublishError('Label preparation is not wired in this shell yet.');
             return;
@@ -391,6 +395,7 @@ export function BackupSection({ activeWallet }) {
                     onPasswordChange={(value) => {
                         setPublishPassword(value);
                         publishPasswordRef.current = value;
+                        if (publishError) setPublishError(null);
                     }}
                     onCancel={resetPublish}
                     onSubmit={runPublish}
@@ -927,7 +932,8 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    const canSubmit = !!chainId && password.length > 0 && !busy;
+    const loadingChains = chains === null;
+    const canSubmit = !busy && !loadingChains;
 
     return (
         <div style={{
@@ -988,7 +994,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                         color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
                     }}
                 >
-                    {busy ? 'Publishing…' : 'Publish'}
+                    {busy ? 'Publishing…' : loadingChains ? 'Loading chains…' : 'Publish'}
                 </button>
             </div>
         </div>

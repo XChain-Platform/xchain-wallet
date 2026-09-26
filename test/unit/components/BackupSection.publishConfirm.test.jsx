@@ -84,6 +84,20 @@ function mount(overrides = {}) {
 }
 
 describe('BackupSection label publication confirmation', () => {
+    it('asks for the wallet password when Publish is pressed', async () => {
+        const messaging = mount();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        await screen.findByLabelText('Publish chain');
+        const action = screen.getByRole('button', { name: 'Publish' });
+
+        expect(action).toBeEnabled();
+        fireEvent.click(action);
+
+        expect(await screen.findByText('Enter your wallet password to publish labels.')).toBeTruthy();
+        expect(messaging.prepareLabelsRequest).not.toHaveBeenCalled();
+    });
+
     it('confirms and dry-runs the prepared FILE envelope before publication', async () => {
         const messaging = mount();
 

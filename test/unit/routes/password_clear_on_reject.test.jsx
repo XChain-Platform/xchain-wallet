@@ -98,3 +98,30 @@ describe('confirmation password cleanup', () => {
         await rejectConfirmation();
     });
 });
+
+describe('primary action validation', () => {
+    it('asks for a file when gated publish Review is pressed', async () => {
+        mount(GatedPublishForm, {
+            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'GATE', onBack() {},
+        });
+        const action = await screen.findByRole('button', { name: 'Review' });
+
+        expect(action).toBeEnabled();
+        fireEvent.click(action);
+
+        expect(await screen.findByText('Pick a file first.')).toBeTruthy();
+    });
+
+    it('asks for a token when roster Review is pressed', async () => {
+        mount(ProjectRosterForm, {
+            walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', onBack() {},
+        });
+        await screen.findByLabelText('Tokens (one per line)');
+        const action = screen.getByRole('button', { name: 'Review list' });
+
+        expect(action).toBeEnabled();
+        fireEvent.click(action);
+
+        expect(await screen.findByText('Add at least one token to the list.')).toBeTruthy();
+    });
+});

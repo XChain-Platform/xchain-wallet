@@ -625,7 +625,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
 
             <div className={styles.actions}>
-                <Button type="submit" variant="primary" disabled={ownerMissing || !fileMeta}>
+                <Button type="submit" variant="primary">
                     Review
                 </Button>
             </div>

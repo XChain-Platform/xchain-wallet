@@ -766,7 +766,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fromAddress || memberTicks.length === 0}
                 >
                     Review list
                 </Button>
