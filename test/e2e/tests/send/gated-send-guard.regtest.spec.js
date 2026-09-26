@@ -339,6 +339,18 @@ test.describe('the PC-26 gated SEND guard', () => {
 
             await holder.getByRole('button', { name: 'Sign action' }).click();
             await expectConfirmModal(holder, 'the bypassed raw SEND');
+
+            // The confirm preflight dry-runs the action against the network and
+            // shows the indexer's own refusal before signing, holding Approve
+            // behind a per-finding "Sign anyway". That refusal is the network's
+            // string, not a wallet-invented one; ticking the override is what
+            // carries the send on to the chain for the verdict asserted below.
+            const confirm = holder.getByTestId('confirm-modal');
+            const refusal = confirm.getByRole('listitem')
+                .filter({ hasText: /gated token transfer requires key handoff message/ });
+            await expect(refusal, 'the preflight did not surface the network\'s gated-send refusal')
+                .toBeVisible({ timeout: 60_000 });
+            await refusal.getByRole('checkbox', { name: 'Sign anyway' }).check();
             await approveConfirm(holder);
             const txid = await readBroadcastTxid(holder);
 
