@@ -31,6 +31,7 @@ import { psbtRefusalReason } from '@xchain-wallet/core/shared/components/PsbtCon
 import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
+import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import {
     listWallets,
     resolveApproval,
@@ -482,7 +483,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // attached one). Only renders when an origin is present; in
     // practice every dApp request carries one, but user-initiated
     // sign flows that re-use this screen wouldn't.
-    const appName = payload?.appName || payload?.payload?.appName || '';
+    const appName = neutralizeControlText(
+        payload?.appName || payload?.payload?.appName || '',
+        { maxLength: 80 },
+    );
 
     // For a PSBT sign, block approval whenever the independent decode failed
     // (or produced nothing). The summary already warns visually, but that is
@@ -620,9 +624,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
             {origin ? (
                 <section className={styles.source} aria-label="Source">
-                    <p className={styles.sourceLabel}>Source</p>
+                    <p className={styles.sourceLabel}>Verified site</p>
                     <p className={styles.sourceOrigin}>{origin}</p>
-                    {appName ? <p className={styles.sourceApp}>{appName}</p> : null}
+                    {appName ? (
+                        <p className={styles.sourceApp}>The site calls itself: {appName}</p>
+                    ) : null}
                 </section>
             ) : null}
 
@@ -793,7 +799,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             return (
                 <div className={shared.summary}>
                     <p className={shared.summaryLabel}>Message</p>
-                    <pre className={shared.summaryValue}>{String(inner.message ?? '')}</pre>
+                    <HardenedSignedText value={inner.message} warningNoun="message" />
                     {inner.address ? (
                         <>
                             <p className={shared.summaryLabel} style={{ marginTop: 8 }}>Signer</p>
@@ -882,14 +888,32 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             return (
                 <div className={shared.summary}>
                     <p className={shared.summaryLabel}>Sign in to</p>
-                    <pre className={shared.summaryValue}>{String(inner.appId || payload?.origin || '')}</pre>
+                    <HardenedSignedText
+                        value={inner.appId || payload?.origin || ''}
+                        warningNoun="sign-in"
+                    />
                     <p className={shared.summaryLabel} style={{ marginTop: 8 }}>One-time code</p>
-                    <pre className={shared.summaryValue}>{String(inner.nonce || '')}</pre>
+                    <HardenedSignedText value={inner.nonce} warningNoun="sign-in" />
                 </div>
             );
         default:
             return null;
     }
+}
+
+function HardenedSignedText({ value, warningNoun }) {
+    const original = String(value ?? '');
+    const display = neutralizeControlText(original);
+    return (
+        <>
+            <pre className={shared.summaryValue}>{display}</pre>
+            {display !== original ? (
+                <p className={styles.textWarning}>
+                    Control characters are displayed safely. The original {warningNoun} text is what you will sign.
+                </p>
+            ) : null}
+        </>
+    );
 }
 
 /**

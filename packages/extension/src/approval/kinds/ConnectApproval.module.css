@@ -1,3 +1,40 @@
+.identity {
+    margin: 0 0 var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised);
+}
+
+.identityLabel,
+.declaredNameLabel {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.identityOrigin {
+    margin: var(--xc-space-1) 0 0;
+    color: var(--xc-text);
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
+}
+
+.declaredNameLabel {
+    margin-top: var(--xc-space-2);
+}
+
+.declaredName {
+    margin: var(--xc-space-1) 0 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    overflow-wrap: anywhere;
+}
+
 .lede {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);

@@ -1394,7 +1394,7 @@ function LinksAndFiles({ assetInfo }) {
                             title={s.url}
                         >
                             <SocialIcon platform={s.platform} />
-                            {socialLabel(s.platform)}
+                            {socialLabel(s.platform)} · {s.host}
                         </a>
                     ))}
                 </div>

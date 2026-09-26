@@ -266,3 +266,44 @@ describe('SignApproval signPsbt intent', () => {
         });
     });
 });
+
+describe('SignApproval untrusted text', () => {
+    it('neutralizes controls in a message while warning that the original is signed', async () => {
+        render(
+            <SignApproval
+                id="message-controls"
+                kind="signMessage"
+                payload={{
+                    origin: 'https://dapp.test',
+                    payload: { message: 'Pay alice\u202Etxt\u200B\u2028today' },
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        expect(await screen.findByText('Pay alice␦txt today')).toBeTruthy();
+        expect(screen.queryByText('Pay alice\u202Etxt\u200B\u2028today')).toBeNull();
+        expect(screen.getByText(/original message text/i)).toBeTruthy();
+    });
+
+    it('neutralizes controls in sign-in identifiers', async () => {
+        render(
+            <SignApproval
+                id="signin-controls"
+                kind="signIn"
+                payload={{
+                    origin: 'https://dapp.test',
+                    payload: {
+                        appId: 'trusted.example\u202Emoc.live',
+                        nonce: 'one\u200Btime\u2028code',
+                    },
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        expect(await screen.findByText('trusted.example␦moc.live')).toBeTruthy();
+        expect(screen.getByText('onetime code')).toBeTruthy();
+        expect(screen.getAllByText(/original sign-in text/i)).toHaveLength(2);
+    });
+});

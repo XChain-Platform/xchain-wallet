@@ -125,9 +125,9 @@ assert.match(
 //
 // The voice guide (packages/web/src/style-guide/sections/VoiceSection.jsx)
 // lists "nonce" among the jargon to name only when the user asks about it,
-// and this dialog opens on every dApp sign-in. The VALUE stays raw in its
-// <pre> so the user can compare it byte-for-byte with the site; only the
-// label is translated.
+// and this dialog opens on every dApp sign-in. The value uses the shared
+// signing-display hardening so invisible and directional controls cannot
+// misrepresent the original bytes that remain in the signing payload.
 assert.match(
     signSrc,
     /summaryLabel[^>]*>One-time code</,
@@ -140,8 +140,8 @@ assert.doesNotMatch(
 );
 assert.match(
     signSrc,
-    /<pre className=\{shared\.summaryValue\}>\{String\(inner\.nonce \|\| ''\)\}<\/pre>/,
-    'the challenge value is still rendered raw for byte-for-byte comparison',
+    /<HardenedSignedText value=\{inner\.nonce\} warningNoun="sign-in" \/>/,
+    'the challenge value renders through signed-text hardening',
 );
 
 // --- 2. dApp Source block (SignApproval) --------------------------------

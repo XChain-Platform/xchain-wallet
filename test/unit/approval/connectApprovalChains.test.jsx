@@ -56,6 +56,26 @@ afterEach(() => {
 });
 
 describe('ConnectApproval chain checklist', () => {
+    it('shows the verified origin before a safely labeled dApp name', () => {
+        const { container } = render(
+            <ConnectApproval
+                id="identity"
+                payload={{
+                    origin: 'https://dapp.test',
+                    appName: 'XChain Wallet\u202Esecurity',
+                    requestedChains: [bundled.id],
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        const text = container.textContent;
+        expect(text.indexOf('https://dapp.test')).toBeLessThan(text.indexOf('The site calls itself'));
+        expect(screen.getByText('XChain Wallet␦security')).toBeTruthy();
+        expect(screen.queryByText('XChain Wallet\u202Esecurity')).toBeNull();
+        expect(screen.getByText('The site calls itself')).toBeTruthy();
+    });
+
     it('offers and pre-selects a user-added chain that arrives with the settings read', async () => {
         const added = custom('operator-connect', 'Operator Connect');
         shim.getSettings = async () => ({ customChains: [added] });
