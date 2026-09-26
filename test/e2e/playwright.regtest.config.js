@@ -99,6 +99,10 @@ export default defineConfig({
                         // in out-of-process iframes/site-isolated renderers, so
                         // --disable-web-security alone is not enough.
                         '--disable-features=IsolateOrigins,site-per-process',
+                        // Keep the run off the production hub. At boot the wallet
+                        // swaps its bundled descriptors for the hub's signed registry,
+                        // and a snapshot older than the tree names the wrong regtest encoder port.
+                        '--host-resolver-rules=MAP hub.xchain.io ~NOTFOUND',
                     ],
                 },
             },
