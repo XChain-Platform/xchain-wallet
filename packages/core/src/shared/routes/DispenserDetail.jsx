@@ -1006,20 +1006,22 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         setBuyStage('submitting');
         setBuyError(null);
         try {
-            const res = await buyConfirm.run({
-                chainId,
-                from: buyRequest.from,
-                compose: () => messaging.composeForConfirm(buyRequest),
-                onApprove: async (prebuiltPsbt) => {
-                    // Recheck at approval because list edits can land while Confirm is open.
-                    if (await refreshBuyerEligibility()) {
-                        throw new Error(
-                            'The selected paying address or dispenser address is refused by a current access list.',
-                        );
-                    }
-                    return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
-                },
-            });
+            const res = ownerLane.isWatcherMode
+                ? await messaging.buildSendPsbtRequest(buyRequest)
+                : await buyConfirm.run({
+                    chainId,
+                    from: buyRequest.from,
+                    compose: () => messaging.composeForConfirm(buyRequest),
+                    onApprove: async (prebuiltPsbt) => {
+                        // Recheck at approval because list edits can land while Confirm is open.
+                        if (await refreshBuyerEligibility()) {
+                            throw new Error(
+                                'The selected paying address or dispenser address is refused by a current access list.',
+                            );
+                        }
+                        return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
+                    },
+                });
             setBuyResult(res);
             setBuyStage('done');
         } catch (err) {
@@ -1029,7 +1031,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setBuyPassword('');
         }
     }, [buyStage, buyRequest, priceStale, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
-        buyConfirm, chainId, messaging, submitConfirmedBuy]);
+        ownerLane.isWatcherMode, buyConfirm, chainId, messaging, submitConfirmedBuy]);
 
     /**
      * Sign one owner action (close, refill or edit) and settle its stage.
@@ -1458,6 +1460,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }
 
     if (buyStage === 'done') {
+        if (buyResult?.psbtHex && !(buyResult.txid || buyResult.broadcast?.txid)) {
+            return wrap(<WatcherResultPanel result={buyResult} onDone={onBack} />);
+        }
         const txid = buyResult?.txid || buyResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1938,6 +1943,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {buyError ? (
                         <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
                     ) : null}
+                    {ownerLane.isWatcherMode ? (
+                        <p className={styles.hint}>
+                            Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                            Signer-mode wallet, then broadcast from a Full-mode wallet.
+                        </p>
+                    ) : null}
                     <Button
                         variant="primary"
                         onClick={beginBuy}
@@ -1947,7 +1958,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             || buyerEligibilityBarred || dispenserSelfBarred || priceStale
                             || buyStage === 'submitting' || buyConfirm.composing}
                     >
-                        Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
+                        {ownerLane.isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : `Buy ${fillsNum > 0 ? `${fillsNum} ` : ''}fill${fillsNum === 1 ? '' : 's'}`}
                     </Button>
                 </section>
             ) : null}

@@ -69,6 +69,7 @@ function mount(dispenser, {
     addresses = [buyerAddress],
     dogeSats = '1000000000',
     destinationRows = [],
+    settings = {},
 } = {}) {
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
@@ -83,7 +84,7 @@ function mount(dispenser, {
                 },
             })),
         }),
-        getSettings: vi.fn().mockResolvedValue({}),
+        getSettings: vi.fn().mockResolvedValue(settings),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
         getDispensersForAddress: vi.fn().mockResolvedValue({ data: destinationRows }),
         composeForConfirm: vi.fn().mockImplementation(({ tick }) => Promise.resolve({
@@ -98,6 +99,12 @@ function mount(dispenser, {
         requoteNativeFee: vi.fn().mockResolvedValue(null),
         sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
         sendAssetHw: vi.fn(),
+        buildSendPsbtRequest: vi.fn().mockResolvedValue({
+            psbtHex: COMPOSED.psbt,
+            encoding: COMPOSED.encoding,
+            fromAddress: BUYER,
+            chainId: CHAIN,
+        }),
     };
     render(
         React.createElement(
@@ -215,6 +222,29 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledTimes(1));
         expect(messaging.sendToken.mock.calls[0][0].prebuiltPsbt)
             .toMatchObject({ psbtHex: COMPOSED.psbt, actionString: 'SEND|1|MEMEVALID' });
+    });
+
+    it.each([
+        ['coin', COIN_PAID, 'DOGE', '2'],
+        ['token', TOKEN_PAID, 'MEMEVALID', '5'],
+    ])('builds an unsigned %s purchase in watcher mode', async (_kind, dispenser, tick, amount) => {
+        const messaging = mount(dispenser, { settings: { walletMode: 'watcher' } });
+        await screen.findByText(new RegExp(`${tick} available`));
+        const build = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        await waitFor(() => expect(build).toBeEnabled());
+        fireEvent.click(build);
+
+        await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
+        expect(messaging.buildSendPsbtRequest.mock.calls[0][0]).toMatchObject({
+            walletId: 'w', chainId: CHAIN, from: { address: BUYER },
+            to: OWNER, tick, amount,
+        });
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+        expect(messaging.sendAssetHw).not.toHaveBeenCalled();
+        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+            .toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Buy submitted' })).toBeNull();
     });
 
     it('blocks a fill count the native balance cannot cover', async () => {
