@@ -341,29 +341,21 @@ test.describe('the PC-26 gated SEND guard', () => {
             await expectConfirmModal(holder, 'the bypassed raw SEND');
 
             // The confirm preflight dry-runs the action against the network and
-            // shows the indexer's own refusal before signing, holding Approve
-            // behind a per-finding "Sign anyway". That refusal is the network's
-            // string, not a wallet-invented one; ticking the override is what
-            // carries the send on to the chain for the verdict asserted below.
+            // shows the indexer's own refusal. A definite consensus refusal blocks
+            // signing outright, with no Sign anyway override, so a bare SEND of a
+            // gated tick can never be broadcast from the wallet and cost a fee.
             const confirm = holder.getByTestId('confirm-modal');
             const refusal = confirm.getByRole('listitem')
                 .filter({ hasText: /gated token transfer requires key handoff message/ });
             await expect(refusal, 'the preflight did not surface the network\'s gated-send refusal')
                 .toBeVisible({ timeout: 60_000 });
-            await refusal.getByRole('checkbox', { name: 'Sign anyway' }).check();
-            await approveConfirm(holder);
-            const txid = await readBroadcastTxid(holder);
+            await expect(refusal.getByRole('checkbox', { name: 'Sign anyway' }),
+                'a definite network refusal still offered Sign anyway').toHaveCount(0);
+            await expect(holder.getByTestId('confirm-approve'),
+                'Approve was enabled past a definite network refusal').toBeDisabled();
 
-            // Not asserted valid: the refusal is the thing under test. A SEND
-            // carries its verdict per transfer leg, so read it through
-            // `actionStatuses` rather than a top-level status it does not have.
-            const [action] = await txActions(txid);
-            expect(action.action).toBe('SEND');
-            expect(actionStatuses(action).join(' '), 'the bare SEND of a gated tick was not rejected by the chain')
-                .toContain('gated token transfer requires key handoff message');
-
-            // An invalid action moves no funds: the holder's balance is
-            // exactly what it was before the bypass attempt.
+            // Nothing was broadcast: the holder's balance is exactly what it was
+            // before the bypass attempt.
             expect(await tokenBalance(holderAddr, TICK)).toBe(holderTickBefore);
         });
     });
