@@ -669,11 +669,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 <>
                     <label
                         className={styles.pickerLabel}
+                        htmlFor="list-addresses"
                         {...recipientsDrop.rootProps}
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
                         Addresses
                         <textarea
+                            id="list-addresses"
                             className={styles.picker}
                             value={pasteText}
                             onChange={(e) => setPasteText(e.target.value)}
