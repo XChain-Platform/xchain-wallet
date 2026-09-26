@@ -49,7 +49,7 @@ function offerLegs(offers) {
  *
  * @param {{ orders: { rows: any[], error: string | null }, swaps: { rows: any[], error: string | null },
  *           dispensers: { rows: any[], error: string | null } }} offers   openOfferRows' result
- * @returns {{ rows: Array<{ tick: string, amount: string, offers: Record<string, number> }>, partial: boolean }}
+ * @returns {{ rows: Array<{ tick: string, amount: string, offers: Record<string, number>, closing?: string }>, partial: boolean }}
  */
 export function sumEscrowByTick(offers) {
     const byTick = new Map();
@@ -63,6 +63,9 @@ export function sumEscrowByTick(offers) {
             const acc = byTick.get(tick) || { tick, amount: '0', offers: {} };
             acc.amount = addPlainDecimals(acc.amount, amount);
             acc.offers[kind] = (acc.offers[kind] || 0) + 1;
+            // The share held by dispensers in their close window, which leaves
+            // escrow when the close lands, so Home can say so beside the total.
+            if (r.closing) acc.closing = addPlainDecimals(acc.closing || '0', amount);
             byTick.set(tick, acc);
         }
     }
@@ -71,12 +74,14 @@ export function sumEscrowByTick(offers) {
 
 /**
  * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string, address: string }} params
- * @returns {Promise<{ rows: Array<{ tick: string, amount: string, offers: Record<string, number> }>, partial: boolean }>}
+ * @returns {Promise<{ rows: Array<{ tick: string, amount: string, offers: Record<string, number>, closing?: string }>, partial: boolean }>}
  */
 export async function escrowedTokens({ sdkRegistry, chainId, address }) {
     if (!sdkRegistry) throw new Error('escrowedTokens: sdkRegistry is required');
     if (!chainId) throw new Error('escrowedTokens: chainId is required');
     if (typeof address !== 'string' || address.trim().length === 0) return { rows: [], partial: false };
     const sdk = sdkRegistry.get(chainId);
-    return sumEscrowByTick(await openOfferRows({ sdk, address }));
+    // A dispenser in its 1-hour close window still holds its escrow, so a
+    // token escrowed in full keeps its Home row until the close lands.
+    return sumEscrowByTick(await openOfferRows({ sdk, address, includeClosingDispensers: true }));
 }

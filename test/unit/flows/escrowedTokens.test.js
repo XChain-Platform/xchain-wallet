@@ -69,6 +69,28 @@ describe('escrowedTokens', () => {
         expect(r.rows).toEqual([]);
     });
 
+    it('keeps counting a dispenser in its close window, since the escrow is still locked', async () => {
+        const r = await escrowedTokens({
+            sdkRegistry: registryFor(fakeSdk({ dispensers: [{ ...BEER_DISPENSER, current_status: 'cancelling' }] })),
+            chainId: 'litecoin-testnet', address: OWNER,
+        });
+        expect(r).toEqual({ rows: [{ tick: 'BEER', amount: '12', offers: { dispenser: 1 }, closing: '12' }], partial: false });
+    });
+
+    it('splits the closing share from open escrow of the same tick', async () => {
+        const r = await escrowedTokens({
+            sdkRegistry: registryFor(fakeSdk({
+                dispensers: [
+                    { ...BEER_DISPENSER, current_status: 'cancelling' },
+                    { ...BEER_DISPENSER, action_index: '20', escrow_remaining: '3' },
+                    { ...BEER_DISPENSER, action_index: '21', current_status: 'cancelled' },
+                ],
+            })),
+            chainId: 'litecoin-testnet', address: OWNER,
+        });
+        expect(r.rows).toEqual([{ tick: 'BEER', amount: '15', offers: { dispenser: 2 }, closing: '12' }]);
+    });
+
     it('marks the answer partial when one offer kind fails, keeping the others', async () => {
         const r = await escrowedTokens({
             sdkRegistry: registryFor(fakeSdk({ dispensers: [BEER_DISPENSER], fail: { orders: true } })),

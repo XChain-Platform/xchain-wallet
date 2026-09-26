@@ -40,6 +40,7 @@ import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
 import { isTerminalDispenserStatus, reopenTermsFrom, terminalDispenserNotice } from '../utils/dispenserReopen.js';
+import { dispenserCancelTimestamp, dispenserCloseEta, shortAddress } from '../utils/dispenserCloseWindow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { dispenserPriceFloor } from '../../flows/dispenserDustFloor.js';
 import {
@@ -153,6 +154,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // True only when the wallet holds the creator (SOURCE): origin standing to
     // open a new dispenser on the same address belongs to the creator alone.
     const [creatorHeld, setCreatorHeld] = useState(false);
+    // Every address this wallet holds on the chain, so the close banner can
+    // tell whether the escrow returns here or to someone else.
+    const [heldAddresses, setHeldAddresses] = useState(/** @type {string[]} */ ([]));
     const [buyerAddresses, setBuyerAddresses] = useState(/** @type {any[]} */ ([]));
     const [buyerAddressId, setBuyerAddressId] = useState(
         /** @type {string | null} */ (null),
@@ -368,6 +372,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 const host = !creator && hostAddr ? onChain.find((a) => a.address === hostAddr) : null;
                 if (creator || host) setOwnerAddress(creator || host);
                 setCreatorHeld(Boolean(creator));
+                setHeldAddresses(onChain.map((a) => a.address).filter(Boolean));
                 // Pre-populate the buyer-address picker with this wallet's
                 // HD addresses on the dispenser's chain. Non-HD (watch-
                 // only) addresses are filtered out because they can't
@@ -415,17 +420,28 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     // the 1-hour close window - while 'closes' is the completion the chain
                     // writes when the window ends. Omitting it left the cancel invisible on
                     // the timeline for that whole hour, right after the owner took it (D-45).
-                    Promise.all(['edits', 'cancels', 'closes', 'expires'].map((kind) => messaging
-                        .getDispenserLifecycle({ chainId, kind, query: source, type: 'address' })
+                    const lanes = ['edits', 'cancels', 'closes', 'expires'].map((kind) => ({ kind, query: source }));
+                    // The cancels feed is keyed by the cancelling address, and the
+                    // dispenser address may close too, so its cancel (which dates the
+                    // close window) is read from that address as well.
+                    const canceller = disp?.cancelled_by;
+                    if (canceller && canceller !== source) lanes.push({ kind: 'cancels', query: canceller });
+                    Promise.all(lanes.map(({ kind, query }) => messaging
+                        .getDispenserLifecycle({ chainId, kind, query, type: 'address' })
                         .then((r) => ({ kind, rows: extractRows(r) }))
                         .catch(() => ({ kind, rows: [] }))))
                         .then((results) => {
                             if (cancelled) return;
                             const evs = [];
+                            const seenEvents = new Set();
                             for (const { kind, rows } of results) {
                                 for (const row of rows) {
                                     const dai = row.dispenser_action_index;
                                     if (dai != null && String(dai) !== String(actionIndex)) continue;
+                                    // Two lanes can return the same row when both addresses are read.
+                                    const eventKey = row.action_index != null ? `${kind}:${row.action_index}` : null;
+                                    if (eventKey && seenEvents.has(eventKey)) continue;
+                                    if (eventKey) seenEvents.add(eventKey);
                                     evs.push({ kind, row });
                                 }
                             }
@@ -544,6 +560,23 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const liveStatus = liveState.status;
     const isOpen = liveStatus === 'open';
     const isClosing = liveStatus === 'cancelling';
+    // The dispenser record names who closed it but not when, so the close
+    // window is dated from the cancel row the Lifecycle tab already loads.
+    const cancelTimestamp = useMemo(
+        () => (isClosing
+            ? dispenserCancelTimestamp(lifecycle.filter((e) => e.kind === 'cancels').map((e) => e.row), actionIndex)
+            : null),
+        [isClosing, lifecycle, actionIndex],
+    );
+    // Re-render once a minute while a countdown is on screen.
+    const [nowMs, setNowMs] = useState(() => Date.now());
+    useEffect(() => {
+        if (cancelTimestamp == null) return undefined;
+        setNowMs(Date.now());
+        const timer = setInterval(() => setNowMs(Date.now()), 60000);
+        return () => clearInterval(timer);
+    }, [cancelTimestamp]);
+    const closeEta = cancelTimestamp != null ? dispenserCloseEta(cancelTimestamp, { nowMs }) : null;
     const isTerminal = isTerminalDispenserStatus(liveStatus);
     // An ownership dispenser's form lane does not exist (DispenserForm has no
     // GIVE_OWNERSHIP), and a sold one no longer has the ownership to offer.
@@ -1660,10 +1693,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     return wrap(
         <>
             {isClosing ? (
-                <p className={local.closeWindowNote} role="status">
-                    Closing: this dispenser is in its 1-hour close window. Remaining escrow
-                    returns to the owner when the window ends; dispenses that confirm before
-                    then are still honored.
+                <p className={local.closeWindowNote} role="status" data-testid="close-window-banner">
+                    {closeWindowNotice({
+                        eta: closeEta,
+                        escrowRemaining,
+                        giveTick,
+                        cancelledBy: dispenser?.cancelled_by ?? dispenser?.state?.cancelled_by ?? null,
+                        heldAddresses,
+                    })}
                 </p>
             ) : null}
             {isTerminal ? (
@@ -2213,6 +2250,42 @@ function formatUnixDate(ts) {
         });
     } catch {
         return new Date(ms).toISOString();
+    }
+}
+
+// The close-window banner copy. Escrow returns to whichever address closed
+// the dispenser (creator or dispenser address), so the destination comes from
+// `cancelled_by`, never from who created it. Without a readable cancel time
+// the copy states the window without a clock.
+function closeWindowNotice({ eta, escrowRemaining, giveTick, cancelledBy, heldAddresses }) {
+    const escrow = escrowRemaining != null
+        ? `the remaining ${formatNum(escrowRemaining)} ${giveTick || ''}`.trim() + ' in escrow'
+        : 'the remaining escrow';
+    const destination = cancelledBy && heldAddresses.includes(cancelledBy)
+        ? 'this wallet'
+        : (cancelledBy ? shortAddress(cancelledBy) : 'the address that closed it');
+    const honored = 'Dispenses that confirm before the close are still honored.';
+    if (!eta) {
+        return `Closing: this dispenser is in its 1-hour close window. ${capitalize(escrow)} returns to ${destination} when the window ends. ${honored}`;
+    }
+    // Past the window, the close waits for a block whose median time is later
+    // than the window's end, so no clock time is promised.
+    if (eta.pastDue) {
+        return `Closing any block now: the 1-hour close window has passed and the close lands with the next block. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+    }
+    return `Closing in ${eta.countdown} (around ${formatLocalClock(eta.closeAtMs)}). This dispenser is in its 1-hour close window; ${escrow} returns to ${destination} with the first block after it ends. ${honored}`;
+}
+
+function capitalize(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+// Hour and minute in the viewer's own zone and clock style.
+function formatLocalClock(ms) {
+    try {
+        return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    } catch {
+        return new Date(ms).toISOString().slice(11, 16);
     }
 }
 

@@ -63,6 +63,14 @@ function isOpenRow(row, address) {
     return !CLOSED_STATUSES.has(status);
 }
 
+// A dispenser in its close window still holds its escrow until the close
+// lands, but a sweep has nothing left to close on it.
+function isClosingDispenserRow(row, address) {
+    const source = row?.source || row?.address;
+    if (source && address && source !== address) return false;
+    return liveStatus(row) === 'cancelling';
+}
+
 async function leg(fn) {
     try {
         return { rows: await fn(), error: null };
@@ -90,9 +98,13 @@ async function enrichOrderRows(sdk, rows) {
  * emptying the others. Shared by the SWEEP preview (what closing them would
  * release) and Home's escrow read (tokens whose balance sits in an offer).
  *
- * @param {{ sdk: any, address: string }} params
+ * `includeClosingDispensers` adds dispensers in their close window, marked
+ * `closing: true`: their escrow is still locked, which Home must count, while
+ * the SWEEP preview leaves it off because the sweep cannot close them again.
+ *
+ * @param {{ sdk: any, address: string, includeClosingDispensers?: boolean }} params
  */
-export async function openOfferRows({ sdk, address }) {
+export async function openOfferRows({ sdk, address, includeClosingDispensers = false }) {
     const trimmed = address.trim();
     const [orders, swaps, dispensers] = await Promise.all([
         leg(async () => {
@@ -118,13 +130,15 @@ export async function openOfferRows({ sdk, address }) {
                 giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
             }))),
         leg(async () => rowsOf(await sdk.getDispensers(trimmed, 'source'))
-            .filter((r) => isOpenRow(r, trimmed))
-            .map((r) => ({
+            .map((r) => ({ r, closing: includeClosingDispensers && isClosingDispenserRow(r, trimmed) }))
+            .filter(({ r, closing }) => closing || isOpenRow(r, trimmed))
+            .map(({ r, closing }) => ({
                 actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
                 tick: r.tick ?? r.give_tick ?? null,
                 escrowRemaining: r.give_remaining != null ? String(r.give_remaining)
                     : (r.escrow_remaining != null ? String(r.escrow_remaining) : null),
                 giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
+                ...(closing ? { closing: true } : {}),
             }))),
     ]);
     return { orders, swaps, dispensers };

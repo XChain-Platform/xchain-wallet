@@ -282,6 +282,17 @@ describe('sweepPreview', () => {
         expect(p.gatedTicks.rows).toEqual([]);
     });
 
+    it('leaves a dispenser in its close window out of the sweep preview', async () => {
+        const sdk = makeSdk({
+            getDispensers: vi.fn(async () => ({ data: [
+                { action_index: 5, source: ADDR, current_status: 'open', tick: 'PEPE', give_remaining: '40', give_ownership: 0 },
+                { action_index: 7, source: ADDR, current_status: 'cancelling', tick: 'PEPE', give_remaining: '12', give_ownership: 0 },
+            ] })),
+        });
+        const p = await sweepPreview({ sdkRegistry: registryFor(sdk), chainId: CHAIN, address: ADDR });
+        expect(p.dispensers.rows).toEqual([{ actionIndex: '5', tick: 'PEPE', escrowRemaining: '40', giveOwnership: false }]);
+    });
+
     it('detects gated ticks across balances and ownerships', async () => {
         const sdk = makeSdk({
             getBalances: vi.fn(async () => ({ data: [{ tick: 'GATEDTICK', amount: '3', decimals: 0 }] })),

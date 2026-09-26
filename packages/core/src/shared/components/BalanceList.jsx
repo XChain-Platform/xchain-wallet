@@ -322,7 +322,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                 </div>
                 {row.escrowed ? (
                     <div className={styles.fiat} data-testid="balance-escrowed">
-                        {balancesHidden ? '•••' : `+ ${row.escrowed} in escrow`}
+                        {balancesHidden ? '•••' : escrowLine(row)}
                     </div>
                 ) : null}
                 <div className={styles.fiat}>
@@ -673,7 +673,17 @@ function addEscrowRows(tokenAcc, escrow, { chainId, descriptor }) {
             tokenAcc.set(e.tick, acc);
         }
         acc.escrowed = addPlainDecimals(acc.escrowed || '0', e.amount);
+        // The part of it held by dispensers in their close window.
+        if (e.closing) acc.escrowClosing = addPlainDecimals(acc.escrowClosing || '0', e.closing);
     }
+}
+
+// The escrow line under a token's amount. Escrow in a closing dispenser is
+// named as such, since it leaves escrow when the close lands.
+export function escrowLine(row) {
+    if (!row.escrowClosing) return `+ ${row.escrowed} in escrow`;
+    if (row.escrowClosing === row.escrowed) return `+ ${row.escrowed} in a closing dispenser`;
+    return `+ ${row.escrowed} in escrow (${row.escrowClosing} in a closing dispenser)`;
 }
 
 function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fiatRate, imageUrl }) {

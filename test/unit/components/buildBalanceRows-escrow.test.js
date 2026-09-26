@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    buildBalanceRows, detectSpamCandidates, isSmallBalanceRow,
+    buildBalanceRows, detectSpamCandidates, escrowLine, isSmallBalanceRow,
 } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 import { escrowTargets, mergeEscrow } from '../../../packages/core/src/shared/hooks/useEscrowedBalances.js';
 
@@ -68,6 +68,20 @@ describe('buildBalanceRows with escrow', () => {
         const bare = { ...byTick.BEER, escrowed: undefined };
         expect(detectSpamCandidates([bare])).toEqual([`litecoin-testnet:BEER`]);
         expect(isSmallBalanceRow(bare)).toBe(true);
+    });
+
+    it('names escrow held by a closing dispenser on the row', () => {
+        const closingRows = buildBalanceRows(mergeEscrow(balances, {
+            [`litecoin-testnet:${OWNER}`]: [
+                { tick: 'BEER', amount: '12', closing: '12' },
+                { tick: 'GFL', amount: '0.5', closing: '0.2' },
+            ],
+        }), chainRegistry);
+        const closing = Object.fromEntries(closingRows.map((r) => [r.tick, r]));
+        expect(closing.BEER).toMatchObject({ quantity: '0', escrowed: '12', escrowClosing: '12' });
+        expect(escrowLine(closing.BEER)).toBe('+ 12 in a closing dispenser');
+        expect(escrowLine(closing.GFL)).toBe('+ 0.5 in escrow (0.2 in a closing dispenser)');
+        expect(escrowLine(byTick.BEER)).toBe('+ 12 in escrow');
     });
 
     it('is unchanged without escrow', () => {

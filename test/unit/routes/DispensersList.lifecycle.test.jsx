@@ -39,12 +39,13 @@ const ROWS = [
     },
 ];
 
-function mount() {
+function mount({ rows = ROWS, lifecycle } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ id: 'a1', address: OWNER, source: 'hd' }],
         }),
-        getDispensersForSource: vi.fn().mockResolvedValue({ data: ROWS }),
+        getDispensersForSource: vi.fn().mockResolvedValue({ data: rows }),
+        ...(lifecycle ? { getDispenserLifecycle: lifecycle } : {}),
     };
     render(
         React.createElement(
@@ -74,5 +75,37 @@ describe('DispensersList lifecycle badges', () => {
         mount();
         expect(await screen.findByText(/48 JAVIERTEST in escrow/)).toBeInTheDocument();
         expect(screen.queryByText(/0 JAVIERTEST in escrow/)).not.toBeInTheDocument();
+    });
+});
+
+describe('DispensersList closing badge', () => {
+    const CANCEL_AT = 1790455620;
+    const CLOSING_ROW = { ...ROWS[0], action_index: '18', current_status: 'cancelling', escrow_remaining: '12' };
+    const cancelRow = { action_index: '19', dispenser_action_index: '18', source: OWNER, block_index: 500, timestamp: CANCEL_AT, status: 'valid' };
+
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('reads "Closing" with a countdown from one cancels read per address', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime((CANCEL_AT + 37 * 60) * 1000);
+        const lifecycle = vi.fn().mockResolvedValue({ data: [cancelRow] });
+        mount({ rows: [CLOSING_ROW, ROWS[1]], lifecycle });
+        expect(await screen.findByText('Closing · ~23 min')).toBeInTheDocument();
+        expect(lifecycle).toHaveBeenCalledTimes(1);
+        expect(lifecycle).toHaveBeenCalledWith({ chainId: CHAIN, kind: 'cancels', query: OWNER, type: 'address' });
+        expect(screen.queryByText('cancelling')).not.toBeInTheDocument();
+    });
+
+    it('reads "Closing" alone when the cancel time is not available', async () => {
+        const lifecycle = vi.fn().mockResolvedValue({ data: [] });
+        mount({ rows: [CLOSING_ROW], lifecycle });
+        expect(await screen.findByText('Closing')).toBeInTheDocument();
+    });
+
+    it('makes no cancels read when no row is closing', async () => {
+        const lifecycle = vi.fn().mockResolvedValue({ data: [] });
+        mount({ lifecycle });
+        expect(await screen.findByText('open')).toBeInTheDocument();
+        expect(lifecycle).not.toHaveBeenCalled();
     });
 });
