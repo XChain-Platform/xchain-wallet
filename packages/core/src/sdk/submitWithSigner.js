@@ -459,6 +459,8 @@ export async function submitWithSigner({
             throw annotateEncoderFeeRequirement(err, preflight.quote);
         }
 
+        assertCompleteEnvelope(encoded, actionData.action);
+
         // Placement, read off the encoding the encoder actually chose rather
         // than predicted from the action size: a chunk encoding means the
         // action rides a reveal, so the fee output is emitted there. Anything
