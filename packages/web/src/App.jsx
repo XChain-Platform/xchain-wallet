@@ -28,7 +28,7 @@
 // need to know about web-only chrome. Auto-hides when `window.xchain`
 // isn't injected, or when the user dismisses it for the session.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
@@ -415,6 +415,7 @@ function AppInner() {
     const palette = useCommandPalette({
         enabled: status.state === 'unlocked',
         binding: settings?.keyboard?.bindings?.['command-palette'],
+        navigate: setUnlockedView,
     });
     // Contacts feed the palette's fuzzy search (§33.2). Loaded lazily the
     // first time the palette opens so a locked/never-opened session pays
@@ -2576,10 +2577,10 @@ function AppInner() {
             // §33: assemble the palette command list from the shared catalogue
             // (navigation + authoring + signing + wallet verbs, gated exactly
             // like the ActionsMenu) plus the lazily-loaded contacts. Every
-            // `run` closes over this shell's setUnlockedView, so selecting a
-            // command drives the same view state the nav does.
+            // `run` uses the palette navigator, so selecting a command drives
+            // the same view state with a fresh route mount.
             const paletteCtx = {
-                navigate: setUnlockedView,
+                navigate: palette.navigate,
                 lock: handleNavLock,
                 refresh,
                 scan: () => setGlobalScannerOpen(true),
@@ -2600,20 +2601,20 @@ function AppInner() {
             // drilldown; settings sections deep-link via
             // settingsInitialSection; help topics reuse both.
             const openSettingsSection = (sectionId) => {
-                if (sectionId === 'connected-sites') { setUnlockedView('connected-sites'); return; }
+                if (sectionId === 'connected-sites') { palette.navigate('connected-sites'); return; }
                 setSettingsInitialSection(sectionId);
-                setUnlockedView('settings');
+                palette.navigate('settings');
             };
             const paletteEntityCtx = {
-                openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
-                openConnectedSites: () => setUnlockedView('connected-sites'),
+                openToken: (tok) => { setTokenDetailRef(tok); palette.navigate('token-detail'); },
+                openConnectedSites: () => palette.navigate('connected-sites'),
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
             };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),
                 ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
-                ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+                ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
                 ...sitesToCommands(paletteSites, paletteEntityCtx),
                 ...settingsSectionsToCommands(paletteEntityCtx),
                 ...helpToCommands(paletteEntityCtx),
@@ -2626,13 +2627,13 @@ function AppInner() {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
-                    setUnlockedView('send');
+                    palette.navigate('send');
                 },
                 searchHistory: (query) => {
                     setHistoryInitialQuery(query);
                     setHistoryInitialChainCoin('');
                     setHistoryReturnTo('home');
-                    setUnlockedView('history');
+                    palette.navigate('history');
                 },
             });
             // Assigned rather than returned directly so the whole unlocked
@@ -2723,7 +2724,7 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    {routeNode}
+                    <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

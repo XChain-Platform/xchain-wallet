@@ -24,7 +24,7 @@
 // MessagingProvider context (shell="popup"). Popup-local wiring boils
 // down to session-state polling and sub-route navigation.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
 
@@ -626,6 +626,7 @@ function AppInner() {
     const palette = useCommandPalette({
         enabled: status.state === 'unlocked',
         binding: settings?.keyboard?.bindings?.['command-palette'],
+        navigate: setUnlockedView,
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
     // entity search: token balances join contacts in the palette's
@@ -658,23 +659,23 @@ function AppInner() {
     const openSettingsSection = (sectionId) => {
         if (sectionId === 'connected-sites') {
             setSettingsInitialSection(null);
-            setUnlockedView('connected-sites');
+            palette.navigate('connected-sites');
             return;
         }
         setSettingsInitialSection(sectionId || null);
-        setUnlockedView('settings');
+        palette.navigate('settings');
     };
 
-    // Shared catalogue + lazily-loaded contacts; each run() closes over this
-    // shell's setUnlockedView (see the web shell for reference wiring). The
+    // Shared catalogue + lazily-loaded contacts; each run() uses the palette
+    // navigator so the destination receives a fresh route mount. The
     // popup locks via messaging.lockWallet (Home owns the visible Lock button).
     const paletteCommands = [
         ...buildCommands({
-            navigate: setUnlockedView,
+            navigate: palette.navigate,
             lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
             refresh,
-            scan: () => setUnlockedView('scan'),
-            switchWallet: () => setUnlockedView('wallet-picker'),
+            scan: () => palette.navigate('scan'),
+            switchWallet: () => palette.navigate('wallet-picker'),
             openHelp: () => setShortcutHelpOpen(true),
             hasBtcAddress,
             hasVmAddress,
@@ -688,10 +689,10 @@ function AppInner() {
         // Connected sites land on the popup's own Connected Sites
         // route, so the "Sites" palette category works here too.
         ...balancesToCommands(paletteTokenRows, {
-            openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
+            openToken: (tok) => { setTokenDetailRef(tok); palette.navigate('token-detail'); },
         }),
-        ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
-        ...sitesToCommands(paletteSites, { openConnectedSites: () => setUnlockedView('connected-sites') }),
+        ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
+        ...sitesToCommands(paletteSites, { openConnectedSites: () => palette.navigate('connected-sites') }),
         ...settingsSectionsToCommands({ openSettings: openSettingsSection }),
         ...helpToCommands({
             openSettings: openSettingsSection,
@@ -705,13 +706,13 @@ function AppInner() {
         composeSend: ({ amount, tick }) => {
             setSendPrefill({ amount, tick });
             setSendBackTo('home');
-            setUnlockedView('send');
+            palette.navigate('send');
         },
         searchHistory: (query) => {
             setHistoryInitialQuery(query);
             setHistoryInitialChainCoin('');
             setHistoryReturnTo('home');
-            setUnlockedView('history');
+            palette.navigate('history');
         },
     });
     // §34 keyboard shortcuts (see the web shell for the reference wiring).
@@ -2483,7 +2484,7 @@ function AppInner() {
             })();
             return (
                 <>
-                    {routeNode}
+                    <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

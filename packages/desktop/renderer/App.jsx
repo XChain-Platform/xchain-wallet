@@ -30,7 +30,7 @@
 // handlers onto `session.defaultSession`. Without them, Electron
 // returns an empty device list under `contextIsolation: true`.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
@@ -300,6 +300,7 @@ function AppInner() {
     const palette = useCommandPalette({
         enabled: status.state === 'unlocked',
         binding: settings?.keyboard?.bindings?.['command-palette'],
+        navigate: setUnlockedView,
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
     // entity search: token balances + connected sites join contacts
@@ -2348,14 +2349,14 @@ function AppInner() {
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
             // §33 command list: shared catalogue + lazily-loaded contacts,
-            // each run() closing over this shell's setUnlockedView (see the
-            // web shell for the reference wiring).
+            // each run() using the palette navigator so the destination
+            // receives a fresh route mount.
             const paletteCtx = {
-                navigate: setUnlockedView,
+                navigate: palette.navigate,
                 lock: handleNavLock,
                 refresh,
-                scan: () => setUnlockedView('scan'),
-                switchWallet: handleOpenWalletPicker,
+                scan: () => palette.navigate('scan'),
+                switchWallet: () => palette.navigate('wallet-picker'),
                 openHelp: () => setShortcutHelpOpen(true),
                 hasBtcAddress,
                 hasVmAddress,
@@ -2368,20 +2369,20 @@ function AppInner() {
             // via settingsInitialSection; help topics open the shortcut help
             // modal.
             const openSettingsSection = (sectionId) => {
-                if (sectionId === 'connected-sites') { setUnlockedView('connected-sites'); return; }
+                if (sectionId === 'connected-sites') { palette.navigate('connected-sites'); return; }
                 setSettingsInitialSection(sectionId);
-                setUnlockedView('settings');
+                palette.navigate('settings');
             };
             const paletteEntityCtx = {
-                openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
-                openConnectedSites: () => setUnlockedView('connected-sites'),
+                openToken: (tok) => { setTokenDetailRef(tok); palette.navigate('token-detail'); },
+                openConnectedSites: () => palette.navigate('connected-sites'),
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
             };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),
                 ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
-                ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+                ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
                 ...sitesToCommands(paletteSites, paletteEntityCtx),
                 ...settingsSectionsToCommands(paletteEntityCtx),
                 ...helpToCommands(paletteEntityCtx),
@@ -2393,13 +2394,13 @@ function AppInner() {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
-                    setUnlockedView('send');
+                    palette.navigate('send');
                 },
                 searchHistory: (query) => {
                     setHistoryInitialQuery(query);
                     setHistoryInitialChainCoin('');
                     setHistoryReturnTo('home');
-                    setUnlockedView('history');
+                    palette.navigate('history');
                 },
             });
             // Assigned rather than returned directly so the whole unlocked
@@ -2452,7 +2453,7 @@ function AppInner() {
                         </>
                     }
                 >
-                    {routeNode}
+                    <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
