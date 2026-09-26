@@ -1891,12 +1891,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     type="submit"
                     variant="primary"
                     block
-                    disabled={
-                        !fromAddress || !token || !amountPer
-                        || (sourceMode === 'paste' && recipients.valid.length === 0)
-                        || (sourceMode === 'holders' && memberTicks.length === 0)
-                        || (sourceMode === 'existing' && !listActionIndex)
-                    }
                 >
                     {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
                 </Button>

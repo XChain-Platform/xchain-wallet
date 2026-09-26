@@ -361,7 +361,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // and are only reachable after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress || !chainId) return;
+        if (!fromAddress || !chainId) {
+            setFormError('Pick a source address first.');
+            return;
+        }
         if (validationError || expError) return;
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
@@ -895,14 +898,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!!validationError || !!expError
-                        || !fromAddress
-                        || !giveTick || !getTick
-                        || (!giveOwnership && !giveAmount)
-                        || (!getOwnership && !getAmount)
-                        || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Swap' : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? 'Swap' : 'Review')}
                 </Button>
             </div>
         </form>,

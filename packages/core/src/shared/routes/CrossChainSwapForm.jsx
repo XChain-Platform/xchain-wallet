@@ -384,7 +384,10 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // reachable only from the review screen.
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress || !giveChainId || !getChainId) return;
+        if (!fromAddress || !giveChainId || !getChainId) {
+            setFormError('Pick a source address first.');
+            return;
+        }
         if (validationError) return;
         if (!giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount)) {
             setFormError('Fill give/get tickers and amounts (or select ownership) before reviewing.');
@@ -873,12 +876,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!!validationError
-                        || !fromAddress
-                        || !giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount) || !getAddress
-                        || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Swap' : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? 'Swap' : 'Review')}
                 </Button>
             </div>
         </form>,
