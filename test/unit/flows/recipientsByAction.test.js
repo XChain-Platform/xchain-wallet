@@ -23,6 +23,32 @@ function mkRegistry(sdk) {
 }
 
 describe('flows/recipientsByAction getDividendRecipients', () => {
+    it('reads holder rows from the explorer data envelope', async () => {
+        const sdk = {
+            getHolders: vi.fn(async () => ({
+                tick: 'MYTOKEN',
+                supply: '15',
+                decimals: 0,
+                total: 2,
+                data: [
+                    { address: 'addr1', amount: '10' },
+                    { address: 'addr2', amount: '5' },
+                ],
+            })),
+        };
+
+        const res = await getDividendRecipients({
+            sdkRegistry: mkRegistry(sdk),
+            chainId: 'c',
+            tick: 'MYTOKEN',
+        });
+
+        expect(res.recipients).toEqual([
+            { address: 'addr1', balance: '10' },
+            { address: 'addr2', balance: '5' },
+        ]);
+    });
+
     it('uses a pre-resolved tick and returns deduped holders with balances', async () => {
         const sdk = {
             getHolders: vi.fn(async () => ({

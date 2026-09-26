@@ -20,6 +20,7 @@ import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
 import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
+import { normalizeMarketHistoryRow } from '../../market/history_rows.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 
@@ -291,8 +292,8 @@ function extractHistoryRows(resp) {
  * Walk a list of match rows and compute last price, 24h change, 24h
  * high/low, and 24h volume (in tick1).
  *
- * Each match row carries `give_tick`, `get_tick`, `give_amount`,
- * `get_amount` and a timestamp. Price = tick2 per tick1.
+ * Each projected match row carries `price`, `amount`, `type`, and a timestamp.
+ * Raw give/get rows remain accepted for older explorers.
  */
 function derive24hStats(rows, tick1, tick2) {
     const now = Math.floor(Date.now() / 1000);
@@ -305,22 +306,9 @@ function derive24hStats(rows, tick1, tick2) {
     let low = Infinity;
     let volume = 0;
     for (const row of rows || []) {
-        const giveTick = row.give_tick || row.giveTick;
-        const getTick = row.get_tick || row.getTick;
-        const giveAmt = Number(row.give_amount ?? row.giveAmount);
-        const getAmt = Number(row.get_amount ?? row.getAmount);
-        const ts = Number(row.timestamp ?? row.block_time);
-        if (!Number.isFinite(giveAmt) || giveAmt <= 0) continue;
-        if (!Number.isFinite(getAmt) || getAmt <= 0) continue;
-        if (!Number.isFinite(ts)) continue;
-        let price; let sizeT1;
-        if (giveTick === tick1 && getTick === tick2) {
-            price = getAmt / giveAmt;
-            sizeT1 = giveAmt;
-        } else if (giveTick === tick2 && getTick === tick1) {
-            price = giveAmt / getAmt;
-            sizeT1 = getAmt;
-        } else { continue; }
+        const parsed = normalizeMarketHistoryRow(row, tick1, tick2);
+        if (!parsed) continue;
+        const { price, amount: sizeT1, timestamp: ts } = parsed;
         if (ts > lastTs) { lastTs = ts; lastPrice = price; }
         if (ts >= dayAgo) {
             if (ts < firstTsIn24h) { firstTsIn24h = ts; firstPriceIn24h = price; }
@@ -361,4 +349,3 @@ function formatVolume(n) {
     if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
     return n.toFixed(0);
 }
-

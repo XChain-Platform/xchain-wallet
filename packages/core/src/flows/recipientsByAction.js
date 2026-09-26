@@ -28,6 +28,8 @@
 // DIVIDEND accepts an optional pre-resolved `tick`. AIRDROP always reads
 // its action because the credit rows are the historical source of truth.
 
+import { extractHolderRows } from '../shared/utils/holderRows.js';
+
 /**
  * @typedef {Object} Recipient
  * @property {string} address
@@ -66,13 +68,7 @@ export async function getDividendRecipients(args) {
     }
 
     const holdersResp = await sdk.getHolders(tick);
-    const rawList = Array.isArray(holdersResp)
-        ? holdersResp
-        : Array.isArray(holdersResp?.holders)
-            ? holdersResp.holders
-            : Array.isArray(holdersResp?.rows)
-                ? holdersResp.rows
-                : [];
+    const rawList = extractHolderRows(holdersResp);
     /** @type {Recipient[]} */
     const recipients = [];
     const seen = new Set();

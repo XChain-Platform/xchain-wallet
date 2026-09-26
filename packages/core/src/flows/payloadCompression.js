@@ -203,7 +203,7 @@ export async function resolveGatedCompression({ sdk, actionIndex, declared = nul
         const action = await sdk.getAction(String(actionIndex));
         if (!action || typeof action !== 'object') return '';
         const record = action.data && typeof action.data === 'object' ? action.data : action;
-        for (const key of ['action_string', 'actionString', 'raw_action']) {
+        for (const key of ['tx_data', 'action_string', 'actionString', 'raw_action']) {
             const candidate = record[key] ?? action[key];
             if (typeof candidate === 'string' && candidate.length > 0) {
                 const field = compressionFieldOf(candidate);

@@ -179,6 +179,17 @@ describe('payloadCompression (Part B)', () => {
             expect(await resolveGatedCompression({ sdk, actionIndex: 42 })).toBe('1');
         });
 
+        it('reads the transaction action string from action detail', async () => {
+            const sdk = {
+                getAction: async () => ({
+                    action: 'FILE',
+                    action_index: 42,
+                    tx_data: 'FILE|0|a.txt|text/plain|T|M|||||1',
+                }),
+            };
+            expect(await resolveGatedCompression({ sdk, actionIndex: 42 })).toBe('1');
+        });
+
         it('falls back to a parsed COMPRESSION field when no action string is exposed', async () => {
             const sdk = { getAction: async () => ({ data: { COMPRESSION: '1' } }) };
             expect(await resolveGatedCompression({ sdk, actionIndex: 42 })).toBe('1');
