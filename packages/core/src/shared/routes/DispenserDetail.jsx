@@ -89,15 +89,15 @@ const ADDRESS_CELL_STYLE = {
  *     type='source' scoped to the dispenser's source address (the
  *     explorer doesn't yet have a by-dispenser-action-index dispense
  *     query).
- *   - For owners (source address is one of the wallet's addresses),
- *     owner actions signed through the shared confirm page and its
+ *   - For owners (the wallet holds the creator address or the dispenser
+ *     address; the creator signs when both are held), owner actions signed through the shared confirm page and its
  *     network pre-flight, via `messaging.dispenserAction` (HW via
  *     `dispenserActionHw`; watcher mode builds an unsigned transaction):
  *     Close (v1 cancel), Refill (v2 edit topping up GIVE_ESCROW), and
  *     Edit (v2 edit of EXPIRATION / ALLOW_LIST / BLOCK_LIST, PC-19). All
  *     owner actions gate on the live status (open only). On a status that
  *     can never be open again (sold out, closed, expired) they are hidden
- *     instead, and the owner is offered Open again.
+ *     instead, and the creator is offered Open again.
  *   - State display: current expiration + allow/block lists, dispenses
  *     this fill against the 1,000 cap, and a close-window banner while
  *     the dispenser sits in its 1-hour "cancelling" state.
@@ -145,9 +145,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // expirations) merged with dispenses into one timeline under a tab.
     const [lifecycle, setLifecycle] = useState(/** @type {any[]} */ ([]));
     const [tab, setTab] = useState(/** @type {'dispenses' | 'lifecycle'} */ ('dispenses'));
+    // The wallet address that signs close / refill / edit: the creator when
+    // this wallet holds it, otherwise the dispenser's own address.
     const [ownerAddress, setOwnerAddress] = useState(
         /** @type {any | null} */ (null),
     );
+    // True only when the wallet holds the creator (SOURCE): origin standing to
+    // open a new dispenser on the same address belongs to the creator alone.
+    const [creatorHeld, setCreatorHeld] = useState(false);
     const [buyerAddresses, setBuyerAddresses] = useState(/** @type {any[]} */ ([]));
     const [buyerAddressId, setBuyerAddressId] = useState(
         /** @type {string | null} */ (null),
@@ -353,12 +358,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setDispenser(disp);
 
             const source = disp?.source || act?.source;
+            const hostAddr = disp?.address || disp?.get_address || '';
             if (addrsByChain) {
                 const onChain = (addrsByChain[chainId] || []);
-                if (source) {
-                    const matches = onChain.find((a) => a.address === source);
-                    if (matches) setOwnerAddress(matches);
-                }
+                // The protocol lets either the creator or the dispenser address
+                // close, refill or edit, so holding either makes this wallet an
+                // owner. The creator signs when held: its close returns escrow to it.
+                const creator = source ? onChain.find((a) => a.address === source) : null;
+                const host = !creator && hostAddr ? onChain.find((a) => a.address === hostAddr) : null;
+                if (creator || host) setOwnerAddress(creator || host);
+                setCreatorHeld(Boolean(creator));
                 // Pre-populate the buyer-address picker with this wallet's
                 // HD addresses on the dispenser's chain. Non-HD (watch-
                 // only) addresses are filtered out because they can't
@@ -538,8 +547,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const isTerminal = isTerminalDispenserStatus(liveStatus);
     // An ownership dispenser's form lane does not exist (DispenserForm has no
     // GIVE_OWNERSHIP), and a sold one no longer has the ownership to offer.
-    const canOpenAgain = isTerminal && Boolean(ownerAddress) && typeof onOpenAgain === 'function'
+    const canOpenAgain = isTerminal && creatorHeld && typeof onOpenAgain === 'function'
         && Number(dispenser?.give_ownership || 0) !== 1;
+    // Holding only the dispenser address grants close / refill / edit but no
+    // origin standing, so such a wallet may not open a new dispenser there.
+    const ownsOnlyDispenserAddress = Boolean(ownerAddress) && !creatorHeld;
+    const creatorSource = dispenser?.source || action?.source || '';
     const priceStale = isDispenserPriceStale(dispenser);
     const currentExpiration = liveState.expiration;
     const currentAllowList = boundListIndex(liveState.allowList);
@@ -979,6 +992,19 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         hardware: 'dispenserActionHw',
     });
 
+    // A close returns escrow to whichever address signs it, so the close
+    // screens name that address. Closing someone else's dispenser from the
+    // dispenser address keeps the escrow here, which the creator may not expect.
+    const closeEscrowNote = ownerAddress ? (
+        <p className={styles.hint} data-testid="close-escrow-destination">
+            Escrow returns to <AddressText address={ownerAddress.address} /> (this wallet).
+            {ownsOnlyDispenserAddress && creatorSource && creatorSource !== ownerAddress.address
+                ? ' Another address opened this dispenser; closing it from the dispenser address'
+                    + ' returns the remaining escrow to this wallet, not to the creator.'
+                : null}
+        </p>
+    ) : null;
+
     // The NEW allow-list's members, read as soon as the owner types a list
     // number, so the edit form can say before signing when the dispenser's
     // own address is missing from it. Keyed by index so a stale read for a
@@ -1219,6 +1245,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         allowListWarning={editAllowSelfWarning}
                         listsChanged={Boolean(editAllowList.trim() || editBlockList.trim())}
                         refillNote={refillCeilingMessage(refillCount)}
+                        closeNote={closeEscrowNote}
                     />
                 )}
             />
@@ -1532,6 +1559,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ))}
                     </div>
                 ) : null}
+                {closeEscrowNote}
                 {feeSelector}
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
@@ -1643,6 +1671,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {terminalDispenserNotice(liveStatus, { canReopen: canOpenAgain })}
                 </p>
             ) : null}
+            {isTerminal && ownsOnlyDispenserAddress ? (
+                <p className={styles.hint} data-testid="reopen-origin-note">
+                    Only the address that opened this dispenser can open it again.
+                </p>
+            ) : null}
             {priceStale ? (
                 <p role="alert" className={styles.warning}>
                     <strong>{DISPENSER_PRICE_STALE_MESSAGE}</strong>
@@ -1709,7 +1742,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dt className={styles.detailsLabel}>Source</dt>
                         <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
                             <AddressText address={source} truncate={false} />
-                            {ownerAddress ? ' (you)' : ''}
+                            {creatorHeld ? ' (you)' : ''}
                         </dd>
                     </>
                 ) : null}
@@ -1718,6 +1751,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dt className={styles.detailsLabel}>Address</dt>
                         <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
                             <AddressText address={dispAddress || source} truncate={false} />
+                            {ownsOnlyDispenserAddress ? ' (you)' : ''}
                         </dd>
                     </>
                 ) : null}
@@ -2223,13 +2257,16 @@ function OwnerLaneFooter({ isWatcherMode, error, submitting, disabled = false, l
  * The dispenser-only facts that must still sit in front of Approve on the
  * confirm page, which shows the decoded action but knows nothing of these.
  */
-function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote }) {
+function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote, closeNote }) {
     if (kind === 'refill') return <p className={styles.hint}>{refillNote}</p>;
     if (kind === 'close') {
         return (
-            <p className={styles.hint}>
-                The dispenser enters a 1-hour close window before remaining escrow is released.
-            </p>
+            <>
+                <p className={styles.hint}>
+                    The dispenser enters a 1-hour close window before remaining escrow is released.
+                </p>
+                {closeNote}
+            </>
         );
     }
     return (

@@ -69,6 +69,11 @@ import {
 } from '../utils/unusedDispenserAddress.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useDispenserPriceFloor, PRICE_BELOW_FLOOR_ERROR } from '../hooks/useDispenserPriceFloor.js';
+import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
+import {
+    dispenserAddressVerdict,
+    readDispenserAddressStanding,
+} from '../../flows/dispenserAddressStanding.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -107,6 +112,25 @@ function unixToLocalInput(unix) {
 // existingAddressId for a reopened dispenser's address when the wallet holds
 // no record of it (see existingAddress below).
 const REOPEN_ADDRESS_ID = 'reopen-dispenser-address';
+
+const COIN_NAME = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
+// Check a typed dispenser address the way Send checks a recipient: it must
+// decode for this chain's coin and network, since buyers pay to it and a
+// mistyped or wrong-chain address sends every payment nowhere. Empty is not
+// an error here; Create reports a missing address on its own.
+function outsideAddressError(address, descriptor) {
+    if (!address || !descriptor?.coin || !descriptor?.networkKind) return null;
+    if (isValidAddressForChain(address, descriptor.coin, descriptor.networkKind)) return null;
+    const chainName = COIN_NAME[descriptor.coin] || descriptor.coin;
+    // Name the coin it does look like, which beats a bare "invalid".
+    const detected = detectAddressCoin(address);
+    if (detected && detected !== descriptor.coin) {
+        return `This looks like a ${COIN_NAME[detected] || detected} address, not a ${chainName} address.`;
+    }
+    const where = descriptor.networkKind === 'mainnet' ? chainName : `${chainName} ${descriptor.networkKind}`;
+    return `This is not a valid ${where} address. Check it for typos.`;
+}
 
 /**
  * Dispenser authoring form (§40.7.1).
@@ -218,12 +242,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     //              when it equals SOURCE; protocol defaults to SOURCE)
     //   'existing' reuse an address that already exists: one picked from
     //              the wallet's own list, or a reopened dispenser's address
+    //   'other'    any address on the chain, typed or pasted; the chain
+    //              accepts it only under the rules checked by outsideVerdict
     const [addressMode, setAddressMode] = useState(
-        /** @type {'new' | 'current' | 'existing'} */ (reopen?.dispenserAddress ? 'existing' : 'new'),
+        /** @type {'new' | 'current' | 'existing' | 'other'} */ (reopen?.dispenserAddress ? 'existing' : 'new'),
     );
     const [existingAddressId, setExistingAddressId] = useState(
         /** @type {string | null} */ (reopen?.dispenserAddress ? REOPEN_ADDRESS_ID : null),
     );
+    const [outsideAddress, setOutsideAddress] = useState('');
+    const outsideTrimmed = outsideAddress.trim();
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
     // Picker's "New dispenser address" row: generates immediately (same
     // flow as Add addresses with Purpose=Dispenser); guards double-taps.
@@ -281,12 +309,14 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,
             showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
+            outsideAddress,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, giveAmount, escrow,
         triggerPrice, oracleAddress, fiatCode, fiatAmount,
         showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
+        outsideAddress,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -302,10 +332,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
         if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
-        if (v.addressMode === 'new' || v.addressMode === 'current' || v.addressMode === 'existing') {
+        if (v.addressMode === 'new' || v.addressMode === 'current' || v.addressMode === 'existing'
+            || v.addressMode === 'other') {
             setAddressMode(v.addressMode);
         }
         if (typeof v.existingAddressId === 'string') setExistingAddressId(v.existingAddressId);
+        if (typeof v.outsideAddress === 'string') setOutsideAddress(v.outsideAddress);
         setDraftPending(true);
     }, [draft]);
     const dismissDraft = useCallback(() => {
@@ -487,7 +519,49 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         ? (dispenserGetAddress?.address || (canDeriveGetAddress ? '' : sourceAddress?.address || ''))
         : addressMode === 'existing'
             ? (existingAddress?.address || sourceAddress?.address || '')
-            : (sourceAddress?.address || '');
+            : addressMode === 'other'
+                ? (outsideTrimmed || sourceAddress?.address || '')
+                : (sourceAddress?.address || '');
+
+    // Mode 'other': the address is typed, so check its format for this chain,
+    // then ask whether the chain will let SOURCE open a dispenser there. The
+    // reads are debounced like the balance lookups, and a verdict is used only
+    // for the exact (chain, address, source) it was read for.
+    const outsideFormatError = addressMode === 'other' ? outsideAddressError(outsideTrimmed, descriptor) : null;
+    const outsideKey = addressMode === 'other' && outsideTrimmed && !outsideFormatError
+        && chainId && sourceAddress?.address
+        ? `${chainId}|${outsideTrimmed}|${sourceAddress.address}`
+        : '';
+    const [outsideStanding, setOutsideStanding] = useState(
+        /** @type {{ key: string, verdict: any }} */ ({ key: '', verdict: null }),
+    );
+    useEffect(() => {
+        if (!outsideKey) return undefined;
+        const source = sourceAddress.address;
+        // Opening on SOURCE itself needs no reads.
+        if (outsideTrimmed === source) {
+            setOutsideStanding({ key: outsideKey, verdict: dispenserAddressVerdict({ address: outsideTrimmed, source }) });
+            return undefined;
+        }
+        let live = true;
+        const timer = setTimeout(() => {
+            readDispenserAddressStanding({ messaging, chainId, address: outsideTrimmed, source })
+                .catch(() => ({ preference: null, seen: null, origin: null }))
+                .then((standing) => {
+                    if (!live) return;
+                    setOutsideStanding({
+                        key: outsideKey,
+                        verdict: dispenserAddressVerdict({ address: outsideTrimmed, source, ...standing }),
+                    });
+                });
+        }, 400);
+        return () => { live = false; clearTimeout(timer); };
+    }, [outsideKey, messaging]);
+    const outsideVerdict = outsideKey && outsideStanding.key === outsideKey ? outsideStanding.verdict : null;
+    const outsideVerdictLoading = Boolean(outsideKey) && !outsideVerdict;
+    // Create waits for the verdict and stays off on a refusal: a refused
+    // create still pays the network fee and opens nothing.
+    const outsideBlocked = addressMode === 'other' && (outsideVerdictLoading || outsideVerdict?.allowed === false);
 
     // D-161: an allow-list gates the dispenser's OWN pay-to address as well as
     // the buyer, so a list of customers alone refuses every sale - silently,
@@ -524,6 +598,22 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             <p className={styles.warning}>{allowListSelfWarning}</p>
         </div>
     ) : null;
+    // Confirm-time reminder for an outside dispenser address: buyers pay that
+    // address, not SOURCE, and the escrow goes back to whichever of the two
+    // closes the dispenser (dispenser.md Rules), which may not be this wallet.
+    const outsideAddressNote = addressMode === 'other' && outsideTrimmed
+        && outsideVerdict?.allowed && outsideVerdict.kind !== 'self' ? (
+            <div role="note" className={styles.warnings} data-testid="outside-address-note">
+                <p className={styles.warning}>
+                    Dispenser address: <AddressText address={outsideTrimmed} truncate={false} />
+                </p>
+                <p className={styles.warning}>
+                    Buyers&apos; payments go to this address, not to your source. Either this
+                    address or your source can close the dispenser, and the unsold escrow
+                    returns to whichever one closes it.
+                </p>
+            </div>
+        ) : null;
 
     // Resolve the SOURCE address's balance of the entered ticker for the
     // escrow AmountField (Max + "available"). Debounced on the ticker for
@@ -600,6 +690,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         } else if (addressMode === 'existing' && existingAddress?.address
             && existingAddress.address !== sourceAddress?.address) {
             p.GET_ADDRESS = existingAddress.address;
+        } else if (addressMode === 'other' && outsideTrimmed && outsideTrimmed !== sourceAddress?.address) {
+            // An outside address: SOURCE still signs and escrows, buyers pay here.
+            p.GET_ADDRESS = outsideTrimmed;
         }
 
         if (payWith === 'token') {
@@ -637,7 +730,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (blockListIdx) p.BLOCK_LIST = blockListIdx;
 
         return p;
-    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress, addressMode, existingAddress, sourceAddress, payWith, getTick, getTokenAmount, expMode, expInput, allowListIdx, blockListIdx]);
+    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, dispenserGetAddress, addressMode, existingAddress, outsideTrimmed, sourceAddress, payWith, getTick, getTokenAmount, expMode, expInput, allowListIdx, blockListIdx]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -716,6 +809,19 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (addressMode === 'existing' && !existingAddress) {
             setFormError('Pick an existing dispenser address, or choose a new one.');
             return;
+        }
+        if (addressMode === 'other') {
+            // An outside address must be present, well formed, and accepted.
+            if (!outsideTrimmed) {
+                setFormError('Enter the dispenser address, or pick one of your own.');
+                return;
+            }
+            if (outsideFormatError) { setFormError(outsideFormatError); return; }
+            if (!outsideVerdict) {
+                setFormError('Still checking whether this address accepts your dispenser.');
+                return;
+            }
+            if (!outsideVerdict.allowed) { setFormError(outsideVerdict.message); return; }
         }
         setFormError(null);
         // §16: the dedicated dispenser sub-address (GET_ADDRESS) for mode
@@ -981,6 +1087,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             <AddressText address={dispenserGetAddress.address} />
                         ) : addressMode === 'existing' && existingAddress ? (
                             <AddressText address={existingAddress.address} />
+                        ) : addressMode === 'other' && outsideTrimmed ? (
+                            <AddressText address={outsideTrimmed} />
                         ) : (
                             <AddressText address={fromAddress.address} />
                         )}
@@ -1007,6 +1115,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         ))}
                     </div>
                 ) : null}
+                {outsideAddressNote}
                 {allowListWarningNode}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
@@ -1110,6 +1219,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             setPickerGenerating(false);
                         }
                     },
+                }, {
+                    // An address this wallet may not hold; the form checks
+                    // whether the chain will accept it before Create enables.
+                    key: 'another-address',
+                    label: 'Another address',
+                    sublabel: 'Enter any address on this chain',
+                    onSelect: () => {
+                        setAddressMode('other');
+                        setExistingAddressId(null);
+                        setAddressPickerOpen(false);
+                    },
                 }]}
                 onPick={(a) => {
                     if (fromAddress && a.id === fromAddress.id) {
@@ -1167,7 +1287,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 getSignerStatus={messaging.getSignerStatus}
                 hintClassName={styles.hint}
                 // Re-checked against the GET_ADDRESS this preview derived
-                extraCredentials={allowListWarningNode}
+                extraCredentials={outsideAddressNote || allowListWarningNode ? (
+                    <>
+                        {outsideAddressNote}
+                        {allowListWarningNode}
+                    </>
+                ) : null}
             />
         );
     }
@@ -1249,19 +1374,46 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             {fromAddress ? (
                 <>
                     {/* Dispenser address: where the dispenser opens (GET_ADDRESS). */}
-                    <AddressField
-                        label="Dispenser address"
-                        icon="addresses"
-                        value={addressMode === 'new'
-                            ? 'New dispenser address (generated at preview)'
-                            : (addressMode === 'existing' && existingAddress
-                                ? existingAddress.address
-                                : fromAddress.address)}
-                        readOnly
-                        onChange={() => {}}
-                        onIconClick={() => setAddressPickerOpen(true)}
-                        iconLabel="Change dispenser address"
-                    />
+                    {addressMode === 'other' ? (
+                        <AddressField
+                            label="Dispenser address"
+                            icon="addresses"
+                            value={outsideAddress}
+                            placeholder={descriptor?.displayName ? `Any ${descriptor.displayName} address` : 'Any address on this chain'}
+                            onChange={(e) => setOutsideAddress(e.target.value)}
+                            error={outsideFormatError || undefined}
+                            onIconClick={() => setAddressPickerOpen(true)}
+                            iconLabel="Change dispenser address"
+                        />
+                    ) : (
+                        <AddressField
+                            label="Dispenser address"
+                            icon="addresses"
+                            value={addressMode === 'new'
+                                ? 'New dispenser address (generated at preview)'
+                                : (addressMode === 'existing' && existingAddress
+                                    ? existingAddress.address
+                                    : fromAddress.address)}
+                            readOnly
+                            onChange={() => {}}
+                            onIconClick={() => setAddressPickerOpen(true)}
+                            iconLabel="Change dispenser address"
+                        />
+                    )}
+                    {/* The pre-flight verdict for an outside address, beside the
+                        field it judges, so a refusal is seen before Create. */}
+                    {outsideVerdictLoading ? (
+                        <StatusMessage variant="status">
+                            Checking whether this address accepts your dispenser…
+                        </StatusMessage>
+                    ) : null}
+                    {addressMode === 'other' && outsideVerdict ? (
+                        <StatusMessage variant={outsideVerdict.allowed ? 'status' : 'error'}>
+                            <span data-testid="outside-address-verdict" data-verdict={outsideVerdict.kind}>
+                                {outsideVerdict.message}
+                            </span>
+                        </StatusMessage>
+                    ) : null}
 
                     {/* Source: which address funds and signs the action. */}
                     <AddressField
@@ -1501,7 +1653,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={derivingGetAddress || actionConfirm.composing}
+                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
                 >
                     {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
                 </Button>
