@@ -1544,8 +1544,8 @@ function decodeIssue(p, chainName, chainSuffix) {
             summary: `Update allow/block list for ${tick || '?'}${chainSuffix}`,
             details: [
                 { label: 'Token', value: tick },
-                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
-                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: listEditValue(allowList, 'allow') }] : []),
+                ...(blockList ? [{ label: 'Block list', value: listEditValue(blockList, 'block') }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: baseWarnings,

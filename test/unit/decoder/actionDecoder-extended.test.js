@@ -231,6 +231,16 @@ describe('decodeAction extended', () => {
             }
         });
 
+        it('v5 describes zero sentinels as policy-list removals', () => {
+            const d = decodeAction({
+                action: 'ISSUE',
+                params: { TICK: 'X', VERSION: '5', ALLOW_LIST: '0', BLOCK_LIST: 0 },
+            });
+            const rows = Object.fromEntries(d.details.map((r) => [r.label, r.value]));
+            expect(rows['Allow list']).toBe('Remove allow list');
+            expect(rows['Block list']).toBe('Remove block list');
+        });
+
         it('v0 create with none of them is unchanged', () => {
             const d = decodeAction({
                 action: 'ISSUE',

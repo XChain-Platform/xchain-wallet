@@ -836,11 +836,12 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         ? String(callbackRaw.block) : null;
     // PC-04 access lists (ISSUE v5): xchain-explorer's getToken groups these
     // under `lists: { allow, block }` as LIST action indexes (numeric) or
-    // null. Surface each as a string action-index (or null when unset).
+    // null. A detached list may be reported as the protocol's 0 sentinel,
+    // which is also no active policy list.
     const listsRaw = row?.lists && typeof row.lists === 'object' ? row.lists : {};
-    const allowList = (listsRaw.allow != null && String(listsRaw.allow) !== '')
+    const allowList = (listsRaw.allow != null && String(listsRaw.allow) !== '' && String(listsRaw.allow) !== '0')
         ? String(listsRaw.allow) : null;
-    const blockList = (listsRaw.block != null && String(listsRaw.block) !== '')
+    const blockList = (listsRaw.block != null && String(listsRaw.block) !== '' && String(listsRaw.block) !== '0')
         ? String(listsRaw.block) : null;
     // Bridge fields (ISSUE v7, xchain-token-bridge.md section 8 / the bridge
     // policy spec). Each is read from where the explorer's getToken grouping

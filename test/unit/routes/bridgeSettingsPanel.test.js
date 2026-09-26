@@ -11,9 +11,8 @@
 // The issuer's bridgeability panel (ISSUE format 7). Every case here is about
 // something an issuer cannot take back: opening a token to another chain, the
 // depth they price a reorg at, and the one-way freeze. The policy refusal is
-// the other half: a token bound to an address list can never be bridged in
-// milestone 1, and a bound list can never be cleared, so a wallet that let an
-// issuer try would be selling a door that does not open.
+// the other half: a token with an active address-list policy cannot bridge
+// until the issuer detaches that policy.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -90,14 +89,14 @@ describe('TokenAdminForm bridge settings: the opt-in', () => {
     });
 });
 
-describe('TokenAdminForm bridge settings: refusals the issuer cannot undo', () => {
-    it('refuses to open a list-bound token, and says why it stays refused', async () => {
+describe('TokenAdminForm bridge settings: policy and freeze refusals', () => {
+    it('refuses to open a list-bound token and names the required detach', async () => {
         mountAdmin({
             chainId: DOGE, tick: 'FUFU', locks: {}, allowList: '1234',
         });
         const msg = await screen.findByText(/bound to an address list/i, {}, WAIT);
         expect(msg.textContent).toContain('would carry none of that policy on the other chain');
-        expect(msg.textContent).toContain('can never be cleared');
+        expect(msg.textContent).toContain('Detach the policy list first');
         expect(screen.getByLabelText('Bitcoin')).toBeDisabled();
     });
 
