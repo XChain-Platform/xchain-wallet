@@ -353,6 +353,9 @@ try {
     const repo = join(work, 'repo');
     mkdirSync(join(repo, 'tools', 'release'), { recursive: true });
     mkdirSync(join(repo, 'tools', 'build-reproduce'), { recursive: true });
+    // The dev-mock gate refuses a release clone without desktop main source.
+    mkdirSync(join(repo, 'packages', 'desktop', 'main'), { recursive: true });
+    writeFileSync(join(repo, 'packages', 'desktop', 'main', 'main.js'), '');
     // update-info.mjs is in this list because lib.sh calls it to decide
     // what is an artifact and what is a channel pointer. Leave it out and
     // sign.sh reports a completely empty artifact set, which reads as a

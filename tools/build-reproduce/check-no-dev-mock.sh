@@ -157,6 +157,26 @@ SCAN_TARGETS=(
     "packages/desktop/renderer/dist|SDKWalletError,MULTISIG_DERIVE_FAILED"
 )
 
+fail_missing_desktop_source() {
+    echo "FAIL packages/desktop/main is missing"
+    echo "     The desktop main process ships as unbundled source, so the release"
+    echo "     gate cannot cover a desktop build without this source tree."
+    echo
+    echo "Pre-release gate FAILED - desktop main-process source is absent; scanned NOTHING."
+    exit 1
+}
+
+if [ ! -d packages/desktop/main ]; then
+    if [ -z "$ARTIFACT_DIR" ]; then
+        fail_missing_desktop_source
+    elif [ -d "$ARTIFACT_DIR" ] \
+        && find "$ARTIFACT_DIR" -maxdepth 1 \
+        \( -name '*.deb' -o -name '*.AppImage' -o -name '*-mac.zip' \) \
+        -print -quit | grep -q .; then
+        fail_missing_desktop_source
+    fi
+fi
+
 # --- Artifact mode ------------------------------------------------------
 #
 # The same markers, pointed at the release staging directory instead of the
