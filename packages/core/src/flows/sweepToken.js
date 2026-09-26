@@ -22,6 +22,7 @@
 import { submitAction } from './submitAction.js';
 import { assertValidDestination, normalizeSource } from './sendToken.js';
 import { disableAutopayForAddress } from './autopayConsent.js';
+import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
 
 /**
  * @typedef {Object} SweepTokenOpts
@@ -114,6 +115,7 @@ export async function sweepToken(opts) {
         prebuiltPsbt: opts.prebuiltPsbt,
         encoderOpts: {
             pubkey: source.publicKey,
+            ...fundingEncoderOpts(source),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),

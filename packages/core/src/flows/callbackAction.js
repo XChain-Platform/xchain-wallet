@@ -21,6 +21,7 @@
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
 
 /**
  * @typedef {Object} CallbackActionOpts
@@ -76,6 +77,7 @@ export async function callbackAction(opts) {
         actionData: { action: 'CALLBACK', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            ...fundingEncoderOpts(source),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
