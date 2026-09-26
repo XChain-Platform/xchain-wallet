@@ -191,6 +191,16 @@ describe('prepareGatedSend detection', () => {
         expect(groups[0].files).toHaveLength(1);
     });
 
+    it('matches gate tickers case-insensitively and keeps stored spelling', async () => {
+        const row = { ...gatedRow(HASH_A, '100'), gate_ticker: 'MiXeD', status: 'valid' };
+        const sdk = makeSdk({ getFiles: vi.fn(async () => [row]) });
+
+        const groups = await listGatedFiles({ sdk, tick: 'MIXED' });
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].gateTicker).toBe('MiXeD');
+    });
+
     it('returns null for an ungated tick', async () => {
         const sdk = makeSdk({ getFiles: vi.fn(async () => []) });
         expect(await prepareGatedSend(makeArgs({ sdk }))).toBeNull();

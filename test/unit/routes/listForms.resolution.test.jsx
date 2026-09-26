@@ -402,10 +402,19 @@ describe('ListCreateForm checks token items before publishing', () => {
     });
 
     it('classifyTickItems and tickLookupVerdict keep the three verdicts apart', () => {
-        expect(classifyTickItems('a, B\nb\n\nx y')).toEqual({ valid: ['A', 'B'], invalid: ['X Y'], duplicates: 1 });
+        expect(classifyTickItems('a, B\nb\n\nx y')).toEqual({ valid: ['a', 'B'], invalid: ['x y'], duplicates: 1 });
         expect(tickLookupVerdict(null)).toBe(null);
         expect(tickLookupVerdict(UNKNOWN)).toBe('missing');
         expect(tickLookupVerdict(KNOWN)).toBe('found');
+    });
+
+    it('classifies token-list items with the chain ticker grammar', () => {
+        expect(classifyTickItems('FLAM1N-H0T-CHEET0S, Wow!, c#, .A, A..B, A.')).toEqual({
+            valid: ['FLAM1N-H0T-CHEET0S', 'Wow!', 'c#'],
+            invalid: ['.A', 'A..B', 'A.'],
+            duplicates: 0,
+        });
+        expect(classifyTickItems('A'.repeat(251)).invalid).toEqual(['A'.repeat(251)]);
     });
 });
 

@@ -629,7 +629,7 @@ export async function listGatedFiles({ sdk, tick }) {
     const seenActionIndexes = new Set();
     for (const row of list) {
         const gate = row && row.gate_ticker ? String(row.gate_ticker) : null;
-        if (!gate || gate !== String(tick)) continue;
+        if (!gate || gate.toLowerCase() !== String(tick).toLowerCase()) continue;
         // Ignore FILE rows that consensus rejected while accepting older
         // explorer responses that do not expose a status field.
         if (row.status != null && String(row.status) !== 'valid') continue;

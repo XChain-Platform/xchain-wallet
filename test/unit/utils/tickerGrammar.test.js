@@ -243,6 +243,8 @@ describe('ticker reference grammar', () => {
 
     it('opens the ^ID form only where the surface asks for it', () => {
         expect(tickerReferenceError('^123', { allowRef: true })).toBeNull();
+        expect(tickerReferenceError('^0', { allowRef: true })).toMatch(/\^ followed by/);
+        expect(tickerReferenceError('^01', { allowRef: true })).toMatch(/\^ followed by/);
         expect(tickerReferenceError('^', { allowRef: true })).toMatch(/\^ followed by/);
         expect(tickerReferenceError('^12A', { allowRef: true })).toMatch(/\^ followed by/);
         expect(tickerReferenceError('A^B', { allowRef: true })).toMatch(/\^ followed by/);
