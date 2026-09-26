@@ -57,6 +57,7 @@ assert.match(codec, /gatedKeys: parsed\.gatedKeys \?\? empty\.gatedKeys/, 'codec
 const host = read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
 assert.match(host, /host\.register\('action\.gatedPublish',/, 'software handler');
 assert.match(host, /registerHwHandler\('action\.gatedPublish\.hw', gatedPublishAction\)/, 'HW handler');
+assert.match(host, /host\.register\('action\.gatedPublish\.composeForConfirm',/, 'confirm composer handler');
 assert.match(host, /host\.register\('action\.gatedPublish\.psbt',/, 'watcher encode-only handler');
 assert.match(host, /host\.register\('gatedKeys\.list',/, 'pack list handler');
 assert.match(host, /schemas\.gatedKey\.gatedKeyMetadata\(r\)/, 'list handler strips keyHex via the schema helper');
@@ -68,7 +69,7 @@ for (const [label, ...p] of [
     ['extension', 'packages', 'extension', 'src', 'popup', 'messaging.js'],
 ]) {
     const m = read(...p);
-    for (const fn of ['gatedPublishAction', 'gatedPublishActionHw', 'buildGatedPublishPsbtRequest', 'listGatedKeys']) {
+    for (const fn of ['gatedPublishAction', 'gatedPublishActionHw', 'composeGatedPublishForConfirm', 'buildGatedPublishPsbtRequest', 'listGatedKeys']) {
         assert.match(m, new RegExp(`export function ${fn}\\(`), `${label}: exports ${fn}`);
     }
     assert.match(m, /sendMessage\('action\.gatedPublish', /, `${label}: routes to action.gatedPublish`);
@@ -81,8 +82,10 @@ assert.match(form, /existingKeyHash: packChoice/, 'pack reuse threads existingKe
 assert.match(form, /published on-chain forever/, 'irreversibility acknowledgment copy');
 assert.match(form, /ackForever/, 'publish blocked until acknowledged');
 assert.match(form, /buildGatedPublishPsbtRequest\(base\)/, 'watcher branch uses the encode-only path');
-assert.match(form, /gatedPublishActionHw\(/, 'HW branch');
-assert.match(form, /gatedPublishAction\(\{ \.\.\.base, password \}\)/, 'software branch');
+assert.match(form, /useActionConfirmFlow\(\{ messaging, walletId \}\)/, 'full wallets use the shared confirm flow');
+assert.match(form, /composeGatedPublishForConfirm\(base\)/, 'confirm compose prepares the encrypted action host-side');
+assert.match(form, /prebuiltActionData: composed\.gatedPublish\.actionData/, 'approve signs the prepared action bytes');
+assert.match(form, /<ActionConfirmScreen/, 'form swaps to the shared confirm page');
 assert.match(form, /ownerMissing/, 'blocks when the wallet lacks the owner address');
 assert.match(form, /Pack key hash/, 'done screen surfaces KEY_HASH');
 

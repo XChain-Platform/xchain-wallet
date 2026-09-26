@@ -38,6 +38,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { buildActionPsbt } from './buildActionPsbt.js';
+import { composeActionForConfirm } from './composeActionForConfirm.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import { maxGatedPlaintextBytes } from './fileSizeLimits.js';
 import { indexerWatermark } from './balances.js';
@@ -87,6 +88,10 @@ export const MAX_GATED_PLAINTEXT_BYTES = 6500;
  *                                    to emit the field early.
  * @property {number} [feePerKb]
  * @property {boolean} [trackPendingTx]
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]
+ * @property {{ action: string, params: object }} [prebuiltActionData]
+ * @property {string} [prebuiltKeyHash]
+ * @property {number} [prebuiltCiphertextLength]
  */
 
 /**
@@ -260,9 +265,8 @@ async function prepareGatedPublish(opts, caller) {
         // leftover clears dust, with "Transaction would burn significant
         // satoshis as fees. Please provide a change address" - it will not
         // silently burn it - so a funded address with one large UTXO fails
-        // every time. The public FILE lane never hit this because its confirm
-        // lane injects the pair; BATCH is fee-quote denied by design, so the
-        // gated form has no confirm lane and always builds live here.
+        // every time. The shared confirm lane also needs the pair before it
+        // builds, while watcher and fallback direct-sign paths use it here.
         // Mirrors linkAction.js / advancedAction.js / composeForConfirm.js.
         sourceAddress: source.address,
         change: source.address,
@@ -274,6 +278,40 @@ async function prepareGatedPublish(opts, caller) {
 }
 
 /**
+ * Prepare the encrypted payload once, persist its key, and compose the exact
+ * PSBT shown on the shared confirm page. The prepared action accompanies the
+ * envelope so approval can sign it without generating a second key or cipher.
+ *
+ * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object }} opts
+ */
+export async function composeGatedPublishForConfirm(opts) {
+    const prepared = await prepareGatedPublish(opts, 'composeGatedPublishForConfirm');
+    const encoderOpts = {
+        ...prepared.encoderOpts,
+        ...(opts.confirmEncoderOpts || {}),
+        ...(opts.change ? { change: opts.change } : {}),
+    };
+    const composed = await composeActionForConfirm({
+        vault: opts.vault,
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        actionData: prepared.actionData,
+        encoderOpts,
+        source: prepared.source.address,
+        ownAddresses: opts.ownAddresses,
+    });
+    return {
+        ...composed,
+        gatedPublish: {
+            actionData: prepared.actionData,
+            keyHash: prepared.keyHash,
+            ciphertextLength: prepared.ciphertextLength,
+        },
+    };
+}
+
+/**
  * Sign-and-broadcast path (software + HW signers; submitAction routes
  * on opts.signer the same way fileAction does).
  *
@@ -281,8 +319,25 @@ async function prepareGatedPublish(opts, caller) {
  * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult & { keyHash: string }>}
  */
 export async function gatedPublishAction(opts) {
-    const { source, actionData, encoderOpts, keyHash, ciphertextLength } =
-        await prepareGatedPublish(opts, 'gatedPublishAction');
+    let prepared;
+    if (opts?.prebuiltPsbt && opts.prebuiltActionData && opts.prebuiltKeyHash) {
+        const source = normalizeSource(opts.from, 'gatedPublishAction');
+        prepared = {
+            source,
+            actionData: opts.prebuiltActionData,
+            encoderOpts: {
+                pubkey: source.publicKey,
+                sourceAddress: source.address,
+                change: source.address,
+                ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+            },
+            keyHash: opts.prebuiltKeyHash,
+            ciphertextLength: Number(opts.prebuiltCiphertextLength) || 0,
+        };
+    } else {
+        prepared = await prepareGatedPublish(opts, 'gatedPublishAction');
+    }
+    const { source, actionData, encoderOpts, keyHash, ciphertextLength } = prepared;
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -304,6 +359,7 @@ export async function gatedPublishAction(opts) {
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
+        prebuiltPsbt: opts.prebuiltPsbt,
         pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,

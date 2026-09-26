@@ -96,6 +96,7 @@ const {
     fileAction,
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    composeGatedPublishForConfirm,
     getProjectForTick,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
@@ -4232,6 +4233,26 @@ export function createBackgroundHost(deps) {
     // the two paths cannot drift (flows/gatedPublishAction.js).
     host.register('action.gatedPublish', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return gatedPublishAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+    });
+    host.register('action.gatedPublish.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const source = normalizeSource(req?.from, 'action.gatedPublish.composeForConfirm');
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
+            req,
+            vault,
+            chainRegistry,
+            signerPool,
+            chainId: req?.chainId,
+            sourceAddress: source.address,
+        });
+        return composeGatedPublishForConfirm({
+            ...req,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            change,
+            ownAddresses,
+            confirmEncoderOpts: deviceHardenedEncoderOpts(req, {}),
+        });
     });
     host.register('action.gatedPublish.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return buildGatedPublishPsbtRequest({ ...req, vault, chainRegistry, sdkRegistry });

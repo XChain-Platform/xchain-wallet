@@ -1354,6 +1354,11 @@ export function gatedPublishActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.hw', opts));
 }
 
+/** @param {object} opts gated publish compose for the shared confirm page */
+export function composeGatedPublishForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish.composeForConfirm', opts));
+}
+
 /** @param {object} opts watcher-mode encode-only gated publish */
 export function buildGatedPublishPsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.psbt', opts));

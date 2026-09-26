@@ -441,6 +441,60 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
         await waitFor(() => expect(hint.textContent).toMatch(/no password is needed/));
     });
 
+    it('ProjectRosterForm confirms and preflights both legs before signing', async () => {
+        const composeForConfirm = vi.fn().mockResolvedValue({
+            psbt: 'aa00', encoding: 'psbt', actionString: 'LIST|0|1|SWAPTEST', version: '0',
+            decoded: { summary: 'Create token list', details: [], warnings: [] },
+        });
+        const preflight = vi.fn().mockResolvedValue({ verdict: 'pass', findings: [], unverified: [] });
+        const createList = vi.fn().mockResolvedValue({ txid: 'list-tx' });
+        const linkAction = vi.fn().mockResolvedValue({ txid: 'link-tx' });
+        const messaging = messagingWith({
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getGenesisForToken: vi.fn().mockResolvedValue({ action_index: 77 }),
+            composeForConfirm,
+            preflight,
+            createList,
+            linkAction,
+            getActionByTxid: vi.fn().mockResolvedValue({ action_index: 88 }),
+            checkInputLiveness: vi.fn().mockResolvedValue({ live: true }),
+            requoteNativeFee: vi.fn().mockResolvedValue(null),
+        });
+        mount(ProjectRosterForm, { walletId: 'w', chainId: DOGE, tick: 'PROJ', onBack() {} }, messaging);
+        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), { target: { value: 'SWAPTEST' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Review list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Publish list' }));
+
+        const from = (await screen.findByTestId('confirm-source')).textContent;
+        expect(from).toContain(BY_CHAIN[DOGE][0].address.slice(0, 6));
+        expect(from).toContain(BY_CHAIN[DOGE][0].address.slice(-6));
+        expect(composeForConfirm.mock.calls[0][0].actionData).toEqual({
+            action: 'LIST', params: { VERSION: '0', TYPE: '1', ITEM: ['SWAPTEST'] },
+        });
+        expect(preflight).toHaveBeenCalledOnce();
+        expect(createList).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).toBeEnabled());
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        await waitFor(() => expect(createList).toHaveBeenCalledOnce());
+        expect(createList.mock.calls[0][0].prebuiltPsbt.psbtHex).toBe('aa00');
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Make it official' }));
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(2));
+        expect(composeForConfirm.mock.calls[1][0].actionData).toEqual({
+            action: 'LINK',
+            params: {
+                VERSION: '0', COIN1: 'DOGE', COIN1_ACTION_INDEX: '88',
+                COIN2: 'DOGE', COIN2_ACTION_INDEX: '77', MEMO: '',
+            },
+        });
+        expect(preflight).toHaveBeenCalledTimes(2);
+        expect(linkAction).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).toBeEnabled());
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        await waitFor(() => expect(linkAction).toHaveBeenCalledOnce());
+        expect(linkAction.mock.calls[0][0].prebuiltPsbt.psbtHex).toBe('aa00');
+    });
+
     // Drives the recipients path to the list review, where the line renders.
     async function airdropReviewHint(ready) {
         mount(AirdropForm, { walletId: 'w', initialChainId: BTC, initialTick: 'JDOG', onBack() {} }, messagingWith({

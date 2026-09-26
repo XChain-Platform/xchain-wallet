@@ -26,6 +26,8 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -101,7 +103,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         /** @type {'compose' | 'review-list' | 'wait-index' | 'review-link' | 'done'} */
         ('compose'),
     );
-    const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [listTxid, setListTxid] = useState(/** @type {string | null} */ (null));
@@ -260,6 +261,33 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const submitting = actionConfirm.composing;
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const confirmDispatch = {
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+    };
+    const submitList = useConfirmSubmit({
+        ...confirmDispatch, software: 'createList', hardware: 'createListHw',
+    });
+    const submitLink = useConfirmSubmit({
+        ...confirmDispatch, software: 'linkAction', hardware: 'linkActionHw',
+    });
+
+    function sourceDescriptor() {
+        return {
+            address: fromAddress.address,
+            publicKey: fromAddress.publicKey,
+            derivationPath: fromAddress.derivationPath,
+            addressId: fromAddress.id,
+            source: fromAddress.source,
+            signerId: fromAddress.signerId,
+        };
+    }
 
     // Parse the textarea into validated, deduplicated, uppercased ticks.
     const memberTicks = useMemo(() => {
@@ -314,38 +342,35 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         if (submitting) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        setSubmitting(true);
         setSubmitError(null);
+        const from = sourceDescriptor();
+        const params = {
+            VERSION: '0',
+            TYPE: '1',
+            ITEM: memberTicks,
+        };
         try {
-            const base = {
-                walletId,
+            const res = await actionConfirm.run({
                 chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
-                // TICK-type LIST (TYPE=1): the roster shape the registry
-                // standard expects (sdk.project.rosterParams).
-                params: {
-                    VERSION: '0',
-                    TYPE: '1',
-                    ITEM: memberTicks,
-                },
-                ...(feePerKb != null ? { feePerKb } : {}),
-            };
-            const res = hw
-                ? await messaging.createListHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.createList({ ...base, password });
+                from,
+                actionData: { action: 'LIST', params },
+                encoderOpts: feePerKb != null ? { feePerKb } : {},
+                onApprove: (prebuiltPsbt) => submitList({
+                    walletId,
+                    chainId,
+                    from,
+                    params,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('List broadcast did not return a transaction ID.');
             setListTxid(txid);
             setPassword('');
             setStage('wait-index');
         } catch (err) {
+            if (isUserRejection(err)) return;
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
                 isBadPassword
@@ -358,8 +383,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
-        } finally {
-            setSubmitting(false);
         }
     }
 
@@ -368,36 +391,42 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         if (submitting || !listActionIndex || !issueActionIndex) return;
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        setSubmitting(true);
         setSubmitError(null);
+        const from = sourceDescriptor();
+        const params = {
+            VERSION: '0',
+            COIN1: coinTicker,
+            COIN1_ACTION_INDEX: listActionIndex,
+            COIN2: coinTicker,
+            COIN2_ACTION_INDEX: issueActionIndex,
+            MEMO: memo.trim() || '',
+        };
         try {
-            const base = {
-                walletId,
+            const res = await actionConfirm.run({
                 chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
-                coin1: coinTicker,
-                coin1ActionIndex: listActionIndex,
-                coin2: coinTicker,
-                coin2ActionIndex: issueActionIndex,
-                ...(memo.trim() ? { memo: memo.trim() } : {}),
-                ...(feePerKb != null ? { feePerKb } : {}),
-            };
-            const res = hw
-                ? await messaging.linkActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.linkAction({ ...base, password });
+                from,
+                actionData: { action: 'LINK', params },
+                encoderOpts: feePerKb != null ? { feePerKb } : {},
+                onApprove: (prebuiltPsbt) => submitLink({
+                    walletId,
+                    chainId,
+                    from,
+                    coin1: coinTicker,
+                    coin1ActionIndex: listActionIndex,
+                    coin2: coinTicker,
+                    coin2ActionIndex: issueActionIndex,
+                    ...(memo.trim() ? { memo: memo.trim() } : {}),
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                    prebuiltPsbt,
+                }),
+            });
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
             setLinkTxid(txid);
             setPassword('');
             setStage('done');
         } catch (err) {
+            if (isUserRejection(err)) return;
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
                 isBadPassword
@@ -410,8 +439,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
-        } finally {
-            setSubmitting(false);
         }
     }
 
@@ -449,6 +476,29 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={onHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
     }
 
     if (stage === 'done') {

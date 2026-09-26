@@ -23,15 +23,22 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
 vi.mock('../../../packages/core/src/flows/buildActionPsbt.js', () => ({
     buildActionPsbt: vi.fn(async () => ({ psbtHex: 'deadbeef', encoding: 'p2wsh' })),
 }));
+vi.mock('../../../packages/core/src/flows/composeActionForConfirm.js', () => ({
+    composeActionForConfirm: vi.fn(async () => ({
+        psbt: 'confirm-psbt', encoding: 'P2WSH', actionString: 'BATCH|0|...', version: '0',
+    })),
+}));
 
 import {
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
 } from '../../../packages/core/src/flows/gatedPublishAction.js';
 import { maxGatedPlaintextBytes, gatedBatchActionString } from '../../../packages/core/src/flows/fileSizeLimits.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { buildActionPsbt } from '../../../packages/core/src/flows/buildActionPsbt.js';
+import { composeActionForConfirm } from '../../../packages/core/src/flows/composeActionForConfirm.js';
 
 // --- Deterministic fake SDK crypto -----------------------------------
 // Real shapes (Buffer in/out, hex hashes) with predictable contents so
@@ -89,6 +96,7 @@ function makeOpts(overrides = {}) {
 beforeEach(() => {
     vi.mocked(submitAction).mockClear();
     vi.mocked(buildActionPsbt).mockClear();
+    vi.mocked(composeActionForConfirm).mockClear();
 });
 
 describe('gatedPublishAction validation', () => {
@@ -129,6 +137,31 @@ describe('gatedPublishAction validation', () => {
 });
 
 describe('gatedPublishAction composition', () => {
+    it('composes once for confirmation and signs those prepared bytes', async () => {
+        const sdk = makeSdk();
+        const vault = makeVault();
+        const opts = makeOpts({ sdk, vault });
+        const composed = await composeGatedPublishForConfirm({ ...opts, ownAddresses: [opts.from.address] });
+
+        expect(composed.psbt).toBe('confirm-psbt');
+        expect(composed.gatedPublish.keyHash).toBe(FIXED_KEY_HASH);
+        expect(vault.gatedKeys.put).toHaveBeenCalledOnce();
+        const prepared = composed.gatedPublish;
+        await gatedPublishAction({
+            ...opts,
+            prebuiltPsbt: { psbtHex: composed.psbt, encoding: composed.encoding },
+            prebuiltActionData: prepared.actionData,
+            prebuiltKeyHash: prepared.keyHash,
+            prebuiltCiphertextLength: prepared.ciphertextLength,
+        });
+
+        expect(sdk.gatedFile.generateKey).toHaveBeenCalledOnce();
+        expect(vault.gatedKeys.put).toHaveBeenCalledOnce();
+        const submit = vi.mocked(submitAction).mock.calls[0][0];
+        expect(submit.prebuiltPsbt.psbtHex).toBe('confirm-psbt');
+        expect(submit.actionData).toEqual(prepared.actionData);
+    });
+
     it('composes BATCH(FILE gated fields, MESSAGE v2 to self) with ciphertext as rawData', async () => {
         const opts = makeOpts();
         const result = await gatedPublishAction(opts);

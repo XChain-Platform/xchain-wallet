@@ -142,6 +142,7 @@ export { fileAction, fileActionParams } from './fileAction.js';
 export {
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
 } from './gatedPublishAction.js';
 export {
