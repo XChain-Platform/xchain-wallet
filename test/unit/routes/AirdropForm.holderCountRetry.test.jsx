@@ -50,6 +50,7 @@ const CHAIN = 'litecoin-mainnet';
 const SOURCE = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
 const HELD = 'HDR550816';
 const LISTED = 'MEM550816';
+const OTHER = 'MEM550817';
 
 const ADDRESSES = {
     [CHAIN]: [{
@@ -155,9 +156,31 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         await listOneTick();
 
         await waitFor(() => {
-            expect(preview()?.textContent).toMatch(/holder count unavailable \(.*429 rate limited.*\)/);
+            expect(preview()?.textContent).toMatch(/holder counts unavailable for 1 token/i);
         }, { timeout: 8000 });
+        expect(screen.getByText('Holder count details (1)')).toBeTruthy();
+        expect(screen.getByText(/HTTP 429 rate limited/)).toBeTruthy();
         expect(holders.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('lists the token and reason for every failed lookup in a partial preview', async () => {
+        const holders = mountAirdrop(async ({ tick }) => {
+            if (tick === OTHER) throw new Error('Explorer has no route for this token');
+            return { tick, total: 2, data: [{ address: 'a' }, { address: 'b' }] };
+        });
+
+        const mode = await screen.findByDisplayValue('Paste addresses');
+        fireEvent.change(mode, { target: { value: 'holders' } });
+        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+            target: { value: `${LISTED}\n${OTHER}` },
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Holder count details (1)')).toBeTruthy();
+        }, { timeout: 8000 });
+        expect(screen.getByText(OTHER)).toBeTruthy();
+        expect(screen.getByText(/Explorer has no route for this token/)).toBeTruthy();
+        expect(holders.mock.calls.filter(([arg]) => arg.tick === OTHER)).toHaveLength(2);
     });
 
     it('asks exactly once and reports the count when the venue answers first time', async () => {

@@ -39,6 +39,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -191,8 +192,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // (typed in 'holders' mode, or read off an 'existing' TYPE=1 list).
     // Always a preview, never a promise: see the file-level doc comment.
     const [holderPreview, setHolderPreview] = useState(
-        /** @type {{ loading: boolean, total: number | null, error: string | null }} */
-        ({ loading: false, total: null, error: null }),
+        /** @type {{ loading: boolean, total: number | null, error: string | null, failures: Array<{ subject: string, message: string }> }} */
+        ({ loading: false, total: null, error: null, failures: [] }),
     );
 
     const [stage, setStage] = useState(
@@ -414,11 +415,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const previewTicksKey = previewTicks.join('|');
     useEffect(() => {
         if (previewTicks.length === 0 || !chainId) {
-            setHolderPreview({ loading: false, total: null, error: null });
+            setHolderPreview({ loading: false, total: null, error: null, failures: [] });
             return undefined;
         }
         let cancelled = false;
-        setHolderPreview((prev) => ({ ...prev, loading: true, error: null }));
+        setHolderPreview((prev) => ({ ...prev, loading: true, error: null, failures: [] }));
         const handle = setTimeout(() => {
             // Retry once, and KEEP THE CAUSE. Both halves were missing, and a
             // single transient read failure was therefore permanent AND
@@ -435,27 +436,34 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 for (let attempt = 0; attempt < 2; attempt += 1) {
                     if (attempt > 0) {
                         await new Promise((resolve) => { setTimeout(resolve, 1200); });
-                        if (cancelled) return { count: null, error: null };
+                        if (cancelled) return { tick: t, count: null, error: null };
                     }
                     try {
                         const resp = await messaging.getHoldersForToken({ chainId, tick: t });
-                        return { count: extractHolderRows(resp).length, error: null };
+                        return { tick: t, count: extractHolderRows(resp).length, error: null };
                     } catch (err) {
                         lastErr = err;
                     }
                 }
-                return { count: null, error: lastErr?.message || 'unknown error' };
+                return {
+                    tick: t,
+                    count: null,
+                    error: lastErr?.message || 'The explorer returned no explanation.',
+                };
             };
             Promise.all(previewTicks.map(countHolders))
                 .then((results) => {
                     if (cancelled) return;
                     const valid = results.filter((r) => r.count !== null);
-                    const firstError = results.find((r) => r.count === null)?.error || 'unknown error';
+                    const failures = results
+                        .filter((r) => r.count === null)
+                        .map((r) => ({ subject: r.tick, message: r.error }));
                     if (valid.length === 0) {
                         setHolderPreview({
                             loading: false,
                             total: null,
-                            error: `Failed to load holder counts: ${firstError}`,
+                            error: `Holder counts unavailable for ${failures.length} token${failures.length === 1 ? '' : 's'}`,
+                            failures,
                         });
                         return;
                     }
@@ -463,9 +471,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setHolderPreview({
                         loading: false,
                         total,
-                        error: valid.length < results.length
-                            ? `Some token holder counts failed to load: ${firstError}`
+                        error: failures.length > 0
+                            ? `Holder counts unavailable for ${failures.length} of ${results.length} tokens`
                             : null,
+                        failures,
                     });
                 });
         }, 400);
@@ -1403,6 +1412,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             : 'Estimate unavailable'}
                     />
                 </dl>
+                <DiagnosticDetails
+                    summary={`Holder count details (${holderPreview.failures.length})`}
+                    items={holderPreview.failures}
+                    className={styles.hint}
+                />
                 {airdropDecoded && airdropDecoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {airdropDecoded.warnings.map((w, i) => (
@@ -1746,6 +1760,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 {' '}{descriptor?.displayName || chainId}, which cannot deliver to
                                 {' '}{recipients.wrongNetwork.length === 1 ? 'it' : 'them'}.
                             </p>
+                            <DiagnosticDetails
+                                summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                items={recipients.wrongNetwork.map((address) => ({
+                                    subject: address,
+                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                }))}
+                            />
                         </div>
                     ) : null}
                 </>
@@ -1776,7 +1797,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             {holderPreview.loading
                                 ? 'counting holders…'
                                 : holderPreview.error
-                                    ? `holder count unavailable (${holderPreview.error})`
+                                    ? holderPreview.error
                                     : holderPreview.total != null
                                         ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now`
                                         : ''}
@@ -1821,7 +1842,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             {' '}{holderPreview.loading
                                 ? 'Counting holders…'
                                 : holderPreview.error
-                                    ? `Couldn't count holders: ${holderPreview.error}`
+                                    ? `${holderPreview.error}.`
                                     : holderPreview.total != null
                                         ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now.`
                                         : ''}
@@ -1835,6 +1856,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     ) : null}
                 </>
             ) : null}
+
+            <DiagnosticDetails
+                summary={`Holder count details (${holderPreview.failures.length})`}
+                items={holderPreview.failures}
+                className={styles.hint}
+            />
 
             <Input
                 label="Memo (optional)"

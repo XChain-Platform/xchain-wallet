@@ -579,12 +579,14 @@ export class CoinpayAutopayWatcher {
                 await this._releaseHold(matchIndex);
             }
             const short = /insufficient|fund|utxo/i.test(String(e?.message));
+            const failureReason = (String(e?.message || '').trim()
+                || 'The wallet service returned no explanation').replace(/[.!?]+$/, '');
             await this._notifyOnce(matchIndex, short ? 'balance-short' : 'pay-failed', {
                 kind: 'coinpay-autopay-manual',
                 title: short ? 'Match found, balance short' : 'Auto-pay attempt failed',
                 body: short
                     ? `A matched order needs ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker} but the order's address cannot cover it. Fund the address or pay manually from Payments due.`
-                    : 'An automatic payment attempt failed. Check Payments due to pay manually before the deadline.',
+                    : `An automatic payment attempt stopped: ${failureReason}. Check Payments due to pay manually before the deadline.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, reason: short ? 'balance-short' : 'pay-failed', urgency: 'high' },
             });
             this._log.error('CoinpayAutopayWatcher: payment failed', e);

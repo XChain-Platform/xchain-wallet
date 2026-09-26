@@ -14,7 +14,7 @@ import { CopyIcon, CheckIcon } from './icons/index.jsx';
 // SSC-4: every copy in the wallet goes through one path, so a
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
-import { copyText } from '../shared/clipboard.js';
+import { copyText, CopyFailure } from '../shared/clipboard.js';
 
 /**
  * Copies `value` to the system clipboard and briefly shows a confirmation
@@ -35,23 +35,28 @@ import { copyText } from '../shared/clipboard.js';
  */
 export function CopyButton({ value, label = 'Copy', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
+    const [failureText, setFailureText] = useState('');
 
     async function handleCopy() {
         // A sensitive copy can come back false on a native shell whose
         // clipboard plugin did not register: the shared path refuses rather
         // than leaking through the web API, and the user sees "Copy failed"
         // instead of a copy that silently went to their other devices.
-        const { ok } = await copyText(value, { sensitive });
+        const { ok, reason } = await copyText(value, { sensitive });
         if (ok) {
             setState('copied');
+            setFailureText('');
             onCopied?.();
         } else {
             setState('failed');
+            setFailureText(reason === CopyFailure.NO_NATIVE_CLIPBOARD
+                ? 'Copy blocked: this app has no secure clipboard.'
+                : 'Copy failed: the clipboard is unavailable.');
         }
         setTimeout(() => setState('idle'), feedbackMs);
     }
 
-    const text = state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : label;
+    const text = state === 'copied' ? 'Copied' : state === 'failed' ? failureText : label;
     const icon = state === 'copied' ? <CheckIcon /> : <CopyIcon />;
     return (
         <button

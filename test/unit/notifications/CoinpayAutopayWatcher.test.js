@@ -377,9 +377,12 @@ describe('duplicate and failure defenses', () => {
             onProgress?.('broadcasting');
             throw new Error('socket hang up');
         });
-        const { watcher, ledger } = makeWatcher({ coinpayAction: failing });
+        const { watcher, ledger, notify } = makeWatcher({ coinpayAction: failing });
         await watcher.pollOnce();
         expect(ledger.release).not.toHaveBeenCalled();
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+            body: expect.stringContaining('socket hang up'),
+        }));
         await watcher.pollOnce();
         expect(failing).toHaveBeenCalledTimes(1); // attempted stays set
     });

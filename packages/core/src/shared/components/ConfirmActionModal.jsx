@@ -275,7 +275,9 @@ export function ConfirmActionModal({
                         so the message is adjacent to the field it refers to. */}
                     {error ? (
                         <div className={styles.error} role="alert" data-testid="confirm-error">
-                            {typeof error === 'string' ? error : (error?.message || 'Something went wrong.')}
+                            {typeof error === 'string'
+                                ? error
+                                : (error?.message || 'The request stopped because the wallet service returned no explanation.')}
                         </div>
                     ) : null}
 

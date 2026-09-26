@@ -619,7 +619,7 @@ export function importBackupPointerRequest(opts) {
  * §48.3 / G149: runtime chain activation.
  *
  * @param {{ walletId: string, chainId: string, password: string, bip39Passphrase?: string, signerId?: string | null }} opts
- * @returns {Promise<{ chainId: string, addresses: Array<{ accountId: string, address: any }>, skippedAccounts: number }>}
+ * @returns {Promise<{ chainId: string, addresses: Array<{ accountId: string, address: any }>, skippedAccounts: number, skippedAccountDetails: Array<{ accountId: string, name: string }> }>}
  */
 export function activateChainRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.activateChain', opts));

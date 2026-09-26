@@ -175,5 +175,5 @@ export function submitFailureMessage(
         if (explorerCopy) return explorerCopy;
     }
     const raw = (err && typeof err === 'object') ? String(/** @type {any} */ (err).message || '') : '';
-    return fallback || raw || 'Something went wrong.';
+    return fallback || raw || 'The request stopped because the wallet service returned no explanation.';
 }

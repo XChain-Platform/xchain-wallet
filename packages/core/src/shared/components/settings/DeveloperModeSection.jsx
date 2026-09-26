@@ -50,6 +50,7 @@ import { registry as registryLib, schemas, flows as flowsLib } from '@xchain-wal
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
+import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
 import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
@@ -249,13 +250,16 @@ function RegtestNetworksRow({ developerMode, fees }) {
     );
 }
 
-function RegtestRow({ descriptor, isActive, disabled }) {
+export function RegtestRow({ descriptor, isActive, disabled }) {
     const { messaging } = useMessaging();
     const [open, setOpen] = useState(false);
     const [password, setPassword] = useState('');
     const [busy, setBusy] = useState(false);
     const [statusText, setStatusText] = useState(/** @type {string | null} */ (null));
     const [errorText, setErrorText] = useState(/** @type {string | null} */ (null));
+    const [skippedAccounts, setSkippedAccounts] = useState(
+        /** @type {Array<{ subject: string, message: string }>} */ ([]),
+    );
     const [walletId, setWalletId] = useState(/** @type {string | null} */ (null));
     // §17.4 / FOLLOWUP 1: signer selection. null = the implicit software
     // seed (password path); a non-null signerId names a paired HW signer,
@@ -290,6 +294,7 @@ function RegtestRow({ descriptor, isActive, disabled }) {
         setBusy(true);
         setErrorText(null);
         setStatusText(null);
+        setSkippedAccounts([]);
         try {
             const r = await messaging.activateChainRequest({
                 walletId,
@@ -298,10 +303,16 @@ function RegtestRow({ descriptor, isActive, disabled }) {
                 signerId: signerId || undefined,
             });
             const created = Array.isArray(r?.addresses) ? r.addresses.length : 0;
-            const skipped = Number.isFinite(r?.skippedAccounts) ? r.skippedAccounts : 0;
+            const skipped = Array.isArray(r?.skippedAccountDetails)
+                ? r.skippedAccountDetails.map((account) => ({
+                    subject: account.name || account.accountId,
+                    message: `Already has an address on ${descriptor.displayName}.`,
+                }))
+                : [];
+            setSkippedAccounts(skipped);
             setStatusText(
                 created > 0
-                    ? `Activated. Derived ${created} address${created === 1 ? '' : 'es'}${skipped > 0 ? ` (${skipped} account${skipped === 1 ? '' : 's'} already had one)` : ''}.`
+                    ? `Activated. Derived ${created} address${created === 1 ? '' : 'es'}.`
                     : 'Already activated. No new addresses needed.',
             );
             setPassword('');
@@ -425,6 +436,10 @@ function RegtestRow({ descriptor, isActive, disabled }) {
                 </form>
             ) : null}
             {statusText ? <Status text={statusText} /> : null}
+            <DiagnosticDetails
+                summary={`Accounts not changed (${skippedAccounts.length})`}
+                items={skippedAccounts}
+            />
             {errorText ? <Status text={errorText} tone="error" /> : null}
         </div>
     );

@@ -20,6 +20,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -724,6 +725,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
                                 This list is published on {descriptor?.displayName || chainId}.
                             </p>
+                            <DiagnosticDetails
+                                summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                items={recipients.wrongNetwork.map((address) => ({
+                                    subject: address,
+                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                }))}
+                            />
                         </div>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
