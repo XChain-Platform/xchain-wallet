@@ -48,7 +48,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.chainId
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
- * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null }) => void} props.onFork
+ * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null, source: string | null, parentIndex: string | null }) => void} props.onFork
  */
 export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
     const { messaging, shell } = useMessaging();
@@ -203,6 +203,9 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                         // to, so fork from the current members under resolution.
                         items: currentItems || items,
                         editResolutionActive: resolution,
+                        // Where the fork form starts its walk to the list's owner.
+                        source: data.source ? String(data.source) : null,
+                        parentIndex: isFork ? String(data.list_action_index) : null,
                     })}
                 >
                     Fork &amp; edit

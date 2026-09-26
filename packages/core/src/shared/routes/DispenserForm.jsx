@@ -55,9 +55,14 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import {
     listMembers,
-    ownerOffAllowList,
+    dispenserCreateAllowListVerdict,
     ownerOffAllowListMessage,
 } from '../../flows/allowListSelfCheck.js';
+import {
+    rememberUnusedDispenserAddress,
+    recallUnusedDispenserAddress,
+    forgetUnusedDispenserAddress,
+} from '../utils/unusedDispenserAddress.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useDispenserPriceFloor, PRICE_BELOW_FLOOR_ERROR } from '../hooks/useDispenserPriceFloor.js';
 
@@ -439,9 +444,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // D-161: the address the CHAIN will check against the allow-list, which is
     // not always the one in the Source field. Mirrors the GET_ADDRESS rule in
     // `actionParams` below, including its default: mode 'current' omits the
-    // param and the protocol falls back to SOURCE.
+    // param and the protocol falls back to SOURCE. Mode 'new' has no address
+    // until the preview derives one, and SOURCE is no stand-in for it: the
+    // dispenser opens there only on a host build that cannot derive.
+    const canDeriveGetAddress = typeof messaging.generateDispenserAddress === 'function';
     const gateAddress = addressMode === 'new'
-        ? (dispenserGetAddress?.address || sourceAddress?.address || '')
+        ? (dispenserGetAddress?.address || (canDeriveGetAddress ? '' : sourceAddress?.address || ''))
         : addressMode === 'existing'
             ? (existingAddress?.address || sourceAddress?.address || '')
             : (sourceAddress?.address || '');
@@ -465,11 +473,22 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             .catch(() => { /* best-effort: no warning beats a wrong one */ });
         return () => { live = false; };
     }, [allowListIdx, chainId, messaging]);
-    const allowListSelfWarning = ownerOffAllowList({
-        members: allowListMembers, getAddress: gateAddress,
-    })
-        ? ownerOffAllowListMessage(gateAddress)
+    const allowListVerdict = dispenserCreateAllowListVerdict({
+        members: allowListMembers,
+        getAddress: gateAddress,
+        sourceAddress: sourceAddress?.address,
+        newAddressPending: addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress,
+    });
+    const allowListSelfWarning = allowListVerdict.barred
+        ? ownerOffAllowListMessage(gateAddress || null, { createFirst: allowListVerdict.createFirst })
         : null;
+    // Scope of the unused-address memory: one per wallet, account and chain.
+    const dispenserAddressScope = { walletId, accountId: activeAccountId, chainId: chainId || '' };
+    const allowListWarningNode = allowListSelfWarning ? (
+        <div role="alert" className={styles.warnings}>
+            <p className={styles.warning}>{allowListSelfWarning}</p>
+        </div>
+    ) : null;
 
     // Resolve the SOURCE address's balance of the entered ticker for the
     // escrow AmountField (Max + "available"). Debounced on the ticker for
@@ -668,10 +687,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return;
         }
         setFormError(null);
-        // §16: derive the dedicated dispenser sub-address (GET_ADDRESS) once
-        // per chain/account, after validation so an invalid form consumes no
-        // index. SOURCE (fromAddress) is unchanged. If the wallet build has
-        // no derivation handler, fall back to opening on SOURCE.
+        // §16: the dedicated dispenser sub-address (GET_ADDRESS) for mode
+        // 'new': the one derived for an earlier unsigned preview while the
+        // wallet still holds it, else a fresh derivation, after validation so
+        // an invalid form consumes no index. SOURCE (fromAddress) is unchanged.
+        // If the wallet build has no derivation handler, fall back to opening
+        // on SOURCE.
         //
         // The derived address is threaded into `params` by hand: `actionParams`
         // is memoized for the render this closure came from, and the confirm
@@ -679,14 +700,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // fold `dispenserGetAddress` in. Reading the memo here would submit
         // the dispenser self-open and orphan the address just derived.
         let params = actionParams;
-        if (addressMode === 'new' && !dispenserGetAddress && typeof messaging.generateDispenserAddress === 'function') {
+        if (addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress) {
             try {
                 setDerivingGetAddress(true);
-                const addr = await messaging.generateDispenserAddress({
-                    walletId,
-                    accountId: activeAccountId,
-                    chainId,
-                });
+                const addr = recallUnusedDispenserAddress(dispenserAddressScope, addressesByChain?.[chainId])
+                    || await messaging.generateDispenserAddress({
+                        walletId,
+                        accountId: activeAccountId,
+                        chainId,
+                    });
+                rememberUnusedDispenserAddress(dispenserAddressScope, addr);
                 setDispenserGetAddress(addr);
                 if (addr?.address) params = { ...actionParams, GET_ADDRESS: addr.address };
             } catch (err) {
@@ -763,6 +786,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setResult(res);
             setPassword('');
             setStage('done');
+            forgetUnusedDispenserAddress(dispenserAddressScope, params.GET_ADDRESS);
             draft.clear();
             setDraftPending(false);
         } catch (err) {
@@ -820,6 +844,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setResult(res);
             setPassword('');
             setStage('done');
+            forgetUnusedDispenserAddress(dispenserAddressScope, actionParams.GET_ADDRESS);
             draft.clear();
             setDraftPending(false);
         } catch (err) {
@@ -951,6 +976,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         ))}
                     </div>
                 ) : null}
+                {allowListWarningNode}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction.
@@ -1109,6 +1135,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 chainId={chainId}
                 getSignerStatus={messaging.getSignerStatus}
                 hintClassName={styles.hint}
+                // Re-checked against the GET_ADDRESS this preview derived
+                extraCredentials={allowListWarningNode}
             />
         );
     }
@@ -1407,11 +1435,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 the same list. Rendered beside the control that caused it rather
                 than at review, so the fix (pick another list, or clear it) is
                 one click away from the warning. */}
-            {allowListSelfWarning ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{allowListSelfWarning}</p>
-                </div>
-            ) : null}
+            {allowListWarningNode}
 
             {feeTiers ? (
                 <FeeSelector

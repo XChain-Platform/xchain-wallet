@@ -25,6 +25,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     listMembers,
+    dispenserCreateAllowListVerdict,
     ownerOffAllowList,
     ownerOffAllowListMessage,
     buyerListVerdict,
@@ -62,6 +63,57 @@ describe('listMembers', () => {
 
     it('answers an empty array for a list that really is empty', () => {
         expect(listMembers({ list: [] })).toEqual([]);
+    });
+
+    // The dispenser gate checks the list's newest valid edit. Reading the
+    // as-created `list` warned about (and hid) the wrong addresses for any list
+    // that had been edited.
+    it('reads the membership the list resolves to, not the one it was created with', () => {
+        const row = {
+            list: [BUYER],
+            state: { edit_resolution_active: true, membership_action_index: 3069, current_list: [BUYER, OWNER] },
+        };
+        expect(listMembers(row)).toEqual([BUYER, OWNER]);
+        expect(ownerOffAllowList({ members: listMembers(row), getAddress: OWNER })).toBe(false);
+    });
+});
+
+describe('dispenserCreateAllowListVerdict', () => {
+
+    const SOURCE = 'rltc1qsourcesourcesourcesourcesourcesourcesou';
+
+    it('bars a new dispenser address before it is even derived', () => {
+        expect(dispenserCreateAllowListVerdict({
+            members: [SOURCE, BUYER], getAddress: null, sourceAddress: SOURCE, newAddressPending: true,
+        })).toEqual({ barred: true, createFirst: true });
+    });
+
+    // The false negative from the field: SOURCE is on the list, the dispenser
+    // opens elsewhere, and SOURCE being listed says nothing about that address.
+    it('judges the address the dispenser opens on, not SOURCE', () => {
+        expect(dispenserCreateAllowListVerdict({
+            members: [SOURCE, BUYER], getAddress: OWNER, sourceAddress: SOURCE,
+        })).toEqual({ barred: true, createFirst: true });
+    });
+
+    it('keeps the plain remedy for a dispenser opening on SOURCE itself', () => {
+        expect(dispenserCreateAllowListVerdict({
+            members: [BUYER], getAddress: SOURCE, sourceAddress: SOURCE,
+        })).toEqual({ barred: true, createFirst: false });
+    });
+
+    it('does not bar an address that is on the list', () => {
+        expect(dispenserCreateAllowListVerdict({
+            members: [BUYER, OWNER], getAddress: OWNER, sourceAddress: SOURCE,
+        }).barred).toBe(false);
+    });
+
+    it('does not bar on an unknown or empty list, even for a pending new address', () => {
+        for (const members of [null, undefined, []]) {
+            expect(dispenserCreateAllowListVerdict({
+                members, getAddress: null, sourceAddress: SOURCE, newAddressPending: true,
+            }).barred).toBe(false);
+        }
     });
 });
 
@@ -115,6 +167,21 @@ describe('ownerOffAllowListMessage', () => {
 
     it('shows a short address whole', () => {
         expect(ownerOffAllowListMessage('short1234')).toContain('short1234');
+    });
+
+    // Listing a not-yet-used dispenser address first counts as activity and
+    // the create is refused, so the advice for any address other than SOURCE is
+    // to create first and list the address afterwards.
+    it('tells a dispenser opening elsewhere to create first and list it afterwards', () => {
+        const copy = ownerOffAllowListMessage(OWNER, { createFirst: true });
+        expect(copy).toMatch(/every purchase would be refused/i);
+        expect(copy).toMatch(/create the dispenser first, then add its address to the list/i);
+        expect(copy).toMatch(/refuses to open a dispenser there/i);
+        expect(copy).not.toMatch(/Add this address to the list, or clear the list/);
+    });
+
+    it('speaks of a new address when none is derived yet', () => {
+        expect(ownerOffAllowListMessage(null, { createFirst: true })).toMatch(/^The new dispenser address will not be on the allow-list/);
     });
 });
 

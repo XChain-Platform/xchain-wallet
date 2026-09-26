@@ -52,6 +52,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { currentListItems } from '../../flows/listMembership.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -382,7 +383,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             .then((row) => {
                 if (cancelled) return;
                 const kind = String(row?.type) === '1' ? 'tick' : 'address';
-                const items = Array.isArray(row?.list) ? row.list : [];
+                // The airdrop pays the list's newest valid edit, not its created members
+                const items = currentListItems(row) || [];
                 setExistingListDetail({ loading: false, kind, items, error: null });
             })
             .catch((err) => {
@@ -495,7 +497,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         messaging.getListByActionIndex({ chainId, actionIndex: listActionIndex })
             .then((row) => {
                 if (cancelled) return;
-                const stored = Array.isArray(row?.list) ? row.list : [];
+                // Reconcile against what the airdrop will resolve the list to
+                const stored = currentListItems(row) || [];
                 setListReconcile(airdropLib.reconcileStoredList(submitted, stored));
             })
             .catch(() => {

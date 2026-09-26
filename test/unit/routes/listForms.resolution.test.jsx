@@ -209,6 +209,101 @@ describe('ListForkForm copy follows list-edit resolution', () => {
     });
 });
 
+// Fork & edit signed from the active address even when the list belonged to
+// another address in the wallet. Once owner-only list edits are armed on a
+// chain, only the root create's SOURCE may edit, so FROM defaults to that
+// address when the wallet holds it and warns when it does not.
+describe('ListForkForm signs from the list owner', () => {
+    const OWNER = { ...hd('nowner', 3), id: 'doge-owner', address: 'nownerownerownerownerownerownerown' };
+    const byChainWithOwner = { [BTC]: [hd('bc', 0)], [DOGE]: [hd('doge', 3), OWNER] };
+    // #3069 is an edit of #2701; #2701 is the root create, made by OWNER.
+    const rows = {
+        2701: { action_index: 2701, type: '1', source: OWNER.address, list_action_index: null },
+        3069: { action_index: 3069, type: '1', source: 'nsomeoneelsesomeoneelsesomeonee', list_action_index: 2701 },
+    };
+    const editRef = { chainId: DOGE, actionIndex: '3069', type: '1', items: ['SWAPTEST'], editResolutionActive: true,
+        source: rows[3069].source, parentIndex: '2701' };
+    const mountOwnerFork = (byChain) => mount(ListForkForm, { walletId: 'w', listRef: editRef, onBack() {}, onDone() {} },
+        messagingWith({
+            ...WATCHER,
+            getAddressesByChain: vi.fn().mockResolvedValue(byChain),
+            getListByActionIndex: vi.fn(({ actionIndex }) => Promise.resolve(rows[actionIndex] || null)),
+        }));
+
+    it('defaults FROM to the root creator when the wallet holds it, with no warning', async () => {
+        const messaging = mountOwnerFork(byChainWithOwner);
+        await screen.findByText(/Forking token list #3069/);
+        await waitFor(() => expect(screen.getByText(/Signed from/).textContent).toContain(OWNER.address.slice(0, 6)));
+        expect(screen.queryByText(/which is not an address in this wallet/)).toBeNull();
+        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalled());
+        expect(messaging.buildActionPsbtRequest.mock.calls[0][0].from.address).toBe(OWNER.address);
+    });
+
+    it('warns when the wallet does not hold the list owner', async () => {
+        mountOwnerFork({ ...BY_CHAIN });
+        await screen.findByText(/Forking token list #3069/);
+        const warning = await screen.findByText(/which is not an address in this wallet/);
+        expect(warning.textContent).toContain(`created by ${OWNER.address.slice(0, 8)}`);
+        expect(warning.textContent).toMatch(/only the list's creator can edit it/);
+    });
+});
+
+// The fork form works from the members ListDetail read when it opened, but
+// the network applies the edit to the list's newest valid edit at the time.
+// An edit published in between (by anyone, while owner-only edits are not
+// armed) was carried into the new version unseen, so the form re-reads first.
+describe('ListForkForm refuses to build on members that changed since it loaded', () => {
+    const rowWith = (current) => ({ ...LIST_2700, state: { ...ACTIVE_STATE, current_list: current } });
+
+    it('stops at Review when the list gained a member the screen never showed', async () => {
+        const messaging = mountFork(true, {
+            ...WATCHER,
+            getListByActionIndex: vi.fn().mockResolvedValue(rowWith(['DOGESWAP', 'INJECTED', 'SWAPTEST'])),
+        });
+        await screen.findByText(/Forking token list #2700/);
+        fireEvent.change(screen.getByLabelText(/Add tokens/), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        const error = await screen.findByText(/List #2700 changed since this screen loaded/);
+        expect(error.textContent).toMatch(/now has 3 members, not 2/);
+        expect(screen.queryByRole('button', { name: 'Create unsigned transaction' })).toBeNull();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+    });
+
+    it('goes ahead when the re-read matches, in any order', async () => {
+        const messaging = mountFork(true, {
+            ...WATCHER,
+            getListByActionIndex: vi.fn().mockResolvedValue(rowWith(['SWAPTEST', 'DOGESWAP'])),
+        });
+        await forkToRepoint();
+        expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+    });
+});
+
+// An airdrop to an existing list pays the list's newest valid edit, so the
+// recipient count (and the total cost and Max built on it) must come from
+// state.current_list, not from the members the list was created with.
+describe('AirdropForm existing-list preview counts the members the airdrop will pay', () => {
+    it('counts state.current_list, not the as-created rows', async () => {
+        const row = {
+            action_index: 2701, type: '2', status: 'valid', source: BY_CHAIN[BTC][0].address, block_index: 10,
+            list: ['bc1qcreated0', 'bc1qcreated1'],
+            state: { edit_resolution_active: true, membership_action_index: 3082,
+                current_list: ['bc1qcreated0', 'bc1qcreated1', 'bc1qadded2', 'bc1qadded3', 'bc1qadded4'] },
+        };
+        mount(AirdropForm, { walletId: 'w', initialChainId: BTC, initialTick: 'JDOG', onBack() {} }, messagingWith({
+            getListsForSource: vi.fn().mockResolvedValue([row]),
+            getListByActionIndex: vi.fn().mockResolvedValue(row),
+        }));
+        fireEvent.change(await screen.findByLabelText(/^Airdrop to/), { target: { value: 'existing' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Address list #2701/ }));
+        expect(await screen.findByText('5 addresses on this list.')).toBeTruthy();
+    });
+});
+
 describe('ListCreateForm edit copy follows list-edit resolution', () => {
     const copyFor = async (editResolutionActive) => {
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '2', editResolutionActive, onBack() {} }, messagingWith());

@@ -48,6 +48,7 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { currentListMemberCount } from '../../flows/listMembership.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -404,7 +405,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: allowListIdx })
-            .then((d) => { if (!cancelled) setAllowListCount(listMemberCount(d)); })
+            .then((d) => { if (!cancelled) setAllowListCount(currentListMemberCount(d)); })
             .catch(() => { if (!cancelled) setAllowListCount(null); });
         return () => { cancelled = true; };
     }, [mode, chainId, allowListIdx, messaging]);
@@ -413,7 +414,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: blockListIdx })
-            .then((d) => { if (!cancelled) setBlockListCount(listMemberCount(d)); })
+            .then((d) => { if (!cancelled) setBlockListCount(currentListMemberCount(d)); })
             .catch(() => { if (!cancelled) setBlockListCount(null); });
         return () => { cancelled = true; };
     }, [mode, chainId, blockListIdx, messaging]);
@@ -1688,13 +1689,6 @@ const MODE_DONE_TITLE = {
     'access-lists': 'Access lists updated',
     'bridge-settings': 'Bridge settings updated',
 };
-
-// PC-04: current-member count of a LIST detail row (getListByActionIndex).
-// The explorer exposes members as `list`; tolerate a couple of aliases.
-function listMemberCount(detail) {
-    const members = detail?.list ?? detail?.items ?? detail?.members;
-    return Array.isArray(members) ? members.length : null;
-}
 
 function DetailRow({ label, value }) {
     return (

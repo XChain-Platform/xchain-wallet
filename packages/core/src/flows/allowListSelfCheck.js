@@ -34,23 +34,25 @@
 //     (the D-161 trap, seen from the other side of the trade)
 //   - none of this wallet's addresses on the chain would be accepted
 
+import { currentListItems } from './listMembership.js';
+
 /**
- * The addresses a LIST action currently holds, or null when the shape carries
- * no member array at all (an older host build, or a read that failed).
+ * The addresses a reference to a LIST currently resolves to, or null when the
+ * shape carries no member array at all (an older host build, or a read that
+ * failed).
  *
- * Tolerant of naming for the same reason `ListPickerScreen` is: the explorer's
- * action-data shape exposes members as `list`, and older/other shapes have used
- * `items` and `members`. A null means "unknown", which callers must treat
- * differently from "empty" - an empty list gates nothing, an unknown one must
- * not produce a warning the user cannot act on.
+ * This is the membership the dispenser gate will actually check: the newest
+ * valid edit's members (`state.current_list`) under list-edit resolution, and
+ * the created members only where resolution is off or the explorer predates
+ * `state` (see `currentListItems`). A null means "unknown", which callers must
+ * treat differently from "empty" - an empty list gates nothing, an unknown one
+ * must not produce a warning the user cannot act on.
  *
  * @param {unknown} detail   a LIST action's detail row
  * @returns {string[] | null}
  */
 export function listMembers(detail) {
-    if (!detail || typeof detail !== 'object') return null;
-    const d = /** @type {any} */ (detail);
-    const rows = d.list ?? d.items ?? d.members;
+    const rows = currentListItems(detail);
     if (!Array.isArray(rows)) return null;
     return rows
         .map((row) => (row && typeof row === 'object'
@@ -127,23 +129,69 @@ export function buyerListVerdict({ addresses, allowMembers, blockMembers }) {
 }
 
 /**
- * The sentence to show when `ownerOffAllowList` is true.
+ * The create form's allow-list verdict: whether the dispenser being created
+ * would refuse every sale, and whether the fix has to come after the create.
+ *
+ * `createFirst` is true whenever the dispenser opens on an address other than
+ * SOURCE. The network lets SOURCE open a dispenser on another address only
+ * while that address is fresh (no protocol activity yet) or SOURCE already
+ * opened one there, and being named in a LIST counts as activity. So adding a
+ * new dispenser address to the list BEFORE the create spends its freshness and
+ * the create is refused; the order that works is create, then list it.
+ *
+ * `newAddressPending` is the "new dispenser address" mode before the address
+ * has been derived. A never-used address cannot be on a non-empty list without
+ * losing its freshness, so the verdict is already known: barred.
+ *
+ * @param {{
+ *   members: string[] | null | undefined,
+ *   getAddress: string | null | undefined,
+ *   sourceAddress: string | null | undefined,
+ *   newAddressPending?: boolean,
+ * }} args
+ * @returns {{ barred: boolean, createFirst: boolean }}
+ */
+export function dispenserCreateAllowListVerdict({ members, getAddress, sourceAddress, newAddressPending = false }) {
+    if (!Array.isArray(members) || members.length === 0) return { barred: false, createFirst: false };
+    if (newAddressPending) return { barred: true, createFirst: true };
+    const addr = typeof getAddress === 'string' ? getAddress.trim() : '';
+    const src = typeof sourceAddress === 'string' ? sourceAddress.trim() : '';
+    return {
+        barred: ownerOffAllowList({ members, getAddress: addr }),
+        createFirst: Boolean(addr) && addr !== src,
+    };
+}
+
+/**
+ * The sentence to show when the dispenser's own address is off its allow-list.
  *
  * Names the consequence and who pays it, because "add yourself to the list" on
  * its own reads like a formality: the failure is total (every fill), silent
  * (the dispenser looks open) and costs the BUYER, not the seller.
  *
- * @param {string} getAddress
+ * With `createFirst` the remedy is reordered, because listing a not-yet-used
+ * dispenser address first makes the network refuse the create (see
+ * `dispenserCreateAllowListVerdict`). A null address is a new one not derived
+ * yet.
+ *
+ * @param {string | null} getAddress
+ * @param {{ createFirst?: boolean }} [opts]
  * @returns {string}
  */
-export function ownerOffAllowListMessage(getAddress) {
-    const shown = getAddress.length > 16
-        ? `${getAddress.slice(0, 8)}…${getAddress.slice(-6)}`
-        : getAddress;
-    return `This dispenser's own address (${shown}) is not on the allow-list, and the network `
-        + 'checks it as well as the buyer. Every purchase would be refused, and a buyer only finds '
-        + 'out after paying, because the coin is sent before the check runs. Add this address to '
-        + 'the list, or clear the list.';
+export function ownerOffAllowListMessage(getAddress, { createFirst = false } = {}) {
+    const addr = typeof getAddress === 'string' ? getAddress : '';
+    const shown = addr.length > 16 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+    const subject = addr
+        ? `This dispenser's own address (${shown}) is not on the allow-list`
+        : 'The new dispenser address will not be on the allow-list';
+    const consequence = `${subject}, and the network checks it as well as `
+        + 'the buyer. Every purchase would be refused, and a buyer only finds out after paying, '
+        + 'because the coin is sent before the check runs.';
+    if (!createFirst) return `${consequence} Add this address to the list, or clear the list.`;
+    return `${consequence} Create the dispenser first, then add its address to the list with `
+        + 'Fork & edit: the dispenser follows the list\'s newest edit, so it can sell from then on. '
+        + 'Listing an unused address before its dispenser exists counts as activity on it, and '
+        + 'the network then refuses to open a dispenser there.';
 }
 
 /**

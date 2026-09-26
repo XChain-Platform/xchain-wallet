@@ -31,9 +31,16 @@ import { memoLengthError } from '../utils/memoLimit.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { currentListItems, findListOwner } from '../../flows/listMembership.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
+
+/** A long address as its first 8 and last 6 characters. */
+function shortAddress(addr) {
+    const s = String(addr || '');
+    return s.length > 16 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s;
+}
 
 // PC-10 fork-repoint rail (spec §3): the three consumer classes with an
 // edit screen that can point them at a different list index. AIRDROP isn't
@@ -47,10 +54,10 @@ const REPOINT_TARGETS = [
 ];
 
 /**
- * PC-10 "Fork & edit" (LIST v1): clone an existing list with ADD and/or
- * REMOVE deltas. Each v1 action produces a brand-new list index; the
- * protocol has no in-place edit (LIST.md), so this is always a fork,
- * never a mutation of the old index.
+ * PC-10 "Fork & edit" (LIST v1): edit an existing list with ADD and/or
+ * REMOVE deltas. Each v1 action gets its own list index, and under
+ * list-edit resolution (below) it also becomes what every reference to
+ * the original list resolves to.
  *
  * The protocol only lets one v1 action carry ONE edit direction
  * (EDIT=1 add, or EDIT=2 remove; LIST.md's format is
@@ -80,9 +87,15 @@ const REPOINT_TARGETS = [
  * that can repoint, each opening its edit screen when the shell passes a
  * handler for it.
  *
+ * FROM defaults to the list's owner, the creator of the root of its edit
+ * chain, whenever this wallet holds that address: once LIST_OWNER_ACTIVATION
+ * is armed on a chain, an edit from any other address is invalid there. When
+ * the wallet does not hold it, the form warns instead, because today such an
+ * edit is still accepted on chains where that rule is not armed yet.
+ *
  * @param {object} props
  * @param {string} props.walletId
- * @param {{ chainId: string, actionIndex: string, type: '1' | '2', items: string[], editResolutionActive?: boolean | null }} props.listRef
+ * @param {{ chainId: string, actionIndex: string, type: '1' | '2', items: string[], editResolutionActive?: boolean | null, source?: string | null, parentIndex?: string | null }} props.listRef
  * @param {() => void} props.onBack
  * @param {() => void} props.onDone
  * @param {Partial<Record<'issue-lists' | 'dispenser-lists' | 'order-lists', () => void>>} [props.repointHandlers]
@@ -130,6 +143,27 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const [tx2Txid, setTx2Txid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // The list's owner: undefined while resolving, null when it cannot be read.
+    const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
+
+    // Walk from the list being forked up to its root create, whose SOURCE owns
+    // every edit in the chain. ListDetail hands over the row it already read.
+    useEffect(() => {
+        let cancelled = false;
+        // An older host build without the list read yields no owner claim
+        const readList = (idx) => (typeof messaging.getListByActionIndex === 'function'
+            ? messaging.getListByActionIndex({ chainId, actionIndex: idx })
+            : Promise.reject(new Error('list read unavailable')));
+        const known = listRef.source !== undefined || listRef.parentIndex !== undefined;
+        const start = known
+            ? Promise.resolve({ source: listRef.source, list_action_index: listRef.parentIndex })
+            : Promise.resolve().then(() => readList(String(oldIndex)));
+        start
+            .then((detail) => findListOwner({ detail, readList }))
+            .then((o) => { if (!cancelled) setOwner(o); })
+            .catch(() => { if (!cancelled) setOwner(null); });
+        return () => { cancelled = true; };
+    }, [chainId, oldIndex, listRef.source, listRef.parentIndex, messaging]);
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -203,6 +237,25 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
         if (picked) setFromAddressId(picked);
     }, [addressesByChain, activeByChain, chainId, fromAddressId]);
+
+    // Once the owner is known, sign from it whenever this wallet holds it:
+    // it is the one address whose edit stays valid under owner-only edits.
+    const ownerRecord = useMemo(() => {
+        if (!owner || !addressesByChain) return null;
+        return (addressesByChain[chainId] || []).find((a) => a.address === owner) || null;
+    }, [owner, addressesByChain, chainId]);
+    useEffect(() => {
+        if (stage === 'compose' && ownerRecord) setFromAddressId(ownerRecord.id);
+    }, [ownerRecord, stage]);
+    // Warn when the wallet cannot sign as the owner (owner unknown: no claim).
+    const notOwnerWarning = owner && !ownerRecord && fromAddress && fromAddress.address !== owner
+        ? `List #${oldIndex} was created by ${shortAddress(owner)}, which is not an address in this wallet, so this edit is signed from ${shortAddress(fromAddress.address)}. Some chains accept an edit from any address today, but once owner-only list edits are active on this chain, only the list's creator can edit it and this edit would be invalid.`
+        : null;
+    const notOwnerNotice = notOwnerWarning ? (
+        <div role="alert" className={styles.warnings}>
+            <p className={styles.warning}>{notOwnerWarning}</p>
+        </div>
+    ) : null;
 
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -378,7 +431,31 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         }
     }
 
-    function handleReview(event) {
+    /**
+     * Re-read the list and say so when its members differ from the ones this
+     * screen was opened with, else null. The network applies the edit to the
+     * list's newest valid edit at that moment, so a change made in between
+     * would be carried into this edit without the user ever seeing it.
+     * Best-effort: an unreadable list is no claim either way.
+     *
+     * @returns {Promise<string | null>}
+     */
+    async function membershipChangedMessage() {
+        if (typeof messaging.getListByActionIndex !== 'function') return null;
+        let fresh;
+        try {
+            fresh = currentListItems(await messaging.getListByActionIndex({ chainId, actionIndex: String(oldIndex) }));
+        } catch {
+            return null;
+        }
+        if (!Array.isArray(fresh)) return null;
+        const asKey = (xs) => xs.map(String).sort().join('\n');
+        if (asKey(fresh) === asKey(currentItems)) return null;
+        return `List #${oldIndex} changed since this screen loaded: it now has ${fresh.length} member${fresh.length === 1 ? '' : 's'}, not ${currentItems.length}. `
+            + 'Go back and open the list again so this edit starts from its current members.';
+    }
+
+    async function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
         if (!needsAdd && !needsRemove) {
@@ -390,6 +467,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
         const memoTooLong = memoLengthError(trimmedMemo);
         if (memoTooLong) { setFormError(memoTooLong); return; }
+        // Verify the list has not changed since this screen loaded it
+        const changed = await membershipChangedMessage();
+        if (changed) { setFormError(changed); return; }
         setFormError(null);
         setStage('review-1');
     }
@@ -399,6 +479,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         if (submitting) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        // Verify again at signing: the list may have changed while this sat on review
+        const changed = await membershipChangedMessage();
+        if (changed) { setSubmitError(changed); return; }
         if (singleEncode) {
             await runLegThroughConfirm(firstParams, (res) => {
                 const txid = res?.txid || res?.broadcast?.txid;
@@ -672,6 +755,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         </>
                     ) : null}
                 </dl>
+                {notOwnerNotice}
                 <SignCredentials
                     unlocked={signerReady}
                     fromAddress={fromAddress}
@@ -745,6 +829,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         {feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
                     </dd>
                 </dl>
+                {notOwnerNotice}
                 {twoPhase ? (
                     <p className={styles.hint}>
                         This fork both adds and removes items, so it's two
@@ -798,6 +883,10 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         ? ` This publishes a new list at a new index; #${oldIndex} itself never changes.`
                         : ` This publishes an edit at a new index. Where list-edit resolution is active, everything that references #${oldIndex} follows it; before that, #${oldIndex} keeps its old membership.`}
             </p>
+            {fromAddress ? (
+                <p className={styles.hint}>Signed from <AddressText address={fromAddress.address} /></p>
+            ) : null}
+            {notOwnerNotice}
 
             {currentItems.length > 0 ? (
                 <>
