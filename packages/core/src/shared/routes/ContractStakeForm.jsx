@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -39,6 +39,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
+import { compareAmounts } from '../../market/orderMath.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -224,7 +225,7 @@ export function ContractStakeForm({
     // Unstake mode's "available" is the STAKED balance on this contract
     // (per pubkey when one is entered), not the wallet token balance;
     // it bounds the optional partial amount.
-    const [stakedAvailable, setStakedAvailable] = useState(/** @type {number | null} */ (null));
+    const [stakedAvailable, setStakedAvailable] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         const address = fromAddress?.address;
         if (mode !== 'unstake' || !address || !chainId) { setStakedAvailable(null); return undefined; }
@@ -242,11 +243,9 @@ export function ContractStakeForm({
                     && (!tick || String(row.tick || '').toUpperCase() === tick.trim().toUpperCase())
                     && (!signingPubkey.trim()
                         || String(row.signing_pubkey || row.SIGNING_PUBKEY || '').toLowerCase() === signingPubkey.trim().toLowerCase()));
-                let total = 0;
-                for (const row of rows) {
-                    const n = Number(row.amount ?? row.AMOUNT ?? 0);
-                    if (Number.isFinite(n)) total += n;
-                }
+                const total = trimAmountTail(sumDecimalStrings(
+                    rows.map((row) => row.amount ?? row.AMOUNT ?? 0),
+                ));
                 setStakedAvailable(rows.length > 0 ? total : null);
             })
             .catch(() => { if (!cancelled) setStakedAvailable(null); });
@@ -307,8 +306,8 @@ export function ContractStakeForm({
         // bytes (full sweep); pre-flag-day layers IGNORE a present AMOUNT,
         // so legacy bytes are the safe encoding for a full sweep.
         if (mode === 'unstake' && amount.trim() !== '') {
-            const n = Number(amount.trim());
-            if (!(stakedAvailable != null && Number.isFinite(n) && n >= stakedAvailable)) {
+            const comparison = compareAmounts(amount.trim(), stakedAvailable);
+            if (stakedAvailable == null || comparison === null || comparison < 0) {
                 p.AMOUNT = amount.trim();
             }
         }
@@ -334,18 +333,19 @@ export function ContractStakeForm({
             return;
         }
         if (mode === 'stake') {
-            if (!actionParams.AMOUNT || !/^[0-9]+(\.[0-9]+)?$/.test(actionParams.AMOUNT) || Number(actionParams.AMOUNT) <= 0) {
+            if (!actionParams.AMOUNT || !/^[0-9]+(\.[0-9]+)?$/.test(actionParams.AMOUNT)
+                || compareAmounts(actionParams.AMOUNT, '0') !== 1) {
                 setFormError('Amount must be a positive decimal.');
                 return;
             }
         }
         if (mode === 'unstake' && amount.trim() !== '') {
             const amt = amount.trim();
-            if (!/^[0-9]+(\.[0-9]+)?$/.test(amt) || Number(amt) <= 0) {
+            if (!/^[0-9]+(\.[0-9]+)?$/.test(amt) || compareAmounts(amt, '0') !== 1) {
                 setFormError('Amount must be a positive decimal (or leave it blank to unstake everything).');
                 return;
             }
-            if (stakedAvailable != null && Number(amt) > stakedAvailable) {
+            if (stakedAvailable != null && compareAmounts(amt, stakedAvailable) === 1) {
                 setFormError(`Amount exceeds the ${formatWithThousands(String(stakedAvailable))} ${tick.trim().toUpperCase()} staked on this contract.`);
                 return;
             }
@@ -805,10 +805,10 @@ export function ContractStakeForm({
                     setAmount(stripped);
                 }}
                     onMax={mode === 'stake'
-                        ? (tickAmtBalance && Number(tickAmtBalance) > 0
+                        ? (tickAmtBalance && compareAmounts(tickAmtBalance, '0') === 1
                             ? () => setAmount(tickAmtBalance)
                             : undefined)
-                        : (stakedAvailable != null && stakedAvailable > 0
+                        : (stakedAvailable != null && compareAmounts(stakedAvailable, '0') === 1
                             ? () => setAmount(String(stakedAvailable))
                             : undefined)}
                     maxDisabled={mode === 'stake' ? !tickAmtBalance : stakedAvailable == null}

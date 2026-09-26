@@ -23,7 +23,7 @@
 // rather than the callers that reach it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
@@ -138,7 +138,9 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         const fromField = await screen.findByLabelText('From');
         expect(fromField.value).toBe(ACTIVE_ADDRESS);
     });
+});
 
+describe('ContractStakeForm unstake availability', () => {
     it('bounds unstake by tip-effective contract positions only', async () => {
         mountForm({
             initialMode: 'unstake',
@@ -170,5 +172,37 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         });
 
         expect(await screen.findByText('7 PEPECASH staked')).toBeInTheDocument();
+    });
+});
+
+describe('ContractStakeForm exact partial unstake', () => {
+    it('keeps a one-atomic-unit-smaller unstake partial', async () => {
+        const signingPubkey = 'a'.repeat(64);
+        const composeForConfirm = vi.fn(() => new Promise(() => {}));
+        mountForm({
+            initialMode: 'unstake',
+            initialTick: 'PEPECASH',
+            initialSigningPubkey: signingPubkey,
+            initialFromAddress: POSITION_ADDRESS,
+        }, {
+            getContractStakesForAddress: vi.fn().mockResolvedValue([{
+                target_contract_index: CONTRACT_INDEX,
+                tick: 'PEPECASH',
+                signing_pubkey: signingPubkey,
+                amount: '90071992.54740902',
+            }]),
+            composeForConfirm,
+        });
+
+        expect(await screen.findByText('90,071,992.54740902 PEPECASH staked'))
+            .toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/^Amount/), {
+            target: { value: '90071992.54740901' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(composeForConfirm.mock.calls[0][0].actionData.params.AMOUNT)
+            .toBe('90071992.54740901');
     });
 });

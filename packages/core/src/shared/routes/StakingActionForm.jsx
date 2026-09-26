@@ -14,7 +14,13 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { formatWithThousands, countNonCommaBefore, indexAfterNonCommaCount } from '../utils/amountFormat.js';
+import {
+    formatWithThousands,
+    countNonCommaBefore,
+    indexAfterNonCommaCount,
+    sumDecimalStrings,
+    trimAmountTail,
+} from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
@@ -38,6 +44,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { compareAmounts } from '../../market/orderMath.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -241,24 +248,21 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // chosen). Claim: pending rewards for the address.
     const availableAmt = useMemo(() => {
         if (!positions) return null;
-        let total = 0;
         if (isUnstake) {
+            const amounts = [];
             for (const s of activeStakes) {
                 const key = s.signing_pubkey || s.SIGNING_PUBKEY;
                 if (signingPubkey && key && key !== signingPubkey) continue;
-                const n = Number(s.amount ?? s.AMOUNT ?? s.quantity ?? 0);
-                if (Number.isFinite(n)) total += n;
+                amounts.push(s.amount ?? s.AMOUNT ?? s.quantity ?? 0);
             }
-        } else {
-            // PC-47: accrual minus valid claims (unclaimedRewards), NOT a
-            // status filter - validator_rewards rows never carry `status`,
-            // so filtering on it always yielded 0 against real data (the
-            // same bug PC-47 fixed in StakeDetail's splitRewards).
-            const totals = unclaimedRewards({ rewards: positions.rewards, claims: positions.claims });
-            const n = Number(totals.unclaimed);
-            if (Number.isFinite(n)) total = n;
+            return trimAmountTail(sumDecimalStrings(amounts));
         }
-        return total;
+        // PC-47: accrual minus valid claims (unclaimedRewards), NOT a
+        // status filter - validator_rewards rows never carry `status`,
+        // so filtering on it always yielded 0 against real data (the
+        // same bug PC-47 fixed in StakeDetail's splitRewards).
+        const totals = unclaimedRewards({ rewards: positions.rewards, claims: positions.claims });
+        return totals.unclaimed;
     }, [positions, isUnstake, signingPubkey, activeStakes]);
 
     // Prefill with the full balance (the common case is still "take it
@@ -445,8 +449,10 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // unknown-balance) submit keeps the legacy absent-AMOUNT bytes
     // (see the header note on the wire policy).
     const isPartial = useMemo(() => {
-        const n = Number(String(amount).replace(/,/g, ''));
-        return Number.isFinite(n) && n > 0 && availableAmt != null && n < availableAmt;
+        const normalized = String(amount).replace(/,/g, '');
+        return compareAmounts(normalized, '0') === 1
+            && availableAmt != null
+            && compareAmounts(normalized, availableAmt) === -1;
     }, [amount, availableAmt]);
 
     const actionParams = useMemo(() => {
@@ -470,12 +476,12 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 return;
             }
         }
-        const amtN = Number(String(amount).replace(/,/g, ''));
-        if (!amount || !Number.isFinite(amtN) || amtN <= 0) {
+        const normalized = String(amount).replace(/,/g, '');
+        if (!amount || compareAmounts(normalized, '0') !== 1) {
             setFormError('Amount must be greater than zero.');
             return;
         }
-        if (availableAmt != null && amtN > availableAmt) {
+        if (availableAmt != null && compareAmounts(normalized, availableAmt) === 1) {
             setFormError(`Amount exceeds the ${formatWithThousands(String(availableAmt))} XCHAIN available.`);
             return;
         }
