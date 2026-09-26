@@ -781,18 +781,26 @@ function decodeLink(p, chainSuffix) {
     };
 }
 
-/* SLEEP decoder: pause a token until a resume block. */
+/* SLEEP decoder: v1 pauses a token, v0 locks the signing address; 0 resumes, -1 is indefinite. */
 function decodeSleep(p, chainSuffix) {
     const resumeBlock = str(p.RESUME_BLOCK);
     const tick = str(p.TICK);
+    const isAddress = str(p.VERSION) === '0';
+    const until = resumeBlock === '-1' ? ' indefinitely' : ` until block ${resumeBlock || '?'}`;
+    let summary;
+    if (resumeBlock === '0') summary = `Resume ${isAddress ? 'this address' : (tick || 'token activity')}${chainSuffix}`;
+    else if (isAddress) summary = `Lock this address${chainSuffix}${until}`;
+    else summary = `Pause ${tick || 'token activity'}${chainSuffix}${until}`;
     return {
-        summary: `Pause ${tick || 'token activity'}${chainSuffix} until block ${resumeBlock || '?'}`,
+        summary,
         details: [
             ...(tick ? [{ label: 'Token', value: tick }] : []),
             { label: 'Resume block', value: resumeBlock },
         ],
         warnings: [
-            'While asleep, transfers of the affected token are rejected.',
+            ...(resumeBlock === '0' ? []
+                : isAddress ? ['While locked, this address cannot send anything, including a wake-up.']
+                    : ['While asleep, transfers of the affected token are rejected.']),
             ...(!resumeBlock ? ['Resume block is empty.'] : []),
         ],
     };
