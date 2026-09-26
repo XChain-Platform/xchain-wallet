@@ -53,15 +53,15 @@ import {
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from '../../fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
-    explorerJson,
     expectConfirmModal,
+    actionStatuses,
     fundAddress,
     mintXchain,
-    nudgeChain,
     readReceiveAddress,
     selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
+    txActions,
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
@@ -134,21 +134,23 @@ async function readBroadcastTxid(page) {
 }
 
 /**
- * The recorded action for `txid`, WITHOUT asserting it is valid - the
- * counterpart of `waitForValidAction` for the one leg of this spec that is
- * supposed to be rejected, where asserting validity would be asserting away
- * the very thing under test.
+ * Every leg `txid` indexed as, oldest first, each asserted valid.
+ *
+ * A gated publish is BATCH(FILE, MESSAGE) and a guarded gated send is
+ * BATCH(SEND, MESSAGE); each indexes as the BATCH row plus one row per leg
+ * under the one tx hash. `waitForValidAction` returns whichever row the
+ * newest-first list shows first, which is the MESSAGE leg, so asserting
+ * "FILE" or "BATCH" on it fails on a good transaction.
  */
-async function waitForAnyRecordedAction(txid, timeoutMs = 300_000) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        const list = await explorerJson('actions?limit=100').catch(() => null);
-        const row = (list?.data || []).find((r) => r.tx_hash === txid);
-        if (row) return explorerJson(`action/${row.action_index}`);
-        await nudgeChain();
-        await new Promise((r) => setTimeout(r, 2_000));
+async function validLegs(txid) {
+    await waitForValidAction(txid);
+    const legs = await txActions(txid);
+    for (const leg of legs) {
+        for (const status of actionStatuses(leg)) {
+            expect(status, `chain rejected the ${leg.action} leg of ${txid}`).toBe('valid');
+        }
     }
-    throw new Error(`No XChain action recorded for ${txid} within ${Math.round(timeoutMs / 1000)}s.`);
+    return legs;
 }
 
 test.describe('the PC-26 gated SEND guard', () => {
@@ -167,6 +169,12 @@ test.describe('the PC-26 gated SEND guard', () => {
             await switchToRegtest(issuer, PASSWORD);
             issuerAddr = await readReceiveAddress(issuer);
             await fundAddress(issuerAddr, FUNDING_BTC);
+            await issuer.reload();
+            await unlockAfterReload(issuer, PASSWORD);
+            // ISSUE, FILE and the guarded SEND each charge an XCHAIN protocol
+            // fee, and the preflight disables Approve on a wallet that holds none.
+            await mintXchain(issuer, MINT_XCHAIN);
+            await waitForTokenBalance(issuerAddr, 'XCHAIN', MINT_XCHAIN);
             await issuer.reload();
             await unlockAfterReload(issuer, PASSWORD);
 
@@ -215,8 +223,10 @@ test.describe('the PC-26 gated SEND guard', () => {
             await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
             // PublishFileForm pins role="listitem" on this owned-token row (it
             // sits inside a role="list" container), so it answers to
-            // 'listitem', not 'button', in the accessibility tree.
-            await issuer.getByRole('listitem', { name: new RegExp(`^${TICK}\\b`) }).click();
+            // 'listitem', not 'button', in the accessibility tree. A listitem
+            // takes no accessible name from its content, so the row is found by
+            // its text rather than by name.
+            await issuer.getByRole('listitem').filter({ hasText: TICK }).click();
 
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('File to publish')).toBeVisible({ timeout: 30_000 });
@@ -241,8 +251,10 @@ test.describe('the PC-26 gated SEND guard', () => {
             const txid = txt.match(/\b[0-9a-f]{64}\b/)?.[0];
             expect(txid, 'the gated publish never showed a transaction id').toBeTruthy();
 
-            const action = await waitForValidAction(txid);
-            expect(action.action).toBe('FILE');
+            const legs = await validLegs(txid);
+            expect(legs.map((a) => a.action), 'the gated publish did not land as BATCH(FILE, MESSAGE)')
+                .toEqual(['BATCH', 'FILE', 'MESSAGE']);
+            expect(legs.find((a) => a.action === 'FILE').gate_ticker).toBe(TICK);
 
             await main.getByRole('button', { name: 'Done' }).click();
         });
@@ -270,13 +282,15 @@ test.describe('the PC-26 gated SEND guard', () => {
             await approveConfirm(issuer);
             const txid = await readBroadcastTxid(issuer);
 
-            const action = await waitForValidAction(txid);
+            const legs = await validLegs(txid);
             // The guard rewrites a gated SEND into BATCH(SEND, MESSAGE); a
             // plain SEND landing here would mean the guard silently didn't run.
-            expect(action.action, 'the gated SEND did not compose as a guarded BATCH').toBe('BATCH');
-            expect(String(action.tx_data), 'no MESSAGE sibling in the BATCH: the key handoff never attached')
+            expect(legs.map((a) => a.action), 'the gated SEND did not compose as a guarded BATCH')
+                .toEqual(['BATCH', 'SEND', 'MESSAGE']);
+            const handoff = legs.find((a) => a.action === 'MESSAGE');
+            expect(String(handoff.tx_data), 'no MESSAGE sibling in the BATCH: the key handoff never attached')
                 .toContain('MESSAGE|2|');
-            expect(String(action.tx_data)).toContain(holderAddr);
+            expect(handoff.destination, 'the key handoff was not addressed to the recipient').toBe(holderAddr);
 
             await waitForTokenBalance(holderAddr, TICK, Number(SEND_AMOUNT));
             await waitForTokenBalance(issuerAddr, TICK, issuerTickBefore - Number(SEND_AMOUNT));
@@ -328,8 +342,12 @@ test.describe('the PC-26 gated SEND guard', () => {
             await approveConfirm(holder);
             const txid = await readBroadcastTxid(holder);
 
-            const action = await waitForAnyRecordedAction(txid);
-            expect(String(action.status), 'the bare SEND of a gated tick was not rejected by the chain')
+            // Not asserted valid: the refusal is the thing under test. A SEND
+            // carries its verdict per transfer leg, so read it through
+            // `actionStatuses` rather than a top-level status it does not have.
+            const [action] = await txActions(txid);
+            expect(action.action).toBe('SEND');
+            expect(actionStatuses(action).join(' '), 'the bare SEND of a gated tick was not rejected by the chain')
                 .toContain('gated token transfer requires key handoff message');
 
             // An invalid action moves no funds: the holder's balance is

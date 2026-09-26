@@ -45,6 +45,7 @@ import {
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from '../../fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
+    actionStatuses,
     expectConfirmModal,
     fundAddress,
     mintXchain,
@@ -52,6 +53,7 @@ import {
     selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
+    txActions,
     tokenBalance,
     unlockAfterReload,
     waitForTokenBalance,
@@ -98,6 +100,26 @@ async function gotoPalette(page, title) {
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
+/**
+ * Every leg `txid` indexed as, oldest first, each asserted valid.
+ *
+ * A gated publish is BATCH(FILE, MESSAGE) and a guarded gated send is
+ * BATCH(SEND, MESSAGE); each indexes as the BATCH row plus one row per leg
+ * under the one tx hash. `waitForValidAction` returns whichever row the
+ * newest-first list shows first, which is the MESSAGE leg, so asserting
+ * "FILE" or "BATCH" on it fails on a good transaction.
+ */
+async function validLegs(txid) {
+    await waitForValidAction(txid);
+    const legs = await txActions(txid);
+    for (const leg of legs) {
+        for (const status of actionStatuses(leg)) {
+            expect(status, `chain rejected the ${leg.action} leg of ${txid}`).toBe('valid');
+        }
+    }
+    return legs;
+}
+
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
@@ -134,6 +156,12 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             await switchToRegtest(issuer, PASSWORD);
             issuerAddr = await readReceiveAddress(issuer);
             await fundAddress(issuerAddr, FUNDING_BTC);
+            await issuer.reload();
+            await unlockAfterReload(issuer, PASSWORD);
+            // ISSUE, FILE and the guarded SEND each charge an XCHAIN protocol
+            // fee, and the preflight disables Approve on a wallet that holds none.
+            await mintXchain(issuer, MINT_XCHAIN);
+            await waitForTokenBalance(issuerAddr, 'XCHAIN', MINT_XCHAIN);
             await issuer.reload();
             await unlockAfterReload(issuer, PASSWORD);
 
@@ -180,8 +208,10 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
             // PublishFileForm pins role="listitem" on this owned-token row (it
             // sits inside a role="list" container), so it answers to
-            // 'listitem', not 'button', in the accessibility tree.
-            await issuer.getByRole('listitem', { name: new RegExp(`^${TICK}\\b`) }).click();
+            // 'listitem', not 'button', in the accessibility tree. A listitem
+            // takes no accessible name from its content, so the row is found by
+            // its text rather than by name.
+            await issuer.getByRole('listitem').filter({ hasText: TICK }).click();
 
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('File to publish')).toBeVisible({ timeout: 30_000 });
@@ -222,8 +252,21 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             publishTxid = txt.match(/\b[0-9a-f]{64}\b/)?.[0];
             expect(publishTxid, 'the gated publish never showed a transaction id').toBeTruthy();
 
-            const action = await waitForValidAction(publishTxid);
-            expect(action.action).toBe('FILE');
+            const legs = await validLegs(publishTxid);
+            expect(legs.map((a) => a.action), 'the gated publish did not land as BATCH(FILE, MESSAGE)')
+                .toEqual(['BATCH', 'FILE', 'MESSAGE']);
+            // The on-chain half of the invariant, read off the real indexer: the
+            // FILE carries its gate but no threshold, and its wire leg has the
+            // eight pre-PC-29 fields (nine tokens with the FILE verb). A ninth
+            // field here is the premature emission the activation map exists
+            // to prevent, and the indexer would have silently dropped it.
+            const file = legs.find((a) => a.action === 'FILE');
+            expect(file.gate_ticker).toBe(TICK);
+            expect(file.gate_min_amount, 'the indexer recorded an unlock threshold on regtest').toBeNull();
+            const fileLeg = String(file.tx_data).replace(/^BATCH\|0\|/, '').split(';')
+                .find((leg) => leg.startsWith('FILE|'));
+            expect(fileLeg, `no FILE leg in ${file.tx_data}`).toBeTruthy();
+            expect(fileLeg.split('|'), `the FILE leg carries a ninth field: ${fileLeg}`).toHaveLength(9);
 
             await main.getByRole('button', { name: 'Done' }).click();
         });
@@ -252,14 +295,17 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             await approveConfirm(issuer);
             const txid = await readBroadcastTxid(issuer);
 
-            const action = await waitForValidAction(txid);
-            expect(action.action, 'the dust-sized gated SEND did not compose as a guarded BATCH - the '
+            const legs = await validLegs(txid);
+            // The guard rewrites a gated SEND into BATCH(SEND, MESSAGE); a
+            // plain SEND landing here would mean the guard silently didn't run.
+            expect(legs.map((a) => a.action), 'the dust-sized gated SEND did not compose as a guarded BATCH - the '
                 + 'below-threshold lane may have activated on a chain where it must stay inert')
-                .toBe('BATCH');
-            expect(String(action.tx_data), 'no MESSAGE sibling in the BATCH: the key handoff never attached '
+                .toEqual(['BATCH', 'SEND', 'MESSAGE']);
+            const handoff = legs.find((a) => a.action === 'MESSAGE');
+            expect(String(handoff.tx_data), 'no MESSAGE sibling in the BATCH: the key handoff never attached '
                 + 'even though this is the smallest amount the form accepts')
                 .toContain('MESSAGE|2|');
-            expect(String(action.tx_data)).toContain(holderAddr);
+            expect(handoff.destination, 'the key handoff was not addressed to the recipient').toBe(holderAddr);
 
             expect(await tokenBalance(issuerAddr, TICK)).toBe(issuerTickBefore - Number(TINY_SEND_AMOUNT));
         });

@@ -1004,6 +1004,50 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
 }
 
 /**
+ * Every action the explorer recorded under `txid`, oldest first, as full
+ * details, WITHOUT asserting any of them valid.
+ *
+ * A BATCH indexes as its parent row plus one row per leg, all under the one
+ * tx hash, and the actions list is newest-first, so `waitForValidAction`
+ * (which takes the first match) hands back the LAST leg, not the BATCH. A
+ * gated publish is BATCH(FILE, MESSAGE) and a guarded gated send is
+ * BATCH(SEND, MESSAGE), so asserting "this was a FILE" or "this was a BATCH"
+ * on that one row fails on a perfectly good transaction. Callers read every
+ * row here and assert on the one they mean; `actionStatuses` gives each
+ * row's verdicts.
+ *
+ * Retries a refused read until the deadline: the shared explorer answers an
+ * occasional DB_ERROR under load that clears on the next request.
+ *
+ * @param {string} txid
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<object[]>}
+ */
+export async function txActions(txid, { timeoutMs = 300_000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastError = null;
+    while (Date.now() < deadline) {
+        try {
+            const list = await explorerJson('actions?limit=100');
+            const rows = (list?.data || [])
+                .filter((r) => r.tx_hash === txid)
+                .sort((a, b) => Number(a.action_index) - Number(b.action_index));
+            if (rows.length > 0) {
+                const details = [];
+                for (const row of rows) details.push(await explorerJson(`action/${row.action_index}`));
+                return details;
+            }
+        } catch (err) {
+            lastError = err;
+        }
+        await nudgeChain();
+        await new Promise((r) => setTimeout(r, 2_000));
+    }
+    throw new Error(`No XChain action recorded for ${txid} within ${Math.round(timeoutMs / 1000)}s`
+        + (lastError ? ` (last read: ${lastError.message})` : ''));
+}
+
+/**
  * Every status an action detail exposes, across both shapes the explorer
  * uses.
  *
@@ -1014,7 +1058,7 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
  * on finding nothing rather than returning an empty list - a caller looping
  * over zero statuses asserts nothing and passes.
  */
-function actionStatuses(detail) {
+export function actionStatuses(detail) {
     const statuses = [];
     if (typeof detail.status === 'string') statuses.push(detail.status);
     for (const leg of Array.isArray(detail.sends) ? detail.sends : []) {
