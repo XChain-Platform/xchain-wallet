@@ -159,7 +159,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // Saying nothing is not a fix for saying zero: a buyer who cannot learn
         // the price cannot pay it.
         mount(FIAT_DISPENSER);
-        expect((await payToBuy()).getByText(/3 USD/)).toBeInTheDocument();
+        expect(await (await payToBuy()).findByText(/3 USD/)).toBeInTheDocument();
     });
 
     it('says the coin amount is resolved when the payment lands, not now', async () => {
@@ -187,7 +187,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // and settlement divides by GIVE_AMOUNT under
         // DISPENSER_ORACLE_PER_TOKEN_PRICE), so printing the bare 1.5 here
         // under-stated what this dispenser costs by a factor of five.
-        expect((await payToBuy()).getByText(/7\.5 USD/)).toBeInTheDocument();
+        expect(await (await payToBuy()).findByText(/7\.5 USD/)).toBeInTheDocument();
         expect(messaging.oracleFeeds).toHaveBeenCalledWith({
             chainId: CHAIN, address: ORACLE_ADDRESS,
         });
@@ -198,7 +198,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // not read the panel's 7.5 as a contradiction.
         mount(ORACLE_DISPENSER, { oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS) });
         const panel = await payToBuy();
-        expect(panel.getByText(/5 XCHAIN at 1\.5 USD each/)).toBeInTheDocument();
+        expect(await panel.findByText(/5 XCHAIN at 1\.5 USD each/)).toBeInTheDocument();
     });
 
     it('adds no breakdown when a fill IS one token', async () => {
@@ -208,7 +208,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
             oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS),
         });
         const panel = await payToBuy();
-        expect(panel.getByText(/1\.5 USD/)).toBeInTheDocument();
+        expect(await panel.findByText(/1\.5 USD/)).toBeInTheDocument();
         expect(panel.queryByText(/at 1\.5 USD each/)).toBeNull();
     });
 
