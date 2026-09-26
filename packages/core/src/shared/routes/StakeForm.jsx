@@ -16,7 +16,11 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import {
+    compareDecimalStrings,
+    formatWithThousands,
+    sumDecimalStrings,
+} from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -210,16 +214,15 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     : [];
                 const rows = effectiveStakingRows(received, watermark?.watermark);
                 let match = false;
-                let sum = 0;
+                const matchedAmounts = [];
                 for (const row of rows) {
                     const rowPk = String(row.signing_pubkey || row.SIGNING_PUBKEY || '').toLowerCase();
                     if (rowPk === pk) {
                         match = true;
-                        const amt = Number(row.amount ?? row.AMOUNT ?? 0);
-                        if (Number.isFinite(amt)) sum += amt;
+                        matchedAmounts.push(row.amount ?? row.AMOUNT ?? '0');
                     }
                 }
-                setExistingStake(String(sum));
+                setExistingStake(sumDecimalStrings(matchedAmounts));
                 setDetectStatus(match ? 'topup' : 'new');
                 setStakeMode(match ? '2' : '1');
             })
@@ -335,32 +338,33 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     // Project which capabilities the post-submit total stake qualifies for.
     // Total = the pubkey's existing valid stake (top-ups) + the entered
-    // amount. Comparison is Number-based and display-only; the indexer
-    // enforces the real on-chain qualification. Null when thresholds are
+    // amount. Null when thresholds are
     // unavailable (no hub / regtest / older SDK).
     const qualifyReadout = useMemo(() => {
         if (!thresholds || thresholds.length === 0) return null;
-        const amt = Number(amount.trim());
-        const base = Number(existingStake);
-        const projected = (Number.isFinite(amt) ? amt : 0) + (Number.isFinite(base) ? base : 0);
+        const projected = sumDecimalStrings([existingStake, amount.trim()]);
         const rows = thresholds
             .filter((t) => !t.disabled)
             .map((t) => {
-                const min = Number(t.min_stake);
                 return {
                     capability: t.capability,
                     label:      CAPABILITY_LABELS[t.capability] || t.capability,
                     minStake:   t.min_stake,
-                    min,
-                    qualifies:  projected > 0 && projected >= min,
+                    qualifies:  compareDecimalStrings(projected, '0') === 1
+                        && compareDecimalStrings(projected, t.min_stake) >= 0,
                 };
             })
             // Drop capabilities the hub has no numeric threshold for
             // (getMinStake returns null when unconfigured); we can't claim
             // qualified/not for those, and "null XCHAIN" would be nonsense.
-            .filter((r) => r.minStake != null && Number.isFinite(r.min));
+            .filter((r) => r.minStake != null
+                && compareDecimalStrings(r.minStake, '0') !== null);
         if (rows.length === 0) return null;
-        return { projected, rows, hasTopup: Number(existingStake) > 0 };
+        return {
+            projected,
+            rows,
+            hasTopup: compareDecimalStrings(existingStake, '0') === 1,
+        };
     }, [thresholds, amount, existingStake]);
 
     function handleReview(event) {

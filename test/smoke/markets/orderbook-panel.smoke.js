@@ -30,7 +30,7 @@ const core = join(wsRoot, 'packages', 'core');
 const empty = normalizeOrderbook(null);
 assert.deepEqual(empty.bids, []);
 assert.deepEqual(empty.asks, []);
-assert.equal(empty.maxCumulative, 0);
+assert.equal(empty.maxCumulative, '0');
 
 // Explorer default shape: [{ asks, bids, market }]
 const wrapped = normalizeOrderbook([{
@@ -51,23 +51,23 @@ assert.equal(plain.bids.length, 2);
 // --- 2. Sort orientation ---------------------------------------
 
 // Bids sorted descending by price (best bid first = highest price).
-assert.equal(wrapped.bids[0].price, 0.0009);
-assert.equal(wrapped.bids[1].price, 0.0008);
+assert.equal(wrapped.bids[0].price, '0.0009');
+assert.equal(wrapped.bids[1].price, '0.0008');
 
 // Asks sorted ascending by price (best ask first = lowest price).
-assert.equal(wrapped.asks[0].price, 0.0010);
-assert.equal(wrapped.asks[1].price, 0.0012);
+assert.equal(wrapped.asks[0].price, '0.0010');
+assert.equal(wrapped.asks[1].price, '0.0012');
 
 // --- 3. Cumulative totals + depth bar input ---------------------
 
 // Bids cumulative: 50 (0.0009), 250 (0.0008).
-assert.equal(wrapped.bids[0].cumulative, 50);
-assert.equal(wrapped.bids[1].cumulative, 250);
+assert.equal(wrapped.bids[0].cumulative, '50');
+assert.equal(wrapped.bids[1].cumulative, '250');
 // Asks cumulative: 50 (0.0010), 150 (0.0012).
-assert.equal(wrapped.asks[0].cumulative, 50);
-assert.equal(wrapped.asks[1].cumulative, 150);
+assert.equal(wrapped.asks[0].cumulative, '50');
+assert.equal(wrapped.asks[1].cumulative, '150');
 // maxCumulative is the larger of the two last cumulatives.
-assert.equal(wrapped.maxCumulative, 250);
+assert.equal(wrapped.maxCumulative, '250');
 
 // --- 4. Display strings preserved ------------------------------
 
@@ -83,7 +83,7 @@ const mixed = normalizeOrderbook({
     asks: [],
 });
 assert.equal(mixed.bids.length, 1, 'rows that fail Number() parse are dropped');
-assert.equal(mixed.bids[0].price, 0.002);
+assert.equal(mixed.bids[0].price, '0.002');
 
 // --- 6. Object-shape level row accepted ------------------------
 
@@ -91,8 +91,8 @@ const objShape = normalizeOrderbook({
     bids: [{ price: '0.01', amount: '10' }],
     asks: [{ price: '0.02', size: '20' }],
 });
-assert.equal(objShape.bids[0].price, 0.01);
-assert.equal(objShape.asks[0].price, 0.02);
+assert.equal(objShape.bids[0].price, '0.01');
+assert.equal(objShape.asks[0].price, '0.02');
 
 // --- 7. OrderbookPanel static wiring ---------------------------
 

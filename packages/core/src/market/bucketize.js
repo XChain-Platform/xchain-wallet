@@ -22,7 +22,11 @@
 // Bucket timestamps: seconds since epoch, floored to the period
 // boundary. Matches missing a parsable timestamp are skipped.
 
-import { normalizeMarketHistoryRow } from './history_rows.js';
+import { normalizeMarketHistoryRowExact } from './history_rows.js';
+import {
+    compareDecimalStrings,
+    sumDecimalStrings,
+} from '../shared/utils/amountFormat.js';
 
 export const PERIODS = /** @type {const} */ ([
     { id: '1m', label: '1m', seconds: 60 },
@@ -64,7 +68,7 @@ export function bucketizeMatches(rows, { tick1, tick2, periodSeconds }) {
     /** @type {Map<number, { open: number, high: number, low: number, close: number, volume: number, firstTs: number, lastTs: number }>} */
     const buckets = new Map();
     for (const row of rows) {
-        const parsed = normalizeMarketHistoryRow(row, tick1, tick2);
+        const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
         if (!parsed) continue;
         const { price, amount: volume, timestamp } = parsed;
         const bucketStart = Math.floor(timestamp / periodSeconds) * periodSeconds;
@@ -80,8 +84,8 @@ export function bucketizeMatches(rows, { tick1, tick2, periodSeconds }) {
                 lastTs: timestamp,
             });
         } else {
-            if (price > existing.high) existing.high = price;
-            if (price < existing.low) existing.low = price;
+            if (compareDecimalStrings(price, existing.high) === 1) existing.high = price;
+            if (compareDecimalStrings(price, existing.low) === -1) existing.low = price;
             if (timestamp < existing.firstTs) {
                 existing.firstTs = timestamp;
                 existing.open = price;
@@ -90,18 +94,19 @@ export function bucketizeMatches(rows, { tick1, tick2, periodSeconds }) {
                 existing.lastTs = timestamp;
                 existing.close = price;
             }
-            existing.volume += volume;
+            existing.volume = sumDecimalStrings([existing.volume, volume]);
         }
     }
     const out = [];
     for (const [time, b] of buckets) {
         out.push({
             time,
-            open: b.open,
-            high: b.high,
-            low: b.low,
-            close: b.close,
-            volume: b.volume,
+            open: Number(b.open),
+            high: Number(b.high),
+            low: Number(b.low),
+            close: Number(b.close),
+            volume: Number(b.volume),
+            exactVolume: b.volume,
         });
     }
     out.sort((a, b) => a.time - b.time);

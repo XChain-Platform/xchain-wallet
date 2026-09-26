@@ -18,7 +18,10 @@ import {
     synthesizeDemoContractMeta,
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import {
+    compareDecimalStrings,
+    formatWithThousands,
+} from '../utils/amountFormat.js';
 import {
     unclaimedRewards,
     effectiveStakingRows,
@@ -224,14 +227,10 @@ export function StakeDetail({
         () => splitRewards(rewards, rewardClaims),
         [rewards, rewardClaims],
     );
-    const totalContractStaked = useMemo(() => {
-        let sum = 0;
-        for (const s of activeContractStakes) {
-            const n = Number(s.amount ?? 0);
-            if (Number.isFinite(n)) sum += n;
-        }
-        return sum;
-    }, [activeContractStakes]);
+    const totalContractStaked = useMemo(
+        () => sumStakingAmounts(activeContractStakes),
+        [activeContractStakes],
+    );
     const contractTick = activeContractStakes[0]?.tick || pendingContractUnstakes[0]?.tick || '';
     const inCooldown = pendingContractUnstakes.length > 0;
 
@@ -283,7 +282,7 @@ export function StakeDetail({
                         ? (primaryStake
                             ? `${fmt(totalValidatorStaked)} ${primaryStake.asset ?? 'XCHAIN'}`
                             : 'Nothing staked from this address')
-                        : `${totalContractStaked ? fmt(totalContractStaked) : '?'} ${contractTick || ''}`.trim()}
+                        : `${compareDecimalStrings(totalContractStaked, '0') === 1 ? fmt(totalContractStaked) : '?'} ${contractTick || ''}`.trim()}
                 </dd>
                 {kind === 'validator' && (primaryStake?.capability_label || primaryStake?.capability) ? (
                     <>
@@ -353,8 +352,8 @@ export function StakeDetail({
                         type="button"
                         className={local.quickAction}
                         onClick={onClaimRewards}
-                        disabled={!onClaimRewards || pending <= 0}
-                        title={pending > 0 ? 'Claim pending rewards' : 'No pending rewards'}
+                        disabled={!onClaimRewards || compareDecimalStrings(pending, '0') !== 1}
+                        title={compareDecimalStrings(pending, '0') === 1 ? 'Claim pending rewards' : 'No pending rewards'}
                     >
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
                         <span>Claim</span>
@@ -656,8 +655,8 @@ function extractRows(resp) {
 function splitRewards(rows, claimRows) {
     const totals = unclaimedRewards({ rewards: rows, claims: claimRows });
     return {
-        pending: Number(totals.unclaimed),
-        lifetime: Number(totals.accrued),
+        pending: totals.unclaimed,
+        lifetime: totals.accrued,
         hasRejectedClaim: totals.hasRejectedClaim,
     };
 }

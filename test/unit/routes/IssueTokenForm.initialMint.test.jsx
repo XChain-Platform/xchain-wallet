@@ -133,6 +133,15 @@ describe('IssueTokenForm initial mint', () => {
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('refuses an initial mint one atomic unit above a large supply', async () => {
+        mountForm();
+        await fill({ supply: '90071992.54740901', initialMint: '90071992.54740902' });
+        await submit();
+
+        await screen.findByText('Initial mint cannot be more than the supply.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('refuses a 0 initial mint that is locked out of ever minting', async () => {
         mountForm();
         await fill({ supply: '5000', initialMint: '0', lockSupply: true });
@@ -150,5 +159,12 @@ describe('IssueTokenForm initial mint', () => {
 
         // 5000 cap minus a 1000 initial mint: 4000 would be stranded.
         await screen.findByText(/4000 left under the cap can never be minted/);
+    });
+
+    it('shows one atomic unit of headroom at a large supply', async () => {
+        mountForm();
+        await fill({ supply: '90071992.54740902', initialMint: '90071992.54740901' });
+
+        await screen.findByText(/Leaves 0\.00000001 to mint later/);
     });
 });

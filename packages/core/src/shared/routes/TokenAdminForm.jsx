@@ -49,6 +49,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -629,7 +630,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Enter at least one field to update.');
                 return;
             }
-            if (mintAddressMax && maxMint && Number(mintAddressMax) < Number(maxMint)) {
+            if (mintAddressMax && maxMint
+                && compareDecimalStrings(mintAddressMax, maxMint) === -1) {
                 setFormError('Max mint per address must be at least the max mint per transaction.');
                 return;
             }

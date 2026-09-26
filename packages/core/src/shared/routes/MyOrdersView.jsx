@@ -38,6 +38,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
@@ -102,8 +103,8 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
         if (fill.status === 'complete') return 'filled';
         if (fill.status === 'cancelled') return 'cancelled';
         if (fill.status === 'expired') return 'expired';
-        const remaining = Number(fill.giveRemaining);
-        if (fill.status === 'open' && Number.isFinite(remaining) && remaining <= 0) return 'filled';
+        const remaining = compareDecimalStrings(fill.giveRemaining, '0');
+        if (fill.status === 'open' && remaining !== null && remaining <= 0) return 'filled';
     }
     const exp = Number(fill?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
@@ -115,10 +116,9 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
 function partialRemaining(item) {
     const fill = item.fill;
     if (!fill || fill.status !== 'open') return null;
-    const remaining = Number(fill.giveRemaining);
-    const total = Number(item.row.give_amount);
-    if (!Number.isFinite(remaining) || !Number.isFinite(total)) return null;
-    if (remaining <= 0 || remaining >= total) return null;
+    const aboveZero = compareDecimalStrings(fill.giveRemaining, '0');
+    const belowTotal = compareDecimalStrings(fill.giveRemaining, item.row.give_amount);
+    if (aboveZero !== 1 || belowTotal !== -1) return null;
     return String(fill.giveRemaining);
 }
 

@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
-import { historyTimestamp, normalizeMarketHistoryRow } from '../../market/history_rows.js';
+import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 
 /**
  * @param {object} props
@@ -224,7 +224,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
 }
 
 function summarizeRow(row, tick1, tick2) {
-    const parsed = normalizeMarketHistoryRow(row, tick1, tick2);
+    const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
     if (!parsed) return null;
     return {
         price: String(parsed.price),

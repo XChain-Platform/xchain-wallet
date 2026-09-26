@@ -47,6 +47,7 @@ describe('explorer market response shapes', () => {
             low: 2.5,
             close: 3,
             volume: 6,
+            exactVolume: '6',
         }]);
     });
 

@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { divideDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -542,9 +542,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         <DetailRow
                             label="Price"
                             value={
-                                Number(giveAmount) > 0 && Number(getAmount) > 0
+                                divideDecimalStrings(getAmount, giveAmount, 8) !== null
                                     ? `1 ${giveTick.trim().toUpperCase()} = ${
-                                        (Number(getAmount) / Number(giveAmount)).toFixed(8).replace(/\.?0+$/, '')
+                                        divideDecimalStrings(getAmount, giveAmount, 8)
                                     } ${getTick.trim().toUpperCase()}`
                                     : 'n/a'
                             }

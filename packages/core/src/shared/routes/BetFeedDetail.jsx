@@ -22,7 +22,14 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
-import { trimAmountTail, sumDecimalStrings } from '../utils/amountFormat.js';
+import {
+    compareDecimalStrings,
+    divideDecimalStrings,
+    multiplyDecimalStrings,
+    roundDecimalString,
+    trimAmountTail,
+    sumDecimalStrings,
+} from '../utils/amountFormat.js';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -403,7 +410,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     const pools = live ? livePools : (settledSplit || livePools);
     const byOutcome = {};
     for (const p of pools) byOutcome[Number(p.outcome)] = p;
-    const total = pools.reduce((a, p) => a + Number(p.pool || 0), 0);
+    const total = sumDecimalStrings(pools.map((pool) => pool.pool || '0'));
     const timeline = Array.isArray(feed.timeline) ? feed.timeline : [];
 
     return wrap(
@@ -443,8 +450,12 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                         // still happen; on a market that is over it asserts
                         // that nobody ever bet, which may be false and is
                         // never something this screen can promise.
-                        const share = total > 0
-                            ? ((Number(p.pool || 0) / total) * 100).toFixed(1) + '%'
+                        const share = compareDecimalStrings(total, '0') === 1
+                            ? `${roundDecimalString(divideDecimalStrings(
+                                multiplyDecimalStrings(p.pool || '0', '100'),
+                                total,
+                                1,
+                            ), 1)}%`
                             : (live ? 'no bets yet' : 'no bets');
                         // (a): the pool is a DECIMAL(65,18) SUM, so it
                         // arrives with an 18-place tail whatever the token's

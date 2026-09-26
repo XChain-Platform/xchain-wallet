@@ -1,35 +1,51 @@
 // Copyright 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import {
+    compareDecimalStrings,
+    divideDecimalStrings,
+} from '../shared/utils/amountFormat.js';
+
 /** Normalize one projected market fill while retaining raw-row compatibility. */
 export function normalizeMarketHistoryRow(row, tick1, tick2) {
+    const exact = normalizeMarketHistoryRowExact(row, tick1, tick2);
+    if (!exact) return null;
+    return {
+        ...exact,
+        price: Number(exact.price),
+        amount: Number(exact.amount),
+    };
+}
+
+/** Normalize one market fill while preserving exact decimal price and amount strings. */
+export function normalizeMarketHistoryRowExact(row, tick1, tick2) {
     if (!row || typeof row !== 'object') return null;
-    const price = Number(row.price);
-    const amount = Number(row.amount);
+    const price = String(row.price ?? '').trim();
+    const amount = String(row.amount ?? '').trim();
     const side = String(row.type || '').toLowerCase();
     const timestamp = historyTimestamp(row);
     if (
-        Number.isFinite(price) && price > 0
-        && Number.isFinite(amount) && amount > 0
+        compareDecimalStrings(price, '0') === 1
+        && compareDecimalStrings(amount, '0') === 1
         && (side === 'buy' || side === 'sell')
         && Number.isFinite(timestamp)
     ) {
         return historyResult(row, { price, amount, side, timestamp });
     }
-    return normalizeRawMatch(row, tick1, tick2, timestamp);
+    return normalizeRawMatchExact(row, tick1, tick2, timestamp);
 }
 
-function normalizeRawMatch(row, tick1, tick2, timestamp) {
+function normalizeRawMatchExact(row, tick1, tick2, timestamp) {
     const giveTick = row.give_tick || row.giveTick;
     const getTick = row.get_tick || row.getTick;
-    const giveAmount = Number(row.give_amount ?? row.giveAmount);
-    const getAmount = Number(row.get_amount ?? row.getAmount);
+    const giveAmount = String(row.give_amount ?? row.giveAmount ?? '');
+    const getAmount = String(row.get_amount ?? row.getAmount ?? '');
     if (!giveTick || !getTick || !Number.isFinite(timestamp)) return null;
-    if (!Number.isFinite(giveAmount) || giveAmount <= 0) return null;
-    if (!Number.isFinite(getAmount) || getAmount <= 0) return null;
+    if (compareDecimalStrings(giveAmount, '0') !== 1) return null;
+    if (compareDecimalStrings(getAmount, '0') !== 1) return null;
     if (giveTick === tick1 && getTick === tick2) {
         return historyResult(row, {
-            price: getAmount / giveAmount,
+            price: divideDecimalStrings(getAmount, giveAmount, 18),
             amount: giveAmount,
             side: 'sell',
             timestamp,
@@ -37,7 +53,7 @@ function normalizeRawMatch(row, tick1, tick2, timestamp) {
     }
     if (giveTick === tick2 && getTick === tick1) {
         return historyResult(row, {
-            price: giveAmount / getAmount,
+            price: divideDecimalStrings(giveAmount, getAmount, 18),
             amount: getAmount,
             side: 'buy',
             timestamp,

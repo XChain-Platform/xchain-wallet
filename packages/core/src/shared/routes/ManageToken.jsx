@@ -34,6 +34,7 @@ import {
     isOpenOffer,
 } from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
+import { formatWithThousands } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -958,9 +959,9 @@ function OrdersPanel({ orders, error, tick, chainId }) {
                 const getTick = o.get_tick || o.get_coin || o.getTick || o.getCoin || '';
                 const { give: giveQty, get: getQty } = offerAmounts(o);
                 const summary =
-                    `${giveQty != null ? Number(giveQty).toLocaleString() : '?'} ${giveTick}` +
+                    `${giveQty != null ? formatWithThousands(giveQty) : '?'} ${giveTick}` +
                     ' → ' +
-                    `${getQty != null ? Number(getQty).toLocaleString() : '?'} ${getTick}`;
+                    `${getQty != null ? formatWithThousands(getQty) : '?'} ${getTick}`;
                 return (
                     <HistoryRow
                         key={String(o.action_index || o.tx_hash || i)}
@@ -999,9 +1000,9 @@ function SwapsPanel({ swaps, error, tick }) {
                 const statusLabel = lifecycle === 'complete' ? 'Filled'
                     : lifecycle ? lifecycle[0].toUpperCase() + lifecycle.slice(1) : 'Status unavailable';
                 const summary =
-                    `${giveQty != null ? Number(giveQty).toLocaleString() : '?'} ${giveTick}` +
+                    `${giveQty != null ? formatWithThousands(giveQty) : '?'} ${giveTick}` +
                     ' ⇄ ' +
-                    `${getQty != null ? Number(getQty).toLocaleString() : '?'} ${getTick}`;
+                    `${getQty != null ? formatWithThousands(getQty) : '?'} ${getTick}`;
                 return (
                     <HistoryRow
                         key={String(s.action_index || s.tx_hash || i)}
@@ -1041,7 +1042,7 @@ function HoldersPanel({ holders, error, onViewAll }) {
                                 {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
                             </span>
                             <span className={styles.rowSub}>
-                                {h.quantity != null ? Number(h.quantity).toLocaleString() : (h.amount != null ? Number(h.amount).toLocaleString() : '-')}
+                                {h.quantity != null ? formatWithThousands(h.quantity) : (h.amount != null ? formatWithThousands(h.amount) : '-')}
                             </span>
                         </div>
                     </li>

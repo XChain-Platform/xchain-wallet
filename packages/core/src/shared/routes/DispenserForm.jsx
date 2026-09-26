@@ -33,7 +33,11 @@ import {
 } from '../../flows/feeEstimate.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import {
+    compareDecimalStrings,
+    decimalQuotientFloor,
+    formatWithThousands,
+} from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -372,13 +376,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     if (cancelled || !byChain) return;
                     const entries = byChain[chainId] || [];
                     let bestAddress = null;
-                    let bestAmount = 0;
+                    let bestAmount = '0';
                     for (const entry of entries) {
                         if (!entry || !entry.balances) continue;
                         const rows = decoderLib.balancesFromSdk(entry.balances) || [];
                         const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
-                        const amount = match ? Number(match.amount) : 0;
-                        if (Number.isFinite(amount) && amount > bestAmount) {
+                        const amount = match ? String(match.amount) : '0';
+                        if (compareDecimalStrings(amount, bestAmount) === 1) {
                             bestAmount = amount;
                             bestAddress = entry.address;
                         }
@@ -515,11 +519,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [ticker, chainId, sourceAddress, activeAccountId, walletId, messaging]);
 
     const fillsEstimate = useMemo(() => {
-        const ga = Number(giveAmount);
-        const esc = Number(escrow);
-        if (!Number.isFinite(ga) || ga <= 0) return null;
-        if (!Number.isFinite(esc) || esc <= 0) return null;
-        return Math.floor(esc / ga);
+        return decimalQuotientFloor(escrow, giveAmount);
     }, [giveAmount, escrow]);
 
     const summaryLine = useMemo(() => {
@@ -644,7 +644,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             setFormError('Escrow amount must be a positive number.');
             return;
         }
-        if (Number(esc) < Number(ga)) {
+        if (compareDecimalStrings(esc, ga) === -1) {
             setFormError('Escrow is smaller than a single fill; the dispenser would never dispense.');
             return;
         }

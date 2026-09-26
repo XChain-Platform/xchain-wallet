@@ -47,6 +47,10 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import {
+    compareDecimalStrings,
+    subtractDecimalStrings,
+} from '../utils/amountFormat.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -313,16 +317,14 @@ export function IssueTokenForm({ walletId, onBack }) {
     // What is left mintable after the initial mint, as a display string, or
     // null when the pair is blank/invalid/fully minted (nothing to say).
     const mintHeadroom = useMemo(() => {
-        const cap = Number(String(supply).trim());
+        const cap = String(supply).trim();
         const mintText = String(initialMint).trim();
-        if (!mintText || !Number.isFinite(cap) || cap <= 0) return null;
-        const mint = Number(mintText);
-        if (!Number.isFinite(mint) || mint < 0 || mint > cap) return null;
-        const left = cap - mint;
-        if (left <= 0) return null;
-        // Trim float noise from the subtraction (0.3 - 0.1 = 0.19999...).
-        return divisible ? String(Number(left.toFixed(8))) : String(left);
-    }, [supply, initialMint, divisible]);
+        if (!mintText || compareDecimalStrings(cap, '0') !== 1) return null;
+        if (compareDecimalStrings(mintText, '0') === -1
+            || compareDecimalStrings(mintText, cap) === 1) return null;
+        const left = subtractDecimalStrings(cap, mintText);
+        return compareDecimalStrings(left, '0') === 1 ? left : null;
+    }, [supply, initialMint]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -362,7 +364,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 setFormError('Initial mint must be zero or a positive number.');
                 return;
             }
-            if (mintNum > Number(supply)) {
+            if (compareDecimalStrings(mintText, supply.trim()) === 1) {
                 setFormError('Initial mint cannot be more than the supply.');
                 return;
             }

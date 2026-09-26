@@ -38,6 +38,12 @@
 // action list so a new protocol action cannot quietly reopen the gap.
 
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
+import {
+    compareDecimalStrings,
+    decimalQuotientFloor,
+    multiplyDecimalStrings,
+    roundDecimalString,
+} from '../shared/utils/amountFormat.js';
 import { listEditValue } from './list_removal_description.js';
 
 /**
@@ -1221,8 +1227,8 @@ function decodeDispenser(p, chainSuffix) {
                 ? `${getAmount || '?'} ${getTick}`
                 : `${getAmount || '?'} ${getCoin || '?'}`;
 
-    const fillsEstimate = giveAmount && giveEscrow && Number(giveAmount) > 0
-        ? Math.floor(Number(giveEscrow) / Number(giveAmount))
+    const fillsEstimate = giveAmount && giveEscrow
+        ? decimalQuotientFloor(giveEscrow, giveAmount)
         : null;
 
     const summary = `Create dispenser${chainSuffix}: lock ${giveEscrow || '?'} ${giveTick || '?'}, give ${giveAmount || '?'} ${giveTick || '?'} per ${payPriceLabel}`;
@@ -1260,7 +1266,7 @@ function decodeDispenser(p, chainSuffix) {
         ...(!giveEscrow || Number(giveEscrow) <= 0
             ? ['Escrow amount is not positive.']
             : []),
-        ...(giveAmount && giveEscrow && Number(giveEscrow) < Number(giveAmount)
+        ...(giveAmount && giveEscrow && compareDecimalStrings(giveEscrow, giveAmount) === -1
             ? ['Escrow is smaller than a single fill, so the dispenser will never dispense.']
             : []),
         ...(!getAmount ? ['Trigger amount is empty.'] : []),
@@ -1319,8 +1325,12 @@ function decodePrice(p, chainSuffix) {
 
     // FEE is a fraction on the wire (0.01 = 1%); show both so a publisher
     // who typed one and meant the other notices before signing.
-    const feePct = fee && Number.isFinite(Number(fee))
-        ? `${fee} (${(Number(fee) * 100).toFixed(2).replace(/\.?0+$/, '')}% of a dispenser's projected proceeds)`
+    const feePercentRaw = multiplyDecimalStrings(fee, '100');
+    const feePercent = feePercentRaw === null
+        ? null
+        : roundDecimalString(feePercentRaw, 2)?.replace(/\.?0+$/, '');
+    const feePct = fee && feePercent !== null
+        ? `${fee} (${feePercent}% of a dispenser's projected proceeds)`
         : fee;
 
     return {

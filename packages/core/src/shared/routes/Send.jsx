@@ -596,15 +596,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     //     to it from any of the wallet's addresses on this chain)
     //   - user hasn't already acknowledged this address in the session
     const testSendGate = useMemo(() => {
-        const threshold = Number(settings?.grace?.testSendThresholdSats) || 0;
-        if (threshold <= 0) return null;
+        const thresholdText = String(settings?.grace?.testSendThresholdSats ?? '0').trim();
+        const threshold = /^\d+$/.test(thresholdText) ? BigInt(thresholdText) : 0n;
+        if (threshold <= 0n) return null;
         const dest = toAddress.trim();
         if (!dest) return null;
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
         if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
-        const amountSats = exactSatsFromDecimalString(amount);
-        if (amountSats === null || amountSats <= 0) return null;
+        const amountSats = exactSatsBigIntFromDecimalString(amount);
+        if (amountSats === null || amountSats <= 0n) return null;
         if (amountSats <= threshold) return null;
         const novelty = checkRecipientNovelty({
             address: dest,
@@ -705,7 +706,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const floor = dustThresholdForCoin(desc?.coin);
         if (!floor) return null;
-        const sats = exactSatsFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount);
         if (sats === null || sats <= 0 || sats >= floor) return null;
         const ticker = nativeTickerFor(desc) || tick.trim().toUpperCase();
         const minimum = decimalStringFromSats(BigInt(floor));
@@ -1479,11 +1480,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
-        const sats = exactSatsFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount);
         const isNativeSend = !!nativeTicker
             && tick.trim().toUpperCase() === nativeTicker
-            && sats !== null && sats > 0;
-        const amountSats = isNativeSend ? sats : 0;
+            && sats !== null && sats > 0n;
+        const amountSats = isNativeSend ? sats : 0n;
         let recipientNovel = false;
         // PC-52: ANY never-seen recipient makes the send novel, not just the
         // first row. The cross-check exists so a hardware user verifies an
@@ -1503,7 +1504,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             recipientNovel,
             multisig: false, // Send.jsx is single-sig; multisig flow is separate.
             settings: {
-                testSendThresholdSats: Number(settings?.grace?.testSendThresholdSats) || 0,
+                testSendThresholdSats: settings?.grace?.testSendThresholdSats ?? '0',
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });

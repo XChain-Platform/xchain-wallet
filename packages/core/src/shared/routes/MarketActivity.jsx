@@ -28,6 +28,7 @@ import {
     offerAmounts,
 } from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
+import { formatWithThousands } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -310,10 +311,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null
-                                        ? `Sell ${Number(giveQty).toLocaleString()} ${tick} for ${Number(getQty).toLocaleString()} ${getTick}`
+                                        ? `Sell ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
                                         : `Sell ${tick}`)
                                     : (giveQty != null && getQty != null
-                                        ? `Buy ${Number(getQty).toLocaleString()} ${tick} for ${Number(giveQty).toLocaleString()} ${giveTick}`
+                                        ? `Buy ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
                                         : `Buy ${tick}`);
                                 const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                 return (
@@ -399,10 +400,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null
-                                        ? `Sold ${Number(giveQty).toLocaleString()} ${tick} for ${Number(getQty).toLocaleString()} ${getTick}`
+                                        ? `Sold ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
                                         : `Sold ${tick}`)
                                     : (giveQty != null && getQty != null
-                                        ? `Bought ${Number(getQty).toLocaleString()} ${tick} for ${Number(giveQty).toLocaleString()} ${giveTick}`
+                                        ? `Bought ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
                                         : `Bought ${tick}`);
                                 const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                 return (

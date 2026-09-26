@@ -20,7 +20,15 @@ import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
 import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
-import { normalizeMarketHistoryRow } from '../../market/history_rows.js';
+import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import {
+    compareDecimalStrings,
+    divideDecimalStrings,
+    multiplyDecimalStrings,
+    roundDecimalString,
+    subtractDecimalStrings,
+    sumDecimalStrings,
+} from '../utils/amountFormat.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 
@@ -298,43 +306,46 @@ function extractHistoryRows(resp) {
 function derive24hStats(rows, tick1, tick2) {
     const now = Math.floor(Date.now() / 1000);
     const dayAgo = now - 86400;
-    let lastPrice = NaN;
+    let lastPrice = null;
     let lastTs = -Infinity;
-    let firstPriceIn24h = NaN;
+    let firstPriceIn24h = null;
     let firstTsIn24h = Infinity;
-    let high = -Infinity;
-    let low = Infinity;
-    let volume = 0;
+    let high = null;
+    let low = null;
+    let volume = '0';
     for (const row of rows || []) {
-        const parsed = normalizeMarketHistoryRow(row, tick1, tick2);
+        const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
         if (!parsed) continue;
         const { price, amount: sizeT1, timestamp: ts } = parsed;
         if (ts > lastTs) { lastTs = ts; lastPrice = price; }
         if (ts >= dayAgo) {
             if (ts < firstTsIn24h) { firstTsIn24h = ts; firstPriceIn24h = price; }
-            if (price > high) high = price;
-            if (price < low) low = price;
-            volume += sizeT1;
+            if (high === null || compareDecimalStrings(price, high) === 1) high = price;
+            if (low === null || compareDecimalStrings(price, low) === -1) low = price;
+            volume = sumDecimalStrings([volume, sizeT1]);
         }
     }
-    const changePct = Number.isFinite(lastPrice) && Number.isFinite(firstPriceIn24h) && firstPriceIn24h > 0
-        ? ((lastPrice - firstPriceIn24h) / firstPriceIn24h) * 100
-        : NaN;
+    const change = lastPrice !== null && compareDecimalStrings(firstPriceIn24h, '0') === 1
+        ? subtractDecimalStrings(lastPrice, firstPriceIn24h)
+        : null;
+    const changePctText = change === null
+        ? null
+        : divideDecimalStrings(multiplyDecimalStrings(change, '100'), firstPriceIn24h, 8);
     return {
-        lastPrice: Number.isFinite(lastPrice) ? lastPrice : NaN,
-        changePct,
-        high: Number.isFinite(high) ? high : NaN,
-        low: Number.isFinite(low) ? low : NaN,
+        lastPrice,
+        changePct: changePctText === null ? NaN : Number(changePctText),
+        high,
+        low,
         volume,
     };
 }
 
 function formatPrice(n) {
-    if (!Number.isFinite(n)) return '-';
-    if (n === 0) return '0';
-    if (n >= 1) return n.toFixed(4);
-    if (n >= 0.01) return n.toFixed(6);
-    return n.toFixed(8);
+    if (compareDecimalStrings(n, '0') === null) return '-';
+    if (compareDecimalStrings(n, '0') === 0) return '0';
+    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
+    if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
+    return roundDecimalString(n, 8);
 }
 
 function formatChangePct(n) {
@@ -344,8 +355,12 @@ function formatChangePct(n) {
 }
 
 function formatVolume(n) {
-    if (!Number.isFinite(n) || n === 0) return '0';
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-    return n.toFixed(0);
+    if (compareDecimalStrings(n, '0') !== 1) return '0';
+    if (compareDecimalStrings(n, '1000000') >= 0) {
+        return `${divideDecimalStrings(n, '1000000', 2)}M`;
+    }
+    if (compareDecimalStrings(n, '1000') >= 0) {
+        return `${divideDecimalStrings(n, '1000', 2)}K`;
+    }
+    return roundDecimalString(n, 0);
 }

@@ -105,7 +105,7 @@ describe('ManageToken DEX panels on explorer-shaped rows', () => {
     it('shows only open orders with explorer amounts and native coin names', async () => {
         renderPanel();
         fireEvent.click(screen.getByRole('tab', { name: 'Orders' }));
-        expect(await screen.findByText('1,250 S18PROBE → 0.031 BTC')).toBeInTheDocument();
+        expect(await screen.findByText('1,250 S18PROBE → 0.03125 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/999 S18PROBE/)).toBeNull();
     });
 

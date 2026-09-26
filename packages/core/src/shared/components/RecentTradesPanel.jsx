@@ -18,7 +18,11 @@
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
-import { normalizeMarketHistoryRow } from '../../market/history_rows.js';
+import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import {
+    compareDecimalStrings,
+    roundDecimalString,
+} from '../utils/amountFormat.js';
 
 const MAX_ROWS = 30;
 
@@ -147,7 +151,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
 }
 
 function summarizeRow(row, tick1, tick2) {
-    const parsed = normalizeMarketHistoryRow(row, tick1, tick2);
+    const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
     if (!parsed) return null;
     return {
         price: formatPrice(parsed.price),
@@ -159,18 +163,18 @@ function summarizeRow(row, tick1, tick2) {
 }
 
 function formatPrice(n) {
-    if (!Number.isFinite(n)) return 'N/A';
-    if (n === 0) return '0';
-    if (n >= 1) return n.toFixed(4);
-    if (n >= 0.01) return n.toFixed(6);
-    return n.toFixed(8);
+    if (compareDecimalStrings(n, '0') === null) return 'N/A';
+    if (compareDecimalStrings(n, '0') === 0) return '0';
+    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
+    if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
+    return roundDecimalString(n, 8);
 }
 
 function formatSize(n) {
-    if (!Number.isFinite(n)) return 'N/A';
-    if (Number.isInteger(n)) return String(n);
-    if (n >= 1) return n.toFixed(2);
-    return n.toFixed(4);
+    if (compareDecimalStrings(n, '0') === null) return 'N/A';
+    if (!String(n).includes('.')) return String(n);
+    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 2);
+    return roundDecimalString(n, 4);
 }
 
 function formatTime(unixSeconds) {

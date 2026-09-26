@@ -32,6 +32,10 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { compareAmounts } from '../../market/orderMath.js';
+import {
+    divideDecimalStrings,
+    subtractDecimalStrings,
+} from '../utils/amountFormat.js';
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
@@ -358,31 +362,31 @@ function summarizeOrder(o, tick1, tick2) {
     }
     const giveTick = o.give_tick || o.giveTick;
     const getTick = o.get_tick || o.getTick;
-    const giveAmt = Number(o.give_amount ?? o.giveAmount);
-    const getAmt = Number(o.get_amount ?? o.getAmount);
-    const giveRemaining = Number(o.give_remaining ?? o.giveRemaining ?? giveAmt);
-    if (!Number.isFinite(giveAmt) || giveAmt <= 0) return null;
-    if (!Number.isFinite(getAmt) || getAmt <= 0) return null;
+    const giveAmt = String(o.give_amount ?? o.giveAmount ?? '');
+    const getAmt = String(o.get_amount ?? o.getAmount ?? '');
+    const giveRemaining = String(o.give_remaining ?? o.giveRemaining ?? giveAmt);
+    if (compareAmounts(giveAmt, '0') !== 1) return null;
+    if (compareAmounts(getAmt, '0') !== 1) return null;
     let side; let price; let size; let filled;
     if (giveTick === tick1 && getTick === tick2) {
         side = 'sell';
-        price = getAmt / giveAmt;
+        price = divideDecimalStrings(getAmt, giveAmt, 18);
         size = giveAmt;
-        filled = Number.isFinite(giveRemaining) ? giveAmt - giveRemaining : 0;
+        filled = subtractDecimalStrings(giveAmt, giveRemaining) ?? '0';
     } else if (giveTick === tick2 && getTick === tick1) {
         side = 'buy';
-        price = giveAmt / getAmt;
+        price = divideDecimalStrings(giveAmt, getAmt, 18);
         size = getAmt;
-        const getRemaining = Number(o.get_remaining ?? o.getRemaining ?? getAmt);
-        filled = Number.isFinite(getRemaining) ? getAmt - getRemaining : 0;
+        const getRemaining = String(o.get_remaining ?? o.getRemaining ?? getAmt);
+        filled = subtractDecimalStrings(getAmt, getRemaining) ?? '0';
     } else {
         return null;
     }
     return {
         actionIndex: String(o.action_index),
         side,
-        price: String(price),
-        size: String(size),
+        price,
+        size,
         filled,
         raw: o,
     };
