@@ -12,8 +12,8 @@
 // security-critical surface: the BATCH must bind the published
 // ciphertext to sha256(K) via KEY_HASH, carry the self-addressed
 // ECIES handoff in the SAME transaction, and K must be durably in the
-// vault BEFORE anything can broadcast (an HW issuer can never recover
-// K from the on-chain envelope).
+// vault after a successful broadcast (an HW issuer can never recover K
+// from the on-chain envelope).
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -145,7 +145,7 @@ describe('gatedPublishAction composition', () => {
 
         expect(composed.psbt).toBe('confirm-psbt');
         expect(composed.gatedPublish.keyHash).toBe(FIXED_KEY_HASH);
-        expect(vault.gatedKeys.put).toHaveBeenCalledOnce();
+        expect(vault.gatedKeys.put).not.toHaveBeenCalled();
         const prepared = composed.gatedPublish;
         await gatedPublishAction({
             ...opts,
@@ -214,7 +214,7 @@ describe('gatedPublishAction composition', () => {
         expect(pubkey).toBe('02'.padEnd(66, 'ab'));
     });
 
-    it('persists K to the vault BEFORE submitAction runs', async () => {
+    it('persists K to the vault after submitAction succeeds', async () => {
         const vault = makeVault();
         const order = [];
         vault.gatedKeys.put.mockImplementation(async (record) => {
@@ -226,7 +226,7 @@ describe('gatedPublishAction composition', () => {
             return { txid: 't' };
         });
         await gatedPublishAction(makeOpts({ vault }));
-        expect(order).toEqual(['vault-put', 'submit']);
+        expect(order).toEqual(['submit', 'vault-put']);
 
         const [record] = [...vault.store.values()];
         expect(record).toMatchObject({

@@ -53,7 +53,7 @@ const COMPOSED = {
 
 afterEach(() => cleanup());
 
-function mount() {
+function mount(overrides = {}) {
     const messaging = {
         labelSyncStatusRequest: vi.fn(async () => ({ due: false })),
         getAddressesByChain: vi.fn(async () => ({ [CHAIN_ID]: [FROM] })),
@@ -73,6 +73,7 @@ function mount() {
             sizeBytes: PREPARATION.sizeBytes,
             fromAddress: FROM.address,
         })),
+        ...overrides,
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -116,5 +117,40 @@ describe('BackupSection label publication confirmation', () => {
             }),
         })));
         expect(await screen.findByText('✓ Labels published')).toBeTruthy();
+    });
+
+    it('clears the label-backup password when confirmation is rejected', async () => {
+        mount();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
+
+        await waitFor(() => expect(screen.getByLabelText('Wallet password')).toHaveValue(''));
+    });
+
+    it('clears the label-backup password when preparation fails', async () => {
+        mount({ prepareLabelsRequest: vi.fn(async () => { throw new Error('compose failed'); }) });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+        expect(await screen.findByText('compose failed')).toBeTruthy();
+        expect(screen.getByLabelText('Wallet password')).toHaveValue('');
+    });
+
+    it('does not prefill the label-backup password after a successful publish', async () => {
+        mount();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Done' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+
+        expect(await screen.findByLabelText('Wallet password')).toHaveValue('');
     });
 });

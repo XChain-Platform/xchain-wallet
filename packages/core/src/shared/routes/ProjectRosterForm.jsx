@@ -367,7 +367,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('List broadcast did not return a transaction ID.');
             setListTxid(txid);
-            setPassword('');
             setStage('wait-index');
         } catch (err) {
             if (isUserRejection(err)) return;
@@ -383,6 +382,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            setPassword('');
         }
     }
 
@@ -423,7 +424,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             const txid = res?.txid || res?.broadcast?.txid;
             if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
             setLinkTxid(txid);
-            setPassword('');
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) return;
@@ -439,6 +439,8 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            setPassword('');
         }
     }
 

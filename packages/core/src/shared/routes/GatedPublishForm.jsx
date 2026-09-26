@@ -35,7 +35,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * ONE atomic transaction, BATCH(FILE with GATE_TICKER/KEY_HASH,
  * MESSAGE v2 to self carrying ECIES(0x01||K)), so the ciphertext
  * never exists on-chain without its key. K is persisted in this
- * wallet's vault before anything broadcasts (flows/gatedPublishAction).
+ * wallet's vault after the transaction broadcasts (flows/gatedPublishAction).
  *
  * Signer coverage (§5): compose is HW-safe (ECIES needs only the
  * issuer's pubkey) and watcher mode gets the encode-only PSBT path.
@@ -312,7 +312,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 });
             }
             setResult(r);
-            setPassword('');
             setStage('done');
         } catch (err) {
             if (isUserRejection(err)) { setStage('review'); return; }
@@ -325,6 +324,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            setPassword('');
         }
     }
 

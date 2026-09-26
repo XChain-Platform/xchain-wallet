@@ -26,14 +26,8 @@
 // in the source address record: no private key is touched at compose
 // time, which is what makes this flow HW- and watcher-safe (§5).
 //
-// Key custody: K is persisted to the vault's gatedKeys collection
-// BEFORE compose/broadcast. Ordering matters twice over: (a) a broadcast
-// that succeeds after a failed put would leave K recoverable only via
-// the ECIES scan, which HW/watch-only signers cannot run; (b) a put
-// that succeeds before a failed broadcast leaves a harmless, reusable
-// pack-key row (same KEY_HASH on retry). Pack extension reuses the
-// stored K by keyHash; the protocol has no pack concept beyond the
-// shared (GATE_TICKER, KEY_HASH).
+// Key custody: a generated K stays in memory through confirmation and
+// reaches the vault only after its transaction broadcasts successfully.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
@@ -44,11 +38,18 @@ import { maxGatedPlaintextBytes } from './fileSizeLimits.js';
 import { indexerWatermark } from './balances.js';
 import { resolveGateMinAmountActive } from './protocolActivations.js';
 
-const PROTOCOL_COIN_TICKER = {
-    bitcoin: 'BTC',
-    litecoin: 'LTC',
-    dogecoin: 'DOGE',
-};
+const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+const pendingGeneratedKeys = new Map();
+
+function rememberGeneratedKey(record) {
+    if (record) pendingGeneratedKeys.set(record.id, record);
+}
+
+async function persistGeneratedKey(vault, record) {
+    if (!record) return;
+    await vault.gatedKeys.put(record);
+    pendingGeneratedKeys.delete(record.id);
+}
 
 /**
  * Metadata-free floor on plaintext size for this lane, kept for callers
@@ -95,8 +96,8 @@ export const MAX_GATED_PLAINTEXT_BYTES = 6500;
  */
 
 /**
- * Shared front half: validate, resolve/generate K, encrypt, persist K,
- * and build the BATCH actionData + encoderOpts. Both the signing path
+ * Shared front half: validate, resolve/generate K, encrypt, and build
+ * the BATCH actionData + encoderOpts. Both the signing path
  * and the watcher (encode-only) path run through here so their
  * compositions cannot drift.
  *
@@ -228,15 +229,10 @@ async function prepareGatedPublish(opts, caller) {
     const handoffPayload = sdk.gatedFile.serializeKeyPayload([key]); // 0x01 || K
     const handoff = sdk.messaging.eciesEncryptBytes(handoffPayload, source.publicKey);
 
-    // --- Persist K before anything can be broadcast ----------------------
-    await opts.vault.gatedKeys.put(createGatedKey({
-        walletId: opts.walletId,
-        chainId: opts.chainId,
-        gateTicker: gate,
-        keyHash,
-        keyHex: key.toString('hex'),
-        source: 'published',
-    }));
+    const generatedKey = opts.existingKeyHash ? null : createGatedKey({
+        walletId: opts.walletId, chainId: opts.chainId, gateTicker: gate,
+        keyHash, keyHex: key.toString('hex'), source: 'published',
+    });
 
     // --- Compose the atomic BATCH ----------------------------------------
     // GATE_MIN_AMOUNT rides as an optional ninth field (PC-29); absent =
@@ -274,12 +270,11 @@ async function prepareGatedPublish(opts, caller) {
         ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
     };
 
-    return { source, actionData, encoderOpts, keyHash, ciphertextLength: ciphertext.length };
+    return { source, actionData, encoderOpts, keyHash, ciphertextLength: ciphertext.length, generatedKey };
 }
-
 /**
- * Prepare the encrypted payload once, persist its key, and compose the exact
- * PSBT shown on the shared confirm page. The prepared action accompanies the
+ * Prepare the encrypted payload once and compose the exact PSBT shown on the
+ * shared confirm page. The prepared action accompanies the
  * envelope so approval can sign it without generating a second key or cipher.
  *
  * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object }} opts
@@ -301,6 +296,7 @@ export async function composeGatedPublishForConfirm(opts) {
         source: prepared.source.address,
         ownAddresses: opts.ownAddresses,
     });
+    rememberGeneratedKey(prepared.generatedKey);
     return {
         ...composed,
         gatedPublish: {
@@ -322,6 +318,14 @@ export async function gatedPublishAction(opts) {
     let prepared;
     if (opts?.prebuiltPsbt && opts.prebuiltActionData && opts.prebuiltKeyHash) {
         const source = normalizeSource(opts.from, 'gatedPublishAction');
+        const keyId = gatedKeyId({ walletId: opts.walletId, chainId: opts.chainId,
+            gateTicker: opts.gateTicker, keyHash: opts.prebuiltKeyHash });
+        const generatedKey = opts.existingKeyHash
+            ? null
+            : pendingGeneratedKeys.get(keyId);
+        if (!opts.existingKeyHash && !generatedKey) {
+            throw new Error('gatedPublishAction: prepared pack key is unavailable; compose again');
+        }
         prepared = {
             source,
             actionData: opts.prebuiltActionData,
@@ -333,6 +337,7 @@ export async function gatedPublishAction(opts) {
             },
             keyHash: opts.prebuiltKeyHash,
             ciphertextLength: Number(opts.prebuiltCiphertextLength) || 0,
+            generatedKey,
         };
     } else {
         prepared = await prepareGatedPublish(opts, 'gatedPublishAction');
@@ -366,6 +371,7 @@ export async function gatedPublishAction(opts) {
         onProgress: opts.onProgress,
         onBroadcastFailure: opts.onBroadcastFailure,
     });
+    await persistGeneratedKey(opts.vault, prepared.generatedKey);
     return { ...result, keyHash };
 }
 
@@ -379,7 +385,7 @@ export async function gatedPublishAction(opts) {
  * @returns {Promise<object & { keyHash: string }>}
  */
 export async function buildGatedPublishPsbtRequest(opts) {
-    const { actionData, encoderOpts, keyHash } =
+    const { actionData, encoderOpts, keyHash, generatedKey } =
         await prepareGatedPublish(opts, 'buildGatedPublishPsbtRequest');
     const psbt = await buildActionPsbt({
         chainRegistry: opts.chainRegistry,
@@ -389,5 +395,6 @@ export async function buildGatedPublishPsbtRequest(opts) {
         actionData,
         encoderOpts,
     });
+    await persistGeneratedKey(opts.vault, generatedKey);
     return { ...psbt, keyHash };
 }

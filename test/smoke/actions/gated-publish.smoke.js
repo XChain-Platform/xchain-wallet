@@ -10,7 +10,7 @@
 
 // Smoke for PC-25 (gated-content publisher): the gatedPublishAction
 // flow composes an atomic BATCH(FILE gated, MESSAGE v2 to self) with
-// vault-first key custody; the gatedKeys vault collection exists with
+// post-broadcast key custody; the gatedKeys vault collection exists with
 // the keyHex-stripping list handler; the GatedPublishForm is owner-
 // gated off ManageToken and wired in all three shells with HW +
 // watcher signing parity.
@@ -32,10 +32,11 @@ assert.match(flow, /serializeKeyPayload\(\[key\]\)/, 'handoff payload is the SDK
 assert.match(flow, /eciesEncryptBytes\(handoffPayload, source\.publicKey\)/, 'handoff ECIES-encrypted to the issuer pubkey (HW-safe)');
 assert.match(flow, /action: 'BATCH'/, 'publishes as one atomic BATCH');
 assert.match(flow, /rawData: ciphertext\.toString\('binary'\)/, 'ciphertext rides rawData');
-// Custody: the vault put appears BEFORE submitAction in the source and
-// prepare() awaits it before returning actionData.
-assert.ok(flow.indexOf('vault.gatedKeys.put') < flow.indexOf('return { source, actionData'),
-    'K persisted before composition returns (vault-first custody)');
+// Custody: confirmation holds K in memory and a successful submit persists it.
+assert.match(flow, /const result = await submitAction\([\s\S]*?await persistGeneratedKey\(opts\.vault, prepared\.generatedKey\)/,
+    'K persisted after submit succeeds');
+assert.match(flow, /rememberGeneratedKey\(prepared\.generatedKey\)/,
+    'confirmation stages K without creating a vault row');
 assert.match(flow, /verifyKey\(key, keyHash\)/, 'stored pack key re-verified against its hash before reuse');
 assert.match(flow, /export async function buildGatedPublishPsbtRequest/, 'watcher encode-only path exists');
 assert.match(flow, /maxGatedPlaintextBytes\(/, 'encoding-aware plaintext ceiling enforced (PC-28)');

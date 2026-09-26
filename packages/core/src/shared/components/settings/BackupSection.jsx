@@ -260,8 +260,6 @@ export function BackupSection({ activeWallet }) {
             });
             setPublishResult(r);
             setPublishStage('result');
-            setPublishPassword('');
-            publishPasswordRef.current = '';
             setPublishPreparation(null);
             // The background clears the pending batch on a successful
             // publish; drop it here too so the notice goes away without
@@ -272,6 +270,9 @@ export function BackupSection({ activeWallet }) {
                 setPublishError(err?.message || 'Failed to publish labels.');
             }
             setPublishStage('form');
+        } finally {
+            setPublishPassword('');
+            publishPasswordRef.current = '';
         }
     }
 
@@ -386,7 +387,11 @@ export function BackupSection({ activeWallet }) {
                     walletId={activeWallet?.id}
                     busy={publishStage === 'running'}
                     error={publishError}
-                    initialPassword={publishPassword}
+                    password={publishPassword}
+                    onPasswordChange={(value) => {
+                        setPublishPassword(value);
+                        publishPasswordRef.current = value;
+                    }}
                     onCancel={resetPublish}
                     onSubmit={runPublish}
                 />
@@ -894,11 +899,10 @@ function triggerDownload(walletName, fileContent) {
  * surfaces chains where the FILE action can actually be broadcast,
  * then takes the wallet password and prepares the encrypted FILE payload.
  */
-function PublishLabelsForm({ walletId, busy, error, initialPassword = '', onCancel, onSubmit }) {
+function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, onCancel, onSubmit }) {
     const { messaging } = useMessaging();
     const [chains, setChains] = useState(/** @type {string[] | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string} */ (''));
-    const [password, setPassword] = useState(initialPassword);
     const [chainsError, setChainsError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
@@ -964,7 +968,7 @@ function PublishLabelsForm({ walletId, busy, error, initialPassword = '', onCanc
                 type="password"
                 placeholder="Wallet password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => onPasswordChange(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
                 aria-label="Wallet password"
