@@ -38,6 +38,7 @@ import {
     getAddressesByChain,
     getSettings,
     parsePsbt,
+    requoteNativeFee,
     parseCoSign,
     preflight,
     describeAction as describeActionOnHost,
@@ -246,8 +247,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // to the opaque hex.
     const psbtHexForSign = kind === 'signPsbt' ? payload?.payload?.psbtHex : null;
     const [psbtIntent, setPsbtIntent] = useState(
-        /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null }} */
-        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null }),
+        /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null, feeMode: string | null }} */
+        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null, feeMode: null }),
     );
     useEffect(() => {
         if (kind !== 'signPsbt') return undefined;
@@ -259,13 +260,14 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 ownAddresses: new Set(),
                 action: null,
                 actionDecodeReason: null,
+                feeMode: null,
             });
             return undefined;
         }
         let cancelled = false;
         setPsbtIntent({
             loading: true, error: null, decomposed: null, ownAddresses: new Set(),
-            action: null, actionDecodeReason: null,
+            action: null, actionDecodeReason: null, feeMode: null,
         });
         async function loadIntent() {
             try {
@@ -282,6 +284,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     } catch { /* leave ownAddresses empty */ }
                 }
                 const res = await parsePsbt({ chainId, psbtHex: psbtHexForSign });
+                const sender = res?.decomposed?.inputs?.[0]?.address || null;
+                let feeMode = null;
+                if (res?.action?.actionString) {
+                    try {
+                        const quote = await requoteNativeFee({
+                            chainId,
+                            actionString: res.action.actionString,
+                            ...(sender ? { source: sender } : {}),
+                        });
+                        feeMode = nativeFeeModeFromOutputs(res?.decomposed?.outputs, quote);
+                    } catch { /* a fee quote failure leaves the dry-run on its default lane */ }
+                }
                 if (cancelled) return;
                 setPsbtIntent({
                     loading: false,
@@ -292,6 +306,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     // decodes. A punt is a state to render, not a parse failure.
                     action: res?.action || null,
                     actionDecodeReason: res?.actionDecodeReason || null,
+                    feeMode,
                 });
             } catch (err) {
                 if (cancelled) return;
@@ -302,6 +317,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     ownAddresses: new Set(),
                     action: null,
                     actionDecodeReason: null,
+                    feeMode: null,
                 });
             }
         }
@@ -311,9 +327,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
     const psbtSourceAddress = useMemo(() => {
         if (kind !== 'signPsbt' || !Array.isArray(psbtIntent.decomposed?.inputs)) return null;
-        return psbtIntent.decomposed.inputs.find(
-            (input) => input.address && psbtIntent.ownAddresses.has(input.address),
-        )?.address || null;
+        return psbtIntent.decomposed.inputs[0]?.address || null;
     }, [kind, psbtIntent]);
     const preflightActionString = kind === 'signAction'
         ? (payload?.payload?.actionString || payload?.actionString || null)
@@ -347,14 +361,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
         preflight({
             chainId,
             actionString: preflightActionString,
-            source: preflightSourceAddress || undefined,
+            ...(preflightSourceAddress ? { source: preflightSourceAddress } : {}),
+            ...(kind === 'signPsbt' && psbtIntent.feeMode
+                ? { feeMode: psbtIntent.feeMode } : {}),
             mode: 'report',
         })
             .then((report) => {
                 if (!cancelled) {
                     setPreflightState({
                         loading: false,
-                        report: report || null,
+                        report: kind === 'signPsbt' && !preflightSourceAddress
+                            ? advisoryPreflightReport(report)
+                            : report || null,
                         actionString: preflightActionString,
                     });
                 }
@@ -371,7 +389,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
             });
         return () => { cancelled = true; };
-    }, [chainId, preflightActionString, preflightSourceAddress]);
+    }, [kind, chainId, preflightActionString, preflightSourceAddress, psbtIntent.feeMode]);
 
     // §22 / P4 co-sign preview: decode the action the agent wants co-signed and
     // dry-run the account policy, so the user approves a legible request (which
@@ -742,6 +760,30 @@ function coSignPreviewDecodedFrom(coSignPreview) {
     const preview = coSignPreview?.preview;
     if (!preview?.decodeOk || !preview.action) return null;
     return { action: preview.action, params: preview.params || {} };
+}
+
+function nativeFeeModeFromOutputs(outputs, quote) {
+    const destination = quote?.feeDestination;
+    if (!destination || !Array.isArray(outputs)) return null;
+    return outputs.some((output) => output?.address === destination) ? 'native' : null;
+}
+
+function advisoryPreflightReport(report) {
+    if (!report || !Array.isArray(report.findings)) return report || null;
+    return {
+        ...report,
+        findings: report.findings.map((finding) => {
+            if (finding?.severity !== 'error') return finding;
+            const data = finding.data && typeof finding.data === 'object'
+                ? { ...finding.data }
+                : undefined;
+            if (data) {
+                delete data.status;
+                delete data.error;
+            }
+            return { ...finding, overridable: true, ...(data ? { data } : {}) };
+        }),
+    };
 }
 
 function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = null }) {

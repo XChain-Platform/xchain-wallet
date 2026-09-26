@@ -118,6 +118,17 @@ export function parsePsbt(opts) {
 }
 
 /**
+ * Read the protocol fee destination for a decoded PSBT action. The approval
+ * surface compares it with the transaction outputs before choosing fee mode.
+ *
+ * @param {{ chainId: string, actionString: string, source?: string }} opts
+ * @returns {Promise<{ feeDestination?: string }>}
+ */
+export function requoteNativeFee(opts) {
+    return /** @type {any} */ (sendMessage('action.requoteNativeFee', opts));
+}
+
+/**
  * Run sdk.preflight for a dApp-supplied action, HOST-side (§5.6 slice 4).
  *
  * §4.8: pre-flight is NOT a bridge method - a dApp that could call it directly
@@ -133,7 +144,7 @@ export function parsePsbt(opts) {
  * exists in the SDK repo and reaches here on the next release the pin moves to;
  * until then read it as intent, not as a checked binding.
  *
- * @param {{ chainId: string, actionString: string, source?: string, mode?: string }} opts
+ * @param {{ chainId: string, actionString: string, source?: string, feeMode?: string, mode?: string }} opts
  * @returns {Promise<import('xchain-sdk').PreflightReport>}
  */
 export function preflight(opts) {
