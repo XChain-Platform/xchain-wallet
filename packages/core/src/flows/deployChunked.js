@@ -53,6 +53,7 @@ import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { createPendingDeploy } from '../schemas/pendingDeploy.js';
 import { preflightContractMeta, metaNameOf } from './contractMetaPreflight.js';
+import { waitForLegIndexed, legMayBeOnChain } from './deployLegWait.js';
 
 /**
  * Plan a deploy: does this source fit one inline DEPLOY, or does it need
@@ -418,7 +419,9 @@ export async function verifyRecordedChunks({ sdkRegistry, chainId, record }) {
  * @param {string} [opts.resumeId]   existing pendingDeploy id to continue
  * @param {(phase: string, data: object) => void} [opts.onProgress]
  * @param {(txid: string, opts?: object) => Promise<unknown>} [opts.waitForTxid]
- * @param {object} [opts.waitOpts]
+ * @param {object} [opts.waitOpts]   options for ONE indexer-wait round
+ * @param {number} [opts.indexPatienceMs]   total indexer patience per leg, across rounds
+ *   (default 15 minutes); see deployLegWait.js
  */
 export async function deployChunkedRun(opts) {
     if (!opts) throw new Error('deployChunkedRun: opts is required');
@@ -531,6 +534,54 @@ export async function deployChunkedRun(opts) {
         intervalMs: opts.waitOpts && opts.waitOpts.pollInterval,
     };
 
+    // Note on the record which leg is waiting on the indexer and what the
+    // chain says about it. The run executes in the host with no progress
+    // channel to the screen, so the deploy form reads this note off the same
+    // pendingDeploy listing its resume banner uses. Best-effort: a failed
+    // write must not end a wait over a leg that is already on chain.
+    const noteIndexerWait = async (wait) => {
+        record = { ...record, indexerWait: wait };
+        try {
+            await opts.vault.pendingDeploys.put(record);
+        } catch { /* the next persist carries it */ }
+    };
+
+    /**
+     * The indexer wait for one leg (a chunk index, or null for the assembler).
+     * A round that times out is checked against the chain and waited on again
+     * while the leg is confirmed or in the mempool, so an indexer holding tip
+     * blocks for several minutes no longer stops the run between chunks.
+     */
+    const legWait = (legIndex) => async (txid, o) => {
+        const isChunk = legIndex !== null;
+        try {
+            return await waitForLegIndexed({
+                waitForTxid,
+                sdk: opts.sdkRegistry.get(opts.chainId),
+                txid,
+                waitOpts: o,
+                address: source.address,
+                patienceMs: opts.indexPatienceMs,
+                legLabel: isChunk ? `Chunk ${legIndex + 1} of ${plan.totalChunks}` : 'The assembling transaction',
+                isChunk,
+                onChainWait: ({ chainState, waitedMs, startedAt }) => {
+                    progress(isChunk ? 'chunk-indexer-wait' : 'assemble-indexer-wait', {
+                        index: legIndex, total: plan.totalChunks, txid, chainState, waitedMs,
+                    });
+                    noteIndexerWait({
+                        leg: legIndex,
+                        total: plan.totalChunks,
+                        txid: String(txid),
+                        chainState,
+                        since: new Date(startedAt).toISOString(),
+                    });
+                },
+            });
+        } finally {
+            if (record.indexerWait) await noteIndexerWait(null);
+        }
+    };
+
     // A resume that already broadcast the assembling leg must ASK the chain what
     // that leg produced before it sends anything at all.
     //
@@ -547,9 +598,13 @@ export async function deployChunkedRun(opts) {
             // Broadcast but not indexed YET: wait on it exactly as the
             // interrupted run would have, rather than paying for a second one.
             try {
-                const waited = await waitForTxid(record.deployTxid, opts.waitOpts);
+                const waited = await legWait(null)(record.deployTxid, opts.waitOpts);
                 assemblerIndex = indexedActionIndex({ indexed: waited });
-            } catch {
+            } catch (err) {
+                // Still on chain or in the mempool, or unreadable: stop
+                // resumably, since a second assembler against a group that
+                // completes can buy a second contract.
+                if (legMayBeOnChain(err)) throw err;
                 // Genuinely gone: fall through to the re-send below.
             }
         }
@@ -662,7 +717,8 @@ export async function deployChunkedRun(opts) {
             toAddress: null,
             actionSummary: label,
         },
-        waitForTxid,
+        // Patient across rounds; the record's txid stamp below lands first.
+        waitForTxid: legWait(chunkIndex),
         waitOpts: opts.waitOpts,
         onProgress: (phase, data) => {
             // 'waiting' is fired with the final txid right after broadcast and
@@ -704,15 +760,18 @@ export async function deployChunkedRun(opts) {
             progress('chunk-waiting', { index: i, total: plan.totalChunks, txid: pending.txid });
             let recovered = null;
             try {
-                const waited = await waitForTxid(pending.txid, opts.waitOpts);
+                const waited = await legWait(i)(pending.txid, opts.waitOpts);
                 const idx = indexedActionIndex({ indexed: waited });
                 if (idx && await confirmByActionIndex({
                     sdk: opts.sdkRegistry.get(opts.chainId), record, chunk: pending, actionIndex: idx,
                 })) {
                     recovered = idx;
                 }
-            } catch {
-                // Never confirmed inside the window, or unreadable: re-send below.
+            } catch (err) {
+                // A chunk the chain holds, or may hold, is never sent twice:
+                // stop resumably and let the next resume wait on it again.
+                if (legMayBeOnChain(err)) throw err;
+                // Dropped, rejected, or no chain read to go on: re-send below.
             }
             if (recovered) {
                 record = {
