@@ -14,6 +14,8 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -73,6 +75,11 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         /** @type {Record<string, { rows: any[], error: string | null }>} */ ({}),
     );
     const [lastQueried, setLastQueried] = useState(/** @type {string | null} */ (null));
+    // A Mode B row carries no price on this lane; it comes from its oracle.
+    const oracleEntries = useMemo(() => Object.entries(rowsByChain)
+        .filter(([cid]) => cid !== '_error')
+        .flatMap(([cid, v]) => (v.rows || []).map((row) => ({ chainId: cid, row }))), [rowsByChain]);
+    const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
     function handleSearch(event) {
         event.preventDefault();
@@ -208,6 +215,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     rowsByChain={rowsByChain}
                     searching={searching}
                     onOpenDispenser={onOpenDispenser}
+                    oracleFeedsFor={oracleFeedsFor}
                 />
             ) : (
                 <p className={styles.entryDescription}>
@@ -219,7 +227,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     );
 }
 
-function ResultsPane({ rowsByChain, searching, onOpenDispenser }) {
+function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }) {
     if (searching) {
         return <p className={styles.entryDescription}>Searching…</p>;
     }
@@ -270,6 +278,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser }) {
                                 <ResultRow
                                     key={String(row.action_index)}
                                     row={row}
+                                    oracleFeeds={oracleFeedsFor(cid, row)}
                                     onSelect={() => onOpenDispenser(cid, String(row.action_index))}
                                 />
                             ))
@@ -281,8 +290,8 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser }) {
     );
 }
 
-function ResultRow({ row, onSelect }) {
-    const rate = rateLabel(row);
+function ResultRow({ row, oracleFeeds, onSelect }) {
+    const rate = dispenserRateLabel(row, oracleFeeds);
     const status = String(row.status || '-');
     return (
         <button
@@ -300,15 +309,6 @@ function ResultRow({ row, onSelect }) {
             </span>
         </button>
     );
-}
-
-function rateLabel(row) {
-    const give = `${row.give_amount ?? '?'} ${row.give_tick || '?'}`;
-    const coin = row.get_coin || '';
-    const tick = row.get_tick || '';
-    const amt = row.get_amount ?? '?';
-    const payAsset = tick || coin || '?';
-    return `${give} per ${amt} ${payAsset}`;
 }
 
 function extractRows(resp) {

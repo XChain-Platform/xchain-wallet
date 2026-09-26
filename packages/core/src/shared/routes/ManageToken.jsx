@@ -15,7 +15,6 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import { isDispenserRowOpen } from '../components/DispenserBadge.jsx';
 import { formatAmount } from '../components/BalanceList.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
@@ -23,6 +22,8 @@ import { RANGES as CHART_RANGES } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { sumTickOnChain } from '../utils/walletBalanceShape.js';
+import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling } from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -267,14 +268,14 @@ export function ManageToken({
                 const rows = Array.isArray(dispensersRaw)
                     ? dispensersRaw
                     : (Array.isArray(dispensersRaw?.data) ? dispensersRaw.data : []);
-                // isDispenserRowOpen() reads the explorer's string status
-                // label ('valid'/'open'). The old check here did
+                // isOpenDispenserSelling() reads the explorer's string status
+                // labels ('valid'/'open', lifecycle first). The old check here did
                 // Number(status) !== 0 against that same string - Number()
                 // of a non-numeric label like "valid" is NaN, which always
                 // failed the !== 0 test, so every real dispenser was
                 // dropped and this tab could never show anything.
                 const open = rows.filter((d) => {
-                    if (!isDispenserRowOpen(d)) return false;
+                    if (!isOpenDispenserSelling(d, tick)) return false;
                     const src = d.source || d.source_address || d.dispenser || d.dispenser_address;
                     return !src || mine.has(src);
                 });
@@ -869,6 +870,10 @@ export function ManageToken({
    coupled to ManageToken's styles + data shapes). ───── */
 
 function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispenser, onCreateDispenser }) {
+    const { messaging } = useMessaging();
+    // A Mode B row carries no price on this lane; it comes from its oracle.
+    const oracleEntries = useMemo(() => (listings || []).map((row) => ({ chainId, row })), [listings, chainId]);
+    const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
     if (listingsError) return <p className={styles.error}>{listingsError}</p>;
     if (listings === null) return (
         <div className={styles.list}>
@@ -889,17 +894,16 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     return (
         <ul className={styles.list} role="list">
             {listings.map((d, i) => {
-                const giveQty = d.give_quantity ?? d.give_remaining ?? null;
-                const getTickRaw = d.get_tick || d.mainchainrate_tick || 'COIN';
-                const getQty = d.get_quantity ?? d.mainchainrate ?? null;
-                const remaining = d.give_remaining ?? d.escrow_quantity ?? null;
+                // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT (0 on a
+                // fiat-priced one), and the live escrow_remaining.
+                const remaining = flowsLib.dispenserLiveState(d).giveRemaining;
                 const actionIndex = d.action_index || d.actionIndex || d.tx_hash || d.id;
                 const onClick = typeof onOpenDispenser === 'function' && actionIndex
                     ? () => onOpenDispenser(chainId, actionIndex)
                     : undefined;
-                const summary = (giveQty && getQty)
-                    ? `${Number(getQty).toLocaleString()} ${getTickRaw} per ${Number(giveQty).toLocaleString()} ${tick}` +
-                      (remaining != null ? ` · ${Number(remaining).toLocaleString()} ${tick} left` : '')
+                const summary = d.give_amount
+                    ? dispenserRateLabel(d, oracleFeedsFor(chainId, d))
+                      + (remaining != null ? ` · ${formatDecimal(remaining)} ${tick} left` : '')
                     : 'Open dispenser';
                 return (
                     <HistoryRow

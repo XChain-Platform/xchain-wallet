@@ -918,17 +918,23 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     // clean 8-dp value so toLocaleString() reads nicely.
     const px = (qty) => Number((unit * qty).toFixed(8));
     const wrap = (row) => ({ chainId, row });
+    // Dispenser and dispense rows use the explorer's own fields (decimal
+    // strings, a string status, the lifecycle beside it) so the demo drives
+    // the same render path real rows do.
+    const pxs = (qty) => px(qty).toFixed(8).replace(/\.?0+$/, '');
+    const offer = (idx, give, remaining) => ({
+        action_index: idx, status: 'valid', current_status: 'open',
+        give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give),
+        escrow_remaining: String(remaining),
+    });
+    const sale = (n, give, ago) => ({
+        tx_hash: `demo-${chainId}-dispense-${n}`, status: 'valid',
+        give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give), timestamp: sec(ago),
+    });
 
-    const offers = [
-        { action_index: 900101, status: 0, give_quantity: 1000, get_tick: coinTick, get_quantity: px(1000), give_remaining: 7500 },
-        { action_index: 900102, status: 0, give_quantity: 500, get_tick: coinTick, get_quantity: px(500), give_remaining: 2000 },
-    ].map(wrap);
+    const offers = [offer(900101, 1000, 7500), offer(900102, 500, 2000)].map(wrap);
 
-    const sales = [
-        { tx_hash: `demo-${chainId}-dispense-1`, give_quantity: 1000, get_tick: coinTick, get_quantity: px(1000), timestamp: sec(3_600) },
-        { tx_hash: `demo-${chainId}-dispense-2`, give_quantity: 250, get_tick: coinTick, get_quantity: px(250), timestamp: sec(14_400) },
-        { tx_hash: `demo-${chainId}-dispense-3`, give_quantity: 2000, get_tick: coinTick, get_quantity: px(2000), timestamp: sec(86_400) },
-    ].map(wrap);
+    const sales = [sale(1, 1000, 3_600), sale(2, 250, 14_400), sale(3, 2000, 86_400)].map(wrap);
 
     const dexOrders = [
         // A sell (give the token, get coin) and a buy (give coin, get the token).

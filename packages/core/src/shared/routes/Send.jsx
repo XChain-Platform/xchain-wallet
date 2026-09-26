@@ -134,6 +134,7 @@ import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
     countNonCommaBefore,
@@ -1020,6 +1021,25 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
           + 'unlock-key handoff. Send this token to one recipient at a time.'
         : null;
 
+    // A native payment to an open coin-paid dispenser is a purchase, and one it
+    // refuses keeps the coin. Shown on the review screen, above the credentials.
+    const dispensersAtDestination = useDispenserDestination({
+        messaging, chainId, to: toAddress, enabled: isNativeSend && !isMultiSend,
+    });
+    const dispenserNotice = useMemo(() => dispenserDestinationNotice({
+        dispensers: dispensersAtDestination, payer: fromAddress?.address, amount: String(amount).trim(),
+    }), [dispensersAtDestination, fromAddress?.address, amount]);
+    const dispenserNoticeBlock = dispenserNotice ? (
+        <div data-testid="send-dispenser-notice">
+            <StatusMessage variant="status">{dispenserNotice.summary}</StatusMessage>
+            {dispenserNotice.warnings.length > 0 ? (
+                <div role="alert" className={styles.warnings}>
+                    {dispenserNotice.warnings.map((w) => <p key={w} className={styles.warning}>{w}</p>)}
+                </div>
+            ) : null}
+        </div>
+    ) : null;
+
     async function handleGatedScan(event) {
         event.preventDefault();
         if (gatedScanBusy || gatedScanPassword.length === 0) return;
@@ -1849,6 +1869,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 getSignerStatus={messaging.getSignerStatus}
                 hwRequireExplicitConfirm={signRisk.requireExplicitConfirm}
                 hwRequireExplicitConfirmReason={signRisk.reason}
+                extraCredentials={dispenserNoticeBlock}
                 onHwConfirmedChange={setHwExplicitConfirmed}
                 hwExplicitConfirmed={hwExplicitConfirmed}
             />
@@ -2014,6 +2035,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return wrap(
             <form id="send-review-form" onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>{decoded?.summary}</p>
+                {dispenserNoticeBlock}
                 <BalanceChanges
                     result={previewResult}
                     loading={previewBalances.loading}

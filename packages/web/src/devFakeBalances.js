@@ -250,10 +250,11 @@ export function fakeDispensersFor(tick, chainId) {
     const ageSec = [1800, 14400, 172800]; // 30m, 4h, 2d ago
     return [0, 1, 2].map((i) => {
         const { blockIndex, actionIndex } = fakeBlockFor(chainId, 'DISPENSER', tick, i);
-        const giveQty = 1000 * 10 ** 8;
-        const escrowQty = giveQty;
-        const remaining = Math.floor(giveQty * (1 - 0.2 * i));
-        const priceSats = [25000, 31000, 42000][i];
+        // The explorer list lane's own fields: decimal strings, the string
+        // create status and the lifecycle beside it, a coin-paid price in
+        // GET_COIN (GET_TICK is null on a coin-paid dispenser).
+        const remaining = ['1000', '800', '600'][i];
+        const price = ['0.00025', '0.00031', '0.00042'][i];
         return {
             action_index: actionIndex,
             tx_hash: actionIndex,
@@ -262,14 +263,14 @@ export function fakeDispensersFor(tick, chainId) {
             block_time: now - ageSec[i],
             source: fakeAddress(chainId, tick, 100 + i),
             give_tick: tick,
-            give_quantity: String(giveQty),
-            give_remaining: String(remaining),
-            escrow_quantity: String(escrowQty),
-            get_tick: native,
-            get_quantity: String(priceSats),
-            mainchainrate: String(priceSats),
-            mainchainrate_tick: native,
-            status: 0,
+            give_amount: '10',
+            give_escrow: '1000',
+            escrow_remaining: remaining,
+            get_coin: native,
+            get_tick: null,
+            get_amount: price,
+            status: 'valid',
+            current_status: 'open',
         };
     });
 }

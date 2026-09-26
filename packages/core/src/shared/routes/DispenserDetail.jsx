@@ -1601,8 +1601,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </dd>
                 <dt className={styles.detailsLabel}>Payment</dt>
                 <dd className={styles.detailsValue}>
-                    {formatNum(getAmount)} {getTick || getCoin || '?'}
-                    {getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}
+                    {/* A fiat-priced dispenser stores GET_AMOUNT 0, which printed as a
+                        price would read "0 DOGE", as if free. Same branches as the
+                        pay-here panel's price line below, so the two agree. */}
+                    {isFiatPriced
+                        ? (oracleAddress && fiatAmount == null
+                            ? (oracleFillPrice != null
+                                ? `${oracleFillPrice} ${fiatCode} (oracle ${oracleAddress})`
+                                : (oracleQuoteChecked
+                                    ? `${fiatCode} via oracle ${oracleAddress}: no current price (stale)`
+                                    : `${fiatCode} via oracle ${oracleAddress}…`))
+                            : `${fiatAmount} ${fiatCode}`)
+                        : `${formatNum(getAmount)} ${getTick || getCoin || '?'}${getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}`}
                 </dd>
                 {escrowRemaining != null ? (
                     <>
@@ -2119,16 +2129,6 @@ function InvalidMarker({ row }) {
             {reason ? <span className={local.dispenseInvalidReason}>{reason}</span> : null}
         </span>
     );
-}
-
-function rateLabel(row) {
-    if (!row) return 'unknown';
-    const give = `${row.give_amount ?? '?'} ${row.give_tick || '?'}`;
-    const coin = row.get_coin || '';
-    const tick = row.get_tick || '';
-    const amt = row.get_amount ?? '?';
-    const payAsset = tick || coin || '?';
-    return `${give} per ${amt} ${payAsset}`;
 }
 
 function pickAction(resp) {

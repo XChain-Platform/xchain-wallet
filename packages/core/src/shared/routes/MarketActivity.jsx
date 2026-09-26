@@ -16,6 +16,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling } from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -108,15 +110,21 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
         const offersByChain = chains.map((cid) =>
             messaging.getDispensersForToken({ chainId: cid, token: tick })
+                // The explorer's status is a string label ('valid'), which
+                // Number() made NaN, so a numeric test here dropped every row.
                 .then((resp) => extractRows(resp)
-                    .filter((d) => d && (d.status === undefined || Number(d.status) === 0))
+                    .filter((d) => isOpenDispenserSelling(d, tick))
                     .map((row) => ({ chainId: cid, row })))
                 .catch(() => []),
         );
         const salesByChain = chains.map((cid) =>
             typeof messaging.getDispenses === 'function'
                 ? messaging.getDispenses({ chainId: cid, query: tick, type: 'token' })
-                    .then((resp) => extractRows(resp).map((row) => ({ chainId: cid, row })))
+                    // A refused dispense (a barred payer, a dark oracle) moved
+                    // nothing, so it is not a sale.
+                    .then((resp) => extractRows(resp)
+                        .filter((row) => flowsLib.dispenseIsValid(row))
+                        .map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
         );
@@ -152,6 +160,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         });
         return () => { cancelled = true; };
     }, [tick, walletId, messaging, chains]);
+
+    // A Mode B offer carries no price on this lane; it comes from its oracle.
+    const oracleFeedsFor = useOracleFeeds(messaging, offers);
 
     // Sub-view: tapping the token header opens the shared picker to switch
     // markets. 'receive' purpose enables cross-chain token discovery so the
@@ -226,10 +237,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {offers.map(({ chainId, row }) => {
-                                const give = row.give_quantity ?? row.give_remaining;
-                                const getTick = row.get_tick || row.mainchainrate_tick || 'COIN';
-                                const get = row.get_quantity ?? row.mainchainrate;
-                                const remaining = row.give_remaining ?? row.escrow_quantity;
+                                // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT
+                                // (0 on a fiat-priced one), live escrow_remaining.
+                                const remaining = flowsLib.dispenserLiveState(row).giveRemaining;
                                 const actionIndex = row.action_index || row.actionIndex || row.tx_hash || row.id;
                                 const onClick = typeof onOpenDispenser === 'function' && actionIndex
                                     ? () => onOpenDispenser(chainId, actionIndex)
@@ -245,10 +255,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>
-                                                    {give && get ? `${Number(get).toLocaleString()} ${getTick} per ${Number(give).toLocaleString()} ${tick}` : 'Open dispenser'}
+                                                    {row.give_amount ? dispenserRateLabel(row, oracleFeedsFor(chainId, row)) : 'Open dispenser'}
                                                 </span>
                                                 <span className={styles.rowSub}>
-                                                    {remaining != null ? `${Number(remaining).toLocaleString()} ${tick} remaining` : ''}
+                                                    {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
                                                 </span>
                                             </span>
                                             {onClick ? <Icon.ForwardIcon /> : null}
@@ -314,9 +324,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {sales.slice(0, 50).map(({ chainId, row }, i) => {
-                                const give = row.give_quantity ?? row.dispense_quantity ?? row.quantity;
-                                const getTick = row.get_tick || row.mainchainrate_tick || 'COIN';
-                                const get = row.get_quantity ?? row.mainchainrate ?? row.price;
+                                // A dispense row's GET_AMOUNT is what the buyer actually
+                                // paid, so it is right even for a fiat-priced dispenser.
+                                const give = row.give_amount;
+                                const soldTick = row.give_tick || tick;
+                                const payAsset = row.get_tick || row.get_coin || '';
+                                const get = row.get_amount;
                                 const ts = Number(row.timestamp || row.block_time || 0);
                                 const dateLabel = ts > 0
                                     ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
@@ -327,8 +340,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>
-                                                    {give ? `Sold ${Number(give).toLocaleString()} ${tick}` : `Sold ${tick}`}
-                                                    {give && get ? ` for ${Number(get).toLocaleString()} ${getTick}` : ''}
+                                                    {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
+                                                    {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
                                                 </span>
                                                 <span className={styles.rowSub}>
                                                     {dateLabel}
