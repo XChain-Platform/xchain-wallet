@@ -215,7 +215,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Parse the tick textarea into uppercased items, counting duplicates
+    // Parse tickers with chain grammar while counting duplicates
     // and malformed names the way the address branch does.
     const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
     const memberTicks = tickItems.valid;
@@ -606,7 +606,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 walletId={walletId}
                 title="Add a token"
                 onSelect={(sel) => {
-                    const t = String(sel.tick || '').toUpperCase();
+                    const t = String(sel.tick || '');
                     if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
                     setTokenPickerOpen(false);
                 }}
@@ -771,7 +771,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="characters"
+                        autoCapitalize="none"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>

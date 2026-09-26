@@ -53,6 +53,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -351,23 +352,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         ));
     }, [pasteText, stage, recipientCoin, recipientNetwork]);
 
-    // 'holders' mode tick parsing: identical shape to ListCreateForm's
-    // TYPE=1 memberTicks/invalidTicks so validation matches exactly.
-    const memberTicks = useMemo(() => {
-        const seen = new Set();
-        const out = [];
-        for (const raw of ticksText.split(/[\n,]+/)) {
-            const t = raw.trim().toUpperCase();
-            if (!t || seen.has(t)) continue;
-            seen.add(t);
-            out.push(t);
-        }
-        return out;
-    }, [ticksText]);
-    const invalidTicks = useMemo(
-        () => memberTicks.filter((t) => !/^[A-Z0-9.^]+$/.test(t)),
-        [memberTicks],
-    );
+    // Parse holder tickers with the same chain grammar as every token-list form.
+    const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
+    const memberTicks = tickItems.valid;
+    const invalidTicks = tickItems.invalid;
 
     // 'existing' mode: once a list is picked, fetch its type + current
     // members (same read ListDetail.jsx uses) so the review stage can
@@ -809,12 +797,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         }
         if (sourceMode === 'holders') {
-            if (memberTicks.length === 0) {
-                setFormError('Add at least one token.');
-                return;
-            }
+            // Verify every token name is well formed before counting valid items.
             if (invalidTicks.length > 0) {
                 setFormError(`These don't look like token names: ${invalidTicks.join(', ')}`);
+                return;
+            }
+            if (memberTicks.length === 0) {
+                setFormError('Add at least one token.');
                 return;
             }
         } else if (recipients.valid.length === 0) {
@@ -1562,7 +1551,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 walletId={walletId}
                 title="Add a token"
                 onSelect={(sel) => {
-                    const t = String(sel.tick || '').toUpperCase();
+                    const t = String(sel.tick || '');
                     if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
                     setHolderTicksPickerOpen(false);
                 }}
@@ -1782,7 +1771,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="characters"
+                        autoCapitalize="none"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>

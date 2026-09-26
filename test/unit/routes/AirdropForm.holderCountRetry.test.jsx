@@ -46,11 +46,36 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
+vi.mock('../../../packages/core/src/shared/utils/listTickItems.js', async () => {
+    const { tickerReferenceError } = await import(
+        '../../../packages/core/src/shared/utils/tickerGrammar.js'
+    );
+    return {
+        classifyTickItems(text) {
+            const seen = new Set();
+            const valid = [];
+            const invalid = [];
+            let duplicates = 0;
+            for (const raw of String(text || '').split(/[\n,]+/)) {
+                const tick = raw.trim();
+                if (!tick) continue;
+                const key = tick.toUpperCase();
+                if (seen.has(key)) { duplicates += 1; continue; }
+                seen.add(key);
+                if (tickerReferenceError(tick, { allowRef: true })) invalid.push(tick);
+                else valid.push(tick);
+            }
+            return { valid, invalid, duplicates };
+        },
+    };
+});
+
 const CHAIN = 'litecoin-mainnet';
 const SOURCE = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
 const HELD = 'HDR550816';
 const LISTED = 'MEM550816';
 const OTHER = 'MEM550817';
+const SYMBOL_TICK = 'MiXeD!';
 
 const ADDRESSES = {
     [CHAIN]: [{
@@ -83,7 +108,10 @@ function mountAirdrop(holders) {
                 address: SOURCE,
                 balances: {
                     native: { tick: 'LTC', quantity: '100000000', divisibility: 8 },
-                    tokens: [{ tick: HELD, quantity: '1000', divisibility: 0 }],
+                    tokens: [
+                        { tick: HELD, quantity: '1000', divisibility: 0 },
+                        { tick: SYMBOL_TICK, quantity: '1', divisibility: 0 },
+                    ],
                 },
             }],
         }),
@@ -197,5 +225,33 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
             expect(preview()?.textContent).toMatch(/~2 holders right now/);
         }, { timeout: 8000 });
         expect(holders).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses shared grammar for symbol tickers and malformed dotted names', async () => {
+        const holders = mountAirdrop(async ({ tick }) => (
+            { tick, total: 1, data: [{ address: 'a' }] }
+        ));
+        const mode = await screen.findByDisplayValue('Paste addresses');
+        fireEvent.change(mode, { target: { value: 'holders' } });
+        const ticks = await screen.findByLabelText('Tokens (one per line)');
+        fireEvent.change(ticks, { target: { value: `${SYMBOL_TICK}\nmixed!\nA..B` } });
+
+        await waitFor(() => expect(holders).toHaveBeenCalledWith({
+            chainId: CHAIN,
+            tick: SYMBOL_TICK,
+        }), { timeout: 3000 });
+        expect(holders.mock.calls.some(([arg]) => arg.tick === 'A..B')).toBe(false);
+        expect(screen.getByText(/These don't look like token names: A\.\.B/)).toBeTruthy();
+        expect(ticks).toHaveAttribute('autocapitalize', 'none');
+    });
+
+    it('keeps a symbol ticker spelling selected for the holder list', async () => {
+        mountAirdrop(async ({ tick }) => ({ tick, total: 1, data: [{ address: 'a' }] }));
+        const mode = await screen.findByDisplayValue('Paste addresses');
+        fireEvent.change(mode, { target: { value: 'holders' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Add from token picker' }));
+        fireEvent.click(await screen.findByLabelText('Open MiXeD! details'));
+
+        expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue(SYMBOL_TICK);
     });
 });
