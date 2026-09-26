@@ -95,6 +95,19 @@ function localInputToUnix(localStr) {
     return Math.floor(ms / 1000);
 }
 
+// Unix seconds -> the datetime-local string the Expires input takes, in local
+// time, since that is what localInputToUnix reads it back as.
+function unixToLocalInput(unix) {
+    const d = new Date(Number(unix) * 1000);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// existingAddressId for a reopened dispenser's address when the wallet holds
+// no record of it (see existingAddress below).
+const REOPEN_ADDRESS_ID = 'reopen-dispenser-address';
+
 /**
  * Dispenser authoring form (§40.7.1).
  *
@@ -126,8 +139,11 @@ function localInputToUnix(localStr) {
  * @param {string} props.walletId
  * @param {string} [props.activeAccountId]   account the dispenser sub-address is derived under
  * @param {() => void} props.onBack
+ * @param {object} [props.reopen]  terms of a finished dispenser to open
+ *   again (DispenserDetail's reopenTermsFrom): its creator as SOURCE, its
+ *   address as the dispenser address, every term prefilled and still editable
  */
-export function DispenserForm({ walletId, activeAccountId, onBack, initialChainId, initialTick, initialFromAddress }) {
+export function DispenserForm({ walletId, activeAccountId, onBack, initialChainId, initialTick, initialFromAddress, reopen }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
@@ -144,8 +160,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (initialChainId || reopen?.chainId || null));
     const lockedToken = !!(initialChainId && initialTick);
+    // A reopen pins SOURCE to the creator: only the address that opened the
+    // first dispenser on an address may open another there (origin standing,
+    // dispenser.md Rules c), so the auto-picked funding address would be
+    // refused on chain whenever the dispenser address is not SOURCE itself.
+    const pinnedFromAddress = initialFromAddress || reopen?.source;
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -157,27 +178,29 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     );
     const [derivingGetAddress, setDerivingGetAddress] = useState(false);
 
-    const [ticker, setTicker] = useState((initialTick || '').toUpperCase());
+    const [ticker, setTicker] = useState((initialTick || reopen?.tick || '').toUpperCase());
     // PC-26: dispenses carry no gated-key handoff; warn when the
     // dispensed token has gated content.
     const gatedGiveNotice = useGatedTickNotice({ messaging, chainId, tick: ticker });
-    const [giveAmount, setGiveAmount] = useState('');
-    const [escrow, setEscrow] = useState('');
-    const [triggerPrice, setTriggerPrice] = useState('');
-    const [oracleAddress, setOracleAddress] = useState('');
-    const [fiatCode, setFiatCode] = useState('');
-    const [fiatAmount, setFiatAmount] = useState('');
-    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [giveAmount, setGiveAmount] = useState(reopen?.giveAmount || '');
+    const [escrow, setEscrow] = useState(reopen?.escrow || '');
+    const [triggerPrice, setTriggerPrice] = useState(reopen?.triggerPrice || '');
+    const [oracleAddress, setOracleAddress] = useState(reopen?.oracleAddress || '');
+    const [fiatCode, setFiatCode] = useState(reopen?.fiatCode || '');
+    const [fiatAmount, setFiatAmount] = useState(reopen?.fiatAmount || '');
+    // Fiat and oracle terms live under Advanced; a reopen that carries them
+    // opens it, or the prefilled pricing would be invisible.
+    const [showAdvanced, setShowAdvanced] = useState(Boolean(reopen?.fiatCode || reopen?.oracleAddress));
     // PC-20: the rest of the DISPENSER v0 field set. payWith 'token' opens
     // a token-priced lane (GET_TICK/GET_AMOUNT) instead of the native-coin
     // lane; EXPIRATION + allow/block lists complete the field set.
-    const [payWith, setPayWith] = useState(/** @type {'coin' | 'token'} */ ('coin'));
-    const [getTick, setGetTick] = useState('');
-    const [getTokenAmount, setGetTokenAmount] = useState('');
-    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
-    const [expInput, setExpInput] = useState('');
-    const [allowListIdx, setAllowListIdx] = useState('');
-    const [blockListIdx, setBlockListIdx] = useState('');
+    const [payWith, setPayWith] = useState(/** @type {'coin' | 'token'} */ (reopen?.payWith === 'token' ? 'token' : 'coin'));
+    const [getTick, setGetTick] = useState(reopen?.getTick || '');
+    const [getTokenAmount, setGetTokenAmount] = useState(reopen?.getTokenAmount || '');
+    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ (reopen?.expiration ? 'custom' : 'default'));
+    const [expInput, setExpInput] = useState(reopen?.expiration ? unixToLocalInput(reopen.expiration) : '');
+    const [allowListIdx, setAllowListIdx] = useState(reopen?.allowList || '');
+    const [blockListIdx, setBlockListIdx] = useState(reopen?.blockList || '');
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     // SOURCE address's balance of `ticker` (coin-scale string), backing
     // the escrow AmountField's Max button + "available" footer. Null
@@ -193,12 +216,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     //   'new'      derive a fresh dispenser address at review (default)
     //   'current'  open on the active/current address (GET_ADDRESS omitted
     //              when it equals SOURCE; protocol defaults to SOURCE)
-    //   'existing' reuse a previously derived role='dispenser' address
+    //   'existing' reuse an address that already exists: one picked from
+    //              the wallet's own list, or a reopened dispenser's address
     const [addressMode, setAddressMode] = useState(
-        /** @type {'new' | 'current' | 'existing'} */ ('new'),
+        /** @type {'new' | 'current' | 'existing'} */ (reopen?.dispenserAddress ? 'existing' : 'new'),
     );
     const [existingAddressId, setExistingAddressId] = useState(
-        /** @type {string | null} */ (null),
+        /** @type {string | null} */ (reopen?.dispenserAddress ? REOPEN_ADDRESS_ID : null),
     );
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
     // Picker's "New dispenser address" row: generates immediately (same
@@ -341,8 +365,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     useEffect(() => {
         if (!chainId || !addressesByChain || !activeByChain) return;
         const all = addressesByChain[chainId] || [];
-        if (initialFromAddress) {
-            const match = all.find((a) => a.address === initialFromAddress);
+        if (pinnedFromAddress) {
+            const match = all.find((a) => a.address === pinnedFromAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
         if (manualSourceRef.current) {
@@ -355,7 +379,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // index, and SOURCE must stay a personal funding address.
         const funding = all.filter((a) => a.role !== 'dispenser');
         setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
-    }, [chainId, addressesByChain, activeByChain, initialFromAddress]);
+    }, [chainId, addressesByChain, activeByChain, pinnedFromAddress]);
 
     // Balance-resolve SOURCE: the active-address default above is a guess
     // at where the token inventory lives. Once a ticker is entered, prefer
@@ -363,10 +387,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // most of that tick, since SOURCE is what the escrow debits. Debounced
     // so typing the ticker doesn't fan out a balance query per keystroke;
     // any failure leaves the default untouched. Skipped when
-    // the source is pinned by an incoming `initialFromAddress`.
+    // the source is pinned by an incoming `initialFromAddress` or a reopen.
     useEffect(() => {
         const tick = ticker.trim().toUpperCase();
-        if (initialFromAddress || manualSourceRef.current) return undefined;
+        if (pinnedFromAddress || manualSourceRef.current) return undefined;
         if (!chainId || !addressesByChain || !tick) return undefined;
         if (typeof messaging.getWalletBalances !== 'function') return undefined;
         let cancelled = false;
@@ -396,7 +420,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 .catch(() => { /* keep the active-address default on failure */ });
         }, 400);
         return () => { cancelled = true; clearTimeout(timer); };
-    }, [ticker, chainId, addressesByChain, activeAccountId, walletId, messaging, initialFromAddress]);
+    }, [ticker, chainId, addressesByChain, activeAccountId, walletId, messaging, pinnedFromAddress]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -422,23 +446,30 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
-    // Previously derived dispenser addresses on this chain, reusable as
-    // the open target when addressMode === 'existing'.
-    const existingDispenserAddresses = useMemo(() => {
-        if (!chainId || !addressesByChain) return [];
-        return (addressesByChain[chainId] || []).filter((a) => a.role === 'dispenser');
-    }, [chainId, addressesByChain]);
+    // The dispenser address for mode 'existing'. Any wallet address qualifies,
+    // not only ones set aside with role='dispenser': the protocol does not
+    // care how the wallet labelled it. A reopened dispenser's address may not
+    // be in the wallet at all (a delegated GET_ADDRESS), and the creator may
+    // still open there by origin standing, so it resolves to a bare record
+    // rather than falling back to a new address.
+    const reopenAddress = reopen?.chainId === chainId ? reopen?.dispenserAddress || '' : '';
     const existingAddress = useMemo(() => {
         if (!chainId || !addressesByChain) return null;
-        return (addressesByChain[chainId] || []).find((a) => a.id === existingAddressId) || null;
-    }, [chainId, addressesByChain, existingAddressId]);
-    // Chain switch invalidates an 'existing' pick; fall back to 'new'.
+        const all = addressesByChain[chainId] || [];
+        const byId = all.find((a) => a.id === existingAddressId);
+        if (byId) return byId;
+        if (existingAddressId !== REOPEN_ADDRESS_ID || !reopenAddress) return null;
+        return all.find((a) => a.address === reopenAddress) || { id: REOPEN_ADDRESS_ID, address: reopenAddress };
+    }, [chainId, addressesByChain, existingAddressId, reopenAddress]);
+    // Chain switch invalidates an 'existing' pick; fall back to 'new'. Not
+    // before the address list loads: a reopen starts in 'existing', and
+    // every pick is unresolvable until then.
     useEffect(() => {
-        if (addressMode === 'existing' && !existingAddress) {
+        if (addressMode === 'existing' && addressesByChain && !existingAddress) {
             setAddressMode('new');
             setExistingAddressId(null);
         }
-    }, [addressMode, existingAddress]);
+    }, [addressMode, addressesByChain, existingAddress]);
 
     // Effective SOURCE for signing / balance checks / review display. The
     // Source field (own-address picker) writes fromAddressId directly, so the

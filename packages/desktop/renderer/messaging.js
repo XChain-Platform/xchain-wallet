@@ -1772,6 +1772,17 @@ export function labelSyncDismissRequest() {
 }
 
 /**
+ * §19.5.2 restore, on-demand half: the Backup panel's "Check chain for
+ * backed-up contacts" button. Fetches + decrypts this wallet's published
+ * labels FILE on one chain and merges anything found into the vault.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, bip39Passphrase?: string }} opts
+ */
+export function restoreLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.restoreLabels', opts));
+}
+
+/**
  * §17.4 / §30.1 / G024: user-initiated message signing.
  *
  * @param {{ walletId: string, addressId: string, password: string, message: string, bip39Passphrase?: string }} opts

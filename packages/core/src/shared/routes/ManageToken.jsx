@@ -14,6 +14,7 @@ import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core'
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { formatAmount } from '../components/BalanceList.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
@@ -220,22 +221,9 @@ export function ManageToken({
     // banner above the action grid and the hiding of issuer-only
     // actions (Mint / Description / Transfer / Broadcast / Lock).
     // null = unknown (loading or no creator on the indexer record).
-    const [isOwner, setIsOwner] = useState(/** @type {boolean | null} */ (null));
-    useEffect(() => {
-        if (!owner) { setIsOwner(null); return undefined; }
-        if (typeof messaging?.getAddressesByChain !== 'function') { setIsOwner(null); return undefined; }
-        let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
-                if (cancelled) return;
-                const addrs = (byChain?.[chainId] || [])
-                    .map((a) => a?.address)
-                    .filter((a) => typeof a === 'string');
-                setIsOwner(addrs.includes(owner));
-            })
-            .catch(() => { if (!cancelled) setIsOwner(null); });
-        return () => { cancelled = true; };
-    }, [messaging, walletId, chainId, owner]);
+    // Shared with TokenDetail's "Manage token" gate so both surfaces
+    // agree on what counts as owning a tick; see useIsTokenIssuer.js.
+    const isOwner = useIsTokenIssuer({ messaging, walletId, chainId, issuerAddress: owner });
 
     // Percentage of circulating supply the user holds. Returns null
     // when supply isn't known yet so the renderer can hide the line.

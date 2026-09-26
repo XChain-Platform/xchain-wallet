@@ -20,6 +20,7 @@ import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
 import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
@@ -68,6 +69,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onSend]                navigate to Send route
  * @param {() => void} [props.onReceive]             navigate to Receive route
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
+ * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
  */
 export function TokenDetail({
     walletId,
@@ -84,6 +86,7 @@ export function TokenDetail({
     onReceive,
     onBuy,
     onViewActivity,
+    onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
@@ -99,6 +102,17 @@ export function TokenDetail({
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
     const assetInfo = useTokenInfo({ chainId, tick, skip: isNative });
+
+    // A holder who is also the issuer gets a way back to the admin
+    // surface: without this, ManageToken was reachable only via Menu ->
+    // My Tokens, several taps away from the token they just opened.
+    // Native coins have no issuer, so the check is skipped there.
+    const isTokenOwner = useIsTokenIssuer({
+        messaging,
+        walletId,
+        chainId,
+        issuerAddress: isNative ? null : (assetInfo?.creator || null),
+    });
 
     // Native-coin price oracle (BTC / LTC / DOGE mainnet). Gated by
     // settings.privacy.priceDataEnabled; the hook surfaces a `disabled`
@@ -293,6 +307,17 @@ export function TokenDetail({
             label: 'History',
             icon: <Icon.HistoryIcon />,
             onClick: () => { setMoreOpen(false); onViewActivity(); },
+        });
+    }
+    // Issuer-only hop into ManageToken; gated on isTokenOwner (not just
+    // the handler being wired) so a holder who isn't the issuer never
+    // sees an entry that would 404 or open someone else's token.
+    if (typeof onManageToken === 'function' && isTokenOwner) {
+        moreOptions.push({
+            id: 'manage-token',
+            label: 'Manage token',
+            icon: <Icon.GearIcon />,
+            onClick: () => { setMoreOpen(false); onManageToken(); },
         });
     }
 

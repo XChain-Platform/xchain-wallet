@@ -1591,6 +1591,12 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('wallet.prepareLabels', async (req, { vault, chainRegistry }) => {
+        // Fund the FILE tx from the same address Send would use.
+        // Same walletId-only resolution useActionForm/Send use for
+        // `addresses.active` (no accountId), so the source lines up with
+        // whatever Home/Send show as this wallet's chain balance instead of
+        // the highest-index HD address, which is very often unfunded.
+        const active = await resolveActiveAddresses({ vault, walletId: req?.walletId, chainRegistry });
         return prepareLabelsPublication({
             vault,
             walletId: req?.walletId,
@@ -1598,6 +1604,7 @@ export function createBackgroundHost(deps) {
             bip39Passphrase: req?.bip39Passphrase,
             chainId: req?.chainId,
             chainRegistry,
+            activeEntry: active?.[req?.chainId],
             fee: req?.fee,
             feePerKb: req?.feePerKb,
         });
@@ -1621,6 +1628,15 @@ export function createBackgroundHost(deps) {
             : await publishLabelsNow({
                 ...common,
                 chainId: req?.chainId,
+                // Same active-address preference as wallet.prepareLabels
+                // This branch runs when the caller skipped the
+                // separate prepare/confirm step and asked publishLabelsNow
+                // to prepare AND submit in one call.
+                activeEntry: (await resolveActiveAddresses({
+                    vault,
+                    walletId: req?.walletId,
+                    chainRegistry,
+                }))?.[req?.chainId],
                 fee: req?.fee,
                 feePerKb: req?.feePerKb,
             });
@@ -1652,6 +1668,36 @@ export function createBackgroundHost(deps) {
     host.register('wallet.labelSyncDismiss', async () => {
         labelSyncPending = null;
         return { ok: true };
+    });
+
+    // §19.5.2 restore, on-demand half: the Backup panel's "Check chain for
+    // backed-up contacts" button. The automatic restore only ever runs once,
+    // inside a from-seed import; a wallet that already exists (or that
+    // published from a different device since) has no other way to re-pull
+    // that payload. 'preserve' because, unlike the fresh vault an import
+    // writes into, this wallet may already hold edits made since the last
+    // publish that a stale chain copy must not clobber. Password errors and
+    // bad arguments throw here (unlike `restoreLabelSyncBestEffort`, which
+    // swallows everything for the best-effort import path) so the panel can
+    // show the user why the check failed.
+    host.register('wallet.restoreLabels', async (req, { vault, sdkRegistry }) => {
+        const walletId = req?.walletId;
+        const chainId = req?.chainId;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('wallet.restoreLabels: walletId is required');
+        }
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('wallet.restoreLabels: chainId is required');
+        }
+        return restoreLabelSyncAfterImport({
+            vault,
+            walletId,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainIds: [chainId],
+            sdkRegistry,
+            onConflict: 'preserve',
+        });
     });
 
     // §19.4 encrypted backup: returns the pretty-printed JSON envelope

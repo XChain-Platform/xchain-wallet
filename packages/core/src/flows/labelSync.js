@@ -54,6 +54,7 @@ import { counterwalletMnemonicToSeedBytes } from '../crypto/counterwallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { submitAction } from './submitAction.js';
 import { ENVELOPE_MAX_PAYLOAD } from './fileSizeLimits.js';
+import { activeSourceId } from '../shared/addressSelection.js';
 
 export const LABEL_SYNC_PAYLOAD_VERSION = 1;
 
@@ -287,6 +288,7 @@ export async function applyLabelSyncPayload({
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {(walletId: string, chainId: string) => Promise<import('../schemas/address.js').Address | null>} [pickFromAddress]   override how the source address for the FILE tx is selected; defaults to "newest external HD address on this (account, chain)"
+ * @property {{ id?: string, address?: string }} [activeEntry]   the chain's active address (addressSelection.js's `getActiveAddresses()[chainId]`); when it resolves to an eligible address it wins over the newest-HD default, same as Send
  * @property {number} [fee]
  * @property {number} [feePerKb]
  */
@@ -343,6 +345,7 @@ export async function prepareLabelsPublication({
     chainId,
     chainRegistry,
     pickFromAddress,
+    activeEntry,
     fee,
     feePerKb,
 }) {
@@ -370,10 +373,11 @@ export async function prepareLabelsPublication({
         throw new Error(`prepareLabelsPublication: unknown chain "${chainId}"`);
     }
 
-    // Source address: caller override, or newest external HD address.
+    // Source address: caller override, or the chain's active address
+    // falling back to newest external HD address.
     const fromAddress = pickFromAddress
         ? await pickFromAddress(walletId, chainId)
-        : await defaultPickFromAddress({ vault, walletId, descriptor });
+        : await defaultPickFromAddress({ vault, walletId, descriptor, activeEntry });
     if (!fromAddress) throw new NoFundedAddressError(walletId, chainId);
 
     const seed = await deriveLabelSyncSeed({ wallet, password, bip39Passphrase });
@@ -488,8 +492,9 @@ export async function submitLabelsPublication({
 /**
  * §19.5.2 manual publish: builds the encrypted labels payload from
  * the wallet's seed and broadcasts it as a FILE action on the chosen
- * chain. The from-address is the wallet's newest external HD address
- * on that chain (callers can override via `pickFromAddress`).
+ * chain. The from-address is the wallet's active address on that chain,
+ * falling back to the newest external HD address when none resolves
+ * (callers can override either input via `pickFromAddress` / `activeEntry`).
  *
  * This flow powers the auto-sync path: `createLabelSyncScheduler` decides
  * WHEN a publish is due, the shell prompts for the password, and the write
@@ -794,22 +799,36 @@ function withTimeout(promise, ms, message) {
 }
 
 /**
- * Default source-address picker: newest external HD address on the
- * chain across any account in the wallet. Mirrors the host's
- * `addresses.newest` semantics so the publish flow lines up with what
- * the user sees in Receive.
+ * Default source-address picker: the chain's active (operating) address
+ * when `activeEntry` resolves to one of this wallet's eligible addresses,
+ * otherwise the newest external HD address on the chain across any account
+ * in the wallet.
+ *
+ * The active address comes first because every other spend-from-balance
+ * flow (Send, via `preferredSourceId` in `addressSelection.js`) funds from
+ * it. A wallet with several receive addresses on a chain keeps its balance
+ * on the active one, and the newest HD address is often empty, which the
+ * encoder reports as no spendable UTXOs. Funding from the active address
+ * lines this up with the chain balance Send and Home show.
  */
-async function defaultPickFromAddress({ vault, walletId, descriptor }) {
+async function defaultPickFromAddress({ vault, walletId, descriptor, activeEntry }) {
     const accounts = await vault.accounts.findBy('walletId', walletId);
     const accountIds = new Set(accounts.map((a) => a.id));
     if (accountIds.size === 0) return null;
     const all = await vault.addresses.list();
+    const eligible = all.filter(
+        (a) => accountIds.has(a.accountId)
+            && a.chain === descriptor.coin
+            && a.network === descriptor.networkKind,
+    );
+
+    const activeId = activeSourceId(eligible, activeEntry);
+    const active = activeId ? eligible.find((a) => a.id === activeId) : null;
+    if (active) return active;
+
     let winner = null;
     let winnerIdx = -1;
-    for (const a of all) {
-        if (!accountIds.has(a.accountId)) continue;
-        if (a.chain !== descriptor.coin) continue;
-        if (a.network !== descriptor.networkKind) continue;
+    for (const a of eligible) {
         if (a.source !== 'hd') continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');

@@ -1220,6 +1220,7 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
+                        reopen={formReturnView === 'dispenser-detail' ? dispenserRef?.reopen : undefined}
                     />
                 );
             }
@@ -1265,6 +1266,12 @@ function AppInner() {
                             if (dispenserRef.origin === 'explorer') return setUnlockedView('dispenser-explorer');
                             if (dispenserRef.origin === 'manage-token') return setUnlockedView('manage-token');
                             return setUnlockedView('dispensers-list');
+                        }}
+                        // Back from the form lands on this detail page again.
+                        onOpenAgain={(terms) => {
+                            setDispenserRef({ ...dispenserRef, reopen: terms });
+                            setFormReturnView('dispenser-detail');
+                            setUnlockedView('dispenser');
                         }}
                     />
                 );
@@ -2183,6 +2190,10 @@ function AppInner() {
                             });
                             setUnlockedView('markets');
                         } : undefined}
+                        // Same hop MyTokens' onSelectTick uses: tokenDetailRef
+                        // already carries this tick's chainId/tick, so Manage
+                        // Token only needs the view switch.
+                        onManageToken={() => setUnlockedView('manage-token')}
                     />
                 );
             }

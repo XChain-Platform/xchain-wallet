@@ -39,6 +39,7 @@ import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
+import { isTerminalDispenserStatus, reopenTermsFrom, terminalDispenserNotice } from '../utils/dispenserReopen.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { dispenserPriceFloor } from '../../flows/dispenserDustFloor.js';
 import {
@@ -94,7 +95,9 @@ const ADDRESS_CELL_STYLE = {
  *     `dispenserActionHw`; watcher mode builds an unsigned transaction):
  *     Close (v1 cancel), Refill (v2 edit topping up GIVE_ESCROW), and
  *     Edit (v2 edit of EXPIRATION / ALLOW_LIST / BLOCK_LIST, PC-19). All
- *     owner actions gate on the live status (open only).
+ *     owner actions gate on the live status (open only). On a status that
+ *     can never be open again (sold out, closed, expired) they are hidden
+ *     instead, and the owner is offered Open again.
  *   - State display: current expiration + allow/block lists, dispenses
  *     this fill against the 1,000 cap, and a close-window banner while
  *     the dispenser sits in its 1-hour "cancelling" state.
@@ -111,8 +114,10 @@ const ADDRESS_CELL_STYLE = {
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
  * @param {() => void} [props.onCanceled]           called after a successful cancel broadcast
+ * @param {(terms: object) => void} [props.onOpenAgain]  opens DispenserForm prefilled with these
+ *   terms; a shell that does not pass it gets no Open again button
  */
-export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled }) {
+export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -530,6 +535,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const liveStatus = liveState.status;
     const isOpen = liveStatus === 'open';
     const isClosing = liveStatus === 'cancelling';
+    const isTerminal = isTerminalDispenserStatus(liveStatus);
+    // An ownership dispenser's form lane does not exist (DispenserForm has no
+    // GIVE_OWNERSHIP), and a sold one no longer has the ownership to offer.
+    const canOpenAgain = isTerminal && Boolean(ownerAddress) && typeof onOpenAgain === 'function'
+        && Number(dispenser?.give_ownership || 0) !== 1;
     const priceStale = isDispenserPriceStale(dispenser);
     const currentExpiration = liveState.expiration;
     const currentAllowList = boundListIndex(liveState.allowList);
@@ -1628,6 +1638,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     then are still honored.
                 </p>
             ) : null}
+            {isTerminal ? (
+                <p className={local.closeWindowNote} role="status">
+                    {terminalDispenserNotice(liveStatus, { canReopen: canOpenAgain })}
+                </p>
+            ) : null}
             {priceStale ? (
                 <p role="alert" className={styles.warning}>
                     <strong>{DISPENSER_PRICE_STALE_MESSAGE}</strong>
@@ -1729,42 +1744,59 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             </dl>
 
             <div className={local.quickActions} role="group" aria-label="Dispenser actions">
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => setCancelStage('confirm')}
-                    disabled={!ownerAddress || !isOpen}
-                    title={!ownerAddress ? 'Only the owner can close'
-                        : !isOpen ? 'Dispenser is not open'
-                        : 'Close this dispenser'}
-                >
-                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
-                    <span>Close</span>
-                </button>
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => setRefillStage('confirm')}
-                    disabled={!ownerAddress || !isOpen}
-                    title={!ownerAddress ? 'Only the owner can refill'
-                        : !isOpen ? 'Dispenser is not open'
-                        : 'Add escrow to this dispenser'}
-                >
-                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                    <span>Refill</span>
-                </button>
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => setEditStage('confirm')}
-                    disabled={!ownerAddress || !isOpen}
-                    title={!ownerAddress ? 'Only the owner can edit'
-                        : !isOpen ? 'Dispenser is not open'
-                        : 'Change expiration or allow/block lists'}
-                >
-                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
-                    <span>Edit</span>
-                </button>
+                {/* Terminal statuses drop Close / Refill / Edit outright: the
+                    chain refuses all three unless the status is open, and a
+                    disabled button's tooltip never shows on a phone. */}
+                {isTerminal ? (canOpenAgain ? (
+                    <button
+                        type="button"
+                        className={local.quickAction}
+                        onClick={() => onOpenAgain(reopenTermsFrom(dispenser, liveState, { chainId }))}
+                        title="Open a new dispenser on this address with the same terms"
+                    >
+                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.RefreshIcon /></span>
+                        <span>Open again</span>
+                    </button>
+                ) : null) : (
+                    <>
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => setCancelStage('confirm')}
+                            disabled={!ownerAddress || !isOpen}
+                            title={!ownerAddress ? 'Only the owner can close'
+                                : !isOpen ? 'Dispenser is not open'
+                                : 'Close this dispenser'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
+                            <span>Close</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => setRefillStage('confirm')}
+                            disabled={!ownerAddress || !isOpen}
+                            title={!ownerAddress ? 'Only the owner can refill'
+                                : !isOpen ? 'Dispenser is not open'
+                                : 'Add escrow to this dispenser'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                            <span>Refill</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => setEditStage('confirm')}
+                            disabled={!ownerAddress || !isOpen}
+                            title={!ownerAddress ? 'Only the owner can edit'
+                                : !isOpen ? 'Dispenser is not open'
+                                : 'Change expiration or allow/block lists'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
+                            <span>Edit</span>
+                        </button>
+                    </>
+                )}
                 <button
                     type="button"
                     className={local.quickAction}

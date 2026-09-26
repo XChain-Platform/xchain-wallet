@@ -588,6 +588,17 @@ export function labelSyncDismissRequest() {
 }
 
 /**
+ * §19.5.2 restore, on-demand half: the Backup panel's "Check chain for
+ * backed-up contacts" button. Fetches + decrypts this wallet's published
+ * labels FILE on one chain and merges anything found into the vault.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, bip39Passphrase?: string }} opts
+ */
+export function restoreLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.restoreLabels', opts));
+}
+
+/**
  * §15.5 / G020: add a single imported WIF to an existing HD wallet.
  *
  * @param {{ walletId: string, password: string, chainId: string, wif: string, addressType?: string, label?: string }} opts

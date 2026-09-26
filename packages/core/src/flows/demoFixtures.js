@@ -1137,7 +1137,8 @@ const DEMO_DISPENSERS = /** @type {Record<string, any[]>} */ ({
         },
         {
             action_index: '7298431', tx_hash: 'demo-disp-doge-2', block_index: 6329988,
-            status: 'canceled', give_tick: 'WOW', give_amount: '10',
+            // The indexer writes `cancelled`, which the list and detail pages key on.
+            status: 'cancelled', give_tick: 'WOW', give_amount: '10',
             get_coin: '', get_tick: 'DOGI', get_amount: '50',
             memo: 'Mispriced, reopened as #7301556.',
             escrow_remaining: '0', dispense_count: 0,

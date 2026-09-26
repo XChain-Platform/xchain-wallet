@@ -30,6 +30,7 @@ import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import {
     publishLabelsNow,
     submitLabelsPublication,
+    prepareLabelsPublication,
 } from '../../../packages/core/src/flows/labelSync.js';
 import { persistHdWallet } from '../../../packages/core/src/flows/_persistHdWallet.js';
 import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
@@ -39,6 +40,7 @@ import {
 } from '../../../packages/core/src/crypto/labelSync.js';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
+import { createAddress } from '../../../packages/core/src/schemas/address.js';
 
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: vi.fn(async () => ({ txid: 'txid-1' })),
@@ -295,5 +297,96 @@ describe('submitLabelsPublication confirmation envelope', () => {
             }),
             prebuiltPsbt,
         }));
+    });
+});
+
+// "Publish labels" was funding from the HIGHEST-index HD receive
+// address on the chain, never the wallet's active address, so a wallet that
+// had moved on from address #0 (the one Send/Home actually operate on) got
+// "no spendable UTXOs found" from an unfunded scratch address instead. These
+// cases build two real HD addresses on one chain and check which one
+// `prepareLabelsPublication` resolves as `from`, with no `pickFromAddress`
+// override, so the default source-selection path itself is under test.
+describe('prepareLabelsPublication: default source address', () => {
+    const chainRegistry = { get: () => ({ coin: 'bitcoin', networkKind: 'regtest' }) };
+
+    async function makeWalletWithTwoAddresses(vault) {
+        const mnemonic = generateBip39Mnemonic(128);
+        const { wallet, account } = await persistHdWallet({
+            mnemonic,
+            format: 'bip39',
+            origin: 'created',
+            passphraseEnabled: false,
+            password: PASSWORD,
+            name: 'Test Wallet',
+            accountName: 'Main',
+            kdfParams: LOW_COST_KDF_PARAMS,
+            vault,
+            chainRegistry: {},
+            sdkRegistry: {},
+            // No auto-derived addresses; the two HD addresses below are the
+            // whole point of the case.
+            activeChainIds: [],
+        });
+        const addr0 = createAddress({
+            accountId: account.id,
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: "m/84'/1'/0'/0/0",
+            address: 'bcrt1qxc3059addrzero',
+            publicKey: 'pub_0_0_0',
+        });
+        const addr1 = createAddress({
+            accountId: account.id,
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: "m/84'/1'/0'/0/1",
+            address: 'bcrt1qxc3059addrone',
+            publicKey: 'pub_0_0_1',
+        });
+        await vault.addresses.put(addr0);
+        await vault.addresses.put(addr1);
+        return { wallet, addr0, addr1 };
+    }
+
+    it('picks index 0 when it is the chain\'s active address, over the newer index-1 address', async () => {
+        const vault = await openVault();
+        const { wallet, addr0 } = await makeWalletWithTwoAddresses(vault);
+
+        const prep = await prepareLabelsPublication({
+            vault,
+            walletId: wallet.id,
+            password: PASSWORD,
+            chainId: CHAIN_ID,
+            chainRegistry,
+            activeEntry: { id: addr0.id },
+        });
+
+        expect(prep.from.id).toBe(addr0.id);
+        // The FILE tx's change must return to the same address it spent
+        // from (labelSync.js ~419-420), never the newest-HD address it
+        // would have picked without an active entry.
+        expect(prep.encoderOpts.sourceAddress).toBe(addr0.address);
+        expect(prep.encoderOpts.change).toBe(addr0.address);
+    });
+
+    it('falls back to the newest HD external address when no active address resolves', async () => {
+        const vault = await openVault();
+        const { wallet, addr1 } = await makeWalletWithTwoAddresses(vault);
+
+        const prep = await prepareLabelsPublication({
+            vault,
+            walletId: wallet.id,
+            password: PASSWORD,
+            chainId: CHAIN_ID,
+            chainRegistry,
+        });
+
+        expect(prep.from.id).toBe(addr1.id);
+        expect(prep.encoderOpts.sourceAddress).toBe(addr1.address);
     });
 });
