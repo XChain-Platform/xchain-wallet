@@ -76,6 +76,21 @@ describe('Marketplace on explorer-shaped rows', () => {
         expect(document.body.textContent).not.toMatch(/per 0 BTC/);
     });
 
+    it('shows when an open dispenser has no usable recent price', async () => {
+        renderMarket({
+            getDispensersForToken: (() => {
+                let answered = false;
+                return vi.fn().mockImplementation(() => {
+                    if (answered) return Promise.resolve({ data: [] });
+                    answered = true;
+                    return Promise.resolve({ data: [{ ...OFFERS[1], price_stale: true }] });
+                });
+            })(),
+        });
+        expect(await screen.findByText('Not selling right now: no price in the last 24 hours'))
+            .toBeInTheDocument();
+    });
+
     it('shows a real dispense with what was paid, and leaves out a refused one', async () => {
         renderMarket();
         expect(await screen.findByText('Sold 15 XCHAIN for 0.03 BTC')).toBeInTheDocument();

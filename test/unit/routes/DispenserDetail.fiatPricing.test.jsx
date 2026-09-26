@@ -26,7 +26,7 @@
 // was a rendering decision (which branch of the panel runs), not arithmetic.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, within, cleanup } from '@testing-library/react';
+import { render, screen, within, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -254,5 +254,25 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         const text = document.body.textContent || '';
         expect(text).toMatch(/Send exactly/);
         expect(text).toMatch(/0\.1 LTC/);
+    });
+
+    it('shows the served stale-price state and says a payment would be kept', async () => {
+        mount({ ...FIAT_DISPENSER, price_stale: true });
+        expect(await screen.findByText('Not selling right now: no price in the last 24 hours'))
+            .toBeInTheDocument();
+        expect(screen.getByText(/payment made now would be refused and kept/i)).toBeInTheDocument();
+    });
+
+    it('blocks an in-wallet Buy only for an explicitly stale price', async () => {
+        mount({ ...COIN_DISPENSER, price_stale: true });
+        expect(await screen.findByRole('button', { name: 'Buy 1 fill' })).toBeDisabled();
+        cleanup();
+
+        mount({ ...COIN_DISPENSER, price_stale: false });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 fill' })).toBeEnabled());
+        cleanup();
+
+        mount(COIN_DISPENSER);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 fill' })).toBeEnabled());
     });
 });

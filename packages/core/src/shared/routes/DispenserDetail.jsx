@@ -53,6 +53,10 @@ import { boundListIndex, editListConflict } from '../../flows/accessListSlots.js
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import {
+    DISPENSER_PRICE_STALE_MESSAGE,
+    isDispenserPriceStale,
+} from '../utils/dispenserPricing.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
@@ -514,6 +518,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const liveStatus = liveState.status;
     const isOpen = liveStatus === 'open';
     const isClosing = liveStatus === 'cancelling';
+    const priceStale = isDispenserPriceStale(dispenser);
     const currentExpiration = liveState.expiration;
     const currentAllowList = boundListIndex(liveState.allowList);
     const currentBlockList = boundListIndex(liveState.blockList);
@@ -989,6 +994,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     const beginBuy = useCallback(async () => {
         if (buyStage === 'submitting' || !buyRequest) return;
+        if (priceStale) {
+            setBuyError(DISPENSER_PRICE_STALE_MESSAGE);
+            return;
+        }
         // Resolve every buyer and pay-to list before any transaction reaches Confirm.
         if (await refreshBuyerEligibility()) return;
         if (buyUnderfunded || buyDustBlock) return;
@@ -1017,7 +1026,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         } finally {
             setBuyPassword('');
         }
-    }, [buyStage, buyRequest, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
+    }, [buyStage, buyRequest, priceStale, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
         buyConfirm, chainId, messaging, submitConfirmedBuy]);
 
     /**
@@ -1598,6 +1607,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     then are still honored.
                 </p>
             ) : null}
+            {priceStale ? (
+                <p role="alert" className={styles.warning}>
+                    <strong>{DISPENSER_PRICE_STALE_MESSAGE}</strong>
+                    <span>. A payment made now would be refused and kept.</span>
+                </p>
+            ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
                 are secondary (action index lives in the More menu). */}
@@ -1927,7 +1942,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         loading={buyStage === 'submitting' || buyConfirm.composing}
                         disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr
                             || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
-                            || buyerEligibilityBarred || dispenserSelfBarred
+                            || buyerEligibilityBarred || dispenserSelfBarred || priceStale
                             || buyStage === 'submitting' || buyConfirm.composing}
                     >
                         Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}

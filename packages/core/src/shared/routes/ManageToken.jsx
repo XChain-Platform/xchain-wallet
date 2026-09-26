@@ -23,7 +23,13 @@ import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
-import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling, isOpenOffer } from '../utils/dispenserPricing.js';
+import {
+    dispenserRateLabel,
+    formatDecimal,
+    isDispenserPriceStale,
+    isOpenDispenserSelling,
+    isOpenOffer,
+} from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -901,10 +907,12 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
                 const onClick = typeof onOpenDispenser === 'function' && actionIndex
                     ? () => onOpenDispenser(chainId, actionIndex)
                     : undefined;
-                const summary = d.give_amount
-                    ? dispenserRateLabel(d, oracleFeedsFor(chainId, d))
-                      + (remaining != null ? ` · ${formatDecimal(remaining)} ${tick} left` : '')
-                    : 'Open dispenser';
+                const summary = isDispenserPriceStale(d)
+                    ? dispenserRateLabel(d)
+                    : d.give_amount
+                        ? (dispenserRateLabel(d, oracleFeedsFor(chainId, d))
+                            + (remaining != null ? ` · ${formatDecimal(remaining)} ${tick} left` : ''))
+                        : 'Open dispenser';
                 return (
                     <HistoryRow
                         key={String(actionIndex || i)}

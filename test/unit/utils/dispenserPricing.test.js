@@ -14,6 +14,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    DISPENSER_PRICE_STALE_MESSAGE,
     dispenserRateLabel,
     isOpenOffer,
     isOpenDispenserSelling,
@@ -58,6 +59,15 @@ describe('dispenserRateLabel', () => {
         expect(dispenserRateLabel(modeA)).toBe('1 MGRTEST per 3 USD');
         expect(dispenserRateLabel({ ...modeA, fiat_amount: null, fiat_code: null }))
             .toMatch(/priced in fiat: open the dispenser/);
+    });
+
+    it('uses the served stale-price state only when it is explicitly true', () => {
+        expect(dispenserRateLabel({ ...MODE_B, price_stale: true }, [FEED]))
+            .toBe(DISPENSER_PRICE_STALE_MESSAGE);
+        expect(dispenserRateLabel({ ...MODE_B, price_stale: false }, [FEED]))
+            .toBe('1 MGRTEST per 0.05 USD (oracle ndDEAA…ss01)');
+        expect(dispenserRateLabel(MODE_B, [FEED]))
+            .toBe('1 MGRTEST per 0.05 USD (oracle ndDEAA…ss01)');
     });
 });
 

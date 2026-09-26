@@ -69,6 +69,21 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(await screen.findAllByText(/no current price, stale/)).not.toHaveLength(0);
     });
 
+    it('shows the explorer stale-price state instead of advertising a rate', async () => {
+        renderExplorer({
+            getDispensersForToken: vi.fn().mockResolvedValue({
+                data: [{ ...MODE_B_ROW, price_stale: true }],
+            }),
+            oracleFeeds: vi.fn().mockResolvedValue([{
+                tick: 'MGRTEST', fiat: 'USD', live: { value: '0.05' },
+            }]),
+        });
+        await searchFor('MGRTEST');
+        expect(await screen.findAllByText(/Not selling right now: no price in the last 24 hours/))
+            .not.toHaveLength(0);
+        expect(screen.queryAllByText(/1 MGRTEST per 0\.05 USD/)).toHaveLength(0);
+    });
+
     it('never quotes zero coin on a host that cannot read oracle feeds', async () => {
         renderExplorer();
         await searchFor('MGRTEST');

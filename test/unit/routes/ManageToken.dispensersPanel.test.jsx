@@ -78,6 +78,16 @@ describe('ManageToken Dispensers panel on explorer-shaped rows', () => {
         expect(document.body.textContent).not.toMatch(/per 0 BTC/);
     });
 
+    it('shows when an open dispenser has no usable recent price', async () => {
+        renderPanel({
+            getDispensersForToken: vi.fn().mockResolvedValue({
+                data: [{ ...MODE_B, price_stale: true }],
+            }),
+        });
+        expect(await screen.findByText(/Not selling right now: no price in the last 24 hours/))
+            .toBeInTheDocument();
+    });
+
     it('lists neither a closed dispenser nor one that buys this token', async () => {
         renderPanel();
         await screen.findByText(/5 S18PROBE per 0\.01 BTC/);

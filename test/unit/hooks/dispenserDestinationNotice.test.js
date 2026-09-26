@@ -86,6 +86,24 @@ describe('dispenserDestinationNotice', () => {
         expect(n.warnings[1]).toMatch(/oracle has no current price/);
     });
 
+    it('uses explicit stale, available, and unknown price states', () => {
+        const stale = dispenserDestinationNotice({
+            dispensers: [entry({ price_stale: true }, { oracle: 'dark' })], payer: PAYER, amount: '1',
+        });
+        const available = dispenserDestinationNotice({
+            dispensers: [entry({ price_stale: false }, { oracle: 'dark' })], payer: PAYER, amount: '1',
+        });
+        const unknown = dispenserDestinationNotice({
+            dispensers: [entry({}, { oracle: 'dark' })], payer: PAYER, amount: '1',
+        });
+        expect(stale.warnings).toEqual([
+            'Not selling right now: no price in the last 24 hours. '
+                + 'A payment made now would be refused and kept.',
+        ]);
+        expect(available.warnings).toEqual([]);
+        expect(unknown.warnings).toEqual([expect.stringMatching(/oracle has no current price/)]);
+    });
+
     it('says a dispenser whose own pay-to is off its allow list sells to nobody', () => {
         const n = dispenserDestinationNotice({
             dispensers: [entry({}, { allowMembers: [PAYER] })], payer: PAYER, amount: '0.01',

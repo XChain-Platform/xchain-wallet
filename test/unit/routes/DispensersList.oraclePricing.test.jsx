@@ -104,6 +104,15 @@ describe('oracle-priced dispenser, "My dispensers" list', () => {
         expect(await screen.findByText(/no current price, stale/)).toBeInTheDocument();
     });
 
+    it('shows the explorer stale-price state instead of advertising a rate', async () => {
+        mount([{ ...ORACLE_ROW, price_stale: true }], {
+            oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS),
+        });
+        expect(await screen.findByText('Not selling right now: no price in the last 24 hours'))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/1 MGRTEST per 0\.05 USD/)).toBeNull();
+    });
+
     it('does not fabricate a price when the wallet cannot read oracle feeds at all', async () => {
         // No `oracleFeeds` on messaging: an older host or one built without the
         // capability. Silence would read as "free"; the fix must say something

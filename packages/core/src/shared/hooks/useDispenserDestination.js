@@ -23,6 +23,10 @@ import {
 } from '../../flows/allowListSelfCheck.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import {
+    DISPENSER_PRICE_STALE_MESSAGE,
+    isDispenserPriceStale,
+} from '../utils/dispenserPricing.js';
 
 /**
  * The open dispensers a payment to `to` would trigger, each with what its
@@ -185,7 +189,9 @@ function refusalWarnings(d, payer) {
         out.push('The address you are sending from is not allowed to buy from this dispenser by its '
             + 'allow or block list. This payment would be refused and the coin is not returned.');
     }
-    if (d.oracle === 'dark') {
+    if (isDispenserPriceStale(d.row)) {
+        out.push(`${DISPENSER_PRICE_STALE_MESSAGE}. A payment made now would be refused and kept.`);
+    } else if (d.row.price_stale !== false && d.oracle === 'dark') {
         out.push('This dispenser\'s oracle has no current price. A payment made now is refused and '
             + 'the coin is not returned.');
     }

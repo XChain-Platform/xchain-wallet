@@ -15,6 +15,12 @@
 
 import { multiplyAmounts } from '../../market/orderMath.js';
 
+export const DISPENSER_PRICE_STALE_MESSAGE = 'Not selling right now: no price in the last 24 hours';
+
+export function isDispenserPriceStale(row) {
+    return row?.price_stale === true;
+}
+
 // Thousands separators on the integer part of a decimal string, exact
 // (no float round-trip): '4750' -> '4,750', '0.005' stays '0.005'.
 export function formatDecimal(v) {
@@ -84,6 +90,7 @@ export function oraclePriceLabel(row, feeds) {
  * @returns {string}
  */
 export function dispenserRateLabel(row, oracleFeeds) {
+    if (isDispenserPriceStale(row)) return DISPENSER_PRICE_STALE_MESSAGE;
     const give = `${formatDecimal(row.give_amount)} ${row.give_tick || '?'}`;
     if (isFiatPricedRow(row)) {
         if (isOraclePricedRow(row)) return `${give} per ${oraclePriceLabel(row, oracleFeeds)}`;

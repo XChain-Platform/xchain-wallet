@@ -17,7 +17,13 @@ import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
-import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling, isOpenOffer } from '../utils/dispenserPricing.js';
+import {
+    dispenserRateLabel,
+    formatDecimal,
+    isDispenserPriceStale,
+    isOpenDispenserSelling,
+    isOpenOffer,
+} from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -255,7 +261,11 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>
-                                                    {row.give_amount ? dispenserRateLabel(row, oracleFeedsFor(chainId, row)) : 'Open dispenser'}
+                                                    {isDispenserPriceStale(row)
+                                                        ? dispenserRateLabel(row)
+                                                        : row.give_amount
+                                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
+                                                            : 'Open dispenser'}
                                                 </span>
                                                 <span className={styles.rowSub}>
                                                     {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
