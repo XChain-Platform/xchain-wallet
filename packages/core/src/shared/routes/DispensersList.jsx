@@ -169,7 +169,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         }
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, walletId]);
-
     // Flatten every chain's rows into one list, newest first. Each row is
     // annotated with its chainId for the network overlay + detail link.
     const allRows = useMemo(() => {
@@ -369,11 +368,6 @@ function DispenserRow({ row, label, oracleFeeds, onSelect }) {
             </div>
             <div className={local.trailing}>
                 <span className={`${local.status} ${local[`status_${status}`] || ''}`}>{status}</span>
-                <span className={local.dispenseCount}>
-                    {row.dispense_count != null
-                        ? `${formatNum(row.dispense_count)} dispense${Number(row.dispense_count) === 1 ? '' : 's'}`
-                        : ''}
-                </span>
             </div>
         </button>
     );

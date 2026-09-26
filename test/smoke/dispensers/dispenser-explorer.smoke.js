@@ -133,8 +133,10 @@ assert.ok(
     'token-paid buy targets the dispenser address',
 );
 assert.ok(
-    /fillsNum/.test(detailSrc),
-    'detail supports multi-fill buy (fills input scaled to an integer)',
+    /const fillsCount = useMemo/.test(detailSrc)
+        && /BigInt\(value\)/.test(detailSrc)
+        && /multiplyAmounts\(getAmount, fillsCount\.toString\(\)\)/.test(detailSrc),
+    'detail supports multi-fill buy with an exact integer fill count',
 );
 assert.ok(
     /Pay to buy/.test(detailSrc),

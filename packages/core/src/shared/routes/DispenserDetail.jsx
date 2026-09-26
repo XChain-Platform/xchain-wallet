@@ -128,6 +128,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [dispenser, setDispenser] = useState(/** @type {any | null} */ (null));
     const [action, setAction] = useState(/** @type {any | null} */ (null));
     const [dispenses, setDispenses] = useState(/** @type {any[]} */ ([]));
+    const [dispensesLoaded, setDispensesLoaded] = useState(false);
     // The live quote of the ORACLE a Mode B dispenser is priced by. Its price is
     // not on the dispenser row - it lives on the oracle's own published feed -
     // so a panel that does not fetch it cannot state a price at all, and told
@@ -311,6 +312,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         let cancelled = false;
         setLoading(true);
         setLoadError(null);
+        setDispenses([]);
+        setDispensesLoaded(false);
         // Demo wallet: resolve the fixture row (owned by the first address
         // on this chain) instead of querying an explorer.
         const isDemo = flowsLib.isDemoWallet(walletId);
@@ -369,6 +372,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
             if (isDemo) {
                 setDispenses(flowsLib.synthesizeDemoDispenses(actionIndex));
+                setDispensesLoaded(true);
             } else if (source) {
                 // Fills of THIS dispenser, keyed by its action index. The source
                 // lane answers "fills on this address", which over-reports as soon
@@ -377,9 +381,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 // no dispenser lane, so fall back to the source lane and let
                 // matchingDispenses() filter what it can (D-38).
                 messaging.getDispenses({ chainId, query: actionIndex, type: 'dispenser' })
-                    .then((d) => { if (!cancelled) setDispenses(extractRows(d)); })
+                    .then((d) => {
+                        if (cancelled) return;
+                        setDispenses(extractRows(d));
+                        setDispensesLoaded(true);
+                    })
                     .catch(() => messaging.getDispenses({ chainId, query: source, type: 'source' })
-                        .then((d) => { if (!cancelled) setDispenses(extractRows(d)); }))
+                        .then((d) => {
+                            if (cancelled) return;
+                            setDispenses(extractRows(d));
+                            setDispensesLoaded(true);
+                        }))
                     .catch(() => { /* best-effort; detail still usable without dispenses */ });
                 // PC-21: the rest of the lifecycle (refills/edits, closes,
                 // expirations). Best-effort; scoped to this dispenser by its
@@ -559,9 +571,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     );
     const minFills = priceFloor ? priceFloor.minFills : 1;
 
-    const fillsNum = useMemo(() => {
-        const n = Number(String(fills).trim());
-        return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    const fillsCount = useMemo(() => {
+        const value = String(fills).trim();
+        if (!/^\d+$/.test(value)) return null;
+        const count = BigInt(value);
+        return count > 0n ? count : null;
     }, [fills]);
 
     // Default Fills to the floor the first time a dispenser needing one loads,
@@ -595,13 +609,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 + `still pay out prices below the ${priceFloor.floor} ${feeCoinTicker} minimum `
                 + 'the network will relay.';
         }
-        if (fillsNum > 0 && fillsNum < minFills) {
+        if (fillsCount != null && fillsCount < BigInt(minFills)) {
             return `Buying fewer than ${minFills} fills builds a payment under `
                 + `${priceFloor.floor} ${feeCoinTicker}, which every node refuses. Enter at `
                 + `least ${minFills} fills to buy from this dispenser.`;
         }
         return null;
-    }, [priceFloor, minFills, dispenserPricedBelowFloor, fillsNum, feeCoinTicker]);
+    }, [priceFloor, minFills, dispenserPricedBelowFloor, fillsCount, feeCoinTicker]);
 
     // Retract the refusal once Fills clears it, identity-matched against what
     // this guard itself pushed (mirrors Send.jsx's dustErrorRef) so an
@@ -623,20 +637,20 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         : null;
 
     const totalPayAmount = useMemo(() => {
-        if (!getAmount || fillsNum <= 0) return null;
+        if (!getAmount || fillsCount == null) return null;
         // `buyRequest` sends this exact value on the wire as the SEND amount,
         // so it must be computed in exact decimal space. Float multiplication
         // drifts ('0.1' x 3 -> '0.30000000000000004') and collapses tiny
         // amounts to scientific notation ('0.00000001' x 3 -> '3e-8'), either
         // of which the encoder rejects or mis-prices. The display string is
         // derived from this same exact value.
-        return multiplyAmounts(getAmount, String(fillsNum));
-    }, [getAmount, fillsNum]);
+        return multiplyAmounts(getAmount, fillsCount.toString());
+    }, [getAmount, fillsCount]);
 
     const totalReceive = useMemo(() => {
-        if (!giveAmount || fillsNum <= 0) return null;
-        return multiplyAmounts(giveAmount, String(fillsNum));
-    }, [giveAmount, fillsNum]);
+        if (!giveAmount || fillsCount == null) return null;
+        return multiplyAmounts(giveAmount, fillsCount.toString());
+    }, [giveAmount, fillsCount]);
 
     // What ONE fill of a Mode B (oracle-priced) dispenser costs in its fiat
     // currency. The oracle publishes the price of one TOKEN - its own publishing
@@ -903,12 +917,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             amount: totalPayAmount,
             ...(feePerKb != null ? { feePerKb } : {}),
             // Label the pending payment as a buy instead of a plain send.
-            actionSummary: `Buy ${fillsNum} fill${fillsNum === 1 ? '' : 's'} from dispenser #${actionIndex}:`
+            actionSummary: `Buy ${fillsCount} fill${fillsCount === 1n ? '' : 's'} from dispenser #${actionIndex}:`
                 + ` ${totalPayAmount} ${payTick}`
                 + (totalReceive ? ` for ${totalReceive} ${giveTick || ''}`.trimEnd() : ''),
         };
     }, [buyFrom, payTick, dispAddr, totalPayAmount, walletId, chainId, feePerKb,
-        fillsNum, actionIndex, totalReceive, giveTick]);
+        fillsCount, actionIndex, totalReceive, giveTick]);
     const dispensersAtBuyDestination = useDispenserDestination({
         messaging,
         chainId,
@@ -1651,11 +1665,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         </dd>
                     </>
                 ) : null}
-                {dispenser?.dispense_count != null ? (
+                {dispensesLoaded ? (
                     <>
                         <dt className={styles.detailsLabel}>Dispenses</dt>
                         <dd className={styles.detailsValue}>
-                            {formatNum(dispenser.dispense_count)} of 1,000 this fill
+                            {formatNum(validDispenseCount)} of 1,000 this fill
                             {remainingFills != null ? (
                                 <span
                                     className={`${local.remainingPill} ${remainingFills > 0n ? local.remainingOk : local.remainingEmpty}`}
@@ -1953,14 +1967,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         variant="primary"
                         onClick={beginBuy}
                         loading={buyStage === 'submitting' || buyConfirm.composing}
-                        disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr
+                        disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
                             || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
                             || buyerEligibilityBarred || dispenserSelfBarred || priceStale
                             || buyStage === 'submitting' || buyConfirm.composing}
                     >
                         {ownerLane.isWatcherMode
                             ? 'Create unsigned transaction'
-                            : `Buy ${fillsNum > 0 ? `${fillsNum} ` : ''}fill${fillsNum === 1 ? '' : 's'}`}
+                            : `Buy ${fillsCount != null ? `${fillsCount} ` : ''}fill${fillsCount === 1n ? '' : 's'}`}
                     </Button>
                 </section>
             ) : null}

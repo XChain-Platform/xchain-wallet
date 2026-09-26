@@ -64,11 +64,11 @@ function mountPanel() {
         getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [OWNER] }),
         getMarketOrders: vi.fn().mockResolvedValue([{
             action_index: 17,
-            give_tick: 'XCP',
-            get_tick: 'PEPE',
-            give_amount: '10',
-            get_amount: '20',
-            give_remaining: '10',
+            type: 'sell',
+            price: '2.00000000',
+            amount: '10.00000000',
+            timestamp: 1760000000,
+            expiration: 800000,
         }]),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         cancelOrder: vi.fn(),
@@ -103,6 +103,13 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('OpenOrdersPanel cancellation confirmation', () => {
+    it('renders the summarized market-orders response', async () => {
+        mountPanel();
+        expect(await screen.findByText('Sell')).toBeInTheDocument();
+        expect(screen.getByText('2.00000000')).toBeInTheDocument();
+        expect(screen.getByText('10.00000000')).toBeInTheDocument();
+    });
+
     it('composes through the owner-action lane and replaces the panel while confirming', async () => {
         const messaging = mountPanel();
 

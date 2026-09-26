@@ -51,12 +51,12 @@ const DISPENSER = {
     current_status: 'open',
 };
 
-function mount({ buyerHolds }) {
+function mount({ buyerHolds, dispenser = DISPENSER }) {
     const tokens = buyerHolds == null
         ? []
         : [{ tick: 'MEMEVALID', quantity: buyerHolds, divisibility: 0 }];
     const messaging = {
-        getDispenserByActionIndex: vi.fn().mockResolvedValue(DISPENSER),
+        getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getDispenses: vi.fn().mockResolvedValue({ data: [] }),
         getWalletBalances: vi.fn().mockResolvedValue({
@@ -146,5 +146,21 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         fireEvent.click(await buyButton());
         expect(await screen.findByTestId('confirm-approve')).toBeInTheDocument();
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
+    });
+
+    it('keeps fill counts above the safe integer limit exact', async () => {
+        const messaging = mount({
+            buyerHolds: '90071992.54740993',
+            dispenser: { ...DISPENSER, get_amount: '0.00000001' },
+        });
+        await screen.findByText(/90,071,992\.54740993 MEMEVALID available/);
+        fireEvent.change(screen.getByLabelText(/Fills/i), {
+            target: { value: '9007199254740993' },
+        });
+        fireEvent.click(await buyButton());
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+        expect(messaging.composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            amount: '90071992.54740993',
+        }));
     });
 });

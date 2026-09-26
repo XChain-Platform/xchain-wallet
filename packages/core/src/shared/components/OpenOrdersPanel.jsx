@@ -31,6 +31,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { compareAmounts } from '../../market/orderMath.js';
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
@@ -340,6 +341,21 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
 function summarizeOrder(o, tick1, tick2) {
     if (!o || typeof o !== 'object') return null;
+    const summarySide = String(o.type || '').toLowerCase();
+    const summaryPrice = String(o.price ?? '').trim();
+    const summarySize = String(o.amount ?? '').trim();
+    if (['buy', 'sell'].includes(summarySide)
+        && compareAmounts(summaryPrice, '0') === 1
+        && compareAmounts(summarySize, '0') === 1) {
+        return {
+            actionIndex: String(o.action_index),
+            side: summarySide,
+            price: summaryPrice,
+            size: summarySize,
+            filled: null,
+            raw: o,
+        };
+    }
     const giveTick = o.give_tick || o.giveTick;
     const getTick = o.get_tick || o.getTick;
     const giveAmt = Number(o.give_amount ?? o.giveAmount);

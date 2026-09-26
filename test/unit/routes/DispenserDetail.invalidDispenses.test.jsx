@@ -119,6 +119,7 @@ describe('dispenser detail: refused dispenses', () => {
         await untilRows();
         // 100 honoured; the 500 attempt moved nothing.
         expect(screen.getByTestId('vended-total')).toHaveTextContent('100 DOGESWAP in 1 fill');
+        expect(screen.getByText('1 of 1,000 this fill')).toBeInTheDocument();
     });
 
     it('shows no vended total when every dispense was refused', async () => {
