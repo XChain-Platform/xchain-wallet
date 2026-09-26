@@ -122,6 +122,49 @@ async function mountSweep() {
     return q;
 }
 
+async function mountGatedSweep() {
+    const missingHash = 'b'.repeat(64);
+    const target = {
+        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
+        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
+        signerReady: () => Promise.resolve({ ready: true }),
+        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
+        getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
+        sweepPreview: () => Promise.resolve({
+            rows: [],
+            gatedTicks: { rows: ['GATED'] },
+        }),
+        listGatedContent: () => Promise.resolve([
+            { keyHash: 'a'.repeat(64), files: [{ actionIndex: 101 }] },
+            { keyHash: missingHash, files: [{ actionIndex: 102 }] },
+        ]),
+        listGatedKeys: () => Promise.resolve([{ keyHash: 'a'.repeat(64) }]),
+        copyGatedKeysToWallet: () => Promise.resolve({ copied: 1, skipped: 0 }),
+    };
+    const messaging = new Proxy(target, {
+        get(t, prop) {
+            if (prop in t) return t[prop];
+            return () => Promise.resolve({ rows: [] });
+        },
+        has: (t, prop) => prop in t,
+    });
+    const { container } = render(
+        React.createElement(
+            MessagingProvider,
+            { shell: 'web', messaging },
+            React.createElement(SweepForm, {
+                walletId: 'w',
+                onBack() {},
+                initialChainId: CHAIN,
+                initialFromAddress: SOURCE.address,
+                migrateTo: { walletId: 'new-wallet', name: 'New wallet', address: OTHER },
+            }),
+        ),
+    );
+    return { container, missingHash };
+}
+
 /** The <input> whose <label> text matches, without a role-tree scan. */
 function labelledInput(container, labelText) {
     const label = Array.from(container.querySelectorAll('label'))
@@ -211,5 +254,16 @@ describe('SweepForm form-level errors (D-58)', () => {
 
         fireEvent.change(q.destination(), { target: { value: OTHER } });
         await waitFor(() => expect(q.alerts()).not.toMatch(/would move nothing anywhere/));
+    });
+});
+
+describe('SweepForm gated key details', () => {
+    it('lists every missing unlock key hash', async () => {
+        const { container, missingHash } = await mountGatedSweep();
+
+        await waitFor(() => {
+            expect(container.textContent).toContain('GATED: 1/2 unlock keys in the vault - missing');
+            expect(container.textContent).toContain(missingHash);
+        });
     });
 });

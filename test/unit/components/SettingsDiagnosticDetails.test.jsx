@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContactsSection } from '../../../packages/core/src/shared/components/settings/ContactsSection.jsx';
+import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
 import { RegtestRow } from '../../../packages/core/src/shared/components/settings/DeveloperModeSection.jsx';
 
 function mount(component, messaging) {
@@ -21,6 +22,41 @@ const settings = { walletMode: 'full', language: 'en', display: {} };
 afterEach(() => cleanup());
 
 describe('settings diagnostic disclosures', () => {
+    it('lists every address mismatch reported by a backup dry run', async () => {
+        const messaging = {
+            dryRunRestoreRequest: vi.fn().mockResolvedValue({
+                overallMatch: false,
+                perChain: [{
+                    chainId: 'bitcoin-mainnet',
+                    addressType: 'p2wpkh',
+                    matchedCount: 1,
+                    divergentCount: 1,
+                    missingCount: 1,
+                    derived: [
+                        { index: 1, path: "m/84'/0'/0'/0/1", address: 'bc1qderivedmismatch' },
+                        { index: 2, path: "m/84'/0'/0'/0/2", address: 'bc1qderivednew' },
+                    ],
+                    comparisons: [
+                        { index: 1, expected: 'bc1qexpected', derived: 'bc1qderivedmismatch', match: false },
+                        { index: 2, expected: null, derived: 'bc1qderivednew', match: false },
+                    ],
+                }],
+            }),
+        };
+        mount(<BackupSection activeWallet={{ id: 'wallet-1', name: 'Wallet' }} />, messaging);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
+        fireEvent.change(screen.getByLabelText('Candidate mnemonic'), {
+            target: { value: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
+
+        expect(await screen.findByText(/Index 1.*m\/84'\/0'\/0'\/0\/1/)).toBeTruthy();
+        expect(screen.getByText(/expected bc1qexpected.*derived bc1qderivedmismatch/i)).toBeTruthy();
+        expect(screen.getByText(/Index 2.*m\/84'\/0'\/0'\/0\/2/)).toBeTruthy();
+        expect(screen.getByText(/no saved wallet address.*derived bc1qderivednew/i)).toBeTruthy();
+    });
+
     it('lists every contact that an import skips with its rejection message', async () => {
         const saveContact = vi.fn(async ({ record }) => {
             if (record.name === 'Broken contact') throw new Error('entries must contain an address');

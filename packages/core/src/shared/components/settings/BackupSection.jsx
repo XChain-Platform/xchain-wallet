@@ -20,7 +20,7 @@
 //     through the `wallet.dryRunRestore` host handler. User pastes a
 //     candidate mnemonic; the panel renders an overall match flag plus
 //     a per-chain comparison report (matched / divergent / missing
-//     counts).
+//     counts and the address behind every difference).
 //   - Publish labels (§19.5.2): prepares the encrypted FILE payload
 //     through `wallet.prepareLabels`, then composes, dry-runs and confirms
 //     it before `wallet.publishLabels` signs those exact bytes. The result
@@ -840,7 +840,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
 
 /**
  * Dry-run comparison report. Shows the overall match flag and a
- * per-chain breakdown (matched / divergent / missing counts).
+ * per-chain breakdown with every divergent or missing address.
  */
 function DryRunReport({ result, onDone }) {
     const overall = result?.overallMatch === true;
@@ -865,31 +865,54 @@ function DryRunReport({ result, onDone }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {perChain.map((c) => (
-                    <div
-                        key={`${c.chainId}-${c.addressType}`}
-                        style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            fontSize: 'var(--xc-text-sm)',
-                            color: 'var(--xc-text)',
-                        }}
-                    >
-                        <span>{c.chainId} <span style={{ color: 'var(--xc-text-muted)' }}>({c.addressType})</span></span>
-                        <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
-                            <span style={{ color: 'var(--xc-accent-primary)' }}>{c.matchedCount} ✓</span>
-                            {c.divergentCount > 0
-                                ? <span style={{ color: 'var(--xc-danger)' }}> · {c.divergentCount} ✗</span>
-                                : null}
-                            {c.missingCount > 0
-                                ? <span style={{ color: 'var(--xc-text-muted)' }}> · {c.missingCount} new</span>
-                                : null}
-                        </span>
-                    </div>
+                    <DryRunChainReport key={`${c.chainId}-${c.addressType}`} chain={c} />
                 ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
             </div>
+        </div>
+    );
+}
+
+function DryRunChainReport({ chain }) {
+    const derivedByIndex = new Map(
+        (Array.isArray(chain.derived) ? chain.derived : []).map((item) => [item.index, item]),
+    );
+    const differences = (Array.isArray(chain.comparisons) ? chain.comparisons : [])
+        .filter((comparison) => comparison.match !== true)
+        .map((comparison) => {
+            const derived = derivedByIndex.get(comparison.index);
+            const location = `Index ${comparison.index}${derived?.path ? `, ${derived.path}` : ''}`;
+            const address = comparison.derived || derived?.address || 'unknown';
+            const reason = comparison.expected === null
+                ? `no saved wallet address; derived ${address}`
+                : `saved address does not match: expected ${comparison.expected}; derived ${address}`;
+            return { key: `${comparison.index}-${comparison.expected || 'new'}`, text: `${location}: ${reason}` };
+        });
+    return (
+        <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
+                <span>{chain.chainId} <span style={{ color: 'var(--xc-text-muted)' }}>({chain.addressType})</span></span>
+                <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
+                    <span style={{ color: 'var(--xc-accent-primary)' }}>{chain.matchedCount} ✓</span>
+                    {chain.divergentCount > 0
+                        ? <span style={{ color: 'var(--xc-danger)' }}> · {chain.divergentCount} ✗</span>
+                        : null}
+                    {chain.missingCount > 0
+                        ? <span style={{ color: 'var(--xc-text-muted)' }}> · {chain.missingCount} new</span>
+                        : null}
+                </span>
+            </div>
+            {differences.length > 0 ? (
+                <ul style={{ marginBlock: 4, paddingInlineStart: 'var(--xc-space-5)' }}>
+                    {differences.map((difference) => (
+                        <li key={difference.key} style={{ fontFamily: 'var(--xc-font-mono)', overflowWrap: 'anywhere' }}>
+                            {difference.text}
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
         </div>
     );
 }

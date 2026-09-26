@@ -10,14 +10,14 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 
-function mount() {
+function mount({ initialType, getTokenInfo } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -32,11 +32,17 @@ function mount() {
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        getTokenInfo: getTokenInfo || vi.fn().mockResolvedValue(null),
     };
 
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <ListCreateForm walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
+            <ListCreateForm
+                walletId="wallet-1"
+                chainId={CHAIN}
+                initialType={initialType}
+                onBack={() => {}}
+            />
         </MessagingProvider>,
     );
 }
@@ -52,5 +58,18 @@ describe('ListCreateForm accessibility', () => {
 
         expect(textarea.id).toBeTruthy();
         expect(label.htmlFor).toBe(textarea.id);
+    });
+
+    it('names every token that the existence preview did not check', async () => {
+        mount({
+            initialType: '1',
+            getTokenInfo: vi.fn().mockResolvedValue({ canonicalTick: 'FOUND' }),
+        });
+
+        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+            target: { value: 'FOUND\n^123' },
+        });
+
+        expect(await screen.findByText('Not checked: ^123.')).toBeTruthy();
     });
 });

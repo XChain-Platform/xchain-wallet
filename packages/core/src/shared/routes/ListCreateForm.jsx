@@ -257,7 +257,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         () => memberTicks.filter((t) => tickStatus[t] === 'found'),
         [memberTicks, tickStatus],
     );
-    const uncheckedTicks = memberTicks.length - missingTicks.length - foundTicks.length;
+    const uncheckedTickItems = useMemo(
+        () => memberTicks.filter((tick) => tickStatus[tick] !== 'missing' && tickStatus[tick] !== 'found'),
+        [memberTicks, tickStatus],
+    );
+    const uncheckedTicks = uncheckedTickItems.length;
 
     const items = listType === '2' ? recipients.valid : memberTicks;
     const trimmedMemo = memo.trim();
@@ -805,6 +809,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 not be a member.
                             </p>
                         </div>
+                    ) : null}
+                    {!tickChecking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
+                        <p className={styles.hint}>Not checked: {uncheckedTickItems.join(', ')}.</p>
                     ) : null}
                 </>
             )}

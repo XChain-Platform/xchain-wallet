@@ -262,6 +262,27 @@ describe('OracleForm consumer disclosure', () => {
         expect(utils.getByText(/1 open dispenser price/i)).toBeTruthy();
     });
 
+    it('expands to show every dispenser included in the affected count', async () => {
+        const dispensers = Array.from({ length: 6 }, (_, index) => ({
+            action_index: index + 1,
+            give_tick: 'PEPECASH',
+            give_amount: String((index + 1) * 100),
+            address: `bc1qdispenser${index + 1}`,
+        }));
+        const { utils } = await mountForm({
+            feeds: liveFeed('0.05'),
+            consumers: { supported: true, dispensers },
+        });
+        await fill(utils, { tick: 'PEPECASH', value: '0.06' });
+        await preview(utils);
+
+        const summary = utils.getByText('Affected dispensers (6)');
+        expect(summary.closest('details').open).toBe(false);
+        fireEvent.click(summary);
+        expect(summary.closest('details').open).toBe(true);
+        expect(utils.getByText(/600 PEPECASH per dispense/)).toBeTruthy();
+    });
+
     // "Could not check" and "nobody is using it" must not render the same,
     // or an operator republishes on an all-clear the wallet never earned.
     it('says the check failed rather than showing an empty all-clear', async () => {
