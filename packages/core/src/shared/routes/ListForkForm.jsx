@@ -143,6 +143,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const [tx2Txid, setTx2Txid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Close re-entry before React renders the visible submitting state.
+    const firstLegInFlightRef = useRef(false);
     // The list's owner: undefined while resolving, null when it cannot be read.
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
 
@@ -474,11 +476,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         setStage('review-1');
     }
 
-    async function handleSignFirst(event) {
-        event.preventDefault();
-        if (submitting) return;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
-        if (!isWatcherMode && hw && hwStatus !== 'available') return;
+    async function signFirst() {
         // Verify again at signing: the list may have changed while this sat on review
         const changed = await membershipChangedMessage();
         if (changed) { setSubmitError(changed); return; }
@@ -492,8 +490,6 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             });
             return;
         }
-        setSubmitting(true);
-        setSubmitError(null);
         try {
             const from = sourceDescriptor();
             const base = { walletId, chainId, from, params: firstParams, payFeeInNativeCoin: nativeFee.flag, ...(feePerKb != null ? { feePerKb } : {}) };
@@ -535,7 +531,21 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'List fork broadcast failed.',
             }));
             if (!hw && !isWatcherMode) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        }
+    }
+
+    async function handleSignFirst(event) {
+        event.preventDefault();
+        if (submitting || firstLegInFlightRef.current) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
+        if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        firstLegInFlightRef.current = true;
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            await signFirst();
         } finally {
+            firstLegInFlightRef.current = false;
             setSubmitting(false);
         }
     }
