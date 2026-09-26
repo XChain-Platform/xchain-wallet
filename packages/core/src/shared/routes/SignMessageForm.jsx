@@ -151,7 +151,11 @@ export function SignMessageForm({ walletId, onBack }) {
             return;
         }
         const own = addrs.filter((a) => a.role !== 'dispenser');
-        setAddressId(preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id);
+        setAddressId((current) => (
+            addrs.some((address) => address.id === current)
+                ? current
+                : preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id
+        ));
     }, [chainId, addressesByChain, activeByChain]);
 
     const chainOptions = useMemo(() => {

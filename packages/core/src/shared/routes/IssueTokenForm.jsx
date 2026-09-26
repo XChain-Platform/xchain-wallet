@@ -215,8 +215,13 @@ export function IssueTokenForm({ walletId, onBack }) {
     // delegated address is never the default; it vends rather than funds.
     useEffect(() => {
         if (!chainId || !addressesByChain || !activeByChain) return;
-        const funding = (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser');
-        setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
+        const addresses = addressesByChain[chainId] || [];
+        const funding = addresses.filter((a) => a.role !== 'dispenser');
+        setFromAddressId((current) => (
+            addresses.some((address) => address.id === current)
+                ? current
+                : preferredSourceId(funding, activeByChain[chainId])
+        ));
     }, [chainId, addressesByChain, activeByChain]);
 
     useEffect(() => {
