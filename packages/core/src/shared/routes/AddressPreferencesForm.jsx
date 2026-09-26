@@ -106,6 +106,12 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     const [currentError, setCurrentError] = useState(/** @type {string | null} */ (null));
     const [reviewBaseline, setReviewBaseline] = useState(/** @type {any} */ (null));
     const prefilled = useRef(false);
+    // A pick made before the mount-time read returns is the user's answer, so
+    // it ends the prefill: a slow explorer read must not overwrite it.
+    const pick = (setter) => (value) => {
+        prefilled.current = true;
+        setter(value);
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -368,7 +374,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     type="radio"
                     name="feePref"
                     checked={feePref === '2'}
-                    onChange={() => setFeePref('2')}
+                    onChange={() => pick(setFeePref)('2')}
                 />
                 <span>Donate to protocol development (default)</span>
             </label>
@@ -377,7 +383,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     type="radio"
                     name="feePref"
                     checked={feePref === '1'}
-                    onChange={() => setFeePref('1')}
+                    onChange={() => pick(setFeePref)('1')}
                 />
                 <span>{feePreferenceLabel(1)}</span>
             </label>
@@ -387,7 +393,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 <input
                     type="checkbox"
                     checked={requireMemo}
-                    onChange={(e) => setRequireMemo(e.target.checked)}
+                    onChange={(e) => pick(setRequireMemo)(e.target.checked)}
                 />
                 <span>Require a memo on any send to this address</span>
             </label>
@@ -398,7 +404,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     type="radio"
                     name="dispPref"
                     checked={dispPref === '1'}
-                    onChange={() => setDispPref('1')}
+                    onChange={() => pick(setDispPref)('1')}
                 />
                 <span>Only this address may open dispensers (default)</span>
             </label>
@@ -407,7 +413,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     type="radio"
                     name="dispPref"
                     checked={dispPref === '2'}
-                    onChange={() => setDispPref('2')}
+                    onChange={() => pick(setDispPref)('2')}
                 />
                 <span>Anyone may open a dispenser funded by this address</span>
             </label>
