@@ -26,6 +26,7 @@ import { SignCredentials } from './SignCredentials.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
+import { readActiveWallet } from '../utils/activeWalletMemory.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -38,7 +39,7 @@ function nativeTickerFor(chainId) {
     return NATIVE_TICKER_BY_COIN[coin] || String(coin).toUpperCase();
 }
 
-function useSourceIdentity(address, chainId) {
+function useSourceIdentity(address, chainId, walletId) {
     const messaging = useContext(MessagingContext)?.messaging;
     const [identity, setIdentity] = useState({ label: '', walletName: '' });
 
@@ -66,7 +67,12 @@ function useSourceIdentity(address, chainId) {
                 }
             }));
             if (cancelled) return;
-            const match = matches.find((item) => item?.record?.label) || matches.find(Boolean);
+            const signingMatch = walletId
+                ? matches.find((item) => item?.wallet?.id === walletId)
+                : null;
+            const match = signingMatch
+                || matches.find((item) => item?.record?.label)
+                || matches.find(Boolean);
             setIdentity({
                 label: match?.record?.label || '',
                 walletName: wallets.length > 1 ? (match?.wallet?.name || '') : '',
@@ -74,7 +80,7 @@ function useSourceIdentity(address, chainId) {
         }).catch(() => {});
 
         return () => { cancelled = true; };
-    }, [address, chainId, messaging]);
+    }, [address, chainId, messaging, walletId]);
 
     return identity;
 }
@@ -82,6 +88,7 @@ function useSourceIdentity(address, chainId) {
 /**
  * @param {object} props
  * @param {ReturnType<typeof import('../hooks/useActionConfirmFlow.js').useActionConfirmFlow>['confirmAction']} props.confirmAction
+ * @param {string} [props.walletId]              wallet whose source record signs the action
  * @param {'small'|'full'} [props.screenVariant]
  * @param {string} props.chainLabel
  * @param {string} [props.feeText]               the form's rate ESTIMATE, used only as a
@@ -118,6 +125,7 @@ function useSourceIdentity(address, chainId) {
  */
 export function ActionConfirmScreen({
     confirmAction,
+    walletId = readActiveWallet(),
     screenVariant = 'small',
     chainLabel,
     feeText,
@@ -178,7 +186,7 @@ export function ActionConfirmScreen({
     // form cannot forget to opt in. hwSource is the fallback for the same
     // value in record form, so a device signer is not the one case left blank.
     const sourceAddress = confirmAction.source || hwSource?.address || null;
-    const sourceIdentity = useSourceIdentity(sourceAddress, composed?.chainId || chainId);
+    const sourceIdentity = useSourceIdentity(sourceAddress, composed?.chainId || chainId, walletId);
     const sourceName = [sourceIdentity.label, sourceIdentity.walletName].filter(Boolean).join(' · ');
 
     return (

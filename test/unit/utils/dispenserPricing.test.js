@@ -61,10 +61,18 @@ describe('dispenserRateLabel', () => {
             .toMatch(/priced in fiat: open the dispenser/);
     });
 
-    it('uses the served stale-price state only when it is explicitly true', () => {
+    it('accepts boolean, numeric, and string stale-price states from the explorer', () => {
         expect(dispenserRateLabel({ ...MODE_B, price_stale: true }, [FEED]))
             .toBe(DISPENSER_PRICE_STALE_MESSAGE);
+        expect(dispenserRateLabel({ ...MODE_B, price_stale: 1 }, [FEED]))
+            .toBe(DISPENSER_PRICE_STALE_MESSAGE);
+        expect(dispenserRateLabel({ ...MODE_B, price_stale: '1' }, [FEED]))
+            .toBe(DISPENSER_PRICE_STALE_MESSAGE);
         expect(dispenserRateLabel({ ...MODE_B, price_stale: false }, [FEED]))
+            .toBe('1 MGRTEST per 0.05 USD (oracle ndDEAA…ss01)');
+        expect(dispenserRateLabel({ ...MODE_B, price_stale: 0 }, [FEED]))
+            .toBe('1 MGRTEST per 0.05 USD (oracle ndDEAA…ss01)');
+        expect(dispenserRateLabel({ ...MODE_B, price_stale: '0' }, [FEED]))
             .toBe('1 MGRTEST per 0.05 USD (oracle ndDEAA…ss01)');
         expect(dispenserRateLabel(MODE_B, [FEED]))
             .toBe('1 MGRTEST per 0.05 USD (oracle ndDEAA…ss01)');

@@ -18,7 +18,8 @@ import { multiplyAmounts } from '../../market/orderMath.js';
 export const DISPENSER_PRICE_STALE_MESSAGE = 'Not selling right now: no price in the last 24 hours';
 
 export function isDispenserPriceStale(row) {
-    return row?.price_stale === true;
+    const value = row?.price_stale;
+    return value === true || value === 1 || value === '1';
 }
 
 // Thousands separators on the integer part of a decimal string, exact

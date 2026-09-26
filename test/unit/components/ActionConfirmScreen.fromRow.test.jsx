@@ -80,6 +80,42 @@ describe('ActionConfirmScreen From row (#40)', () => {
         });
     });
 
+    it('uses the signing wallet label when two wallets contain the address', async () => {
+        const messaging = {
+            getAddressesByChain: async (walletId) => ({
+                'bitcoin-mainnet': [{
+                    address: SOFTWARE_ADDRESS,
+                    label: walletId === 'wallet-cold' ? 'Cold account' : 'Main account',
+                }],
+            }),
+            listWallets: async () => [
+                { id: 'wallet-main', name: 'Main wallet' },
+                { id: 'wallet-cold', name: 'Cold wallet' },
+            ],
+        };
+
+        render(
+            <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
+                <ActionConfirmScreen
+                    confirmAction={confirmAction({
+                        source: SOFTWARE_ADDRESS,
+                        composed: { chainId: 'bitcoin-mainnet' },
+                    })}
+                    walletId="wallet-cold"
+                    chainLabel="Bitcoin"
+                    signerReady={false}
+                    password="hunter2"
+                    onPasswordChange={() => {}}
+                />
+            </MessagingContext.Provider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('confirm-source').textContent)
+                .toContain('Cold account · Cold wallet');
+        });
+    });
+
     it('names the spender for a software signer, from confirmAction.source', () => {
         render(
             <ActionConfirmScreen
