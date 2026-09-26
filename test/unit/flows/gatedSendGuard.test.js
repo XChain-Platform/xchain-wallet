@@ -25,6 +25,7 @@ import {
     prepareGatedSend,
     gatedSendReadiness,
     resolveGatedSendKeys,
+    getGatedGroupsForSend,
     clearGatedGroupsCache,
     gatedGroupThreshold,
     GatedSendKeysMissingError,
@@ -170,6 +171,25 @@ describe('prepareGatedSend detection', () => {
     it('degrades to plain SEND when the explorer is down (listGatedFiles swallows)', async () => {
         const sdk = makeSdk({ getFiles: vi.fn(async () => { throw new Error('explorer down'); }) });
         expect(await prepareGatedSend(makeArgs({ sdk }))).toBeNull();
+    });
+
+    it('ignores explicitly invalid gated FILE rows', async () => {
+        const sdk = makeSdk({
+            getFiles: vi.fn(async () => [{ ...gatedRow(HASH_A, '100'), status: 'invalid' }]),
+        });
+        expect(await prepareGatedSend(makeArgs({ sdk }))).toBeNull();
+    });
+
+    it('does not cache an empty group result that can hide a new gated FILE', async () => {
+        const sdk = makeSdk({
+            getFiles: vi.fn()
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([{ ...gatedRow(HASH_A, '100'), status: 'valid' }]),
+        });
+        expect(await getGatedGroupsForSend({ sdk, chainId: 'btc-regtest', tick: 'GATED' })).toEqual([]);
+        const groups = await getGatedGroupsForSend({ sdk, chainId: 'btc-regtest', tick: 'GATED' });
+        expect(groups).toHaveLength(1);
+        expect(sdk.getFiles).toHaveBeenCalledTimes(2);
     });
 });
 
