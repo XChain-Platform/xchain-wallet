@@ -398,7 +398,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     // Two real broadcasts plus two indexing waits. Well under the old
     // ISSUE+2 MINT+SEND walk, and still generous: the long pole on this shared
     // venue is the indexer, not the app.
-    test.setTimeout(600_000);
+    test.setTimeout(1_800_000);
     // Without this, actions inherit the TEST budget, so one unmatched locator
     // costs ten minutes instead of thirty seconds.
     test.use({ actionTimeout: 30_000 });

@@ -58,7 +58,7 @@ test.skip(REGTEST_COIN !== 'RBTC', 'the Taproot envelope is offered on Bitcoin o
 
 test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
-    test.setTimeout(900_000);
+    test.setTimeout(1_800_000);
 
     test('a 50 KB public file rides a Taproot commit and reveal through one Approve', async ({ page }) => {
         let source;

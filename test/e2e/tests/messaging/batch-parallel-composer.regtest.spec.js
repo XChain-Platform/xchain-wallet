@@ -59,14 +59,6 @@ const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
 const STAMP = Date.now().toString().slice(-6);
 
-// How long to wait for the indexer to record a mined action. The fixture's
-// 300s default is not enough on this shared rail: the indexer defers each
-// new block behind the hub's oracle admission watermark, which was measured
-// trailing the tip by three to five blocks for several minutes at a time
-// (2026-09-26, RLTC: a Batch mined fine and took about 620s to index, past
-// the 300s default). Both tests set a 30-minute budget, which still covers this.
-const INDEX_BUDGET_MS = 1_200_000;
-
 /** Opens the command palette and runs the first matching entry. */
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -292,7 +284,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Waits until the transaction is indexed; every action it produced
             // is then read off the transaction endpoint below.
-            await waitForValidAction(txid, INDEX_BUDGET_MS);
+            await waitForValidAction(txid);
 
             // The indexer records a BATCH as its own action plus one action
             // per sub-command, all sharing the one tx_hash, so the newest row
@@ -370,12 +362,12 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByText('Parallel run complete'), 'the composer never reached its done stage')
                 .toBeVisible({ timeout: 60_000 });
 
-            const actionOne = await waitForValidAction(txidOne, INDEX_BUDGET_MS);
+            const actionOne = await waitForValidAction(txidOne);
             expect(actionOne.action, 'row 1 did not record a BROADCAST action').toBe('BROADCAST');
             expect(actionOne.source, 'row 1 was not signed by the funded address').toBe(owner);
             expect(actionOne.message, 'row 1\'s on-chain MESSAGE does not match what was typed').toBe(msgOne);
 
-            const actionTwo = await waitForValidAction(txidTwo, INDEX_BUDGET_MS);
+            const actionTwo = await waitForValidAction(txidTwo);
             expect(actionTwo.action, 'row 2 did not record a BROADCAST action').toBe('BROADCAST');
             expect(actionTwo.source, 'row 2 was not signed by the funded address').toBe(owner);
             expect(actionTwo.message, 'row 2\'s on-chain MESSAGE does not match what was typed').toBe(msgTwo);

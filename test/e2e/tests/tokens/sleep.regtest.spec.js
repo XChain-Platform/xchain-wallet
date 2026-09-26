@@ -120,7 +120,7 @@ async function latestSleepRow(tick) {
 
 test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
-    test.setTimeout(900_000);
+    test.setTimeout(1_800_000);
 
     test('pausing a token, resuming it and locking the address all land on chain', async ({ page }) => {
         let source;
