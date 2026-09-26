@@ -40,6 +40,13 @@ export function preflightFindingKey(f) {
 }
 
 const CONSENSUS_INVALID = /^\s*invalid:\s*(.+?)\s*\.?\s*$/i;
+const CONSENSUS_REFUSAL_COPY = [
+    [
+        /^trailing data after batch signatures$/i,
+        'The network refused this price batch because it contains extra data after its signatures.',
+    ],
+];
+const UNINFORMATIVE_REFUSAL = /^(?:internal encoder error|(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal|.* wording))$/i;
 
 /**
  * Return the reason supplied by a completed consensus validation, or null
@@ -72,11 +79,21 @@ export function consensusRefusalReason(f) {
 export function consensusRefusalMessage(f) {
     const reason = consensusRefusalReason(f);
     if (!reason) return null;
-    const plainReason = reason.charAt(0).toUpperCase() + reason.slice(1);
+    const mapped = CONSENSUS_REFUSAL_COPY.find(([pattern]) => pattern.test(reason));
+    if (mapped) return mapped[1];
     const subject = Number.isInteger(f?.data?.commandIndex)
         ? `batch command ${f.data.commandIndex + 1}`
         : 'this action';
+    if (UNINFORMATIVE_REFUSAL.test(reason)) {
+        return `The network refused ${subject} for a reason the wallet could not explain.`;
+    }
+    const plainReason = reason.charAt(0).toUpperCase() + reason.slice(1);
     return `The network refused ${subject}: ${plainReason}.`;
+}
+
+/** Return raw consensus wording for an explicit technical-details disclosure. */
+export function consensusRefusalDetail(f) {
+    return consensusRefusalReason(f) || '';
 }
 
 /**

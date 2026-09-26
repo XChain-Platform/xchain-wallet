@@ -33,6 +33,7 @@ import { coinToFiat } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { humanizeError } from '../utils/humanizeError.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -178,7 +179,12 @@ export function ComposeMessage({
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
-    const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [submitError, setSubmitErrorMessage] = useState(/** @type {string | null} */ (null));
+    const [submitErrorDetails, setSubmitErrorDetails] = useState('');
+    const setSubmitError = useCallback((message, details = '') => {
+        setSubmitErrorMessage(message);
+        setSubmitErrorDetails(message ? details : '');
+    }, []);
     const [hwStatus, setHwStatus] = useState('idle');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -489,9 +495,10 @@ export function ComposeMessage({
             // half swallows a specific host reason, such as an
             // insufficient-funds shortfall naming the amount required, behind
             // a bare "Send failed."
+            const failure = humanizeError(err);
             setSubmitError(submitFailureMessage(err, {
                 chainId, coinTicker: nativeTicker, fallback: err?.message || 'Send failed.',
-            }));
+            }), failure.details);
         }
     }
 
@@ -592,9 +599,10 @@ export function ComposeMessage({
                 // above. The helper's own header names this exact trap: a form
                 // swept on one submit path and not the other still ships wire
                 // wording on the other.
+                const failure = humanizeError(err);
                 setSubmitError(submitFailureMessage(err, {
                     chainId, coinTicker: nativeTicker, fallback: err?.message || 'Send failed.',
-                }));
+                }), failure.details);
             }
             setStage('review');
             if (!hw) {
@@ -993,7 +1001,9 @@ export function ComposeMessage({
                 Send message looked like a button that does nothing. Cleared by
                 the next edit of the address, message or delivery network. */}
             {submitError ? (
-                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                <StatusMessage variant="error" className={styles.error} details={submitErrorDetails}>
+                    {submitError}
+                </StatusMessage>
             ) : null}
 
             <div className={styles.actions} style={{ marginTop: '0.75rem' }}>

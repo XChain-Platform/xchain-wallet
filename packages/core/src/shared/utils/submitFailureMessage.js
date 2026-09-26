@@ -50,6 +50,7 @@ import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import { humanizeError } from './humanizeError.js';
 
 /**
  * A native-coin fee refusal, recognised however it reached us.
@@ -174,6 +175,14 @@ export function submitFailureMessage(
         const explorerCopy = explorerErrorMessage(err);
         if (explorerCopy) return explorerCopy;
     }
-    const raw = (err && typeof err === 'object') ? String(/** @type {any} */ (err).message || '') : '';
-    return fallback || raw || 'The request stopped because the wallet service returned no explanation.';
+    const raw = (err && typeof err === 'object')
+        ? String(/** @type {any} */ (err).message || '')
+        : (typeof err === 'string' ? err : '');
+    const fallbackText = String(fallback || '');
+    if (fallbackText && fallbackText !== raw) return fallbackText;
+    const humanized = humanizeError(err);
+    if ((fallbackText && fallbackText === raw)
+        || humanized.cause !== 'unknown'
+        || humanized.details) return humanized.message;
+    return raw || 'The request stopped because the wallet service returned no explanation.';
 }
