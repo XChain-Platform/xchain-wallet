@@ -1021,10 +1021,15 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
           + 'unlock-key handoff. Send this token to one recipient at a time.'
         : null;
 
-    // A native payment to an open coin-paid dispenser is a purchase, and one it
-    // refuses keeps the coin. Shown on the review screen, above the credentials.
+    // A matching coin or token payment to an open dispenser is a purchase, and
+    // a refused payment keeps the sent asset. Show that above the credentials.
     const dispensersAtDestination = useDispenserDestination({
-        messaging, chainId, to: toAddress, enabled: isNativeSend && !isMultiSend,
+        messaging,
+        chainId,
+        to: toAddress,
+        paymentTick: tick,
+        isNativePayment: isNativeSend,
+        enabled: !isMultiSend,
     });
     const dispenserNotice = useMemo(() => dispenserDestinationNotice({
         dispensers: dispensersAtDestination, payer: fromAddress?.address, amount: String(amount).trim(),
@@ -2763,4 +2768,3 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
         </div>
     );
 }
-

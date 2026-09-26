@@ -51,6 +51,13 @@ describe('dispenserDestinationNotice', () => {
         expect(n.summary).toMatch(/you would receive 10 DOGI, all it has left; the rest of this payment is not refunded/);
     });
 
+    it('names the payment token when the amount buys no whole fill', () => {
+        const n = dispenserDestinationNotice({
+            dispensers: [entry({ get_tick: 'XCHAIN', get_amount: '5' })], payer: PAYER, amount: '4',
+        });
+        expect(n.summary).toMatch(/below its price of 5 XCHAIN a fill and would buy nothing/);
+    });
+
     it('says a payment below the price buys nothing', () => {
         const n = dispenserDestinationNotice({ dispensers: [entry()], payer: PAYER, amount: '0.005' });
         expect(n.summary).toMatch(/below its price of 0\.01 BTC a fill and would buy nothing/);

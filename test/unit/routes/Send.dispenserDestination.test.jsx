@@ -33,9 +33,17 @@ const COIN_DISPENSER_ROW = {
     get_coin: 'BTC', get_amount: '0.01',
     status: 'valid', current_status: 'open', escrow_remaining: '500',
 };
+const TOKEN_DISPENSER_ROW = {
+    ...COIN_DISPENSER_ROW,
+    action_index: '9002',
+    give_amount: '5',
+    get_tick: 'XCHAIN',
+    get_amount: '4',
+    escrow_remaining: '10',
+};
 const ORACLE_ADDRESS = 'bc1qoracleoracleoracleoracleoracleoracle01';
 
-function mount(extraMessaging = {}) {
+function mount(extraMessaging = {}, sendProps = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{
@@ -73,7 +81,7 @@ function mount(extraMessaging = {}) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Send, { walletId: 'w', onBack() {} }),
+            React.createElement(Send, { walletId: 'w', onBack() {}, ...sendProps }),
         ),
     );
     return messaging;
@@ -113,6 +121,38 @@ describe('Send review: destination matches an open dispenser', () => {
         const messaging = mount();
         await fillAndReview({ to: DISPENSER_ADDR, amount: '0.02' });
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        await lookupSettled(messaging);
+
+        expect(screen.queryByText(/This pays dispenser/)).toBeNull();
+    });
+
+    it('shows a capped purchase for a matching token-priced dispenser', async () => {
+        mount({
+            getDispensersForAddress: vi.fn().mockResolvedValue({
+                data: [COIN_DISPENSER_ROW, TOKEN_DISPENSER_ROW],
+            }),
+            getDispenserByActionIndex: vi.fn().mockResolvedValue({
+                ...TOKEN_DISPENSER_ROW, state: { status: 'open', allow_list: '77' },
+            }),
+            getListByActionIndex: vi.fn().mockResolvedValue({
+                list: [{ address: DISPENSER_ADDR }],
+            }),
+        }, { prefill: { chainId: CHAIN_ID, tick: 'XCHAIN' } });
+        await fillAndReview({ to: DISPENSER_ADDR, amount: '12' });
+
+        expect(await screen.findByText(/This pays dispenser #9002/, {}, { timeout: 3000 }))
+            .toBeInTheDocument();
+        expect(screen.getByText(/you would receive 10 DOGI, all it has left/)).toBeInTheDocument();
+        expect(screen.getByText(/rest of this payment is not refunded/)).toBeInTheDocument();
+        expect(screen.getByText(/address you are sending from is not allowed to buy/)).toBeInTheDocument();
+        expect(screen.queryByText(/#9001/)).toBeNull();
+    });
+
+    it('shows no purchase hint when the sent token does not match the dispenser price token', async () => {
+        const messaging = mount({
+            getDispensersForAddress: vi.fn().mockResolvedValue({ data: [TOKEN_DISPENSER_ROW] }),
+        }, { prefill: { chainId: CHAIN_ID, tick: 'OTHER' } });
+        await fillAndReview({ to: DISPENSER_ADDR, amount: '12' });
         await lookupSettled(messaging);
 
         expect(screen.queryByText(/This pays dispenser/)).toBeNull();

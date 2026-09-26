@@ -8,10 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// useDispenserDestination: a coin-paid dispenser sells on a bare payment to
-// its address, so a Send there is a purchase that no XChain action names. A
-// payment the dispenser refuses (its oracle has no live price, or its lists
-// bar the payer) keeps the coin and dispenses nothing, so Send says so first.
+// useDispenserDestination: a dispenser sells on a coin or token payment to
+// its address, so a Send there is a purchase that no separate action names.
+// A refused payment keeps the sent asset and dispenses nothing.
+// Send exposes the fill estimate and refusal checks before signing.
 
 import { useEffect, useRef, useState } from 'react';
 import { dispenserLiveState } from '../../flows/dispenserQueries.js';
@@ -25,14 +25,17 @@ import { multiplyAmounts } from '../../market/orderMath.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 
 /**
- * The open coin-paid dispensers a native payment to `to` would trigger, each
- * with what its refusal checks need. Empty while unknown or when none match;
- * a failed lookup is silent so it never blocks or clutters an ordinary send.
+ * The open dispensers a payment to `to` would trigger, each with what its
+ * refusal checks need. Empty while unknown or when none match; a failed lookup
+ * is silent so it never blocks or clutters an ordinary send.
  *
- * @param {{ messaging: any, chainId: string | null | undefined, to: string, enabled: boolean }} params
+ * @param {{ messaging: any, chainId: string | null | undefined, to: string, paymentTick: string,
+ *   isNativePayment: boolean, enabled: boolean }} params
  * @returns {DispenserAtDestination[]}
  */
-export function useDispenserDestination({ messaging, chainId, to, enabled }) {
+export function useDispenserDestination({
+    messaging, chainId, to, paymentTick, isNativePayment, enabled,
+}) {
     const [found, setFound] = useState(/** @type {DispenserAtDestination[]} */ ([]));
     const seqRef = useRef(0);
     useEffect(() => {
@@ -42,16 +45,17 @@ export function useDispenserDestination({ messaging, chainId, to, enabled }) {
         seqRef.current = seq;
         setFound([]);
         const dest = typeof to === 'string' ? to.trim() : '';
-        if (!enabled || !chainId || !dest) return undefined;
+        const sentTick = String(paymentTick || '').trim().toUpperCase();
+        if (!enabled || !chainId || !dest || !sentTick) return undefined;
         if (typeof messaging?.getDispensersForAddress !== 'function') return undefined;
         // Debounced: the destination changes per keystroke when typed by hand.
         const timer = setTimeout(() => {
-            loadDispensersAt(messaging, chainId, dest)
+            loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment)
                 .then((rows) => { if (seqRef.current === seq) setFound(rows); })
                 .catch(() => { /* best-effort, see above */ });
         }, 400);
         return () => { clearTimeout(timer); };
-    }, [messaging, chainId, to, enabled]);
+    }, [messaging, chainId, to, paymentTick, isNativePayment, enabled]);
     return found;
 }
 
@@ -63,15 +67,18 @@ export function useDispenserDestination({ messaging, chainId, to, enabled }) {
  * @property {'live' | 'dark' | null} oracle  null when not oracle-priced or unreadable
  */
 
-async function loadDispensersAt(messaging, chainId, dest) {
+async function loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment) {
     const resp = await messaging.getDispensersForAddress({ chainId, address: dest });
     const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
     // Pay-to is GET_ADDRESS when set, otherwise SOURCE (the rule the detail
-    // page uses). A token-priced dispenser (GET_TICK set) sells only for that
-    // token, never for a native-coin payment.
-    const open = rows.filter((r) => r && !r.get_tick
-        && String(r.address || r.source || '').trim() === dest
-        && dispenserLiveState(r).status === 'open');
+    // page uses). GET_TICK selects one payment token; an empty GET_TICK selects
+    // the chain's native coin.
+    const open = rows.filter((r) => {
+        const priceTick = String(r?.get_tick || '').trim().toUpperCase();
+        const assetMatches = isNativePayment ? !priceTick : priceTick === sentTick;
+        return r && assetMatches && String(r.address || r.source || '').trim() === dest
+            && dispenserLiveState(r).status === 'open';
+    });
     open.sort((a, b) => Number(a.action_index || 0) - Number(b.action_index || 0));
     return Promise.all(open.map((r) => assessDispenser(messaging, chainId, r)));
 }
@@ -138,7 +145,7 @@ function safeText(v) {
     return neutralizeControlText(String(v ?? ''), { maxLength: 32 });
 }
 
-// What `amount` of coin buys from one fixed-price dispenser: whole fills at
+// What `amount` of the payment asset buys from one fixed-price dispenser: whole fills at
 // GET_AMOUNT each, capped at what its escrow still holds. The indexer keeps
 // any overpayment, so a capped purchase says the rest is not refunded.
 function receiveText(d, amount) {
@@ -151,7 +158,8 @@ function receiveText(d, amount) {
     const byPayment = floorDivide(amount, row.get_amount);
     if (byPayment == null) return 'enter an amount to see what it would buy';
     if (byPayment <= 0n) {
-        return `this amount is below its price of ${safeText(row.get_amount)} ${safeText(row.get_coin)} a fill `
+        const priceTick = safeText(row.get_tick || row.get_coin);
+        return `this amount is below its price of ${safeText(row.get_amount)} ${priceTick} a fill `
             + 'and would buy nothing';
     }
     if (row.give_ownership) return `you would receive ownership of ${tick}`;
