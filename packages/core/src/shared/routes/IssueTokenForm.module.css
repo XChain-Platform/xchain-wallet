@@ -232,7 +232,7 @@
 .validationText {
     color: inherit;
     font: inherit;
-    text-align: left;
+    text-align: start;
 }
 
 .validationLink {
