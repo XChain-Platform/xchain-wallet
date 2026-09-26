@@ -10,25 +10,28 @@
 
 // PC-32: ADDRESS v0 "On-chain preferences" editor for ONE address.
 //
-// Deliberately NOT on the one-tap confirm modal: the item's safety
-// rails are (a) every write carries ALL THREE preferences (a blank
+// The form keeps its specialized fresh-baseline review before opening the
+// shared confirm page. Its safety rails are (a) every write carries ALL THREE
+// preferences (a blank
 // FEE_PREFERENCE / REQUIRE_MEMO on the wire silently reverts to default at
 // the indexer), and (b) current values are RE-FETCHED when the user enters
 // review, so a stale read cannot silently revert the two fields the user
-// did not touch. Both rails need a review surface that shows all three
-// values being written with the changed ones marked, which the generic
-// decoded-action modal cannot carry (same reasoning as OracleForm/PC-30).
+// did not touch. The local review shows all three values and marks changes;
+// the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useActionForm } from '../hooks/useActionForm.js';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import {
     estimateNativeSendFee,
@@ -68,9 +71,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         signerReady,
         isWatcherMode,
         isHwSource,
-        hwStatus,
-        onHwStatusChange,
-        submit,
     } = useActionForm({
         walletId,
         action: 'ADDRESS',
@@ -91,8 +91,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
-    const [password, setPassword] = useState('');
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // The three preferences as the WIRE values they will be written as.
     const [feePref, setFeePref] = useState(/** @type {'1' | '2'} */ ('2'));
@@ -166,6 +164,14 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,
     });
+    const ownerLane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId,
+        owner: fromAddress,
+        software: 'addressPreferencesAction',
+        hardware: 'addressPreferencesActionHw',
+    });
 
     // Review entry re-fetches the on-chain baseline so the "unchanged" rows
     // shown are the truth at sign time, not the load-time snapshot.
@@ -185,28 +191,25 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
-        if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
-        if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        if (stage === 'submitting' || ownerLane.composing) return;
         setStage('submitting');
         setSubmitError(null);
         try {
-            const res = await submit({
-                params: actionParams,
-                password,
-                extraBase: {
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                },
+            const res = await ownerLane.run({
+                actionData: { action: 'ADDRESS', params: actionParams },
                 encoderOpts: {
                     payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 },
+                submitExtra: { params: actionParams },
             });
             setResult(res);
-            setPassword('');
             setStage('done');
         } catch (err) {
+            if (isUserRejection(err)) {
+                setStage('review');
+                return;
+            }
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(
                 isBadPassword
@@ -219,10 +222,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     }),
             );
             setStage('review');
-            if (!isWatcherMode && !isHwSource) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
         }
     }
 
@@ -247,8 +246,22 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!addressesByChain || !chainId || !fromAddress) return wrap(<p className={styles.hint}>Loading…</p>);
 
+    if (ownerLane.open) {
+        return (
+            <ActionConfirmScreen
+                {...ownerLane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                signerReady={signerReady}
+                hwSignerInfo={hwSignerInfo}
+                hintClassName={styles.hint}
+            />
+        );
+    }
+
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} what="address preferences" />);
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
@@ -313,37 +326,17 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         Sign it on your Signer-mode wallet, then bring the signed
                         transaction to a Full-mode wallet to broadcast.
                     </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-                {(isWatcherMode || isHwSource) && submitError ? (
+                ) : null}
+                {submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     <Button
                         type="submit"
                         variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode
-                            ? false
-                            : (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                        loading={stage === 'submitting' || ownerLane.composing}
                     >
-                        {isWatcherMode ? 'Build unsigned transaction' : 'Sign & broadcast'}
+                        {isWatcherMode ? 'Build unsigned transaction' : 'Continue to confirmation'}
                     </Button>
                 </div>
             </form>,
@@ -484,4 +477,3 @@ function DetailRow({ label, value, emphasize = false }) {
         </>
     );
 }
-
