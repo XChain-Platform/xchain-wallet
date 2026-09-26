@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { siblingCheckout, skipOrFail } from '../helpers/siblingCheckout.js';
 
 const made = [];
+const FILESYSTEM_FIXTURE_TIMEOUT = 60_000;
 
 /** A scratch parent holding `own` (a main or linked checkout) and the docs entry beside it. */
 function layout({ ownLinked, docs }) {
@@ -46,7 +47,7 @@ afterEach(() => {
     vi.unstubAllEnvs();
 });
 
-describe('siblingCheckout verdicts', () => {
+describe('siblingCheckout verdicts', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
     it('refuses an absent sibling', () => {
         const { own, literal } = layout({ ownLinked: false, docs: 'absent' });
         const v = siblingCheckout(own, literal, { ownRoot: own });
@@ -72,7 +73,7 @@ describe('siblingCheckout verdicts', () => {
     });
 });
 
-describe('skipOrFail', () => {
+describe('skipOrFail', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
     const refused = { usable: false, path: '/x', reason: 'sibling path absent: /x' };
 
     it('throws naming the guard and the reason when siblings are required', () => {

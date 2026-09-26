@@ -30,11 +30,10 @@
 // why the plugin scans the emitted `store` bundle and fails the build shut on
 // any surviving marker (`generateBundle` in packages/web/regtestSidecar.js).
 
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 
 import {
@@ -48,11 +47,15 @@ import {
 import { BUILD_PROFILES } from '../../../packages/web/buildProfile.js';
 
 const require = createRequire(import.meta.url);
-const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, '..', '..', '..');
 
 /** The SDK's coin registry as it sits in node_modules, i.e. what gets bundled. */
 const sdkCoins = dirname(require.resolve('xchain-sdk/src/coins/index.js'));
+const SDK_COIN_FILES = ['index.js', 'BTC.js', 'LTC.js', 'DOGE.js', 'consensus_pin.js'];
+// Cache the installed source once so every assertion and fixture uses the same bytes.
+const SDK_SOURCES = new Map(SDK_COIN_FILES.map((file) => [
+    file, readFileSync(join(sdkCoins, file), 'utf8'),
+]));
+const SDK_FIXTURE_TIMEOUT = 60_000;
 
 /** Two working copies: one untouched, one with the transform applied. */
 let workDir;
@@ -63,19 +66,19 @@ beforeAll(() => {
     workDir = mkdtempSync(join(tmpdir(), 'xc1016-'));
     pristine = join(workDir, 'pristine');
     stripped = join(workDir, 'stripped');
-    cpSync(sdkCoins, pristine, { recursive: true });
-    cpSync(sdkCoins, stripped, { recursive: true });
-    for (const file of ['index.js', 'BTC.js', 'LTC.js', 'DOGE.js']) {
-        const path = join(stripped, file);
-        writeFileSync(path, stripRegtestSidecar(readFileSync(path, 'utf8')).code);
+    mkdirSync(pristine);
+    mkdirSync(stripped);
+    for (const [file, source] of SDK_SOURCES) {
+        writeFileSync(join(pristine, file), source);
+        writeFileSync(join(stripped, file), stripRegtestSidecar(source).code);
     }
-});
+}, SDK_FIXTURE_TIMEOUT);
 
 afterAll(() => {
     if (workDir) rmSync(workDir, { recursive: true, force: true });
-});
+}, SDK_FIXTURE_TIMEOUT);
 
-describe('the markers a store build must not contain', () => {
+describe('the markers a store build must not contain', { timeout: SDK_FIXTURE_TIMEOUT }, () => {
     it('name the config key, the file it points at, and the line users saw', () => {
         // The log line is listed on its own because it is the observable this
         // item was filed on: a wallet in an app-store build printing
@@ -101,25 +104,25 @@ describe('the markers a store build must not contain', () => {
     });
 });
 
-describe('the transform, run against the SDK source that ships', () => {
+describe('the transform, run against the SDK source that ships', { timeout: SDK_FIXTURE_TIMEOUT }, () => {
     it('finds both halves there in the first place', () => {
         // Guards the tests below from passing vacuously: if the SDK ever stops
         // carrying this, the cleanup is done and the plugin can go - but that
         // has to be noticed, not assumed.
-        expect(readFileSync(join(sdkCoins, 'BTC.js'), 'utf8')).toContain(SIDECAR_KEY);
-        expect(readFileSync(join(sdkCoins, 'index.js'), 'utf8'))
+        expect(SDK_SOURCES.get('BTC.js')).toContain(SIDECAR_KEY);
+        expect(SDK_SOURCES.get('index.js'))
             .toContain('FULLNODE regtest sidecar ignored');
     });
 
     it('removes the config literal from the coin data', () => {
-        const { removed } = stripRegtestSidecar(readFileSync(join(sdkCoins, 'BTC.js'), 'utf8'));
+        const { removed } = stripRegtestSidecar(SDK_SOURCES.get('BTC.js'));
         expect(removed).toContain('config');
         expect(findRegtestSidecarMarkers(readFileSync(join(stripped, 'BTC.js'), 'utf8')))
             .toEqual([]);
     });
 
     it('removes the loader block from the registry', () => {
-        const { removed } = stripRegtestSidecar(readFileSync(join(sdkCoins, 'index.js'), 'utf8'));
+        const { removed } = stripRegtestSidecar(SDK_SOURCES.get('index.js'));
         expect(removed).toContain('loader');
         expect(findRegtestSidecarMarkers(readFileSync(join(stripped, 'index.js'), 'utf8')))
             .toEqual([]);
@@ -129,7 +132,7 @@ describe('the transform, run against the SDK source that ships', () => {
         // Minification drops these anyway, so no shipped byte changes. They go
         // so the bundle scan can be a flat "no marker anywhere" instead of
         // carrying an exception for comments, which is how a real one hides.
-        const { removed } = stripRegtestSidecar(readFileSync(join(sdkCoins, 'index.js'), 'utf8'));
+        const { removed } = stripRegtestSidecar(SDK_SOURCES.get('index.js'));
         expect(removed).toContain('comments');
     });
 
@@ -144,7 +147,7 @@ describe('the transform, run against the SDK source that ships', () => {
     });
 });
 
-describe('what the stripped registry resolves', () => {
+describe('what the stripped registry resolves', { timeout: SDK_FIXTURE_TIMEOUT }, () => {
     it('loads as valid JavaScript', () => {
         // A half-deleted statement in someone else's package is the failure
         // mode worth being loudest about: it would break the wallet's whole
@@ -177,7 +180,7 @@ describe('what the stripped registry resolves', () => {
     });
 });
 
-describe('the deletion is real, not a mute', () => {
+describe('the deletion is real, not a mute', { timeout: SDK_FIXTURE_TIMEOUT }, () => {
     it('stops a sidecar file in cwd from being read at all', () => {
         // The capability check the SDK added means the loader cannot run in a
         // WebView; this proves the transform removed the loader rather than
@@ -199,7 +202,7 @@ describe('the deletion is real, not a mute', () => {
     });
 });
 
-describe('the transform when it does not recognize the shape', () => {
+describe('the transform when it does not recognize the shape', { timeout: SDK_FIXTURE_TIMEOUT }, () => {
     it('leaves a braceless loader alone rather than half-deleting it', () => {
         const code = 'if (fullnode.$regtestSidecar && ok()) load(fullnode.$regtestSidecar);\n';
         expect(removeSidecarLoader(code)).toEqual({ code, removed: false });

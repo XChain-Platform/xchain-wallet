@@ -33,6 +33,7 @@ import { join } from 'node:path';
 // transform, so it cannot be used here.
 const WS_ROOT = process.cwd();
 const HELPER = join(WS_ROOT, 'test', 'smoke', '_docs-repo.js');
+const GIT_FIXTURE_TIMEOUT = 60_000;
 
 /** A docs sibling that does (or does not) carry components/wallet. */
 function makeDocsRoot({ withWalletDocs, packageName = 'xchain-documentation' } = {}) {
@@ -60,7 +61,7 @@ function probe(env) {
     return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 
-describe('docs sibling guard @regression', () => {
+describe('docs sibling guard @regression', { timeout: GIT_FIXTURE_TIMEOUT }, () => {
     it('this repo declares the docs sibling, so its absence is a harness failure', () => {
         // If this ever stops being true the guard below correctly relaxes to a
         // skip, so assert the premise rather than let it rot silently.

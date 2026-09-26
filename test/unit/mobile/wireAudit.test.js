@@ -25,7 +25,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import {
@@ -37,6 +37,7 @@ import {
 import { directivesFor } from '../../../packages/web/src/csp.js';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const INDEX_SCAN_TIMEOUT = 60_000;
 
 /**
  * Modules that reach the network with a literal host in them. A module absent
@@ -222,17 +223,17 @@ describe('wire audit: the update feed has no path into a store build', () => {
     it('exactly one module imports directUpdateCheck, and it is the gated one', () => {
         // An IMPORT, not a mention: the audit module and the docs name the
         // file as provenance and must not read as callers.
-        const out = execSync(
-            String.raw`grep -rlE "(from|import\()\s*['\"][^'\"]*directUpdateCheck" packages/*/src 2>/dev/null || true`,
-            { cwd: REPO, encoding: 'utf8' },
-        ).trim();
+        const out = execFileSync('git', [
+            'grep', '-l', '-E', String.raw`(from|import\()[[:space:]]*['"][^'"]*directUpdateCheck`,
+            '--', ':(glob)packages/*/src/**',
+        ], { cwd: REPO, encoding: 'utf8' }).trim();
         const importers = out ? out.split('\n').sort() : [];
         expect(
             importers,
             'the feed client must have exactly one caller, so the "not in a store build" rule '
             + 'lives on one line instead of at four call sites',
         ).toEqual(['packages/web/src/update/directUpdateProvider.js']);
-    });
+    }, INDEX_SCAN_TIMEOUT);
 
     it('the only caller installs the provider ONLY on an explicit direct lane', () => {
         const src = readFileSync(
