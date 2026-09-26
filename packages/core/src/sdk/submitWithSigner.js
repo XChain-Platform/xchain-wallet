@@ -114,18 +114,27 @@ export class HardwareChunkLaneError extends Error {
  * so the forms render the refusal instead of "Couldn't send."
  */
 export class EnvelopeConfirmLaneError extends Error {
-    /** @param {{ action: string, encoding: string }} fields */
-    constructor({ action, encoding }) {
+    /**
+     * @param {{ action: string, encoding: string, commitMismatch?: boolean }} fields
+     *   commitMismatch: the signed commit is not the one the reveal spends
+     */
+    constructor({ action, encoding, commitMismatch = false }) {
         super(`This ${action} is too large for one transaction: the network carries it as a `
             + `${encoding} pair, a commit plus a revealing transaction that must be signed before `
-            + 'the first is broadcast. The revealing transaction or its recovery record did not '
-            + 'arrive with the commit, and broadcasting only the first would spend coin into a '
-            + 'script that nothing can open and record no action at all, so nothing was signed. '
+            + 'the first is broadcast. '
+            + (commitMismatch
+                ? 'The commit that was signed is not the transaction its revealing transaction '
+                  + 'spends, and broadcasting it would spend coin into a script that nothing can '
+                  + 'open and record no action at all, so nothing was broadcast. '
+                : 'The revealing transaction or its recovery record did not '
+                  + 'arrive with the commit, and broadcasting only the first would spend coin into a '
+                  + 'script that nothing can open and record no action at all, so nothing was signed. ')
             + 'Try again.');
         this.name = 'EnvelopeConfirmLaneError';
         this.userFacing = true;
         this.action = action;
         this.encoding = encoding;
+        this.commitMismatch = commitMismatch;
     }
 }
 
@@ -518,13 +527,21 @@ export async function submitWithSigner({
     const envelopePair = Boolean(encoded && encoded.revealPsbt);
     let envelopeRevealSigned = null;
 
-    // Step 3: sign via the injected Signer.    // Step 3: sign via the injected Signer.
+    // Step 3: sign via the injected Signer.
     onProgress('signing', { encoding: encoded.encoding });
     const signed = await signer.signPsbt({
         psbtHex: encoded.psbt,
         chainId,
         signingPaths: expandSigningPaths(encoded.psbt),
     });
+
+    // The reveal and the recovery record both name the commit by txid, so a
+    // signed commit with any other txid is one the reveal cannot spend.
+    if (envelopePair && encoded.envelope && signed.txid !== encoded.envelope.commitTxid) {
+        throw new EnvelopeConfirmLaneError({
+            action: actionData.action, encoding: encoded.encoding, commitMismatch: true,
+        });
+    }
 
     // Step 3b: the envelope reveal, signed while nothing is on chain yet.
     if (envelopePair) {

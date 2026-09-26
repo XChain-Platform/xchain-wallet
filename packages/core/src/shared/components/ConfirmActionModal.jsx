@@ -33,6 +33,7 @@ import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
+import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -79,7 +80,7 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   which inputs the wallet owns; collapsing it to one From line would be a lie
  *   dressed as a disclosure. Pass nothing on the psbt and message variants.
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
- *   read off the composed envelope (the oracle usage fee)
+ *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
@@ -123,6 +124,11 @@ export function ConfirmActionModal({
     // neither fee line covers. Action variant only, for the reason above.
     const oracleFee = variant === 'action'
         ? oracleUsageFeeLine({ composed, ticker: nativeTicker })
+        : null;
+    // A Taproot envelope is a commit and a reveal signed on one Approve; list
+    // both with their own fees so the total above is not read as one transaction.
+    const envelopeLines = variant === 'action'
+        ? envelopeTransactionLines({ composed, ticker: nativeTicker })
         : null;
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
@@ -227,6 +233,15 @@ export function ConfirmActionModal({
 
                     {feeText ? (
                         <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
+                    ) : null}
+
+                    {envelopeLines ? (
+                        <div className={styles.fee} data-testid="confirm-envelope-transactions">
+                            <div>Two transactions, both signed now and broadcast in order:</div>
+                            {envelopeLines.map((line) => (
+                                <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
+                            ))}
+                        </div>
                     ) : null}
 
                     {/* Directly under the miner fee so the two costs read as

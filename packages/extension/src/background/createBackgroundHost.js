@@ -497,6 +497,28 @@ function deviceHardenedEncoderOpts(req, encoderOpts) {
 }
 
 /**
+ * The spending Address record that decides whether an oversized payload may
+ * ride the Taproot envelope: the vault's own record when the request names one,
+ * else the request's `from`. A wrong claim cannot strand coin, because the
+ * submit path signs the reveal before it broadcasts the commit.
+ *
+ * @param {any} vault
+ * @param {any} req
+ * @returns {Promise<{ source?: string }|null>}
+ */
+async function envelopeSignerOf(vault, req) {
+    const id = req?.from?.addressId;
+    if (typeof id === 'string' && id.length > 0) {
+        // An unreadable record falls back to the request, never to a guess.
+        try {
+            const record = await vault.addresses.get(id);
+            if (record) return record;
+        } catch { /* fall through */ }
+    }
+    return req?.from && typeof req.from === 'object' ? req.from : null;
+}
+
+/**
  * Look up the Address record a `action.*.hw` handler needs to resolve
  * the right SignerRecord. The request carries `from.addressId` (the
  * Address record's id, filled by the form) OR a plain `from` triple
@@ -2174,6 +2196,7 @@ export function createBackgroundHost(deps) {
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
             source: source.address, ownAddresses,
+            signer: await envelopeSignerOf(vault, req),
         });
     });
 
@@ -4296,6 +4319,7 @@ export function createBackgroundHost(deps) {
             }),
             source: source.address,
             ownAddresses,
+            signer: await envelopeSignerOf(vault, req),
         });
         return { ...composed, messageParams: params };
     });

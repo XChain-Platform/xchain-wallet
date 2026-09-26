@@ -28,7 +28,8 @@
 
 import { composeForConfirm } from './composeForConfirm.js';
 import { isBareNativePayment } from './nativePayment.js';
-import { assertNoTamper } from './confirmChecks.js';
+import { assertNoTamper, TamperDetectedError } from './confirmChecks.js';
+import { checkEnvelopeReveal, envelopeNetworkFees } from './envelopeRevealCheck.js';
 import { totalNetworkFeeSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
@@ -45,6 +46,7 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
  * @property {import('../sdk/submitWithSigner.js').SubmitEncoderOpts} encoderOpts  must include pubkey
  * @property {string} source                     spender address (native-fee quote + own-change baseline)
  * @property {string[]} [ownAddresses]           wallet-owned addresses on this chain (change is allowed there)
+ * @property {{ source?: string }|null} [signer]  the spending Address record; lets an oversized payload ride the Taproot envelope
  * @property {AbortSignal} [signal]
  */
 
@@ -83,6 +85,7 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
  * @property {{ change: string|null, rawData: string|null }|null} revealOpts     what the reveal must be built with
  * @property {string|null} revealPsbt       TAPROOT envelope reveal PSBT built against `psbt`; NULL off the envelope lane
  * @property {object|null} envelope         TAPROOT recovery record the submit path persists before the commit; NULL off the envelope lane
+ * @property {{ commitFeeSats: number|null, revealFeeSats: number|null, totalFeeSats: number|null }|null} envelopeFees  TAPROOT only: each transaction's exact miner fee; NULL off the envelope lane
  * @property {object|null} oracleFeeQuote    Mode B dispenser oracle usage fee quote; NULL when none was priced
  * @property {object} adsPlan                resolved ADS plan
  * @property {ReturnType<typeof import('./confirmChecks.js').buildExpectedOutputs>} expectedOutputs
@@ -100,7 +103,7 @@ import { balancesFromSdk } from '../decoder/balanceAdapter.js';
  * @returns {Promise<HostComposeEnvelope>}
  */
 export async function composeActionForConfirm({
-    vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts, source, ownAddresses, signal,
+    vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts, source, ownAddresses, signal, signer = null,
 }) {
     if (!sdkRegistry) throw new Error('composeActionForConfirm: sdkRegistry is required');
     if (!chainRegistry) throw new Error('composeActionForConfirm: chainRegistry is required');
@@ -146,7 +149,7 @@ export async function composeActionForConfirm({
         : Promise.resolve(null);
 
     const composed = await composeForConfirm({
-        sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts, source, signal,
+        sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts, source, signal, signer,
     });
 
     // Tamper check on the exact built PSBT, HOST-side (this is where
@@ -182,7 +185,7 @@ export async function composeActionForConfirm({
     const revealOutputs = Array.isArray(composed.deferredOutputs) && composed.deferredOutputs.length
         ? composed.deferredOutputs
         : (composed.deferredFeeOutput ? [composed.deferredFeeOutput] : []);
-    const networkFeeSats = totalNetworkFeeSats(decomposed, {
+    let networkFeeSats = totalNetworkFeeSats(decomposed, {
         carrierScripts: composed.carrierScripts,
         ownAddresses: own,
         revealOutputSats: revealOutputs.length
@@ -211,6 +214,13 @@ export async function composeActionForConfirm({
         network: sdk.config && sdk.config.network,
         verifyCarrierScripts: sdk.decoder.verifyCarrierScripts,
     });
+
+    // A Taproot envelope is two transactions signed on one Approve, so the
+    // reveal is checked too and each transaction's own fee is stated.
+    const envelopeFees = composed.revealPsbt
+        ? checkedEnvelopeFees({ sdk, composed, commit: decomposed, own })
+        : null;
+    if (envelopeFees) networkFeeSats = envelopeFees.totalFeeSats;
 
     // §5.2.3 balance deltas. Computed HERE, not per-form, for the same reason
     // the tamper check is: this is where the SDK, the balances and the canonical
@@ -371,6 +381,9 @@ export async function composeActionForConfirm({
         // commit when either is missing, so dropping them here refuses every envelope.
         revealPsbt: composed.revealPsbt || null,
         envelope: composed.envelope || null,
+        // The commit and reveal fees, so the confirm screen can show both
+        // transactions rather than one total.
+        envelopeFees,
         // The oracle usage fee a Mode B dispenser pays as a real coin output,
         // which neither fee line nor the projection covers; the confirm screen
         // names it from this quote.
@@ -403,6 +416,36 @@ export async function composeActionForConfirm({
         decoded,
         tamperVerified: true,
     };
+}
+
+/**
+ * Check a composed envelope reveal and return both transactions' fees.
+ *
+ * Throws TamperDetectedError when the reveal does not spend the commit's
+ * envelope output, pays an address outside the wallet, or carries any action
+ * other than the approved one: the user signs it on the same Approve, so an
+ * unchecked reveal would be an unchecked signature.
+ *
+ * @returns {{ commitFeeSats: number|null, revealFeeSats: number|null, totalFeeSats: number|null }}
+ */
+function checkedEnvelopeFees({ sdk, composed, commit, own }) {
+    const reveal = sdk.wallet.decomposePsbt(composed.revealPsbt);
+    const verdict = checkEnvelopeReveal({
+        commit,
+        reveal,
+        envelope: composed.envelope,
+        ownAddresses: own,
+        actionString: composed.actionString,
+        // The co-signer decoder reads the envelope leaf; the inline extractor
+        // the commit check uses cannot see it.
+        decodeRevealAction: () => sdk.decoder.decodeActionFromPsbt(composed.revealPsbt),
+    });
+    if (!verdict.ok) {
+        throw new TamperDetectedError(
+            'The action encoded in the transaction does not match what you approved.',
+            { reason: verdict.reason });
+    }
+    return envelopeNetworkFees(commit, reveal);
 }
 
 /**

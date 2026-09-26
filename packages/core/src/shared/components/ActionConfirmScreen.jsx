@@ -116,8 +116,10 @@ export function ActionConfirmScreen({
     const composed = confirmAction.composed;
     const exactSats = composed?.networkFeeSats;
     const ticker = coinTicker || nativeTickerFor(composed?.chainId);
+    // An envelope's total covers its commit and its reveal, and says so.
+    const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
     const exactFeeText = Number.isFinite(exactSats)
-        ? `Network fee: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
+        ? `${feeLabel}: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
         : null;
 
     // (c): still the host's decode of the composed bytes, with the
