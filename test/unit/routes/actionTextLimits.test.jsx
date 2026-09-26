@@ -104,7 +104,7 @@ describe('BroadcastForm text limits', () => {
 });
 
 describe('LinkForm memo limit', () => {
-    it('shows a live counter and disables Link past the memo limit', async () => {
+    it('shows a live counter and explains the memo limit when Link is pressed', async () => {
         const messaging = mount(LinkForm);
         const [firstIndex, secondIndex] = await screen.findAllByLabelText('Action to reference');
         fireEvent.change(firstIndex, { target: { value: '11' } });
@@ -118,7 +118,9 @@ describe('LinkForm memo limit', () => {
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
         expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(0);
-        expect(submit.disabled).toBe(true);
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(1);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

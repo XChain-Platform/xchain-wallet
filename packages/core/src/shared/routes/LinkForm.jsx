@@ -366,9 +366,18 @@ export function LinkForm({ walletId, onBack }) {
     // reachable from the review screen is in an invalid state.
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress || !submitChainId) return;
-        if (!chain1Id || !chain2Id) return;
-        if (validationError) return;
+        if (!chain1Id || !chain2Id) {
+            setFormError('Pick both chains before reviewing.');
+            return;
+        }
+        if (!fromAddress || !submitChainId) {
+            setFormError('Pick a source address first.');
+            return;
+        }
+        if (validationError) {
+            setFormError(validationError);
+            return;
+        }
         if (!actionIndex1 || !actionIndex2) {
             setFormError('Provide both action indices before reviewing.');
             return;
@@ -765,12 +774,11 @@ export function LinkForm({ walletId, onBack }) {
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!!validationError
-                        || !fromAddress
-                        || !actionIndex1 || !actionIndex2
-                        || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Link' : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Link' : 'Review'}
                 </Button>
             </div>
         </form>,

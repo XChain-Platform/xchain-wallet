@@ -1185,7 +1185,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fileMeta || !fromAddress}
                 >
                     Review upload
                 </Button>

@@ -65,7 +65,6 @@ export function SignMessageForm({ walletId, onBack }) {
     const [message, setMessage] = useState('');
     const [password, setPassword] = useState('');
 
-    const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [signature, setSignature] = useState(/** @type {string | null} */ (null));
     const [signedMessage, setSignedMessage] = useState('');
@@ -223,7 +222,7 @@ export function SignMessageForm({ walletId, onBack }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (busy) return;
+        if (confirmAction.composing) return;
         setError(null);
         if (!chainId) { setError('Pick a chain.'); return; }
         if (!addressId) { setError('Pick an address.'); return; }
@@ -239,7 +238,7 @@ export function SignMessageForm({ walletId, onBack }) {
     }
 
     const header = (
-        <PageHeader onBack={onBack} backDisabled={busy} title="Sign message" />
+        <PageHeader onBack={onBack} backDisabled={confirmAction.composing} title="Sign message" />
     );
 
     if (loadError) {
@@ -436,13 +435,10 @@ export function SignMessageForm({ walletId, onBack }) {
                 type="submit"
                 variant="primary"
                 block
-                loading={busy}
-                disabled={busy
-                    || message.length === 0
-                    || !addressId
-                    }
+                loading={confirmAction.composing}
+                disabled={confirmAction.composing}
             >
-                Sign message
+                {confirmAction.composing ? 'Preparing signature…' : 'Sign message'}
             </Button>
         </form>
     );
