@@ -19,10 +19,10 @@
 // guard (`nativeFeeHookAdoption.test.js`); what a grep cannot see is whether
 // the flag survives the trip to the encoder, which is what this drives.
 //
-// TWO LANES, both on ISSUE, both on BITCOIN - and Bitcoin is the deliberate
-// choice. Off Bitcoin `mandatory` forces the flag on, so "the flag reached the
-// wire" would be true no matter what the form did with it; on Bitcoin the flag
-// is a genuine opt-in, which is the only place the question has an answer.
+// ISSUE covers the priced path on every venue. Bitcoin exercises the opt-in;
+// Litecoin and Dogecoin exercise the mandatory native lane. SEND and MINT add
+// the two fee-free action shapes, where selecting native mode must still
+// compose, broadcast, and index without inventing a fee.
 //
 // LANE 1, the confirm path: compose with the toggle ON, approve, and
 //     read the RESULT OFF THE CHAIN - the action must index valid AND pay the
@@ -52,44 +52,42 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
-    EXPLORER_URL,
     fundAddress,
-    minerRpc,
+    mintXchain,
     REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_ID,
+    REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    REGTEST_DESTINATION,
+    REGTEST_TICKER,
+    selectVenueChain,
     switchToRegtest,
+    tokenBalance,
     unlockAfterReload,
+    waitForTokenBalance,
+    waitForValidAction,
     warmFeeQuote,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-const FUNDING = 1;
-const TICK = `FEE${Date.now().toString().slice(-7)}`;
+const FUNDING = 100;
+const STAMP = Date.now().toString().slice(-7);
+const ISSUE_TICK = `FEE${STAMP}`;
+const SEND_TICK = `SND${STAMP}`;
+const MINT_TICK = `MNF${STAMP}`;
 const SUPPLY = '1000';
-
-async function explorerJson(path) {
-    const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    return res.json();
-}
-
-async function nudgeChain() {
-    try {
-        const status = await explorerJson('status');
-        if (Number(status?.decoder_lag_blocks?.[REGTEST_COIN] ?? 0) > 3) return;
-        await minerRpc('generate_blocks', { count: 1 });
-    } catch { /* transient */ }
-}
+const INITIAL_MINT = '500';
+const MINT_AMOUNT = 100;
+const SEND_AMOUNT = 25;
 
 /** The venue's own answer for what this action's protocol fee costs in coin. */
-async function feeQuote(params) {
+async function feeQuote(action, params, source) {
     // Retried, not read once. This venue's fee-quote path stalls past the
     // explorer's 5s indexer-hop timeout often enough to redden this spec on a
     // perfectly healthy stack  , and reading it cold at the top of a
     // run is the likeliest moment to hit it. The failure then reads as a
     // price-seed problem that is not there.
-    return warmFeeQuote({ action: 'ISSUE', params });
+    return warmFeeQuote({ action, params, source });
 }
 
 async function gotoPalette(page, title) {
@@ -117,8 +115,23 @@ async function setWalletMode(page, mode) {
 
 /** The native-fee opt-in, which on Bitcoin is a real control. */
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    const name = /^Pay protocol fee in .* instead of XCHAIN/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
+}
+
+async function setNativeFee(scope, enabled = true) {
+    const toggle = feeToggle(scope);
+    if (REGTEST_COIN === 'RBTC') {
+        await expect(toggle, 'Bitcoin did not offer its native-fee choice')
+            .toBeVisible({ timeout: 30_000 });
+        if (enabled !== (await toggle.isChecked())) await toggle.click();
+        await expect(toggle).toBeChecked({ checked: enabled });
+        return;
+    }
+    expect(enabled, `${REGTEST_TICKER} cannot disable its mandatory native-fee lane`).toBe(true);
+    await expect(toggle,
+        `${REGTEST_TICKER} exposed an opt-in even though its native-fee lane is mandatory`)
+        .toHaveCount(0);
 }
 
 /**
@@ -128,60 +141,133 @@ function feeToggle(scope) {
  * would make the second build fail for a reason that has nothing to do with
  * fees.
  */
-async function fillIssueForm(page, tick, { nativeFee }) {
+async function fillIssueForm(page, tick, { nativeFee, initialMint = null }) {
     await gotoPalette(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await selectVenueChain(main);
     await main.getByLabel('Ticker').fill(tick);
     await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-
-    const toggle = feeToggle(main);
-    await expect(toggle, 'Bitcoin does not offer the fee choice this spec is about')
-        .toBeVisible({ timeout: 30_000 });
-    if (nativeFee !== (await toggle.isChecked())) await toggle.click();
-    await expect(toggle).toBeChecked({ checked: nativeFee });
+    if (initialMint !== null) {
+        await main.getByLabel('Initial mint (optional)').fill(String(initialMint));
+    }
+    await setNativeFee(main, nativeFee);
     return main;
 }
 
-test.describe('the native-fee flag on each submit lane', () => {
-    test.use({ actionTimeout: 30_000 });
-    test.setTimeout(1_800_000);
+async function approveAndGetTxid(page) {
+    const approve = page.getByTestId('confirm-approve');
+    await expect(approve).toBeEnabled({ timeout: 120_000 });
+    await approve.click();
+    const main = page.getByRole('main');
+    await expect(main, 'no transaction id ever appeared after Approve')
+        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
+    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    expect(txid, 'success screen showed no transaction id').toBeTruthy();
+    return txid;
+}
 
-    // BITCOIN BY DESIGN, NOT BY ACCIDENT, and this one would go GREEN for the
-    // wrong reason if it ran here. Its own header says it: off Bitcoin
-    // `mandatory` forces the flag on, so "the flag reached the wire" would be
-    // true no matter what the form did with it. A pass on Litecoin would
-    // certify a control this spec never exercised, which is worse than a red.
-    // Skipped rather than converted or `fixme`d: it pins no defect here.
-    // Modelled on the guard `native-fee-requote.regtest.spec.js` already carries.
-    test.beforeEach(() => {
-        test.skip(REGTEST_COIN !== 'RBTC',
-            `off Bitcoin the native-fee flag is forced on by \`mandatory\`, so this spec would pass on `
-            + `${REGTEST_COIN} without the form having done anything - a green that certifies nothing`);
-    });
+async function assertNativeFeeRecord(action, quote) {
+    const quotedSats = Number(quote?.requiredFeeSats || 0);
+    if (quotedSats === 0) {
+        expect(Number(action.fee?.native_coin_amount || 0),
+            'a fee-free action unexpectedly paid a native protocol fee').toBe(0);
+        return;
+    }
+    expect(Number(action.fee?.payment_mode), 'the indexed action did not use the native fee lane')
+        .toBe(1);
+    expect(Math.round(Number(action.fee?.native_coin_amount) * 1e8),
+        'the indexed native fee differs from the venue quote').toBe(quotedSats);
+    expect(String(action.fee?.native_coin)).toBe(REGTEST_TICKER);
+}
+
+async function setupFundedWallet(page, name) {
+    await createWallet(page, { password: PASSWORD, name });
+    await switchToRegtest(page, PASSWORD);
+    await gotoPalette(page, 'Issue token');
+    const main = page.getByRole('main');
+    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await selectVenueChain(main);
+    const source = await main.getByLabel('From').inputValue();
+    expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
+        .toMatch(REGTEST_ADDRESS_RE);
+
+    await fundAddress(source, FUNDING);
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+    await mintXchain(page, 20);
+    await waitForTokenBalance(source, 'XCHAIN', 20, 1_200_000);
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+    return source;
+}
+
+async function issueToken(page, tick, { initialMint = null } = {}) {
+    const main = await fillIssueForm(page, tick, { nativeFee: true, initialMint });
+    const submit = main.getByRole('button', { name: 'Issue token', exact: true });
+    await submit.click();
+    await expectConfirmModal(page, `the ISSUE of ${tick}`, 120_000);
+    const action = await waitForValidAction(await approveAndGetTxid(page), 1_200_000);
+    expect(String(action.action)).toBe('ISSUE');
+    expect(String(action.tick)).toBe(tick);
+    return action;
+}
+
+async function pickMintToken(page, tick) {
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: /^Token:/ }).click();
+    const search = page.getByLabel('Search coins or tokens');
+    await expect(search, 'the Mint token picker did not open').toBeVisible({ timeout: 30_000 });
+    await search.fill(tick);
+    const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
+    await expect(row, `the Mint picker does not list ${tick} on ${REGTEST_CHAIN_LABEL}`)
+        .toBeVisible({ timeout: 60_000 });
+    await row.click();
+}
+
+async function waitForExactTokenBalance(address, tick, expected) {
+    const deadline = Date.now() + 1_200_000;
+    let last = null;
+    while (Date.now() < deadline) {
+        last = await tokenBalance(address, tick).catch(() => last);
+        if (last === expected) return last;
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+    throw new Error(`${tick} balance for ${address} never reached ${expected} (last=${last})`);
+}
+
+test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}`, () => {
+    test.use({ actionTimeout: 30_000 });
+    test.setTimeout(3_600_000);
 
     test('the flag reaches the wire on the confirm path and on the watcher build', async ({ page }) => {
         let source;
         let quotedSats;
 
-        await test.step('onboard and fund on Bitcoin', async () => {
+        await test.step(`onboard and fund on ${REGTEST_CHAIN_LABEL}`, async () => {
             await createWallet(page, { password: PASSWORD, name: 'Fee Lane Wallet' });
             await switchToRegtest(page, PASSWORD);
 
             await gotoPalette(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await selectVenueChain(main);
             source = await main.getByLabel('From').inputValue();
-            expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
+            expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
+                .toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(source, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+            await mintXchain(page, 20);
+            await waitForTokenBalance(source, 'XCHAIN', 20, 1_200_000);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
             // The venue's own price of this action, read BEFORE composing so the
             // spec fails on a stale oracle with that named rather than blaming
             // the wallet several steps later (§3.2).
-            const quote = await feeQuote(`${TICK}|${SUPPLY}|0|0|0`);
+            const quote = await feeQuote('ISSUE', `${ISSUE_TICK}|${SUPPLY}|0|0|0`, source);
             expect(quote?.valid,
                 `the venue cannot price this action (${quote?.status}); seed the sentinels at wall `
                 + 'clock per campaign §3.2 before re-running - this is a venue state, not a wallet bug')
@@ -192,7 +278,7 @@ test.describe('the native-fee flag on each submit lane', () => {
         });
 
         await test.step('LANE 1: the confirm path pays the fee in coin, on chain', async () => {
-            const main = await fillIssueForm(page, TICK, { nativeFee: true });
+            const main = await fillIssueForm(page, ISSUE_TICK, { nativeFee: true });
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             // In full mode this form is SINGLE-ENCODE: the form button
@@ -201,25 +287,8 @@ test.describe('the native-fee flag on each submit lane', () => {
             await main.getByRole('button', { name: 'Issue token', exact: true }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
-
-            // Read the RESULT off the chain rather than off the screen: the
-            // screen is what already showed can be wrong about fees.
-            const until = Date.now() + 300_000;
-            let action = null;
-            while (Date.now() < until && !action) {
-                const list = await explorerJson('actions?limit=50');
-                const row = (list?.data || []).find((a) => a.source === source);
-                if (row) {
-                    const detail = await explorerJson(`action/${row.action_index}`);
-                    if (String(detail?.tick) === TICK || String(detail?.tx_data || '').includes(TICK)) {
-                        action = detail;
-                    }
-                }
-                if (!action) { await nudgeChain(); await new Promise((r) => setTimeout(r, 2_000)); }
-            }
-            expect(action, `the ISSUE of ${TICK} never reached the chain`).toBeTruthy();
+            const action = await waitForValidAction(await approveAndGetTxid(page), 1_200_000);
+            expect(String(action.tick), 'the indexed ISSUE used a different ticker').toBe(ISSUE_TICK);
             expect(String(action.status),
                 'the action indexed invalid, which is what a DROPPED fee flag looks like: the wallet '
                 + 'signed and paid a miner fee for something the chain would never accept')
@@ -237,7 +306,7 @@ test.describe('the native-fee flag on each submit lane', () => {
             expect(Math.round(Number(action.fee?.native_coin_amount) * 1e8),
                 `the coin fee on chain is not the ${quotedSats} sats quoted`)
                 .toBe(quotedSats);
-            expect(String(action.fee?.native_coin)).toBe('BTC');
+            expect(String(action.fee?.native_coin)).toBe(REGTEST_TICKER);
         });
 
         await test.step('LANE 2: the watcher build changes when the flag is set', async () => {
@@ -257,7 +326,14 @@ test.describe('the native-fee flag on each submit lane', () => {
                 return value;
             };
 
-            const off = await build(`${TICK}A`, false);
+            if (REGTEST_COIN !== 'RBTC') {
+                const mandatory = await build(`${ISSUE_TICK}M`, true);
+                expect(mandatory, 'the mandatory watcher build is empty')
+                    .toMatch(/^[0-9a-f]{40,}$/i);
+                return;
+            }
+
+            const off = await build(`${ISSUE_TICK}A`, false);
             // BACK VIA THE SCREEN'S OWN CONTROL, not the palette: re-selecting
             // "Issue token" while the route is already mounted changes no state,
             // so the form stays on its result screen and the second build never
@@ -265,7 +341,7 @@ test.describe('the native-fee flag on each submit lane', () => {
             // route you are already on is a no-op - and here the wallet offers
             // "Build another" precisely for this.
             await page.getByRole('button', { name: 'Build another', exact: true }).click();
-            const on = await build(`${TICK}B`, true);
+            const on = await build(`${ISSUE_TICK}B`, true);
 
             // Differential, so no transaction parsing is needed: a dropped flag
             // makes these two builds the same shape, and the coin fee is one
@@ -278,5 +354,80 @@ test.describe('the native-fee flag on each submit lane', () => {
                 `the flagged build is not longer by an output (off=${off.length}, on=${on.length} hex chars)`)
                 .toBeGreaterThan(50);
         });
+    });
+
+    test('the Advanced SEND lane submits with native mode and settles on chain', async ({ page }) => {
+        const source = await setupFundedWallet(page, 'Native SEND Wallet');
+        await issueToken(page, SEND_TICK);
+        await waitForTokenBalance(source, SEND_TICK, Number(SUPPLY), 1_200_000);
+        await page.reload();
+        await unlockAfterReload(page, PASSWORD);
+
+        const params = `0|${SEND_TICK}|${SEND_AMOUNT}|${REGTEST_DESTINATION}`;
+        const quote = await feeQuote('SEND', params, source);
+        expect(quote?.valid, `the venue refused the SEND before the wallet composed it: ${quote?.status}`)
+            .toBe(true);
+
+        await gotoPalette(page, 'Advanced action');
+        const main = page.getByRole('main');
+        await expect(main.getByLabel('Action')).toBeVisible({ timeout: 30_000 });
+        await selectVenueChain(main);
+        await main.getByLabel('Action').selectOption('SEND');
+        await main.getByRole('textbox', { name: 'TICK', exact: true }).fill(SEND_TICK);
+        await main.getByRole('textbox', { name: 'AMOUNT', exact: true })
+            .fill(String(SEND_AMOUNT));
+        await main.getByRole('textbox', { name: 'DESTINATION', exact: true })
+            .fill(REGTEST_DESTINATION);
+        await setNativeFee(main, true);
+        await main.getByRole('button', { name: 'Sign action', exact: true }).click();
+
+        await expectConfirmModal(page, 'the SEND', 120_000);
+        const action = await waitForValidAction(await approveAndGetTxid(page), 1_200_000);
+        expect(String(action.action)).toBe('SEND');
+        const sent = (action.sends || []).find((row) => (
+            String(row.tick) === SEND_TICK && String(row.destination) === REGTEST_DESTINATION
+        ));
+        expect(sent, 'the indexed SEND does not contain the form destination and ticker').toBeTruthy();
+        expect(Number(sent.amount)).toBe(SEND_AMOUNT);
+        expect(String(sent.status)).toBe('valid');
+        await assertNativeFeeRecord(action, quote);
+        await waitForTokenBalance(REGTEST_DESTINATION, SEND_TICK, SEND_AMOUNT, 1_200_000);
+        await waitForExactTokenBalance(source, SEND_TICK, Number(SUPPLY) - SEND_AMOUNT);
+    });
+
+    test('the Mint form submits native mode and increases the indexed supply', async ({ page }) => {
+        const source = await setupFundedWallet(page, 'Native MINT Wallet');
+        await issueToken(page, MINT_TICK, { initialMint: INITIAL_MINT });
+        await waitForTokenBalance(source, MINT_TICK, Number(INITIAL_MINT), 1_200_000);
+        await page.reload();
+        await unlockAfterReload(page, PASSWORD);
+
+        const params = `0|${MINT_TICK}|${MINT_AMOUNT}`;
+        const quote = await feeQuote('MINT', params, source);
+        expect(quote?.valid, `the venue refused the MINT before the wallet composed it: ${quote?.status}`)
+            .toBe(true);
+
+        await gotoPalette(page, 'Mint supply');
+        const main = page.getByRole('main');
+        await expect(main.getByRole('textbox', { name: /^Amount/ }))
+            .toBeVisible({ timeout: 30_000 });
+        await selectVenueChain(main);
+        await pickMintToken(page, MINT_TICK);
+        await main.getByRole('textbox', { name: /^Amount/ }).fill(String(MINT_AMOUNT));
+        await setNativeFee(main, true);
+        await main.getByRole('button', { name: 'Mint', exact: true }).click();
+
+        await expectConfirmModal(page, 'the MINT', 120_000);
+        const action = await waitForValidAction(await approveAndGetTxid(page), 1_200_000);
+        expect(String(action.action)).toBe('MINT');
+        expect(String(action.tick)).toBe(MINT_TICK);
+        expect(Number(action.amount)).toBe(MINT_AMOUNT);
+        await assertNativeFeeRecord(action, quote);
+        await waitForTokenBalance(
+            source,
+            MINT_TICK,
+            Number(INITIAL_MINT) + MINT_AMOUNT,
+            1_200_000,
+        );
     });
 });

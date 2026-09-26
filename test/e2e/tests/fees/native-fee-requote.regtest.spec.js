@@ -49,15 +49,21 @@ import {
     EXPLORER_URL,
     fundAddress,
     minerRpc,
+    mintXchain,
     REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
+    REGTEST_TICKER,
     runInIndexer,
+    selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    waitForTokenBalance,
 } from '../../fixtures/regtest.js';
 import { VENUE_PRICE, SYNTHETIC_ROUNDS, writeRowsScript } from '../../fixtures/priceSeed.js';
 
 const PASSWORD = 'regtestpassword123';
+const FUNDING = 100;
 const SUPPLY = '1000';
 const TICK = `RQT${Date.now().toString().slice(-6)}`;
 
@@ -129,27 +135,31 @@ async function gotoPalette(page, title) {
 }
 
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    const name = /^Pay protocol fee in .* instead of XCHAIN/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
 }
 
-test.describe('§11.5: the protocol fee moving while the confirm screen is open', () => {
+async function enableNativeFee(scope) {
+    const toggle = feeToggle(scope);
+    if (REGTEST_COIN === 'RBTC') {
+        await expect(toggle, 'Bitcoin did not offer its native-fee choice')
+            .toBeVisible({ timeout: 30_000 });
+        if (!(await toggle.isChecked())) await toggle.click();
+        await expect(toggle).toBeChecked();
+        return;
+    }
+    await expect(toggle,
+        `${REGTEST_TICKER} exposed an opt-in even though its native-fee lane is mandatory`)
+        .toHaveCount(0);
+}
+
+test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
     test('a fee that went short between compose and Approve is refused, not broadcast', async ({ page }) => {
         const venue = VENUE_PRICE[REGTEST_COIN];
-        test.skip(!venue, `no fixture price for ${REGTEST_COIN}`);
-        // This spec is about the XCHAIN-or-coin fee CHOICE, and that choice only
-        // exists on Bitcoin: off it the coin is the only lane, so there is nothing
-        // to re-quote between compose and Approve. Without this guard a run on
-        // LTC or DOGE got as far as reading the form and failed on "the form has
-        // no Bitcoin address to sign with", which reads like a wallet bug and is
-        // really just the wrong venue. Now reachable because the VENUES table
-        // carries three chains.
-        test.skip(REGTEST_COIN !== 'RBTC',
-            `the fee choice this spec re-quotes exists only on Bitcoin; ${REGTEST_COIN} pays its protocol fee `
-            + 'in the coin with no alternative lane');
+        expect(venue, `no fixture price for ${REGTEST_COIN}`).toBeTruthy();
         const params = `${TICK}|${SUPPLY}|0|0|0`;
         let source;
         let composedSats;
@@ -161,9 +171,15 @@ test.describe('§11.5: the protocol fee moving while the confirm screen is open'
             await gotoPalette(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await selectVenueChain(main);
             source = await main.getByLabel('From').inputValue();
-            expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
-            await fundAddress(source, 1);
+            expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
+                .toMatch(REGTEST_ADDRESS_RE);
+            await fundAddress(source, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+            await mintXchain(page, 10);
+            await waitForTokenBalance(source, 'XCHAIN', 10, 1_200_000);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
 
@@ -179,13 +195,10 @@ test.describe('§11.5: the protocol fee moving while the confirm screen is open'
             await gotoPalette(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await selectVenueChain(main);
             await main.getByLabel('Ticker').fill(TICK);
             await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-            const toggle = feeToggle(main);
-            await expect(toggle, 'Bitcoin does not offer the fee choice this spec is about')
-                .toBeVisible({ timeout: 30_000 });
-            if (!(await toggle.isChecked())) await toggle.click();
-            await expect(toggle).toBeChecked();
+            await enableNativeFee(main);
 
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
