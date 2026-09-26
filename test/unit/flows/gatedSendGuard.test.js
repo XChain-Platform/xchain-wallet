@@ -34,6 +34,7 @@ import {
 import { PubkeyMismatchError } from '../../../packages/core/src/flows/messageAction.js';
 import {
     clearGatedContentCaches,
+    listGatedFiles,
     scanGatedKeyHandoffs,
 } from '../../../packages/core/src/flows/gatedContent.js';
 import { gatedKeyId, createGatedKey } from '../../../packages/core/src/schemas/gatedKey.js';
@@ -144,6 +145,52 @@ beforeEach(() => {
 });
 
 describe('prepareGatedSend detection', () => {
+    it('detects an unlinked gated FILE through the gate lookup', async () => {
+        const sdk = makeSdk({
+            getFiles: vi.fn(async (_tick, type) => (
+                type === 'gate' ? [{ ...gatedRow(HASH_A, '100'), status: 'valid' }] : []
+            )),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault }));
+
+        expect(plan.actionData.action).toBe('BATCH');
+        expect(sdk.getFiles).toHaveBeenCalledWith('GATED', 'gate');
+        expect(sdk.getFiles).not.toHaveBeenCalledWith('GATED', 'token');
+    });
+
+    it('falls back to the token lookup when an older explorer lacks the gate route', async () => {
+        const notFound = Object.assign(new Error('Explorer returned HTTP 404 for /files/GATED/gate'), {
+            code: 'EXPLORER_HTTP_404',
+        });
+        const sdk = makeSdk({
+            getFiles: vi.fn(async (_tick, type) => {
+                if (type === 'gate') throw notFound;
+                return [{ ...gatedRow(HASH_A, '100'), status: 'valid' }];
+            }),
+        });
+
+        const groups = await listGatedFiles({ sdk, tick: 'GATED' });
+
+        expect(groups).toHaveLength(1);
+        expect(sdk.getFiles.mock.calls).toEqual([
+            ['GATED', 'gate'],
+            ['GATED', 'token'],
+        ]);
+    });
+
+    it('de-duplicates explorer rows by action index', async () => {
+        const row = { ...gatedRow(HASH_A, '100'), status: 'valid' };
+        const sdk = makeSdk({ getFiles: vi.fn(async () => [row, { ...row }]) });
+
+        const groups = await listGatedFiles({ sdk, tick: 'GATED' });
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].files).toHaveLength(1);
+    });
+
     it('returns null for an ungated tick', async () => {
         const sdk = makeSdk({ getFiles: vi.fn(async () => []) });
         expect(await prepareGatedSend(makeArgs({ sdk }))).toBeNull();
