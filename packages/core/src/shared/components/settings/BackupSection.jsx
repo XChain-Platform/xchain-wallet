@@ -21,10 +21,9 @@
 //     candidate mnemonic; the panel renders an overall match flag plus
 //     a per-chain comparison report (matched / divergent / missing
 //     counts).
-//   - Publish labels (§19.5.2): wires `publishLabelsNow` core flow
-//     through the `wallet.publishLabels` host handler. User picks a
-//     chain + enters the wallet password; the panel encrypts the
-//     labels + contacts payload, broadcasts it as a FILE action, and
+//   - Publish labels (§19.5.2): prepares the encrypted FILE payload
+//     through `wallet.prepareLabels`, then composes, dry-runs and confirms
+//     it before `wallet.publishLabels` signs those exact bytes. The result
 //     reports the txid + payload size.
 //   - Label auto-sync (§19.5.2 cadence): the background debounces
 //     label / contact edits and marks ONE publish due per unlock
@@ -32,9 +31,12 @@
 //     same publish form. Fetch-on-restore decryption is still a
 //     followup.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
-import { useMessaging } from '../../useMessaging.js';
+import { useMessaging, screenVariantFor } from '../../useMessaging.js';
+import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
+import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
+import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -55,7 +57,9 @@ const ACTION_BTN = {
  * @param {{ id: string, name: string } | null} [props.activeWallet]
  */
 export function BackupSection({ activeWallet }) {
-    const { messaging } = useMessaging();
+    const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(activeWallet?.id);
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId: activeWallet?.id || '' });
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
     const [pendingPassword, setPendingPassword] = useState(/** @type {string | null} */ (null));
@@ -84,6 +88,9 @@ export function BackupSection({ activeWallet }) {
     );
     const [publishError, setPublishError] = useState(/** @type {string | null} */ (null));
     const [publishResult, setPublishResult] = useState(/** @type {any} */ (null));
+    const [publishPreparation, setPublishPreparation] = useState(/** @type {any} */ (null));
+    const [publishPassword, setPublishPassword] = useState('');
+    const publishPasswordRef = useRef('');
 
     // §19.5.2 auto-sync state. The background debounces label / contact
     // edits and marks ONE publish due per unlock window; this panel is
@@ -215,6 +222,10 @@ export function BackupSection({ activeWallet }) {
     }
 
     async function runPublish({ chainId, password }) {
+        if (typeof messaging?.prepareLabelsRequest !== 'function') {
+            setPublishError('Label preparation is not wired in this shell yet.');
+            return;
+        }
         if (typeof messaging?.publishLabelsRequest !== 'function') {
             setPublishError('Label publish is not wired in this shell yet.');
             return;
@@ -225,20 +236,41 @@ export function BackupSection({ activeWallet }) {
         }
         setPublishStage('running');
         setPublishError(null);
+        setPublishPassword(password);
+        publishPasswordRef.current = password;
         try {
-            const r = await messaging.publishLabelsRequest({
+            const preparation = await messaging.prepareLabelsRequest({
                 walletId: activeWallet.id,
                 password,
                 chainId,
             });
+            setPublishPreparation(preparation);
+            const r = await actionConfirm.run({
+                chainId: preparation.chainId,
+                from: preparation.from,
+                actionData: preparation.actionData,
+                encoderOpts: preparation.encoderOpts,
+                onApprove: (prebuiltPsbt) => messaging.publishLabelsRequest({
+                    walletId: activeWallet.id,
+                    password: publishPasswordRef.current,
+                    chainId: preparation.chainId,
+                    preparation,
+                    prebuiltPsbt,
+                }),
+            });
             setPublishResult(r);
             setPublishStage('result');
+            setPublishPassword('');
+            publishPasswordRef.current = '';
+            setPublishPreparation(null);
             // The background clears the pending batch on a successful
             // publish; drop it here too so the notice goes away without
             // waiting for the next poll.
             setAutoSync(null);
         } catch (err) {
-            setPublishError(err?.message || 'Failed to publish labels.');
+            if (!isUserRejection(err)) {
+                setPublishError(err?.message || 'Failed to publish labels.');
+            }
             setPublishStage('form');
         }
     }
@@ -246,7 +278,28 @@ export function BackupSection({ activeWallet }) {
     function resetPublish() {
         setPublishResult(null);
         setPublishError(null);
+        setPublishPreparation(null);
+        setPublishPassword('');
+        publishPasswordRef.current = '';
         setPublishStage('idle');
+    }
+
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={screenVariantFor(shell)}
+                chainLabel={publishPreparation?.chainId || ''}
+                signerReady={signerReady}
+                password={publishPassword}
+                onPasswordChange={(value) => {
+                    setPublishPassword(value);
+                    publishPasswordRef.current = value;
+                }}
+                chainId={publishPreparation?.chainId}
+                getSignerStatus={messaging.getSignerStatus}
+            />
+        );
     }
 
     return (
@@ -333,6 +386,7 @@ export function BackupSection({ activeWallet }) {
                     walletId={activeWallet?.id}
                     busy={publishStage === 'running'}
                     error={publishError}
+                    initialPassword={publishPassword}
                     onCancel={resetPublish}
                     onSubmit={runPublish}
                 />
@@ -838,13 +892,13 @@ function triggerDownload(walletName, fileContent) {
  * §19.5.2 publish-labels form. Pulls the wallet's address-bearing
  * chains from `messaging.getAddressesByChain` so the picker only
  * surfaces chains where the FILE action can actually be broadcast,
- * then takes the wallet password and dispatches `publishLabelsRequest`.
+ * then takes the wallet password and prepares the encrypted FILE payload.
  */
-function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
+function PublishLabelsForm({ walletId, busy, error, initialPassword = '', onCancel, onSubmit }) {
     const { messaging } = useMessaging();
     const [chains, setChains] = useState(/** @type {string[] | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string} */ (''));
-    const [password, setPassword] = useState('');
+    const [password, setPassword] = useState(initialPassword);
     const [chainsError, setChainsError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {

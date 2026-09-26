@@ -356,16 +356,14 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the composer never entered the sequential signing stage')
                 .toBeVisible({ timeout: 30_000 });
             await signParallelRow(main);
-
-            // No confirm modal here (§42.8.2: ParallelComposer signs each row
-            // directly, with no ActionConfirmScreen), so the FIRST broadcast
-            // this test's own network listener sees is row 1's.
+            await approveConfirm(page, 'parallel row 1');
             const txidOne = await settledTxid(txids, 0);
 
             await expect(main.getByText('Signing action 2 of 2'),
                 'row 1 did not succeed and advance to row 2')
                 .toBeVisible({ timeout: 60_000 });
             await signParallelRow(main);
+            await approveConfirm(page, 'parallel row 2');
 
             const txidTwo = await settledTxid(txids, 1);
 

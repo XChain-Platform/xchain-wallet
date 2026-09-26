@@ -8,11 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -44,11 +46,10 @@ const newRowId = () => `row-${++nextRowId}`;
  * on row 2 does not roll back row 1. The composer requires the user
  * to acknowledge this before signing the first row.
  *
- * Sign loop. Software-signed rows reuse a single password entered
- * once at the top of the sign sequence; the password lives in
- * component state for the duration of the run and is cleared on
- * unmount or "Done." HW-signed rows prompt independently per row
- * (one signer-status block per row).
+ * Sign loop. Every row opens the shared confirm page, runs its own
+ * network dry-run, and signs the exact PSBT shown there. Hardware
+ * rows use the same confirm page with a device prompt in place of
+ * the software password field.
  *
  * Row status: `pending` → `submitting` → `success | failed`. Failed
  * rows can be retried in place; pending rows after a failure can be
@@ -89,11 +90,6 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
         /** @type {'compose' | 'review' | 'signing' | 'done'} */ ('compose'),
     );
     const [activeRowIndex, setActiveRowIndex] = useState(0);
-    const [password, setPassword] = useState('');
-    const [hwStatus, setHwStatus] = useState('idle');
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
-
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -206,7 +202,14 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
 
     const activeRow = rows[activeRowIndex] || null;
     const activeFromAddress = fromAddressFor(activeRow);
-    const activeHw = isHwSource(activeFromAddress);
+    const activeLane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId: activeRow?.chainId || '',
+        owner: activeFromAddress,
+        software: 'advancedAction',
+        hardware: 'advancedActionHw',
+    });
 
     // Network fee for the active row's chain: Low / Normal / Fast / Custom
     // via FeeSelector; feePerKb prices the broadcast of each signed row.
@@ -238,30 +241,16 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
 
     async function signActiveRow() {
         if (!activeRow || !activeFromAddress) return;
-        if (!activeHw && (!signerReady && password.length === 0)) return;
-        if (activeHw && hwStatus !== 'available') return;
+        if (activeLane.composing || activeRow.status === 'submitting') return;
 
         updateRow(activeRowIndex, { status: 'submitting', error: null });
         try {
             const params = JSON.parse(activeRow.paramsJson || '{}');
-            const base = {
-                walletId,
-                chainId: activeRow.chainId,
-                from: {
-                    address: activeFromAddress.address,
-                    publicKey: activeFromAddress.publicKey,
-                    derivationPath: activeFromAddress.derivationPath,
-                    addressId: activeFromAddress.id,
-                    source: activeFromAddress.source,
-                    signerId: activeFromAddress.signerId,
-                },
-                action: activeRow.action,
-                params,
-                ...(feePerKb != null ? { feePerKb } : {}),
-            };
-            const result = activeHw
-                ? await messaging.advancedActionHw({ ...base, signerId: activeFromAddress.signerId })
-                : await messaging.advancedAction({ ...base, password });
+            const result = await activeLane.run({
+                actionData: { action: activeRow.action, params },
+                encoderOpts: feePerKb != null ? { feePerKb } : {},
+                submitExtra: { action: activeRow.action, params },
+            });
             updateRow(activeRowIndex, {
                 status: 'success',
                 txid: result?.txid || null,
@@ -275,6 +264,10 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 setActiveRowIndex(nextIdx);
             }
         } catch (err) {
+            if (isUserRejection(err)) {
+                updateRow(activeRowIndex, { status: 'pending', error: null });
+                return;
+            }
             const bad = err?.name === 'InvalidPasswordError';
             updateRow(activeRowIndex, {
                 status: 'failed',
@@ -286,10 +279,6 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                     fallback: err?.message || 'Sign failed.',
                 }),
             });
-            if (!activeHw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
         }
     }
 
@@ -319,6 +308,24 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
 
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    // Each row owns a separate confirm and dry-run. Reject closes this page
+    // and returns to the same pending row without advancing the sequence.
+    if (activeLane.open) {
+        return (
+            <ActionConfirmScreen
+                {...activeLane.confirmProps}
+                screenVariant={variant}
+                chainLabel={activeDescriptor?.displayName || activeChainId || ''}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${activeCoinTicker}`.trim()
+                    : undefined}
+                coinTicker={activeCoinTicker}
+                signerReady={signerReady}
+                hintClassName={styles.hint}
+            />
+        );
     }
 
     if (stage === 'done') {
@@ -363,21 +370,6 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                     row={activeRow}
                     addressesByChain={addressesByChain}
                 />
-                {activeFromAddress ? (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={activeFromAddress}
-                        chainId={activeRow.chainId}
-                        password={password}
-                        onPasswordChange={(v) => setPassword(v)}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={activeRow.error || null}
-                        disabled={activeRow.status === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                ) : null}
-
                 {feeTiers ? (
                     <FeeSelector
                         label="Network fee"
@@ -412,14 +404,11 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                     <Button
                         type="button"
                         variant="primary"
-                        loading={activeRow.status === 'submitting'}
-                        disabled={!activeFromAddress
-                            || (activeHw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                        loading={activeLane.composing}
+                        disabled={!activeFromAddress || activeRow.status === 'submitting'}
                         onClick={signActiveRow}
                     >
-                        {activeHw
-                            ? `Sign on ${activeFromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign'}
+                        Sign
                     </Button>
                 </div>
             </>,

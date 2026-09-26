@@ -275,6 +275,8 @@ const {
     checkReachability,
     revealMnemonic,
     dryRunRestore,
+    prepareLabelsPublication,
+    submitLabelsPublication,
     publishLabelsNow,
     createLabelSyncScheduler,
     importWif,
@@ -1587,18 +1589,40 @@ export function createBackgroundHost(deps) {
         return { wallet: toSafeWallet(r.wallet), address: r.address };
     });
 
-    host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        const r = await publishLabelsNow({
+    host.register('wallet.prepareLabels', async (req, { vault, chainRegistry }) => {
+        return prepareLabelsPublication({
             vault,
             walletId: req?.walletId,
             password: req?.password,
             bip39Passphrase: req?.bip39Passphrase,
             chainId: req?.chainId,
             chainRegistry,
-            sdkRegistry,
             fee: req?.fee,
             feePerKb: req?.feePerKb,
         });
+    });
+
+    host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const common = {
+            vault,
+            walletId: req?.walletId,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        };
+        const r = req?.preparation
+            ? await submitLabelsPublication({
+                ...common,
+                preparation: req.preparation,
+                prebuiltPsbt: req?.prebuiltPsbt,
+            })
+            : await publishLabelsNow({
+                ...common,
+                chainId: req?.chainId,
+                fee: req?.fee,
+                feePerKb: req?.feePerKb,
+            });
         // The payload just published carries every pending edit,
         // whether the user got here from the auto-sync prompt or hit
         // "Publish now" by hand. Either way the batch is satisfied.
@@ -5236,4 +5260,3 @@ export function createBackgroundHost(deps) {
 
     return host;
 }
-

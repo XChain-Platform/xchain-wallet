@@ -536,6 +536,8 @@ export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';
 export {
     buildLabelSyncPayload,
     applyLabelSyncPayload,
+    prepareLabelsPublication,
+    submitLabelsPublication,
     publishLabelsNow,
     fetchAndDecryptLabelSync,
     restoreLabelSyncAfterImport,

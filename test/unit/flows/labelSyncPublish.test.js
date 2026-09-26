@@ -27,7 +27,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
-import { publishLabelsNow } from '../../../packages/core/src/flows/labelSync.js';
+import {
+    publishLabelsNow,
+    submitLabelsPublication,
+} from '../../../packages/core/src/flows/labelSync.js';
 import { persistHdWallet } from '../../../packages/core/src/flows/_persistHdWallet.js';
 import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
 import {
@@ -238,5 +241,59 @@ describe('publishLabelsNow: stored passphrase (§15.6) drives the commitment key
         const correctName = await discoveryNameForPassphrase(mnemonic, storedPassphrase);
         const call = vi.mocked(submitAction).mock.calls[0][0];
         expect(call.actionData.params.NAME).toBe(correctName);
+    });
+});
+
+describe('submitLabelsPublication confirmation envelope', () => {
+    it('submits the prepared FILE data with the exact Taproot PSBT that was approved', async () => {
+        const prebuiltPsbt = {
+            psbtHex: 'commit-psbt',
+            encoding: 'TAPROOT',
+            actionString: 'FILE|0|labels',
+            revealPsbt: { psbtHex: 'reveal-psbt' },
+            envelope: { kind: 'taproot' },
+        };
+        const preparation = {
+            chainId: CHAIN_ID,
+            from: FROM_ADDRESS,
+            actionData: {
+                action: 'FILE',
+                params: {
+                    VERSION: '0',
+                    NAME: 'labels',
+                    TYPE: 'application/octet-stream',
+                    TITLE: 'wallet-labels',
+                    MEMO: '',
+                },
+            },
+            encoderOpts: {
+                rawData: 'aabbccdd',
+                sourceAddress: FROM_ADDRESS.address,
+                change: FROM_ADDRESS.address,
+            },
+            discoveryName: 'labels',
+            sizeBytes: 4,
+        };
+
+        await submitLabelsPublication({
+            vault: {},
+            walletId: 'wallet-1',
+            password: PASSWORD,
+            chainRegistry: {},
+            sdkRegistry: {},
+            preparation,
+            prebuiltPsbt,
+        });
+
+        expect(submitAction).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: CHAIN_ID,
+            actionData: preparation.actionData,
+            encoderOpts: expect.objectContaining({
+                rawData: preparation.encoderOpts.rawData,
+                sourceAddress: FROM_ADDRESS.address,
+                change: FROM_ADDRESS.address,
+            }),
+            prebuiltPsbt,
+        }));
     });
 });

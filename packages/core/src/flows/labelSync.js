@@ -292,6 +292,16 @@ export async function applyLabelSyncPayload({
  */
 
 /**
+ * @typedef {Object} PublishLabelsPreparation
+ * @property {string} chainId
+ * @property {import('../schemas/address.js').Address} from
+ * @property {{ action: 'FILE', params: object }} actionData
+ * @property {object} encoderOpts
+ * @property {string} discoveryName
+ * @property {number} sizeBytes
+ */
+
+/**
  * @typedef {Object} PublishLabelsNowResult
  * @property {string} txid
  * @property {string} chainId
@@ -318,45 +328,35 @@ export class WifOnlyLabelSyncUnsupportedError extends Error {
 }
 
 /**
- * §19.5.2 manual publish: builds the encrypted labels payload from
- * the wallet's seed and broadcasts it as a FILE action on the chosen
- * chain. The from-address is the wallet's newest external HD address
- * on that chain (callers can override via `pickFromAddress`).
+ * Build the encrypted FILE payload and resolve the address that will fund it.
+ * Keeping this separate from submission lets the shared confirm flow compose,
+ * dry-run and display the exact payload before any signature is produced.
  *
- * This flow powers both the manual "Publish now" button and the
- * auto-sync path: `createLabelSyncScheduler` decides WHEN a publish is
- * due, the shell prompts for the password, and the write lands here.
- * `fetchAndDecryptLabelSync` reads the result back on restore. HW
- * wallets are not supported here because the commitment key is derived
- * from the seed, which only exists for software wallets.
- *
- * @param {PublishLabelsNowOpts} opts
- * @returns {Promise<PublishLabelsNowResult>}
+ * @param {Omit<PublishLabelsNowOpts, 'sdkRegistry'>} opts
+ * @returns {Promise<PublishLabelsPreparation>}
  */
-export async function publishLabelsNow({
+export async function prepareLabelsPublication({
     vault,
     walletId,
     password,
     bip39Passphrase = '',
     chainId,
     chainRegistry,
-    sdkRegistry,
     pickFromAddress,
     fee,
     feePerKb,
 }) {
-    if (!vault) throw new Error('publishLabelsNow: vault is required');
+    if (!vault) throw new Error('prepareLabelsPublication: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
-        throw new Error('publishLabelsNow: walletId is required');
+        throw new Error('prepareLabelsPublication: walletId is required');
     }
     if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('publishLabelsNow: password is required');
+        throw new Error('prepareLabelsPublication: password is required');
     }
     if (typeof chainId !== 'string' || chainId.length === 0) {
-        throw new Error('publishLabelsNow: chainId is required');
+        throw new Error('prepareLabelsPublication: chainId is required');
     }
-    if (!chainRegistry) throw new Error('publishLabelsNow: chainRegistry is required');
-    if (!sdkRegistry) throw new Error('publishLabelsNow: sdkRegistry is required');
+    if (!chainRegistry) throw new Error('prepareLabelsPublication: chainRegistry is required');
 
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
@@ -367,7 +367,7 @@ export async function publishLabelsNow({
 
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) {
-        throw new Error(`publishLabelsNow: unknown chain "${chainId}"`);
+        throw new Error(`prepareLabelsPublication: unknown chain "${chainId}"`);
     }
 
     // Source address: caller override, or newest external HD address.
@@ -387,14 +387,9 @@ export async function publishLabelsNow({
 
     const { ciphertext, discoveryName } = payload;
     const sizeBytes = ciphertext.length;
-    const result = await submitAction({
-        vault,
-        walletId,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
+    return {
         chainId,
+        from: fromAddress,
         actionData: {
             action: 'FILE',
             params: {
@@ -426,9 +421,59 @@ export async function publishLabelsNow({
             ...(fee !== undefined && { fee }),
             ...(feePerKb !== undefined && { feePerKb }),
         },
-        signingPaths: [fromAddress.derivationPath
-            ? { inputIndex: 0, path: fromAddress.derivationPath }
-            : { inputIndex: 0, addressId: fromAddress.id }],
+        discoveryName,
+        sizeBytes,
+    };
+}
+
+/**
+ * Submit a prepared label payload, optionally signing the exact PSBT already
+ * shown by the shared confirm flow.
+ *
+ * @param {object} opts
+ * @param {import('../storage/Vault.js').Vault} opts.vault
+ * @param {string} opts.walletId
+ * @param {string} [opts.password]
+ * @param {any} [opts.signer]
+ * @param {string} [opts.bip39Passphrase]
+ * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
+ * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
+ * @param {PublishLabelsPreparation} opts.preparation
+ * @param {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [opts.prebuiltPsbt]
+ * @returns {Promise<PublishLabelsNowResult>}
+ */
+export async function submitLabelsPublication({
+    vault,
+    walletId,
+    password,
+    signer,
+    bip39Passphrase = '',
+    chainRegistry,
+    sdkRegistry,
+    preparation,
+    prebuiltPsbt,
+}) {
+    if (!preparation?.from || !preparation?.actionData || !preparation?.encoderOpts) {
+        throw new Error('submitLabelsPublication: preparation is required');
+    }
+    if (!sdkRegistry) throw new Error('submitLabelsPublication: sdkRegistry is required');
+
+    const { chainId, from, actionData, encoderOpts, discoveryName, sizeBytes } = preparation;
+    const result = await submitAction({
+        vault,
+        walletId,
+        password,
+        signer,
+        bip39Passphrase,
+        chainRegistry,
+        sdkRegistry,
+        chainId,
+        actionData,
+        encoderOpts: { pubkey: from.publicKey, ...encoderOpts },
+        signingPaths: [from.derivationPath
+            ? { inputIndex: 0, path: from.derivationPath }
+            : { inputIndex: 0, addressId: from.id }],
+        prebuiltPsbt,
     });
 
     return {
@@ -436,8 +481,30 @@ export async function publishLabelsNow({
         chainId,
         discoveryName,
         sizeBytes,
-        fromAddress: fromAddress.address,
+        fromAddress: from.address,
     };
+}
+
+/**
+ * §19.5.2 manual publish: builds the encrypted labels payload from
+ * the wallet's seed and broadcasts it as a FILE action on the chosen
+ * chain. The from-address is the wallet's newest external HD address
+ * on that chain (callers can override via `pickFromAddress`).
+ *
+ * This flow powers the auto-sync path: `createLabelSyncScheduler` decides
+ * WHEN a publish is due, the shell prompts for the password, and the write
+ * lands here. The manual settings path calls the preparation and submission
+ * halves separately so shared confirmation sits between them.
+ * `fetchAndDecryptLabelSync` reads the result back on restore. HW
+ * wallets are not supported here because the commitment key is derived
+ * from the seed, which only exists for software wallets.
+ *
+ * @param {PublishLabelsNowOpts} opts
+ * @returns {Promise<PublishLabelsNowResult>}
+ */
+export async function publishLabelsNow(opts) {
+    const preparation = await prepareLabelsPublication(opts);
+    return submitLabelsPublication({ ...opts, preparation });
 }
 
 /**

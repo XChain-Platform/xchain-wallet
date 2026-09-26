@@ -694,6 +694,16 @@ export function dryRunRestoreRequest(opts) {
 }
 
 /**
+ * Prepare the encrypted label FILE payload and resolve its funding address.
+ * The caller sends this result through the shared confirmation lane.
+ *
+ * @param {{ walletId: string, password: string, chainId: string }} opts
+ */
+export function prepareLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.prepareLabels', opts));
+}
+
+/**
  * §19.5.2 / G037 : manual on-chain label publish. Encrypts the
  * wallet's labels + contacts under the seed-derived commitment key
  * and broadcasts the ciphertext as a FILE action on the chosen chain.
