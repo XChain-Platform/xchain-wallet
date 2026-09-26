@@ -68,6 +68,13 @@ function stubMessaging(overrides = {}) {
         // on the handshake path in the first place.
         getRecipientPubkey: () => Promise.resolve(null),
         preflight: () => Promise.resolve({ verdict: 'pass', findings: [] }),
+        composeForConfirm: () => Promise.resolve({
+            psbt: 'aa00',
+            encoding: 'psbt',
+            actionString: 'MESSAGE|0|BTC|bc1qdevmock02ddeeff|2|02aabbcc',
+            version: 0,
+            chainId: CHAIN,
+        }),
     };
     Object.assign(target, overrides);
     return new Proxy(target, {
@@ -120,10 +127,7 @@ function alertText(utils) {
 }
 
 describe('the message key-request reports its failures', () => {
-    it('says the wallet is LOCKED, and names something the user can do about it', async () => {
-        // The exact state the defect was found in: the signer pool did not
-        // rehydrate, so `signerReady` is false and there is no password field
-        // on this stage to satisfy it with.
+    it('collects a locked wallet password on the shared confirm screen', async () => {
         const messaging = stubMessaging({ signerReady: () => Promise.resolve({ ready: false }) });
         const utils = await openHandshakeBox(messaging);
 
@@ -132,70 +136,8 @@ describe('the message key-request reports its failures', () => {
             await drainMicrotasks();
         });
 
-        const said = alertText(utils);
-        expect(said, 'a failed key request must not be silent').toMatch(/locked/i);
-        expect(said, 'unlocking is the remedy the user can actually reach').toMatch(/unlock/i);
-        // The old copy sent the user to a password field that does not exist on
-        // this stage. Asking for a password here is the defect, not the fix.
-        expect(said, 'this stage has no password field to enter one into')
-            .not.toMatch(/enter your password/i);
-    });
-
-    it('tells a legacy 25th-word passphrase wallet the truth instead of sending it round the unlock loop', async () => {
-        // The same `!signerReady` branch as above, and a DIFFERENT sentence is
-        // owed. This wallet is not locked: `SignerPool.populate` skips a
-        // legacy passphrase wallet (`passphraseEnabled` true, nothing stored
-        // yet) on purpose, and no field on THIS screen can supply the
-        // passphrase, so "unlock it and press this again" is an instruction
-        // that can never succeed - the same class of un-compliable copy this
-        // whole error state exists to kill.
-        const messaging = stubMessaging({
-            signerReady: () => Promise.resolve({ ready: false }),
-            listWallets: () => Promise.resolve([{ id: 'w', passphraseEnabled: true, passphraseStored: false }]),
-        });
-        const utils = await openHandshakeBox(messaging);
-
-        await domAct(async () => {
-            fireEvent.click(requestButton(utils));
-            await drainMicrotasks();
-        });
-
-        const said = alertText(utils);
-        expect(said, 'the reason does not name why this wallet has no signer')
-            .toMatch(/25th-word passphrase/i);
-        expect(said, 'names the unlock screen as the remedy, not typing on this screen')
-            .toMatch(/unlock screen/i);
-        expect(said, 'a wallet that is not locked was told it was locked')
-            .not.toMatch(/wallet is locked/i);
-        // The banner it renders inside already offers Plain text; the reason
-        // has to point at it, because it is the only way forward this wallet
-        // has for a first-contact message.
-        expect(said, 'no remedy this wallet can actually reach was named')
-            .toMatch(/plain text/i);
-    });
-
-    it('gives a wallet with a STORED passphrase the plain locked message, not the capture one', async () => {
-        // A stored passphrase (§3.4) makes the password the only secret the
-        // unlock needs, so a not-ready signer here really is just locked: the
-        // generic "unlock it and press this again" is true and sufficient.
-        // Reading `passphraseEnabled` alone (without `passphraseStored`) would
-        // wrongly send this wallet the legacy capture sentence instead.
-        const messaging = stubMessaging({
-            signerReady: () => Promise.resolve({ ready: false }),
-            listWallets: () => Promise.resolve([{ id: 'w', passphraseEnabled: true, passphraseStored: true }]),
-        });
-        const utils = await openHandshakeBox(messaging);
-
-        await domAct(async () => {
-            fireEvent.click(requestButton(utils));
-            await drainMicrotasks();
-        });
-
-        const said = alertText(utils);
-        expect(said, 'a stored-passphrase wallet gets the generic locked message')
-            .toMatch(/locked/i);
-        expect(said, 'the one-time capture sentence does not apply once it is stored')
-            .not.toMatch(/25th-word passphrase that has not been stored/i);
+        expect(utils.getByTestId('confirm-modal')).toBeTruthy();
+        expect(utils.getByLabelText('Password')).toBeTruthy();
     });
 
     it('surfaces a REFUSED send instead of swallowing it', async () => {
@@ -206,6 +148,10 @@ describe('the message key-request reports its failures', () => {
 
         await domAct(async () => {
             fireEvent.click(requestButton(utils));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
             await drainMicrotasks();
         });
 
@@ -222,6 +168,10 @@ describe('the message key-request reports its failures', () => {
 
         await domAct(async () => {
             fireEvent.click(requestButton(utils));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
             await drainMicrotasks();
         });
 

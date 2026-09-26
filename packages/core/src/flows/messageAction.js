@@ -324,6 +324,45 @@ export async function messageAction(opts) {
 }
 
 /**
+ * Build the deterministic MESSAGE action used for an ECDH key exchange.
+ * Both handshake screens pass this exact wire shape to shared confirmation,
+ * and the submit flow uses the same helper before signing its prebuilt PSBT.
+ *
+ * @param {object} opts
+ * @param {any} opts.chainRegistry
+ * @param {string} opts.chainId
+ * @param {object} opts.from
+ * @param {string} opts.destination
+ * @param {0 | 1} [opts.version]
+ */
+export function buildHandshakeActionData(opts) {
+    if (!opts) throw new Error('handshakeAction: opts is required');
+    if (typeof opts.destination !== 'string' || opts.destination.length === 0) {
+        throw new Error('handshakeAction: destination is required');
+    }
+    const version = opts.version === 1 ? 1 : 0;
+    const descriptor = opts.chainRegistry.get(opts.chainId);
+    if (!descriptor) throw new Error(`handshakeAction: unknown chain "${opts.chainId}"`);
+    const coin = PROTOCOL_COIN_TICKER[descriptor.coin];
+    if (!coin) throw new Error(`handshakeAction: no protocol coin ticker for "${descriptor.coin}"`);
+    const source = normalizeSource(opts.from, 'handshakeAction');
+    return {
+        actionData: {
+            action: 'MESSAGE',
+            params: {
+                VERSION: String(version),
+                COIN: coin,
+                DESTINATION: opts.destination,
+                ENCRYPTION_METHOD: '2',
+                ENCRYPTION_KEY: source.publicKey,
+            },
+        },
+        source,
+        version,
+    };
+}
+
+/**
  * Publish an ECDH key-exchange handshake (MESSAGE format 0 = request, 1 =
  * response). It broadcasts our address pubkey (the ECDH "session key") in
  * ENCRYPTION_KEY so the counterparty can derive the shared secret and send us
@@ -339,27 +378,7 @@ export async function messageAction(opts) {
  * @returns {Promise<import('./submitAction.js').SubmitResult>}
  */
 export async function handshakeAction(opts) {
-    if (!opts) throw new Error('handshakeAction: opts is required');
-    if (typeof opts.destination !== 'string' || opts.destination.length === 0) {
-        throw new Error('handshakeAction: destination is required');
-    }
-    const version = opts.version === 1 ? 1 : 0;
-
-    const descriptor = opts.chainRegistry.get(opts.chainId);
-    if (!descriptor) throw new Error(`handshakeAction: unknown chain "${opts.chainId}"`);
-    const coin = PROTOCOL_COIN_TICKER[descriptor.coin];
-    if (!coin) throw new Error(`handshakeAction: no protocol coin ticker for "${descriptor.coin}"`);
-
-    const source = normalizeSource(opts.from, 'handshakeAction');
-    const params = {
-        // VERSION selects format 0 vs 1 (identical field shapes; the encoder's
-        // FormatSelector picks the version from this explicit value).
-        VERSION: String(version),
-        COIN: coin,
-        DESTINATION: opts.destination,
-        ENCRYPTION_METHOD: '2',
-        ENCRYPTION_KEY: source.publicKey,
-    };
+    const { actionData, source, version } = buildHandshakeActionData(opts);
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -378,7 +397,7 @@ export async function handshakeAction(opts) {
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
-        actionData: { action: 'MESSAGE', params },
+        actionData,
         encoderOpts: {
             pubkey: source.publicKey,
             sourceAddress: source.address,
@@ -395,6 +414,7 @@ export async function handshakeAction(opts) {
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
         onBroadcastFailure: opts.onBroadcastFailure,
+        prebuiltPsbt: opts.prebuiltPsbt,
     });
 }
 

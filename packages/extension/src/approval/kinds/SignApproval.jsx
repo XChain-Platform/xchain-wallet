@@ -309,46 +309,69 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, [kind, chainId, psbtHexForSign, walletId]);
 
-    // §5.6 slice 4 / §6 "dApp-supplied action string": run pre-flight for
-    // the requested action and render the same <PreflightPanel> the in-wallet
-    // confirm page uses, so a dApp request gets the indexer's own verdict before
-    // the password is entered rather than only a balance-delta guess.
+    const psbtSourceAddress = useMemo(() => {
+        if (kind !== 'signPsbt' || !Array.isArray(psbtIntent.decomposed?.inputs)) return null;
+        return psbtIntent.decomposed.inputs.find(
+            (input) => input.address && psbtIntent.ownAddresses.has(input.address),
+        )?.address || null;
+    }, [kind, psbtIntent]);
+    const preflightActionString = kind === 'signAction'
+        ? (payload?.payload?.actionString || payload?.actionString || null)
+        : kind === 'signPsbt'
+            ? psbtIntent.action?.actionString || null
+            : null;
+    const preflightSourceAddress = kind === 'signPsbt'
+        ? psbtSourceAddress
+        : previewBalances.fromAddress;
+
+    // Run pre-flight for either a dApp action request or the readable action
+    // decoded from a dApp PSBT. The latter now matches the in-wallet PSBT path.
     //
     // ONE report per approval request (§4.8): the window is created per request
     // and this runs once for it. The report stays in this window; the dApp only
     // ever learns approve or reject.
     const [preflightState, setPreflightState] = useState(
-        /** @type {{ loading: boolean, report: any | null }} */
-        ({ loading: false, report: null }),
+        /** @type {{ loading: boolean, report: any | null, actionString: string | null }} */
+        ({ loading: false, report: null, actionString: null }),
     );
     const [acknowledged, setAcknowledged] = useState(() => new Set());
     // Shared with the hook: an add-only copy here made the "Sign anyway"
     // checkbox a one-way latch on the dApp approval surface too.
     const acknowledge = (code) => setAcknowledged((prev) => toggleAcknowledged(prev, code));
     useEffect(() => {
-        if (kind !== 'signAction' || !chainId) return undefined;
-        // The action string the dApp supplied IS the payload for this kind, so
-        // it is what gets checked (never a re-serialization of form state).
-        const actionString = payload?.payload?.actionString || payload?.actionString || null;
-        if (typeof actionString !== 'string' || !actionString) return undefined;
+        if (!chainId || typeof preflightActionString !== 'string' || !preflightActionString) {
+            return undefined;
+        }
         let cancelled = false;
-        setPreflightState({ loading: true, report: null });
+        setPreflightState({ loading: true, report: null, actionString: preflightActionString });
         preflight({
             chainId,
-            actionString,
-            source: previewBalances.fromAddress || undefined,
+            actionString: preflightActionString,
+            source: preflightSourceAddress || undefined,
             mode: 'report',
         })
             .then((report) => {
-                if (!cancelled) setPreflightState({ loading: false, report: report || null });
+                if (!cancelled) {
+                    setPreflightState({
+                        loading: false,
+                        report: report || null,
+                        actionString: preflightActionString,
+                    });
+                }
             })
             .catch(() => {
                 // Best-effort (§4.2): a dead explorer must not block approval.
                 // A null report reads as "no findings" and Approve stays live.
-                if (!cancelled) setPreflightState({ loading: false, report: null });
+                if (!cancelled) {
+                    setPreflightState({
+                        loading: false,
+                        report: null,
+                        actionString: preflightActionString,
+                    });
+                }
             });
         return () => { cancelled = true; };
-    }, [kind, chainId, payload, previewBalances.fromAddress]);
+    }, [chainId, preflightActionString, preflightSourceAddress]);
 
     // §22 / P4 co-sign preview: decode the action the agent wants co-signed and
     // dry-run the account policy, so the user approves a legible request (which
@@ -503,8 +526,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // §4.2 pre-flight gate, using the SAME predicate the in-wallet confirm page
     // uses: a locally-provable error hard-blocks, a network-sourced one blocks
     // until the user acknowledges that specific finding.
-    const preflightBlocked = kind === 'signAction'
-        && !canApproveWithReport(preflightState.report, acknowledged);
+    const preflightBlocked = !!preflightActionString
+        && (preflightState.actionString !== preflightActionString
+            || preflightState.loading
+            || !canApproveWithReport(preflightState.report, acknowledged));
 
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
         || !!psbtRefusal || preflightBlocked;
@@ -592,7 +617,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 // resolved above for the balance preview and the pre-flight
                 // call; it was never shown to the user deciding whether to
                 // approve.
-                sourceAddress={previewBalances.fromAddress}
+                sourceAddress={preflightSourceAddress}
             />
 
             {/* §5.6 slice 4: the shared PSBT panel enumerates every
@@ -638,16 +663,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </>
             ) : null}
 
+            {preflightActionString ? (
+                <PreflightPanel
+                    report={preflightState.report}
+                    loading={preflightState.loading
+                        || preflightState.actionString !== preflightActionString}
+                    acknowledged={acknowledged}
+                    onAcknowledge={acknowledge}
+                />
+            ) : null}
+
             {kind === 'signAction' ? (
                 <>
-                    {/* The indexer's own verdict for the dApp's action, on the
-                        same panel the in-wallet confirm page renders. */}
-                    <PreflightPanel
-                        report={preflightState.report}
-                        loading={preflightState.loading}
-                        acknowledged={acknowledged}
-                        onAcknowledge={acknowledge}
-                    />
                     <BalanceChanges
                         result={previewResult}
                         loading={previewBalances.loading}

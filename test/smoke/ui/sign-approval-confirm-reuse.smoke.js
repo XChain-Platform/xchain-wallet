@@ -93,8 +93,8 @@ assert.match(
 assert.match(signSrc, /\n\s*preflight,\n/, 'SignApproval imports preflight from messaging');
 assert.match(
     signSrc,
-    /kind !== 'signAction'/,
-    'pre-flight is scoped to the signAction kind',
+    /kind === 'signPsbt'[\s\S]{0,120}psbtIntent\.action\?\.actionString/,
+    'pre-flight includes readable actions decoded from signPsbt requests',
 );
 
 // §4.8: a dApp that could call preflight itself could binary-search balances.

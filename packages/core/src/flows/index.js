@@ -195,6 +195,7 @@ export {
 export {
     messageAction,
     buildMessageParams,
+    buildHandshakeActionData,
     handshakeAction,
     getRecipientPubkey,
     PubkeyNotFoundError,
