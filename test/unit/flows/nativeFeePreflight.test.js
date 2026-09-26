@@ -101,23 +101,27 @@ describe('applyNativeFeePreflight', () => {
         expect(out.quote.requiredFeeSats).toBe(0);
     });
 
-    // Measured live on Bitcoin regtest: a DIVIDEND to a single holder quotes
-    // requiredFeeSats 2 (DIVIDEND_PER_RECIPIENT 100 gas), the wallet attached that output,
-    // and bitcoind rejected the whole transaction as `dust` - after which the wallet still
-    // reported the dividend as sent. Refusing at the guardrail is what keeps the doomed
-    // transaction from being built at all.
-    it('refuses a fee priced below the chain dust threshold instead of building a doomed tx', async () => {
-        const sdk = makeSdk({ requiredFeeSats: 2, requiredFeeNative: '0.00000002' });
-        let err = null;
-        try {
-            await applyNativeFeePreflight({ sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true } });
-        } catch (e) { err = e; }
-        expect(err).toBeInstanceOf(NativeFeeForfeitError);
-        expect(err.reason).toBe('dust');
-        expect(err.quote.requiredFeeSats).toBe(2);
+    it('rounds a Litecoin SWEEP fee up to the relay dust floor', async () => {
+        const sdk = Object.assign(makeSdk({ requiredFeeSats: 600, requiredFeeNative: '0.00000600' }), {
+            wallet: { getBitcoinNetwork: () => ({ dustThreshold: 5460 }) },
+        });
+        const out = await applyNativeFeePreflight({
+            sdk,
+            actionData: { action: 'SWEEP', params: { DESTINATION: 'dest' } },
+            encoderOpts: { payFeeInNativeCoin: true },
+        });
+
+        expect(out.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 5460 }]);
+        expect(out.quote).toMatchObject({
+            requiredFeeSats: 5460,
+            requiredFeeNative: '0.00005460',
+            quotedFeeSats: 600,
+            quotedFeeNative: '0.00000600',
+            dustThresholdSats: 5460,
+        });
     });
 
-    it('reads the dust threshold off the SDK network, so DOGE refuses what Bitcoin allows', async () => {
+    it('reads the dust threshold off the SDK network when sizing the output', async () => {
         // 600 sats clears Bitcoin's 546 and is far below Dogecoin's 100000.
         const withNetwork = (dustThreshold) => Object.assign(makeSdk({ requiredFeeSats: 600 }), {
             wallet: { getBitcoinNetwork: () => ({ dustThreshold }) },
@@ -127,14 +131,10 @@ describe('applyNativeFeePreflight', () => {
         });
         expect(btc.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 600 }]);
 
-        let err = null;
-        try {
-            await applyNativeFeePreflight({
-                sdk: withNetwork(100000), actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
-            });
-        } catch (e) { err = e; }
-        expect(err).toBeInstanceOf(NativeFeeForfeitError);
-        expect(err.reason).toBe('dust');
+        const doge = await applyNativeFeePreflight({
+            sdk: withNetwork(100000), actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
+        });
+        expect(doge.encoderOpts.customOutputs).toEqual([{ address: 'feeDest', value: 100000 }]);
     });
 
     it('still attaches a fee at or above the threshold', async () => {

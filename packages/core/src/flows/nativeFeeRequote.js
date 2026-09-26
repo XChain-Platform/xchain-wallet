@@ -78,7 +78,7 @@ const DEFAULT_TOLERANCE_MAX = 1.10;
  * which is the same posture the input-liveness and pre-flight re-checks take.
  *
  * @param {Object} [args]
- * @param {{ requiredFeeSats?: number|string } | null} [args.composed]  the compose-time quote
+ * @param {{ requiredFeeSats?: number|string, dustThresholdSats?: number|string } | null} [args.composed]  the compose-time quote
  * @param {object | null} [args.fresh]   the Approve-time quote (sdk.quoteNativeFee)
  * @returns {NativeFeeRequoteComparison}
  */
@@ -100,8 +100,8 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
         return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'not priceable' };
     }
 
-    const expectedSats = intOrNull(fresh.requiredFeeSats);
-    if (expectedSats === null) {
+    const quotedExpectedSats = intOrNull(fresh.requiredFeeSats);
+    if (quotedExpectedSats === null) {
         return { ...base, coin, verdict: 'unavailable', reason: 'quote carries no amount' };
     }
 
@@ -109,8 +109,22 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
     // formats both to 8 dp, so they convert to satoshis exactly) and are
     // derived from the tolerances only as a fallback, rounded the conservative
     // way in each direction.
-    const minSats = boundSats(fresh.minAcceptable, expectedSats, fresh.toleranceMin, DEFAULT_TOLERANCE_MIN, Math.ceil);
-    const maxSats = boundSats(fresh.maxAcceptable, expectedSats, fresh.toleranceMax, DEFAULT_TOLERANCE_MAX, Math.floor);
+    const quotedMinSats = boundSats(
+        fresh.minAcceptable, quotedExpectedSats, fresh.toleranceMin, DEFAULT_TOLERANCE_MIN, Math.ceil,
+    );
+    const quotedMaxSats = boundSats(
+        fresh.maxAcceptable, quotedExpectedSats, fresh.toleranceMax, DEFAULT_TOLERANCE_MAX, Math.floor,
+    );
+    // A composed quote records the relay floor only when its fee was rounded up to dust.
+    // Keep that floor on the fresh band while the action still carries a positive fee.
+    const dustThresholdSats = quotedExpectedSats > 0
+        ? intOrNull(composed && composed.dustThresholdSats)
+        : null;
+    const expectedSats = dustThresholdSats
+        ? Math.max(quotedExpectedSats, dustThresholdSats)
+        : quotedExpectedSats;
+    const minSats = dustThresholdSats ? Math.max(quotedMinSats, dustThresholdSats) : quotedMinSats;
+    const maxSats = dustThresholdSats ? Math.max(quotedMaxSats, dustThresholdSats) : quotedMaxSats;
 
     const cmp = { ...base, coin, expectedSats, minSats, maxSats };
     if (paidSats < minSats) return { ...cmp, verdict: 'short' };
