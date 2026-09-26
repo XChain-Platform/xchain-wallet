@@ -38,3 +38,54 @@ export function preflightFindingKey(f) {
     const ci = f?.data?.commandIndex;
     return Number.isInteger(ci) ? `${f.code}#${ci}` : f?.code;
 }
+
+const CONSENSUS_INVALID = /^\s*invalid:\s*(.+?)\s*\.?\s*$/i;
+
+/**
+ * Return the reason supplied by a completed consensus validation, or null
+ * when the finding only describes uncertainty or advice.
+ *
+ * The encoder and indexer put their authoritative rejection in `status` or
+ * `error` with an `invalid:` prefix. Transport failures, timeouts and generic
+ * rejections do not carry that prefix, so they remain eligible for override.
+ *
+ * @param {{ severity?: string, data?: { status?: unknown, error?: unknown } }} f
+ * @returns {string | null}
+ */
+export function consensusRefusalReason(f) {
+    if (f?.severity !== 'error') return null;
+    const candidates = [f?.data?.status, f?.data?.error];
+    for (const value of candidates) {
+        if (typeof value !== 'string') continue;
+        const match = value.match(CONSENSUS_INVALID);
+        if (match && match[1].trim()) return match[1].trim().replace(/\.+$/, '');
+    }
+    return null;
+}
+
+/**
+ * Format a consensus refusal for the signer without protocol status syntax.
+ *
+ * @param {{ severity?: string, data?: { status?: unknown, error?: unknown, commandIndex?: number } }} f
+ * @returns {string | null}
+ */
+export function consensusRefusalMessage(f) {
+    const reason = consensusRefusalReason(f);
+    if (!reason) return null;
+    const plainReason = reason.charAt(0).toUpperCase() + reason.slice(1);
+    const subject = Number.isInteger(f?.data?.commandIndex)
+        ? `batch command ${f.data.commandIndex + 1}`
+        : 'this action';
+    return `The network refused ${subject}: ${plainReason}.`;
+}
+
+/**
+ * Decide whether an error is proven and cannot be acknowledged away.
+ *
+ * @param {{ severity?: string, overridable?: boolean, data?: object }} f
+ * @returns {boolean}
+ */
+export function isHardPreflightFinding(f) {
+    return f?.severity === 'error'
+        && (f.overridable === false || consensusRefusalReason(f) !== null);
+}

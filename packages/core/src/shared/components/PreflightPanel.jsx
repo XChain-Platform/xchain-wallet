@@ -10,8 +10,8 @@
 
 // PreflightPanel (§5.2.4). Renders a PreflightReport: a verdict
 // chip, findings grouped by severity with per-finding override affordances
-// (non-overridable client errors have none; network-sourced errors carry an
-// explicit acknowledgment checkbox), the Tier-1 notice saying which party
+// (proven client or consensus errors have none; uncertain network-sourced
+// errors carry an explicit acknowledgment checkbox), the Tier-1 notice saying which party
 // answered, a "Could not verify" list, and the "checked at block N" stamp.
 // aria-live=polite (assertive on fail).
 //
@@ -23,7 +23,11 @@ import styles from './PreflightPanel.module.css';
 // override identity must be ONE definition shared with the Approve gate, and
 // this component is rendered by the extension approval root, so it pulls in
 // nothing but the key function.
-import { preflightFindingKey } from '../utils/preflightFindingKey.js';
+import {
+    consensusRefusalMessage,
+    isHardPreflightFinding,
+    preflightFindingKey,
+} from '../utils/preflightFindingKey.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -343,8 +347,8 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                         utils/preflightFindingKey.js. */}
                     {errors.map((f, i) => (
                         <li key={`${preflightFindingKey(f)}-${i}`} className={`${styles.finding} ${styles.findingError}`}>
-                            <span className={styles.findingMsg}>{f.message}</span>
-                            {f.overridable ? (
+                            <span className={styles.findingMsg}>{consensusRefusalMessage(f) || f.message}</span>
+                            {f.overridable && !isHardPreflightFinding(f) ? (
                                 <label className={styles.ack}>
                                     <input
                                         type="checkbox"

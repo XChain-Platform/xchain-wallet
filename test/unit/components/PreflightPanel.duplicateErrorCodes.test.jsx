@@ -141,3 +141,74 @@ describe('canApproveWithReport: one ack clears one sub-command', () => {
         expect(canApproveWithReport(hard, new Set(['PARSE_INVALID#2']))).toBe(false);
     });
 });
+
+describe('definite consensus refusals', () => {
+    const refusal = {
+        code: 'DRYRUN_INVALID',
+        severity: 'error',
+        source: 'dryrun',
+        overridable: true,
+        message: 'The network reports this will fail: invalid: gated token transfer requires key handoff message',
+        data: { status: 'invalid: gated token transfer requires key handoff message', error: null },
+    };
+
+    it('hard-blocks an explicit invalid verdict even when it is acknowledged', () => {
+        const report = reportWith([refusal]);
+        expect(canApproveWithReport(report, new Set())).toBe(false);
+        expect(canApproveWithReport(report, new Set(['DRYRUN_INVALID']))).toBe(false);
+    });
+
+    it('shows the refusal reason in plain words without a Sign anyway control', () => {
+        mount(reportWith([refusal]));
+        expect(screen.getByText('The network refused this action: Gated token transfer requires key handoff message.'))
+            .toBeTruthy();
+        expect(screen.queryByTestId('ack-DRYRUN_INVALID')).toBeNull();
+        expect(screen.queryByText(/invalid:/i)).toBeNull();
+    });
+
+    it('also hard-blocks an invalid verdict carried in the encoder error field', () => {
+        const encoderRefusal = {
+            ...refusal,
+            source: 'encoder',
+            data: { status: null, error: 'invalid: gated token transfer requires key handoff message' },
+        };
+        expect(canApproveWithReport(reportWith([encoderRefusal]), new Set(['DRYRUN_INVALID'])))
+            .toBe(false);
+    });
+});
+
+describe('uncertain and advisory pre-flight results', () => {
+    it.each([
+        ['encoder unreachable', 'ENCODER_UNREACHABLE'],
+        ['network timeout', 'DRYRUN_TIMEOUT'],
+        ['unknown rejection', 'DRYRUN_INVALID'],
+    ])('keeps %s overridable', (message, code) => {
+        const finding = {
+            code,
+            severity: 'error',
+            source: 'dryrun',
+            overridable: true,
+            message,
+            data: { status: message === 'unknown rejection' ? 'rejected' : null },
+        };
+        const report = reportWith([finding]);
+        mount(report);
+        expect(screen.getByTestId(`ack-${code}`)).toBeTruthy();
+        expect(canApproveWithReport(report, new Set())).toBe(false);
+        expect(canApproveWithReport(report, new Set([code]))).toBe(true);
+    });
+
+    it('keeps an unreachable result and an advisory non-blocking', () => {
+        const report = reportWith([
+            {
+                code: 'DRYRUN_UNAVAILABLE', severity: 'info', source: 'dryrun',
+                message: 'The network dry-run was unavailable (connection refused).', data: {},
+            },
+            {
+                code: 'NATIVE_FEE_FORFEIT', severity: 'warning', source: 'client',
+                message: 'Review the fee before signing.', data: {},
+            },
+        ]);
+        expect(canApproveWithReport(report, new Set())).toBe(true);
+    });
+});

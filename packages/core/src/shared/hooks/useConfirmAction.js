@@ -33,7 +33,7 @@ import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.j
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
 import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
-import { preflightFindingKey } from '../utils/preflightFindingKey.js';
+import { isHardPreflightFinding, preflightFindingKey } from '../utils/preflightFindingKey.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -341,7 +341,8 @@ export function useConfirmAction() {
                 setReport(fresh);
                 reportStampRef.current = Date.now();
                 // Verdict DEGRADED -> interrupt instead of signing.
-                if (verdictRank(fresh?.verdict) > verdictRank(report?.verdict)) {
+                if (verdictRank(fresh?.verdict) > verdictRank(report?.verdict)
+                    || !canApproveWithReport(fresh, acknowledged)) {
                     setPhase('ready');
                     return { interrupted: true, reason: 'findings-changed' };
                 }
@@ -463,7 +464,7 @@ export function useConfirmAction() {
             settleReject(err);
             return undefined;
         }
-    }, [report, instanceId, settleResolve, settleReject]);
+    }, [report, acknowledged, instanceId, settleResolve, settleReject]);
 
     const reject = useCallback(() => {
         settleReject(new UserRejectedError());
@@ -477,8 +478,8 @@ export function useConfirmAction() {
     return {
         confirm, approve, reject, acknowledge,
         phase, composing, composed, report, error, acknowledged, source,
-        // Approve is allowed when every non-overridable error is absent AND
-        // every overridable error the report carries has been acknowledged.
+        // Approve is allowed when every hard error is absent and every
+        // uncertain, overridable error has been acknowledged.
         canApprove: canApproveWithReport(report, acknowledged),
     };
 }
@@ -536,9 +537,9 @@ export function isCredentialFailure(err) {
 
 /**
  * The §4.2 Approve gate, as a pure function: a locally-provable
- * (`overridable: false`) error hard-blocks, a network-sourced one blocks until
- * the user explicitly acknowledges that specific finding, and no report at all
- * (best-effort, timed out, or pre-flight skipped) allows.
+ * (`overridable: false`) error or explicit `invalid:` consensus verdict
+ * hard-blocks. An uncertain network-sourced error blocks until the user
+ * acknowledges it, and no report at all allows.
  *
  * Exported because the extension's approval window is a SEPARATE React root
  * that renders <PreflightPanel> without running this hook's state machine
@@ -565,7 +566,7 @@ export function canApproveWithReport(report, acknowledged) {
     if (!report) return true; // no report (best-effort / timed out): allow
     for (const f of report.findings) {
         if (f.severity !== 'error') continue;
-        if (f.overridable === false) return false;           // hard block
+        if (isHardPreflightFinding(f)) return false;         // hard block
         // Needs an explicit ack of THIS finding, per sub-command.
         if (!acknowledged.has(preflightFindingKey(f))) return false;
     }
