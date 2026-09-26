@@ -38,6 +38,7 @@ import {
     nudgeChain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
     REGTEST_DESTINATION,
     selectVenueChain,
     switchToRegtest,
@@ -47,7 +48,10 @@ import {
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
-const FUNDING = 1;
+// Off Bitcoin the protocol fee is paid in the native coin: about 20 DOGE per
+// fee-bearing action at the venue's seeded DOGE price, and this test makes
+// about ten of them, so one DOGE cannot even pay for the first ISSUE.
+const FUNDING = REGTEST_COIN === 'RDOGE' ? 1000 : 1;
 const SUPPLY = '1000';
 /** Pays the XCHAIN protocol fee on the three ISSUEs, the FILE, three LINKs and three LISTs, with room to spare. */
 const MINT_XCHAIN = 100;
