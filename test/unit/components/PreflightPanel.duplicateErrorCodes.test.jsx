@@ -34,9 +34,9 @@ const subCommandError = (position) => ({
     severity: 'error',
     source: 'dryrun',
     overridable: true,
-    message: `The network reports batch command ${position + 1} will fail: insufficient funds.`
+    message: `The network reports batch command ${position + 1} will fail: invalid: TICK (unknown).`
         + ' A batch is not atomic, so the other commands still apply.',
-    data: { commandIndex: position, action: 'SEND', status: 'insufficient funds' },
+    data: { commandIndex: position, action: 'SEND', status: 'invalid: TICK (unknown)' },
 });
 
 const reportWith = (findings) => ({
@@ -75,7 +75,7 @@ describe('preflightFindingKey', () => {
 describe('PreflightPanel: repeated error codes in one batch report', () => {
     it('renders one row per rejected sub-command', () => {
         mount(reportWith([subCommandError(1), subCommandError(4)]));
-        const rows = screen.getAllByText(/The network reports batch command/);
+        const rows = screen.getAllByText(/The network refused batch command/);
         expect(rows).toHaveLength(2);
         expect(rows[0].textContent).toContain('batch command 2');
         expect(rows[1].textContent).toContain('batch command 5');
@@ -130,6 +130,20 @@ describe('canApproveWithReport: one ack clears one sub-command', () => {
             toggleAcknowledged(acked, 'DRYRUN_SUBCOMMAND_INVALID#4'))).toBe(false);
     });
 
+    it('allows a batch with one invalid command after that command is acknowledged', () => {
+        const oneInvalid = reportWith([
+            {
+                code: 'DRYRUN_VALID', severity: 'info', source: 'dryrun',
+                message: 'The network accepted this batch transaction, but NOT every command in it.',
+                data: { subCommandCount: 2, accepted: 1 },
+            },
+            subCommandError(1),
+        ]);
+        expect(canApproveWithReport(oneInvalid, new Set())).toBe(false);
+        expect(canApproveWithReport(oneInvalid,
+            new Set(['DRYRUN_SUBCOMMAND_INVALID#1']))).toBe(true);
+    });
+
     // A non-overridable per-command error (PARSE_INVALID is `local`, so
     // addFinding stamps overridable:false) must stay a hard block no matter
     // what is in the set; the per-command key changes nothing there.
@@ -147,12 +161,11 @@ describe('definite consensus refusals', () => {
         code: 'DRYRUN_INVALID',
         severity: 'error',
         source: 'dryrun',
-        overridable: true,
         message: 'The network reports this will fail: invalid: gated token transfer requires key handoff message',
         data: { status: 'invalid: gated token transfer requires key handoff message', error: null },
     };
 
-    it('hard-blocks an explicit invalid verdict even when it is acknowledged', () => {
+    it('hard-blocks an unmarked whole-action invalid verdict even when it is acknowledged', () => {
         const report = reportWith([refusal]);
         expect(canApproveWithReport(report, new Set())).toBe(false);
         expect(canApproveWithReport(report, new Set(['DRYRUN_INVALID']))).toBe(false);
@@ -178,6 +191,41 @@ describe('definite consensus refusals', () => {
 });
 
 describe('uncertain and advisory pre-flight results', () => {
+    it('honours an explicit override on a whole-action invalid verdict', () => {
+        const finding = {
+            code: 'DRYRUN_INVALID',
+            severity: 'error',
+            source: 'dryrun',
+            overridable: true,
+            message: 'The network reports this will fail: invalid: controller (reverted)',
+            data: { status: 'invalid: controller (reverted)', error: null },
+        };
+        const report = reportWith([finding]);
+        mount(report);
+        expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
+        expect(canApproveWithReport(report, new Set())).toBe(false);
+        expect(canApproveWithReport(report, new Set(['DRYRUN_INVALID']))).toBe(true);
+    });
+
+    it.each([
+        'invalid: insufficient funds',
+        'invalid: GIVE_AMOUNT (insufficient balance)',
+    ])('keeps an SDK-overridable balance refusal behind Sign anyway: %s', (status) => {
+        const finding = {
+            code: 'DRYRUN_INVALID',
+            severity: 'error',
+            source: 'dryrun',
+            overridable: true,
+            message: `The network reports this will fail: ${status}`,
+            data: { status, error: null },
+        };
+        const report = reportWith([finding]);
+        mount(report);
+        expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
+        expect(canApproveWithReport(report, new Set())).toBe(false);
+        expect(canApproveWithReport(report, new Set(['DRYRUN_INVALID']))).toBe(true);
+    });
+
     it.each([
         ['encoder unreachable', 'ENCODER_UNREACHABLE'],
         ['network timeout', 'DRYRUN_TIMEOUT'],

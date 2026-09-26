@@ -46,8 +46,8 @@ const CONSENSUS_INVALID = /^\s*invalid:\s*(.+?)\s*\.?\s*$/i;
  * when the finding only describes uncertainty or advice.
  *
  * The encoder and indexer put their authoritative rejection in `status` or
- * `error` with an `invalid:` prefix. Transport failures, timeouts and generic
- * rejections do not carry that prefix, so they remain eligible for override.
+ * `error` with an `invalid:` prefix. This extracts the reason for display;
+ * `isHardPreflightFinding` separately applies the producer's override policy.
  *
  * @param {{ severity?: string, data?: { status?: unknown, error?: unknown } }} f
  * @returns {string | null}
@@ -82,10 +82,17 @@ export function consensusRefusalMessage(f) {
 /**
  * Decide whether an error is proven and cannot be acknowledged away.
  *
+ * A producer's explicit override policy wins over status wording. Batch
+ * sub-command refusals are also scoped to one command rather than the whole
+ * action, so they stay eligible for per-command acknowledgement.
+ *
  * @param {{ severity?: string, overridable?: boolean, data?: object }} f
  * @returns {boolean}
  */
 export function isHardPreflightFinding(f) {
-    return f?.severity === 'error'
-        && (f.overridable === false || consensusRefusalReason(f) !== null);
+    if (f?.severity !== 'error') return false;
+    if (f.overridable !== undefined) return f.overridable === false;
+    const isSubCommand = f.code === 'DRYRUN_SUBCOMMAND_INVALID'
+        || Number.isInteger(f?.data?.commandIndex);
+    return !isSubCommand && consensusRefusalReason(f) !== null;
 }

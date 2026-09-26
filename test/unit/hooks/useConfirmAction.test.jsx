@@ -332,7 +332,7 @@ describe('useConfirmAction', () => {
         await act(async () => { result.current.reject(); await p; });
     });
 
-    it('interrupts signing when a stale re-check returns a definite consensus refusal', async () => {
+    it('interrupts signing when a stale re-check returns an unclassified consensus refusal', async () => {
         const initial = {
             verdict: 'fail',
             findings: [{
@@ -344,7 +344,7 @@ describe('useConfirmAction', () => {
         const refusal = {
             verdict: 'fail',
             findings: [{
-                code: 'DRYRUN_INVALID', severity: 'error', source: 'dryrun', overridable: true,
+                code: 'DRYRUN_INVALID', severity: 'error', source: 'dryrun',
                 message: 'The network reports this will fail: invalid: key handoff required.',
                 data: { status: 'invalid: key handoff required', error: null },
             }],

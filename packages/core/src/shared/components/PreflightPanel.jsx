@@ -10,8 +10,8 @@
 
 // PreflightPanel (§5.2.4). Renders a PreflightReport: a verdict
 // chip, findings grouped by severity with per-finding override affordances
-// (proven client or consensus errors have none; uncertain network-sourced
-// errors carry an explicit acknowledgment checkbox), the Tier-1 notice saying which party
+// (non-overridable errors have none; producer-marked overridable errors carry
+// an explicit acknowledgment checkbox), the Tier-1 notice saying which party
 // answered, a "Could not verify" list, and the "checked at block N" stamp.
 // aria-live=polite (assertive on fail).
 //

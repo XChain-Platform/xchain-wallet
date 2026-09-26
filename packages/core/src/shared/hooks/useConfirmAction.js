@@ -479,7 +479,7 @@ export function useConfirmAction() {
         confirm, approve, reject, acknowledge,
         phase, composing, composed, report, error, acknowledged, source,
         // Approve is allowed when every hard error is absent and every
-        // uncertain, overridable error has been acknowledged.
+        // overridable error has been acknowledged.
         canApprove: canApproveWithReport(report, acknowledged),
     };
 }
@@ -537,9 +537,9 @@ export function isCredentialFailure(err) {
 
 /**
  * The §4.2 Approve gate, as a pure function: a locally-provable
- * (`overridable: false`) error or explicit `invalid:` consensus verdict
- * hard-blocks. An uncertain network-sourced error blocks until the user
- * acknowledges it, and no report at all allows.
+ * (`overridable: false`) error or an unclassified whole-action `invalid:`
+ * consensus verdict hard-blocks. A producer-marked overridable error blocks
+ * until the user acknowledges it, and no report at all allows.
  *
  * Exported because the extension's approval window is a SEPARATE React root
  * that renders <PreflightPanel> without running this hook's state machine

@@ -341,21 +341,23 @@ test.describe('the PC-26 gated SEND guard', () => {
             await expectConfirmModal(holder, 'the bypassed raw SEND');
 
             // The confirm preflight dry-runs the action against the network and
-            // shows the indexer's own refusal. A definite consensus refusal blocks
-            // signing outright, with no Sign anyway override, so a bare SEND of a
-            // gated tick can never be broadcast from the wallet and cost a fee.
+            // shows the indexer's own refusal. The SDK marks network-sourced
+            // verdicts overridable so confirmed-only state cannot censor signing.
             const confirm = holder.getByTestId('confirm-modal');
             const refusal = confirm.getByRole('listitem')
                 .filter({ hasText: /gated token transfer requires key handoff message/ });
             await expect(refusal, 'the preflight did not surface the network\'s gated-send refusal')
                 .toBeVisible({ timeout: 60_000 });
-            await expect(refusal.getByRole('checkbox', { name: 'Sign anyway' }),
-                'a definite network refusal still offered Sign anyway').toHaveCount(0);
-            await expect(holder.getByTestId('confirm-approve'),
-                'Approve was enabled past a definite network refusal').toBeDisabled();
+            const override = refusal.getByRole('checkbox', { name: 'Sign anyway' });
+            await expect(override, 'the SDK override policy was ignored').toBeVisible();
+            const approve = holder.getByTestId('confirm-approve');
+            await expect(approve, 'Approve was enabled before explicit consent').toBeDisabled();
+            await override.check();
+            await expect(approve, 'Approve stayed disabled after explicit consent').toBeEnabled();
+            await holder.getByTestId('confirm-reject').click();
+            await expect(confirm).toHaveCount(0);
 
-            // Nothing was broadcast: the holder's balance is exactly what it was
-            // before the bypass attempt.
+            // Rejecting the override leaves the holder's balance unchanged.
             expect(await tokenBalance(holderAddr, TICK)).toBe(holderTickBefore);
         });
     });
