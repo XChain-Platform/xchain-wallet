@@ -16,6 +16,9 @@
 // address is active with no stored state, and a deleted override falls back
 // to the default automatically.
 
+import { recordLastUsedChain } from '../shared/chainSelection.js';
+import { updateSettings } from './settings.js';
+
 /**
  * Default active address for a chain group: the lowest-index HD receive
  * address (external branch change=0, not a dispenser). Imported / watch-only
@@ -184,5 +187,8 @@ export async function setActiveAddress({ vault, accountId, chainId, addressId })
 
     const map = { ...(account.activeAddressByChainId || {}), [chainId]: addressId };
     await vault.accounts.put({ ...account, activeAddressByChainId: map });
+    await recordLastUsedChain({
+        updateSettings: (patch) => updateSettings(vault, patch),
+    }, chainId);
     return { ok: true };
 }
