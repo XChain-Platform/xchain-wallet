@@ -170,4 +170,30 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
         expect(submit.args).toMatchObject({ destination: COUNTERPARTY, version: 1 });
     });
+
+    it('shows an unsigned inbox key-share without claiming it was sent in watcher mode', async () => {
+        const buildActionPsbtRequest = vi.fn(() =>
+            Promise.resolve({ psbtHex: 'aa00', encoding: 'psbt' }));
+        const { messaging, calls } = recordingMessaging({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest,
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(MessagingInbox, messaging);
+            await drainMicrotasks(24);
+        });
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Share my key' }));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+            .toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(utils.container.textContent).not.toMatch(/Key shared/i);
+        expect(buildActionPsbtRequest).toHaveBeenCalledOnce();
+        expect(calls.some((call) => call.method === 'sendHandshake')).toBe(false);
+    });
 });

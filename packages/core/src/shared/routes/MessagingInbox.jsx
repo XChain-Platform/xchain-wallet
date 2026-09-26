@@ -16,6 +16,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { readMsgRead, writeMsgRead, writeMsgUnread } from '../utils/msgReadMemory.js';
@@ -779,6 +780,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
 function SessionRequestRow({ request, record, signerReady, messaging, walletId, variant, contactName, onMessage }) {
     const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
     const lane = useOwnerActionLane({
         messaging,
         walletId,
@@ -799,10 +801,15 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
                 destination: request.from,
                 version: 1,
             });
-            await lane.run({
+            const result = await lane.run({
                 actionData,
                 submitExtra: { destination: request.from, version: 1 },
             });
+            if (lane.isWatcherMode) {
+                setWatcherResult(result);
+                setStage('idle');
+                return;
+            }
             setStage('sent');
         } catch (err) {
             if (isUserRejection(err)) {
@@ -833,6 +840,18 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
                     chainLabel={descriptor?.displayName || record.chainId}
                     signerReady={signerReady}
                     hintClassName={styles.hint}
+                />
+            </li>
+        );
+    }
+
+    if (watcherResult) {
+        return (
+            <li className={local.requestRow}>
+                <WatcherResultPanel
+                    result={watcherResult}
+                    onBuildAnother={() => setWatcherResult(null)}
+                    onDone={() => setWatcherResult(null)}
                 />
             </li>
         );

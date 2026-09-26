@@ -17,6 +17,7 @@ import { OpenOrdersPanel } from '../../../packages/core/src/shared/components/Op
 const lane = vi.hoisted(() => ({
     open: false,
     composing: false,
+    isWatcherMode: false,
     run: vi.fn(),
     hook: vi.fn(),
     resolve: null,
@@ -28,6 +29,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => (
         return {
             open: lane.open,
             composing: lane.composing,
+            isWatcherMode: lane.isWatcherMode,
             run: lane.run,
             confirmProps: { confirmAction: { phase: 'ready' } },
         };
@@ -88,6 +90,7 @@ function mountPanel() {
 beforeEach(() => {
     lane.open = false;
     lane.composing = false;
+    lane.isWatcherMode = false;
     lane.resolve = null;
     lane.hook.mockClear();
     lane.run.mockReset();
@@ -131,5 +134,23 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         await waitFor(() => {
             expect(screen.getByText('No open orders on this market.')).toBeTruthy();
         });
+    });
+
+    it('keeps the order open and shows the unsigned transaction in watcher mode', async () => {
+        lane.isWatcherMode = true;
+        lane.run.mockResolvedValue({ psbtHex: 'aa00', encoding: 'psbt' });
+        mountPanel();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+        expect(await screen.findByRole('heading', {
+            name: 'Unsigned transaction, ready for signing',
+        })).toBeTruthy();
+        expect(screen.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(screen.queryByText('No open orders on this market.')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy();
     });
 });

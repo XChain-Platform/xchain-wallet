@@ -25,6 +25,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { ActionConfirmScreen } from './ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from './WatcherResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -51,6 +52,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [confirmOrder, setConfirmOrder] = useState(/** @type {any | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
@@ -148,7 +150,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         setSubmitError(null);
         const orderActionIndex = String(confirmOrder.action_index);
         try {
-            await cancelLane.run({
+            const result = await cancelLane.run({
                 actionData: {
                     action: 'ORDER',
                     params: { VERSION: '1', ORDER_ACTION_INDEX: orderActionIndex },
@@ -156,6 +158,10 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
                 submitExtra: { orderActionIndex },
             });
+            if (cancelLane.isWatcherMode) {
+                setWatcherResult(result);
+                return;
+            }
             setConfirmOrder(null);
             setOrders((prev) => prev.filter((o) => o.action_index !== confirmOrder.action_index));
         } catch (err) {
@@ -181,6 +187,19 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
+            />
+        );
+    }
+
+    if (watcherResult) {
+        return (
+            <WatcherResultPanel
+                result={watcherResult}
+                onBuildAnother={() => setWatcherResult(null)}
+                onDone={() => {
+                    setWatcherResult(null);
+                    setConfirmOrder(null);
+                }}
             />
         );
     }

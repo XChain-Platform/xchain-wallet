@@ -30,12 +30,12 @@ const COMPOSED = {
 
 afterEach(() => cleanup());
 
-function mount() {
+function mount({ walletMode = 'full' } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn(async () => ({ [CHAIN_ID]: [FROM] })),
         getActiveAddresses: vi.fn(async () => ({ [CHAIN_ID]: FROM })),
         listActions: vi.fn(async () => ['SEND']),
-        getSettings: vi.fn(async () => ({ walletMode: 'full' })),
+        getSettings: vi.fn(async () => ({ walletMode })),
         signerReady: vi.fn(async () => ({ ready: true })),
         composeForConfirm: vi.fn(async () => COMPOSED),
         preflight: vi.fn(async () => ({ verdict: 'pass', findings: [], unverified: [] })),
@@ -44,6 +44,7 @@ function mount() {
         reserve: vi.fn(async () => {}),
         releaseReservation: vi.fn(async () => {}),
         advancedAction: vi.fn(async () => ({ txid: 'parallel-txid' })),
+        buildActionPsbtRequest: vi.fn(async () => ({ psbtHex: 'aa00', encoding: 'psbt' })),
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -87,5 +88,21 @@ describe('ParallelComposer confirmation', () => {
             prebuiltPsbt: expect.objectContaining({ psbtHex: COMPOSED.psbt }),
         })));
         expect(await screen.findByText('Parallel run complete')).toBeTruthy();
+    });
+
+    it('shows an unsigned transaction without completing the row in watcher mode', async () => {
+        const messaging = mount({ walletMode: 'watcher' });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
+
+        expect(await screen.findByRole('heading', {
+            name: 'Unsigned transaction, ready for signing',
+        })).toBeTruthy();
+        expect(screen.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(screen.queryByText('Parallel run complete')).toBeNull();
+        expect(messaging.advancedAction).not.toHaveBeenCalled();
     });
 });

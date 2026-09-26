@@ -179,4 +179,22 @@ describe('the message key-request reports its failures', () => {
             .toMatch(/Key request sent/i);
         expect(alertText(utils), 'and reports no failure alongside it').not.toMatch(/locked|refused/i);
     });
+
+    it('shows the unsigned key request without claiming it was sent in watcher mode', async () => {
+        const messaging = stubMessaging({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: () => Promise.resolve({ psbtHex: 'aa00', encoding: 'psbt' }),
+        });
+        const utils = await openHandshakeBox(messaging);
+
+        await domAct(async () => {
+            fireEvent.click(requestButton(utils));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+            .toBeTruthy();
+        expect(utils.getByLabelText('Unsigned transaction hex').value).toBe('aa00');
+        expect(utils.container.textContent).not.toMatch(/Key request sent/i);
+    });
 });

@@ -13,6 +13,7 @@ import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, 
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -90,6 +91,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
         /** @type {'compose' | 'review' | 'signing' | 'done'} */ ('compose'),
     );
     const [activeRowIndex, setActiveRowIndex] = useState(0);
+    const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -251,6 +253,11 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 encoderOpts: feePerKb != null ? { feePerKb } : {},
                 submitExtra: { action: activeRow.action, params },
             });
+            if (activeLane.isWatcherMode) {
+                updateRow(activeRowIndex, { status: 'pending', error: null });
+                setWatcherResult(result);
+                return;
+            }
             updateRow(activeRowIndex, {
                 status: 'success',
                 txid: result?.txid || null,
@@ -325,6 +332,16 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 signerReady={signerReady}
                 hintClassName={styles.hint}
             />
+        );
+    }
+
+    if (watcherResult) {
+        return wrap(
+            <WatcherResultPanel
+                result={watcherResult}
+                onBuildAnother={() => setWatcherResult(null)}
+                onDone={onBack}
+            />,
         );
     }
 

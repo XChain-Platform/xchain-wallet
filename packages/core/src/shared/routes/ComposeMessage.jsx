@@ -17,6 +17,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -160,6 +161,7 @@ export function ComposeMessage({
     // branch can confirm it without leaving the compose screen.
     const [handshakeBusy, setHandshakeBusy] = useState(false);
     const [handshakeSent, setHandshakeSent] = useState(false);
+    const [handshakeResult, setHandshakeResult] = useState(/** @type {any | null} */ (null));
     // The key request's OWN error, deliberately not `submitError`. It used to
     // write into that one, which the form stage renders nowhere (only the
     // review stage and the hardware branch do), so every failure of this button
@@ -599,11 +601,15 @@ export function ComposeMessage({
                 destination: toAddress.trim(),
                 version: 0,
             });
-            await handshakeLane.run({
+            const requestResult = await handshakeLane.run({
                 actionData,
                 encoderOpts: feePerKb != null ? { feePerKb } : {},
                 submitExtra: { destination: toAddress.trim(), version: 0 },
             });
+            if (handshakeLane.isWatcherMode) {
+                setHandshakeResult(requestResult);
+                return;
+            }
             setHandshakeSent(true);
         } catch (err) {
             if (!isUserRejection(err)) {
@@ -639,6 +645,16 @@ export function ComposeMessage({
 
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    if (handshakeResult) {
+        return wrap(
+            <WatcherResultPanel
+                result={handshakeResult}
+                onBuildAnother={() => setHandshakeResult(null)}
+                onDone={() => setHandshakeResult(null)}
+            />,
+        );
     }
 
     if (stage === 'done') {
