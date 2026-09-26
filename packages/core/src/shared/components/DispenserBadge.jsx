@@ -21,6 +21,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { isOpenDispenserSelling } from '../utils/dispenserPricing.js';
 
 /** @type {Map<string, { state: 'loading' | 'ready', count: number, promise?: Promise<number> }>} */
 const CACHE = new Map();
@@ -34,17 +35,14 @@ function extractRows(resp) {
     return [];
 }
 
-// Exported as isDispenserRowOpen so other surfaces (ManageToken's
-// Dispensers tab) share this exact rule instead of reinventing their own -
-// see D-39/dispenserQueries.js: the token-listing endpoint only ever
-// returns the frozen creation-time action status ('valid' for anything
-// that indexed successfully), never a real open/closed/sold-out state, so
-// "valid" is treated as active here by design, not a bug to fix later.
+// Exported as isDispenserRowOpen so other surfaces can share this rule.
+// The explorer keeps creation validity in `status` after a dispenser closes.
+// Its `current_status` and remaining escrow describe whether stock is live.
+// The shared pricing helper reads those current fields when present and falls
+// back to creation validity for explorers that omit the newer fields. Keeping
+// the badge on that helper also keeps token listings and market badges aligned.
 export function isDispenserRowOpen(row) {
-    if (!row || typeof row !== 'object') return false;
-    const status = String(row.status || '').toLowerCase();
-    if (!status) return true; // if explorer omits status, assume row is active
-    return status === 'valid' || status === 'open';
+    return isOpenDispenserSelling(row);
 }
 
 /**

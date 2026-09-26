@@ -89,6 +89,11 @@ describe('isOpenDispenserSelling', () => {
         expect(isOpenDispenserSelling({ status: 'valid', current_status: 'cancelled', give_tick: 'X' }, 'X')).toBe(false);
     });
 
+    it('requires positive escrow when the explorer serves the current remainder', () => {
+        expect(isOpenDispenserSelling({ status: 'valid', current_status: 'open', escrow_remaining: '0', give_tick: 'X' }, 'X')).toBe(false);
+        expect(isOpenDispenserSelling({ status: 'valid', current_status: 'open', escrow_remaining: '2', give_tick: 'X' }, 'X')).toBe(true);
+    });
+
     it('drops a dispenser priced IN the tick, which buys it rather than sells it', () => {
         expect(isOpenDispenserSelling({ status: 'valid', give_tick: 'OTHER', get_tick: 'X' }, 'X')).toBe(false);
         expect(isOpenDispenserSelling({ status: 'valid', give_tick: 'OTHER' }, '^1234')).toBe(true);

@@ -52,6 +52,7 @@ function mountForm(getStakesForAddress, extra = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getStakesForAddress,
+        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
         ...extra,
     };
     render(
@@ -121,6 +122,24 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         expect(
             screen.getByRole('radio', { name: /Top up an existing stake/ }),
         ).not.toBeChecked();
+    });
+
+    it('ignores a matching stake whose deactivation block has passed', async () => {
+        const getStakesForAddress = vi.fn().mockResolvedValue([
+            {
+                signing_pubkey: PUBKEY,
+                status: 'valid',
+                amount: '500',
+                activation_block: 10,
+                deactivation_block: 90,
+            },
+        ]);
+        mountForm(getStakesForAddress);
+
+        await enterPubkey();
+
+        expect(await screen.findByText(/No existing stake for this pubkey/)).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /New stake/ })).toBeChecked();
     });
 
     it('surfaces a manual-choice hint (and does not throw) when the indexer query rejects', async () => {

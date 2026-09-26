@@ -59,7 +59,7 @@ const ADDRESSES = {
 
 const POSITION_PUBKEY = '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9';
 
-function mountForm(props = {}) {
+function mountForm(props = {}, messagingExtra = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         // Shaped like the real host's getActiveAddresses(): a map of chainId
@@ -73,6 +73,7 @@ function mountForm(props = {}) {
         }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        ...messagingExtra,
     };
     // Anything else the form's hooks reach for (native-fee quotes, staked
     // balance lookups) answers empty rather than throwing: this suite is
@@ -136,5 +137,38 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         // No initialFromAddress: the ordinary active-address default wins.
         const fromField = await screen.findByLabelText('From');
         expect(fromField.value).toBe(ACTIVE_ADDRESS);
+    });
+
+    it('bounds unstake by tip-effective contract positions only', async () => {
+        mountForm({
+            initialMode: 'unstake',
+            initialTick: 'PEPECASH',
+            initialSigningPubkey: POSITION_PUBKEY,
+            initialFromAddress: POSITION_ADDRESS,
+        }, {
+            getContractStakesForAddress: vi.fn().mockResolvedValue([
+                {
+                    target_contract_index: CONTRACT_INDEX,
+                    tick: 'PEPECASH',
+                    signing_pubkey: POSITION_PUBKEY,
+                    amount: '100',
+                    status: 'valid',
+                    activation_block: 1,
+                    deactivation_block: 90,
+                },
+                {
+                    target_contract_index: CONTRACT_INDEX,
+                    tick: 'PEPECASH',
+                    signing_pubkey: POSITION_PUBKEY,
+                    amount: '7',
+                    status: 'valid',
+                    activation_block: 95,
+                    deactivation_block: null,
+                },
+            ]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        });
+
+        expect(await screen.findByText('7 PEPECASH staked')).toBeInTheDocument();
     });
 });

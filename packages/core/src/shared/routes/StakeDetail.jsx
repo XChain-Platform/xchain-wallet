@@ -19,7 +19,14 @@ import {
 } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { formatWithThousands } from '../utils/amountFormat.js';
-import { unclaimedRewards } from '../../flows/stakingDashboard.js';
+import {
+    unclaimedRewards,
+    effectiveStakingRows,
+    latestEffectiveStakingRow,
+    stakingRowState,
+    isPendingContractUnstake,
+    sumStakingAmounts,
+} from '../../flows/stakingDashboard.js';
 import styles from './IssueTokenForm.module.css';
 import local from './StakeDetail.module.css';
 
@@ -90,6 +97,7 @@ export function StakeDetail({
     const [contractStakes, setContractStakes] = useState(/** @type {any[]} */ ([]));
     const [contractUnstakes, setContractUnstakes] = useState(/** @type {any[]} */ ([]));
     const [slashEvents, setSlashEvents] = useState(/** @type {any[]} */ ([]));
+    const [height, setHeight] = useState(/** @type {number | null} */ (null));
 
     const [activeTab, setActiveTab] = useState(kind === 'validator' ? 'rewards' : 'positions');
 
@@ -185,23 +193,47 @@ export function StakeDetail({
         return () => { cancelled = true; };
     }, [walletId, kind, chainId, address, contractActionIndex, messaging]);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
+        messaging.getIndexerWatermark({ chainId })
+            .then((result) => {
+                if (!cancelled) setHeight(Number.isFinite(result?.watermark) ? result.watermark : null);
+            })
+            .catch(() => { if (!cancelled) setHeight(null); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
+
     const descriptor = chainRegistry.get(chainId);
-    const primaryStake = stakes[0];
-    const primaryDelegation = delegations[0];
+    const activeStakes = useMemo(() => effectiveStakingRows(stakes, height), [stakes, height]);
+    const activeContractStakes = useMemo(
+        () => effectiveStakingRows(contractStakes, height),
+        [contractStakes, height],
+    );
+    const pendingContractUnstakes = useMemo(
+        () => contractUnstakes.filter(isPendingContractUnstake),
+        [contractUnstakes],
+    );
+    const primaryStake = latestEffectiveStakingRow(activeStakes, height);
+    const primaryDelegation = latestEffectiveStakingRow(delegations, height);
+    const totalValidatorStaked = useMemo(
+        () => sumStakingAmounts(activeStakes),
+        [activeStakes],
+    );
     const { pending, lifetime } = useMemo(
         () => splitRewards(rewards, rewardClaims),
         [rewards, rewardClaims],
     );
     const totalContractStaked = useMemo(() => {
         let sum = 0;
-        for (const s of contractStakes) {
+        for (const s of activeContractStakes) {
             const n = Number(s.amount ?? 0);
             if (Number.isFinite(n)) sum += n;
         }
         return sum;
-    }, [contractStakes]);
-    const contractTick = contractStakes[0]?.tick || contractUnstakes[0]?.tick || '';
-    const inCooldown = contractUnstakes.length > 0;
+    }, [activeContractStakes]);
+    const contractTick = activeContractStakes[0]?.tick || pendingContractUnstakes[0]?.tick || '';
+    const inCooldown = pendingContractUnstakes.length > 0;
 
     // Quick actions hand the position's token + signing pubkey to the caller
     // so a shell can seed ContractStakeForm from THIS position instead of
@@ -209,7 +241,7 @@ export function StakeDetail({
     // pubkey) - a position on a non-XCHAIN token otherwise lands the user on
     // a form that does not match what they clicked (xchain-wallet#34).
     const contractPositionSeed = kind === 'contract'
-        ? { tick: contractTick, signingPubkey: contractStakes[0]?.signing_pubkey || '' }
+        ? { tick: contractTick, signingPubkey: activeContractStakes[0]?.signing_pubkey || '' }
         : null;
 
     const header = (
@@ -249,7 +281,7 @@ export function StakeDetail({
                 <dd className={styles.detailsValue}>
                     {kind === 'validator'
                         ? (primaryStake
-                            ? `${fmt(primaryStake.amount ?? primaryStake.quantity)} ${primaryStake.asset ?? 'XCHAIN'}`
+                            ? `${fmt(totalValidatorStaked)} ${primaryStake.asset ?? 'XCHAIN'}`
                             : 'Nothing staked from this address')
                         : `${totalContractStaked ? fmt(totalContractStaked) : '?'} ${contractTick || ''}`.trim()}
                 </dd>
@@ -400,7 +432,7 @@ export function StakeDetail({
                         type="button"
                         className={local.quickAction}
                         onClick={() => onUnstake?.(contractPositionSeed)}
-                        disabled={!onUnstake || contractStakes.length === 0}
+                        disabled={!onUnstake || activeContractStakes.length === 0}
                         title="Start unstaking (cooldown applies)"
                     >
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.UnlockIcon /></span>
@@ -410,7 +442,7 @@ export function StakeDetail({
                         type="button"
                         className={local.quickAction}
                         onClick={() => onDelegate?.(contractPositionSeed)}
-                        disabled={!onDelegate || contractStakes.length === 0}
+                        disabled={!onDelegate || activeContractStakes.length === 0}
                         title="Rotate the position's signing key"
                     >
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
@@ -490,7 +522,7 @@ export function StakeDetail({
                                 <span className={local.eventAmount}>
                                     {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)}
                                 </span>
-                                <span className={local.eventMeta}>{d.status || ''}</span>
+                                <span className={local.eventMeta}>{stakingRowState(d, height)}</span>
                                 <span className={local.eventWhen}>
                                     {d.block_index ? `block ${fmt(d.block_index)}` : ''}
                                 </span>
@@ -502,11 +534,11 @@ export function StakeDetail({
 
             {activeTab === 'positions' ? (
                 <ul className={local.eventList}>
-                    {contractStakes.length === 0 && contractUnstakes.length === 0 ? (
+                    {activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
                         <li><div className={local.eventEmpty}>No positions found for this contract.</div></li>
                     ) : (
                         <>
-                            {contractStakes.map((s, i) => (
+                            {activeContractStakes.map((s, i) => (
                                 <li key={`s:${String(s.action_index ?? i)}:${i}`}>
                                     <div className={local.eventRow}>
                                         <span className={local.eventAmount}>{fmt(s.amount)} {s.tick}</span>
@@ -517,7 +549,7 @@ export function StakeDetail({
                                     </div>
                                 </li>
                             ))}
-                            {contractUnstakes.map((u, i) => (
+                            {pendingContractUnstakes.map((u, i) => (
                                 <li key={`u:${String(u.action_index ?? i)}:${i}`}>
                                     <div className={local.eventRow}>
                                         <span className={local.eventAmount}>{fmt(u.amount)} {u.tick}</span>

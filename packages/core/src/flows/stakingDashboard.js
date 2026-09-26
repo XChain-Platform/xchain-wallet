@@ -169,6 +169,75 @@ export function unclaimedRewards({ rewards, claims } = {}) {
     };
 }
 
+function lifecycleBlock(row, lower, upper) {
+    const value = row?.[lower] ?? row?.[upper];
+    if (value == null || value === '') return null;
+    const block = Number(value);
+    return Number.isFinite(block) ? block : NaN;
+}
+
+/**
+ * Resolve a mutable staking row against the explorer's indexed tip.
+ * Rows from older explorers carry neither lifecycle field and remain active
+ * as a compatibility fallback. A missing tip keeps a served row visible but
+ * marks its state unknown because its activation window cannot be resolved.
+ *
+ * @param {any} row
+ * @param {number|string|null|undefined} height
+ * @returns {'active'|'pending'|'inactive'|'invalid'|'unknown'}
+ */
+export function stakingRowState(row, height) {
+    if (!row || typeof row !== 'object') return 'invalid';
+    const status = String(row.status ?? row.STATUS ?? '').trim().toLowerCase();
+    if (status && !['valid', 'active', 'open'].includes(status)) return 'invalid';
+
+    const activation = lifecycleBlock(row, 'activation_block', 'ACTIVATION_BLOCK');
+    const deactivation = lifecycleBlock(row, 'deactivation_block', 'DEACTIVATION_BLOCK');
+    if (activation === null && deactivation === null) return 'active';
+    if (Number.isNaN(activation) || Number.isNaN(deactivation)) return 'invalid';
+
+    const tip = height == null || height === '' ? NaN : Number(height);
+    if (!Number.isFinite(tip)) return 'unknown';
+    if (activation !== null && activation > tip) return 'pending';
+    if (deactivation !== null && deactivation <= tip) return 'inactive';
+    return 'active';
+}
+
+/** Keep rows effective at the indexed tip, with compatibility fallbacks. */
+export function effectiveStakingRows(rows, height) {
+    return (Array.isArray(rows) ? rows : []).filter((row) => {
+        const state = stakingRowState(row, height);
+        return state === 'active' || state === 'unknown';
+    });
+}
+
+/** Select the newest effective row without trusting explorer page order. */
+export function latestEffectiveStakingRow(rows, height) {
+    return effectiveStakingRows(rows, height).sort((a, b) => {
+        const action = Number(b?.action_index ?? 0) - Number(a?.action_index ?? 0);
+        if (action !== 0) return action;
+        return Number(b?.block_index ?? 0) - Number(a?.block_index ?? 0);
+    })[0] || null;
+}
+
+/** Sum current staking row amounts exactly at the protocol token scale. */
+export function sumStakingAmounts(rows) {
+    let total = 0n;
+    for (const row of Array.isArray(rows) ? rows : []) {
+        const units = toBaseUnits(row?.amount ?? row?.AMOUNT ?? row?.quantity);
+        if (units === null) return null;
+        total += units;
+    }
+    return fromBaseUnits(total);
+}
+
+/** Whether a contract unstake still represents funds in cooldown. */
+export function isPendingContractUnstake(row) {
+    if (!row || typeof row !== 'object') return false;
+    const status = String(row.status ?? row.STATUS ?? '').trim().toLowerCase();
+    return !status || ['valid', 'open', 'pending', 'releasing', 'cooldown'].includes(status);
+}
+
 /**
  * @typedef {Object} CooldownStatus
  * @property {'matured' | 'releasing' | 'unknown'} state

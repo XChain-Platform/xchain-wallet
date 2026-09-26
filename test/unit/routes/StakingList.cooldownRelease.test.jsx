@@ -23,6 +23,83 @@ import { buildRows } from '../../../packages/core/src/shared/routes/StakingList.
 const OWNER = 'DTestOwnerAddressExampleExampleExample';
 
 describe('buildRows: contract-stake cooldown vs. completed release', () => {
+    it('omits validator stake rows outside their activation window', () => {
+        const rows = buildRows({
+            chainId: 'bitcoin-mainnet',
+            height: 100,
+            stakes: [
+                { action_index: 1, amount: '100', status: 'valid', activation_block: 1, deactivation_block: 90 },
+                { action_index: 2, amount: '5', status: 'valid', activation_block: 95, deactivation_block: null },
+            ],
+            delegations: [],
+            rewards: [],
+            rewardClaims: [],
+            contractStakes: [],
+            contractUnstakes: [],
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].key).toContain(':2');
+        expect(rows[0].amountLabel).toBe('5 XCHAIN');
+    });
+
+    it('omits deactivated contract stakes and completed or invalid cooldown history', () => {
+        const rows = buildRows({
+            chainId: 'dogecoin-mainnet',
+            height: 100,
+            stakes: [],
+            delegations: [],
+            rewards: [],
+            rewardClaims: [],
+            contractStakes: [{
+                target_contract_index: '1790',
+                action_index: 'stake-old',
+                amount: '9',
+                status: 'valid',
+                activation_block: 1,
+                deactivation_block: 90,
+                tick: 'SWAPTEST',
+                _ownerAddress: OWNER,
+            }],
+            contractUnstakes: [
+                { target_contract_index: '1790', status: 'completed', amount: '9', tick: 'SWAPTEST' },
+                { target_contract_index: '1790', status: 'invalid: amount', amount: '9', tick: 'SWAPTEST' },
+            ],
+        });
+
+        expect(rows).toEqual([]);
+    });
+
+    it('keeps a current residual row despite completed history for its contract', () => {
+        const rows = buildRows({
+            chainId: 'dogecoin-mainnet',
+            height: 100,
+            stakes: [],
+            delegations: [],
+            rewards: [],
+            rewardClaims: [],
+            contractStakes: [{
+                target_contract_index: '1790',
+                action_index: 'stake-residual',
+                amount: '3',
+                status: 'valid',
+                activation_block: 90,
+                deactivation_block: null,
+                tick: 'SWAPTEST',
+                _ownerAddress: OWNER,
+            }],
+            contractUnstakes: [{
+                target_contract_index: '1790',
+                status: 'completed',
+                amount: '7',
+                tick: 'SWAPTEST',
+            }],
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].amountLabel).toBe('3 SWAPTEST');
+    });
+
     it('drops the stake row once a completed unstake fully covers the staked amount', () => {
         const rows = buildRows({
             chainId: 'dogecoin-mainnet',

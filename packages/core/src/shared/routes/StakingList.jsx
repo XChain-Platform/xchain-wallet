@@ -22,7 +22,15 @@ import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
-import { unclaimedRewards, cooldownStatus, cooldownText, toBaseUnits } from '../../flows/stakingDashboard.js';
+import {
+    unclaimedRewards,
+    cooldownStatus,
+    cooldownText,
+    toBaseUnits,
+    effectiveStakingRows,
+    latestEffectiveStakingRow,
+    isPendingContractUnstake,
+} from '../../flows/stakingDashboard.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakingList.module.css';
 
@@ -103,7 +111,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         /** @type {string | null} */ (null),
     );
 
-    /** @typedef {{ loading: boolean, rows: any[], rewards: any[], error: string | null }} ChainState */
+    /** @typedef {{ loading: boolean, rows: any[], positions?: any, rewards: any[], error: string | null }} ChainState */
     const [stateByChain, setStateByChain] = useState(
         /** @type {Record<string, ChainState>} */ ({}),
     );
@@ -161,6 +169,14 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         contractStakes: contract.stakes.map((s) => ({ ...s, _ownerAddress: owner })),
                         contractUnstakes: contract.unstakes.map((u) => ({ ...u, _ownerAddress: owner })),
                     }),
+                    positions: {
+                        stakes: stakes.map((s) => ({ ...s, _ownerAddress: owner })),
+                        delegations,
+                        rewards,
+                        rewardClaims: [],
+                        contractStakes: contract.stakes.map((s) => ({ ...s, _ownerAddress: owner })),
+                        contractUnstakes: contract.unstakes.map((u) => ({ ...u, _ownerAddress: owner })),
+                    },
                     rewards,
                     rewardClaims: [],
                     error: null,
@@ -250,6 +266,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     [cid]: {
                         loading: false,
                         rows: buildRows({ chainId: cid, ...merged }),
+                        positions: merged,
                         rewards: merged.rewards,
                         rewardClaims: merged.rewardClaims,
                         error: errs.length > 0 ? errs.join('; ') : null,
@@ -289,25 +306,27 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         return unclaimedRewards({ rewards, claims });
     }, [stateByChain]);
 
-    // PC-47: the Claim button deep-links to the validator detail page,
-    // which already owns the COLLECT flow and its own preconditions. Picking a
-    // surface rather than composing a claim here keeps one code path signing.
-    const firstValidatorRef = useMemo(() => {
-        for (const state of Object.values(stateByChain)) {
-            const row = (state.rows || []).find((r) => r.kind === 'validator');
-            if (row) return row.ref;
-        }
-        return null;
-    }, [stateByChain]);
-
     // Flatten every chain's rows into one list, newest first.
     const allRows = useMemo(() => {
         /** @type {any[]} */
         const out = [];
-        for (const state of Object.values(stateByChain)) out.push(...(state.rows || []));
+        for (const [chainId, state] of Object.entries(stateByChain)) {
+            const current = state.positions
+                ? buildRows({ chainId, height: heightByChain[chainId], ...state.positions })
+                : state.rows || [];
+            out.push(...current);
+        }
         out.sort((a, b) => Number(b.blockIndex || 0) - Number(a.blockIndex || 0));
         return out;
-    }, [stateByChain]);
+    }, [stateByChain, heightByChain]);
+
+    // The Claim button deep-links to the validator detail page,
+    // which already owns the COLLECT flow and its own preconditions. Picking a
+    // surface rather than composing a claim here keeps one code path signing.
+    const firstValidatorRef = useMemo(
+        () => allRows.find((row) => row.kind === 'validator')?.ref || null,
+        [allRows],
+    );
 
     const anyLoading = useMemo(() => {
         const states = Object.values(stateByChain);
@@ -494,6 +513,7 @@ function StakeRow({ row, cooldown, onSelect }) {
  */
 export function buildRows({
     chainId,
+    height,
     stakes,
     delegations,
     rewards,
@@ -515,8 +535,8 @@ export function buildRows({
         ? `+${formatWithThousands(String(pendingRewards))} XCHAIN reward`
         : null;
 
-    const primaryDelegation = (delegations || [])[0];
-    for (const s of (stakes || [])) {
+    const primaryDelegation = latestEffectiveStakingRow(delegations, height);
+    for (const s of effectiveStakingRows(stakes, height)) {
         const amt = fmtAmount(s.amount ?? s.AMOUNT ?? s.quantity);
         const asset = s.asset ?? s.ASSET ?? 'XCHAIN';
         const label = s.capability_label || s.capability || 'Validator stake';
@@ -543,7 +563,8 @@ export function buildRows({
         });
     }
 
-    for (const s of (contractStakes || [])) {
+    const activeContractStakes = effectiveStakingRows(contractStakes, height);
+    for (const s of activeContractStakes) {
         const idx = String(s.target_contract_index ?? '?');
         const addr = String(s._ownerAddress || '');
         const tick = s.tick || '?';
@@ -556,7 +577,7 @@ export function buildRows({
         // position at "Ready to withdraw" forever, and the stake row it sat on
         // still carried the original amount, so the list claimed coins were
         // staked that were already spendable.
-        const releasing = matchingUnstakes.filter((u) => !isReleasedUnstake(u));
+        const releasing = matchingUnstakes.filter(isPendingContractUnstake);
         const released = matchingUnstakes.filter(isReleasedUnstake);
         // Nothing still releasing and the completed rows account for the whole
         // position: it is over. The explorer keeps serving the stake row (its
@@ -564,7 +585,9 @@ export function buildRows({
         // here is the only way the list stops showing a stake that is not one.
         // Anything short of full coverage keeps the row, because a partial
         // release leaves a real remaining stake.
-        if (releasing.length === 0 && released.length > 0
+        const hasLifecycle = s.activation_block != null || s.ACTIVATION_BLOCK != null
+            || s.deactivation_block != null || s.DEACTIVATION_BLOCK != null;
+        if (!hasLifecycle && releasing.length === 0 && released.length > 0
             && coversWholeStake(released, s.amount)) continue;
         // A matching unstake still before its cooldown end means part of
         // this position is releasing; flag the whole row as cooldown.
@@ -597,16 +620,12 @@ export function buildRows({
 
     // Unstakes whose stake row is already gone (fully releasing
     // positions) still deserve a row until cooldown ends.
-    for (const u of (contractUnstakes || [])) {
+    for (const u of (contractUnstakes || []).filter(isPendingContractUnstake)) {
         const idx = String(u.target_contract_index ?? '?');
-        const hasStakeRow = (contractStakes || []).some(
+        const hasStakeRow = activeContractStakes.some(
             (s) => String(s.target_contract_index ?? '') === idx,
         );
         if (hasStakeRow) continue;
-        // Already swept back to the owner: there is no position left to show.
-        // Without this an orphan unstake row renders as a permanent cooldown
-        // for coins that are spendable again.
-        if (isReleasedUnstake(u)) continue;
         const addr = String(u._ownerAddress || '');
         const tick = u.tick || '?';
         rows.push({

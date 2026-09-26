@@ -22,6 +22,11 @@ import {
     cooldownText,
     toBaseUnits,
     fromBaseUnits,
+    stakingRowState,
+    effectiveStakingRows,
+    latestEffectiveStakingRow,
+    sumStakingAmounts,
+    isPendingContractUnstake,
 } from '../../../packages/core/src/flows/stakingDashboard.js';
 
 describe('base-unit conversion', () => {
@@ -189,6 +194,50 @@ describe('cooldownStatus', () => {
         expect(cooldownStatus({ unstake: {}, height: 1000 }).state).toBe('unknown');
         expect(cooldownStatus({ unstake: { cooldown_end_block: 'soon' }, height: 1000 }).state).toBe('unknown');
         expect(cooldownStatus({ height: 1000 }).state).toBe('unknown');
+    });
+});
+
+describe('staking lifecycle state', () => {
+    const rows = [
+        { action_index: 1, status: 'valid', activation_block: 10, deactivation_block: 90 },
+        { action_index: 2, status: 'valid', activation_block: 95, deactivation_block: null },
+        { action_index: 3, status: 'valid', activation_block: 110, deactivation_block: null },
+    ];
+
+    it('uses the activation window at the current indexed tip', () => {
+        expect(rows.map((row) => stakingRowState(row, 100)))
+            .toEqual(['inactive', 'active', 'pending']);
+        expect(effectiveStakingRows(rows, 100).map((row) => row.action_index)).toEqual([2]);
+    });
+
+    it('selects the newest effective delegation instead of historical page order', () => {
+        expect(latestEffectiveStakingRow([rows[2], rows[0], rows[1]], 100)?.action_index).toBe(2);
+    });
+
+    it('sums only the effective current amounts selected by the caller', () => {
+        const active = effectiveStakingRows([
+            { status: 'valid', amount: '10.5', activation_block: 1, deactivation_block: null },
+            { status: 'valid', amount: '99', activation_block: 1, deactivation_block: 50 },
+            { status: 'valid', amount: '2.25', activation_block: 80, deactivation_block: null },
+        ], 100);
+        expect(sumStakingAmounts(active)).toBe('12.75');
+    });
+
+    it('keeps rows from an older explorer that omits lifecycle fields', () => {
+        expect(stakingRowState({ status: 'valid' }, 100)).toBe('active');
+        expect(effectiveStakingRows([{ status: 'valid', amount: '5' }], 100)).toHaveLength(1);
+    });
+
+    it('keeps served lifecycle rows visible when the tip read is unavailable', () => {
+        expect(stakingRowState(rows[0], null)).toBe('unknown');
+        expect(effectiveStakingRows(rows, null)).toHaveLength(3);
+    });
+
+    it('distinguishes pending contract unstakes from completed and invalid history', () => {
+        expect(isPendingContractUnstake({ status: 'valid' })).toBe(true);
+        expect(isPendingContractUnstake({})).toBe(true);
+        expect(isPendingContractUnstake({ status: 'completed' })).toBe(false);
+        expect(isPendingContractUnstake({ status: 'invalid: amount' })).toBe(false);
     });
 });
 

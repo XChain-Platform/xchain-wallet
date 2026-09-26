@@ -32,6 +32,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -195,19 +196,24 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         }
         let cancelled = false;
         setDetectStatus('checking');
-        messaging.getStakesForAddress({ chainId, address: fromAddress.address })
-            .then((resp) => {
+        Promise.all([
+            messaging.getStakesForAddress({ chainId, address: fromAddress.address }),
+            typeof messaging.getIndexerWatermark === 'function'
+                ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([resp, watermark]) => {
                 if (cancelled) return;
-                const rows = Array.isArray(resp) ? resp
+                const received = Array.isArray(resp) ? resp
                     : Array.isArray(resp?.data) ? resp.data
                     : Array.isArray(resp?.rows) ? resp.rows
                     : [];
+                const rows = effectiveStakingRows(received, watermark?.watermark);
                 let match = false;
                 let sum = 0;
                 for (const row of rows) {
                     const rowPk = String(row.signing_pubkey || row.SIGNING_PUBKEY || '').toLowerCase();
-                    const rowStatus = String(row.status || row.STATUS || '').toLowerCase();
-                    if (rowPk === pk && rowStatus === 'valid') {
+                    if (rowPk === pk) {
                         match = true;
                         const amt = Number(row.amount ?? row.AMOUNT ?? 0);
                         if (Number.isFinite(amt)) sum += amt;

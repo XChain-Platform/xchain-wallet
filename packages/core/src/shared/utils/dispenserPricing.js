@@ -131,6 +131,10 @@ export function isOpenOffer(row) {
  */
 export function isOpenDispenserSelling(row, tick) {
     if (!isOpenOffer(row)) return false;
+    const remaining = row?.state?.give_remaining
+        ?? row?.escrow_remaining
+        ?? row?.give_remaining;
+    if (remaining != null && remaining !== '' && !(Number(remaining) > 0)) return false;
     const want = String(tick || '').toUpperCase();
     if (!want || want.startsWith('^') || !row.give_tick) return true;
     return String(row.give_tick).toUpperCase() === want;

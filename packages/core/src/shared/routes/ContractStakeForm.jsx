@@ -38,6 +38,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -228,10 +229,15 @@ export function ContractStakeForm({
         const address = fromAddress?.address;
         if (mode !== 'unstake' || !address || !chainId) { setStakedAvailable(null); return undefined; }
         let cancelled = false;
-        messaging.getContractStakesForAddress({ chainId, address })
-            .then((r) => {
+        Promise.all([
+            messaging.getContractStakesForAddress({ chainId, address }),
+            typeof messaging.getIndexerWatermark === 'function'
+                ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([r, watermark]) => {
                 if (cancelled) return;
-                const rows = extractRows(r).filter((row) =>
+                const rows = effectiveStakingRows(extractRows(r), watermark?.watermark).filter((row) =>
                     String(row.target_contract_index) === String(contractActionIndex)
                     && (!tick || String(row.tick || '').toUpperCase() === tick.trim().toUpperCase())
                     && (!signingPubkey.trim()

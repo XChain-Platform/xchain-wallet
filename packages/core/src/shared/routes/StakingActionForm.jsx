@@ -21,7 +21,7 @@ import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { unclaimedRewards } from '../../flows/stakingDashboard.js';
+import { unclaimedRewards, effectiveStakingRows } from '../../flows/stakingDashboard.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -163,7 +163,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // balance for the source address; upper bound for the editable
     // Amount field (partial claim/unstake).
     const [positions, setPositions] = useState(
-        /** @type {{ stakes: any[], rewards: any[], claims: any[] } | null} */ (null),
+        /** @type {{ stakes: any[], rewards: any[], claims: any[], height: number|null } | null} */ (null),
     );
     useEffect(() => {
         const address = fromAddress?.address;
@@ -174,6 +174,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 let stakes = [];
                 let rewards = [];
                 let claims = [];
+                let height = null;
                 if (isDemoWallet(walletId)) {
                     const demo = synthesizeDemoStaking(chainId);
                     // Demo stake rows carry no signing_pubkey; attribute them
@@ -182,7 +183,14 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     stakes = demo.stakes.map((s) => ({ signing_pubkey: demoKey, ...s }));
                     rewards = demo.rewards;
                 } else if (isUnstake) {
-                    stakes = extractRows(await messaging.getStakesForAddress({ chainId, address }));
+                    const [stakeResponse, watermark] = await Promise.all([
+                        messaging.getStakesForAddress({ chainId, address }),
+                        typeof messaging.getIndexerWatermark === 'function'
+                            ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                            : Promise.resolve(null),
+                    ]);
+                    stakes = extractRows(stakeResponse);
+                    height = Number.isFinite(watermark?.watermark) ? watermark.watermark : null;
                 } else {
                     // PC-47 (propagated from StakeDetail's splitRewards): the
                     // rewards endpoint is a pure accrual ledger with no status
@@ -197,7 +205,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     rewards = extractRows(r);
                     claims = extractRows(c);
                 }
-                if (!cancelled) setPositions({ stakes, rewards, claims });
+                if (!cancelled) setPositions({ stakes, rewards, claims, height });
             } catch {
                 if (!cancelled) setPositions(null);
             }
@@ -210,14 +218,18 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // buckets stakes per (address, signing_pubkey), so the key selects
     // WHICH bundle an UNSTAKE returns; the wallet already knows the
     // candidates, so prefill instead of making the user paste hex.
+    const activeStakes = useMemo(
+        () => effectiveStakingRows(positions?.stakes, positions?.height),
+        [positions],
+    );
     const stakedKeys = useMemo(() => {
         const keys = [];
-        for (const s of (positions?.stakes || [])) {
+        for (const s of activeStakes) {
             const k = s.signing_pubkey || s.SIGNING_PUBKEY;
             if (k && !keys.includes(k)) keys.push(k);
         }
         return keys;
-    }, [positions]);
+    }, [activeStakes]);
 
     useEffect(() => {
         if (isUnstake && !signingPubkey && stakedKeys.length > 0) {
@@ -231,7 +243,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         if (!positions) return null;
         let total = 0;
         if (isUnstake) {
-            for (const s of positions.stakes) {
+            for (const s of activeStakes) {
                 const key = s.signing_pubkey || s.SIGNING_PUBKEY;
                 if (signingPubkey && key && key !== signingPubkey) continue;
                 const n = Number(s.amount ?? s.AMOUNT ?? s.quantity ?? 0);
@@ -247,7 +259,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             if (Number.isFinite(n)) total = n;
         }
         return total;
-    }, [positions, isUnstake, signingPubkey]);
+    }, [positions, isUnstake, signingPubkey, activeStakes]);
 
     // Prefill with the full balance (the common case is still "take it
     // all"), but stop overwriting once the user edits: a positions
