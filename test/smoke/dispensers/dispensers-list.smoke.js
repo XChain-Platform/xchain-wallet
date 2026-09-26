@@ -22,8 +22,8 @@
 //      getAddressesByChain in parallel. Owner detection compares the
 //      dispenser's source against wallet addresses on the chain.
 //   4. Cancel flow composes { VERSION: '1', DISPENSER_ACTION_INDEX }
-//      and submits via messaging.dispenserAction. Danger-variant sign
-//      button; password re-prompt on wrong-password.
+//      and signs on the shared confirm page via the dispenserAction
+//      lane. Danger-variant Close button; wrong password named as such.
 //   5. Core flows (dispenserQueries.js) guard required inputs and call
 //      the right SDK method per lane. Re-exported from the flows
 //      barrel.
@@ -144,12 +144,12 @@ assert.ok(
     'DispenserDetail cancel params carry DISPENSER_ACTION_INDEX from props',
 );
 assert.ok(
-    /messaging\.dispenserAction/.test(detailSrc),
-    'DispenserDetail dispatches cancel via messaging.dispenserAction',
+    /software: 'dispenserAction'/.test(detailSrc),
+    'DispenserDetail signs cancel on the dispenserAction lane',
 );
 assert.ok(
-    /variant="danger"/.test(detailSrc),
-    'DispenserDetail sign-cancel button uses danger variant',
+    /label="Close dispenser"\s+danger/.test(detailSrc),
+    'DispenserDetail close button uses the danger variant',
 );
 assert.ok(
     /'InvalidPasswordError'/.test(detailSrc),

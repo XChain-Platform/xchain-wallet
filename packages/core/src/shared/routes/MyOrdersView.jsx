@@ -30,9 +30,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -367,27 +374,31 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
 /**
  * Cancel (ORDER v1) or Edit (ORDER v2) an open order, signed from its
- * owner address. Mirrors OpenOrdersPanel's cancel confirm: software
- * signers type their password, HW signers slot in through SignCredentials.
+ * owner address. The form is the input step; signing happens on the shared
+ * confirm page with its network pre-flight, or, in watcher mode, the form
+ * builds an unsigned transaction.
  */
 function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
     const { chainId, owner, row } = item;
     const descriptor = chainRegistry.get(chainId);
-    const hw = isHwSource(owner);
-    const from = {
-        address: owner.address,
-        publicKey: owner.publicKey,
-        derivationPath: owner.derivationPath,
-        addressId: owner.id,
-        source: owner.source,
-        signerId: owner.signerId,
-    };
+    const isCancel = type === 'cancel';
+    const signerReady = useSignerReady(walletId);
+    const lane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId,
+        owner,
+        software: isCancel ? 'cancelOrder' : 'editOrder',
+        hardware: isCancel ? 'cancelOrderHw' : 'editOrderHw',
+    });
+    // An edit re-charges the expiration fee, and off Bitcoin that fee is a
+    // native-coin output the transaction must carry or the indexer rejects it.
+    const nativeFee = useNativeFee(chainId);
 
-    const [password, setPassword] = useState('');
-    const [hwStatus, setHwStatus] = useState('idle');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [done, setDone] = useState(false);
+    const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const done = result !== null;
 
     // Edit fields (prefilled from the order's current values).
     const [expInput, setExpInput] = useState('');
@@ -411,9 +422,7 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
 
     async function submit(event) {
         event.preventDefault();
-        if (submitting) return;
-        if (!hw && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (submitting || lane.composing) return;
         if (type === 'edit') {
             if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
             if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
@@ -422,25 +431,32 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
         }
         setSubmitting(true);
         setError(null);
-        const base = { walletId, chainId, from, orderActionIndex: String(row.action_index) };
+        const orderActionIndex = String(row.action_index);
+        // The wire params the confirm page composes and previews; the signing
+        // flow rebuilds the same set from `orderActionIndex` and `params`.
+        const params = isCancel
+            ? { VERSION: '1', ORDER_ACTION_INDEX: orderActionIndex }
+            : { VERSION: '2', ORDER_ACTION_INDEX: orderActionIndex, ...editParams };
         try {
-            if (type === 'cancel') {
-                if (hw) await messaging.cancelOrderHw({ ...base, signerId: owner.signerId });
-                else await messaging.cancelOrder({ ...base, password });
-            } else {
-                const withParams = { ...base, params: editParams };
-                if (hw) await messaging.editOrderHw({ ...withParams, signerId: owner.signerId });
-                else await messaging.editOrder({ ...withParams, password });
-            }
-            setDone(true);
+            const res = await lane.run({
+                actionData: { action: 'ORDER', params },
+                encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
+                submitExtra: isCancel ? { orderActionIndex } : { orderActionIndex, params: editParams },
+            });
+            setResult(res || {});
         } catch (err) {
-            const bad = err?.name === 'InvalidPasswordError';
-            setError(bad ? 'Incorrect password.' : (err?.message || `${type === 'cancel' ? 'Cancel' : 'Edit'} failed.`));
+            if (!isUserRejection(err)) {
+                setError(err?.name === 'InvalidPasswordError' ? 'Incorrect password.' : submitFailureMessage(err, {
+                    chainId,
+                    mandatory: nativeFee.mandatory,
+                    fallback: err?.message || `${isCancel ? 'Cancel' : 'Edit'} failed.`,
+                }));
+            }
+        } finally {
             setSubmitting(false);
         }
     }
 
-    const isCancel = type === 'cancel';
     const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel order' : 'Edit order'} />;
     const isFull = variant === 'full';
     const wrap = (children) => (
@@ -467,7 +483,24 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
         );
     }
 
+    if (lane.open) {
+        return (
+            <ActionConfirmScreen
+                {...lane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                signerReady={signerReady}
+                hintClassName={F.hint}
+            />
+        );
+    }
+
     if (done) {
+        // Signed but not broadcast yet: nothing changed on chain, so no success copy.
+        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what={isCancel ? 'order cancel' : 'order edit'} />);
+        if (result.psbtHex && !(result.txid || result.broadcast?.txid)) {
+            return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
+        }
         return wrap(
             <>
                 <h2 className={F.successTitle}>{isCancel ? 'Cancel broadcast' : 'Edit broadcast'}</h2>
@@ -527,27 +560,22 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                 </>
             )}
 
-            <SignCredentials
-                unlocked={false}
-                fromAddress={from}
-                chainId={chainId}
-                password={password}
-                onPasswordChange={(v) => { setPassword(v); if (error) setError(null); }}
-                onStatusChange={setHwStatus}
-                submitError={error}
-                disabled={submitting}
-                getSignerStatus={messaging.getSignerStatus}
-            />
-            {error && hw ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
+            {lane.isWatcherMode ? (
+                <p className={F.hint}>
+                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                </p>
+            ) : null}
+            {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
 
             <div className={F.actions}>
                 <Button
                     type="submit"
                     variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting}
-                    disabled={hw ? hwStatus !== 'available' : (password.length === 0 || (type === 'edit' && !editHasChange))}
+                    loading={submitting || lane.composing}
+                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
                 >
-                    {hw ? `Sign on ${owner.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (isCancel ? 'Sign cancel' : 'Sign edit')}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
                 </Button>
             </div>
         </form>,

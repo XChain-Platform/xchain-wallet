@@ -47,7 +47,14 @@ import {
     dispenserRefusesEveryoneMessage,
     listMembers,
     ownerOffAllowList,
+    ownerOffAllowListMessage,
 } from '../../flows/allowListSelfCheck.js';
+import { editListConflict } from '../../flows/accessListSlots.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -76,11 +83,12 @@ const ADDRESS_CELL_STYLE = {
  *     explorer doesn't yet have a by-dispenser-action-index dispense
  *     query).
  *   - For owners (source address is one of the wallet's addresses),
- *     owner actions via `messaging.dispenserAction` with a password
- *     re-prompt (HW via `dispenserActionHw`): Close (v1 cancel),
- *     Refill (v2 edit topping up GIVE_ESCROW), and Edit (v2 edit of
- *     EXPIRATION / ALLOW_LIST / BLOCK_LIST, PC-19). All owner actions
- *     gate on the live status (open only).
+ *     owner actions signed through the shared confirm page and its
+ *     network pre-flight, via `messaging.dispenserAction` (HW via
+ *     `dispenserActionHw`; watcher mode builds an unsigned transaction):
+ *     Close (v1 cancel), Refill (v2 edit topping up GIVE_ESCROW), and
+ *     Edit (v2 edit of EXPIRATION / ALLOW_LIST / BLOCK_LIST, PC-19). All
+ *     owner actions gate on the live status (open only).
  *   - State display: current expiration + allow/block lists, dispenses
  *     this fill against the 1,000 cap, and a close-window banner while
  *     the dispenser sits in its 1-hour "cancelling" state.
@@ -146,10 +154,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         /** @type {string | null} */ (null),
     );
     // D-147: how many of the five refills are gone, derived from the lifecycle
-    // events this page already loads. Nothing else can answer it: this lane has
-    // no confirm screen and owes no protocol fee, so no network dry run runs on
-    // it, and a sixth refill used to be signed and broadcast against a rule that
-    // rejects it every time.
+    // events this page already loads. The refill now reaches the confirm page's
+    // network dry run too, but this count is what says so on the form itself,
+    // before a sixth refill is composed against a rule that rejects it every
+    // time.
     const refillCount = useMemo(() => refillsUsed(lifecycle), [lifecycle]);
 
     // Edit (DISPENSER v2: reschedule EXPIRATION / update ALLOW_LIST /
@@ -206,10 +214,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [cancelStage, setCancelStage] = useState(
         /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
     );
-    const [password, setPassword] = useState('');
     const [cancelError, setCancelError] = useState(/** @type {string | null} */ (null));
     const [cancelResult, setCancelResult] = useState(/** @type {any | null} */ (null));
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Buy state, shared by the token-paid and coin-paid lanes.
     const [fills, setFills] = useState('1');
@@ -403,12 +409,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         });
         return () => { cancelled = true; };
     }, [walletId, chainId, actionIndex, messaging, reloadKey]);
-
-    useEffect(() => {
-        if (cancelStage === 'confirm') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
-    }, [cancelStage]);
 
     useEffect(() => {
         if (buyStage === 'confirm') {
@@ -807,11 +807,49 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const buyUnderfunded = buyPreflight?.verdict === 'fail';
 
     const buyHw = isHwSource(buyerAddress);
-    const cancelHw = isHwSource(ownerAddress);
     const [buyHwStatus, setBuyHwStatus] = useState('idle');
-    const [cancelHwStatus, setCancelHwStatus] = useState('idle');
     const onBuyHwStatusChange = useCallback(({ status }) => setBuyHwStatus(status), []);
-    const onCancelHwStatusChange = useCallback(({ status }) => setCancelHwStatus(status), []);
+    // Close, refill and edit all sign through the shared confirm page, which
+    // runs the network dry run and signs the bytes it previewed.
+    const ownerLane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId,
+        owner: ownerAddress,
+        software: 'dispenserAction',
+        hardware: 'dispenserActionHw',
+    });
+
+    // The NEW allow-list's members, read as soon as the owner types a list
+    // number, so the edit form can say before signing when the dispenser's
+    // own address is missing from it. Keyed by index so a stale read for a
+    // list the owner has since retyped never produces the warning.
+    const editAllowIdx = /^\d+$/.test(editAllowList.trim()) ? editAllowList.trim() : '';
+    const [editAllowRead, setEditAllowRead] = useState(
+        /** @type {{ idx: string, members: string[] | null } | null} */ (null),
+    );
+    useEffect(() => {
+        if (!editAllowIdx || !chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
+        let live = true;
+        const timer = setTimeout(() => {
+            messaging.getListByActionIndex({ chainId, actionIndex: editAllowIdx })
+                .then((detail) => { if (live) setEditAllowRead({ idx: editAllowIdx, members: listMembers(detail) }); })
+                .catch(() => { /* best-effort: no warning beats a wrong one */ });
+        }, 400);
+        return () => { live = false; clearTimeout(timer); };
+    }, [editAllowIdx, chainId, messaging]);
+    const editAllowSelfWarning = editAllowIdx && editAllowRead?.idx === editAllowIdx
+        && ownerOffAllowList({ members: editAllowRead.members, getAddress: dispAddr })
+        ? ownerOffAllowListMessage(dispAddr)
+        : null;
+    // One list in both slots admits nobody; checked against the pair the
+    // dispenser will hold after the edit, so the edit is refused.
+    const editListConflictText = editListConflict({
+        allowList: editAllowList.trim(),
+        blockList: editBlockList.trim(),
+        currentAllowList,
+        currentBlockList,
+    });
 
     // Turn a failed sign into house copy; the thrown text survives only as the fallback.
     const submitFailureText = (err, fallback) => (err?.name === 'InvalidPasswordError'
@@ -886,66 +924,66 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
     }
 
+    /**
+     * Sign one owner action (close, refill or edit) and settle its stage.
+     * A full wallet opens the shared confirm page, so the network dry run
+     * runs and Approve signs the exact bytes previewed; Reject returns to
+     * the form quietly. Watcher mode builds an unsigned transaction instead.
+     */
+    async function runOwnerAction({ params, setStage, setError, setResult, fallback, onSigned }) {
+        setStage('submitting');
+        setError(null);
+        // Demo wallet: fabricated dispensers can't broadcast; simulate.
+        if (flowsLib.isDemoWallet(walletId)) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            setResult({ txid: null });
+            setStage('done');
+            onSigned?.({ txid: null });
+            return;
+        }
+        try {
+            const res = await ownerLane.run({
+                actionData: { action: 'DISPENSER', params },
+                encoderOpts: {
+                    // `flag` is true or undefined, never false, so on Bitcoin
+                    // (where the fee is opt-in) this leaves the payload untouched.
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                submitExtra: { params },
+            });
+            setResult(res || {});
+            setStage('done');
+            onSigned?.(res || {});
+        } catch (err) {
+            setStage('confirm');
+            if (!isUserRejection(err)) setError(submitFailureText(err, fallback));
+        }
+    }
+
     async function handleRefill(event) {
         event.preventDefault();
         if (refillStage === 'submitting' || !ownerAddress) return;
         const amt = refillAmount.trim();
         if (!amt || !(Number(amt) > 0)) { setRefillError('Enter a refill amount.'); return; }
-        if (!cancelHw && (!signerReady && password.length === 0)) return;
-        if (cancelHw && cancelHwStatus !== 'available') return;
-        setRefillStage('submitting');
-        setRefillError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setRefillResult({ txid: null });
-            setPassword('');
-            setRefillStage('done');
-            return;
-        }
-        try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: ownerAddress.address,
-                    publicKey: ownerAddress.publicKey,
-                    derivationPath: ownerAddress.derivationPath,
-                    addressId: ownerAddress.id,
-                    source: ownerAddress.source,
-                    signerId: ownerAddress.signerId,
-                },
-                params: {
-                    VERSION: '2',
-                    DISPENSER_ACTION_INDEX: String(actionIndex),
-                    GIVE_ESCROW: amt,
-                },
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // `flag` is true or undefined, never false, so on Bitcoin
-                // (where the fee is opt-in) this leaves the payload untouched.
-                payFeeInNativeCoin: nativeFee.flag,
-            };
-            const res = cancelHw
-                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
-                : await messaging.dispenserAction({ ...base, password });
-            setRefillResult(res);
-            setPassword('');
-            setRefillStage('done');
-        } catch (err) {
-            setRefillError(submitFailureText(err, 'Refill failed.'));
-            setRefillStage('confirm');
-            if (!cancelHw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        }
+        // D-147: a spent ceiling is refused here as well as on the button.
+        if (refillCount.remaining <= 0 && refillCount.exact) return;
+        await runOwnerAction({
+            params: {
+                VERSION: '2',
+                DISPENSER_ACTION_INDEX: String(actionIndex),
+                GIVE_ESCROW: amt,
+            },
+            setStage: setRefillStage,
+            setError: setRefillError,
+            setResult: setRefillResult,
+            fallback: 'Refill failed.',
+        });
     }
 
     async function handleEdit(event) {
         event.preventDefault();
         if (editStage === 'submitting' || !ownerAddress) return;
-        if (!cancelHw && (!signerReady && password.length === 0)) return;
-        if (cancelHw && cancelHwStatus !== 'available') return;
 
         // Assemble only the fields the owner filled in; a blank field is
         // left unchanged (indexer null = keep current). Refill lives in its
@@ -979,101 +1017,32 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setEditError('Change at least one field to submit an edit.');
             return;
         }
+        // The same list as both allow-list and block-list admits nobody, and
+        // a bound list can never be removed, so this edit is refused outright.
+        if (editListConflictText) { setEditError(editListConflictText); return; }
 
-        setEditStage('submitting');
-        setEditError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setEditResult({ txid: null });
-            setEditedLists(changedLists);
-            setPassword('');
-            setEditStage('done');
-            return;
-        }
-        try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: ownerAddress.address,
-                    publicKey: ownerAddress.publicKey,
-                    derivationPath: ownerAddress.derivationPath,
-                    addressId: ownerAddress.id,
-                    source: ownerAddress.source,
-                    signerId: ownerAddress.signerId,
-                },
-                params,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // `flag` is true or undefined, never false, so on Bitcoin
-                // (where the fee is opt-in) this leaves the payload untouched.
-                payFeeInNativeCoin: nativeFee.flag,
-            };
-            const res = cancelHw
-                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
-                : await messaging.dispenserAction({ ...base, password });
-            setEditResult(res);
-            setEditedLists(changedLists);
-            setPassword('');
-            setEditStage('done');
-        } catch (err) {
-            setEditError(submitFailureText(err, 'Edit failed.'));
-            setEditStage('confirm');
-            if (!cancelHw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        }
+        await runOwnerAction({
+            params,
+            setStage: setEditStage,
+            setError: setEditError,
+            setResult: setEditResult,
+            fallback: 'Edit failed.',
+            onSigned: () => setEditedLists(changedLists),
+        });
     }
 
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
-        if (!cancelHw && (!signerReady && password.length === 0)) return;
-        if (cancelHw && cancelHwStatus !== 'available') return;
-        setCancelStage('submitting');
-        setCancelError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setCancelResult({ txid: null });
-            setPassword('');
-            setCancelStage('done');
-            return;
-        }
-        try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: ownerAddress.address,
-                    publicKey: ownerAddress.publicKey,
-                    derivationPath: ownerAddress.derivationPath,
-                    addressId: ownerAddress.id,
-                    source: ownerAddress.source,
-                    signerId: ownerAddress.signerId,
-                },
-                params: cancelParams,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // `flag` is true or undefined, never false, so on Bitcoin
-                // (where the fee is opt-in) this leaves the payload untouched.
-                payFeeInNativeCoin: nativeFee.flag,
-            };
-            const res = cancelHw
-                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
-                : await messaging.dispenserAction({ ...base, password });
-            setCancelResult(res);
-            setPassword('');
-            setCancelStage('done');
-            onCanceled?.();
-        } catch (err) {
-            setCancelError(submitFailureText(err, 'Cancel failed.'));
-            setCancelStage('confirm');
-            if (!cancelHw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        }
+        await runOwnerAction({
+            params: cancelParams,
+            setStage: setCancelStage,
+            setError: setCancelError,
+            setResult: setCancelResult,
+            fallback: 'Cancel failed.',
+            // Only a broadcast cancel has started the close window.
+            onSigned: (res) => { if (res.txid || res.broadcast?.txid) onCanceled?.(); },
+        });
     }
 
         const header = (
@@ -1100,7 +1069,42 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
 
+    // The confirm page stands in for whichever owner form opened it; that
+    // form's state stays intact behind it, so Reject lands back on it.
+    if (ownerLane.open) {
+        return (
+            <ActionConfirmScreen
+                {...ownerLane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                coinTicker={feeCoinTicker}
+                signerReady={signerReady}
+                hintClassName={styles.hint}
+                extraCredentials={(
+                    <OwnerConfirmNotes
+                        kind={editStage === 'submitting' ? 'edit' : refillStage === 'submitting' ? 'refill' : 'close'}
+                        allowListWarning={editAllowSelfWarning}
+                        listsChanged={Boolean(editAllowList.trim() || editBlockList.trim())}
+                        refillNote={refillCeilingMessage(refillCount)}
+                    />
+                )}
+            />
+        );
+    }
+
+    // A watcher build or a signed-but-queued broadcast is not a success:
+    // nothing reached the chain yet, so neither gets the "submitted" copy.
+    const ownerPendingPanel = (res, onDone) => {
+        if (res?.queued) return wrap(<QueuedResultPanel onDone={onDone} what="dispenser update" />);
+        if (res?.psbtHex && !(res.txid || res.broadcast?.txid)) {
+            return wrap(<WatcherResultPanel result={res} onDone={onDone} />);
+        }
+        return null;
+    };
+
     if (cancelStage === 'done') {
+        const pending = ownerPendingPanel(cancelResult, onBack);
+        if (pending) return pending;
         const txid = cancelResult?.txid || cancelResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1122,6 +1126,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }
 
     if (refillStage === 'done') {
+        const pending = ownerPendingPanel(refillResult, () => { setRefillStage('idle'); setRefillAmount(''); });
+        if (pending) return pending;
         const txid = refillResult?.txid || refillResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1152,8 +1158,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </p>
                 {/*
                   * D-147: this used to be policy copy alone ("a dispenser allows
-                  * up to 5 refills … a 6th is rejected") with no count, on the one
-                  * lane the wallet cannot dry-run. It now says where THIS dispenser
+                  * up to 5 refills … a 6th is rejected") with no count, on a
+                  * lane that had no dry run then. It now says where THIS dispenser
                   * stands, and when the ceiling is spent it says so as an alert and
                   * the sign button goes away, because the alternative is a signed
                   * transaction the chain always rejects.
@@ -1191,42 +1197,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <SignCredentials
-                    unlocked={signerReady}
-                    fromAddress={ownerAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (refillError) setRefillError(null);
-                    }}
-                    onStatusChange={onCancelHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={refillError}
-                    disabled={refillStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
+                <OwnerLaneFooter
+                    isWatcherMode={ownerLane.isWatcherMode}
+                    error={refillError}
+                    submitting={refillStage === 'submitting'}
+                    disabled={refillCount.remaining <= 0 && refillCount.exact}
+                    label="Refill dispenser"
                 />
-                {cancelHw && refillError ? (
-                    <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={refillStage === 'submitting'}
-                        disabled={(refillCount.remaining <= 0 && refillCount.exact)
-                            || (cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0))}
-                    >
-                        {cancelHw
-                            ? `Sign refill on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign refill'}
-                    </Button>
-                </div>
             </form>,
         );
     }
 
     if (editStage === 'done') {
+        const pending = ownerPendingPanel(editResult, () => {
+            setEditStage('idle');
+            setEditExpiration('');
+            setEditAllowList('');
+            setEditBlockList('');
+        });
+        if (pending) return pending;
         const txid = editResult?.txid || editResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1300,41 +1289,29 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         transaction confirms, per the dispenser list-edit delay.
                     </p>
                 ) : null}
+                {/* D-161 on the edit lane: the NEW allow-list gates the
+                    dispenser's own address too, so a list without it refuses
+                    every buyer. Same check and copy as the create form. */}
+                {editAllowSelfWarning ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{editAllowSelfWarning}</p>
+                    </div>
+                ) : null}
+                {editListConflictText && editListConflictText !== editError ? (
+                    <StatusMessage variant="error" className={styles.error}>{editListConflictText}</StatusMessage>
+                ) : null}
                 {feeSelector}
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <SignCredentials
-                    unlocked={signerReady}
-                    fromAddress={ownerAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (editError) setEditError(null);
-                    }}
-                    onStatusChange={onCancelHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={editError}
-                    disabled={editStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
+                <OwnerLaneFooter
+                    isWatcherMode={ownerLane.isWatcherMode}
+                    error={editError}
+                    submitting={editStage === 'submitting'}
+                    disabled={Boolean(editListConflictText)}
+                    label="Edit dispenser"
                 />
-                {cancelHw && editError ? (
-                    <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={editStage === 'submitting'}
-                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {cancelHw
-                            ? `Sign edit on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign edit'}
-                    </Button>
-                </div>
             </form>,
         );
     }
@@ -1470,36 +1447,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <SignCredentials
-                        unlocked={signerReady}
-                    fromAddress={ownerAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (cancelError) setCancelError(null);
-                    }}
-                    onStatusChange={onCancelHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={cancelError}
-                    disabled={cancelStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
+                <OwnerLaneFooter
+                    isWatcherMode={ownerLane.isWatcherMode}
+                    error={cancelError}
+                    submitting={cancelStage === 'submitting'}
+                    label="Close dispenser"
+                    danger
                 />
-                {cancelHw && cancelError ? (
-                    <StatusMessage variant="error" className={styles.error}>{cancelError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="danger"
-                        loading={cancelStage === 'submitting'}
-                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {cancelHw
-                            ? `Sign cancel on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign cancel'}
-                    </Button>
-                </div>
             </form>,
         );
     }
@@ -2107,6 +2061,65 @@ function localInputToUnix(localStr) {
     const ms = Date.parse(String(localStr));
     if (!Number.isFinite(ms)) return null;
     return Math.floor(ms / 1000);
+}
+
+/**
+ * The bottom of an owner form: the watcher-mode note, the error, and the one
+ * button. Credentials live on the confirm page, not here, because nothing is
+ * signed until the dry run has been seen there.
+ */
+function OwnerLaneFooter({ isWatcherMode, error, submitting, disabled = false, label, danger = false }) {
+    return (
+        <>
+            {isWatcherMode ? (
+                <p className={styles.hint}>
+                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                </p>
+            ) : null}
+            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            <div className={styles.actions}>
+                <Button
+                    type="submit"
+                    variant={danger ? 'danger' : 'primary'}
+                    loading={submitting}
+                    disabled={submitting || disabled}
+                >
+                    {isWatcherMode ? 'Create unsigned transaction' : label}
+                </Button>
+            </div>
+        </>
+    );
+}
+
+/**
+ * The dispenser-only facts that must still sit in front of Approve on the
+ * confirm page, which shows the decoded action but knows nothing of these.
+ */
+function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote }) {
+    if (kind === 'refill') return <p className={styles.hint}>{refillNote}</p>;
+    if (kind === 'close') {
+        return (
+            <p className={styles.hint}>
+                The dispenser enters a 1-hour close window before remaining escrow is released.
+            </p>
+        );
+    }
+    return (
+        <>
+            {allowListWarning ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{allowListWarning}</p>
+                </div>
+            ) : null}
+            {listsChanged ? (
+                <p className={styles.hint}>
+                    Allow/block list changes take effect about 1 hour after this
+                    transaction confirms, and a bound list can be replaced but never removed.
+                </p>
+            ) : null}
+        </>
+    );
 }
 
 function DetailRow({ label, value }) {

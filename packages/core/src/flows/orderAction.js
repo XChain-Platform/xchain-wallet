@@ -128,8 +128,8 @@ export async function orderAction(opts) {
             // answers "has no matching Script". The confirm screen hides this
             // on the create path by handing down a prebuiltPsbt, which skips
             // createTx entirely - so it bites exactly the callers that build
-            // live: watcher mode here, and cancel/edit below, which have no
-            // confirm screen at all. Inert on the prebuiltPsbt path.
+            // live: watcher mode, here and on cancel/edit below. Inert on the
+            // prebuiltPsbt path.
             sourceAddress: source.address,
             change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
@@ -229,10 +229,9 @@ export async function cancelOrder(opts) {
         actionData: { action: 'ORDER', params },
         encoderOpts: {
             pubkey: source.publicKey,
-            // Cancel has no confirm screen, so it ALWAYS builds live: without
-            // these the encoder funds from the public key and the utxo-tracker
-            // refuses it ("has no matching Script"), which made releasing an
-            // order's escrow impossible from the wallet.
+            // A watcher-mode cancel builds live: without these the encoder
+            // funds from the public key and the utxo-tracker refuses it
+            // ("has no matching Script"). Inert on the prebuiltPsbt path.
             sourceAddress: source.address,
             change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
@@ -312,7 +311,7 @@ export async function editOrder(opts) {
         actionData: { action: 'ORDER', params },
         encoderOpts: {
             pubkey: source.publicKey,
-            // Edit builds live too (no confirm screen); see cancelOrder above.
+            // Same as cancelOrder above: needed whenever the edit builds live.
             sourceAddress: source.address,
             change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),

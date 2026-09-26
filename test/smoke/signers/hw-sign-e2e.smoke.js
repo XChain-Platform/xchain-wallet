@@ -757,12 +757,12 @@ assert.ok(
     'DispenserDetail buy path calls messaging.sendAssetHw for HW buyers',
 );
 assert.ok(
-    /messaging\.dispenserActionHw\(/.test(dispDetailSrc),
-    'DispenserDetail cancel path calls messaging.dispenserActionHw for HW owners',
+    /hardware: 'dispenserActionHw'/.test(dispDetailSrc),
+    'DispenserDetail owner actions sign dispenserActionHw for HW owners',
 );
 assert.ok(
-    /buyHwStatus/.test(dispDetailSrc) && /cancelHwStatus/.test(dispDetailSrc),
-    'DispenserDetail tracks buy + cancel HW statuses separately',
+    /buyHwStatus/.test(dispDetailSrc) && /useOwnerActionLane\(/.test(dispDetailSrc),
+    'DispenserDetail tracks the buy HW status apart from the owner lane',
 );
 
 // 13c. AirdropForm: two independent sign points.
