@@ -41,6 +41,12 @@ const chainRegistry = registryLib.defaultRegistry();
 // estimate on the review screen.
 const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+// Why a key request cannot go out from a wallet whose passphrase is unstored.
+// It names both ways out, since this form has no passphrase or password field.
+const UNSTORED_PASSPHRASE_REASON = 'This wallet uses a 25th-word passphrase that has not been '
+    + 'stored yet, so the key request cannot be signed. Lock the wallet; the unlock screen will '
+    + 'capture it, or pick "Plain text" above to message them without encryption.';
+
 /**
  * The address a message is funded from on its delivery chain. The chain's
  * active address wins when the wallet holds it (that is where the user keeps
@@ -598,6 +604,22 @@ export function ComposeMessage({
         }
     }
 
+    // True for a wallet with a 25th-word passphrase it has never stored: the
+    // signer pool skips it, and only the unlock screen's capture step fixes it.
+    // Read on press, so the common case costs no extra lookup.
+    async function passphraseAwaitsCapture() {
+        try {
+            const wallets = typeof messaging.listWallets === 'function'
+                ? await messaging.listWallets()
+                : null;
+            const record = Array.isArray(wallets) ? wallets.find((w) => w?.id === walletId) : null;
+            return Boolean(record?.passphraseEnabled && !record?.passphraseStored);
+        } catch {
+            // A shell that cannot list wallets falls through to the confirm page.
+            return false;
+        }
+    }
+
     // Publish our pubkey to the recipient (MESSAGE format-0 handshake) so they
     // can derive the ECDH shared secret and message us, even before our address
     // has spent. Used when the recipient's key is unknown: it requests a session
@@ -607,6 +629,13 @@ export function ComposeMessage({
         setHandshakeBusy(true);
         setHandshakeError(null);
         try {
+            // Refuse here, not on the confirm page: that page only offers a
+            // password, and a password alone cannot sign for this wallet.
+            if (!hw && !handshakeLane.isWatcherMode && !signerReady
+                && await passphraseAwaitsCapture()) {
+                setHandshakeError(UNSTORED_PASSPHRASE_REASON);
+                return;
+            }
             const { actionData } = flowsLib.buildHandshakeActionData({
                 chainRegistry,
                 chainId,
