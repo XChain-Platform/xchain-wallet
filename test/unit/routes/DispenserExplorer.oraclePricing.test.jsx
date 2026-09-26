@@ -55,6 +55,8 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         });
         await searchFor('MGRTEST');
         expect(await screen.findAllByText(/1 MGRTEST per 0\.05 USD \(oracle ndDEAA/)).not.toHaveLength(0);
+        expect(screen.getAllByText(/status open/)).not.toHaveLength(0);
+        expect(screen.queryAllByText(/status valid/)).toHaveLength(0);
         expect(document.body.textContent).not.toMatch(/per 0 DOGE/);
         expect(messaging.oracleFeeds).toHaveBeenCalledWith(expect.objectContaining({ address: ORACLE }));
     });

@@ -15,6 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     dispenserRateLabel,
+    isOpenOffer,
     isOpenDispenserSelling,
 } from '../../../packages/core/src/shared/utils/dispenserPricing.js';
 
@@ -77,5 +78,18 @@ describe('isOpenDispenserSelling', () => {
 
     it('drops an invalid create', () => {
         expect(isOpenDispenserSelling({ status: 'invalid: insufficient funds', give_tick: 'X' }, 'X')).toBe(false);
+    });
+});
+
+describe('isOpenOffer', () => {
+    it('accepts valid create rows and lets lifecycle status overrule them', () => {
+        expect(isOpenOffer({ status: 'valid' })).toBe(true);
+        expect(isOpenOffer({ status: 'valid', order_status: 'open' })).toBe(true);
+        expect(isOpenOffer({ status: 'valid', order_status: 'cancelled' })).toBe(false);
+        expect(isOpenOffer({ status: 'valid', swap_status: 'settled' })).toBe(false);
+    });
+
+    it('rejects an invalid create row', () => {
+        expect(isOpenOffer({ status: 'invalid: expired' })).toBe(false);
     });
 });

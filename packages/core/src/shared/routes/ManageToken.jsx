@@ -23,7 +23,7 @@ import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
-import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling } from '../utils/dispenserPricing.js';
+import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling, isOpenOffer } from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -308,7 +308,7 @@ export function ManageToken({
             .then((resp) => {
                 if (cancelled) return;
                 const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
-                setOrders(rows);
+                setOrders(rows.filter((row) => isOpenOffer(row)));
             })
             .catch((err) => { if (!cancelled) setOrdersError(err?.message || 'Failed to load orders.'); });
         return () => { cancelled = true; };
@@ -937,10 +937,10 @@ function OrdersPanel({ orders, error, tick, chainId }) {
     return (
         <ul className={styles.list} role="list">
             {orders.slice(0, 50).map((o, i) => {
-                const giveTick = o.give_tick || o.giveTick || '';
-                const getTick = o.get_tick || o.getTick || '';
-                const giveQty = o.give_quantity ?? o.give_remaining ?? null;
-                const getQty = o.get_quantity ?? o.get_remaining ?? null;
+                const giveTick = o.give_tick || o.give_coin || o.giveTick || o.giveCoin || '';
+                const getTick = o.get_tick || o.get_coin || o.getTick || o.getCoin || '';
+                const giveQty = o.give_amount ?? o.giveAmount ?? null;
+                const getQty = o.get_amount ?? o.getAmount ?? null;
                 const summary =
                     `${giveQty != null ? Number(giveQty).toLocaleString() : '?'} ${giveTick}` +
                     ' → ' +
@@ -975,10 +975,10 @@ function SwapsPanel({ swaps, error, tick }) {
     return (
         <ul className={styles.list} role="list">
             {swaps.slice(0, 50).map((s, i) => {
-                const giveTick = s.give_tick || s.giveTick || '';
-                const getTick = s.get_tick || s.getTick || '';
-                const giveQty = s.give_quantity ?? null;
-                const getQty = s.get_quantity ?? null;
+                const giveTick = s.give_tick || s.give_coin || s.giveTick || s.giveCoin || '';
+                const getTick = s.get_tick || s.get_coin || s.getTick || s.getCoin || '';
+                const giveQty = s.give_amount ?? s.giveAmount ?? null;
+                const getQty = s.get_amount ?? s.getAmount ?? null;
                 const summary =
                     `${giveQty != null ? Number(giveQty).toLocaleString() : '?'} ${giveTick}` +
                     ' ⇄ ' +

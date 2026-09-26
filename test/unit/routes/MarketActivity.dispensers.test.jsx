@@ -81,6 +81,36 @@ describe('Marketplace on explorer-shaped rows', () => {
         expect(await screen.findByText('Sold 15 XCHAIN for 0.03 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/Sold 2 XCHAIN/)).toBeNull();
     });
+
+    it('shows open DEX orders using explorer amount and coin fields', async () => {
+        const open = {
+            action_index: '40', status: 'valid', order_status: 'open',
+            give_tick: 'XCHAIN', give_coin: 'BTC', give_amount: '25',
+            get_tick: null, get_coin: 'BTC', get_amount: '0.01',
+        };
+        const closed = { ...open, action_index: '41', give_amount: '99', order_status: 'cancelled' };
+        renderMarket({
+            getOrdersForToken: vi.fn()
+                .mockResolvedValueOnce({ data: [open, closed] })
+                .mockResolvedValue({ data: [] }),
+        });
+        expect(await screen.findByText('Sell 25 XCHAIN for 0.01 BTC')).toBeInTheDocument();
+        expect(screen.queryByText(/Sell 99 XCHAIN/)).toBeNull();
+    });
+
+    it('shows DEX swaps using explorer amount and coin fields', async () => {
+        const settled = {
+            action_index: '50', status: 'valid', swap_status: 'settled',
+            give_tick: null, give_coin: 'BTC', give_amount: '0.08',
+            get_tick: 'XCHAIN', get_coin: 'BTC', get_amount: '3200', timestamp: 1785186698,
+        };
+        renderMarket({
+            getSwapsForToken: vi.fn()
+                .mockResolvedValueOnce({ data: [settled] })
+                .mockResolvedValue({ data: [] }),
+        });
+        expect(await screen.findByText('Bought 3,200 XCHAIN for 0.08 BTC')).toBeInTheDocument();
+    });
 });
 
 describe('demo Marketplace feed', () => {
@@ -94,5 +124,12 @@ describe('demo Marketplace feed', () => {
             '1,000 XCHAIN per 0.02 BTC', '500 XCHAIN per 0.01 BTC',
         ]);
         expect(demo.sales.every(({ row }) => dispenseIsValid(row) && Number(row.get_amount) > 0)).toBe(true);
+        expect(demo.dexOrders.every(({ row }) => row.status === 'valid'
+            && row.give_amount != null && row.get_amount != null
+            && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
+        expect(demo.dexSwaps.every(({ row }) => row.status === 'valid'
+            && row.swap_status === 'settled'
+            && row.give_amount != null && row.get_amount != null
+            && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
     });
 });

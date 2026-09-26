@@ -292,7 +292,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
 
 function ResultRow({ row, oracleFeeds, onSelect }) {
     const rate = dispenserRateLabel(row, oracleFeeds);
-    const status = String(row.status || '-');
+    const status = String(flowsLib.dispenserLiveState(row).status || '-');
     return (
         <button
             type="button"

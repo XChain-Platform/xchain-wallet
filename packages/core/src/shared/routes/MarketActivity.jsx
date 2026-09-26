@@ -17,7 +17,7 @@ import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
-import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling } from '../utils/dispenserPricing.js';
+import { dispenserRateLabel, formatDecimal, isOpenDispenserSelling, isOpenOffer } from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -132,7 +132,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             typeof messaging.getOrdersForToken === 'function'
                 ? messaging.getOrdersForToken({ chainId: cid, tick })
                     .then((resp) => extractRows(resp)
-                        .filter((o) => o && (o.status === undefined || o.status === 'open' || Number(o.status) === 0))
+                        .filter((row) => isOpenOffer(row))
                         .map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
@@ -283,10 +283,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {dexOrders.slice(0, 50).map(({ chainId, row }, i) => {
-                                const giveTick = row.give_tick || row.giveTick || '';
-                                const getTick = row.get_tick || row.getTick || '';
-                                const giveQty = row.give_quantity ?? row.give_remaining;
-                                const getQty = row.get_quantity ?? row.get_remaining;
+                                const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
+                                const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                const giveQty = row.give_amount ?? row.giveAmount ?? null;
+                                const getQty = row.get_amount ?? row.getAmount ?? null;
                                 const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null
@@ -368,10 +368,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {dexSwaps.slice(0, 50).map(({ chainId, row }, i) => {
-                                const giveTick = row.give_tick || row.giveTick || '';
-                                const getTick = row.get_tick || row.getTick || '';
-                                const giveQty = row.give_quantity ?? null;
-                                const getQty = row.get_quantity ?? null;
+                                const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
+                                const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                const giveQty = row.give_amount ?? row.giveAmount ?? null;
+                                const getQty = row.get_amount ?? row.getAmount ?? null;
                                 const ts = Number(row.timestamp || row.block_time || 0);
                                 const dateLabel = ts > 0
                                     ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()

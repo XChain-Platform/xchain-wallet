@@ -938,14 +938,14 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
 
     const dexOrders = [
         // A sell (give the token, get coin) and a buy (give coin, get the token).
-        { action_index: 900201, give_tick: tick, give_quantity: 5000, get_tick: coinTick, get_quantity: px(5000) },
-        { action_index: 900202, give_tick: coinTick, give_quantity: px(3000), get_tick: tick, get_quantity: 3000 },
+        { action_index: 900201, status: 'valid', give_tick: tick, give_coin: coinTick, give_amount: '5000', get_tick: null, get_coin: coinTick, get_amount: String(px(5000)) },
+        { action_index: 900202, status: 'valid', give_tick: null, give_coin: coinTick, give_amount: String(px(3000)), get_tick: tick, get_coin: coinTick, get_amount: '3000' },
     ].map(wrap);
 
     const dexSwaps = [
-        { tx_hash: `demo-${chainId}-swap-1`, give_tick: tick, give_quantity: 1500, get_tick: coinTick, get_quantity: px(1500), timestamp: sec(7_200) },
-        { tx_hash: `demo-${chainId}-swap-2`, give_tick: coinTick, give_quantity: px(800), get_tick: tick, get_quantity: 800, timestamp: sec(18_000) },
-        { tx_hash: `demo-${chainId}-swap-3`, give_tick: tick, give_quantity: 4200, get_tick: coinTick, get_quantity: px(4200), timestamp: sec(90_000) },
+        { action_index: 900301, tx_hash: `demo-${chainId}-swap-1`, status: 'valid', swap_status: 'settled', give_tick: tick, give_coin: coinTick, give_amount: '1500', get_tick: null, get_coin: coinTick, get_amount: String(px(1500)), timestamp: sec(7_200) },
+        { action_index: 900302, tx_hash: `demo-${chainId}-swap-2`, status: 'valid', swap_status: 'settled', give_tick: null, give_coin: coinTick, give_amount: String(px(800)), get_tick: tick, get_coin: coinTick, get_amount: '800', timestamp: sec(18_000) },
+        { action_index: 900303, tx_hash: `demo-${chainId}-swap-3`, status: 'valid', swap_status: 'settled', give_tick: tick, give_coin: coinTick, give_amount: '4200', get_tick: null, get_coin: coinTick, get_amount: String(px(4200)), timestamp: sec(90_000) },
     ].map(wrap);
 
     return { offers, sales, dexOrders, dexSwaps };

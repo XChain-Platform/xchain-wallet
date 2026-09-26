@@ -96,6 +96,21 @@ export function dispenserRateLabel(row, oracleFeeds) {
 }
 
 /**
+ * Whether an offer row is valid and still open. List rows keep action
+ * validity in `status`; a served lifecycle field overrides that fallback.
+ *
+ * @param {any} row
+ * @returns {boolean}
+ */
+export function isOpenOffer(row) {
+    if (!row || typeof row !== 'object') return false;
+    const validity = String(row.status || '').toLowerCase();
+    if (validity && validity !== 'valid' && validity !== 'open') return false;
+    const lifecycle = row.current_status || row.order_status || row.swap_status || row.state?.status;
+    return !lifecycle || String(lifecycle).toLowerCase() === 'open';
+}
+
+/**
  * Whether a dispenser list row is an open offer selling `tick`. The create
  * row's status stays 'valid' after a close, so the lifecycle (current_status,
  * or a detail read's state) decides; a row carrying neither falls back to the
@@ -107,11 +122,7 @@ export function dispenserRateLabel(row, oracleFeeds) {
  * @returns {boolean}
  */
 export function isOpenDispenserSelling(row, tick) {
-    if (!row || typeof row !== 'object') return false;
-    const lifecycle = row.current_status || row.state?.status;
-    const status = String(lifecycle || row.status || '').toLowerCase();
-    const open = lifecycle ? status === 'open' : (status === '' || status === 'valid' || status === 'open');
-    if (!open) return false;
+    if (!isOpenOffer(row)) return false;
     const want = String(tick || '').toUpperCase();
     if (!want || want.startsWith('^') || !row.give_tick) return true;
     return String(row.give_tick).toUpperCase() === want;
