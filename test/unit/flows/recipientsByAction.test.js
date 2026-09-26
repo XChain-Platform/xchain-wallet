@@ -85,53 +85,53 @@ describe('flows/recipientsByAction getDividendRecipients', () => {
 });
 
 describe('flows/recipientsByAction getAirdropRecipients', () => {
-    it('uses a pre-resolved listActionIndex and reads the LIST ITEM array', async () => {
-        const sdk = {
-            getAction: vi.fn(async (idx) => {
-                expect(idx).toBe('7');
-                return { params: { TYPE: 2, ITEM: ['addr1', 'addr2', 'addr1'] } };
-            }),
+    it('reads historical recipients from production-shaped AIRDROP credits', async () => {
+        const action = {
+            action: 'AIRDROP',
+            action_index: 42,
+            list_action_index: 7,
+            tick: 'XCP',
+            credits: [
+                { address: 'addr1', tick: 'XCP', amount: '10' },
+                { address: 'addr2', tick: 'XCP', amount: '10' },
+                { address: 'addr1', tick: 'XCP', amount: '5' },
+            ],
         };
-        const res = await getAirdropRecipients({ sdkRegistry: mkRegistry(sdk), chainId: 'c', listActionIndex: '7' });
+        const sdk = { getAction: vi.fn(async () => action) };
+
+        const res = await getAirdropRecipients({
+            sdkRegistry: mkRegistry(sdk),
+            chainId: 'c',
+            actionIndex: '42',
+            listActionIndex: '7',
+        });
+
+        expect(sdk.getAction).toHaveBeenCalledTimes(1);
+        expect(sdk.getAction).toHaveBeenCalledWith('42');
         expect(res.listActionIndex).toBe('7');
-        expect(res.listType).toBe('2');
         expect(res.recipients).toEqual([{ address: 'addr1' }, { address: 'addr2' }]);
     });
 
-    it('resolves listActionIndex from the AIRDROP action first, then fetches the LIST', async () => {
-        const sdk = {
-            getAction: vi.fn(async (idx) => {
-                if (idx === '42') return { params: { LIST_ACTION_INDEX: '7' } };
-                if (idx === '7') return { params: { TYPE: 2, ITEM: [{ address: 'addr1' }] } };
-                throw new Error(`unexpected getAction(${idx})`);
-            }),
-        };
-        const res = await getAirdropRecipients({ sdkRegistry: mkRegistry(sdk), chainId: 'c', actionIndex: '42' });
-        expect(res.recipients).toEqual([{ address: 'addr1' }]);
-        expect(sdk.getAction).toHaveBeenCalledTimes(2);
+    it('falls back to the row list index when the action response omits it', async () => {
+        const sdk = { getAction: vi.fn(async () => ({ credits: [] })) };
+        const res = await getAirdropRecipients({
+            sdkRegistry: mkRegistry(sdk),
+            chainId: 'c',
+            actionIndex: '42',
+            listActionIndex: '7',
+        });
+        expect(res.listActionIndex).toBe('7');
     });
 
-    it('coerces a single non-array ITEM to a one-element list', async () => {
-        const sdk = { getAction: async () => ({ params: { TYPE: 2, ITEM: 'soloAddr' } }) };
-        const res = await getAirdropRecipients({ sdkRegistry: mkRegistry(sdk), chainId: 'c', listActionIndex: '7' });
-        expect(res.recipients).toEqual([{ address: 'soloAddr' }]);
-    });
-
-    it('throws when neither listActionIndex nor actionIndex is provided', async () => {
+    it('throws when actionIndex is not provided', async () => {
         await expect(getAirdropRecipients({ sdkRegistry: mkRegistry({ getAction: async () => ({}) }), chainId: 'c' }))
-            .rejects.toThrow(/either listActionIndex or actionIndex is required/);
-    });
-
-    it('throws when the AIRDROP action has no LIST_ACTION_INDEX', async () => {
-        const sdk = { getAction: async () => ({ params: {} }) };
-        await expect(getAirdropRecipients({ sdkRegistry: mkRegistry(sdk), chainId: 'c', actionIndex: '9' }))
-            .rejects.toThrow(/has no LIST_ACTION_INDEX field/);
+            .rejects.toThrow(/actionIndex is required/);
     });
 
     it('guards sdkRegistry, chainId, and an unregistered SDK', async () => {
-        await expect(getAirdropRecipients({ chainId: 'c', listActionIndex: '7' })).rejects.toThrow(/sdkRegistry is required/);
-        await expect(getAirdropRecipients({ sdkRegistry: mkRegistry({}), listActionIndex: '7' })).rejects.toThrow(/chainId is required/);
-        await expect(getAirdropRecipients({ sdkRegistry: { get: () => null }, chainId: 'c', listActionIndex: '7' }))
+        await expect(getAirdropRecipients({ chainId: 'c', actionIndex: '42' })).rejects.toThrow(/sdkRegistry is required/);
+        await expect(getAirdropRecipients({ sdkRegistry: mkRegistry({}), actionIndex: '42' })).rejects.toThrow(/chainId is required/);
+        await expect(getAirdropRecipients({ sdkRegistry: { get: () => null }, chainId: 'c', actionIndex: '42' }))
             .rejects.toThrow(/SDK not registered/);
     });
 });
