@@ -31,13 +31,14 @@
 // rendered unconditionally rather than a calculation.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 
 const CHAIN = 'litecoin-mainnet';
 const BUYER = 'ltc1qbuyerbuyerbuyerbuyerbuyerbuyerbuyerbu';
+const OTHER_BUYER = 'ltc1qotherbuyerbuyerbuyerbuyerbuyerbuyer';
 const OWNER = 'ltc1qownerownerownerownerownerownerownerow';
 
 const ADDRESSES = {
@@ -70,20 +71,38 @@ const OPEN_DISPENSER = {
 const ALLOW_GATED = { ...OPEN_DISPENSER, action_index: '1701', allow_list: '1690' };
 const BLOCK_GATED = { ...OPEN_DISPENSER, action_index: '1702', block_list: '1691' };
 const BOTH_GATED = { ...OPEN_DISPENSER, action_index: '1703', allow_list: '1690', block_list: '1691' };
+const TOKEN_PAID = {
+    ...OPEN_DISPENSER,
+    action_index: '1704',
+    get_tick: 'PAY',
+    get_coin: null,
+};
 
-function mount(dispenser) {
+function mount(dispenser, {
+    addresses = ADDRESSES,
+    lists = {},
+    tokenInfo = {},
+    getListByActionIndex,
+} = {}) {
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
-        getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
+        getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getDispenses: vi.fn().mockResolvedValue({ data: [] }),
         getWalletBalances: vi.fn().mockResolvedValue({
-            [CHAIN]: [{
-                address: BUYER,
-                balances: { native: { tick: 'LTC', quantity: '100000000', divisibility: 8 }, tokens: [] },
-            }],
+            [CHAIN]: (addresses[CHAIN] || []).map((address) => ({
+                address: address.address,
+                balances: {
+                    native: { tick: 'LTC', quantity: '100000000', divisibility: 8 },
+                    tokens: [{ tick: 'PAY', quantity: '100000000', divisibility: 8 }],
+                },
+            })),
         }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
         sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
+        getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve(tokenInfo[tick] || {})),
+        getListByActionIndex: getListByActionIndex || vi.fn().mockImplementation(
+            ({ actionIndex: index }) => Promise.resolve(lists[index] || { list: [] }),
+        ),
     };
     render(
         React.createElement(
@@ -96,6 +115,22 @@ function mount(dispenser) {
         ),
     );
     return messaging;
+}
+
+function list(current, created = current) {
+    return {
+        list: created,
+        state: { edit_resolution_active: true, current_list: current },
+    };
+}
+
+function buyButton() {
+    return screen.getByRole('button', { name: 'Buy 1 fill' });
+}
+
+async function expectSelectedPayerRefused() {
+    expect(await screen.findByText(/selected paying address is not allowed/i)).toBeInTheDocument();
+    expect(buyButton()).toBeDisabled();
 }
 
 afterEach(() => cleanup());
@@ -154,5 +189,111 @@ describe('restricted dispenser, buyer view (D-148)', () => {
         expect(text, 'an unrestricted dispenser must not be described as restricted')
             .not.toMatch(/restricted/i);
         expect(text).toMatch(/Send exactly/);
+    });
+
+    it('uses the current edited membership for the selected payer', async () => {
+        mount(ALLOW_GATED, {
+            lists: {
+                1690: list([OWNER], [BUYER, OWNER]),
+            },
+        });
+        await expectSelectedPayerRefused();
+    });
+
+    it('enforces the dispenser block-list for the selected payer', async () => {
+        mount(BLOCK_GATED, {
+            lists: { 1691: list([BUYER]) },
+        });
+        await expectSelectedPayerRefused();
+    });
+
+    it('does not let an eligible sibling address authorize the selected payer', async () => {
+        const addresses = {
+            [CHAIN]: [
+                ADDRESSES[CHAIN][0],
+                {
+                    ...ADDRESSES[CHAIN][0],
+                    id: 'addr-2',
+                    address: OTHER_BUYER,
+                    derivationPath: "m/84'/2'/0'/0/1",
+                },
+            ],
+        };
+        mount(ALLOW_GATED, {
+            addresses,
+            lists: { 1690: list([BUYER, OWNER]) },
+        });
+        await screen.findByLabelText(/Pay from/i);
+        fireEvent.change(screen.getByLabelText(/Pay from/i), { target: { value: 'addr-2' } });
+        await expectSelectedPayerRefused();
+    });
+
+    it.each([
+        ['payment-token allow-list', 'pay-allow', [OWNER]],
+        ['payment-token block-list', 'pay-block', [BUYER]],
+        ['dispensed-token allow-list', 'give-allow', [OWNER]],
+        ['dispensed-token block-list', 'give-block', [BUYER]],
+    ])('enforces the %s', async (_name, barredList, members) => {
+        mount(TOKEN_PAID, {
+            tokenInfo: {
+                PAY: { allowList: 'pay-allow', blockList: 'pay-block' },
+                XCHAIN: { allowList: 'give-allow', blockList: 'give-block' },
+            },
+            lists: {
+                'pay-allow': list(barredList === 'pay-allow' ? members : [BUYER, OWNER]),
+                'pay-block': list(barredList === 'pay-block' ? members : []),
+                'give-allow': list(barredList === 'give-allow' ? members : [BUYER, OWNER]),
+                'give-block': list(barredList === 'give-block' ? members : []),
+            },
+        });
+        await expectSelectedPayerRefused();
+    });
+
+    it('allows the buy only when payer and pay-to pass all six list gates', async () => {
+        mount({ ...TOKEN_PAID, allow_list: '1690', block_list: '1691' }, {
+            tokenInfo: {
+                PAY: { allowList: 'pay-allow', blockList: 'pay-block' },
+                XCHAIN: { allowList: 'give-allow', blockList: 'give-block' },
+            },
+            lists: {
+                1690: list([BUYER, OWNER]),
+                1691: list([]),
+                'pay-allow': list([BUYER, OWNER]),
+                'pay-block': list([]),
+                'give-allow': list([BUYER, OWNER]),
+                'give-block': list([]),
+            },
+        });
+        await waitFor(() => expect(buyButton()).toBeEnabled());
+        expect(document.body.textContent).not.toMatch(/selected paying address is not allowed/i);
+    });
+
+    it('refreshes membership before opening the signing review', async () => {
+        let reads = 0;
+        const getListByActionIndex = vi.fn().mockImplementation(() => {
+            reads += 1;
+            return Promise.resolve(list(reads === 1 ? [BUYER, OWNER] : [OWNER]));
+        });
+        mount(ALLOW_GATED, { getListByActionIndex });
+        await waitFor(() => expect(buyButton()).toBeEnabled());
+        fireEvent.click(buyButton());
+        await expectSelectedPayerRefused();
+        expect(screen.queryByText(/Review buy/i)).not.toBeInTheDocument();
+    });
+
+    it('refreshes membership again before signing', async () => {
+        let reads = 0;
+        const getListByActionIndex = vi.fn().mockImplementation(() => {
+            reads += 1;
+            return Promise.resolve(list(reads < 3 ? [BUYER, OWNER] : [OWNER]));
+        });
+        const messaging = mount(ALLOW_GATED, { getListByActionIndex });
+        await waitFor(() => expect(buyButton()).toBeEnabled());
+        fireEvent.click(buyButton());
+        const password = await screen.findByLabelText(/Password/i);
+        fireEvent.change(password, { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: /Sign buy/i }));
+        expect(await screen.findByText(/refused by a current access list/i)).toBeInTheDocument();
+        expect(messaging.sendToken).not.toHaveBeenCalled();
     });
 });

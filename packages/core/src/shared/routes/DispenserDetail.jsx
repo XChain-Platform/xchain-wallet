@@ -673,51 +673,119 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return buyerAddresses.find((a) => a.id === buyerAddressId) || null;
     }, [buyerAddressId, buyerAddresses]);
 
-    // D-162: the panel already tells a buyer this dispenser is restricted and
-    // names the list, then tells them to "check you are on the right side of
-    // the list before sending" - which is a read the wallet can just do. Both
-    // list details, fetched once per dispenser; best-effort, since a failed
-    // read must leave the existing generic warning standing rather than
-    // replace it with a specific claim that is not backed by anything.
-    const [allowMembers, setAllowMembers] = useState(/** @type {string[]|null} */ (null));
-    const [blockMembers, setBlockMembers] = useState(/** @type {string[]|null} */ (null));
-    useEffect(() => {
-        setAllowMembers(null);
-        setBlockMembers(null);
-        if (!chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
-        let live = true;
-        const read = (idx, set) => {
-            if (!idx) return;
-            messaging.getListByActionIndex({ chainId, actionIndex: String(idx) })
-                .then((detail) => { if (live) set(listMembers(detail)); })
-                .catch(() => { /* best-effort */ });
-        };
-        read(currentAllowList, setAllowMembers);
-        read(currentBlockList, setBlockMembers);
-        return () => { live = false; };
-    }, [chainId, currentAllowList, currentBlockList, messaging]);
+    // Apply the same three policy pairs as settlement: the dispenser, the
+    // payment token, and the dispensed token. Each list read uses its resolved
+    // current membership through listMembers().
 
-    // The verdict that does NOT depend on who pays: a dispenser whose own
-    // pay-to address is off its own allow-list sells to nobody, so checking
-    // your own membership cannot help (D-161, from the buyer's side).
-    const dispenserSelfBarred = ownerOffAllowList({
-        members: allowMembers, getAddress: dispAddr,
-    });
-    // And the one that does: whether any address THIS wallet holds on this
-    // chain would be accepted. A coin-paid dispenser takes a bare payment from
-    // anywhere, so the wallet cannot know the payer - it can only answer for
-    // the addresses it has.
+    // Fetch current token-policy pointers on every assessment so token edits
+    // cannot leave the detail page using metadata from an earlier render.
+    // Deduplicate shared list references before reading their memberships.
+
+    // Keep failed reads unknown; only a resolved membership answer drives a
+    // refusal verdict.
+    const readBuyerPolicies = useCallback(async () => {
+        const readToken = async (tick) => {
+            if (!tick || typeof messaging.getTokenInfo !== 'function') return null;
+            try {
+                return await messaging.getTokenInfo({ chainId, tick });
+            } catch {
+                return null;
+            }
+        };
+        const [paymentInfo, giveInfo] = await Promise.all([
+            readToken(getTick),
+            readToken(giveTick),
+        ]);
+        const refs = [
+            { scope: 'dispenser', allowList: currentAllowList, blockList: currentBlockList },
+            { scope: 'payment token', allowList: paymentInfo?.allowList, blockList: paymentInfo?.blockList },
+            { scope: 'dispensed token', allowList: giveInfo?.allowList, blockList: giveInfo?.blockList },
+        ];
+        const indexes = [...new Set(refs
+            .flatMap((policy) => [policy.allowList, policy.blockList])
+            .filter((index) => index != null && String(index) !== '')
+            .map(String))];
+        const members = new Map();
+        if (typeof messaging.getListByActionIndex === 'function') {
+            await Promise.all(indexes.map(async (index) => {
+                try {
+                    const detail = await messaging.getListByActionIndex({ chainId, actionIndex: index });
+                    members.set(index, listMembers(detail));
+                } catch {
+                    members.set(index, null);
+                }
+            }));
+        }
+        return refs.map((policy) => ({
+            ...policy,
+            allowMembers: policy.allowList != null
+                ? members.get(String(policy.allowList)) ?? null : null,
+            blockMembers: policy.blockList != null
+                ? members.get(String(policy.blockList)) ?? null : null,
+        }));
+    }, [chainId, currentAllowList, currentBlockList, getTick, giveTick, messaging]);
+
+    const [buyerPolicies, setBuyerPolicies] = useState(/** @type {any[]} */ ([]));
+    const [eligibilityChecking, setEligibilityChecking] = useState(true);
+    useEffect(() => {
+        let live = true;
+        setEligibilityChecking(true);
+        readBuyerPolicies()
+            .then((policies) => {
+                if (!live) return;
+                setBuyerPolicies(policies);
+                setEligibilityChecking(false);
+            })
+            .catch(() => { if (live) setEligibilityChecking(false); });
+        return () => { live = false; };
+    }, [readBuyerPolicies]);
+
+    // Judge only the address the purchase flow will actually put in `from`.
     const buyerVerdict = useMemo(() => buyerListVerdict({
-        addresses: buyerAddresses
-            .filter((a) => !chainId || a.chainId === chainId || a.chain_id === chainId)
-            .map((a) => a.address)
-            .filter(Boolean),
-        allowMembers,
-        blockMembers,
-    }), [buyerAddresses, chainId, allowMembers, blockMembers]);
+        addresses: buyerAddress?.address ? [buyerAddress.address] : [],
+        policies: buyerPolicies,
+    }), [buyerAddress, buyerPolicies]);
+    const dispenserVerdict = useMemo(() => buyerListVerdict({
+        addresses: dispAddr ? [dispAddr] : [],
+        policies: buyerPolicies,
+    }), [dispAddr, buyerPolicies]);
+    const dispenserSelfBarred = dispenserVerdict.verdict === 'refused';
+    const buyerEligibilityBarred = buyerVerdict.verdict === 'refused';
     const buyerListNotice = dispenserSelfBarred
         ? dispenserRefusesEveryoneMessage()
         : buyerListMessage(buyerVerdict);
+    const tokenPolicyDescriptions = buyerPolicies.flatMap((policy) => {
+        if (policy.scope === 'dispenser') return [];
+        const descriptions = [];
+        if (policy.allowList != null && String(policy.allowList) !== '') {
+            descriptions.push(`${policy.scope} allow-list #${policy.allowList}`);
+        }
+        if (policy.blockList != null && String(policy.blockList) !== '') {
+            descriptions.push(`${policy.scope} block-list #${policy.blockList}`);
+        }
+        return descriptions;
+    });
+
+    const refreshBuyerEligibility = useCallback(async () => {
+        setEligibilityChecking(true);
+        const policies = await readBuyerPolicies();
+        setBuyerPolicies(policies);
+        setEligibilityChecking(false);
+        const payerVerdict = buyerListVerdict({
+            addresses: buyerAddress?.address ? [buyerAddress.address] : [],
+            policies,
+        });
+        const payToVerdict = buyerListVerdict({
+            addresses: dispAddr ? [dispAddr] : [],
+            policies,
+        });
+        return payerVerdict.verdict === 'refused' || payToVerdict.verdict === 'refused';
+    }, [buyerAddress, dispAddr, readBuyerPolicies]);
+
+    const beginBuy = useCallback(async () => {
+        if (await refreshBuyerEligibility()) return;
+        setBuyStage('confirm');
+    }, [refreshBuyerEligibility]);
 
     // D-37: what the paying address actually holds of the payment
     // token, through the same hook that backs every other form's Max +
@@ -865,6 +933,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (!buyHw && (!signerReady && buyPassword.length === 0)) return;
         if (buyHw && buyHwStatus !== 'available') return;
         if (!payTick || !dispAddr || !totalPayAmount) return;
+        // Refresh immediately before signing because list edits can land while
+        // the review screen is open.
+        if (await refreshBuyerEligibility()) {
+            setBuyError('The selected paying address or dispenser address is refused by a current access list.');
+            setBuyStage('confirm');
+            return;
+        }
         // D-37: last gate before signing. The balance can also resolve (or
         // drop) while the review screen is open, so the check is repeated
         // here rather than trusted from the panel's disabled button.
@@ -1503,7 +1578,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * fee and receives nothing. Measured on Litecoin regtest:
               * 5,005,460 sats for a refused fill, unrecoverable.
               */}
-            {currentAllowList || currentBlockList ? (
+            {currentAllowList || currentBlockList || tokenPolicyDescriptions.length > 0 ? (
                 <p role="alert" className={styles.warning}>
                     <strong>This dispenser is restricted.</strong>{' '}
                     {currentAllowList
@@ -1513,22 +1588,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {currentBlockList
                         ? `Addresses on list #${currentBlockList} are barred from triggering it.`
                         : ''}
+                    {tokenPolicyDescriptions.length > 0
+                        ? ` Settlement also checks the ${tokenPolicyDescriptions.join(' and ')}.`
+                        : ''}
                     {' '}A payment from an address it refuses is <strong>not returned</strong>:
                     the {payTick || getCoin} is spent, the dispense is recorded invalid, and nothing
                     comes back.
                 </p>
             ) : null}
             {/*
-              * D-162: the line above used to end "Check you are on the
-              * right side of the list before sending", which hands the
-              * buyer a lookup the wallet can do itself off the read the
-              * list picker already makes. Two verdicts, and the first
-              * does not depend on who pays: a dispenser whose own
-              * pay-to address is off its allow-list sells to nobody
-              * (D-161 from the other side), so no amount of checking
-              * your own membership helps. Silent when the read failed
-              * or the answer is "you are fine" - the generic warning
-              * above still stands on its own.
+              * Show the specific eligibility verdict the wallet can resolve
+              * from current list membership.
+              */}
+            {/*
+              * Treat the pay-to verdict as payer-independent: a dispenser
+              * address refused by any settlement policy sells to nobody.
+              */}
+            {/*
+              * Keep this silent when a read failed or both addresses pass,
+              * since the generic restriction warning still stands on its own.
               */}
             {buyerListNotice ? (
                 <p role="alert" className={styles.warning}>{buyerListNotice}</p>
@@ -1875,9 +1953,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     ) : null}
                     <Button
                         variant="primary"
-                        onClick={() => setBuyStage('confirm')}
+                        onClick={beginBuy}
                         disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr
-                            || buyUnderfunded || Boolean(buyDustBlock)}
+                            || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
+                            || buyerEligibilityBarred || dispenserSelfBarred}
                     >
                         Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
                     </Button>

@@ -107,20 +107,29 @@ export function ownerOffAllowList({ members, getAddress }) {
  *   addresses: string[],
  *   allowMembers?: string[] | null,
  *   blockMembers?: string[] | null,
+ *   policies?: Array<{ allowMembers?: string[] | null, blockMembers?: string[] | null }>,
  * }} args
  * @returns {{ verdict: 'unknown'|'ok'|'refused'|'partial', accepted: string[], refused: string[] }}
  */
-export function buyerListVerdict({ addresses, allowMembers, blockMembers }) {
+export function buyerListVerdict({ addresses, allowMembers, blockMembers, policies }) {
     const mine = Array.isArray(addresses) ? addresses.filter(Boolean) : [];
-    const allow = Array.isArray(allowMembers) && allowMembers.length ? allowMembers : null;
-    const block = Array.isArray(blockMembers) && blockMembers.length ? blockMembers : null;
-    if (mine.length === 0 || (!allow && !block)) {
+    const rules = (Array.isArray(policies) ? policies : [{ allowMembers, blockMembers }])
+        .map((policy) => ({
+            allow: Array.isArray(policy?.allowMembers) && policy.allowMembers.length
+                ? policy.allowMembers : null,
+            block: Array.isArray(policy?.blockMembers) && policy.blockMembers.length
+                ? policy.blockMembers : null,
+        }))
+        .filter((policy) => policy.allow || policy.block);
+    if (mine.length === 0 || rules.length === 0) {
         return { verdict: 'unknown', accepted: [], refused: [] };
     }
     const accepted = [];
     const refused = [];
     for (const addr of mine) {
-        const barred = (allow && !allow.includes(addr)) || (block && block.includes(addr));
+        const barred = rules.some(({ allow, block }) => (
+            (allow && !allow.includes(addr)) || (block && block.includes(addr))
+        ));
         (barred ? refused : accepted).push(addr);
     }
     if (accepted.length === 0) return { verdict: 'refused', accepted, refused };
@@ -208,6 +217,10 @@ export function ownerOffAllowListMessage(getAddress, { createFirst = false } = {
 export function buyerListMessage(v) {
     if (!v) return null;
     if (v.verdict === 'refused') {
+        if (v.refused.length === 1) {
+            return 'The selected paying address is not allowed to buy from this dispenser. '
+                + 'A payment from it would be refused and the coin or token is not returned.';
+        }
         return 'None of this wallet\'s addresses on this chain are allowed to buy from this '
             + 'dispenser. A payment from here would be refused and the coin is not returned.';
     }
@@ -220,17 +233,17 @@ export function buyerListMessage(v) {
 }
 
 /**
- * The buyer-side sentence for a dispenser whose OWN pay-to address is off its
- * own allow-list - the D-161 trap, seen from the other side of the trade.
+ * The buyer-side sentence for a dispenser whose OWN pay-to address is refused
+ * by one of the access policies settlement applies.
  *
  * Worth its own line because it is the one verdict that does not depend on who
- * pays: nobody can buy from this dispenser, so no amount of checking your own
+ * pays: nobody can buy from this dispenser, so no amount of checking the payer
  * membership helps.
  *
  * @returns {string}
  */
 export function dispenserRefusesEveryoneMessage() {
-    return 'This dispenser cannot sell to anyone: its own pay-to address is missing from the '
-        + 'allow-list it was opened with, and the network checks that as well as the buyer. Every '
-        + 'payment would be refused, and the coin is not returned. Only its owner can fix it.';
+    return 'This dispenser cannot sell to anyone: its own pay-to address is refused by an '
+        + 'allow-list or block-list that settlement checks as well as the buyer. Every payment '
+        + 'would be refused, and the coin or token is not returned. Only its owner can fix it.';
 }
