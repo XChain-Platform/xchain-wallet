@@ -913,7 +913,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         messaging,
         chainId,
         to: dispAddr || '',
-        enabled: coinBuyable,
+        paymentTick: payTick,
+        isNativePayment: coinBuyable,
+        enabled: canBuyWithSend,
     });
     const buyDestinationNotice = useMemo(() => dispenserDestinationNotice({
         dispensers: dispensersAtBuyDestination,
