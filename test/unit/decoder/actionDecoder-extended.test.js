@@ -19,6 +19,18 @@ import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 const chainRegistry = defaultRegistry();
 
 describe('decodeAction extended', () => {
+    it.each(['ORDER', 'SWAP', 'DISPENSER'])('describes %s list-removal edits without list #0', (action) => {
+        const indexKey = `${action}_ACTION_INDEX`;
+        const d = decodeAction({
+            action,
+            params: { VERSION: '2', [indexKey]: '42', ALLOW_LIST: '0', BLOCK_LIST: 0 },
+        });
+        const rows = Object.fromEntries(d.details.map((r) => [r.label, r.value]));
+        expect(rows['Allow list']).toBe('Remove allow list');
+        expect(rows['Block list']).toBe('Remove block list');
+        expect(d.details.map((r) => r.value).join(' ')).not.toMatch(/list #?0/i);
+    });
+
     describe('MINT', () => {
         it('produces a mint summary with destination', () => {
             const d = decodeAction({

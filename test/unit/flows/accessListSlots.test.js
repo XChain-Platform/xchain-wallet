@@ -14,10 +14,23 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    boundListIndex,
     listInBothSlots,
     editListConflict,
     listInBothSlotsMessage,
 } from '../../../packages/core/src/flows/accessListSlots.js';
+
+describe('boundListIndex', () => {
+    it('treats numeric and string zero as no bound list', () => {
+        expect(boundListIndex(0)).toBeNull();
+        expect(boundListIndex('0')).toBeNull();
+        expect(boundListIndex('000')).toBeNull();
+    });
+
+    it('keeps a real list index as display text', () => {
+        expect(boundListIndex(' 2701 ')).toBe('2701');
+    });
+});
 
 describe('listInBothSlots', () => {
     it('flags the same list in both slots', () => {
@@ -33,6 +46,7 @@ describe('listInBothSlots', () => {
         expect(listInBothSlots({ allowList: '', blockList: '' })).toBe(false);
         expect(listInBothSlots({ allowList: null, blockList: undefined })).toBe(false);
         expect(listInBothSlots({ allowList: '2701', blockList: '' })).toBe(false);
+        expect(listInBothSlots({ allowList: '0', blockList: '0' })).toBe(false);
     });
 });
 
@@ -53,5 +67,10 @@ describe('editListConflict', () => {
     it('passes an edit that replaces the clashing half', () => {
         const bound = { currentAllowList: '7', currentBlockList: 7 };
         expect(editListConflict({ allowList: '8', blockList: '', ...bound })).toBeNull();
+    });
+
+    it('treats zero as removal when calculating the resulting pair', () => {
+        const bound = { currentAllowList: '7', currentBlockList: '7' };
+        expect(editListConflict({ allowList: '0', blockList: '', ...bound })).toBeNull();
     });
 });

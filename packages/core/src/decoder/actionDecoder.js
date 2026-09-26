@@ -38,6 +38,7 @@
 // action list so a new protocol action cannot quietly reopen the gap.
 
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
+import { listEditValue } from './list_removal_description.js';
 
 /**
  * @typedef {Object} DecodedAction
@@ -396,8 +397,8 @@ function decodeOrderSwap(action, p, chainSuffix) {
             details: [
                 ...(idx ? [{ label: `${properNoun} action index`, value: idx }] : []),
                 ...(expiration ? [{ label: 'Expiration', value: expiration }] : []),
-                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
-                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: listEditValue(allowList, 'allow') }] : []),
+                ...(blockList ? [{ label: 'Block list', value: listEditValue(blockList, 'block') }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [...(!idx ? [`${properNoun} action index is empty.`] : []), ...memoWarnings],
@@ -1183,8 +1184,8 @@ function decodeDispenser(p, chainSuffix) {
                 ...(idx ? [{ label: 'Dispenser action index', value: idx }] : []),
                 ...(giveEscrow ? [{ label: 'Refill escrow by', value: giveEscrow }] : []),
                 ...(expiration ? [{ label: 'Expiration (unix)', value: expiration }] : []),
-                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
-                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: listEditValue(allowList, 'allow') }] : []),
+                ...(blockList ? [{ label: 'Block list', value: listEditValue(blockList, 'block') }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [

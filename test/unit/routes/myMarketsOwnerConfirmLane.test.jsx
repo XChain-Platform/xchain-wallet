@@ -101,11 +101,17 @@ async function drain(rounds = 24) {
     }
 }
 
-async function mount(view, { owner = HD_ADDRESS, rows = [marketRow(700)], settings = { walletMode: 'full' }, preflight = PASS } = {}) {
+async function mount(view, {
+    owner = HD_ADDRESS,
+    rows = [marketRow(700)],
+    settings = { walletMode: 'full' },
+    preflight = PASS,
+    chainId = CHAIN,
+} = {}) {
     const calls = [];
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
     const target = {
-        getAddressesByChain: () => Promise.resolve({ [CHAIN]: [owner] }),
+        getAddressesByChain: () => Promise.resolve({ [chainId]: [owner] }),
         getSettings: () => Promise.resolve(settings),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: owner.source === 'hd' ? 'unlocked' : 'available' }),
@@ -195,6 +201,27 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
         expect(sign.args.signerId).toBe('signer-hw');
         expect(sign.args.password, 'no password rides the device lane').toBeUndefined();
         expect(sign.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00' });
+    });
+
+    it('offers a bound-list removal on regtest and sends the zero sentinel', async () => {
+        const rows = [marketRow(700, { allow_list: '2701', block_list: '0' })];
+        const { utils, calls } = await mount(view, { rows, chainId: 'dogecoin-regtest' });
+        expect(utils.getByText(/Allow list #2701 · Block list none/)).toBeTruthy();
+        await openAction(utils, 'Edit');
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Remove allow list' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Edit ${view.noun}` })));
+
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.actionData.params).toEqual({
+            VERSION: '2', [view.indexKey]: '700', ALLOW_LIST: '0',
+        });
+    });
+
+    it('keeps the removal choice hidden while the activation is unarmed', async () => {
+        const rows = [marketRow(700, { allow_list: '2701' })];
+        const { utils } = await mount(view, { rows });
+        await openAction(utils, 'Edit');
+        expect(utils.queryByRole('button', { name: 'Remove allow list' })).toBeNull();
     });
 
     it('keeps watcher mode on its unsigned build, with no signature to pre-flight', async () => {

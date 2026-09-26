@@ -192,6 +192,8 @@ export {
     gateMinAmountScheduledHeight,
     isGateMinAmountActive,
     resolveGateMinAmountActive,
+    LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS,
+    isListEditRemoveActive,
 } from './protocolActivations.js';
 export {
     messageAction,

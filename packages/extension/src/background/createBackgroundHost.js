@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { flows, registry, schemas } from '@xchain-wallet/core';
+import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
@@ -2348,14 +2348,16 @@ export function createBackgroundHost(deps) {
         if (typeof sdk?.decoder?.describe !== 'function') {
             throw new Error(`action.describe: SDK for "${chainId}" lacks decoder.describe`);
         }
-        return sdk.decoder.describe(
-            { action: req.action, version: req.version, params: req.params || {} },
+        const parsed = { action: req.action, version: req.version, params: req.params || {} };
+        const described = sdk.decoder.describe(
+            parsed,
             {
                 chainId,
                 chainRegistry,
                 ...(Array.isArray(req.ownAddresses) && { ownAddresses: req.ownAddresses }),
             },
         );
+        return decoder.withListRemovalDescriptions(described, parsed);
     });
 
     // Confirm-session persistence.

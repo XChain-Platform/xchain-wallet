@@ -256,15 +256,13 @@ export async function cancelOrder(opts) {
  * via ORDER VERSION 2 (`VERSION|ORDER_ACTION_INDEX|EXPIRATION|ALLOW_LIST|BLOCK_LIST|MEMO`).
  * A blank field leaves that property unchanged (indexer getOrderEdits
  * overlays only truthy edit values), so the caller OMITS a field it
- * does not mean to touch - it never clears one. Two protocol facts the
+ * does not mean to touch. Two protocol facts the
  * form copy must reflect (both verified against xchain-indexer order.js):
  *   - EXPIRATION is a wall-clock Unix timestamp, not a block height; it
  *     must be strictly in the future (`EXPIRATION > BLOCK_TIME`) or the
  *     edit indexes invalid as `EXPIRATION (past)`.
- *   - There is no null-clear for the lists: passing `0` is numeric but
- *     resolves to no LIST (`ALLOW_LIST (unknown)`); a bound list can be
- *     replaced but not removed (lift a restriction by pointing at an
- *     empty address list, same as ISSUE v5).
+ *   - After LIST_EDIT_REMOVE activates, `0` removes an allow-list or
+ *     block-list binding. A blank field continues to mean unchanged.
  * An edit re-charges the expiration fee.
  *
  * @param {OrderActionOpts & { orderActionIndex: string }} opts  params carries the fields to change (EXPIRATION as a future Unix timestamp string, ALLOW_LIST/BLOCK_LIST as LIST action indexes, optional MEMO). VERSION + ORDER_ACTION_INDEX are set here.

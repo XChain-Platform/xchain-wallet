@@ -49,7 +49,8 @@ import {
     ownerOffAllowList,
     ownerOffAllowListMessage,
 } from '../../flows/allowListSelfCheck.js';
-import { editListConflict } from '../../flows/accessListSlots.js';
+import { boundListIndex, editListConflict } from '../../flows/accessListSlots.js';
+import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -518,8 +519,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const isOpen = liveStatus === 'open';
     const isClosing = liveStatus === 'cancelling';
     const currentExpiration = liveState.expiration;
-    const currentAllowList = liveState.allowList;
-    const currentBlockList = liveState.blockList;
+    const currentAllowList = boundListIndex(liveState.allowList);
+    const currentBlockList = boundListIndex(liveState.blockList);
+    const canRemoveList = isListEditRemoveActive({ chainId });
     // Fills this dispenser can still pay out, shown as a bubble next to the
     // dispense count and used to cap the buy panel's Max. Needs the LIVE
     // escrow: `escrow_remaining` is the demo fixtures' spelling and the real
@@ -892,7 +894,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // number, so the edit form can say before signing when the dispenser's
     // own address is missing from it. Keyed by index so a stale read for a
     // list the owner has since retyped never produces the warning.
-    const editAllowIdx = /^\d+$/.test(editAllowList.trim()) ? editAllowList.trim() : '';
+    const editAllowIdx = boundListIndex(editAllowList) || '';
     const [editAllowRead, setEditAllowRead] = useState(
         /** @type {{ idx: string, members: string[] | null } | null} */ (null),
     );
@@ -1092,8 +1094,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setEditError('Change at least one field to submit an edit.');
             return;
         }
-        // The same list as both allow-list and block-list admits nobody, and
-        // a bound list can never be removed, so this edit is refused outright.
+        // The same list as both allow-list and block-list admits nobody, so
+        // this edit is refused unless one slot carries the removal sentinel.
         if (editListConflictText) { setEditError(editListConflictText); return; }
 
         await runOwnerAction({
@@ -1350,6 +1352,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
                 />
+                {canRemoveList && currentAllowList ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setEditAllowList('0')}>
+                        Remove allow list
+                    </Button>
+                ) : null}
                 <Input
                     label="Block list"
                     inputMode="numeric"
@@ -1358,6 +1365,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
                 />
+                {canRemoveList && currentBlockList ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setEditBlockList('0')}>
+                        Remove block list
+                    </Button>
+                ) : null}
                 {anyListFilled ? (
                     <p className={styles.hint}>
                         Allow/block list changes take effect about 1 hour after this
@@ -1705,18 +1717,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dd className={styles.detailsValue}>{formatUnixDate(currentExpiration)}</dd>
                     </>
                 ) : null}
-                {currentAllowList ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Allow list</dt>
-                        <dd className={styles.detailsValue}>#{currentAllowList}</dd>
-                    </>
-                ) : null}
-                {currentBlockList ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Block list</dt>
-                        <dd className={styles.detailsValue}>#{currentBlockList}</dd>
-                    </>
-                ) : null}
+                <dt className={styles.detailsLabel}>Allow list</dt>
+                <dd className={styles.detailsValue}>{currentAllowList ? `#${currentAllowList}` : 'none'}</dd>
+                <dt className={styles.detailsLabel}>Block list</dt>
+                <dd className={styles.detailsValue}>{currentBlockList ? `#${currentBlockList}` : 'none'}</dd>
                 {dispenser?.memo ? (
                     <>
                         <dt className={styles.detailsLabel}>Memo</dt>
@@ -2194,7 +2198,7 @@ function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote })
             {listsChanged ? (
                 <p className={styles.hint}>
                     Allow/block list changes take effect about 1 hour after this
-                    transaction confirms, and a bound list can be replaced but never removed.
+                    transaction confirms.
                 </p>
             ) : null}
         </>

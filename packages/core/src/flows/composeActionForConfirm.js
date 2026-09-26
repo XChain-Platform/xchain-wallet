@@ -35,6 +35,7 @@ import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
 import { simulateAction } from '../decoder/txSimulator.js';
 import { balancesFromSdk } from '../decoder/balanceAdapter.js';
+import { withListRemovalDescriptions } from '../decoder/list_removal_description.js';
 
 /**
  * @typedef {Object} ComposeActionForConfirmOpts
@@ -278,6 +279,7 @@ export async function composeActionForConfirm({
                 chainRegistry,
                 ownAddresses: [...own],
             });
+            decoded = withListRemovalDescriptions(decoded, parsed);
         }
     } catch {
         // Leave it null and the caller's own `decoded` still renders: a

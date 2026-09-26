@@ -78,6 +78,8 @@ const TOKEN_PAID = {
     get_coin: null,
 };
 
+const REMOVED_LISTS = { ...OPEN_DISPENSER, action_index: '1704', allow_list: '0', block_list: 0 };
+
 function mount(dispenser, {
     addresses = ADDRESSES,
     lists = {},
@@ -295,5 +297,15 @@ describe('restricted dispenser, buyer view (D-148)', () => {
         fireEvent.click(screen.getByRole('button', { name: /Sign buy/i }));
         expect(await screen.findByText(/refused by a current access list/i)).toBeInTheDocument();
         expect(messaging.sendToken).not.toHaveBeenCalled();
+    });
+
+    it('reads zero list sentinels as none', async () => {
+        mount(REMOVED_LISTS);
+        await screen.findByText(/Pay to buy/);
+        const text = document.body.textContent || '';
+        expect(text).not.toMatch(/list #0/i);
+        expect(text).not.toMatch(/restricted/i);
+        expect(text).toMatch(/Allow listnone/);
+        expect(text).toMatch(/Block listnone/);
     });
 });

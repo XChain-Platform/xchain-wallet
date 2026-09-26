@@ -112,6 +112,42 @@ export async function resolveGateMinAmountActive({ chainId, getBlockHeight, heig
     return Number.isFinite(height) && Number(height) >= scheduled;
 }
 
+/**
+ * Chain activation heights for the zero sentinel on DISPENSER, ORDER, and
+ * SWAP list edits. Null leaves the feature unarmed.
+ */
+export const LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS = Object.freeze({
+    'bitcoin-mainnet': null,
+    'bitcoin-testnet': null,
+    'bitcoin-regtest': 0,
+    'litecoin-mainnet': null,
+    'litecoin-testnet': null,
+    'litecoin-regtest': 0,
+    'dogecoin-mainnet': null,
+    'dogecoin-testnet': null,
+    'dogecoin-regtest': 0,
+});
+
+/**
+ * Check whether list-removal edits are active at the known chain height.
+ * A genesis activation needs no tip read because every chain block is at or
+ * above height zero. Unknown and unarmed chains fail closed.
+ *
+ * @param {{ chainId: string, blockHeight?: number,
+ *           heights?: Record<string, number | null> }} params
+ * @returns {boolean}
+ */
+export function isListEditRemoveActive({
+    chainId,
+    blockHeight,
+    heights = LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS,
+}) {
+    const scheduled = heights ? heights[chainId] : null;
+    if (!Number.isFinite(scheduled)) return false;
+    if (Number(scheduled) === 0) return true;
+    return Number.isFinite(blockHeight) && Number(blockHeight) >= Number(scheduled);
+}
+
 // ---------------------------------------------------------------------------
 // PC-42: the two binding-poll flag-days.
 //

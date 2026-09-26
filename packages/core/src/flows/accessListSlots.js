@@ -10,8 +10,8 @@
 
 // One LIST bound as both the allow-list and the block-list of a dispenser
 // admits nobody: every address the allow-list accepts, the block-list refuses.
-// The network accepts that pairing on a dispenser edit and a bound list can be
-// replaced but never removed, so the edit form is the only place to stop it.
+// The network accepts that pairing on a dispenser edit, so the edit form is the
+// place to stop it while respecting zero as the remove-list sentinel.
 
 /**
  * Normalize a LIST action index for comparison: trimmed, and leading zeros
@@ -27,6 +27,18 @@ function listKey(idx) {
 }
 
 /**
+ * Return a displayable bound LIST index, or null when the slot is empty or
+ * carries the zero sentinel that removes the binding.
+ *
+ * @param {unknown} idx
+ * @returns {string | null}
+ */
+export function boundListIndex(idx) {
+    const key = listKey(idx);
+    return key === '' || key === '0' ? null : key;
+}
+
+/**
  * Whether the allow-list and block-list slots name the same LIST. A blank
  * slot never matches, since "no list" is not a list.
  *
@@ -34,9 +46,9 @@ function listKey(idx) {
  * @returns {boolean}
  */
 export function listInBothSlots({ allowList, blockList }) {
-    const allow = listKey(allowList);
-    const block = listKey(blockList);
-    return allow !== '' && allow === block;
+    const allow = boundListIndex(allowList);
+    const block = boundListIndex(blockList);
+    return allow !== null && allow === block;
 }
 
 /**
@@ -55,8 +67,8 @@ export function listInBothSlots({ allowList, blockList }) {
 export function editListConflict({ allowList, blockList, currentAllowList, currentBlockList }) {
     if (!allowList && !blockList) return null;
     const next = {
-        allowList: allowList || listKey(currentAllowList),
-        blockList: blockList || listKey(currentBlockList),
+        allowList: allowList || boundListIndex(currentAllowList),
+        blockList: blockList || boundListIndex(currentBlockList),
     };
     return listInBothSlots(next) ? listInBothSlotsMessage(next.allowList) : null;
 }

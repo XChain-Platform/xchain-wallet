@@ -2391,6 +2391,8 @@ function fullDetailRows(entry, balancesHidden = false) {
         let display;
         if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
             display = '•••••';
+        } else if (isRemovedAccessListValue(k, v)) {
+            display = 'none';
         } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
             display = '0 (protocol placeholder; price set by oracle)';
         } else if (v === null || v === undefined) display = '-';
@@ -2406,6 +2408,11 @@ function fullDetailRows(entry, balancesHidden = false) {
     }
 
     return rows;
+}
+
+function isRemovedAccessListValue(key, value) {
+    return ['allow_list', 'ALLOW_LIST', 'block_list', 'BLOCK_LIST'].includes(key)
+        && Number(value) === 0;
 }
 
 function isOraclePricedGetAmount(entry, raw, key, value) {

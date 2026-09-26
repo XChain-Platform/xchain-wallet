@@ -40,6 +40,8 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { boundListIndex } from '../../flows/accessListSlots.js';
+import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -302,6 +304,8 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
         const expText = fmtDate(it.row.expiration);
         const remaining = partialRemaining(it);
+        const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
+        const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
         const consent = autopayByKey.get(it.key);
         const chip = status === 'open'
             ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
@@ -320,6 +324,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                     </div>
                     {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
                     {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
+                    <div className={L.rowDetail}>
+                        Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
+                    </div>
                     {consent && isNativeGive(it.row) ? (
                         <label className={F.checkRow}>
                             <input type="checkbox" checked={consent.autopay === true} onChange={() => handleAutopayToggle(consent)} />
@@ -382,6 +389,9 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
     const { chainId, owner, row } = item;
     const descriptor = chainRegistry.get(chainId);
     const isCancel = type === 'cancel';
+    const currentAllowList = boundListIndex(row.allow_list ?? row.allowList);
+    const currentBlockList = boundListIndex(row.block_list ?? row.blockList);
+    const canRemoveList = isListEditRemoveActive({ chainId });
     const signerReady = useSignerReady(walletId);
     const lane = useOwnerActionLane({
         messaging,
@@ -547,15 +557,21 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                     <p className={F.successLabel}>Access lists (optional)</p>
                     <div className={F.actions}>
                         <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                            {allowListIdx === '0' ? 'Remove allow list' : (allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list')}
                         </Button>
                         <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                            {blockListIdx === '0' ? 'Remove block list' : (blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list')}
                         </Button>
+                        {canRemoveList && currentAllowList && allowListIdx !== '0' ? (
+                            <Button type="button" variant="secondary" size="sm" onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
+                        ) : null}
+                        {canRemoveList && currentBlockList && blockListIdx !== '0' ? (
+                            <Button type="button" variant="secondary" size="sm" onClick={() => setBlockListIdx('0')}>Remove block list</Button>
+                        ) : null}
                     </div>
                     <p className={F.hint}>
-                        A blank field is left unchanged. A bound list can be replaced but not removed
-                        (point it at an empty list to lift a restriction).
+                        Current: allow list {currentAllowList ? `#${currentAllowList}` : 'none'};
+                        {' '}block list {currentBlockList ? `#${currentBlockList}` : 'none'}. A blank choice is left unchanged.
                     </p>
                 </>
             )}

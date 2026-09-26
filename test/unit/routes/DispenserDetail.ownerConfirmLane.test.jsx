@@ -73,12 +73,19 @@ async function drainMicrotasks(rounds = 16) {
 }
 
 /** Every host call in order, so a test can prove the dry run came first. */
-function recordingMessaging({ owner = OWNER_ADDRESS, dispenser = DISPENSER, settings = { walletMode: 'full' }, preflight = PASS, lists = {} } = {}) {
+function recordingMessaging({
+    owner = OWNER_ADDRESS,
+    dispenser = DISPENSER,
+    settings = { walletMode: 'full' },
+    preflight = PASS,
+    lists = {},
+    chainId = CHAIN,
+} = {}) {
     const calls = [];
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
     const target = {
         getDispenserByActionIndex: () => Promise.resolve(dispenser),
-        getAddressesByChain: () => Promise.resolve({ [CHAIN]: [owner] }),
+        getAddressesByChain: () => Promise.resolve({ [chainId]: [owner] }),
         getActiveAddresses: () => Promise.resolve({}),
         getDispenses: () => Promise.resolve({ data: [] }),
         getDispenserLifecycle: () => Promise.resolve({ data: [] }),
@@ -101,13 +108,14 @@ function recordingMessaging({ owner = OWNER_ADDRESS, dispenser = DISPENSER, sett
 
 async function mount(opts) {
     const { messaging, calls } = recordingMessaging(opts);
+    const chainId = opts?.chainId || CHAIN;
     let utils;
     await domAct(async () => {
         utils = render(React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
             React.createElement(DispenserDetail, {
-                walletId: 'w', chainId: CHAIN, actionIndex: DISPENSER.action_index, onBack() {}, onCanceled() {},
+                walletId: 'w', chainId, actionIndex: DISPENSER.action_index, onBack() {}, onCanceled() {},
             }),
         ));
         await drainMicrotasks();
@@ -191,6 +199,25 @@ describe('dispenser owner actions sign through the confirm page', () => {
 });
 
 describe('dispenser edit checks the lists it is about to bind', () => {
+    it('offers removal on regtest and sends the zero sentinel', async () => {
+        const dispenser = { ...DISPENSER, allow_list: '2701' };
+        const { utils, calls } = await mount({ dispenser, chainId: 'bitcoin-regtest' });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Remove allow list' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
+
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.actionData.params).toEqual({
+            VERSION: '2', DISPENSER_ACTION_INDEX: '2868', ALLOW_LIST: '0',
+        });
+    });
+
+    it('keeps removal hidden on an unarmed network', async () => {
+        const { utils } = await mount({ dispenser: { ...DISPENSER, allow_list: '2701' } });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
+        expect(utils.queryByRole('button', { name: 'Remove allow list' })).toBeNull();
+    });
+
     it('warns when the NEW allow-list leaves out the dispenser\'s own address', async () => {
         const { utils } = await mount({ lists: { 2701: { list: [{ address: BUYER }] } } });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
