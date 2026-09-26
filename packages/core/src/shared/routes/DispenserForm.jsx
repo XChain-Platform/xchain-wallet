@@ -580,9 +580,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         } else if (oracle) {
             // Oracle pricing: validator path (fiatAmount + code) or user-
             // oracle path (oracle + code, fiatAmount empty). GET_AMOUNT
-            // is typically 0 per DISPENSER.md example 4/5 because the
+            // is 0 per DISPENSER.md example 4/5 because the
             // effective coin price is derived dynamically.
-            p.GET_AMOUNT = trig || '0';
+            p.GET_AMOUNT = '0';
             p.ORACLE_ADDRESS = oracle;
             if (fiatCode) p.FIAT_CODE = fiatCode;
             if (fa) p.FIAT_AMOUNT = fa;
@@ -1328,6 +1328,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         autoComplete="off"
                     />
                 </>
+            ) : oracleAddress.trim() ? (
+                <StatusMessage>
+                    The oracle sets the native coin price when each fill occurs.
+                </StatusMessage>
             ) : (
                 <Input
                     label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}

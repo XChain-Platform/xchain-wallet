@@ -119,7 +119,7 @@ const setValue = (utils, label, value) => {
  * Mount a locked-token DispenserForm, run the optional picker steps, fill
  * the amounts, press Create, then Approve on the confirm page.
  */
-async function driveCreate({ steps = [] } = {}) {
+async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
     const { messaging, calls } = recordingMessaging();
     let utils;
     await domAct(async () => {
@@ -144,6 +144,10 @@ async function driveCreate({ steps = [] } = {}) {
         setValue(utils, /^Trigger price/, '0.001');
         await drainMicrotasks();
     });
+    for (const step of pricingSteps) {
+        // eslint-disable-next-line no-await-in-loop
+        await domAct(async () => { step(utils); await drainMicrotasks(); });
+    }
     const create = utils.getByRole('button', { name: 'Create' });
     expect(create.disabled).toBe(false);
     await domAct(async () => {
@@ -208,5 +212,25 @@ describe('DispenserForm GET_ADDRESS by address mode', () => {
         const { composed, submitted } = composeAndSubmitParams(calls);
         expect(composed).not.toHaveProperty('GET_ADDRESS');
         expect(submitted).not.toHaveProperty('GET_ADDRESS');
+    });
+});
+
+describe('DispenserForm Mode B pricing', () => {
+    it('hides the native trigger and composes the oracle placeholder as zero', async () => {
+        let triggerWasHidden = false;
+        const { calls } = await driveCreate({
+            pricingSteps: [
+                (utils) => fireEvent.click(utils.getByRole('button', { name: /Advanced options/ })),
+                (utils) => {
+                    setValue(utils, 'Priced in fiat (optional)', 'USD');
+                    setValue(utils, /^Oracle address/, 'bc1qoracleoracleoracleoracleoracleoracle');
+                },
+                (utils) => { triggerWasHidden = utils.queryByLabelText(/^Trigger price/) === null; },
+            ],
+        });
+        const { composed, submitted } = composeAndSubmitParams(calls);
+        expect(triggerWasHidden).toBe(true);
+        expect(composed.GET_AMOUNT).toBe('0');
+        expect(submitted.GET_AMOUNT).toBe('0');
     });
 });

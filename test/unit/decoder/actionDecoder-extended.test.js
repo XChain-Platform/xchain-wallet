@@ -350,10 +350,21 @@ describe('decodeAction extended', () => {
         it('v0 fiat oracle pricing mode', () => {
             const d = decodeAction({
                 action: 'DISPENSER',
-                params: { GIVE_TICK: 'X', GIVE_AMOUNT: '1', GIVE_ESCROW: '10', GET_COIN: 'BTC', GET_AMOUNT: '1', ORACLE_ADDRESS: 'bc1qoracle', VERSION: '0' },
+                params: {
+                    GIVE_TICK: 'X', GIVE_AMOUNT: '1', GIVE_ESCROW: '10',
+                    GET_COIN: 'BTC', GET_AMOUNT: '0', FIAT_CODE: 'USD',
+                    ORACLE_ADDRESS: 'bc1qoracle', VERSION: '0',
+                },
             });
             expect(d.summary).toContain('oracle-priced');
-            expect(d.warnings.some((w) => /fiat currency/i.test(w))).toBe(true);
+            expect(d.details).toEqual(expect.arrayContaining([
+                { label: 'Pricing mode', value: 'Oracle-priced (Mode B)' },
+                { label: 'Fiat code', value: 'USD' },
+                { label: 'Fiat amount', value: 'Set by oracle' },
+                { label: 'Oracle address', value: 'bc1qoracle' },
+            ]));
+            expect(d.details.some((r) => r.label === 'Trigger amount')).toBe(false);
+            expect(d.details.some((r) => r.label === 'Buyer pays (coin)')).toBe(false);
         });
 
         it('v1 cancel with index', () => {
