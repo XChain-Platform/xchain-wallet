@@ -36,7 +36,7 @@ import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativ
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
-import { pushPrefixSize } from './fileSizeLimits.js';
+import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
 import { envelopeEncoderOpts } from './envelopeSelection.js';
@@ -208,14 +208,26 @@ export async function composeForConfirm({
 
     // 1b. A payload over the legacy carrier asks for the Taproot envelope when
     // this chain and signer can carry one, whichever action it is.
+    const compiledBytes = createResult
+        ? compiledPayloadByteLen(createResult.actionString, requestedEncoderOpts?.rawData, null)
+        : 0;
     const envelopeRequest = createResult
         ? envelopeEncoderOpts({
             descriptor,
             signer,
             encoderOpts: requestedEncoderOpts,
-            compiledBytes: compiledPayloadByteLen(createResult.actionString, requestedEncoderOpts?.rawData, null),
+            compiledBytes,
         })
         : null;
+    // Refuse an oversized legacy payload before the encoder can expose its raw
+    // carrier error. Larger payloads need both Taproot on the chain and a local
+    // software key that can sign the envelope reveal.
+    if (compiledBytes > MAX_COMPILED_ACTION_BYTES && !envelopeRequest) {
+        const subject = actionData.action === 'FILE' ? 'Files' : 'Payloads';
+        throw new Error(
+            `${subject} over 8 KB can only be published on a Taproot-capable chain from a software-key address.`,
+        );
+    }
     const encoderOpts = envelopeRequest ? { ...requestedEncoderOpts, ...envelopeRequest } : requestedEncoderOpts;
 
     // 2. Native-coin fee pre-flight (folds the FEE_DESTINATION output into

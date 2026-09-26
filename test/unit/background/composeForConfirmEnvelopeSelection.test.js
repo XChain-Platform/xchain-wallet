@@ -90,7 +90,11 @@ function makeHost() {
             schemaVersion: 2, id: 'acct-1', walletId: 'w1', index: 0, name: 'Main',
             activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z',
         }]),
-        addresses: memCollection([row('addr-hd', 'hd'), row('addr-trezor', 'trezor')]),
+        addresses: memCollection([
+            row('addr-hd', 'hd'),
+            row('addr-trezor', 'trezor'),
+            row('addr-watch', 'watch-only'),
+        ]),
         signers: memCollection(),
         settings: {
             _rec: {
@@ -162,17 +166,38 @@ describe('the confirm lane requests the Taproot envelope for any oversized actio
         expect(opts.options).toBeUndefined();
     });
 
-    it('trusts the vault record over the request: a device address never asks', async () => {
+    it('refuses a device address before calling the encoder', async () => {
         // The request claims a software source; the vault says it is a Trezor.
-        const opts = await encoderRequestFor('action.composeForConfirm',
-            broadcastRequest({ text: 'x'.repeat(9000), addressId: 'addr-trezor', source: 'hd' }));
-        expect(opts.encoding).toBeUndefined();
+        const { host, createTx } = makeHost();
+        const result = await host.handle({
+            type: 'action.composeForConfirm',
+            request: broadcastRequest({ text: 'x'.repeat(9000), addressId: 'addr-trezor', source: 'hd' }),
+        });
+        expect(result).toMatchObject({ ok: false });
+        expect(result.error.message).toMatch(/over 8 KB.*Taproot-capable chain.*software-key address/);
+        expect(createTx).not.toHaveBeenCalled();
     });
 
-    it('a chain without Taproot never asks', async () => {
-        const opts = await encoderRequestFor('action.composeForConfirm',
-            broadcastRequest({ text: 'x'.repeat(9000), chainId: LEGACY_CHAIN.id }));
-        expect(opts.encoding).toBeUndefined();
+    it('refuses a watch-only address before calling the encoder', async () => {
+        const { host, createTx } = makeHost();
+        const result = await host.handle({
+            type: 'action.composeForConfirm',
+            request: broadcastRequest({ text: 'x'.repeat(9000), addressId: 'addr-watch', source: 'hd' }),
+        });
+        expect(result).toMatchObject({ ok: false });
+        expect(result.error.message).toMatch(/over 8 KB.*software-key address/);
+        expect(createTx).not.toHaveBeenCalled();
+    });
+
+    it('refuses a chain without Taproot before calling the encoder', async () => {
+        const { host, createTx } = makeHost();
+        const result = await host.handle({
+            type: 'action.composeForConfirm',
+            request: broadcastRequest({ text: 'x'.repeat(9000), chainId: LEGACY_CHAIN.id }),
+        });
+        expect(result).toMatchObject({ ok: false });
+        expect(result.error.message).toMatch(/over 8 KB.*Taproot-capable chain/);
+        expect(createTx).not.toHaveBeenCalled();
     });
 });
 

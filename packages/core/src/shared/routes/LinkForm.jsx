@@ -33,6 +33,7 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -233,7 +234,11 @@ export function LinkForm({ walletId, onBack }) {
         }
     }, [stage]);
 
+    const trimmedMemo = memo.trim();
+    const memoTooLong = memoLengthError(trimmedMemo);
+
     const validationError = useMemo(() => {
+        if (memoTooLong) return memoTooLong;
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
         if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
@@ -242,7 +247,7 @@ export function LinkForm({ walletId, onBack }) {
             return 'Cannot link an action to itself.';
         }
         return null;
-    }, [ticker1, ticker2, actionIndex1, actionIndex2]);
+    }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong]);
 
     const { isWatcherMode } = useWalletMode();
 
@@ -681,6 +686,8 @@ export function LinkForm({ walletId, onBack }) {
 
             <Input
                 label="Memo (optional)"
+                hint={`${trimmedMemo.length} / ${MAX_MEMO_LENGTH} characters.`}
+                error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />

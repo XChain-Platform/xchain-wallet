@@ -21,6 +21,7 @@ import { envelopeTransactionLines } from '../../../packages/core/src/flows/envel
 
 const ACTION = 'FILE|0|big.bin|application/octet-stream|Taproot test||';
 const SOURCE = 'bcrt1qsource';
+const PUBKEY = `02${'11'.repeat(32)}`;
 const COMMIT_SCRIPT = `5120${'ee'.repeat(32)}`;
 const ENVELOPE = Object.freeze({
     commitTxid: 'aa'.repeat(32),
@@ -83,9 +84,10 @@ const ARGS = (h) => ({
     vault: h.vault, chainRegistry: h.chainRegistry, sdkRegistry: h.sdkRegistry,
     chainId: 'bitcoin-regtest',
     actionData: { action: 'FILE', params: {} },
-    encoderOpts: { pubkey: 'pub', rawData: 'x'.repeat(51200), encoding: 'AUTO' },
+    encoderOpts: { pubkey: PUBKEY, rawData: 'x'.repeat(51200), encoding: 'AUTO' },
     source: SOURCE,
     ownAddresses: [SOURCE],
+    signer: { source: 'hd' },
 });
 
 describe('composeActionForConfirm on the Taproot envelope lane', () => {
