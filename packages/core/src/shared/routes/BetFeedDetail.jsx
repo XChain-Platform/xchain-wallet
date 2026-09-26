@@ -307,6 +307,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     // AMOUNT (that rule, sharper here).
     async function placeBet() {
         if (!fromAddress) { setFormError('No address on this chain to bet from.'); return; }
+        if (outcome === null) { setFormError('Choose an outcome.'); return; }
+        if (!amount.trim() || Number(amount) <= 0) { setFormError('Enter a positive bet amount.'); return; }
         setFormError(null);
         const from = sourceDescriptor();
         try {
@@ -583,10 +585,11 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                             <div className={styles.actions}>
                                 <Button
                                     variant="primary"
-                                    disabled={outcome === null || !amount}
+                                    loading={actionConfirm.composing}
+                                    disabled={actionConfirm.composing}
                                     onClick={placeBet}
                                 >
-                                    Review bet
+                                    {actionConfirm.composing ? 'Preparing review…' : 'Review bet'}
                                 </Button>
                             </div>
                             <p className={styles.hint}>

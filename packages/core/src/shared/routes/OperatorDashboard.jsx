@@ -481,14 +481,11 @@ function PublisherMode({ walletId, chainId, address, feed, messaging }) {
                             type="submit"
                             variant="primary"
                             loading={submitState === 'submitting'}
-                            disabled={
-                                !fromAddress
-                                || !feedActionIndex.trim()
-                                || !value.trim()
-                                || (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0))
-                            }
+                            disabled={submitState === 'submitting'}
                         >
-                            {isHwSource ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish value'}
+                            {submitState === 'submitting'
+                                ? 'Publishing…'
+                                : isHwSource ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish value'}
                         </Button>
                     </div>
                 </form>

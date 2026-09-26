@@ -837,9 +837,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || (items.length === 0 && invalidTicks.length === 0) || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Publish list' : 'Review'}
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
                 </Button>
             </div>
         </form>,

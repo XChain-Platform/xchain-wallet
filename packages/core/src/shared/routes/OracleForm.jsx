@@ -697,9 +697,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick || !value.trim() || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {isWatcherMode ? 'Preview' : 'Publish price'}
+                    {actionConfirm.composing ? 'Preparing review…' : isWatcherMode ? 'Preview' : 'Publish price'}
                 </Button>
             </div>
         </form>,

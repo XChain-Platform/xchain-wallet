@@ -952,7 +952,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
 
             {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
             <div className={styles.actions}>
-                <Button type="submit" variant="primary" block disabled={!needsAdd && !needsRemove}>
+                <Button type="submit" variant="primary" block>
                     Review
                 </Button>
             </div>
