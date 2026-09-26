@@ -12,6 +12,8 @@
 // returns. The dispenser record names who closed it but not when, so the
 // banner dates the window from the cancel row the Lifecycle tab loads, counts
 // down while mounted, and sends the escrow to whichever address closed it.
+// The countdown runs on the chain's protocol time from the chain tip read,
+// and on the wall clock only when that read has no protocol time.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, act as domAct, cleanup } from '@testing-library/react';
@@ -76,8 +78,9 @@ async function drainMicrotasks(rounds = 16) {
     }
 }
 
-function stubMessaging({ dispenser, walletAddress, cancelsByAddress }) {
+function stubMessaging({ dispenser, walletAddress, cancelsByAddress, chainTime }) {
     const lifecycleCalls = [];
+    const tipReads = [];
     const target = {
         getDispenserByActionIndex: () => Promise.resolve(dispenser),
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [walletAddress] }),
@@ -93,6 +96,13 @@ function stubMessaging({ dispenser, walletAddress, cancelsByAddress }) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getListByActionIndex: () => Promise.resolve(null),
+        // No chainTime means the read answers without a protocol time, the
+        // shape it has on networks whose blocks carry their own stamp.
+        getChainTipBlockTime: (req) => {
+            tipReads.push(req);
+            const protocolTime = typeof chainTime === 'function' ? chainTime() : (chainTime ?? null);
+            return Promise.resolve({ chainId: req.chainId, blockTime: null, protocolTime });
+        },
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -100,11 +110,13 @@ function stubMessaging({ dispenser, walletAddress, cancelsByAddress }) {
             return () => Promise.resolve({});
         },
     });
-    return { messaging, lifecycleCalls };
+    return { messaging, lifecycleCalls, tipReads };
 }
 
-async function mount({ dispenser = CLOSING, walletAddress = CREATOR_ADDRESS, cancelsByAddress = { [CREATOR]: [CANCEL_ROW] } } = {}) {
-    const { messaging, lifecycleCalls } = stubMessaging({ dispenser, walletAddress, cancelsByAddress });
+async function mount({
+    dispenser = CLOSING, walletAddress = CREATOR_ADDRESS, cancelsByAddress = { [CREATOR]: [CANCEL_ROW] }, chainTime,
+} = {}) {
+    const { messaging, lifecycleCalls, tipReads } = stubMessaging({ dispenser, walletAddress, cancelsByAddress, chainTime });
     let utils;
     await domAct(async () => {
         utils = render(React.createElement(
@@ -117,7 +129,7 @@ async function mount({ dispenser = CLOSING, walletAddress = CREATOR_ADDRESS, can
         ));
         await drainMicrotasks();
     });
-    return { utils, lifecycleCalls };
+    return { utils, lifecycleCalls, tipReads };
 }
 
 const banner = (utils) => utils.getByTestId('close-window-banner').textContent;
@@ -145,14 +157,54 @@ describe('DispenserDetail close-window banner', () => {
         clearSpy.mockRestore();
     });
 
-    it('says "any block now" once the window has passed', async () => {
+    it('says "any block now" once the device clock passes the window and no chain time is readable', async () => {
         vi.setSystemTime((CANCEL_AT + 3600 + 90) * 1000);
         const { utils } = await mount();
         expect(banner(utils)).toBe(
-            'Closing any block now: the 1-hour close window has passed and the close lands with the next block. '
+            "Closing any block now: the 1-hour close window has passed by this device's clock, and the close "
+            + "lands with the first block after the chain's time passes it too. "
             + 'The remaining 12 BEER in escrow returns to this wallet. '
             + 'Dispenses that confirm before the close are still honored.',
         );
+    });
+
+    it('counts down on chain time when the chain trails the wall clock by 29 minutes', async () => {
+        const wallNow = CANCEL_AT + 3600 + 5 * 60;
+        vi.setSystemTime(wallNow * 1000);
+        const { utils, tipReads } = await mount({ chainTime: wallNow - 29 * 60 });
+        expect(tipReads).toEqual([{ chainId: CHAIN, withProtocolTime: true }]);
+        expect(banner(utils)).toBe(
+            `Closing in about 24 minutes (around ${clockOf(wallNow + 24 * 60)}). `
+            + 'This dispenser is in its 1-hour close window; the remaining 12 BEER in escrow returns to '
+            + 'this wallet with the first block after it ends. '
+            + 'Dispenses that confirm before the close are still honored.',
+        );
+    });
+
+    it('says "at the next block" once the chain has passed the window', async () => {
+        vi.setSystemTime((CANCEL_AT + 3600 + 90) * 1000);
+        const { utils } = await mount({ chainTime: CANCEL_AT + 3600 + 1 });
+        expect(banner(utils)).toBe(
+            'Closing at the next block: the chain has passed the end of the 1-hour close window. '
+            + 'The remaining 12 BEER in escrow returns to this wallet. '
+            + 'Dispenses that confirm before the close are still honored.',
+        );
+    });
+
+    it('re-reads chain time on the minute timer at most every five minutes, advancing it in between', async () => {
+        const wallNow = CANCEL_AT + 3600;
+        vi.setSystemTime(wallNow * 1000);
+        // The chain stands still (no new block) across the first reads.
+        const { utils, tipReads } = await mount({ chainTime: wallNow - 29 * 60 });
+        expect(tipReads).toHaveLength(1);
+        await domAct(async () => { vi.advanceTimersByTime(4 * 60 * 1000); await drainMicrotasks(); });
+        expect(tipReads).toHaveLength(1);
+        expect(banner(utils)).toMatch(/^Closing in about 25 minutes/);
+        await domAct(async () => { vi.advanceTimersByTime(60 * 1000); await drainMicrotasks(); });
+        expect(tipReads).toHaveLength(2);
+        // The fresh read answered with the same chain time, so the remainder
+        // steps back up to what the chain itself says.
+        expect(banner(utils)).toMatch(/^Closing in about 29 minutes/);
     });
 
     it('sends the escrow to the dispenser address when that address closed it, reading its cancel there', async () => {

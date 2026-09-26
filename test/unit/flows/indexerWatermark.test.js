@@ -130,3 +130,72 @@ describe('chainTipBlockTime', () => {
         await expect(chainTipBlockTime({ sdkRegistry: makeRegistry({}) })).rejects.toThrow(/chainId/);
     });
 });
+
+// With `withProtocolTime`, the read also returns the time the indexer will
+// date the next block by. On testnet that is the median of the newest eleven
+// block stamps, which trails the tip's own stamp; elsewhere it is null.
+describe('chainTipBlockTime withProtocolTime', () => {
+    // The newest eleven TLTC block stamps, tip first.
+    const TLTC_STAMPS = [
+        1790460068, 1790459694, 1790459332, 1790459031, 1790458728, 1790458382,
+        1790458068, 1790457767, 1790457411, 1790457009, 1790456634,
+    ];
+    const blocksPage = (stamps, tip = 4901902) => ({
+        data: stamps.map((t, i) => ({ block_index: String(tip - i), timestamp: String(t), actions: {} })),
+    });
+
+    function makeTestnetRegistry({ blocks, coin = 'TLTC' } = {}) {
+        const calls = [];
+        const sdk = {
+            explorer: {
+                coin,
+                get: async (path, opts) => {
+                    calls.push({ path, opts });
+                    return typeof blocks === 'function' ? blocks() : blocks;
+                },
+            },
+            getStatus: async () => ({ last_block_time: { [coin]: TLTC_STAMPS[0] } }),
+        };
+        return { registry: { get: () => sdk }, calls };
+    }
+
+    it('returns the median of the newest eleven block stamps on testnet', async () => {
+        const { registry, calls } = makeTestnetRegistry({ blocks: blocksPage(TLTC_STAMPS) });
+        const res = await chainTipBlockTime({ sdkRegistry: registry, chainId: 'litecoin-testnet', withProtocolTime: true });
+        expect(res).toEqual({ chainId: 'litecoin-testnet', blockTime: 1790460068, protocolTime: 1790458382 });
+        expect(calls).toEqual([{ path: '/blocks', opts: { limit: 11, noRetry: true } }]);
+    });
+
+    it('makes no blocks read and returns null on networks dated by their own stamps', async () => {
+        for (const chainId of ['litecoin-mainnet', 'litecoin-regtest']) {
+            const { registry, calls } = makeTestnetRegistry({ blocks: blocksPage(TLTC_STAMPS) });
+            const res = await chainTipBlockTime({ sdkRegistry: registry, chainId, withProtocolTime: true });
+            expect(res.protocolTime).toBeNull();
+            expect(calls).toEqual([]);
+        }
+    });
+
+    it('returns null for a short, gapped or failed blocks read', async () => {
+        const gapped = blocksPage(TLTC_STAMPS);
+        gapped.data[10].block_index = '4901880';
+        const cases = [
+            blocksPage(TLTC_STAMPS.slice(0, 10)),
+            gapped,
+            { data: null },
+            () => { throw new Error('explorer down'); },
+        ];
+        for (const blocks of cases) {
+            const { registry } = makeTestnetRegistry({ blocks });
+            const res = await chainTipBlockTime({ sdkRegistry: registry, chainId: 'litecoin-testnet', withProtocolTime: true });
+            expect(res.protocolTime).toBeNull();
+            expect(res.blockTime).toBe(1790460068);
+        }
+    });
+
+    it('leaves the default result shape unchanged', async () => {
+        const { registry, calls } = makeTestnetRegistry({ blocks: blocksPage(TLTC_STAMPS) });
+        const res = await chainTipBlockTime({ sdkRegistry: registry, chainId: 'litecoin-testnet' });
+        expect(res).toEqual({ chainId: 'litecoin-testnet', blockTime: 1790460068 });
+        expect(calls).toEqual([]);
+    });
+});
