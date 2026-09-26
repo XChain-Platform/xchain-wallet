@@ -87,6 +87,24 @@ describe('compareNativeFeeQuote', () => {
         expect(isNativeFeeRefusal(cmp)).toBe(true);
     });
 
+    it('accepts a dust-rounded fee while the fresh quote remains below dust', () => {
+        const cmp = compareNativeFeeQuote({
+            composed: { requiredFeeSats: 5460, quotedFeeSats: 600, dustThresholdSats: 5460 },
+            fresh: quote({ requiredFeeSats: 600, minAcceptable: '0.00000570', maxAcceptable: '0.00000660' }),
+        });
+        expect(cmp).toMatchObject({
+            verdict: 'ok', paidSats: 5460, expectedSats: 5460, minSats: 5460, maxSats: 5460,
+        });
+    });
+
+    it('refuses a dust-rounded fee when a fresh quote rises above the relay floor', () => {
+        const cmp = compareNativeFeeQuote({
+            composed: { requiredFeeSats: 5460, quotedFeeSats: 600, dustThresholdSats: 5460 },
+            fresh: quote({ requiredFeeSats: 6000, minAcceptable: '0.00005700', maxAcceptable: '0.00006600' }),
+        });
+        expect(cmp).toMatchObject({ verdict: 'short', paidSats: 5460, minSats: 5700 });
+    });
+
     it('an action that no longer carries a protocol fee at all is an overpay, not an ok', () => {
         const cmp = compareNativeFeeQuote({
             composed: composedTwoHundredth,

@@ -41,7 +41,7 @@ import { isDemoGatedActionIndex } from './demoGatedContent.js';
 // an over-inclusive preview only over-states what moves - the safe
 // direction for an indicative display.
 const CLOSED_STATUSES = new Set([
-    'cancelled', 'cancelling', 'closed', 'expired', 'filled', 'invalid',
+    'cancelled', 'cancelling', 'closed', 'complete', 'empty', 'expired', 'filled', 'invalid', 'settled',
 ]);
 
 function rowsOf(resp) {
@@ -52,7 +52,7 @@ function rowsOf(resp) {
 }
 
 function liveStatus(row) {
-    return String(row?.current_status || row?.status || '').toLowerCase();
+    return String(row?.current_status || row?.swap_status || row?.state?.status || row?.status || '').toLowerCase();
 }
 
 function isOpenRow(row, address) {
@@ -69,6 +69,65 @@ async function leg(fn) {
     } catch (e) {
         return { rows: [], error: e?.message || String(e) };
     }
+}
+
+async function enrichOrderRows(sdk, rows) {
+    if (typeof sdk?.getAction !== 'function') return rows;
+    return Promise.all(rows.map(async (row) => {
+        try {
+            const detail = await sdk.getAction(String(row.action_index ?? row.actionIndex ?? ''));
+            const state = detail?.state || detail?.data?.state;
+            return state && typeof state === 'object' ? { ...row, state } : row;
+        } catch {
+            return row;
+        }
+    }));
+}
+
+/**
+ * The address's open ORDERs, SWAPs and DISPENSERs with what each still holds
+ * in escrow, one leg per kind so a failed read reports on its own instead of
+ * emptying the others. Shared by the SWEEP preview (what closing them would
+ * release) and Home's escrow read (tokens whose balance sits in an offer).
+ *
+ * @param {{ sdk: any, address: string }} params
+ */
+export async function openOfferRows({ sdk, address }) {
+    const trimmed = address.trim();
+    const [orders, swaps, dispensers] = await Promise.all([
+        leg(async () => {
+            const listed = rowsOf(await sdk.getOrders(trimmed, 'address'))
+                .filter((r) => !r.source || r.source === trimmed);
+            const rows = await enrichOrderRows(sdk, listed);
+            return rows.filter((r) => isOpenRow(r, trimmed)).map((r) => ({
+                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
+                giveTick: r.give_tick ?? r.giveTick ?? null,
+                giveCoin: r.give_coin ?? r.giveCoin ?? null,
+                giveAmount: r.state?.give_remaining != null ? String(r.state.give_remaining)
+                    : r.give_remaining != null ? String(r.give_remaining)
+                    : (r.give_amount != null ? String(r.give_amount) : null),
+                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
+            }));
+        }),
+        leg(async () => rowsOf(await sdk.getSwaps(trimmed, 'address'))
+            .filter((r) => isOpenRow(r, trimmed))
+            .map((r) => ({
+                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
+                giveTick: r.give_tick ?? r.giveTick ?? null,
+                giveAmount: r.give_amount != null ? String(r.give_amount) : null,
+                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
+            }))),
+        leg(async () => rowsOf(await sdk.getDispensers(trimmed, 'source'))
+            .filter((r) => isOpenRow(r, trimmed))
+            .map((r) => ({
+                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
+                tick: r.tick ?? r.give_tick ?? null,
+                escrowRemaining: r.give_remaining != null ? String(r.give_remaining)
+                    : (r.escrow_remaining != null ? String(r.escrow_remaining) : null),
+                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
+            }))),
+    ]);
+    return { orders, swaps, dispensers };
 }
 
 // Cap the gated-file fan-out: one explorer call per held tick. Past the
@@ -100,7 +159,7 @@ export async function sweepPreview({ sdkRegistry, chainId, address }) {
     const sdk = sdkRegistry.get(chainId);
     const trimmed = address.trim();
 
-    const [balances, ownerships, orders, swaps, dispensers] = await Promise.all([
+    const [balances, ownerships, offers] = await Promise.all([
         leg(async () => tokensFromBalances(await sdk.getBalances(trimmed))
             .filter((t) => t.quantity != null && String(t.quantity) !== '0' && Number(t.quantity) > 0)
             .map((t) => ({ tick: t.tick, quantity: t.quantity, divisibility: t.divisibility }))),
@@ -108,34 +167,9 @@ export async function sweepPreview({ sdkRegistry, chainId, address }) {
             .map((r) => normalizeTokenRow(r))
             .filter((r) => r && r.tick)
             .map((r) => ({ tick: r.tick.toUpperCase() }))),
-        leg(async () => rowsOf(await sdk.getOrders(trimmed, 'address'))
-            .filter((r) => isOpenRow(r, trimmed))
-            .map((r) => ({
-                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
-                giveTick: r.give_tick ?? r.giveTick ?? null,
-                giveCoin: r.give_coin ?? r.giveCoin ?? null,
-                giveAmount: r.give_remaining != null ? String(r.give_remaining)
-                    : (r.give_amount != null ? String(r.give_amount) : null),
-                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
-            }))),
-        leg(async () => rowsOf(await sdk.getSwaps(trimmed, 'address'))
-            .filter((r) => isOpenRow(r, trimmed))
-            .map((r) => ({
-                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
-                giveTick: r.give_tick ?? r.giveTick ?? null,
-                giveAmount: r.give_amount != null ? String(r.give_amount) : null,
-                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
-            }))),
-        leg(async () => rowsOf(await sdk.getDispensers(trimmed, 'source'))
-            .filter((r) => isOpenRow(r, trimmed))
-            .map((r) => ({
-                actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
-                tick: r.tick ?? r.give_tick ?? null,
-                escrowRemaining: r.give_remaining != null ? String(r.give_remaining)
-                    : (r.escrow_remaining != null ? String(r.escrow_remaining) : null),
-                giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
-            }))),
+        openOfferRows({ sdk, address: trimmed }),
     ]);
+    const { orders, swaps, dispensers } = offers;
 
     // Gated detection over every tick the sweep can move directly
     // (balances + ownerships). Escrowed ticks ride the offer-close path

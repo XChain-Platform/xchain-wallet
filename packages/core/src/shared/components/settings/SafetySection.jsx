@@ -92,8 +92,11 @@ export function SafetySection() {
                     step={1}
                     defaultValue={settings.grace.testSendThresholdSats}
                     onBlur={(e) => {
-                        const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                        update({ grace: { testSendThresholdSats: n } }).catch((err) => {
+                        const raw = e.target.value.trim();
+                        const threshold = /^\d+$/.test(raw)
+                            ? raw.replace(/^0+(?=\d)/, '')
+                            : '0';
+                        update({ grace: { testSendThresholdSats: threshold } }).catch((err) => {
                             // eslint-disable-next-line no-console
                             console.error('grace.testSendThresholdSats update failed:', err);
                         });

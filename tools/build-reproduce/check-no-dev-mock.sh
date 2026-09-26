@@ -157,6 +157,26 @@ SCAN_TARGETS=(
     "packages/desktop/renderer/dist|SDKWalletError,MULTISIG_DERIVE_FAILED"
 )
 
+fail_missing_desktop_source() {
+    echo "FAIL packages/desktop/main is missing"
+    echo "     The desktop main process ships as unbundled source, so the release"
+    echo "     gate cannot cover a desktop build without this source tree."
+    echo
+    echo "Pre-release gate FAILED - desktop main-process source is absent; scanned NOTHING."
+    exit 1
+}
+
+if [ ! -d packages/desktop/main ]; then
+    if [ -z "$ARTIFACT_DIR" ]; then
+        fail_missing_desktop_source
+    elif [ -d "$ARTIFACT_DIR" ] \
+        && find "$ARTIFACT_DIR" -maxdepth 1 \
+        \( -name '*.deb' -o -name '*.AppImage' -o -name '*-mac.zip' \) \
+        -print -quit | grep -q .; then
+        fail_missing_desktop_source
+    fi
+fi
+
 # --- Artifact mode ------------------------------------------------------
 #
 # The same markers, pointed at the release staging directory instead of the
@@ -300,12 +320,41 @@ if [ -n "$ARTIFACT_DIR" ]; then
             echo "Pre-release gate FAILED - a staged release artifact could not be unpacked."
             exit 1
         fi
-        SCAN_TARGETS+=("$UNPACK_ROOT/desktop|SDKWalletError,MULTISIG_DERIVE_FAILED|$(basename "$deb")|positive-only")
+        # Only the asar is scanned. The rest of the package is the Electron
+        # runtime, shared libraries and unpacked native addons, none of which
+        # is the renderer bundle the repo-tree target reads, so a real-SDK
+        # literal found there would satisfy the positive check for a package
+        # whose app bundle is missing or hollow.
+        asar_count=0
+        while IFS= read -r asar; do
+            [ -n "$asar" ] || continue
+            asar_count=$((asar_count + 1))
+            mkdir -p "$UNPACK_ROOT/desktop-asar/$asar_count"
+            mv "$asar" "$UNPACK_ROOT/desktop-asar/$asar_count/app.asar"
+        done < <(find "$UNPACK_ROOT/desktop" -type f -name 'app.asar' | sort)
+        if [ "$asar_count" -eq 0 ]; then
+            echo "FAIL $(basename "$deb") opened, but holds no app.asar"
+            echo "     The renderer bundle ships inside app.asar, and it is the one"
+            echo "     file in an installer this gate reads, so there is nothing here"
+            echo "     to say anything about."
+            echo
+            echo "Pre-release gate FAILED - a staged release artifact carries no scannable bundle."
+            exit 1
+        fi
+        SCAN_TARGETS+=("$UNPACK_ROOT/desktop-asar|SDKWalletError,MULTISIG_DERIVE_FAILED|$(basename "$deb")|positive-only")
     elif find "$ARTIFACT_DIR" -maxdepth 1 -name '*.AppImage' | grep -q .; then
-        # Named rather than skipped: this set HAS a desktop artifact and it
-        # is the one shape that cannot be opened here.
-        echo "GAP  desktop renderer - this set ships AppImages and no .deb, and an"
-        echo "     AppImage cannot be opened without a Linux host or unsquashfs"
+        # Refused, not reported: this set HAS a desktop artifact and it is the
+        # one shape that cannot be opened here. A GAP line alone let such a set
+        # pass whenever anything else in it was scanned, and sign.sh would then
+        # record `enforced` for a desktop renderer nobody read.
+        echo "FAIL this set ships AppImages and no .deb:"
+        find "$ARTIFACT_DIR" -maxdepth 1 -name '*.AppImage' | sort | sed 's|^.*/|    |'
+        echo "  An AppImage cannot be opened without a Linux host or unsquashfs,"
+        echo "  and the .deb built beside it in the same electron-builder run is"
+        echo "  what answers for the Linux renderer. Stage the .deb as well."
+        echo
+        echo "Pre-release gate FAILED - a staged desktop artifact could not be read."
+        exit 1
     fi
 
     # THE MAC HALF OF THE SAME REHEARSAL, and it would have hit the identical

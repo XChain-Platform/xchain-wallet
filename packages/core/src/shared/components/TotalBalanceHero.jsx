@@ -19,6 +19,7 @@ import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import styles from './TotalBalanceHero.module.css';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -115,7 +116,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             }
         }
         if (!hasAny || total24hAgo <= 0) return null;
-        const delta = total - total24hAgo;
+        const delta = Number(total) - total24hAgo;
         const pct = (delta / total24hAgo) * 100;
         return { delta, pct };
     }, [rows, priceMap, total]);
@@ -130,10 +131,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const showMeta = hasChange || hasUnpriced || hasSync;
 
     return (
-        <section className={styles.hero} aria-label="Total balance">
+        // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
+        // "Total balance" read as the whole wallet while the wallet's other
+        // addresses went uncounted (xchain-wallet#57). The label says what the
+        // figure is.
+        <section className={styles.hero} aria-label="Active address balance">
             <div className={styles.row}>
                 <span className={styles.label}>
-                    Total balance
+                    Active address balance
                     {filterLabel ? (
                         <span className={styles.scope}>· {filterLabel}</span>
                     ) : null}
@@ -252,18 +257,8 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
 // no-data slot.
 function fiatValueOf(row) {
     if (!row) return null;
-    if (typeof row.fiatRate !== 'number' || !Number.isFinite(row.fiatRate)) return null;
-    const q = (() => {
-        try { return BigInt(String(row.quantity || '0')); }
-        catch { return 0n; }
-    })();
-    if (q === 0n) return 0;
-    const d = row.divisibility || 0;
-    if (d <= 0) return Number(q) * row.fiatRate;
-    const div = 10n ** BigInt(d);
-    const whole = Number(q / div);
-    const frac = Number(q % div) / Number(div);
-    return (whole + frac) * row.fiatRate;
+    const exact = sumFiatValue([row]).total;
+    return Number(exact);
 }
 
 // Format the numeric portion of the total balance in the wallet's
@@ -281,9 +276,12 @@ function formatFiatAmount(value, currency) {
             currencyDisplay: 'symbol',
         });
         const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) return `<${fmt.format(minorUnit)}`;
-        return fmt.format(value);
+        if (compareDecimalStrings(value, '0') === 1
+            && compareDecimalStrings(value, String(minorUnit)) === -1) {
+            return `<${fmt.format(minorUnit)}`;
+        }
+        return fmt.format(String(value));
     } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        return String(value);
     }
 }

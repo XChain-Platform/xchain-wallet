@@ -498,7 +498,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <>
                 <p className={styles.summary}>Method call broadcast.</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '(none)')}</dd>
                 </dl>
                 <div className={styles.actions}>

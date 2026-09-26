@@ -19,9 +19,9 @@
 //      messaging wiring already shipped for My Lists, via a local
 //      ExistingListPickerScreen, and skips LIST creation (no new-list
 //      params ever get built for that mode).
-//   3. 'holders' mode reuses ListCreateForm's TYPE=1 tick-parsing shape
-//      (memberTicks/invalidTicks) and feeds AMOUNT-per-holder ticks into
-//      the same LIST+AIRDROP two-transaction path 'paste' uses.
+//   3. 'holders' mode reuses the token-list ticker classifier and feeds
+//      AMOUNT-per-holder ticks into the same LIST+AIRDROP two-transaction
+//      path 'paste' uses.
 //   4. Holder-snapshot honesty: a "not final" / "preview" volatility
 //      callout naming the AIRDROP-execution binding time is present, and
 //      there is no min-balance threshold field anywhere (AIRDROP.md
@@ -75,10 +75,16 @@ assert.match(
     "picking a list sets listActionIndex directly (no LIST broadcast in between)",
 );
 
-// --- 3. 'holders' mode: TYPE=1 tick parsing reused from ListCreateForm -
+// --- 3. 'holders' mode: TYPE=1 tick parsing uses the shared classifier -
 
-assert.match(src, /const memberTicks = useMemo\(/, "'holders' mode parses memberTicks");
-assert.match(src, /const invalidTicks = useMemo\(/, "'holders' mode validates invalidTicks");
+assert.match(src, /import \{ classifyTickItems \} from '\.\.\/utils\/listTickItems\.js';/,
+    "'holders' mode imports the token-list ticker classifier");
+assert.match(src, /const tickItems = useMemo\(\(\) => classifyTickItems\(ticksText\)/,
+    "'holders' mode parses tickers with the shared classifier");
+assert.match(src, /const memberTicks = tickItems\.valid;/,
+    "'holders' mode uses the classifier's valid tickers");
+assert.match(src, /const invalidTicks = tickItems\.invalid;/,
+    "'holders' mode uses the classifier's invalid tickers");
 assert.match(
     src,
     /const listItems = sourceMode === 'holders' \? memberTicks : recipients\.valid;/,
@@ -144,7 +150,7 @@ assert.doesNotMatch(src, /messaging\.buildActionPsbtRequest\(/,
 console.log(
     'OK: airdrop source-modes smoke (PC-11: paste/existing/holders Select + '
     + "'existing' reuses PC-10 listsForSource/listByActionIndex without a LIST leg + "
-    + "'holders' reuses ListCreateForm's TYPE=1 tick parsing + holder-snapshot "
+    + "'holders' uses the shared TYPE=1 ticker classifier + holder-snapshot "
     + 'honesty copy (current-not-final + binding time + no min-balance field) + '
     + 'pendingAirdrop listType round-trip + watcher-mode block unchanged)',
 );

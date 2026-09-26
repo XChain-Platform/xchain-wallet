@@ -33,6 +33,30 @@ import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 /** Message type the extension pages send to ask for a wipe. */
 export const WIPE_STORAGE_MESSAGE_TYPE = 'wallet.wipeStorage';
 
+/** Upper bound on the pre-wipe step, so a hung seal cannot stall the erase. */
+export const BEFORE_WIPE_TIMEOUT_MS = 2000;
+
+/**
+ * Run the caller's pre-wipe step, bounded and never throwing.
+ *
+ * @param {(() => void | Promise<void>) | undefined} beforeWipe
+ * @returns {Promise<void>}
+ */
+async function runBeforeWipe(beforeWipe) {
+    if (typeof beforeWipe !== 'function') return;
+    let timer;
+    try {
+        await Promise.race([
+            Promise.resolve().then(() => beforeWipe()),
+            new Promise((resolve) => { timer = setTimeout(resolve, BEFORE_WIPE_TIMEOUT_MS); }),
+        ]);
+    } catch (err) {
+        console.error('[xchain] pre-wipe step failed:', err);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 /**
  * Wallet-owned `chrome.storage.local` keys. Enumerated from the modules
  * that own them rather than guessed, so a key added later is a one-line
@@ -118,10 +142,14 @@ export async function wipeExtensionStorage(stores = {}) {
  * Sender-gated like every other UI-only type: a web page reaching the
  * content-script relay must never be able to erase a wallet.
  *
- * @param {{ onWiped?: () => void | Promise<void>,
+ * @param {{ beforeWipe?: () => void | Promise<void>,
+ *           onWiped?: () => void | Promise<void>,
  *           wipe?: typeof wipeExtensionStorage }} [deps]
- *   `onWiped` runs AFTER a successful clear and is where the caller drops
- *   the in-memory host (vault, signer pool, watchers).
+ *   `beforeWipe` runs BEFORE the clear, bounded by BEFORE_WIPE_TIMEOUT_MS, and
+ *   a failure there never stops the wipe; it is where the caller seals writers
+ *   that could put wiped data back, since a write already inside set() cannot be
+ *   recalled after the key removal. `onWiped` runs AFTER the clear and is where
+ *   the caller drops the in-memory host (vault, signer pool, watchers).
  * @param {{ id?: string, onMessage: { addListener: Function, removeListener: Function } }} [chromeRuntime]
  * @returns {() => void} detach fn
  */
@@ -145,6 +173,7 @@ export function attachWipeStorageListener(deps = {}, chromeRuntime) {
             return true;
         }
         (async () => {
+            await runBeforeWipe(deps.beforeWipe);
             const result = await wipe();
             // Tear down even on a partial clear: the keys that DID go are
             // gone, so a host still serving the wiped wallet is the worse

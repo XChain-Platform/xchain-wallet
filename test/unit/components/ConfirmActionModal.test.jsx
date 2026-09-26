@@ -39,6 +39,40 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-approve').textContent).toMatch(/Approve/);
     });
 
+    // #40. The page that is the last check before signing did not say who was
+    // signing, in a wallet that holds several addresses per chain.
+    describe('the From row (#40)', () => {
+        const ADDR = 'ndDEAAqTMcJmDFEHkLPfEjGvPTyY4NVoTY';
+
+        it('names the spender on the action variant', () => {
+            render(<ConfirmActionModal {...base({ sourceAddress: ADDR })} />);
+            const row = screen.getByTestId('confirm-source');
+            expect(row.textContent).toMatch(/^From/);
+            // AddressText truncates for display and carries the full string on
+            // title, which is what a user comparing against their address list
+            // needs to be able to read.
+            expect(row.querySelector('[title]')?.getAttribute('title')).toBe(ADDR);
+        });
+
+        it('renders no row when no source was supplied', () => {
+            render(<ConfirmActionModal {...base()} />);
+            expect(screen.queryByTestId('confirm-source')).toBeNull();
+        });
+
+        // The restriction is the design, not an oversight: a caller-supplied
+        // PSBT can spend several owned addresses, and the psbt variant already
+        // enumerates its inputs and marks which ones the wallet owns. One From
+        // line there would assert a single spender that may not exist.
+        it('stays off the psbt variant even when a source is passed', () => {
+            render(<ConfirmActionModal {...base({
+                variant: 'psbt', sourceAddress: ADDR, headline: 'Sign transaction',
+                psbtPanel: <div data-testid="psbt-panel" />,
+            })} />);
+            expect(screen.queryByTestId('confirm-source')).toBeNull();
+            expect(screen.getByTestId('psbt-panel')).toBeTruthy();
+        });
+    });
+
     it('renders no error region by default', () => {
         render(<ConfirmActionModal {...base()} />);
         expect(screen.queryByTestId('confirm-error')).toBeNull();
@@ -59,6 +93,12 @@ describe('ConfirmActionModal', () => {
     it('accepts a plain string error', () => {
         render(<ConfirmActionModal {...base({ error: 'Something broke.' })} />);
         expect(screen.getByTestId('confirm-error').textContent).toMatch(/Something broke/);
+    });
+
+    it('explains when a failed request carries no diagnostic message', () => {
+        render(<ConfirmActionModal {...base({ error: {} })} />);
+        expect(screen.getByTestId('confirm-error').textContent)
+            .toMatch(/wallet service returned no explanation/i);
     });
 
     // Page form (operator direction 2026-07-22): the confirm surface

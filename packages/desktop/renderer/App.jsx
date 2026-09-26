@@ -30,7 +30,7 @@
 // handlers onto `session.defaultSession`. Without them, Electron
 // returns an empty device list under `contextIsolation: true`.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
@@ -214,7 +214,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -300,6 +300,7 @@ function AppInner() {
     const palette = useCommandPalette({
         enabled: status.state === 'unlocked',
         binding: settings?.keyboard?.bindings?.['command-palette'],
+        navigate: setUnlockedView,
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
     // entity search: token balances + connected sites join contacts
@@ -946,6 +947,7 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
+                        reopen={formReturnView === 'dispenser-detail' ? dispenserRef?.reopen : undefined}
                         onBack={formBack}
                     />
                 );
@@ -1002,6 +1004,12 @@ function AppInner() {
                         listRef={listForkRef}
                         onBack={() => setUnlockedView('list-detail')}
                         onDone={() => { setListForkRef(null); setUnlockedView('lists'); }}
+                        // Each consumer's own edit screen; Back from it lands on My Lists.
+                        repointHandlers={{
+                            'issue-lists': () => { setFormReturnView('lists'); setUnlockedView('access-lists'); },
+                            'dispenser-lists': () => { setDispensersBackTo('lists'); setUnlockedView('dispensers-list'); },
+                            'order-lists': () => setUnlockedView('my-orders'),
+                        }}
                     />
                 );
             }
@@ -1029,6 +1037,12 @@ function AppInner() {
                             if (dispenserRef.origin === 'manage-token') return setUnlockedView('manage-token');
                             if (dispenserRef.origin === 'explorer') return setUnlockedView('dispenser-explorer');
                             return setUnlockedView('dispensers-list');
+                        }}
+                        // Back from the form lands on this detail page again.
+                        onOpenAgain={(terms) => {
+                            setDispenserRef({ ...dispenserRef, reopen: terms });
+                            setFormReturnView('dispenser-detail');
+                            setUnlockedView('dispenser');
                         }}
                     />
                 );
@@ -1163,11 +1177,33 @@ function AppInner() {
                     <MarketsList
                         walletId={activeWalletId}
                         selectedAsset={marketsAsset}
+                        onChangeAsset={() => setUnlockedView('markets-picker')}
                         onOpenMarket={(chainId, tick1, tick2) => {
                             setActiveMarket({ chainId, tick1, tick2 });
                             setUnlockedView('market');
                         }}
                         onBack={() => setUnlockedView('home')}
+                    />
+                );
+            }
+            if (unlockedView === 'markets-picker' && activeWalletId) {
+                return (
+                    <ReceivePicker
+                        walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
+                        title="Select coin or token"
+                        backLabel="Back to markets"
+                        hideOwnFilter
+                        onBack={() => setUnlockedView('markets')}
+                        onSelect={(sel) => {
+                            setMarketsAsset({
+                                chainId: sel.chainId,
+                                tick: sel.tick,
+                                displayName: sel.displayName,
+                                kind: sel.kind,
+                            });
+                            setUnlockedView('markets');
+                        }}
                     />
                 );
             }
@@ -1182,6 +1218,11 @@ function AppInner() {
                             setActiveMarket(null);
                             setUnlockedView('markets');
                         }}
+                        onSwap={() => setActiveMarket({
+                            chainId: activeMarket.chainId,
+                            tick1: activeMarket.tick2,
+                            tick2: activeMarket.tick1,
+                        })}
                     />
                 );
             }
@@ -1654,6 +1695,9 @@ function AppInner() {
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
                         initialMode={contractRef.initialMode}
+                        initialTick={contractRef.initialTick}
+                        initialSigningPubkey={contractRef.initialSigningPubkey}
+                        initialFromAddress={contractRef.initialFromAddress}
                         onBack={() => {
                             // Return to whichever flow opened the form: the
                             // staking list (new-stake picker), the position's
@@ -1731,23 +1775,31 @@ function AppInner() {
                         address={stakingRef.address}
                         contractActionIndex={stakingRef.contractActionIndex}
                         onUnstake={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'unstake',
+                                    // Seed the form from THIS position (xchain-wallet#34)
+                                    // instead of letting it fall back to XCHAIN/blank/default-address.
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
                             : () => setUnlockedView('staking-unstake')}
                         onDelegate={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'delegate',
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
@@ -1756,12 +1808,15 @@ function AppInner() {
                         onClaimRewards={() => setUnlockedView('staking-claim')}
                         onOpenOperatorDashboard={() => setUnlockedView('operator-dashboard')}
                         onStakeMore={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'stake',
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
@@ -1928,6 +1983,10 @@ function AppInner() {
                             });
                             setUnlockedView('markets');
                         }}
+                        // Same hop MyTokens' onSelectTick uses: tokenDetailRef
+                        // already carries this tick's chainId/tick, so Manage
+                        // Token only needs the view switch.
+                        onManageToken={() => setUnlockedView('manage-token')}
                     />
                 );
             }
@@ -2301,14 +2360,14 @@ function AppInner() {
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
             // §33 command list: shared catalogue + lazily-loaded contacts,
-            // each run() closing over this shell's setUnlockedView (see the
-            // web shell for the reference wiring).
+            // each run() using the palette navigator so the destination
+            // receives a fresh route mount.
             const paletteCtx = {
-                navigate: setUnlockedView,
+                navigate: palette.navigate,
                 lock: handleNavLock,
                 refresh,
-                scan: () => setUnlockedView('scan'),
-                switchWallet: handleOpenWalletPicker,
+                scan: () => palette.navigate('scan'),
+                switchWallet: () => palette.navigate('wallet-picker'),
                 openHelp: () => setShortcutHelpOpen(true),
                 hasBtcAddress,
                 hasVmAddress,
@@ -2321,20 +2380,20 @@ function AppInner() {
             // via settingsInitialSection; help topics open the shortcut help
             // modal.
             const openSettingsSection = (sectionId) => {
-                if (sectionId === 'connected-sites') { setUnlockedView('connected-sites'); return; }
+                if (sectionId === 'connected-sites') { palette.navigate('connected-sites'); return; }
                 setSettingsInitialSection(sectionId);
-                setUnlockedView('settings');
+                palette.navigate('settings');
             };
             const paletteEntityCtx = {
-                openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
-                openConnectedSites: () => setUnlockedView('connected-sites'),
+                openToken: (tok) => { setTokenDetailRef(tok); palette.navigate('token-detail'); },
+                openConnectedSites: () => palette.navigate('connected-sites'),
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
             };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),
                 ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
-                ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+                ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
                 ...sitesToCommands(paletteSites, paletteEntityCtx),
                 ...settingsSectionsToCommands(paletteEntityCtx),
                 ...helpToCommands(paletteEntityCtx),
@@ -2346,13 +2405,13 @@ function AppInner() {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
-                    setUnlockedView('send');
+                    palette.navigate('send');
                 },
                 searchHistory: (query) => {
                     setHistoryInitialQuery(query);
                     setHistoryInitialChainCoin('');
                     setHistoryReturnTo('home');
-                    setUnlockedView('history');
+                    palette.navigate('history');
                 },
             });
             // Assigned rather than returned directly so the whole unlocked
@@ -2405,7 +2464,7 @@ function AppInner() {
                         </>
                     }
                 >
-                    {routeNode}
+                    <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

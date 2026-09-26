@@ -30,9 +30,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { boundListIndex } from '../../flows/accessListSlots.js';
+import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -81,6 +91,7 @@ export function fillStateOf(detail) {
     return {
         status: String(state.status || ''),
         giveRemaining: state.give_remaining ?? null,
+        expiration: state.expiration ?? null,
     };
 }
 
@@ -92,10 +103,10 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
         if (fill.status === 'complete') return 'filled';
         if (fill.status === 'cancelled') return 'cancelled';
         if (fill.status === 'expired') return 'expired';
-        const remaining = Number(fill.giveRemaining);
-        if (fill.status === 'open' && Number.isFinite(remaining) && remaining <= 0) return 'filled';
+        const remaining = compareDecimalStrings(fill.giveRemaining, '0');
+        if (fill.status === 'open' && remaining !== null && remaining <= 0) return 'filled';
     }
-    const exp = Number(item.row.expiration);
+    const exp = Number(fill?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
 }
@@ -105,10 +116,9 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
 function partialRemaining(item) {
     const fill = item.fill;
     if (!fill || fill.status !== 'open') return null;
-    const remaining = Number(fill.giveRemaining);
-    const total = Number(item.row.give_amount);
-    if (!Number.isFinite(remaining) || !Number.isFinite(total)) return null;
-    if (remaining <= 0 || remaining >= total) return null;
+    const aboveZero = compareDecimalStrings(fill.giveRemaining, '0');
+    const belowTotal = compareDecimalStrings(fill.giveRemaining, item.row.give_amount);
+    if (aboveZero !== 1 || belowTotal !== -1) return null;
     return String(fill.giveRemaining);
 }
 
@@ -208,9 +218,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             }
             all.sort((a, b) => Number(b.row.action_index || 0) - Number(a.row.action_index || 0));
             for (const it of all) it.cancelled = cancelledKeys.has(it.key);
-            // Only the orders the feeds still call open pay for a detail read.
-            const now = Math.floor(Date.now() / 1000);
-            const candidates = all.filter((it) => deriveStatus(it, cancelledKeys, now) === 'open');
+            // Read valid, uncancelled candidates before applying mutable expiration.
+            const candidates = all.filter((it) => !cancelledKeys.has(it.key)
+                && String(it.row.status || 'valid') === 'valid');
             const fills = await readFillStates(messaging, candidates);
             setItems(all.map((it) => ({ ...it, cancelledKeys, fill: fills.get(it.key) || null })));
             setLoadError(null);
@@ -293,8 +303,10 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
-        const expText = fmtDate(it.row.expiration);
+        const expText = fmtDate(it.fill?.expiration ?? it.row.expiration);
         const remaining = partialRemaining(it);
+        const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
+        const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
         const consent = autopayByKey.get(it.key);
         const chip = status === 'open'
             ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
@@ -313,6 +325,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                     </div>
                     {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
                     {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
+                    <div className={L.rowDetail}>
+                        Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
+                    </div>
                     {consent && isNativeGive(it.row) ? (
                         <label className={F.checkRow}>
                             <input type="checkbox" checked={consent.autopay === true} onChange={() => handleAutopayToggle(consent)} />
@@ -367,27 +382,34 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
 /**
  * Cancel (ORDER v1) or Edit (ORDER v2) an open order, signed from its
- * owner address. Mirrors OpenOrdersPanel's cancel confirm: software
- * signers type their password, HW signers slot in through SignCredentials.
+ * owner address. The form is the input step; signing happens on the shared
+ * confirm page with its network pre-flight, or, in watcher mode, the form
+ * builds an unsigned transaction.
  */
 function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
     const { chainId, owner, row } = item;
     const descriptor = chainRegistry.get(chainId);
-    const hw = isHwSource(owner);
-    const from = {
-        address: owner.address,
-        publicKey: owner.publicKey,
-        derivationPath: owner.derivationPath,
-        addressId: owner.id,
-        source: owner.source,
-        signerId: owner.signerId,
-    };
+    const isCancel = type === 'cancel';
+    const currentAllowList = boundListIndex(row.allow_list ?? row.allowList);
+    const currentBlockList = boundListIndex(row.block_list ?? row.blockList);
+    const canRemoveList = isListEditRemoveActive({ chainId });
+    const signerReady = useSignerReady(walletId);
+    const lane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId,
+        owner,
+        software: isCancel ? 'cancelOrder' : 'editOrder',
+        hardware: isCancel ? 'cancelOrderHw' : 'editOrderHw',
+    });
+    // An edit re-charges the expiration fee, and off Bitcoin that fee is a
+    // native-coin output the transaction must carry or the indexer rejects it.
+    const nativeFee = useNativeFee(chainId);
 
-    const [password, setPassword] = useState('');
-    const [hwStatus, setHwStatus] = useState('idle');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [done, setDone] = useState(false);
+    const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const done = result !== null;
 
     // Edit fields (prefilled from the order's current values).
     const [expInput, setExpInput] = useState('');
@@ -411,9 +433,7 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
 
     async function submit(event) {
         event.preventDefault();
-        if (submitting) return;
-        if (!hw && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (submitting || lane.composing) return;
         if (type === 'edit') {
             if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
             if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
@@ -422,25 +442,32 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
         }
         setSubmitting(true);
         setError(null);
-        const base = { walletId, chainId, from, orderActionIndex: String(row.action_index) };
+        const orderActionIndex = String(row.action_index);
+        // The wire params the confirm page composes and previews; the signing
+        // flow rebuilds the same set from `orderActionIndex` and `params`.
+        const params = isCancel
+            ? { VERSION: '1', ORDER_ACTION_INDEX: orderActionIndex }
+            : { VERSION: '2', ORDER_ACTION_INDEX: orderActionIndex, ...editParams };
         try {
-            if (type === 'cancel') {
-                if (hw) await messaging.cancelOrderHw({ ...base, signerId: owner.signerId });
-                else await messaging.cancelOrder({ ...base, password });
-            } else {
-                const withParams = { ...base, params: editParams };
-                if (hw) await messaging.editOrderHw({ ...withParams, signerId: owner.signerId });
-                else await messaging.editOrder({ ...withParams, password });
-            }
-            setDone(true);
+            const res = await lane.run({
+                actionData: { action: 'ORDER', params },
+                encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
+                submitExtra: isCancel ? { orderActionIndex } : { orderActionIndex, params: editParams },
+            });
+            setResult(res || {});
         } catch (err) {
-            const bad = err?.name === 'InvalidPasswordError';
-            setError(bad ? 'Incorrect password.' : (err?.message || `${type === 'cancel' ? 'Cancel' : 'Edit'} failed.`));
+            if (!isUserRejection(err)) {
+                setError(err?.name === 'InvalidPasswordError' ? 'Incorrect password.' : submitFailureMessage(err, {
+                    chainId,
+                    mandatory: nativeFee.mandatory,
+                    fallback: err?.message || `${isCancel ? 'Cancel' : 'Edit'} failed.`,
+                }));
+            }
+        } finally {
             setSubmitting(false);
         }
     }
 
-    const isCancel = type === 'cancel';
     const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel order' : 'Edit order'} />;
     const isFull = variant === 'full';
     const wrap = (children) => (
@@ -467,7 +494,24 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
         );
     }
 
+    if (lane.open) {
+        return (
+            <ActionConfirmScreen
+                {...lane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                signerReady={signerReady}
+                hintClassName={F.hint}
+            />
+        );
+    }
+
     if (done) {
+        // Signed but not broadcast yet: nothing changed on chain, so no success copy.
+        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what={isCancel ? 'order cancel' : 'order edit'} />);
+        if (result.psbtHex && !(result.txid || result.broadcast?.txid)) {
+            return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
+        }
         return wrap(
             <>
                 <h2 className={F.successTitle}>{isCancel ? 'Cancel broadcast' : 'Edit broadcast'}</h2>
@@ -514,40 +558,41 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                     <p className={F.successLabel}>Access lists (optional)</p>
                     <div className={F.actions}>
                         <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                            {allowListIdx === '0' ? 'Remove allow list' : (allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list')}
                         </Button>
                         <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                            {blockListIdx === '0' ? 'Remove block list' : (blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list')}
                         </Button>
+                        {canRemoveList && currentAllowList && allowListIdx !== '0' ? (
+                            <Button type="button" variant="secondary" size="sm" onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
+                        ) : null}
+                        {canRemoveList && currentBlockList && blockListIdx !== '0' ? (
+                            <Button type="button" variant="secondary" size="sm" onClick={() => setBlockListIdx('0')}>Remove block list</Button>
+                        ) : null}
                     </div>
                     <p className={F.hint}>
-                        A blank field is left unchanged. A bound list can be replaced but not removed
-                        (point it at an empty list to lift a restriction).
+                        Current: allow list {currentAllowList ? `#${currentAllowList}` : 'none'};
+                        {' '}block list {currentBlockList ? `#${currentBlockList}` : 'none'}. A blank choice is left unchanged.
                     </p>
                 </>
             )}
 
-            <SignCredentials
-                unlocked={false}
-                fromAddress={from}
-                chainId={chainId}
-                password={password}
-                onPasswordChange={(v) => { setPassword(v); if (error) setError(null); }}
-                onStatusChange={setHwStatus}
-                submitError={error}
-                disabled={submitting}
-                getSignerStatus={messaging.getSignerStatus}
-            />
-            {error && hw ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
+            {lane.isWatcherMode ? (
+                <p className={F.hint}>
+                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                </p>
+            ) : null}
+            {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
 
             <div className={F.actions}>
                 <Button
                     type="submit"
                     variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting}
-                    disabled={hw ? hwStatus !== 'available' : (password.length === 0 || (type === 'edit' && !editHasChange))}
+                    loading={submitting || lane.composing}
+                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
                 >
-                    {hw ? `Sign on ${owner.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (isCancel ? 'Sign cancel' : 'Sign edit')}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
                 </Button>
             </div>
         </form>,

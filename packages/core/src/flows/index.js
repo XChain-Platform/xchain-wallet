@@ -83,6 +83,7 @@ export {
 } from './pairPartner.js';
 export { sweepToken } from './sweepToken.js';
 export { sweepPreview } from './sweepPreview.js';
+export { escrowedTokens } from './escrowedTokens.js';
 export { quoteMaxSendable, insufficientFundsQuote } from './maxSendable.js';
 export { issueToken } from './issueToken.js';
 export { mintToken } from './mintToken.js';
@@ -141,6 +142,7 @@ export { fileAction, fileActionParams } from './fileAction.js';
 export {
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
 } from './gatedPublishAction.js';
 export {
@@ -190,10 +192,13 @@ export {
     gateMinAmountScheduledHeight,
     isGateMinAmountActive,
     resolveGateMinAmountActive,
+    LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS,
+    isListEditRemoveActive,
 } from './protocolActivations.js';
 export {
     messageAction,
     buildMessageParams,
+    buildHandshakeActionData,
     handshakeAction,
     getRecipientPubkey,
     PubkeyNotFoundError,
@@ -344,6 +349,7 @@ export {
 export { searchPlatformTokens } from './searchTokens.js';
 export { listOwnedTokens } from './listOwnedTokens.js';
 export { createMultisigConfig } from './createMultisigConfig.js';
+export { getMultisigCosignerInfo, deriveCosignerKeys } from './multisigCosignerInfo.js';
 export { receiveMultisigAddress, listMultisigReceiveAddresses } from './multisigAddress.js';
 export {
     startMultisigSigningSession,
@@ -533,6 +539,8 @@ export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';
 export {
     buildLabelSyncPayload,
     applyLabelSyncPayload,
+    prepareLabelsPublication,
+    submitLabelsPublication,
     publishLabelsNow,
     fetchAndDecryptLabelSync,
     restoreLabelSyncAfterImport,

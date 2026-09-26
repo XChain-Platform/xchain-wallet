@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -20,6 +20,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -31,10 +32,18 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
+import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
+import { classifyTickItems, tickLookupVerdict } from '../utils/listTickItems.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Most token lookups one form run fires; a longer list reports the rest as
+// not checked rather than flooding the explorer.
+const MAX_TICK_LOOKUPS = 50;
 
 /**
  * PC-10 "My Lists": LIST v0 create form. One transaction, so (unlike
@@ -54,9 +63,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.walletId
  * @param {string} [props.chainId]
  * @param {'1' | '2'} [props.initialType]   defaults to '2' (address list)
+ * @param {boolean | null} [props.editResolutionActive]   list-edit resolution on this chain; unknown when omitted
  * @param {() => void} props.onBack
  */
-export function ListCreateForm({ walletId, chainId: initialChainId, initialType, onBack }) {
+export function ListCreateForm({ walletId, chainId: initialChainId, initialType, editResolutionActive = null, onBack }) {
     const [chainId, setChainId] = useState(initialChainId || null);
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
@@ -95,6 +105,12 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // TYPE=1 (token list) member entry: same free-text tick parsing as
     // ProjectRosterForm.
     const [ticksText, setTicksText] = useState('');
+    // Per-tick existence verdicts from the token lookup, keyed by tick.
+    const [tickStatus, setTickStatus] = useState(
+        /** @type {Record<string, 'found' | 'missing' | null>} */ ({}),
+    );
+    const [tickChecking, setTickChecking] = useState(false);
+    const [memo, setMemo] = useState('');
 
     const [password, setPassword] = useState('');
     const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
@@ -103,8 +119,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -112,14 +129,20 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
-                const first = Object.keys(byChain || {})[0];
-                if (!chainId && first) setChainId(first);
-                if (!first) setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
+                // Open on the last-used chain, behind a caller-seeded one and
+                // ahead of the first-key fallback: `byChain` is in address-
+                // creation order, so its first key is the wallet's OLDEST chain.
+                const picked = pickDefaultChainId(byChain, { explicitChainId: chainId, settings });
+                if (!chainId && picked) setChainId(picked);
+                if (Object.keys(byChain || {}).length === 0) setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
@@ -192,31 +215,61 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Parse the tick textarea into validated, deduplicated, uppercased
-    // ticks (identical shape to ProjectRosterForm's memberTicks).
-    const memberTicks = useMemo(() => {
-        const seen = new Set();
-        const out = [];
-        for (const raw of ticksText.split(/[\n,]+/)) {
-            const t = raw.trim().toUpperCase();
-            if (!t || seen.has(t)) continue;
-            seen.add(t);
-            out.push(t);
+    // Parse tickers with chain grammar while counting duplicates
+    // and malformed names the way the address branch does.
+    const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
+    const memberTicks = tickItems.valid;
+    const invalidTicks = tickItems.invalid;
+    const tickKey = memberTicks.join('|');
+
+    // Look each well-formed tick up on the chain the list is published to.
+    // The network leaves an unknown TICK out of the list, so the form says
+    // which ones it could not find before the user pays for them. A `^`
+    // TICK_ID reference is not a name the lookup takes, so it stays unchecked.
+    useEffect(() => {
+        if (listType !== '1' || !chainId || memberTicks.length === 0) {
+            setTickStatus({});
+            setTickChecking(false);
+            return undefined;
         }
-        return out;
-    }, [ticksText]);
-    const invalidTicks = useMemo(
-        () => memberTicks.filter((t) => !/^[A-Z0-9.^]+$/.test(t)),
-        [memberTicks],
+        let cancelled = false;
+        setTickChecking(true);
+        const timer = setTimeout(() => {
+            const toCheck = memberTicks.filter((t) => !t.startsWith('^')).slice(0, MAX_TICK_LOOKUPS);
+            Promise.all(toCheck.map((t) => fetchTokenInfo(messaging, chainId, t)
+                .then((info) => [t, tickLookupVerdict(info)])))
+                .then((pairs) => {
+                    if (cancelled) return;
+                    setTickStatus(Object.fromEntries(pairs));
+                    setTickChecking(false);
+                });
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timer); };
+        // tickKey stands in for memberTicks, which is a new array every parse.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [listType, chainId, tickKey, messaging]);
+
+    const missingTicks = useMemo(
+        () => memberTicks.filter((t) => tickStatus[t] === 'missing'),
+        [memberTicks, tickStatus],
     );
+    const foundTicks = useMemo(
+        () => memberTicks.filter((t) => tickStatus[t] === 'found'),
+        [memberTicks, tickStatus],
+    );
+    const uncheckedTicks = memberTicks.length - missingTicks.length - foundTicks.length;
 
     const items = listType === '2' ? recipients.valid : memberTicks;
+    const trimmedMemo = memo.trim();
 
+    // MEMO is optional and sits before the ITEM tail; an empty memo leaves
+    // the field out so the wire keeps its empty slot (`LIST|0|1||...`).
     const wireParams = useMemo(() => ({
         VERSION: '0',
         TYPE: listType,
+        ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: items,
-    }), [listType, items]);
+    }), [listType, items, trimmedMemo]);
 
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
@@ -318,14 +371,20 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     function validate() {
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
+        if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
+        // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
+        const memoTooLong = memoLengthError(trimmedMemo);
+        if (memoTooLong) { setFormError(memoTooLong); return false; }
         if (listType === '2') {
             if (recipients.valid.length === 0) { setFormError('Add at least one valid address.'); return false; }
         } else {
-            if (memberTicks.length === 0) { setFormError('Add at least one token.'); return false; }
+            // Verify every token name is well formed before counting them
             if (invalidTicks.length > 0) {
                 setFormError(`These don't look like token names: ${invalidTicks.join(', ')}`);
                 return false;
             }
+            if (memberTicks.length === 0) { setFormError('Add at least one token.'); return false; }
         }
         return true;
     }
@@ -421,8 +480,15 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     {listType === '2' ? 'Address' : 'Token'} list with {items.length} item{items.length === 1 ? '' : 's'} is on its way.
                     Once it's indexed you can view it from My Lists and reference it from an airdrop, gate, dispenser, or order.
                 </p>
+                {listType === '1' && missingTicks.length > 0 ? (
+                    <p className={styles.hint}>
+                        {missingTicks.length} of these ({missingTicks.join(', ')}) {missingTicks.length === 1 ? 'was' : 'were'} not
+                        found on {descriptor?.displayName || chainId}; the network leaves an unknown token out of the list.
+                        Check the members in My Lists once it's indexed.
+                    </p>
+                ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}><code className={styles.txid}>{String(txid || 'n/a')}</code></dd>
                 </dl>
                 <div className={styles.actions}>
@@ -470,6 +536,12 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <dd className={styles.detailsValue}>{listType === '2' ? 'Address list' : 'Token list'}</dd>
                     <dt className={styles.detailsLabel}>Items</dt>
                     <dd className={styles.detailsValue}>{items.length}</dd>
+                    {trimmedMemo ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}>{trimmedMemo}</dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
@@ -534,7 +606,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 walletId={walletId}
                 title="Add a token"
                 onSelect={(sel) => {
-                    const t = String(sel.tick || '').toUpperCase();
+                    const t = String(sel.tick || '');
                     if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
                     setTokenPickerOpen(false);
                 }}
@@ -597,11 +669,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 <>
                     <label
                         className={styles.pickerLabel}
+                        htmlFor="list-addresses"
                         {...recipientsDrop.rootProps}
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
                         Addresses
                         <textarea
+                            id="list-addresses"
                             className={styles.picker}
                             value={pasteText}
                             onChange={(e) => setPasteText(e.target.value)}
@@ -653,12 +727,27 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
                                 This list is published on {descriptor?.displayName || chainId}.
                             </p>
+                            <DiagnosticDetails
+                                summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                items={recipients.wrongNetwork.map((address) => ({
+                                    subject: address,
+                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                }))}
+                            />
                         </div>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
                         public on-chain data once the list is broadcast. */}
+                    {/* What an edit does depends on list-edit resolution:
+                        after it, every reference follows the owner's newest
+                        edit; before it, a fork is a separate list. */}
                     <p className={styles.hint}>
-                        These addresses become permanent public on-chain data once the list is published. There's no way to edit or delete an address out of a list later; forking (§ Fork &amp; edit) only creates a new list at a new index.
+                        These addresses become permanent public on-chain data once the list is published.
+                        {editResolutionActive === true
+                            ? ' You can change who is on the list later with Fork & edit, and everything that references this list then uses the edited membership, but the addresses published here stay in the chain\'s history.'
+                            : editResolutionActive === false
+                                ? ' There\'s no way to edit or delete an address out of a list later; forking (Fork & edit) only creates a new list at a new index.'
+                                : ' Fork & edit can change who is on the list later: where list-edit resolution is active, everything that references this list follows your newest edit; before that, a fork is a separate list at a new index. Either way, the addresses published here stay in the chain\'s history.'}
                     </p>
                     {/* xchain-token-bridge-policy.md section 8, D9/milestone-1 refusal:
                         an address list is the thing IssueTokenForm/TokenAdminForm point
@@ -684,7 +773,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="characters"
+                        autoCapitalize="none"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>
@@ -692,11 +781,41 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             Add from token picker
                         </Button>
                     </div>
-                    {memberTicks.length > 0 ? (
-                        <p className={styles.hint}>{memberTicks.length} token{memberTicks.length === 1 ? '' : 's'}</p>
+                    {ticksText.trim() ? (
+                        <p className={styles.hint}>
+                            {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
+                            {tickItems.duplicates > 0 ? ` · ${tickItems.duplicates} duplicate${tickItems.duplicates === 1 ? '' : 's'} removed` : ''}
+                            {invalidTicks.length > 0 ? ` · ${invalidTicks.length} invalid` : ''}
+                            {tickChecking ? ' · checking…' : ''}
+                            {!tickChecking && foundTicks.length > 0 ? ` · ${foundTicks.length} found` : ''}
+                            {!tickChecking && missingTicks.length > 0 ? ` · ${missingTicks.length} not found` : ''}
+                            {!tickChecking && uncheckedTicks > 0 && (foundTicks.length + missingTicks.length) > 0 ? ` · ${uncheckedTicks} not checked` : ''}
+                        </p>
+                    ) : null}
+                    {invalidTicks.length > 0 ? (
+                        <p className={styles.hint}>Not a token name: {invalidTicks.join(', ')}</p>
+                    ) : null}
+                    {/* The protocol records an unknown TICK as invalid and
+                        leaves it out of the list without failing the LIST. */}
+                    {!tickChecking && missingTicks.length > 0 ? (
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                Not found on {descriptor?.displayName || chainId}: {missingTicks.join(', ')}.
+                                The network leaves an unknown token out of the list, so {missingTicks.length === 1 ? 'it' : 'they'} will
+                                not be a member.
+                            </p>
+                        </div>
                     ) : null}
                 </>
             )}
+
+            <Input
+                label="Memo (optional)"
+                hint="Protocol rejects | or ;."
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                autoComplete="off"
+            />
 
             {feeTiers ? (
                 <FeeSelector
@@ -720,9 +839,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || items.length === 0 || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Publish list' : 'Review'}
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
                 </Button>
             </div>
         </form>,

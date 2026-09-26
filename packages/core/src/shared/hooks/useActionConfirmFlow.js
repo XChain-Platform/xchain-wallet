@@ -95,7 +95,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
      *   exist once the host has built them (see `action.message.composeForConfirm`).
      *   Must resolve with the same tamper-verified envelope
      *   `action.composeForConfirm` returns. Defaults to the generic route.
-     * @param {(prebuiltPsbt: { psbtHex: string, encoding: string, actionString: string, version: any }, composed: object) => Promise<any>} args.onApprove
+     * @param {(prebuiltPsbt: import('../../sdk/submitWithSigner.js').PrebuiltPsbt, composed: object) => Promise<any>} args.onApprove
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
      * §5.4 opt-in. Supply it only when this form's Approve can be
      *   completed away from the form: `software`/`hardware` name the same
@@ -167,11 +167,21 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 // ...and the change the reveal must be built with, or its
                 // surplus sweep lands on the un-rotated spending address.
                 revealOpts: composed.revealOpts || null,
+                // A TAPROOT envelope's reveal and recovery record. The submit
+                // path signs the reveal and persists the record before the commit
+                // is broadcast, and refuses the commit if either did not arrive.
+                revealPsbt: composed.revealPsbt || null,
+                envelope: composed.envelope || null,
                 // The donation verdict these bytes actually carry. The submit
                 // path re-resolved it from a fresh settings snapshot, so a
                 // concurrent window that moved the accumulator between compose
                 // and Approve booked a donation this transaction never made.
                 adsDonation: { included: !!composed.adsPlan?.canSubmit },
+                // The encoder's compression report for these exact bytes, so
+                // the success screen can state the size actually stored on
+                // chain. Dropping it here left the Publish file result silent
+                // about a payload the encoder had shrunk to a quarter.
+                compression: composed.compression || null,
             }, composed),
         })
     ), [confirmAction, messaging, settings, walletId]);

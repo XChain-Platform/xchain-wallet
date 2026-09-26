@@ -89,13 +89,13 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
 
     it('never claims the network has it before a sighting', () => {
         render(<TxStatusTimeline entry={pendingEntry({ broadcastAtMs: NOW - 1000 })} />);
-        expect(mempoolRow().textContent).not.toContain('In mempool');
+        expect(mempoolRow().textContent).not.toContain('Held by the network');
     });
 
-    it('says "In mempool" once a node has actually reported holding it', () => {
+    it('says "Held by the network" once a node has actually reported holding it', () => {
         render(<TxStatusTimeline entry={pendingEntry({ origin: 'mempool', firstSeenMs: NOW - 5000, lastMempoolSeenMs: NOW - 5000 })} />);
         const row = mempoolRow();
-        expect(row.textContent).toContain('In mempool');
+        expect(row.textContent).toContain('Held by the network');
         expect(row.querySelector('span[aria-hidden="true"]').textContent).toBe('●');
         expect(row.className).toContain('rowDone');
     });
@@ -137,7 +137,7 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
         });
         render(<TxStatusTimeline entry={recentlyGone} />);
         const row = mempoolRow();
-        expect(row.textContent).toContain('In mempool');
+        expect(row.textContent).toContain('Held by the network');
         expect(row.className).not.toContain('rowWarn');
     });
 
@@ -172,7 +172,7 @@ describe('TxStatusTimeline: per-network window overrides (I-17)', () => {
     it('a widened grace window defers the dropped reading', () => {
         const gone = pendingEntry({ lastMempoolSeenMs: NOW - (DROPPED_GRACE_MS + 1000) });
         render(<TxStatusTimeline entry={gone} droppedGraceMs={DROPPED_GRACE_MS * 4} />);
-        expect(mempoolRow().textContent).toContain('In mempool');
+        expect(mempoolRow().textContent).toContain('Held by the network');
     });
 });
 

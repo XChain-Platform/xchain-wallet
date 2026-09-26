@@ -23,7 +23,27 @@ import {
     VOTE_CALLBACK_TIMELOCK_TIMES,
     isVoteBindingMinimumsActive,
     isVoteCallbackTimelockActive,
+    LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS,
+    isListEditRemoveActive,
 } from '../../../packages/core/src/flows/protocolActivations.js';
+
+describe('LIST_EDIT_REMOVE activation', () => {
+    it('is live from genesis on regtest only', () => {
+        for (const coin of ['bitcoin', 'litecoin', 'dogecoin']) {
+            expect(LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS[`${coin}-regtest`]).toBe(0);
+            expect(isListEditRemoveActive({ chainId: `${coin}-regtest` })).toBe(true);
+            expect(isListEditRemoveActive({ chainId: `${coin}-testnet`, blockHeight: 9e9 })).toBe(false);
+            expect(isListEditRemoveActive({ chainId: `${coin}-mainnet`, blockHeight: 9e9 })).toBe(false);
+        }
+    });
+
+    it('fails closed for unknown chains and future scheduled heights', () => {
+        expect(isListEditRemoveActive({ chainId: 'unknown' })).toBe(false);
+        const heights = { 'bitcoin-mainnet': 100 };
+        expect(isListEditRemoveActive({ chainId: 'bitcoin-mainnet', blockHeight: 99, heights })).toBe(false);
+        expect(isListEditRemoveActive({ chainId: 'bitcoin-mainnet', blockHeight: 100, heights })).toBe(true);
+    });
+});
 
 describe('shipped GATE_MIN_AMOUNT map (testnet genesis-active, mainnet unscheduled)', () => {
     const TESTNET = ['bitcoin-testnet', 'litecoin-testnet', 'dogecoin-testnet'];

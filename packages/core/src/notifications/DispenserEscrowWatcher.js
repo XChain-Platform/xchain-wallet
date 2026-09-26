@@ -44,6 +44,11 @@
 // refill_count nor per-edit escrow, so only the refill form itself can state
 // where the operator stands against that cap.
 
+import {
+    compareDecimalStrings,
+    decimalQuotientFloor,
+} from '../shared/utils/amountFormat.js';
+
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /** Warn at or below this many remaining dispenses. */
 const DEFAULT_LOW_DISPENSES = 3;
@@ -211,10 +216,10 @@ export class DispenserEscrowWatcher {
                 if (!row || (row.status != null && String(row.status) !== 'valid')) continue;
                 const actionIndex = String(row.action_index ?? '');
                 if (!actionIndex || candidates.has(actionIndex)) continue;
-                const giveAmount = Number(row.give_amount);
+                const giveAmount = String(row.give_amount ?? '');
                 // A dispenser that gives nothing per dispense has no "how many
                 // left" to compute; skip rather than divide by zero.
-                if (!Number.isFinite(giveAmount) || giveAmount <= 0) continue;
+                if (compareDecimalStrings(giveAmount, '0') !== 1) continue;
                 candidates.set(actionIndex, { actionIndex, giveAmount, giveTick: row.give_tick || '' });
             }
         }
@@ -241,11 +246,17 @@ export class DispenserEscrowWatcher {
             }
             const state = detail && typeof detail === 'object' ? detail.state : null;
             if (!state || String(state.status) !== 'open') continue;
-            const remaining = Number(state.give_remaining);
-            if (!Number.isFinite(remaining) || remaining < 0) continue;
-            const dispensesLeft = Math.floor(remaining / d.giveAmount);
-            if (dispensesLeft > this._lowDispenses) continue;
-            low.push({ ...d, remaining, dispensesLeft, bucket: dispensesLeft === 0 ? 'empty' : 'low' });
+            const remaining = String(state.give_remaining ?? '');
+            const dispensesLeftText = decimalQuotientFloor(remaining, d.giveAmount);
+            if (dispensesLeftText === null) continue;
+            if (BigInt(dispensesLeftText) > BigInt(this._lowDispenses)) continue;
+            const dispensesLeft = Number(dispensesLeftText);
+            low.push({
+                ...d,
+                remaining,
+                dispensesLeft,
+                bucket: dispensesLeft === 0 ? 'empty' : 'low',
+            });
         }
 
         const seen = this._seen.get(chainId) || new Set();

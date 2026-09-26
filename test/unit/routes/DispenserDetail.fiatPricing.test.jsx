@@ -26,7 +26,7 @@
 // was a rendering decision (which branch of the panel runs), not arithmetic.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, within, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -138,6 +138,13 @@ function mount(dispenser, extraMessaging = {}) {
 
 afterEach(() => cleanup());
 
+// The stats-hero "Payment" line states the same fill price, so a page-wide
+// findByText matches twice. These tests are about the "Pay to buy" panel;
+// scope to it.
+async function payToBuy() {
+    return within((await screen.findByText(/Pay to buy/)).closest('section'));
+}
+
 describe('fiat-priced dispenser, buyer view (D-144)', () => {
     it('never quotes a coin price of zero', async () => {
         mount(FIAT_DISPENSER);
@@ -152,7 +159,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // Saying nothing is not a fix for saying zero: a buyer who cannot learn
         // the price cannot pay it.
         mount(FIAT_DISPENSER);
-        expect(await screen.findByText(/3 USD/)).toBeInTheDocument();
+        expect(await (await payToBuy()).findByText(/3 USD/)).toBeInTheDocument();
     });
 
     it('says the coin amount is resolved when the payment lands, not now', async () => {
@@ -180,7 +187,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // and settlement divides by GIVE_AMOUNT under
         // DISPENSER_ORACLE_PER_TOKEN_PRICE), so printing the bare 1.5 here
         // under-stated what this dispenser costs by a factor of five.
-        expect(await screen.findByText(/7\.5 USD/)).toBeInTheDocument();
+        expect(await (await payToBuy()).findByText(/7\.5 USD/)).toBeInTheDocument();
         expect(messaging.oracleFeeds).toHaveBeenCalledWith({
             chainId: CHAIN, address: ORACLE_ADDRESS,
         });
@@ -190,8 +197,8 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // The oracle's own feed publishes 1.5, and a buyer who looks it up must
         // not read the panel's 7.5 as a contradiction.
         mount(ORACLE_DISPENSER, { oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS) });
-        await screen.findByText(/7\.5 USD/);
-        expect(document.body.textContent || '').toMatch(/5 XCHAIN at 1\.5 USD each/);
+        const panel = await payToBuy();
+        expect(await panel.findByText(/5 XCHAIN at 1\.5 USD each/)).toBeInTheDocument();
     });
 
     it('adds no breakdown when a fill IS one token', async () => {
@@ -200,8 +207,9 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         mount({ ...ORACLE_DISPENSER, give_amount: '1' }, {
             oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS),
         });
-        expect(await screen.findByText(/1\.5 USD/)).toBeInTheDocument();
-        expect(document.body.textContent || '').not.toMatch(/at 1\.5 USD each/);
+        const panel = await payToBuy();
+        expect(await panel.findByText(/1\.5 USD/)).toBeInTheDocument();
+        expect(panel.queryByText(/at 1\.5 USD each/)).toBeNull();
     });
 
     it('quotes the LIVE feed, never the one still maturing', async () => {
@@ -209,7 +217,7 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         // prices nothing yet. Showing it would be a price no payment made today
         // can buy at - worse than no number, because it looks like one.
         mount(ORACLE_DISPENSER, { oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS) });
-        await screen.findByText(/7\.5 USD/);
+        expect(await (await payToBuy()).findByText(/7\.5 USD/)).toBeInTheDocument();
         expect(document.body.textContent || '').not.toMatch(/9\.99/);
     });
 
@@ -246,5 +254,25 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         const text = document.body.textContent || '';
         expect(text).toMatch(/Send exactly/);
         expect(text).toMatch(/0\.1 LTC/);
+    });
+
+    it('shows the served stale-price state and says a payment would be kept', async () => {
+        mount({ ...FIAT_DISPENSER, price_stale: true });
+        expect(await screen.findByText('Not selling right now: no price in the last 24 hours'))
+            .toBeInTheDocument();
+        expect(screen.getByText(/payment made now would be refused and kept/i)).toBeInTheDocument();
+    });
+
+    it('blocks an in-wallet Buy only for an explicitly stale price', async () => {
+        mount({ ...COIN_DISPENSER, price_stale: true });
+        expect(await screen.findByRole('button', { name: 'Buy 1 fill' })).toBeDisabled();
+        cleanup();
+
+        mount({ ...COIN_DISPENSER, price_stale: false });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 fill' })).toBeEnabled());
+        cleanup();
+
+        mount(COIN_DISPENSER);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 fill' })).toBeEnabled());
     });
 });

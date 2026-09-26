@@ -9,9 +9,9 @@
 // contact legal@dankest.llc.
 
 // receiveAddress: §29.7. Derive and persist the next unused external
-// address for a wallet/account/chain/addressType tuple. Each call
-// advances the index: "fresh address per open of the Receive screen"
-// per the spec's privacy posture.
+// address for a wallet/account/chain/addressType tuple. Ordinary calls
+// advance to the lowest free index for the Receive screen's privacy
+// posture; advanced callers can request one specific free index.
 //
 // "Unused" means not held by a persisted Address record (an address that
 // has been handed out). The scan takes the LOWEST unheld index, not the
@@ -39,6 +39,16 @@ export class NoMatchingAccountError extends Error {
     }
 }
 
+export class DerivationIndexAlreadyHeldError extends Error {
+    constructor(derivationIndex) {
+        super(`Derivation index ${derivationIndex} is already held by this account.`);
+        this.name = 'DerivationIndexAlreadyHeldError';
+        this.derivationIndex = derivationIndex;
+    }
+}
+
+const MAX_DERIVATION_INDEX = 0x7fffffff;
+
 /**
  * @typedef {Object} ReceiveAddressOpts
  * @property {import('../storage/Vault.js').Vault} vault
@@ -52,6 +62,7 @@ export class NoMatchingAccountError extends Error {
  * @property {string} [accountId]               preferred: pick the Account by id
  * @property {number} [accountIndex]            fallback: pick by BIP44 index (default 0). Ignored when `accountId` is supplied.
  * @property {string} [addressType]             defaults to descriptor.defaultAddressType
+ * @property {number} [derivationIndex]         advanced: derive this external index instead of the lowest unheld index
  * @property {string} [label]                   defaults to "<TICKER> Address #N+1" (e.g. "BTC Address #2")
  */
 
@@ -71,6 +82,7 @@ export async function receiveAddress({
     accountId,
     accountIndex = 0,
     addressType,
+    derivationIndex,
     label,
 }) {
     if (!vault) throw new Error('receiveAddress: vault is required');
@@ -84,6 +96,15 @@ export async function receiveAddress({
     if (!sdkRegistry) throw new Error('receiveAddress: sdkRegistry is required');
     if (typeof chainId !== 'string' || chainId.length === 0) {
         throw new Error('receiveAddress: chainId is required');
+    }
+    if (derivationIndex !== undefined && (
+        !Number.isInteger(derivationIndex)
+        || derivationIndex < 0
+        || derivationIndex > MAX_DERIVATION_INDEX
+    )) {
+        throw new RangeError(
+            `Derivation index must be a whole number from 0 to ${MAX_DERIVATION_INDEX}.`,
+        );
     }
 
     const descriptor = chainRegistry.get(chainId);
@@ -147,6 +168,10 @@ export async function receiveAddress({
     }
     let nextIndex = 0;
     while (held.has(nextIndex)) nextIndex += 1;
+    const targetIndex = derivationIndex ?? nextIndex;
+    if (derivationIndex !== undefined && held.has(targetIndex)) {
+        throw new DerivationIndexAlreadyHeldError(targetIndex);
+    }
 
     const signer = providedSigner
         ? providedSigner
@@ -168,7 +193,7 @@ export async function receiveAddress({
             chainId,
             accountIndex: resolvedAccountIndex,
             change: 0,
-            startIndex: nextIndex,
+            startIndex: targetIndex,
             count: 1,
             addressType: type,
         });
@@ -184,7 +209,7 @@ export async function receiveAddress({
                 chainId,
                 accountIndex: resolvedAccountIndex,
                 change: 0,
-                startIndex: nextIndex,
+                startIndex: targetIndex,
                 count: 1,
                 addressType: type,
                 verify: true,
@@ -206,7 +231,7 @@ export async function receiveAddress({
             derivationPath: derived.path,
             address: derived.address,
             publicKey: derived.publicKey,
-            label: label ?? `${tickerForCoin(descriptor.coin)} Address #${nextIndex + 1}`,
+            label: label ?? `${tickerForCoin(descriptor.coin)} Address #${targetIndex + 1}`,
             signerId: signer.id,
         });
         await vault.addresses.put(record);

@@ -60,6 +60,25 @@
 //     An attribute's container is covered by the JSXAttribute case, so
 //     the content visitor skips it rather than reporting twice, which is
 //     also what keeps className={cond ? 'btn' : 'btn--ghost'} silent.
+//   - Constant tables feeding a sink: when one of those attributes, or a
+//     JSX-content container, holds an identifier or member access rooted
+//     at a module-scope `const NAME = { … }` / `[ … ]` in the same file,
+//     the string values that access can reach are judged at their own
+//     location:  const HINT = { flat: 'One vote' };  hint={HINT[mode]}
+//     → 'One vote' flagged. Static member keys narrow the reach
+//     (`T.file` judges only `file`), a computed key reaches every entry,
+//     and only string-shaped values count, so an id or a nested object
+//     beside the copy stays silent. A table no sink reads is never judged.
+//
+// What the rule cannot see, so a clean run is not proof a screen has no
+// untranslated copy:
+//
+//   - Tables imported from another module, e.g. a `*Copy.js` file
+//     consumed as hint={RESTORE_PASSWORD_HINTS.file}.
+//   - Copy returned by a helper call, or built inside a component (a
+//     descriptor array that is filtered and mapped before it renders).
+//   - Descriptor keys outside USER_FACING_ATTRS, such as `summary` or
+//     `description`, wherever the copy is written.
 //
 // What the rule allows:
 //
@@ -78,9 +97,16 @@
 //     `aria-label`, `aria-description`, `aria-roledescription` and
 //     `aria-valuetext` stay checked while `aria-labelledby`,
 //     `aria-hidden` and the rest do not).
-//   - Files matching `ignoreFiles` glob list (defaults exclude
-//     `*.smoke.js`, `test/**`, `*.test.js`, `*.test.jsx`,
-//     `tools/**`, `claude/**`).
+//   - Files whose full path matches DEFAULT_IGNORE_FILES (a name ending
+//     `.smoke.js` or `.test.js` / `.jsx` / `.ts` / `.tsx`, or a path
+//     through a `/test/`, `/tools/`, `/claude/`, `/dist/` or
+//     `/node_modules/` directory) or an `ignoreFiles` entry. Each entry
+//     is a regular-expression source (or a RegExp) tested against the
+//     absolute filename ESLint passes, so anchor on a directory, not the
+//     repo root: `ignoreFiles: ['/src/legacy/']`. Glob notation such as
+//     `src/legacy/**` or `src/*.jsx` is refused with an error naming the
+//     entry, because as a regex it either fails to compile or repeats
+//     the slash and skips the wrong files.
 //
 // To opt out at a specific call site, use the standard ESLint disable
 // comment:
@@ -301,8 +327,33 @@ function branchCopy(node, allow = [], minLength = 2) {
  */
 export function shouldSkipFile(filename, extra = []) {
     if (typeof filename !== 'string') return true;
-    const all = [...DEFAULT_IGNORE_FILES, ...extra.map((p) => p instanceof RegExp ? p : new RegExp(p))];
+    const all = [...DEFAULT_IGNORE_FILES, ...extra.map(ignorePattern)];
     return all.some((re) => re.test(filename));
+}
+
+/**
+ * Compile one `ignoreFiles` entry, refusing glob notation by name.
+ *
+ * An unescaped `/*` compiles but repeats the slash (`src/*.jsx` skips
+ * the wrong files), and `**` or a leading `*` does not compile at all;
+ * either way the author meant a glob, so say what the option takes.
+ *
+ * @param {RegExp | string} entry
+ * @returns {RegExp}
+ */
+function ignorePattern(entry) {
+    if (entry instanceof RegExp) return entry;
+    const source = String(entry);
+    const refuse = () => new Error(
+        `no-jsx-literal-strings: ignoreFiles entry "${source}" is not a regular-expression source; `
+        + 'ignoreFiles takes regex sources tested against the full filename (e.g. "/src/legacy/"), not globs',
+    );
+    if (/(^|[^\\])\/\*/.test(source)) throw refuse();
+    try {
+        return new RegExp(source);
+    } catch {
+        throw refuse();
+    }
 }
 
 /**
@@ -354,6 +405,90 @@ export function propDefaultViolations(pattern, allow = [], minLength = 2) {
 }
 
 /**
+ * Map each module-scope `const NAME = { … } | [ … ]` in a Program to its
+ * initializer. Any other root yields an empty map, so a gate fed by it
+ * judges nothing.
+ *
+ * @param {object} program
+ * @returns {Map<string, object>}
+ */
+function constTables(program) {
+    const tables = new Map();
+    if (program?.type !== 'Program') return tables;
+    for (const stmt of program.body ?? []) {
+        const decl = stmt?.type === 'ExportNamedDeclaration' ? stmt.declaration : stmt;
+        if (decl?.type !== 'VariableDeclaration' || decl.kind !== 'const') continue;
+        for (const d of decl.declarations ?? []) {
+            const init = d?.init;
+            if (d?.id?.type === 'Identifier'
+                && (init?.type === 'ObjectExpression' || init?.type === 'ArrayExpression')) {
+                tables.set(d.id.name, init);
+            }
+        }
+    }
+    return tables;
+}
+
+/** Name a member access's static key, or null when it is computed from a value. */
+function memberKey(member) {
+    if (!member.computed) return member.property?.name ?? null;
+    return member.property?.type === 'Literal' ? String(member.property.value) : null;
+}
+
+/** Return the values under `node` that `key` reaches (null reaches every entry). */
+function tableEntries(node, key) {
+    if (node?.type === 'ArrayExpression') {
+        return key === null ? (node.elements ?? []).filter(Boolean) : [];
+    }
+    if (node?.type !== 'ObjectExpression') return [];
+    return (node.properties ?? [])
+        .filter((p) => (p?.type === 'Property' || p?.type === 'ObjectProperty')
+            && (key === null || (!p.computed && (p.key?.name ?? String(p.key?.value)) === key)))
+        .map((p) => p.value);
+}
+
+/**
+ * Return the violations a sink value reaches through a constant table:
+ * `hint={HINTS[mode]}` judges every entry of HINTS, `hint={HINTS.file}`
+ * only `file`. Each table value is judged once per file, however many
+ * sinks read it, so `judged` carries across calls.
+ *
+ * @param {object} expr        the sink's expression
+ * @param {string} sink        attribute name, or 'JSX content'
+ * @param {Map<string, object>} tables
+ * @param {Set<object>} judged
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {Array<{ node: object, message: string }>}
+ */
+function tableViolations(expr, sink, tables, judged, allow = [], minLength = 2) {
+    const path = [];
+    let root = expr;
+    while (root?.type === 'MemberExpression') {
+        path.unshift(memberKey(root));
+        root = root.object;
+    }
+    if (root?.type !== 'Identifier' || !tables.has(root.name)) return [];
+    let values = [tables.get(root.name)];
+    for (const key of path) values = values.flatMap((n) => tableEntries(n, key));
+    const out = [];
+    for (const value of values) {
+        if (judged.has(value)) continue;
+        judged.add(value);
+        const copy = value?.type === 'Literal' && typeof value.value === 'string'
+            ? (isTrivialString(value.value, allow, minLength) ? null : value.value)
+            : templateCopy(value, allow, minLength) ?? branchCopy(value, allow, minLength);
+        if (copy !== null) {
+            out.push({
+                node: value,
+                message: `Table copy "${truncate(copy)}" reaches ${sink} via ${root.name} and should use t('key').`,
+            });
+        }
+    }
+    return out;
+}
+
+/**
  * Top-level dispatch: given an AST node + filename, return the list
  * of violations { node, message }. The rule wraps this in an ESLint
  * `create()` and reports each violation through context.report.
@@ -361,6 +496,8 @@ export function propDefaultViolations(pattern, allow = [], minLength = 2) {
 export function findViolations(node, options = {}) {
     const { allow = [], minLength = 2 } = options;
     const out = [];
+    const tables = constTables(node);
+    const judged = new Set();
 
     function visit(n) {
         if (!n || typeof n !== 'object') return;
@@ -411,6 +548,7 @@ export function findViolations(node, options = {}) {
                             message: `Inline ${attrName} branch copy "${truncate(copy)}" should use t('key').`,
                         });
                     }
+                    out.push(...tableViolations(v.expression, attrName, tables, judged, allow, minLength));
                 }
             }
             // Descend once, and enter an expression container at its
@@ -461,6 +599,7 @@ export function findViolations(node, options = {}) {
                         message: `Inline JSX branch copy "${truncate(fromBranch)}" should use t('key').`,
                     });
                 }
+                out.push(...tableViolations(n.expression, 'JSX content', tables, judged, allow, minLength));
             }
             // Fall through to the generic recursion rather than returning:
             // a branch can hold JSX of its own, e.g. {cond ? <p>Hi</p> :
@@ -514,8 +653,17 @@ function create(context) {
     const minLength = options.minLength ?? 2;
     const filename = context.getFilename ? context.getFilename() : context.filename;
     if (shouldSkipFile(filename, options.ignoreFiles ?? [])) return {};
+    // Constant tables a sink reads: same shared judge as findViolations.
+    let tables = new Map();
+    const judged = new Set();
+    const reportTables = (expr, sink) => {
+        for (const v of tableViolations(expr, sink, tables, judged, allow, minLength)) context.report(v);
+    };
 
     return {
+        Program(node) {
+            tables = constTables(node);
+        },
         JSXText(node) {
             if (!isTrivialString(node.value, allow, minLength)) {
                 context.report({ node, message: 'Inline JSX text should be moved to the i18n dictionary' });
@@ -550,6 +698,7 @@ function create(context) {
                 && branchCopy(v.expression, allow, minLength) !== null) {
                 context.report({ node: v.expression, message: `Inline ${attrName} branch copy should use t('key')` });
             }
+            if (v?.type === 'JSXExpressionContainer') reportTables(v.expression, attrName);
         },
         JSXExpressionContainer(node) {
             // Only JSX *content* containers: an attribute's container is
@@ -575,6 +724,7 @@ function create(context) {
             if (branchCopy(expr, allow, minLength) !== null) {
                 context.report({ node: expr, message: "Inline JSX branch copy should use t('key')" });
             }
+            reportTables(expr, 'JSX content');
         },
         ObjectPattern(node) {
             // Prop defaults such as `{ label = 'Copy' }`: same shared

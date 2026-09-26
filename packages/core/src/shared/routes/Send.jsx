@@ -134,6 +134,7 @@ import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
     countNonCommaBefore,
@@ -595,15 +596,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     //     to it from any of the wallet's addresses on this chain)
     //   - user hasn't already acknowledged this address in the session
     const testSendGate = useMemo(() => {
-        const threshold = Number(settings?.grace?.testSendThresholdSats) || 0;
-        if (threshold <= 0) return null;
+        const thresholdText = String(settings?.grace?.testSendThresholdSats ?? '0').trim();
+        const threshold = /^\d+$/.test(thresholdText) ? BigInt(thresholdText) : 0n;
+        if (threshold <= 0n) return null;
         const dest = toAddress.trim();
         if (!dest) return null;
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
         if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
-        const amountSats = exactSatsFromDecimalString(amount);
-        if (amountSats === null || amountSats <= 0) return null;
+        const amountSats = exactSatsBigIntFromDecimalString(amount);
+        if (amountSats === null || amountSats <= 0n) return null;
         if (amountSats <= threshold) return null;
         const novelty = checkRecipientNovelty({
             address: dest,
@@ -704,7 +706,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const floor = dustThresholdForCoin(desc?.coin);
         if (!floor) return null;
-        const sats = exactSatsFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount);
         if (sats === null || sats <= 0 || sats >= floor) return null;
         const ticker = nativeTickerFor(desc) || tick.trim().toUpperCase();
         const minimum = decimalStringFromSats(BigInt(floor));
@@ -1019,6 +1021,30 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         ? `${tick.trim().toUpperCase()} has token-gated content, and each recipient needs their own `
           + 'unlock-key handoff. Send this token to one recipient at a time.'
         : null;
+
+    // A matching coin or token payment to an open dispenser is a purchase, and
+    // a refused payment keeps the sent asset. Show that above the credentials.
+    const dispensersAtDestination = useDispenserDestination({
+        messaging,
+        chainId,
+        to: toAddress,
+        paymentTick: tick,
+        isNativePayment: isNativeSend,
+        enabled: !isMultiSend,
+    });
+    const dispenserNotice = useMemo(() => dispenserDestinationNotice({
+        dispensers: dispensersAtDestination, payer: fromAddress?.address, amount: String(amount).trim(),
+    }), [dispensersAtDestination, fromAddress?.address, amount]);
+    const dispenserNoticeBlock = dispenserNotice ? (
+        <div data-testid="send-dispenser-notice">
+            <StatusMessage variant="status">{dispenserNotice.summary}</StatusMessage>
+            {dispenserNotice.warnings.length > 0 ? (
+                <div role="alert" className={styles.warnings}>
+                    {dispenserNotice.warnings.map((w) => <p key={w} className={styles.warning}>{w}</p>)}
+                </div>
+            ) : null}
+        </div>
+    ) : null;
 
     async function handleGatedScan(event) {
         event.preventDefault();
@@ -1454,11 +1480,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
-        const sats = exactSatsFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount);
         const isNativeSend = !!nativeTicker
             && tick.trim().toUpperCase() === nativeTicker
-            && sats !== null && sats > 0;
-        const amountSats = isNativeSend ? sats : 0;
+            && sats !== null && sats > 0n;
+        const amountSats = isNativeSend ? sats : 0n;
         let recipientNovel = false;
         // PC-52: ANY never-seen recipient makes the send novel, not just the
         // first row. The cross-check exists so a hardware user verifies an
@@ -1478,7 +1504,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             recipientNovel,
             multisig: false, // Send.jsx is single-sig; multisig flow is separate.
             settings: {
-                testSendThresholdSats: Number(settings?.grace?.testSendThresholdSats) || 0,
+                testSendThresholdSats: settings?.grace?.testSendThresholdSats ?? '0',
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });
@@ -1849,6 +1875,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 getSignerStatus={messaging.getSignerStatus}
                 hwRequireExplicitConfirm={signRisk.requireExplicitConfirm}
                 hwRequireExplicitConfirmReason={signRisk.reason}
+                extraCredentials={dispenserNoticeBlock}
                 onHwConfirmedChange={setHwExplicitConfirmed}
                 hwExplicitConfirmed={hwExplicitConfirmed}
             />
@@ -2014,6 +2041,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return wrap(
             <form id="send-review-form" onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>{decoded?.summary}</p>
+                {dispenserNoticeBlock}
                 <BalanceChanges
                     result={previewResult}
                     loading={previewBalances.loading}
@@ -2741,4 +2769,3 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
         </div>
     );
 }
-

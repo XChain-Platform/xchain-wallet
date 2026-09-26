@@ -37,12 +37,10 @@
 // implements, both windows send an XChain TOKEN (XCHAIN, free-mintable on
 // regtest), which has a pre-flight and a reservable delta.
 
+import { createWallet, gotoSection, mainButton } from '../../fixtures/wallet.js';
+import { expect, openSecondPopup, test } from '../../fixtures/extension.js';
 import {
-    } from '../../fixtures/wallet.js';,
-    createWallet, gotoSection, mainButton,
     expectConfirmModal,
-    import {,
-    import { expect, openSecondPopup, test } from '../../fixtures/extension.js';,
     REGTEST_DESTINATION, fundAddress, minerRpc, mintXchain, readReceiveAddress,
     switchToRegtest, unlockAfterReload, waitForTokenBalance,
 } from '../../fixtures/regtest.js';

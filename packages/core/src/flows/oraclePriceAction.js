@@ -100,8 +100,8 @@ export async function oraclePriceAction(opts) {
         encoderOpts: {
             pubkey: source.publicKey,
             // Name the funding ADDRESS, not just its public key. Two separate
-            // things read it, and this form is on the legacy sign path where
-            // both run live rather than against a prebuilt PSBT:
+            // things read it whenever this flow composes live, i.e. a caller
+            // that passes no prebuiltPsbt from the confirm page:
             //   - the native-coin fee pre-flight, which passes it to the
             //     indexer as the quoted action's SOURCE. Without it the PRICE
             //     dry run has no source to write and answers `valid:false`
@@ -129,5 +129,6 @@ export async function oraclePriceAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

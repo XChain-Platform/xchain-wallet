@@ -664,6 +664,17 @@ const check = (over) => assertRecord({
             `${lane.id} must report as named-but-unrehearsed, not as unnamed`);
     }
 
+    // Hold the release README's status list to the same answer.
+    if (LANES.every((lane) => lane.device)) {
+        const readme = readFileSync(join(root, 'tools/release/README.md'), 'utf8');
+        for (const stale of [/blocked on DD4 for [a-z]+ of/i, /only lane with hardware/i]) {
+            assert.doesNotMatch(readme, stale,
+                'tools/release/README.md says DD4 still blocks lanes, but every lane in '
+                + 'rehearsal-matrix.mjs names a device. Re-state the README status bullet from the '
+                + 'matrix rather than editing this assertion.');
+        }
+    }
+
     // And naming must NOT read as rehearsing. Every lane is named, none has an
     // observed swap, so coverage still fails and still says why: the two are
     // different blockers with different owners (a device is DD4's; an observed

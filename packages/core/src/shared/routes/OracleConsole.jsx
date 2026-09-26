@@ -280,7 +280,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     </p>
                     {result.queued ? null : (
                         <dl className={styles.detailsList}>
-                            <dt className={styles.detailsLabel}>Txid</dt>
+                            <dt className={styles.detailsLabel}>Transaction ID</dt>
                             <dd className={styles.detailsValue}>{String(result.txid || 'n/a')}</dd>
                         </dl>
                     )}

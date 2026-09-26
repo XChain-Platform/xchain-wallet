@@ -97,7 +97,7 @@ test.describe('Settings: wallet mode', () => {
                 // Unlocked BY HAND rather than through `unlockAfterReload`,
                 // and this is a fixture limitation worth knowing before writing
                 // any other signer-mode spec: that helper waits for
-                // `unlockedShell`, which is the "Total balance" region - and a
+                // `unlockedShell`, which is the "Active address balance" region - and a
                 // signer-mode Home deliberately renders no balance at all. The
                 // helper therefore cannot return on the very mode whose whole
                 // point is that the balance surface is gone.

@@ -193,4 +193,32 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
         fireEvent.click(screen.getByText('Raw'));
         expect(view.container.textContent).toContain('Peer ·');
     });
+
+    it('labels an oracle-priced zero in Details without changing Raw', () => {
+        const raw = {
+            action: 'DISPENSER', get_amount: '0', fiat_code: 'USD',
+            oracle_address: 'bc1qoracleoracleoracleoracleoracleoracle',
+        };
+        const { view } = renderCard(confirmedEntry({ action: 'DISPENSER', raw }));
+        fireEvent.click(screen.getByText('Details'));
+        const label = screen.getByRole('rowheader', { name: 'get_amount' });
+        expect(label.closest('tr').querySelector('td').textContent)
+            .toBe('0 (protocol placeholder; price set by oracle)');
+
+        fireEvent.click(screen.getByText('Raw'));
+        expect(view.container.querySelector('pre').textContent).toContain('"get_amount": "0"');
+        expect(view.container.querySelector('pre').textContent).not.toContain('protocol placeholder');
+    });
+
+    it('labels zero allow and block lists as none in History details', () => {
+        const raw = { action: 'ORDER', allow_list: '0', block_list: 0 };
+        const { view } = renderCard(confirmedEntry({ action: 'ORDER', raw }));
+        fireEvent.click(screen.getByText('Details'));
+
+        for (const key of ['allow_list', 'block_list']) {
+            const label = screen.getByRole('rowheader', { name: key });
+            expect(label.closest('tr').querySelector('td').textContent).toBe('none');
+        }
+        expect(view.container.textContent).not.toMatch(/list #0/i);
+    });
 });

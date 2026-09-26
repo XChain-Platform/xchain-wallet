@@ -462,7 +462,7 @@ export function checkReachabilityRequest(opts) {
  * §30.4 / G088: read-only PSBT decompose for the paste-in form preview.
  *
  * @param {{ chainId: string, psbtHex: string }} opts
- * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt }>}
+ * @returns {Promise<import('@xchain-wallet/extension/src/background/createBackgroundHost.js').ParsedPsbtResult>}
  */
 export function parsePsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));
@@ -551,6 +551,16 @@ export function dryRunRestoreRequest(opts) {
 }
 
 /**
+ * Prepare the encrypted label FILE payload and resolve its funding address.
+ * The caller sends this result through the shared confirmation lane.
+ *
+ * @param {{ walletId: string, password: string, chainId: string }} opts
+ */
+export function prepareLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.prepareLabels', opts));
+}
+
+/**
  * §19.5.2 / G037: manual on-chain label publish. Encrypts the wallet's
  * labels + contacts and broadcasts the ciphertext as a FILE action on
  * the chosen chain.
@@ -575,6 +585,17 @@ export function labelSyncStatusRequest() {
 /** Dismiss the pending auto-sync prompt for this unlock window. */
 export function labelSyncDismissRequest() {
     return /** @type {any} */ (sendMessage('wallet.labelSyncDismiss', {}));
+}
+
+/**
+ * §19.5.2 restore, on-demand half: the Backup panel's "Check chain for
+ * backed-up contacts" button. Fetches + decrypts this wallet's published
+ * labels FILE on one chain and merges anything found into the vault.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, bip39Passphrase?: string }} opts
+ */
+export function restoreLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.restoreLabels', opts));
 }
 
 /**
@@ -609,7 +630,7 @@ export function importBackupPointerRequest(opts) {
  * §48.3 / G149: runtime chain activation.
  *
  * @param {{ walletId: string, chainId: string, password: string, bip39Passphrase?: string, signerId?: string | null }} opts
- * @returns {Promise<{ chainId: string, addresses: Array<{ accountId: string, address: any }>, skippedAccounts: number }>}
+ * @returns {Promise<{ chainId: string, addresses: Array<{ accountId: string, address: any }>, skippedAccounts: number, skippedAccountDetails: Array<{ accountId: string, name: string }> }>}
  */
 export function activateChainRequest(opts) {
     return /** @type {any} */ (sendMessage('wallet.activateChain', opts));
@@ -752,6 +773,11 @@ export function sweepTokenHw(opts) {
 /** @param {{ chainId: string, address: string }} req PC-34: indicative preview of what a SWEEP would move */
 export function sweepPreview(req) {
     return /** @type {any} */ (sendMessage('sweep.preview', req));
+}
+
+/** @param {{ chainId: string, address: string }} req Home: per-tick escrow in this address's own open offers */
+export function getEscrowedTokens(req) {
+    return /** @type {any} */ (sendMessage('balances.escrowed', req));
 }
 
 /** @param {{ fromWalletId: string, toWalletId: string, chainId?: string }} req PC-34 migrate gate: re-scope stored gated keys to the target wallet (counts only) */
@@ -1207,6 +1233,14 @@ export function cancelMarketActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.cancelMarket.hw', opts));
 }
 
+/**
+ * Compose a BET action through the allow-listed sdk.betting.*Params builder
+ * host-side, so the confirm page previews the wire params the encoder will see.
+ * Resolves with the same envelope as composeForConfirm plus those params.
+ *
+ * @param {object} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { betParams: object }>}
+ */
 export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
 }
@@ -1323,6 +1357,16 @@ export function getChainTipBlockTime(req) {
 /** @param {object} req */
 export function createMultisigConfig(req) {
     return /** @type {any} */ (sendMessage('multisig.create', req));
+}
+
+/**
+ * §22.2 cosigner fields for one of the wallet's own addresses: master
+ * fingerprint, account xpub, derivation path and pubkey. Public data only.
+ *
+ * @param {{ walletId: string, addressId: string }} req
+ */
+export function getMultisigCosignerInfo(req) {
+    return /** @type {any} */ (sendMessage('multisig.cosignerInfo', req));
 }
 
 // §22 / P4 passive co-signer (agent account) management.
@@ -1536,6 +1580,11 @@ export function gatedPublishActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.hw', opts));
 }
 
+/** @param {object} opts gated publish compose for the shared confirm page */
+export function composeGatedPublishForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish.composeForConfirm', opts));
+}
+
 /** @param {object} opts watcher-mode encode-only gated publish */
 export function buildGatedPublishPsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.psbt', opts));
@@ -1689,20 +1738,33 @@ export function signerReady(opts) { return /** @type {any} */ (sendMessage('wall
 // §41.7.3 Compose
 /** @param {object} opts */
 export function messageAction(opts) { return /** @type {any} */ (sendMessage('action.message', opts)); }
-/** §5.6 slice 3: encrypt host-side, then compose the one PSBT over that ciphertext. */
-// Compose a VOTE through the SDK's own sdk.voting.*Params builder
-// host-side, so the confirm page previews the wire params the encoder will
-// actually see instead of a client-side mirror of that encoding.
 // Switch network AND derive the first address on each of its chains,
 // so a switch cannot leave the wallet with no addresses and no way to make one.
 export function setActiveNetwork(opts) {
     return /** @type {any} */ (sendMessage('settings.setActiveNetwork', opts));
 }
 
+/**
+ * Compose a VOTE through the SDK's own sdk.voting.*Params builder
+ * host-side, so the confirm page previews the wire params the encoder will
+ * actually see instead of a client-side mirror of that encoding. Resolves with
+ * the same envelope as composeForConfirm plus the params the encoder saw.
+ *
+ * @param {object} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { voteParams: object }>}
+ */
 export function composeVoteForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.vote.composeForConfirm', opts));
 }
 
+/**
+ * §5.6 slice 3: encrypt host-side, then compose the one PSBT over that
+ * ciphertext (MESSAGE params cannot be built client-side). Resolves with the
+ * same envelope as composeForConfirm plus the params the encoder saw.
+ *
+ * @param {object} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { messageParams: object }>}
+ */
 export function composeMessageForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.message.composeForConfirm', opts));
 }

@@ -10,14 +10,20 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
-import { flows as flowsLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { readMsgRead, writeMsgRead, writeMsgUnread } from '../utils/msgReadMemory.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * §41.7.2 Messaging inbox, scoped to the active account.
@@ -51,9 +57,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
-    // Whether the session can sign without a per-action password. Drives the
-    // inline "Share my key" reply to an encrypted-session request: ready means
-    // send straight away, otherwise the row asks for the wallet password.
+    // Whether the session can sign without a per-action password. The shared
+    // confirmation screen uses this to either show the unlocked note or ask
+    // for the wallet password before sharing a key.
     const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -638,6 +644,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     signerReady={signerReady}
                                     messaging={messaging}
                                     walletId={walletId}
+                                    variant={variant}
                                     contactName={contactsByAddress[r.from]}
                                     onMessage={onCompose ? () => onCompose({
                                         chainId: record.chainId,
@@ -766,56 +773,88 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * @param {boolean} props.signerReady
  * @param {any} props.messaging
  * @param {string} props.walletId
+ * @param {'small'|'full'} props.variant
  * @param {string} [props.contactName]
  * @param {(() => void) | null} [props.onMessage]
  */
-function SessionRequestRow({ request, record, signerReady, messaging, walletId, contactName, onMessage }) {
-    const [stage, setStage] = useState(/** @type {'idle' | 'auth' | 'sending' | 'sent'} */ ('idle'));
-    const [password, setPassword] = useState('');
+function SessionRequestRow({ request, record, signerReady, messaging, walletId, variant, contactName, onMessage }) {
+    const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+    const lane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId: record.chainId,
+        owner: record,
+        software: 'sendHandshake',
+        hardware: 'sendHandshakeHw',
+    });
 
-    async function share(pw) {
+    async function share() {
         setStage('sending');
         setError(null);
         try {
-            await messaging.sendHandshake({
-                walletId,
+            const { actionData } = flowsLib.buildHandshakeActionData({
+                chainRegistry,
                 chainId: record.chainId,
-                from: {
-                    address: record.address,
-                    publicKey: record.publicKey,
-                    derivationPath: record.derivationPath,
-                    addressId: record.id,
-                    source: record.source,
-                    signerId: record.signerId,
-                },
+                from: record,
                 destination: request.from,
                 version: 1,
-                password: pw,
             });
+            const result = await lane.run({
+                actionData,
+                submitExtra: { destination: request.from, version: 1 },
+            });
+            if (lane.isWatcherMode) {
+                setWatcherResult(result);
+                setStage('idle');
+                return;
+            }
             setStage('sent');
-            setPassword('');
         } catch (err) {
+            if (isUserRejection(err)) {
+                setStage('idle');
+                return;
+            }
             const name = err?.name;
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
                 setError('Incorrect password.');
             } else {
                 setError(err?.message || 'Could not share your key.');
             }
-            // Drop back to the form the user came from so they can retry.
-            setStage(signerReady ? 'idle' : 'auth');
+            setStage('idle');
         }
     }
 
     function handleShare() {
-        if (signerReady) { share(''); return; }
-        setStage('auth');
+        share();
     }
 
-    function handleAuthSubmit(event) {
-        event.preventDefault();
-        if (password.length === 0) return;
-        share(password);
+    if (lane.open) {
+        const descriptor = chainRegistry.get(record.chainId);
+        return (
+            <li className={local.requestRow}>
+                <ActionConfirmScreen
+                    {...lane.confirmProps}
+                    screenVariant={variant}
+                    chainLabel={descriptor?.displayName || record.chainId}
+                    signerReady={signerReady}
+                    hintClassName={styles.hint}
+                />
+            </li>
+        );
+    }
+
+    if (watcherResult) {
+        return (
+            <li className={local.requestRow}>
+                <WatcherResultPanel
+                    result={watcherResult}
+                    onBuildAnother={() => setWatcherResult(null)}
+                    onDone={() => setWatcherResult(null)}
+                />
+            </li>
+        );
     }
 
     return (
@@ -827,22 +866,6 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
                 <p className={local.requestSent} role="status">
                     ✓ Key shared. They can now send you encrypted messages.
                 </p>
-            ) : stage === 'auth' ? (
-                <form onSubmit={handleAuthSubmit} className={local.requestAuth} noValidate>
-                    <Input
-                        type="password"
-                        label="Wallet password"
-                        value={password}
-                        onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
-                        autoComplete="current-password"
-                        aria-invalid={error ? true : undefined}
-                    />
-                    <div className={local.requestActions}>
-                        <Button type="submit" variant="primary" disabled={password.length === 0}>
-                            Share my key
-                        </Button>
-                    </div>
-                </form>
             ) : (
                 <div className={local.requestActions}>
                     <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>

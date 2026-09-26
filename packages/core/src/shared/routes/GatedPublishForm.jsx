@@ -22,6 +22,8 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -33,7 +35,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * ONE atomic transaction, BATCH(FILE with GATE_TICKER/KEY_HASH,
  * MESSAGE v2 to self carrying ECIES(0x01||K)), so the ciphertext
  * never exists on-chain without its key. K is persisted in this
- * wallet's vault before anything broadcasts (flows/gatedPublishAction).
+ * wallet's vault after the transaction broadcasts (flows/gatedPublishAction).
  *
  * Signer coverage (§5): compose is HW-safe (ECIES needs only the
  * issuer's pubkey) and watcher mode gets the encode-only PSBT path.
@@ -139,6 +141,17 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     }, [addressesByChain, chainId, issuerAddress]);
     const ownerMissing = !!(addressesByChain && issuerAddress && !fromAddress);
     const hw = isHwSource(fromAddress);
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const passwordValueRef = useRef('');
+    passwordValueRef.current = password;
+    const submitConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: hw,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'gatedPublishAction',
+        hardware: 'gatedPublishActionHw',
+    });
 
     // Network fee: same Low/Normal/Fast/Custom row as AttachContentForm.
     const [feePick, setFeePick] = useState(
@@ -240,6 +253,38 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         setStage('review');
     }
 
+    function publishRequest() {
+        // Latin-1 binary string; the flow rebuilds the exact bytes via
+        // Buffer.from(plainData, 'binary') before encrypting.
+        let plainData = '';
+        for (let i = 0; i < fileMeta.bytes.length; i += 1) {
+            plainData += String.fromCharCode(fileMeta.bytes[i]);
+        }
+        return {
+            walletId,
+            chainId,
+            from: {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            },
+            gateTicker: tick,
+            name: fileMeta.name,
+            type: fileMeta.type,
+            title: title.trim() || undefined,
+            memo: memo.trim() || undefined,
+            plainData,
+            ...(packChoice !== 'new' ? { existingKeyHash: packChoice } : {}),
+            ...(thresholdActive && gateMinAmount.trim()
+                ? { gateMinAmount: gateMinAmount.trim() }
+                : {}),
+            ...(feePerKb != null ? { feePerKb } : {}),
+        };
+    }
+
     async function handleSubmit(event) {
         event.preventDefault();
         if (!fileMeta || !fromAddress || stage === 'submitting') return;
@@ -248,47 +293,28 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         setStage('submitting');
         setSubmitError(null);
         try {
-            // Latin-1 binary string; the flow rebuilds the exact bytes via
-            // Buffer.from(plainData, 'binary') before encrypting.
-            let plainData = '';
-            for (let i = 0; i < fileMeta.bytes.length; i += 1) {
-                plainData += String.fromCharCode(fileMeta.bytes[i]);
-            }
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
-                gateTicker: tick,
-                name: fileMeta.name,
-                type: fileMeta.type,
-                title: title.trim() || undefined,
-                memo: memo.trim() || undefined,
-                plainData,
-                ...(packChoice !== 'new' ? { existingKeyHash: packChoice } : {}),
-                ...(thresholdActive && gateMinAmount.trim()
-                    ? { gateMinAmount: gateMinAmount.trim() }
-                    : {}),
-                ...(feePerKb != null ? { feePerKb } : {}),
-            };
+            const base = publishRequest();
             let r;
             if (isWatcherMode) {
                 r = await messaging.buildGatedPublishPsbtRequest(base);
-            } else if (hw) {
-                r = await messaging.gatedPublishActionHw({ ...base, signerId: fromAddress.signerId });
             } else {
-                r = await messaging.gatedPublishAction({ ...base, password });
+                r = await actionConfirm.run({
+                    chainId,
+                    from: base.from,
+                    compose: () => messaging.composeGatedPublishForConfirm(base),
+                    onApprove: (prebuiltPsbt, composed) => submitConfirmed({
+                        ...base,
+                        prebuiltPsbt,
+                        prebuiltActionData: composed.gatedPublish.actionData,
+                        prebuiltKeyHash: composed.gatedPublish.keyHash,
+                        prebuiltCiphertextLength: composed.gatedPublish.ciphertextLength,
+                    }),
+                });
             }
             setResult(r);
-            setPassword('');
             setStage('done');
         } catch (err) {
+            if (isUserRejection(err)) { setStage('review'); return; }
             const bad = err?.name === 'InvalidPasswordError';
             setSubmitError(bad ? 'Incorrect password.' : submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || 'Publish failed.',
@@ -298,6 +324,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            setPassword('');
         }
     }
 
@@ -315,6 +343,29 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    }
+
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
+                coinTicker={coinTicker}
+                signerReady={signerReady}
+                password={password}
+                onPasswordChange={setPassword}
+                hwSource={hw ? fromAddress : null}
+                hwStatus={hwStatus}
+                onHwStatusChange={({ status }) => setHwStatus(status)}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                hintClassName={styles.hint}
+            />
+        );
     }
 
     if (stage === 'done') {
@@ -574,7 +625,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
 
             <div className={styles.actions}>
-                <Button type="submit" variant="primary" disabled={ownerMissing || !fileMeta}>
+                <Button type="submit" variant="primary">
                     Review
                 </Button>
             </div>

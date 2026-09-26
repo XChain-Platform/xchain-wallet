@@ -332,6 +332,47 @@ describe('useConfirmAction', () => {
         await act(async () => { result.current.reject(); await p; });
     });
 
+    it('interrupts signing when a stale re-check returns an unclassified consensus refusal', async () => {
+        const initial = {
+            verdict: 'fail',
+            findings: [{
+                code: 'DRYRUN_INVALID', severity: 'error', source: 'dryrun', overridable: true,
+                message: 'The network returned an unknown rejection.', data: { status: 'rejected' },
+            }],
+            unverified: [],
+        };
+        const refusal = {
+            verdict: 'fail',
+            findings: [{
+                code: 'DRYRUN_INVALID', severity: 'error', source: 'dryrun',
+                message: 'The network reports this will fail: invalid: key handoff required.',
+                data: { status: 'invalid: key handoff required', error: null },
+            }],
+            unverified: [],
+        };
+        const preflight = vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(refusal);
+        const onApprove = vi.fn(async () => 'sent');
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+        const { result } = renderHook(() => useConfirmAction());
+        let p, out;
+        await act(async () => {
+            p = settle(result.current.confirm({
+                compose: async () => COMPOSED, onApprove, chainId: 'btc', preflight,
+            }));
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        await act(async () => { result.current.acknowledge('DRYRUN_INVALID'); });
+        expect(result.current.canApprove).toBe(true);
+
+        now.mockReturnValue(32_000);
+        await act(async () => { out = await result.current.approve({}); });
+        expect(out).toMatchObject({ interrupted: true, reason: 'findings-changed' });
+        expect(onApprove).not.toHaveBeenCalled();
+        expect(result.current.canApprove).toBe(false);
+        now.mockRestore();
+        await act(async () => { result.current.reject(); await p; });
+    });
+
     // §4.6 input liveness. The half of the Approve-time re-check that
     // was specified in v3 and never built: the pre-flight verdict was re-run,
     // the held PSBT's inputs never were.

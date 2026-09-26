@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -38,6 +38,8 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
+import { compareAmounts } from '../../market/orderMath.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -83,9 +85,21 @@ function extractRows(resp) {
  * @param {string} props.chainId
  * @param {string|number} props.contractActionIndex - target contract being staked TO
  * @param {'stake'|'unstake'|'delegate'} [props.initialMode] - preselect the action radio (e.g. a staking position's Unstake quick action)
+ * @param {string} [props.initialTick] - preseed the token field from a staking position (xchain-wallet#34); falls back to 'XCHAIN' when absent
+ * @param {string} [props.initialSigningPubkey] - preseed the signing pubkey field from a staking position (xchain-wallet#34); falls back to blank when absent
+ * @param {string} [props.initialFromAddress] - preseed From with this address when it is one of the wallet's own addresses on `chainId` (xchain-wallet#34); falls back to the chain's active/newest address like every other spend-from-balance form
  * @param {() => void} props.onBack
  */
-export function ContractStakeForm({ walletId, chainId, contractActionIndex, initialMode, onBack }) {
+export function ContractStakeForm({
+    walletId,
+    chainId,
+    contractActionIndex,
+    initialMode,
+    initialTick,
+    initialSigningPubkey,
+    initialFromAddress,
+    onBack,
+}) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -104,8 +118,11 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
     // stake, the most common operation)
     const [mode, setMode] = useState(/** @type {'stake'|'unstake'|'delegate'} */ (initialMode || 'stake'));
     const [amount, setAmount] = useState('');
-    const [signingPubkey, setSigningPubkey] = useState('');
-    const [tick, setTick] = useState('XCHAIN');
+    // Seeded once from the position that opened this form (xchain-wallet#34);
+    // a one-shot default via the useState initializer, same as every other
+    // initial* prop in this repo - it never re-fights a later user edit.
+    const [signingPubkey, setSigningPubkey] = useState(initialSigningPubkey || '');
+    const [tick, setTick] = useState(initialTick || 'XCHAIN');
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [password, setPassword] = useState('');
@@ -129,9 +146,15 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             .then(([byChain, active]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
-                // Stake from the chain's active address (else newest HD
+                const onChain = byChain?.[chainId] || [];
+                // The position that opened this form wins when its address is
+                // still one of ours on this chain (xchain-wallet#34); otherwise
+                // stake from the chain's active address (else newest HD
                 // external), matching Send.
-                const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
+                const seeded = initialFromAddress
+                    ? onChain.find((a) => a.address === initialFromAddress)
+                    : null;
+                const sourceId = seeded?.id || preferredSourceId(onChain, active?.[chainId]);
                 if (!sourceId) {
                     setLoadError('No address on this chain to stake from. Use Receive to generate one first.');
                     return;
@@ -202,24 +225,27 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
     // Unstake mode's "available" is the STAKED balance on this contract
     // (per pubkey when one is entered), not the wallet token balance;
     // it bounds the optional partial amount.
-    const [stakedAvailable, setStakedAvailable] = useState(/** @type {number | null} */ (null));
+    const [stakedAvailable, setStakedAvailable] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         const address = fromAddress?.address;
         if (mode !== 'unstake' || !address || !chainId) { setStakedAvailable(null); return undefined; }
         let cancelled = false;
-        messaging.getContractStakesForAddress({ chainId, address })
-            .then((r) => {
+        Promise.all([
+            messaging.getContractStakesForAddress({ chainId, address }),
+            typeof messaging.getIndexerWatermark === 'function'
+                ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([r, watermark]) => {
                 if (cancelled) return;
-                const rows = extractRows(r).filter((row) =>
+                const rows = effectiveStakingRows(extractRows(r), watermark?.watermark).filter((row) =>
                     String(row.target_contract_index) === String(contractActionIndex)
                     && (!tick || String(row.tick || '').toUpperCase() === tick.trim().toUpperCase())
                     && (!signingPubkey.trim()
                         || String(row.signing_pubkey || row.SIGNING_PUBKEY || '').toLowerCase() === signingPubkey.trim().toLowerCase()));
-                let total = 0;
-                for (const row of rows) {
-                    const n = Number(row.amount ?? row.AMOUNT ?? 0);
-                    if (Number.isFinite(n)) total += n;
-                }
+                const total = trimAmountTail(sumDecimalStrings(
+                    rows.map((row) => row.amount ?? row.AMOUNT ?? 0),
+                ));
                 setStakedAvailable(rows.length > 0 ? total : null);
             })
             .catch(() => { if (!cancelled) setStakedAvailable(null); });
@@ -280,8 +306,8 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
         // bytes (full sweep); pre-flag-day layers IGNORE a present AMOUNT,
         // so legacy bytes are the safe encoding for a full sweep.
         if (mode === 'unstake' && amount.trim() !== '') {
-            const n = Number(amount.trim());
-            if (!(stakedAvailable != null && Number.isFinite(n) && n >= stakedAvailable)) {
+            const comparison = compareAmounts(amount.trim(), stakedAvailable);
+            if (stakedAvailable == null || comparison === null || comparison < 0) {
                 p.AMOUNT = amount.trim();
             }
         }
@@ -307,18 +333,19 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
             return;
         }
         if (mode === 'stake') {
-            if (!actionParams.AMOUNT || !/^[0-9]+(\.[0-9]+)?$/.test(actionParams.AMOUNT) || Number(actionParams.AMOUNT) <= 0) {
+            if (!actionParams.AMOUNT || !/^[0-9]+(\.[0-9]+)?$/.test(actionParams.AMOUNT)
+                || compareAmounts(actionParams.AMOUNT, '0') !== 1) {
                 setFormError('Amount must be a positive decimal.');
                 return;
             }
         }
         if (mode === 'unstake' && amount.trim() !== '') {
             const amt = amount.trim();
-            if (!/^[0-9]+(\.[0-9]+)?$/.test(amt) || Number(amt) <= 0) {
+            if (!/^[0-9]+(\.[0-9]+)?$/.test(amt) || compareAmounts(amt, '0') !== 1) {
                 setFormError('Amount must be a positive decimal (or leave it blank to unstake everything).');
                 return;
             }
-            if (stakedAvailable != null && Number(amt) > stakedAvailable) {
+            if (stakedAvailable != null && compareAmounts(amt, stakedAvailable) === 1) {
                 setFormError(`Amount exceeds the ${formatWithThousands(String(stakedAvailable))} ${tick.trim().toUpperCase()} staked on this contract.`);
                 return;
             }
@@ -520,7 +547,7 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                     The transaction was broadcast; the network will record it shortly.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '(pending)')}</dd>
                 </dl>
                 <div className={styles.actions}>
@@ -778,10 +805,10 @@ export function ContractStakeForm({ walletId, chainId, contractActionIndex, init
                     setAmount(stripped);
                 }}
                     onMax={mode === 'stake'
-                        ? (tickAmtBalance && Number(tickAmtBalance) > 0
+                        ? (tickAmtBalance && compareAmounts(tickAmtBalance, '0') === 1
                             ? () => setAmount(tickAmtBalance)
                             : undefined)
-                        : (stakedAvailable != null && stakedAvailable > 0
+                        : (stakedAvailable != null && compareAmounts(stakedAvailable, '0') === 1
                             ? () => setAmount(String(stakedAvailable))
                             : undefined)}
                     maxDisabled={mode === 'stake' ? !tickAmtBalance : stakedAvailable == null}

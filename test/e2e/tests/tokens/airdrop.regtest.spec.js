@@ -83,6 +83,7 @@ import {
     EXPLORER_URL,
     fundAddress,
     minerRpc,
+    mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -91,11 +92,12 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    waitForTokenBalance,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE, LIST, SEND and AIRDROP each pay a real coin fee on this chain. */
-const FUNDING = 3;
+const FUNDING = 100;
 const STAMP = Date.now().toString().slice(-6);
 const TICK = `DRP${STAMP}`;
 /** Test 2 drops this token to the holders of MEMB_TICK, which is a different token. */
@@ -109,6 +111,8 @@ const MEMB_SUPPLY = 100;
 const MEMB_MOVE = 10;
 /** Paid to EACH address on the list, so the drop costs this x the recipient count. */
 const AMOUNT = 25;
+const SLOW_INDEXER_TIMEOUT = 1_200_000;
+const RATE_LIMIT_BACKOFF = 65_000;
 
 /**
  * A real, well-formed BITCOIN MAINNET address (the published BIP84
@@ -206,7 +210,7 @@ async function mineIfPending() {
  * forever (§3.6/D-127), so the recent-actions list comes first and only an index
  * it returned is ever fetched.
  */
-async function waitForIndexedAction(txid, timeoutMs = 300_000) {
+async function waitForIndexedAction(txid, timeoutMs = SLOW_INDEXER_TIMEOUT) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         const list = await explorerJson('actions?limit=100').catch(() => null);
@@ -233,7 +237,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
  * cannot mask a real failure - a credit that had landed would read HIGHER and
  * never come back down.
  */
-async function waitForBalance(address, tick, want, timeoutMs = 180_000) {
+async function waitForBalance(address, tick, want, timeoutMs = SLOW_INDEXER_TIMEOUT) {
     const deadline = Date.now() + timeoutMs;
     let last = null;
     while (Date.now() < deadline) {
@@ -276,28 +280,56 @@ async function gotoPalette(page, title) {
  * the screen instead. The price check stays because it names one venue state
  * early and by itself.
  */
-async function expectConfirmModal(page) {
-    let modal;
-    try {
-        modal = await sharedConfirmModal(page, 'this action', 60_000);
-    } catch (err) {
-        // Skipped rather than failed for the same reason the
-        // preview probe below is: the wallet is BEHAVING here. The shared
-        // explorer's rate limit refuses a read mid-compose, the wallet says so
-        // in its own words ("The service that reads the chain is temporarily
-        // unavailable (error 429). Nothing was signed or sent"), and the confirm
-        // screen correctly never opens. Nothing about that is a defect in this
-        // lane; the venue's rate limit is what has to move, and a red here
-        // sends the next reader after the wrong thing.
-        test.skip(/error 429/i.test(String(err?.message || '')),
-            'the shared explorer rate-limited the wallet mid-compose, so this leg never '
-            + `reached a confirm screen. Venue state, not a wallet defect - ${err?.message || err}`);
-        throw err;
+async function expectConfirmModal(page, retrySubmit) {
+    const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
+    let lastError = null;
+    while (Date.now() < deadline) {
+        try {
+            await sharedConfirmModal(page, 'this action', 60_000);
+            lastError = null;
+            break;
+        } catch (err) {
+            lastError = err;
+            if (!/\b429\b/i.test(String(err?.message || '')) || !retrySubmit) throw err;
+            await page.waitForTimeout(RATE_LIMIT_BACKOFF);
+            await expect(retrySubmit,
+                'the form did not become retryable after the explorer rate limit window closed')
+                .toBeEnabled({ timeout: 60_000 });
+            await retrySubmit.click();
+        }
+    }
+    if (lastError) {
+        throw new Error(`the confirm screen was still rate-limited after ${SLOW_INDEXER_TIMEOUT}ms: `
+            + String(lastError?.message || lastError));
     }
     expect(await page.getByText(/fee price is temporarily unavailable/).count(),
         'the venue could not price this action: the price sentinel has gone stale mid-run. '
         + 'Venue state, not a wallet defect - re-seed (campaign §3.2) and re-run')
         .toBe(0);
+}
+
+async function waitForHolderCount(page, tick, expected) {
+    const holderLine = page.getByRole('main').getByText(/1 token · /);
+    const tickInput = page.getByLabel('Tokens (one per line)');
+    const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
+    let last = '';
+
+    await expect(holderLine, 'the form previewed no holder count at all for the listed token')
+        .toBeVisible({ timeout: 60_000 });
+    while (Date.now() < deadline) {
+        last = await holderLine.innerText();
+        if (expected.test(last)) return last;
+        if (/counting holders/i.test(last)) {
+            await page.waitForTimeout(2_000);
+            continue;
+        }
+        if (!/\b429\b/i.test(last)) break;
+
+        await page.waitForTimeout(RATE_LIMIT_BACKOFF);
+        await tickInput.fill('');
+        await tickInput.fill(tick);
+    }
+    throw new Error(`the holder preview never reached ${expected} (last: ${last.trim()})`);
 }
 
 /**
@@ -390,9 +422,10 @@ async function issueToken(page, tick, supply, source) {
         .toBe(source);
     await form.getByLabel('Ticker').fill(tick);
     await form.getByLabel('Supply', { exact: true }).fill(String(supply));
-    await form.getByRole('button', { name: 'Issue token', exact: true }).click();
+    const submit = form.getByRole('button', { name: 'Issue token', exact: true });
+    await submit.click();
 
-    await expectConfirmModal(page);
+    await expectConfirmModal(page, submit);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(issued.status),
         `the venue rejected the ISSUE of ${tick} (${issued.status}); on this chain that is `
@@ -427,6 +460,10 @@ async function onboardAndIssue(page, ticks = [[TICK, SUPPLY]], walletName = 'Air
     await fundAddress(source, FUNDING);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
+    await mintXchain(page, 20);
+    await waitForTokenBalance(source, 'XCHAIN', 20, SLOW_INDEXER_TIMEOUT);
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
 
     // Seeded ONCE for the whole setup, not per action. A snapshot is good for
     // 1800 chain-seconds and these runs are ~3 minutes, while `seedPrices()`
@@ -457,8 +494,9 @@ async function sendToken(page, tick, destination, amount, destinationAfter) {
 
     await page.getByLabel('To', { exact: true }).fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
-    await main.getByRole('button', { name: 'Send', exact: true }).click();
-    await expectConfirmModal(page);
+    const submit = main.getByRole('button', { name: 'Send', exact: true });
+    await submit.click();
+    await expectConfirmModal(page, submit);
 
     // A SEND carries its verdict per LEG (`sends[].status`) and has no top-level
     // `status` of its own, unlike every other action this spec reads - so a
@@ -531,8 +569,9 @@ async function publishAddressList(page, source, members) {
     await expect(main, `the list form did not accept all ${members.length} addresses for this chain`)
         .toContainText(`${members.length} valid ${plural}`);
 
-    await main.getByRole('button', { name: /^(Publish list|Review)$/ }).click();
-    await expectConfirmModal(page);
+    const submit = main.getByRole('button', { name: /^(Publish list|Review)$/ });
+    await submit.click();
+    await expectConfirmModal(page, submit);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(published.action)).toBe('LIST');
     expect(String(published.status), 'the chain rejected the LIST').toBe('valid');
@@ -568,7 +607,7 @@ async function pickDropToken(page, tick) {
 
 test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
-    test.setTimeout(2_400_000);
+    test.setTimeout(4_800_000);
 
     test('a paste-mode airdrop publishes its list, waits for it to index, and credits exactly the addresses on it', async ({ page }) => {
         let issuer;
@@ -659,8 +698,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the review stage does not state that this costs two signatures')
                 .toContainText('Airdrop is a two-transaction flow');
 
-            await main.getByRole('button', { name: /^Sign LIST/ }).click();
-            await expectConfirmModal(page);
+            const submit = main.getByRole('button', { name: /^Sign LIST/ });
+            await submit.click();
+            await expectConfirmModal(page, submit);
             listTxid = await approveAndGetTxid(page);
         });
 
@@ -673,7 +713,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
 
             const title = page.getByText('Review airdrop', { exact: true }).first();
-            const deadline = Date.now() + 300_000;
+            const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
             while (Date.now() < deadline) {
                 if (await title.isVisible().catch(() => false)) break;
                 await mineIfPending();
@@ -698,8 +738,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toContainText(new RegExp(`recipients\\s*${recipients.length}\\b`, 'i'),
                     { useInnerText: true });
 
-            await main.getByRole('button', { name: /^Sign AIRDROP/ }).click();
-            await expectConfirmModal(page);
+            const submit = main.getByRole('button', { name: /^Sign AIRDROP/ });
+            await submit.click();
+            await expectConfirmModal(page, submit);
 
             // Read the screen's two money figures BEFORE approving, and the
             // payer's coin balance with them. This is the only action in the
@@ -892,24 +933,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // "Failed to load holder counts.", which is why five whole-suite
             // runs could not place this failure).
             //
-            // Probed rather than `test.fixme`d, following the four price-family
-            // specs: a fixme never runs anywhere, while a probe returns to
-            // green on its own the moment the venue stops refusing.
-            const holderLine = main.getByText(/1 token · /);
-            await expect(holderLine, 'the form previewed no holder count at all for the listed token')
-                .toBeVisible({ timeout: 60_000 });
-            // The line appears while still LOADING ("counting holders…"), so
-            // reading it on first sight catches the spinner rather than the
-            // answer. Wait for it to settle into a count or a refusal.
-            await expect(holderLine, 'the holder count never finished counting')
-                .not.toContainText(/counting holders/, { timeout: 60_000 });
-            const previewed = await holderLine.innerText();
-            test.skip(/HTTP 429/.test(previewed),
-                `the venue refused the holder-count read: "${previewed.trim()}". The `
-                + 'shared explorer rate-limits at 120 requests per 60s and this spec crossed it; '
-                + 'raising that limit is the venue\'s, not this campaign\'s');
-            expect(previewed, 'the form did not preview the holder count for the listed token')
-                .toMatch(/1 token · ~2 holders right now/);
+            // A refusal is retried after the rate-limit window instead of
+            // skipping the rest of this chain assertion.
+            await waitForHolderCount(page, MEMB_TICK, /1 token · ~2 holders right now/);
 
             await main.getByRole('button', { name: 'Review recipients' }).click();
             await expect(page.getByText('Review token list', { exact: true }).first(),
@@ -917,14 +943,15 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'back to the address-list wording, which would mean the wrong LIST TYPE)')
                 .toBeVisible({ timeout: 30_000 });
 
-            await page.getByRole('main').getByRole('button', { name: /^Sign LIST/ }).click();
-            await expectConfirmModal(page);
+            const submit = page.getByRole('main').getByRole('button', { name: /^Sign LIST/ });
+            await submit.click();
+            await expectConfirmModal(page, submit);
             listTxid = await approveAndGetTxid(page);
         });
 
         await test.step('the wallet resolves the list index on its own and offers leg 2', async () => {
             const title = page.getByText('Review airdrop', { exact: true }).first();
-            const deadline = Date.now() + 300_000;
+            const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
             while (Date.now() < deadline) {
                 if (await title.isVisible().catch(() => false)) break;
                 await mineIfPending();
@@ -966,8 +993,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('sign the AIRDROP against the token list', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Sign AIRDROP/ }).click();
-            await expectConfirmModal(page);
+            const submit = main.getByRole('button', { name: /^Sign AIRDROP/ });
+            await submit.click();
+            await expectConfirmModal(page, submit);
             airdropTxid = await approveAndGetTxid(page, listTxid);
             expect(airdropTxid).not.toBe(listTxid);
             await expect(page.getByRole('heading', { name: 'Airdrop sent' }))
@@ -1107,8 +1135,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the existing-list mode is waiting on an indexer it has no reason to wait for')
                 .toBe(0);
 
-            await main.getByRole('button', { name: /^Sign AIRDROP/ }).click();
-            await expectConfirmModal(page);
+            const submit = main.getByRole('button', { name: /^Sign AIRDROP/ });
+            await submit.click();
+            await expectConfirmModal(page, submit);
             airdropTxid = await approveAndGetTxid(page);
             await expect(page.getByRole('heading', { name: 'Airdrop sent' }))
                 .toBeVisible({ timeout: 30_000 });

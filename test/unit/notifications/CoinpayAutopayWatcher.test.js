@@ -58,7 +58,7 @@ function matchRow(over = {}) {
         action_index: '900',
         // The row's two column families do NOT pair up: the amounts are the
         // TRIGGERING order's give/get and that order is get_action_index, while
-        // give_action_index names the counterparty (xchain-indexer db.js
+        // give_action_index names the counterparty (xchain-indexer src/db/orders/match_rows.js
         // createOrderMatch). This fixture was written the other way round, which
         // is how orientMatch's inversion survived: the consented order '500' owes
         // the COIN, so it must be the side whose give_amount is the coin fill.
@@ -377,9 +377,12 @@ describe('duplicate and failure defenses', () => {
             onProgress?.('broadcasting');
             throw new Error('socket hang up');
         });
-        const { watcher, ledger } = makeWatcher({ coinpayAction: failing });
+        const { watcher, ledger, notify } = makeWatcher({ coinpayAction: failing });
         await watcher.pollOnce();
         expect(ledger.release).not.toHaveBeenCalled();
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+            body: expect.stringContaining('socket hang up'),
+        }));
         await watcher.pollOnce();
         expect(failing).toHaveBeenCalledTimes(1); // attempted stays set
     });

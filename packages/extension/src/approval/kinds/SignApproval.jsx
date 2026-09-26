@@ -31,6 +31,7 @@ import { psbtRefusalReason } from '@xchain-wallet/core/shared/components/PsbtCon
 import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
+import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import {
     listWallets,
     resolveApproval,
@@ -38,6 +39,7 @@ import {
     getAddressesByChain,
     getSettings,
     parsePsbt,
+    requoteNativeFee,
     parseCoSign,
     preflight,
     describeAction as describeActionOnHost,
@@ -246,8 +248,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // to the opaque hex.
     const psbtHexForSign = kind === 'signPsbt' ? payload?.payload?.psbtHex : null;
     const [psbtIntent, setPsbtIntent] = useState(
-        /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null }} */
-        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null }),
+        /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null, feeMode: string | null }} */
+        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null, feeMode: null }),
     );
     useEffect(() => {
         if (kind !== 'signPsbt') return undefined;
@@ -259,13 +261,14 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 ownAddresses: new Set(),
                 action: null,
                 actionDecodeReason: null,
+                feeMode: null,
             });
             return undefined;
         }
         let cancelled = false;
         setPsbtIntent({
             loading: true, error: null, decomposed: null, ownAddresses: new Set(),
-            action: null, actionDecodeReason: null,
+            action: null, actionDecodeReason: null, feeMode: null,
         });
         async function loadIntent() {
             try {
@@ -282,6 +285,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     } catch { /* leave ownAddresses empty */ }
                 }
                 const res = await parsePsbt({ chainId, psbtHex: psbtHexForSign });
+                const sender = res?.decomposed?.inputs?.[0]?.address || null;
+                let feeMode = null;
+                if (res?.action?.actionString) {
+                    try {
+                        const quote = await requoteNativeFee({
+                            chainId,
+                            actionString: res.action.actionString,
+                            ...(sender ? { source: sender } : {}),
+                        });
+                        feeMode = nativeFeeModeFromOutputs(res?.decomposed?.outputs, quote);
+                    } catch { /* a fee quote failure leaves the dry-run on its default lane */ }
+                }
                 if (cancelled) return;
                 setPsbtIntent({
                     loading: false,
@@ -292,6 +307,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     // decodes. A punt is a state to render, not a parse failure.
                     action: res?.action || null,
                     actionDecodeReason: res?.actionDecodeReason || null,
+                    feeMode,
                 });
             } catch (err) {
                 if (cancelled) return;
@@ -302,6 +318,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     ownAddresses: new Set(),
                     action: null,
                     actionDecodeReason: null,
+                    feeMode: null,
                 });
             }
         }
@@ -309,46 +326,71 @@ export function SignApproval({ id, kind, payload, onReject }) {
         return () => { cancelled = true; };
     }, [kind, chainId, psbtHexForSign, walletId]);
 
-    // §5.6 slice 4 / §6 "dApp-supplied action string": run pre-flight for
-    // the requested action and render the same <PreflightPanel> the in-wallet
-    // confirm page uses, so a dApp request gets the indexer's own verdict before
-    // the password is entered rather than only a balance-delta guess.
+    const psbtSourceAddress = useMemo(() => {
+        if (kind !== 'signPsbt' || !Array.isArray(psbtIntent.decomposed?.inputs)) return null;
+        return psbtIntent.decomposed.inputs[0]?.address || null;
+    }, [kind, psbtIntent]);
+    const preflightActionString = kind === 'signAction'
+        ? (payload?.payload?.actionString || payload?.actionString || null)
+        : kind === 'signPsbt'
+            ? psbtIntent.action?.actionString || null
+            : null;
+    const preflightSourceAddress = kind === 'signPsbt'
+        ? psbtSourceAddress
+        : previewBalances.fromAddress;
+
+    // Run pre-flight for either a dApp action request or the readable action
+    // decoded from a dApp PSBT. The latter now matches the in-wallet PSBT path.
     //
     // ONE report per approval request (§4.8): the window is created per request
     // and this runs once for it. The report stays in this window; the dApp only
     // ever learns approve or reject.
     const [preflightState, setPreflightState] = useState(
-        /** @type {{ loading: boolean, report: any | null }} */
-        ({ loading: false, report: null }),
+        /** @type {{ loading: boolean, report: any | null, actionString: string | null }} */
+        ({ loading: false, report: null, actionString: null }),
     );
     const [acknowledged, setAcknowledged] = useState(() => new Set());
     // Shared with the hook: an add-only copy here made the "Sign anyway"
     // checkbox a one-way latch on the dApp approval surface too.
     const acknowledge = (code) => setAcknowledged((prev) => toggleAcknowledged(prev, code));
     useEffect(() => {
-        if (kind !== 'signAction' || !chainId) return undefined;
-        // The action string the dApp supplied IS the payload for this kind, so
-        // it is what gets checked (never a re-serialization of form state).
-        const actionString = payload?.payload?.actionString || payload?.actionString || null;
-        if (typeof actionString !== 'string' || !actionString) return undefined;
+        if (!chainId || typeof preflightActionString !== 'string' || !preflightActionString) {
+            return undefined;
+        }
         let cancelled = false;
-        setPreflightState({ loading: true, report: null });
+        setPreflightState({ loading: true, report: null, actionString: preflightActionString });
         preflight({
             chainId,
-            actionString,
-            source: previewBalances.fromAddress || undefined,
+            actionString: preflightActionString,
+            ...(preflightSourceAddress ? { source: preflightSourceAddress } : {}),
+            ...(kind === 'signPsbt' && psbtIntent.feeMode
+                ? { feeMode: psbtIntent.feeMode } : {}),
             mode: 'report',
         })
             .then((report) => {
-                if (!cancelled) setPreflightState({ loading: false, report: report || null });
+                if (!cancelled) {
+                    setPreflightState({
+                        loading: false,
+                        report: kind === 'signPsbt' && !preflightSourceAddress
+                            ? advisoryPreflightReport(report)
+                            : report || null,
+                        actionString: preflightActionString,
+                    });
+                }
             })
             .catch(() => {
                 // Best-effort (§4.2): a dead explorer must not block approval.
                 // A null report reads as "no findings" and Approve stays live.
-                if (!cancelled) setPreflightState({ loading: false, report: null });
+                if (!cancelled) {
+                    setPreflightState({
+                        loading: false,
+                        report: null,
+                        actionString: preflightActionString,
+                    });
+                }
             });
         return () => { cancelled = true; };
-    }, [kind, chainId, payload, previewBalances.fromAddress]);
+    }, [kind, chainId, preflightActionString, preflightSourceAddress, psbtIntent.feeMode]);
 
     // §22 / P4 co-sign preview: decode the action the agent wants co-signed and
     // dry-run the account policy, so the user approves a legible request (which
@@ -441,7 +483,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // attached one). Only renders when an origin is present; in
     // practice every dApp request carries one, but user-initiated
     // sign flows that re-use this screen wouldn't.
-    const appName = payload?.appName || payload?.payload?.appName || '';
+    const appName = neutralizeControlText(
+        payload?.appName || payload?.payload?.appName || '',
+        { maxLength: 80 },
+    );
 
     // For a PSBT sign, block approval whenever the independent decode failed
     // (or produced nothing). The summary already warns visually, but that is
@@ -503,8 +548,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // §4.2 pre-flight gate, using the SAME predicate the in-wallet confirm page
     // uses: a locally-provable error hard-blocks, a network-sourced one blocks
     // until the user acknowledges that specific finding.
-    const preflightBlocked = kind === 'signAction'
-        && !canApproveWithReport(preflightState.report, acknowledged);
+    const preflightBlocked = !!preflightActionString
+        && (preflightState.actionString !== preflightActionString
+            || preflightState.loading
+            || !canApproveWithReport(preflightState.report, acknowledged));
 
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
         || !!psbtRefusal || preflightBlocked;
@@ -577,9 +624,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
             {origin ? (
                 <section className={styles.source} aria-label="Source">
-                    <p className={styles.sourceLabel}>Source</p>
+                    <p className={styles.sourceLabel}>Verified site</p>
                     <p className={styles.sourceOrigin}>{origin}</p>
-                    {appName ? <p className={styles.sourceApp}>{appName}</p> : null}
+                    {appName ? (
+                        <p className={styles.sourceApp}>The site calls itself: {appName}</p>
+                    ) : null}
                 </section>
             ) : null}
 
@@ -588,6 +637,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 payload={resolvedPayload}
                 decoded={intent.decoded}
                 intentLoading={intent.loading}
+                // #40: the address this window will spend from. Already
+                // resolved above for the balance preview and the pre-flight
+                // call; it was never shown to the user deciding whether to
+                // approve.
+                sourceAddress={preflightSourceAddress}
             />
 
             {/* §5.6 slice 4: the shared PSBT panel enumerates every
@@ -633,16 +687,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </>
             ) : null}
 
+            {preflightActionString ? (
+                <PreflightPanel
+                    report={preflightState.report}
+                    loading={preflightState.loading
+                        || preflightState.actionString !== preflightActionString}
+                    acknowledged={acknowledged}
+                    onAcknowledge={acknowledge}
+                />
+            ) : null}
+
             {kind === 'signAction' ? (
                 <>
-                    {/* The indexer's own verdict for the dApp's action, on the
-                        same panel the in-wallet confirm page renders. */}
-                    <PreflightPanel
-                        report={preflightState.report}
-                        loading={preflightState.loading}
-                        acknowledged={acknowledged}
-                        onAcknowledge={acknowledge}
-                    />
                     <BalanceChanges
                         result={previewResult}
                         loading={previewBalances.loading}
@@ -712,14 +768,38 @@ function coSignPreviewDecodedFrom(coSignPreview) {
     return { action: preview.action, params: preview.params || {} };
 }
 
-function SignSummary({ kind, payload, decoded, intentLoading }) {
+function nativeFeeModeFromOutputs(outputs, quote) {
+    const destination = quote?.feeDestination;
+    if (!destination || !Array.isArray(outputs)) return null;
+    return outputs.some((output) => output?.address === destination) ? 'native' : null;
+}
+
+function advisoryPreflightReport(report) {
+    if (!report || !Array.isArray(report.findings)) return report || null;
+    return {
+        ...report,
+        findings: report.findings.map((finding) => {
+            if (finding?.severity !== 'error') return finding;
+            const data = finding.data && typeof finding.data === 'object'
+                ? { ...finding.data }
+                : undefined;
+            if (data) {
+                delete data.status;
+                delete data.error;
+            }
+            return { ...finding, overridable: true, ...(data ? { data } : {}) };
+        }),
+    };
+}
+
+function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = null }) {
     const inner = payload?.payload || {};
     switch (kind) {
         case 'signMessage':
             return (
                 <div className={shared.summary}>
                     <p className={shared.summaryLabel}>Message</p>
-                    <pre className={shared.summaryValue}>{String(inner.message ?? '')}</pre>
+                    <HardenedSignedText value={inner.message} warningNoun="message" />
                     {inner.address ? (
                         <>
                             <p className={shared.summaryLabel} style={{ marginTop: 8 }}>Signer</p>
@@ -768,6 +848,16 @@ function SignSummary({ kind, payload, decoded, intentLoading }) {
                         >
                             {decoded.summary}
                         </p>
+                        {/* #40: "From", not "Signer" as the signMessage case
+                            above says, because this one spends. A dApp picks
+                            the account, the user did not, so the window that
+                            asks for approval has to name it. */}
+                        {sourceAddress ? (
+                            <>
+                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>From</p>
+                                <pre className={shared.summaryValue} data-testid="sign-approval-source">{sourceAddress}</pre>
+                            </>
+                        ) : null}
                         {decoded.details.length > 0 ? (
                             <details className={styles.details}>
                                 <summary className={styles.detailsToggle}>
@@ -798,14 +888,32 @@ function SignSummary({ kind, payload, decoded, intentLoading }) {
             return (
                 <div className={shared.summary}>
                     <p className={shared.summaryLabel}>Sign in to</p>
-                    <pre className={shared.summaryValue}>{String(inner.appId || payload?.origin || '')}</pre>
+                    <HardenedSignedText
+                        value={inner.appId || payload?.origin || ''}
+                        warningNoun="sign-in"
+                    />
                     <p className={shared.summaryLabel} style={{ marginTop: 8 }}>One-time code</p>
-                    <pre className={shared.summaryValue}>{String(inner.nonce || '')}</pre>
+                    <HardenedSignedText value={inner.nonce} warningNoun="sign-in" />
                 </div>
             );
         default:
             return null;
     }
+}
+
+function HardenedSignedText({ value, warningNoun }) {
+    const original = String(value ?? '');
+    const display = neutralizeControlText(original);
+    return (
+        <>
+            <pre className={shared.summaryValue}>{display}</pre>
+            {display !== original ? (
+                <p className={styles.textWarning}>
+                    Control characters are displayed safely. The original {warningNoun} text is what you will sign.
+                </p>
+            ) : null}
+        </>
+    );
 }
 
 /**

@@ -47,12 +47,11 @@ for (const call of [
     'messaging.getGenesisForToken',
     'messaging.getProjectForToken',
     'messaging.getActionByTxid',
-    'messaging.createList',
-    'messaging.createListHw',
-    'messaging.linkAction',
-    'messaging.linkActionHw',
 ]) {
     assert.ok(src.includes(call), `ProjectRosterForm calls ${call}`);
+}
+for (const method of ['createList', 'createListHw', 'linkAction', 'linkActionHw']) {
+    assert.ok(src.includes(`'${method}'`), `ProjectRosterForm dispatches ${method}`);
 }
 
 // The roster LIST is the TICK type (TYPE=1): the registry shape.
@@ -61,6 +60,10 @@ assert.ok(/TYPE:\s*'1'/.test(src), 'roster LIST uses TYPE=1 (TICK list)');
 // Owner-validation surfaced, watcher mode blocked.
 assert.ok(/ownerMismatch/.test(src), 'form warns on issuer/owner mismatch');
 assert.ok(/isWatcherMode/.test(src), 'form blocks watcher mode');
+assert.ok(/useActionConfirmFlow/.test(src), 'both roster legs use the shared confirm flow');
+assert.ok(/actionData: \{ action: 'LIST', params \}/.test(src), 'LIST opens the shared confirm page');
+assert.ok(/actionData: \{ action: 'LINK', params \}/.test(src), 'LINK opens the shared confirm page');
+assert.ok(/<ActionConfirmScreen/.test(src), 'roster swaps each review for the shared confirm page');
 
 // --- Core flow (roster prefill read) ---
 

@@ -21,20 +21,30 @@
 //     candidate mnemonic; the panel renders an overall match flag plus
 //     a per-chain comparison report (matched / divergent / missing
 //     counts).
-//   - Publish labels (§19.5.2): wires `publishLabelsNow` core flow
-//     through the `wallet.publishLabels` host handler. User picks a
-//     chain + enters the wallet password; the panel encrypts the
-//     labels + contacts payload, broadcasts it as a FILE action, and
+//   - Publish labels (§19.5.2): prepares the encrypted FILE payload
+//     through `wallet.prepareLabels`, then composes, dry-runs and confirms
+//     it before `wallet.publishLabels` signs those exact bytes. The result
 //     reports the txid + payload size.
 //   - Label auto-sync (§19.5.2 cadence): the background debounces
 //     label / contact edits and marks ONE publish due per unlock
 //     window; this panel surfaces that as a notice which opens the
-//     same publish form. Fetch-on-restore decryption is still a
-//     followup.
+//     same publish form.
+//   - Check chain for backed-up contacts (§19.5.2 restore, on-demand
+//     half): the automatic restore only ever runs once, inside the
+//     from-seed import flow, so a wallet that already exists has no way
+//     to re-pull a payload it published earlier. This button runs the
+//     same fetch-and-decrypt against the *current* wallet's seed for a
+//     chosen chain, through `wallet.restoreLabels`, and applies whatever
+//     it finds with `applyLabelSyncPayload`'s 'preserve' policy, which
+//     only adds or updates matching records and never deletes a local
+//     contact or label the chain copy doesn't know about.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
-import { useMessaging } from '../../useMessaging.js';
+import { useMessaging, screenVariantFor } from '../../useMessaging.js';
+import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
+import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
+import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -55,7 +65,9 @@ const ACTION_BTN = {
  * @param {{ id: string, name: string } | null} [props.activeWallet]
  */
 export function BackupSection({ activeWallet }) {
-    const { messaging } = useMessaging();
+    const { messaging, shell } = useMessaging();
+    const signerReady = useSignerReady(activeWallet?.id);
+    const actionConfirm = useActionConfirmFlow({ messaging, walletId: activeWallet?.id || '' });
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
     const [pendingPassword, setPendingPassword] = useState(/** @type {string | null} */ (null));
@@ -84,6 +96,18 @@ export function BackupSection({ activeWallet }) {
     );
     const [publishError, setPublishError] = useState(/** @type {string | null} */ (null));
     const [publishResult, setPublishResult] = useState(/** @type {any} */ (null));
+    const [publishPreparation, setPublishPreparation] = useState(/** @type {any} */ (null));
+    const [publishPassword, setPublishPassword] = useState('');
+    const publishPasswordRef = useRef('');
+
+    // §19.5.2 on-demand restore state ("Check chain for backed-up
+    // contacts"). Separate from the auto-sync state above: that one
+    // only ever fires once, silently, inside the from-seed import.
+    const [restoreStage, setRestoreStage] = useState(
+        /** @type {'idle' | 'form' | 'running' | 'result'} */ ('idle'),
+    );
+    const [restoreError, setRestoreError] = useState(/** @type {string | null} */ (null));
+    const [restoreResult, setRestoreResult] = useState(/** @type {any} */ (null));
 
     // §19.5.2 auto-sync state. The background debounces label / contact
     // edits and marks ONE publish due per unlock window; this panel is
@@ -215,6 +239,14 @@ export function BackupSection({ activeWallet }) {
     }
 
     async function runPublish({ chainId, password }) {
+        // Require a chain with a source address for the FILE action.
+        if (!chainId) { setPublishError('Choose a chain with an address to publish labels.'); return; }
+        // Require the wallet credential before preparing encrypted labels.
+        if (!password) { setPublishError('Enter your wallet password to publish labels.'); return; }
+        if (typeof messaging?.prepareLabelsRequest !== 'function') {
+            setPublishError('Label preparation is not wired in this shell yet.');
+            return;
+        }
         if (typeof messaging?.publishLabelsRequest !== 'function') {
             setPublishError('Label publish is not wired in this shell yet.');
             return;
@@ -225,28 +257,112 @@ export function BackupSection({ activeWallet }) {
         }
         setPublishStage('running');
         setPublishError(null);
+        setPublishPassword(password);
+        publishPasswordRef.current = password;
         try {
-            const r = await messaging.publishLabelsRequest({
+            const preparation = await messaging.prepareLabelsRequest({
                 walletId: activeWallet.id,
                 password,
                 chainId,
             });
+            setPublishPreparation(preparation);
+            const r = await actionConfirm.run({
+                chainId: preparation.chainId,
+                from: preparation.from,
+                actionData: preparation.actionData,
+                encoderOpts: preparation.encoderOpts,
+                onApprove: (prebuiltPsbt) => messaging.publishLabelsRequest({
+                    walletId: activeWallet.id,
+                    password: publishPasswordRef.current,
+                    chainId: preparation.chainId,
+                    preparation,
+                    prebuiltPsbt,
+                }),
+            });
             setPublishResult(r);
             setPublishStage('result');
+            setPublishPreparation(null);
             // The background clears the pending batch on a successful
             // publish; drop it here too so the notice goes away without
             // waiting for the next poll.
             setAutoSync(null);
         } catch (err) {
-            setPublishError(err?.message || 'Failed to publish labels.');
+            if (!isUserRejection(err)) {
+                setPublishError(err?.message || 'Failed to publish labels.');
+            }
             setPublishStage('form');
+        } finally {
+            setPublishPassword('');
+            publishPasswordRef.current = '';
         }
     }
 
     function resetPublish() {
         setPublishResult(null);
         setPublishError(null);
+        setPublishPreparation(null);
+        setPublishPassword('');
+        publishPasswordRef.current = '';
         setPublishStage('idle');
+    }
+
+    /**
+     * §19.5.2 restore, on-demand half. No signature and no broadcast, so
+     * this skips `actionConfirm` entirely: it is a read (fetch the FILE,
+     * decrypt it against this wallet's own seed) and a vault write, not a
+     * transaction. `wallet.restoreLabels` derives the seed itself from the
+     * password and never returns it here.
+     */
+    async function runRestore({ chainId, password }) {
+        if (typeof messaging?.restoreLabelsRequest !== 'function') {
+            setRestoreError('Chain restore is not wired in this shell yet.');
+            return;
+        }
+        if (!activeWallet?.id) {
+            setRestoreError('No active wallet.');
+            return;
+        }
+        setRestoreStage('running');
+        setRestoreError(null);
+        try {
+            const r = await messaging.restoreLabelsRequest({
+                walletId: activeWallet.id,
+                password,
+                chainId,
+            });
+            // The result never says which chain it searched when nothing
+            // authenticated (chainId comes back null on a miss), so the
+            // requested chain rides along for the "not found on X" copy.
+            setRestoreResult({ ...r, requestedChainId: chainId });
+            setRestoreStage('result');
+        } catch (err) {
+            setRestoreError(err?.message || 'Failed to check the chain for backed-up contacts.');
+            setRestoreStage('form');
+        }
+    }
+
+    function resetRestore() {
+        setRestoreResult(null);
+        setRestoreError(null);
+        setRestoreStage('idle');
+    }
+
+    if (actionConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={actionConfirm.confirmAction}
+                screenVariant={screenVariantFor(shell)}
+                chainLabel={publishPreparation?.chainId || ''}
+                signerReady={signerReady}
+                password={publishPassword}
+                onPasswordChange={(value) => {
+                    setPublishPassword(value);
+                    publishPasswordRef.current = value;
+                }}
+                chainId={publishPreparation?.chainId}
+                getSignerStatus={messaging.getSignerStatus}
+            />
+        );
     }
 
     return (
@@ -333,6 +449,12 @@ export function BackupSection({ activeWallet }) {
                     walletId={activeWallet?.id}
                     busy={publishStage === 'running'}
                     error={publishError}
+                    password={publishPassword}
+                    onPasswordChange={(value) => {
+                        setPublishPassword(value);
+                        publishPasswordRef.current = value;
+                        if (publishError) setPublishError(null);
+                    }}
                     onCancel={resetPublish}
                     onSubmit={runPublish}
                 />
@@ -348,6 +470,28 @@ export function BackupSection({ activeWallet }) {
                     actionLabel="Publish now…"
                     disabled={!activeWallet}
                     onClick={() => { setPublishStage('form'); setPublishError(null); }}
+                />
+            )}
+            {restoreStage === 'form' || restoreStage === 'running' ? (
+                <RestoreLabelsForm
+                    walletId={activeWallet?.id}
+                    busy={restoreStage === 'running'}
+                    error={restoreError}
+                    onCancel={resetRestore}
+                    onSubmit={runRestore}
+                />
+            ) : restoreStage === 'result' ? (
+                <RestoreLabelsReport
+                    result={restoreResult}
+                    onDone={resetRestore}
+                />
+            ) : (
+                <BackupRow
+                    label="Check chain for backed-up contacts"
+                    hint="Looks for labels and contacts you published earlier on the selected chain and merges anything found into this wallet, without erasing what's already here."
+                    actionLabel="Check…"
+                    disabled={!activeWallet}
+                    onClick={() => { setRestoreStage('form'); setRestoreError(null); }}
                 />
             )}
         </div>
@@ -838,13 +982,12 @@ function triggerDownload(walletName, fileContent) {
  * §19.5.2 publish-labels form. Pulls the wallet's address-bearing
  * chains from `messaging.getAddressesByChain` so the picker only
  * surfaces chains where the FILE action can actually be broadcast,
- * then takes the wallet password and dispatches `publishLabelsRequest`.
+ * then takes the wallet password and prepares the encrypted FILE payload.
  */
-function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
+function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, onCancel, onSubmit }) {
     const { messaging } = useMessaging();
     const [chains, setChains] = useState(/** @type {string[] | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string} */ (''));
-    const [password, setPassword] = useState('');
     const [chainsError, setChainsError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
@@ -869,7 +1012,8 @@ function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    const canSubmit = !!chainId && password.length > 0 && !busy;
+    const loadingChains = chains === null;
+    const canSubmit = !busy && !loadingChains;
 
     return (
         <div style={{
@@ -910,7 +1054,7 @@ function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                 type="password"
                 placeholder="Wallet password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => onPasswordChange(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
                 aria-label="Wallet password"
@@ -930,7 +1074,7 @@ function PublishLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                         color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
                     }}
                 >
-                    {busy ? 'Publishing…' : 'Publish'}
+                    {busy ? 'Publishing…' : loadingChains ? 'Loading chains…' : 'Publish'}
                 </button>
             </div>
         </div>
@@ -958,7 +1102,7 @@ function PublishLabelsReport({ result, onDone }) {
                 ✓ Labels published
             </div>
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
-                <dt style={ROW_HINT}>Txid</dt>
+                <dt style={ROW_HINT}>Transaction ID</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
                 <dt style={ROW_HINT}>Chain</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.chainId || '-'}</dd>
@@ -980,6 +1124,165 @@ function PublishLabelsReport({ result, onDone }) {
                 >
                     Copy txid
                 </button>
+                <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * §19.5.2 restore, on-demand half. Same chain picker as
+ * `PublishLabelsForm` (only chains this wallet already has an address
+ * on can carry a FILE the wallet itself would have published), because
+ * a chain with nothing to publish from also never held a label-sync
+ * publish to find.
+ */
+function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
+    const { messaging } = useMessaging();
+    const [chains, setChains] = useState(/** @type {string[] | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string} */ (''));
+    const [chainsError, setChainsError] = useState(/** @type {string | null} */ (null));
+    const [password, setPassword] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId || typeof messaging?.getAddressesByChain !== 'function') {
+            setChains([]);
+            return () => { cancelled = true; };
+        }
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                if (cancelled) return;
+                const ids = Object.keys(byChain || {})
+                    .filter((cid) => Array.isArray(byChain[cid]) && byChain[cid].length > 0);
+                setChains(ids);
+                if (ids.length > 0) setChainId(ids[0]);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setChains([]);
+                setChainsError(err?.message || 'Failed to load chains.');
+            });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
+    const canSubmit = !!chainId && password.length > 0 && !busy;
+
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-border)',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Check chain for backed-up contacts</div>
+            <div style={ROW_HINT}>
+                Decrypts the labels + contacts FILE this wallet's seed published
+                on the chain below, if any, and merges anything found into this
+                wallet. Nothing already here is removed.
+            </div>
+            {chains === null ? (
+                <div style={ROW_HINT}>Loading chains…</div>
+            ) : chains.length === 0 ? (
+                <Status text={chainsError || 'No chains have addresses on this wallet. Generate one first.'} tone="error" />
+            ) : (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
+                    <span style={ROW_HINT}>Chain</span>
+                    <select
+                        value={chainId}
+                        onChange={(e) => setChainId(e.target.value)}
+                        aria-label="Restore chain"
+                        style={passwordStyle}
+                    >
+                        {chains.map((cid) => (
+                            <option key={cid} value={cid}>{cid}</option>
+                        ))}
+                    </select>
+                </label>
+            )}
+            <input
+                type="password"
+                placeholder="Wallet password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus
+                autoComplete="current-password"
+                aria-label="Wallet password"
+                style={passwordStyle}
+            />
+            {error ? <Status text={error} tone="error" /> : null}
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
+                <button
+                    type="button"
+                    onClick={() => onSubmit({ chainId, password })}
+                    disabled={!canSubmit}
+                    style={{
+                        ...ACTION_BTN,
+                        background: canSubmit ? 'var(--xc-accent-primary)' : 'transparent',
+                        borderColor: canSubmit ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
+                        color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
+                    }}
+                >
+                    {busy ? 'Checking…' : 'Check'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Turn a `wallet.restoreLabels` result into the one line the user reads.
+ * Exported for the unit test: the three outcomes worth telling apart are
+ * "found and merged something", "authenticated nothing under this seed
+ * on this chain", and "the search itself failed" (an unreachable
+ * explorer, collected per-chain in `errors` rather than thrown, per
+ * `restoreLabelSyncAfterImport`'s best-effort contract).
+ *
+ * @param {any} result
+ * @returns {string}
+ */
+export function restoreLabelsMessage(result) {
+    if (!result) return '';
+    if (result.skipped === 'wif-only') {
+        return 'This wallet was imported from a private key only. There is no seed to check on-chain backups with.';
+    }
+    const chainLabel = result.chainId || result.requestedChainId || 'this chain';
+    if (result.restored === true) {
+        const contacts = Number(result.contactsAdded || 0) + Number(result.contactsUpdated || 0);
+        const labels = Number(result.addressesUpdated || 0);
+        return `Restored ${contacts} contact${contacts === 1 ? '' : 's'} and ${labels} label${labels === 1 ? '' : 's'}.`;
+    }
+    const firstError = Array.isArray(result.errors) && result.errors.length > 0 ? result.errors[0] : null;
+    if (firstError) return firstError.message;
+    return `No backed-up labels found on ${chainLabel}.`;
+}
+
+/**
+ * §19.5.2 restore report. `applyLabelSyncPayload` runs with the
+ * 'preserve' conflict policy here (see `wallet.restoreLabels`), so a
+ * "Restored" result only ever added a missing contact/label or filled
+ * one in that was blank; it never overwrote something the user typed
+ * on this device since the last publish.
+ */
+function RestoreLabelsReport({ result, onDone }) {
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: `1px solid ${result?.restored ? 'var(--xc-accent-primary)' : 'var(--xc-border)'}`,
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
+                {restoreLabelsMessage(result)}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
             </div>
         </div>

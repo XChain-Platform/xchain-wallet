@@ -537,7 +537,41 @@ function tearDownHost() {
     // reference at construction time. Swapping in a fresh empty pool
     // keeps that reference stable for the next unlock.
     signerPool = new signersLib.SignerPool();
+    if (host && typeof host.sealBroadcastQueue === 'function') {
+        retireQueueSeal(host.sealBroadcastQueue);
+    }
     host = null;
+}
+
+// Queue seals of hosts torn down recently. A lock drops the host without
+// sealing (a locked wallet still owes its persists), but a broadcast that
+// resolves after the lock writes through that host's adapter; the wipe
+// escapes run locked, so they must reach those seals, not only the live host's.
+const RETIRED_SEAL_WINDOW_MS = 120_000;
+const retiredQueueSeals = new Set();
+
+function retireQueueSeal(seal) {
+    retiredQueueSeals.add(seal);
+    setTimeout(() => retiredQueueSeals.delete(seal), RETIRED_SEAL_WINDOW_MS);
+}
+
+/**
+ * Seal every broadcast-queue writer this worker still holds, before a wipe
+ * removes the key. Never throws: a failed seal must not stop the erase.
+ *
+ * @returns {Promise<void>}
+ */
+async function sealBroadcastQueues() {
+    const seals = [...retiredQueueSeals];
+    retiredQueueSeals.clear();
+    if (host && typeof host.sealBroadcastQueue === 'function') seals.push(host.sealBroadcastQueue);
+    await Promise.all(seals.map(async (seal) => {
+        try {
+            await seal();
+        } catch (err) {
+            console.error('[xchain] broadcast-queue seal failed:', err);
+        }
+    }));
 }
 
 // --- Auto-lock backstop (§26) ------------------------------------------
@@ -616,7 +650,10 @@ attachSignerBridgeListener();
 // teardown is the second half of the wipe: clearing chrome.storage while
 // the worker still holds an open vault and a warm signer pool leaves the
 // wiped wallet serving.
-attachWipeStorageListener({ onWiped: () => tearDownHost() });
+attachWipeStorageListener({
+    beforeWipe: () => sealBroadcastQueues(),
+    onWiped: () => tearDownHost(),
+});
 
 // §46: MV3 keepalive. Chrome evicts an idle service worker after ~30s, which
 // would silently tear down the notification WebSocket. A periodic alarm wakes

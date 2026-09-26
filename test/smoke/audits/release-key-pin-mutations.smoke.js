@@ -124,15 +124,6 @@ function statesFingerprint(md, value) {
  * guards in release-key-channels.test.js, and the fixtures below. */
 const NO_RELEASE_SENTENCE = 'No XChain Wallet release has been signed or published yet';
 
-/* The per-lane version of the same protection, for the state the project is
- * actually in: one signed release covering Android alone, and three lanes that
- * a reader must still be told nothing has been signed for. Written out rather
- * than derived, because the page names the lanes in its own words and the
- * websites guard builds the same sentence from data-release-coverage; two
- * independent constructions that must agree is the property worth having here.
- * It has a scheduled end: see mode ES5c. */
-const UNSIGNED_LANES_SENTENCE = 'No desktop, extension or iOS release has been signed or published yet';
-
 /* Sets the fingerprint AND the release-state attribute that has to agree with
  * it, because the page carries both and the guards read both.
  *
@@ -147,11 +138,15 @@ const UNSIGNED_LANES_SENTENCE = 'No desktop, extension or iOS release has been s
  * than from a defect. Three modes went red for the venue rather than the tree.
  *
  * This file's own header says a harness whose meaning depends on which side of
- * the ceremony the repo is on is not a harness on either side. Deriving one of
- * the two coupled values and inheriting the other was that dependency, hiding
- * in a helper. */
-function pagePublishes(html, value) {
+ * the ceremony the repo is on is not a harness on either side. All three values
+ * are explicit so the state-specific modes can deliberately break exactly one
+ * while leaving the other two fixed. */
+function pagePublishes(html, { fingerprint, releaseState, statesNoRelease }) {
     if (!html) return html;            // sibling absent: the wallet half still runs
+    assert.ok(releaseState === 'none' || releaseState === 'published',
+        `the security-page fixture needs a valid release state, got ${JSON.stringify(releaseState)}.`);
+    assert.equal(typeof statesNoRelease, 'boolean',
+        'the security-page fixture must say whether it carries the no-release sentence.');
     const re = /(<code id="release-key-fingerprint">)[^<]*(<\/code>)/;
     assert.match(html, re, 'the security page has no <code id="release-key-fingerprint"> to mutate.');
 
@@ -160,10 +155,7 @@ function pagePublishes(html, value) {
         + 'fingerprint. The guards read both, so a fixture that sets one and inherits the other is '
         + 'self-contradictory the moment the live page changes state.');
 
-    // The page's own vocabulary for "no release yet", matched rather than
-    // guessed at: anything that is not that phrase is a real fingerprint.
-    const state = /not yet published/i.test(value) ? 'none' : 'published';
-    let out = html.replace(re, `$1${value}$2`).replace(stateRe, `$1${state}$2`);
+    let out = html.replace(re, `$1${fingerprint}$2`).replace(stateRe, `$1${releaseState}$2`);
 
     /* The THIRD coupled value. A page in the `none` state must carry the
      * sentence, and a page in the `published` state must not - those are two
@@ -173,11 +165,20 @@ function pagePublishes(html, value) {
      * Setting it here is what lets both states be built from whichever page
      * happens to be live, which is the property this helper exists for. */
     const has = out.includes(NO_RELEASE_SENTENCE);
-    if (state === 'none' && !has) {
-        out = out.replace('</body>', `<p>${NO_RELEASE_SENTENCE}</p></body>`);
-    } else if (state === 'published' && has) {
+    if (statesNoRelease && !has) {
+        const anchor = '</body>';
+        assert.ok(out.includes(anchor), `the security page has no ${anchor} to insert before.`);
+        out = out.replace(anchor, `<p>${NO_RELEASE_SENTENCE}</p>${anchor}`);
+    } else if (!statesNoRelease && has) {
         out = out.split(NO_RELEASE_SENTENCE).join('');
     }
+
+    assert.equal(/<code id="release-key-fingerprint">([^<]*)<\/code>/.exec(out)?.[1], fingerprint,
+        'the security-page fixture did not retain the requested fingerprint.');
+    assert.equal(/data-release-state="([^"]*)"/.exec(out)?.[1], releaseState,
+        'the security-page fixture did not retain the requested release state.');
+    assert.equal(out.includes(NO_RELEASE_SENTENCE), statesNoRelease,
+        'the security-page fixture did not retain the requested no-release sentence state.');
     return out;
 }
 
@@ -185,19 +186,6 @@ function pagePublishes(html, value) {
  * page still naming the other channel further down, the mode came back green,
  * and the harness read that as the guard failing to fire: a mutation that does
  * not fully mutate accuses the wrong file. */
-/* The mirror of drop(), for a guard that forbids a sentence rather than
- * requiring one. It refuses for the same reason drop() does, from the other
- * side: if the needle is ALREADY there, adding it changes nothing and the mode
- * would report the guard firing on the base rather than on the mutation. */
-const readd = (text, needle) => {
-    if (!text) return text;            // sibling absent: the wallet half still runs
-    assert.ok(!text.includes(needle), `fixture source ALREADY contains ${JSON.stringify(needle)}, `
-        + 'so this mode would add nothing and prove nothing.');
-    const anchor = '</body>';
-    assert.ok(text.includes(anchor), `the security page has no ${anchor} to insert before.`);
-    return text.replace(anchor, `<p>${needle}</p>${anchor}`);
-};
-
 const drop = (text, needle) => {
     if (!text) return text;            // sibling absent: the wallet half still runs
     assert.ok(text.includes(needle), `fixture source no longer contains ${JSON.stringify(needle)}, `
@@ -249,6 +237,17 @@ const page0 = sitesAvailable ? readFileSync(join(SITES_ROOT, PAGE_REL), 'utf8') 
 
 const LIVE = { security: security0, verify: verify0, page: page0 };
 
+const UNPUBLISHED_PAGE = {
+    fingerprint: 'not yet published',
+    releaseState: 'none',
+    statesNoRelease: true,
+};
+const PUBLISHED_PAGE = {
+    fingerprint: FP_A,
+    releaseState: 'published',
+    statesNoRelease: false,
+};
+
 /* THE BASE STATES, and why the modes below no longer start from the live tree.
  *
  * Every failure mode used to mutate ONE field of the checkout as it stood and
@@ -269,12 +268,12 @@ const LIVE = { security: security0, verify: verify0, page: page0 };
 const UNPUBLISHED_BASE = {
     security: statesFingerprint(security0, 'not yet published.'),
     verify: pin(verify0),
-    page: pagePublishes(page0, 'not yet published'),
+    page: pagePublishes(page0, UNPUBLISHED_PAGE),
 };
 const PUBLISHED_BASE = {
     security: statesFingerprint(security0, `${FP_A}.`),
     verify: pin(verify0, { fingerprint: FP_A, armored: ARMORED }),
-    page: pagePublishes(page0, FP_A),
+    page: pagePublishes(page0, PUBLISHED_PAGE),
 };
 
 /* `wallet` and `sites` are either 'green' or a regex the failure output must
@@ -298,7 +297,7 @@ const MODES = [
         mutate: (f) => ({
             security: statesFingerprint(f.security, `${FP_A}.`),
             verify: pin(f.verify, { fingerprint: FP_A, armored: ARMORED }),
-            page: pagePublishes(f.page, FP_A),
+            page: pagePublishes(f.page, PUBLISHED_PAGE),
         }),
     },
     {
@@ -331,7 +330,7 @@ const MODES = [
         mutate: (f) => ({
             security: statesFingerprint(f.security, `${FP_A}.`),
             verify: pin(f.verify, { fingerprint: FP_A, armored: ARMORED }),
-            page: pagePublishes(f.page, FP_B),
+            page: pagePublishes(f.page, { ...PUBLISHED_PAGE, fingerprint: FP_B }),
         }),
     },
     {
@@ -343,7 +342,7 @@ const MODES = [
         mutate: (f) => ({
             security: statesFingerprint(f.security, `${SHORT_ID}.`),
             verify: pin(f.verify, { fingerprint: FP_A, armored: ARMORED }),
-            page: pagePublishes(f.page, SHORT_ID),
+            page: pagePublishes(f.page, { ...PUBLISHED_PAGE, fingerprint: SHORT_ID }),
         }),
     },
     {
@@ -355,7 +354,7 @@ const MODES = [
         mutate: (f) => ({
             security: statesFingerprint(f.security, `${FP_A}.`),
             verify: pin(f.verify, { fingerprint: FP_A.toLowerCase().replace(/(.{4})/g, '$1 ').trim(), armored: ARMORED }),
-            page: pagePublishes(f.page, FP_A),
+            page: pagePublishes(f.page, PUBLISHED_PAGE),
         }),
     },
 
@@ -391,7 +390,7 @@ const MODES = [
         base: UNPUBLISHED_BASE,
         wallet: 'green',
         sites: /disagree about whether the key is published at all/,
-        mutate: (f) => ({ ...f, page: pagePublishes(f.page, '') }),
+        mutate: (f) => ({ ...f, page: pagePublishes(f.page, { ...PUBLISHED_PAGE, fingerprint: '' }) }),
     },
     {
         /* This mode used to DELETE `No XChain Wallet release has been signed or
@@ -417,7 +416,10 @@ const MODES = [
         base: UNPUBLISHED_BASE,
         wallet: 'green',
         sites: /must state plainly that nothing is signed yet/,
-        mutate: (f) => ({ ...f, page: drop(f.page, NO_RELEASE_SENTENCE) }),
+        mutate: (f) => ({
+            ...f,
+            page: pagePublishes(f.page, { ...UNPUBLISHED_PAGE, statesNoRelease: false }),
+        }),
     },
     {
         /* The other side of the same property, and the side the project is on
@@ -432,7 +434,10 @@ const MODES = [
         base: PUBLISHED_BASE,
         wallet: 'green',
         sites: /still tells readers nothing has been signed/,
-        mutate: (f) => ({ ...f, page: readd(f.page, NO_RELEASE_SENTENCE) }),
+        mutate: (f) => ({
+            ...f,
+            page: pagePublishes(f.page, { ...PUBLISHED_PAGE, statesNoRelease: true }),
+        }),
     },
     {
         /* THE SENTENCE THAT IS PROTECTIVE NOW, which is neither of the two
@@ -458,7 +463,14 @@ const MODES = [
         base: PUBLISHED_BASE,
         wallet: 'green',
         sites: /must name every lane no signed release covers/,
-        mutate: (f) => ({ ...f, page: drop(f.page, UNSIGNED_LANES_SENTENCE) }),
+        mutate: (f) => {
+            if (!f.page) return f;
+            const sentences = f.page.match(/No [^.<\n]+ release has been signed or published yet/g) || [];
+            const unsignedLanes = sentences.filter((sentence) => sentence !== NO_RELEASE_SENTENCE);
+            assert.equal(unsignedLanes.length, 1,
+                'the published page fixture must name exactly one set of lanes that remain unsigned.');
+            return { ...f, page: drop(f.page, unsignedLanes[0]) };
+        },
     },
     {
         /* This mode used to delete the page's link to SECURITY.md and expect
@@ -527,7 +539,7 @@ if (failures.length) {
 const channelHalf = sitesChecks === MODES.length
     ? 'each also through the websites publication-channel test'
     : `${sitesChecks} of them also through the websites publication-channel test`;
-console.log(`PASS release-key-pin-mutations.smoke.js (${MODES.length} ceremony states driven`
+console.log(`PASS release-key-pin-mutations.smoke.js (${MODES.length} ceremony states driven `
     + `against a fixture tree, ${channelHalf}, and every one left the claimed suite red for the `
     + 'claimed reason and the other suite green)');
 

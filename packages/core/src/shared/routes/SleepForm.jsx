@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -537,6 +537,10 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
+            {!isTick ? (
+                <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]} chainRegistry={chainRegistry} />
+            ) : null}
+
             {isTick ? (
                 <>
                     {lockedToken && chainId ? <LockedTokenContext chainId={chainId} tick={ticker} /> : null}

@@ -20,6 +20,15 @@ import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
 import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
+import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import {
+    compareDecimalStrings,
+    divideDecimalStrings,
+    multiplyDecimalStrings,
+    roundDecimalString,
+    subtractDecimalStrings,
+    sumDecimalStrings,
+} from '../utils/amountFormat.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 
@@ -53,6 +62,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.tick1
  * @param {string} props.tick2
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onSwap] renders the reverse-pair control; reopens the market with tick1/tick2 flipped
  */
 export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) {
     const { messaging, shell } = useMessaging();
@@ -290,62 +300,52 @@ function extractHistoryRows(resp) {
  * Walk a list of match rows and compute last price, 24h change, 24h
  * high/low, and 24h volume (in tick1).
  *
- * Each match row carries `give_tick`, `get_tick`, `give_amount`,
- * `get_amount` and a timestamp. Price = tick2 per tick1.
+ * Each projected match row carries `price`, `amount`, `type`, and a timestamp.
+ * Raw give/get rows remain accepted for older explorers.
  */
 function derive24hStats(rows, tick1, tick2) {
     const now = Math.floor(Date.now() / 1000);
     const dayAgo = now - 86400;
-    let lastPrice = NaN;
+    let lastPrice = null;
     let lastTs = -Infinity;
-    let firstPriceIn24h = NaN;
+    let firstPriceIn24h = null;
     let firstTsIn24h = Infinity;
-    let high = -Infinity;
-    let low = Infinity;
-    let volume = 0;
+    let high = null;
+    let low = null;
+    let volume = '0';
     for (const row of rows || []) {
-        const giveTick = row.give_tick || row.giveTick;
-        const getTick = row.get_tick || row.getTick;
-        const giveAmt = Number(row.give_amount ?? row.giveAmount);
-        const getAmt = Number(row.get_amount ?? row.getAmount);
-        const ts = Number(row.timestamp ?? row.block_time);
-        if (!Number.isFinite(giveAmt) || giveAmt <= 0) continue;
-        if (!Number.isFinite(getAmt) || getAmt <= 0) continue;
-        if (!Number.isFinite(ts)) continue;
-        let price; let sizeT1;
-        if (giveTick === tick1 && getTick === tick2) {
-            price = getAmt / giveAmt;
-            sizeT1 = giveAmt;
-        } else if (giveTick === tick2 && getTick === tick1) {
-            price = giveAmt / getAmt;
-            sizeT1 = getAmt;
-        } else { continue; }
+        const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
+        if (!parsed) continue;
+        const { price, amount: sizeT1, timestamp: ts } = parsed;
         if (ts > lastTs) { lastTs = ts; lastPrice = price; }
         if (ts >= dayAgo) {
             if (ts < firstTsIn24h) { firstTsIn24h = ts; firstPriceIn24h = price; }
-            if (price > high) high = price;
-            if (price < low) low = price;
-            volume += sizeT1;
+            if (high === null || compareDecimalStrings(price, high) === 1) high = price;
+            if (low === null || compareDecimalStrings(price, low) === -1) low = price;
+            volume = sumDecimalStrings([volume, sizeT1]);
         }
     }
-    const changePct = Number.isFinite(lastPrice) && Number.isFinite(firstPriceIn24h) && firstPriceIn24h > 0
-        ? ((lastPrice - firstPriceIn24h) / firstPriceIn24h) * 100
-        : NaN;
+    const change = lastPrice !== null && compareDecimalStrings(firstPriceIn24h, '0') === 1
+        ? subtractDecimalStrings(lastPrice, firstPriceIn24h)
+        : null;
+    const changePctText = change === null
+        ? null
+        : divideDecimalStrings(multiplyDecimalStrings(change, '100'), firstPriceIn24h, 8);
     return {
-        lastPrice: Number.isFinite(lastPrice) ? lastPrice : NaN,
-        changePct,
-        high: Number.isFinite(high) ? high : NaN,
-        low: Number.isFinite(low) ? low : NaN,
+        lastPrice,
+        changePct: changePctText === null ? NaN : Number(changePctText),
+        high,
+        low,
         volume,
     };
 }
 
 function formatPrice(n) {
-    if (!Number.isFinite(n)) return '-';
-    if (n === 0) return '0';
-    if (n >= 1) return n.toFixed(4);
-    if (n >= 0.01) return n.toFixed(6);
-    return n.toFixed(8);
+    if (compareDecimalStrings(n, '0') === null) return '-';
+    if (compareDecimalStrings(n, '0') === 0) return '0';
+    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
+    if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
+    return roundDecimalString(n, 8);
 }
 
 function formatChangePct(n) {
@@ -355,9 +355,12 @@ function formatChangePct(n) {
 }
 
 function formatVolume(n) {
-    if (!Number.isFinite(n) || n === 0) return '0';
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-    return n.toFixed(0);
+    if (compareDecimalStrings(n, '0') !== 1) return '0';
+    if (compareDecimalStrings(n, '1000000') >= 0) {
+        return `${divideDecimalStrings(n, '1000000', 2)}M`;
+    }
+    if (compareDecimalStrings(n, '1000') >= 0) {
+        return `${divideDecimalStrings(n, '1000', 2)}K`;
+    }
+    return roundDecimalString(n, 0);
 }
-

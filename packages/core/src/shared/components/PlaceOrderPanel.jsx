@@ -911,9 +911,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !price || !size || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? `Place ${side} order` : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? `Place ${side} order` : 'Review')}
                 </Button>
             </div>
         </form>

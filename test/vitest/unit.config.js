@@ -101,9 +101,7 @@ export default defineConfig({
         // steady-state cost and the blast radius. See `maxForks` above for why
         // the ceiling is now computed rather than fixed at 8.
         pool: 'forks',
-        poolOptions: {
-            forks: { maxForks },
-        },
+        maxWorkers: maxForks,
         // Carries the instrumentation flag into the test processes, where
         // test/helpers/testEnvSpeed.js turns it into a multiplier for the
         // ceilings that bound real CPU work.
@@ -171,18 +169,24 @@ export default defineConfig({
             // again - `shared/routes/CreateOrderForm.jsx`, `HomeTabs.jsx` and
             // `ListCreateForm.jsx` among them.
             //
-            // `coverage.experimentalAstAwareRemapping` reports the honest
-            // counts (it maps v8 data through the AST, and `ast-v8-to-istanbul`
-            // is already installed as a transitive dependency, so the flag
-            // costs no new package). It is NOT enabled, and the reason is
-            // measured rather than assumed: on this suite it reads 56.07%
-            // functions over 10535 of them against v8's 63.6% over 5754, so
-            // every floor below would need re-seeding - and two identical runs
-            // disagreed on the DENOMINATOR (10535 vs 10311 functions, 54441 vs
-            // 53372 statements). A ratchet cannot sit on a total that moves
-            // between runs; a stable basis that undercounts is safer than an
-            // honest one that drifts. Revisit when the flag leaves
-            // experimental, or price a real istanbul provider.
+            // AST-aware remapping (v8 data mapped through the AST, via
+            // `ast-v8-to-istanbul`) reports the honest counts, and as of vitest
+            // 4 it is the ONLY basis: `coverage.experimentalAstAwareRemapping`
+            // was removed as an option and the package became a direct
+            // dependency of the provider. There is nothing left to opt out of.
+            //
+            // Kept because it is the history of the floors below. Under vitest
+            // 3 the flag was deliberately OFF: it read 56.07% functions over
+            // 10535 of them against v8's 63.6% over 5754, and two identical
+            // runs disagreed on the DENOMINATOR (10535 vs 10311 functions,
+            // 54441 vs 53372 statements). A ratchet cannot sit on a total that
+            // moves between runs, so a stable basis that undercounts beat an
+            // honest one that drifts.
+            //
+            // That drift did NOT survive into the shipped implementation; see
+            // the re-measurement beside the thresholds. The old reasoning is
+            // recorded here so nobody re-derives it from scratch and reverts
+            // the re-seeding as an unexplained loosening.
             //
             // A RATCHET, not the target. G166 wants >=80% on core; the suite is
             // at ~65% across this lens today, so an 80% gate would just fail
@@ -201,11 +205,37 @@ export default defineConfig({
             // it only records that one was once possible. Keep the gap at ~1-1.5
             // points, the platform convention, which is ten times that spread and
             // so leaves ample slack for runner-to-runner variation.
+            // RE-SEEDED 2026-09-22 for vitest 4, and this is a CHANGE OF BASIS,
+            // not a drop in coverage. Nothing stopped being tested: the same
+            // 7886 tests run over the same lens. `@vitest/coverage-v8` 4.x
+            // removed `experimentalAstAwareRemapping` as an option and made AST
+            // remapping the only path (`ast-v8-to-istanbul` is now a direct
+            // dependency of the provider, not a transitive one), so the honest counts
+            // the note above describes are no longer opt-in.
+            //
+            // Two of the four floors go UP on the new basis (functions 55.2 to
+            // 58.6, lines 64 to 64.4) and two go down (statements, branches),
+            // which is what a different denominator looks like rather than a
+            // regression.
+            //
+            // The note above rejected that basis for one measured reason: two
+            // identical runs disagreed on the denominator, and a ratchet cannot
+            // sit on a total that moves. RE-MEASURED against the shipped v4
+            // implementation, that no longer holds. Three runs across two
+            // machines: 62.02 / 52.35 / 59.79 / 65.59 twice on the dev box,
+            // byte-identical, and 62.03 / 52.35 on an independent CI venue. A spread of
+            // one hundredth of a point, against the tenth of a point v8's own
+            // basis showed. So the objection was to the experimental flag's
+            // behaviour, not to AST remapping as such, and the floors can sit on
+            // it.
+            //
+            // Same ~1-1.5 point gap under measured as before: ten times the
+            // observed spread, still tight enough to catch a real regression.
             thresholds: {
-                statements: 64,
-                branches: 68.3,
-                functions: 55.2,
-                lines: 64,
+                statements: 60.8,
+                branches: 51.2,
+                functions: 58.6,
+                lines: 64.4,
             },
         },
     },

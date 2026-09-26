@@ -33,11 +33,12 @@ const src = readFileSync(formPath, 'utf8');
 assert.ok(/export function OperatorDashboard\b/.test(src),
     'OperatorDashboard is a named export');
 
-// Five read-side data sources fetched in parallel.
+// Six read-side data sources fetched in parallel.
 for (const call of [
     'messaging.getStakesForAddress',
     'messaging.getDelegationsForAddress',
     'messaging.getRewardsForAddress',
+    'messaging.getRewardClaimsForAddress',
     'messaging.getBroadcastsForAddress',
     'messaging.getValidatorsForChain',
 ]) {
@@ -71,6 +72,10 @@ assert.ok(/setValue\(''\)/.test(src),
 // Auto-find self in validator roster by signing pubkey.
 assert.ok(/signing_pubkey|SIGNING_PUBKEY/.test(src),
     'OperatorDashboard joins validator roster by signing pubkey');
+assert.ok(/splitRewards\(rewards\.rows, rewardClaims\.rows\)/.test(src),
+    'OperatorDashboard includes claim-ledger rows in its reward split');
+assert.ok(/unclaimedRewards\(\{ rewards: rows, claims \}\)/.test(src),
+    'OperatorDashboard uses the canonical accrued-minus-valid-claims helper');
 
 // --- Core flow ---
 

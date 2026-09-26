@@ -158,6 +158,13 @@
 # skips every row belonging to another one, so the two shapes cannot
 # satisfy each other in either direction.
 #
+# THE SOURCE TREE IS PART OF THIS CONTRACT. Production signing reads this
+# artifact profile and the dev-mock gate from the pristine release tag. Only
+# `sign.sh --staging` reads both from the invoking tool tree, because that
+# rehearsal tests the next release's controls against the previous release's
+# bytes. sign.sh derives both paths from one immutable root so the profile and
+# gate cannot silently come from different trees.
+#
 # WHY THE REHEARSAL SET NEEDED ITS OWN SHAPE AT ALL. A staging build
 # deliberately emits ONLY the update-capable formats - mac zip, win nsis,
 # linux AppImage and deb - because a staging variant of a format with no

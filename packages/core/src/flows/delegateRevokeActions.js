@@ -25,6 +25,7 @@
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
 
 /**
  * @typedef {Object} DelegateActionOpts
@@ -77,6 +78,7 @@ export async function delegateAction(opts) {
         actionData: { action: 'DELEGATE', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            ...fundingEncoderOpts(source),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
@@ -89,6 +91,7 @@ export async function delegateAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }
 
@@ -144,6 +147,7 @@ export async function revokeDelegationAction(opts) {
         actionData: { action: 'DELEGATE', params: { VERSION: '2', ...opts.params } },
         encoderOpts: {
             pubkey: source.publicKey,
+            ...fundingEncoderOpts(source),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
@@ -156,5 +160,6 @@ export async function revokeDelegationAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

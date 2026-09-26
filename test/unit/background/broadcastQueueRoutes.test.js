@@ -33,9 +33,11 @@
 //      from the queue is what would otherwise strand the record for good, and
 //      a second key would outlive the wipe, which clears by enumerated key.
 //   5. A boot whose local store lost the queue rebuilds it from the durable
-//      PendingTx records the signing flow stamped 'queued', bounded by an
-//      ownership join so no wallet sees another's signed bytes, and by the
-//      'broadcasting' claim so nothing that reached a node comes back.
+//      PendingTx records, bounded by an ownership join so no wallet sees
+//      another's signed bytes. A record still stamped 'broadcasting' comes back
+//      too, flagged as a resumed claim: its worker died mid-send, so re-sending
+//      the identical bytes is how the wallet learns whether they landed, and an
+//      "already known" answer settles it as delivered rather than failed.
 
 import { describe, it, expect, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
@@ -772,10 +774,11 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
         expect((await h.list()).map((e) => e.pendingTxId)).toEqual(['p1']);
     });
 
-    it('does not rebuild an entry for bytes that already reached a node', async () => {
+    // The claim before the network lands; the settlement after it does not,
+    // which is the shape that leaves a claimed transaction stranded at
+    // 'broadcasting' with valid signed bytes and no surface that can see them.
+    const strandedClaim = async () => {
         const records = await withRecords([queuedRecord('p1', A_ADDR)]);
-        // The claim before the network lands; the settlement after it does not,
-        // which is the shape that leaves a broadcast transaction unsettled.
         const refusesAfterClaim = {
             ...records,
             put: async (rec) => {
@@ -791,12 +794,79 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
         });
         expect((await first.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
         expect((await records.get('p1')).status).toBe('broadcasting');
+        return records;
+    };
 
-        // A fresh worker over an empty local store and the same vault.
+    it('rebuilds an interrupted claim as a resumed entry rather than hiding it', async () => {
+        const records = await strandedClaim();
+
+        // A fresh worker over an empty local store and the same vault. Reading
+        // only 'queued' leaves these signed bytes unreachable from every
+        // surface: the History mapper skips a PendingTx with no txid, and the
+        // record never leaves 'broadcasting' on its own.
         const broadcastTx = vi.fn(async () => 'tx-A');
         const reopened = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
-        expect(await reopened.list()).toEqual([]);
+        const listed = await reopened.list();
+        expect(listed.map((e) => e.pendingTxId)).toEqual(['p1']);
+        expect(listed[0].resumedClaim).toBe(true);
+        // Listing is not sending: the user decides.
         expect(broadcastTx).not.toHaveBeenCalled();
+    });
+
+    it('settles a resumed claim the node already knows as broadcast, not failed', async () => {
+        const records = await strandedClaim();
+
+        // Re-sending the identical bytes is how the wallet learns what happened
+        // to them. "Already known" means the node holds this txid, so the
+        // transaction was delivered; retiring it as 'failed' here would invite
+        // a re-compose, the one action on this path that can spend twice.
+        const broadcastTx = vi.fn(async () => { throw new Error('txn-already-known'); });
+        const reopened = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
+        const listed = await reopened.list();
+        const res = await reopened.call('broadcast.queue.broadcast', { walletId: W, id: listed[0].id });
+
+        expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
+        expect(res.result.alreadyOnNetwork).toBe(true);
+        expect((await records.get('p1')).status).toBe('broadcast');
+        expect(await reopened.list()).toEqual([]);
+    });
+
+    it('keeps the never-claimed lane retiring an already-known rejection as failed', async () => {
+        // The same node answer on a record that was never claimed still means
+        // these bytes cannot be sent by this entry, so the ordinary lane is
+        // untouched by the resumed-claim path.
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const broadcastTx = vi.fn(async () => { throw new Error('txn-already-known'); });
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
+        const listed = await h.list();
+        expect(listed[0].resumedClaim).toBeUndefined();
+
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: listed[0].id });
+        expect(res.ok).toBe(false);
+        expect((await records.get('p1')).status).toBe('failed');
+    });
+
+    it('does not re-admit an interrupted claim the settlement journal still owes a write to', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR, { status: 'broadcasting' })]);
+        const h = makeHost({
+            entries: [],
+            pendingTxs: records,
+            broadcastTx: vi.fn(),
+            storage: {
+                load: async () => ({}),
+                save: async () => {},
+                loadSettlements: async () => ([{
+                    id: 's1', pendingTxId: 'p1', op: 'patch', patch: { status: 'broadcast', txid: 'tx-A' },
+                }]),
+                saveSettlements: async () => {},
+                clear: async () => {},
+            },
+            ...tables(),
+        });
+
+        // The journal names this record, so its broadcast already resolved and
+        // the replay owns it.
+        expect(await h.list()).toEqual([]);
     });
 
     it('does not rebuild an entry the settlement journal still owes a write to', async () => {

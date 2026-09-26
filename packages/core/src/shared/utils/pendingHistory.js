@@ -173,6 +173,22 @@ export function firstSeenToMs(firstSeen) {
     return n < 1e12 ? Math.round(n * 1000) : Math.round(n);
 }
 
+/**
+ * An entry's own time in milliseconds, or null when it carries none.
+ *
+ * A merged list holds two time scales at once. A confirmed entry is stamped
+ * in unix SECONDS (the explorer hands over `blocks.block_time`) and a pending
+ * one in milliseconds, so anything that orders or windows the merged list has
+ * to read through here. Comparing the two scales raw puts every pending row
+ * fifty thousand years above every confirmed one.
+ *
+ * @param {{ timestamp?: unknown } | null | undefined} entry
+ * @returns {number | null}
+ */
+export function entryTimeMs(entry) {
+    return firstSeenToMs(entry?.timestamp);
+}
+
 /** @param {unknown} iso */
 function isoToMs(iso) {
     if (typeof iso !== 'string' || iso === '') return null;
@@ -518,8 +534,20 @@ export function pendingDisplayState(entry, nowMs, windows) {
 }
 
 /**
- * Sort order for a merged list (I-22): pending first, newest first, then the
- * confirmed groups in the order History has always used.
+ * Sort order for a merged list (I-22): pending first, then every entry
+ * newest first by its own clock.
+ *
+ * The clock is the point. History fans out over every chain the wallet uses
+ * and merges the results into ONE list, and a block height is a per-chain
+ * counter, not a shared time. Dogecoin's heights run millions above
+ * Bitcoin's, so ordering the confirmed side by height alone parked every
+ * DOGE row above every BTC row permanently, whatever their dates: a send
+ * from three days ago sat above sends made today.
+ *
+ * Height and action index still decide ties, but only BETWEEN ROWS OF ONE
+ * CHAIN, where they are a real sequence and finer than the block time both
+ * rows share. Across chains they are two unrelated counters and comparing
+ * them is the defect above.
  *
  * Exported so History and its tests agree on one comparator rather than each
  * carrying a copy.
@@ -531,7 +559,14 @@ export function compareMergedEntries(a, b) {
     const aPending = Number(a?.blockIndex ?? 0) <= 0;
     const bPending = Number(b?.blockIndex ?? 0) <= 0;
     if (aPending !== bPending) return aPending ? -1 : 1;
-    if (aPending) return Number(b?.timestamp ?? 0) - Number(a?.timestamp ?? 0);
+
+    // An entry with no usable stamp sinks below every dated one. A zero would
+    // instead float it to the top of an ascending subtraction.
+    const aMs = entryTimeMs(a) ?? -Infinity;
+    const bMs = entryTimeMs(b) ?? -Infinity;
+    if (aMs !== bMs) return bMs - aMs;
+
+    if (aPending || a?.chainId !== b?.chainId) return 0;
     if (b.blockIndex !== a.blockIndex) return b.blockIndex - a.blockIndex;
     return Number(b.actionIndex) - Number(a.actionIndex);
 }

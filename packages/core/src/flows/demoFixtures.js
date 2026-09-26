@@ -710,8 +710,9 @@ const DEMO_STAKING_BY_CHAIN = {
                 block_index: 12_412,
             },
         ],
-        // Two claimed + one pending; splitRewards() sums all three for
-        // "Lifetime" (80.25) and only the pending one for "Pending" (12.5).
+        // Accrual ledger only: without separate demo claim rows,
+        // unclaimedRewards() reports all 80.25 as unclaimed. reward_claims,
+        // not these legacy display statuses, supply the subtraction.
         rewards: [
             { action_index: 'demo-reward-3', amount: 12.5, status: 'pending', block_index: 12_470 },
             { action_index: 'demo-reward-2', amount: 40, status: 'claimed', block_index: 12_300 },
@@ -917,28 +918,34 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     // clean 8-dp value so toLocaleString() reads nicely.
     const px = (qty) => Number((unit * qty).toFixed(8));
     const wrap = (row) => ({ chainId, row });
+    // Dispenser and dispense rows use the explorer's own fields (decimal
+    // strings, a string status, the lifecycle beside it) so the demo drives
+    // the same render path real rows do.
+    const pxs = (qty) => px(qty).toFixed(8).replace(/\.?0+$/, '');
+    const offer = (idx, give, remaining) => ({
+        action_index: idx, status: 'valid', current_status: 'open',
+        give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give),
+        escrow_remaining: String(remaining),
+    });
+    const sale = (n, give, ago) => ({
+        tx_hash: `demo-${chainId}-dispense-${n}`, status: 'valid',
+        give_tick: tick, give_amount: String(give), get_coin: coinTick, get_amount: pxs(give), timestamp: sec(ago),
+    });
 
-    const offers = [
-        { action_index: 900101, status: 0, give_quantity: 1000, get_tick: coinTick, get_quantity: px(1000), give_remaining: 7500 },
-        { action_index: 900102, status: 0, give_quantity: 500, get_tick: coinTick, get_quantity: px(500), give_remaining: 2000 },
-    ].map(wrap);
+    const offers = [offer(900101, 1000, 7500), offer(900102, 500, 2000)].map(wrap);
 
-    const sales = [
-        { tx_hash: `demo-${chainId}-dispense-1`, give_quantity: 1000, get_tick: coinTick, get_quantity: px(1000), timestamp: sec(3_600) },
-        { tx_hash: `demo-${chainId}-dispense-2`, give_quantity: 250, get_tick: coinTick, get_quantity: px(250), timestamp: sec(14_400) },
-        { tx_hash: `demo-${chainId}-dispense-3`, give_quantity: 2000, get_tick: coinTick, get_quantity: px(2000), timestamp: sec(86_400) },
-    ].map(wrap);
+    const sales = [sale(1, 1000, 3_600), sale(2, 250, 14_400), sale(3, 2000, 86_400)].map(wrap);
 
     const dexOrders = [
         // A sell (give the token, get coin) and a buy (give coin, get the token).
-        { action_index: 900201, give_tick: tick, give_quantity: 5000, get_tick: coinTick, get_quantity: px(5000) },
-        { action_index: 900202, give_tick: coinTick, give_quantity: px(3000), get_tick: tick, get_quantity: 3000 },
+        { action_index: 900201, status: 'valid', give_tick: tick, give_coin: coinTick, give_amount: '5000', get_tick: null, get_coin: coinTick, get_amount: String(px(5000)) },
+        { action_index: 900202, status: 'valid', give_tick: null, give_coin: coinTick, give_amount: String(px(3000)), get_tick: tick, get_coin: coinTick, get_amount: '3000' },
     ].map(wrap);
 
     const dexSwaps = [
-        { tx_hash: `demo-${chainId}-swap-1`, give_tick: tick, give_quantity: 1500, get_tick: coinTick, get_quantity: px(1500), timestamp: sec(7_200) },
-        { tx_hash: `demo-${chainId}-swap-2`, give_tick: coinTick, give_quantity: px(800), get_tick: tick, get_quantity: 800, timestamp: sec(18_000) },
-        { tx_hash: `demo-${chainId}-swap-3`, give_tick: tick, give_quantity: 4200, get_tick: coinTick, get_quantity: px(4200), timestamp: sec(90_000) },
+        { action_index: 900301, tx_hash: `demo-${chainId}-swap-1`, status: 'valid', swap_status: 'complete', give_tick: tick, give_coin: coinTick, give_amount: '1500', get_tick: null, get_coin: coinTick, get_amount: String(px(1500)), timestamp: sec(7_200) },
+        { action_index: 900302, tx_hash: `demo-${chainId}-swap-2`, status: 'valid', swap_status: 'complete', give_tick: null, give_coin: coinTick, give_amount: String(px(800)), get_tick: tick, get_coin: coinTick, get_amount: '800', timestamp: sec(18_000) },
+        { action_index: 900303, tx_hash: `demo-${chainId}-swap-3`, status: 'valid', swap_status: 'complete', give_tick: tick, give_coin: coinTick, give_amount: '4200', get_tick: null, get_coin: coinTick, get_amount: String(px(4200)), timestamp: sec(90_000) },
     ].map(wrap);
 
     return { offers, sales, dexOrders, dexSwaps };
@@ -1130,7 +1137,8 @@ const DEMO_DISPENSERS = /** @type {Record<string, any[]>} */ ({
         },
         {
             action_index: '7298431', tx_hash: 'demo-disp-doge-2', block_index: 6329988,
-            status: 'canceled', give_tick: 'WOW', give_amount: '10',
+            // The indexer writes `cancelled`, which the list and detail pages key on.
+            status: 'cancelled', give_tick: 'WOW', give_amount: '10',
             get_coin: '', get_tick: 'DOGI', get_amount: '50',
             memo: 'Mispriced, reopened as #7301556.',
             escrow_remaining: '0', dispense_count: 0,

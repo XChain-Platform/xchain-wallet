@@ -35,6 +35,7 @@ import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import styles from './TokenWizard.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -110,6 +111,10 @@ export function TokenWizard({ walletId, onBack }) {
     const [maxMint, setMaxMint] = useState('');
     const [lockOnCreate, setLockOnCreate] = useState(false);
     const [transferTo, setTransferTo] = useState('');
+    // Where the initial mint lands (ISSUE TRANSFER_SUPPLY). Separate from
+    // ownership: the chain keeps the minted units with the issuer unless this
+    // is set, which the standalone form learned from a testnet report.
+    const [transferSupplyTo, setTransferSupplyTo] = useState('');
     const [imageUrl, setImageUrl] = useState('');         // collectible + edition
     const [parentToken, setParentToken] = useState('');   // subtoken only
     // Edition-only public-mint window fields.
@@ -150,8 +155,9 @@ export function TokenWizard({ walletId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -159,19 +165,28 @@ export function TokenWizard({ walletId, onBack }) {
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
-                const first = Object.keys(byChain)[0];
-                if (!first) {
+                if (Object.keys(byChain || {}).length === 0) {
                     setLoadError(
                         'No addresses on any chain yet. Use Receive to generate one before creating a token.',
                     );
                     return;
                 }
-                setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key opened the wizard on the wallet's OLDEST chain
+                // forever. Open on the last-used chain instead, ahead of the
+                // first-key fallback, exactly as Send does.
+                setChainId((prev) => pickDefaultChainId(byChain, {
+                    explicitChainId: prev,
+                    settings,
+                }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -280,6 +295,7 @@ export function TokenWizard({ walletId, onBack }) {
             description,
             lockOnCreate,
             transferTo,
+            transferSupplyTo,
             imageUrl,
             parentToken,
             perAddressMax,
@@ -288,7 +304,7 @@ export function TokenWizard({ walletId, onBack }) {
             advanced,
         }),
         [template, name, supply, maxMint, divisible, description,
-         lockOnCreate, transferTo, imageUrl, parentToken,
+         lockOnCreate, transferTo, transferSupplyTo, imageUrl, parentToken,
          perAddressMax, mintStartBlock, mintStopBlock, advanced],
     );
 
@@ -590,6 +606,7 @@ export function TokenWizard({ walletId, onBack }) {
             maxMint, setMaxMint,
             lockOnCreate, setLockOnCreate,
             transferTo, setTransferTo,
+            transferSupplyTo, setTransferSupplyTo,
             imageUrl, setImageUrl,
             parentToken, setParentToken,
             perAddressMax, setPerAddressMax,
@@ -882,6 +899,9 @@ const TEMPLATE_COMPOSERS = {
             p.LOCK_MINT = '1';
         }
         if (form.transferTo) p.TRANSFER = form.transferTo.trim();
+        // seedSupply above always mints the whole supply here, so a
+        // destination for it is never a dead field on this template.
+        if (form.transferSupplyTo && p.MINT_SUPPLY) p.TRANSFER_SUPPLY = form.transferSupplyTo.trim();
         // PC-06: the advanced disclosure's lock matrix, callback trio,
         // and access lists. Applied last so an explicitly checked flag
         // and the `lockOnCreate` shortcut converge on the same '1'
@@ -1065,6 +1085,7 @@ const TEMPLATE_FIELDS = {
     custom: {
         name: true, displayName: true, supply: true, divisible: true,
         description: true, maxMint: true, lockOnCreate: true, transferTo: true,
+        transferSupplyTo: true,
     },
 };
 
@@ -1078,6 +1099,7 @@ function renderDetailsStage({
     maxMint, setMaxMint,
     lockOnCreate, setLockOnCreate,
     transferTo, setTransferTo,
+    transferSupplyTo, setTransferSupplyTo,
     imageUrl, setImageUrl,
     parentToken, setParentToken,
     perAddressMax, setPerAddressMax,
@@ -1230,9 +1252,20 @@ function renderDetailsStage({
             {show.transferTo ? (
                 <Input
                     label="Transfer ownership to (optional)"
-                    hint="Leave blank to keep control."
+                    hint="Leave blank to keep control. This hands over the right to manage the token; the minted tokens stay with the issuing address unless you also send them below."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                />
+            ) : null}
+            {show.transferSupplyTo ? (
+                <Input
+                    label="Send the initial mint to (optional)"
+                    hint="Leave blank to keep the minted tokens at the issuing address."
+                    value={transferSupplyTo}
+                    onChange={(e) => setTransferSupplyTo(e.target.value)}
                     autoComplete="off"
                     autoCapitalize="none"
                     autoCorrect="off"

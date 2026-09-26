@@ -60,7 +60,8 @@ function latin1Of(bytes) {
  *     from anyone but the tick's issuer (FILE.md anti-spam rule).
  *
  * Size limits are encoding-aware (flows/fileSizeLimits.js): the ceiling
- * is the 8192-byte compiled ACTION push (consensus) minus this upload's
+ * is the 8192-byte compiled ACTION push (consensus), or the Taproot envelope
+ * ceiling where the envelope is available, minus this upload's
  * actual metadata overhead, computed live - not the old flat 7000-byte
  * guess. The PC-29 unlock-threshold field intentionally does NOT appear
  * here yet; it ships with PC-29 behind its flag-day activation height.
@@ -235,27 +236,31 @@ export function PublishFileForm({ walletId, onBack }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Can this publish actually ride a Taproot envelope? BOTH halves must
-    // hold, and each rules out a different disaster.
+    // Can this publish actually ride a Taproot envelope? All three must hold,
+    // and each rules out a different disaster.
     //
     // The SIGNER half (§6): a reveal that cannot be signed strands the commit, so
-    // hardware and watch-only never qualify (flows/signerCapability.js).
+    // hardware never qualifies (flows/signerCapability.js).
+    //
+    // The LANE half: only the confirm lane carries the commit, its reveal and the
+    // recovery record to Approve. The watch-only lane builds one unsigned PSBT
+    // with no reveal, so it stays on the legacy ceiling.
     //
     // The CHAIN half: offering a 390 KB ceiling on a chain with no Taproot would
     // let the user pick a file the encoder cannot carry, and they would find out
     // at submit. `p2tr` in addressTypes is the descriptor's own statement that the
     // chain does Taproot: BTC yes, DOGE never (no segwit at all). LTC is
-    // protocol-capable and armed at 3160000, but its descriptor still reserves
-    // p2tr, so the wallet stays conservative there until that lands rather than
-    // guessing ahead of the registry.
+    // protocol-capable, but its descriptor still reserves p2tr, so the wallet
+    // stays conservative there until that lands rather than guessing ahead.
     const envelopeAvailable = Boolean(
-        flowsLib.signerSupportsTapscript(fromAddress)
+        !isWatcherMode
+        && flowsLib.signerSupportsTapscript(fromAddress)
         && descriptor?.addressTypes?.includes('p2tr'),
     );
 
-    // Encoding-aware ceiling for the CURRENT metadata (PC-28): exact,
-    // not the old flat 7000-byte artwork guess. With the envelope available this
-    // is the §4 per-encoding ceiling rather than the legacy compiled one.
+    // Size the ceiling from the encoding the compose actually requests (PC-28):
+    // the envelope ceiling when the compose asks for AUTO below, the legacy
+    // compiled ceiling otherwise.
     const publicCapFor = (name, type) => flowsLib.maxPublicFileBytes(
         { name, type, title, memo },
         envelopeAvailable ? { encoding: 'TAPROOT' } : {},
@@ -333,7 +338,15 @@ export function PublishFileForm({ walletId, onBack }) {
                     rawData,
                     payFeeInNativeCoin: nativeFee.flag || undefined,
                     ...(feePerKb != null ? { feePerKb } : {}),
+                    // Opt in to size-aware selection, and ASSERT the signer's
+                    // tapscript capability rather than letting AUTO assume it: AUTO
+                    // reaches for the envelope only when that flag is true.
+                    ...(envelopeAvailable
+                        ? { encoding: 'AUTO', options: flowsLib.encoderSignerOptions(fromAddress) }
+                        : {}),
                 },
+                // prebuiltPsbt carries the envelope's reveal and recovery record
+                // when AUTO chose TAPROOT, so Approve signs both composed PSBTs.
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
@@ -441,15 +454,6 @@ export function PublishFileForm({ walletId, onBack }) {
                     rawData,
                     payFeeInNativeCoin: nativeFee.flag,
                     ...(feePerKb != null ? { feePerKb } : {}),
-                    // Opt in to size-aware selection, and ASSERT the signer's
-                    // tapscript capability rather than letting AUTO assume it. AUTO only
-                    // reaches for the envelope when that flag is true, so an unaffirmed
-                    // signer stays on P2WSH instead of committing to a reveal it cannot
-                    // produce. Only sent when the envelope is actually available, so
-                    // nothing changes for chains or accounts that cannot use it.
-                    ...(envelopeAvailable
-                        ? { encoding: 'AUTO', options: flowsLib.encoderSignerOptions(fromAddress) }
-                        : {}),
                 };
                 r = hw
                     ? await messaging.fileActionHw({ ...base, signerId: fromAddress.signerId })
@@ -845,9 +849,11 @@ export function PublishFileForm({ walletId, onBack }) {
                             type="submit"
                             variant="primary"
                             loading={actionConfirm.composing}
-                            disabled={!fileMeta || !fromAddress || actionConfirm.composing}
+                            disabled={actionConfirm.composing}
                         >
-                            {singleEncode ? 'Publish file' : 'Review publish'}
+                            {actionConfirm.composing
+                                ? 'Preparing review…'
+                                : singleEncode ? 'Publish file' : 'Review publish'}
                         </Button>
                     </div>
                 </>

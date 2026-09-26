@@ -5,7 +5,7 @@
 //
 // that fix (`xchain-indexer` 297c7cb) clears `_smtTickNameCache` /
 // `_smtAddressNameCache` in the `finally` of every transaction ABORT, and
-// `test/unit/actions.dryRunSmtMemoInvalidation.test.js` pins the coupling
+// `test/unit/state_commitment/actions_dry_run_smt_memo_invalidation.test.js` pins the coupling
 // against a real Database. that verify clause is a different question: it
 // asks whether the LTC REGTEST VENUE, the deployed process, still wedges. Only
 // the venue can answer that, so this driver asks it.

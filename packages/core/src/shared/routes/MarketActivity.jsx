@@ -16,7 +16,19 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import {
+    dispenserRateLabel,
+    enrichOfferRows,
+    formatDecimal,
+    isCompleteSwap,
+    isDispenserPriceStale,
+    isOpenDispenserSelling,
+    isOpenOffer,
+    offerAmounts,
+} from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
+import { formatWithThousands } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -108,23 +120,32 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
         const offersByChain = chains.map((cid) =>
             messaging.getDispensersForToken({ chainId: cid, token: tick })
+                // The explorer's status is a string label ('valid'), which
+                // Number() made NaN, so a numeric test here dropped every row.
                 .then((resp) => extractRows(resp)
-                    .filter((d) => d && (d.status === undefined || Number(d.status) === 0))
+                    .filter((d) => isOpenDispenserSelling(d, tick))
                     .map((row) => ({ chainId: cid, row })))
                 .catch(() => []),
         );
         const salesByChain = chains.map((cid) =>
             typeof messaging.getDispenses === 'function'
                 ? messaging.getDispenses({ chainId: cid, query: tick, type: 'token' })
-                    .then((resp) => extractRows(resp).map((row) => ({ chainId: cid, row })))
+                    // A refused dispense (a barred payer, a dark oracle) moved
+                    // nothing, so it is not a sale.
+                    .then((resp) => extractRows(resp)
+                        .filter((row) => flowsLib.dispenseIsValid(row))
+                        .map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
         );
         const ordersByChain = chains.map((cid) =>
             typeof messaging.getOrdersForToken === 'function'
                 ? messaging.getOrdersForToken({ chainId: cid, tick })
-                    .then((resp) => extractRows(resp)
-                        .filter((o) => o && (o.status === undefined || o.status === 'open' || Number(o.status) === 0))
+                    .then(async (resp) => enrichOfferRows(extractRows(resp),
+                        typeof messaging.getOrderDetail === 'function'
+                            ? (row) => messaging.getOrderDetail({ chainId: cid, actionIndex: String(row.action_index) })
+                            : null))
+                    .then((rows) => rows.filter((row) => isOpenOffer(row))
                         .map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
@@ -132,7 +153,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         const swapsByChain = chains.map((cid) =>
             typeof messaging.getSwapsForToken === 'function'
                 ? messaging.getSwapsForToken({ chainId: cid, tick })
-                    .then((resp) => extractRows(resp).map((row) => ({ chainId: cid, row })))
+                    .then(async (resp) => enrichOfferRows(extractRows(resp),
+                        typeof messaging.getSwapDetail === 'function'
+                            ? (row) => messaging.getSwapDetail({ chainId: cid, actionIndex: String(row.action_index) })
+                            : null))
+                    .then((rows) => rows.filter((row) => isCompleteSwap(row))
+                        .map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
         );
@@ -152,6 +178,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         });
         return () => { cancelled = true; };
     }, [tick, walletId, messaging, chains]);
+
+    // A Mode B offer carries no price on this lane; it comes from its oracle.
+    const oracleFeedsFor = useOracleFeeds(messaging, offers);
 
     // Sub-view: tapping the token header opens the shared picker to switch
     // markets. 'receive' purpose enables cross-chain token discovery so the
@@ -226,10 +255,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {offers.map(({ chainId, row }) => {
-                                const give = row.give_quantity ?? row.give_remaining;
-                                const getTick = row.get_tick || row.mainchainrate_tick || 'COIN';
-                                const get = row.get_quantity ?? row.mainchainrate;
-                                const remaining = row.give_remaining ?? row.escrow_quantity;
+                                // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT
+                                // (0 on a fiat-priced one), live escrow_remaining.
+                                const remaining = flowsLib.dispenserLiveState(row).giveRemaining;
                                 const actionIndex = row.action_index || row.actionIndex || row.tx_hash || row.id;
                                 const onClick = typeof onOpenDispenser === 'function' && actionIndex
                                     ? () => onOpenDispenser(chainId, actionIndex)
@@ -245,10 +273,14 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>
-                                                    {give && get ? `${Number(get).toLocaleString()} ${getTick} per ${Number(give).toLocaleString()} ${tick}` : 'Open dispenser'}
+                                                    {isDispenserPriceStale(row)
+                                                        ? dispenserRateLabel(row)
+                                                        : row.give_amount
+                                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
+                                                            : 'Open dispenser'}
                                                 </span>
                                                 <span className={styles.rowSub}>
-                                                    {remaining != null ? `${Number(remaining).toLocaleString()} ${tick} remaining` : ''}
+                                                    {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
                                                 </span>
                                             </span>
                                             {onClick ? <Icon.ForwardIcon /> : null}
@@ -273,17 +305,16 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {dexOrders.slice(0, 50).map(({ chainId, row }, i) => {
-                                const giveTick = row.give_tick || row.giveTick || '';
-                                const getTick = row.get_tick || row.getTick || '';
-                                const giveQty = row.give_quantity ?? row.give_remaining;
-                                const getQty = row.get_quantity ?? row.get_remaining;
+                                const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
+                                const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                const { give: giveQty, get: getQty } = offerAmounts(row);
                                 const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null
-                                        ? `Sell ${Number(giveQty).toLocaleString()} ${tick} for ${Number(getQty).toLocaleString()} ${getTick}`
+                                        ? `Sell ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
                                         : `Sell ${tick}`)
                                     : (giveQty != null && getQty != null
-                                        ? `Buy ${Number(getQty).toLocaleString()} ${tick} for ${Number(giveQty).toLocaleString()} ${giveTick}`
+                                        ? `Buy ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
                                         : `Buy ${tick}`);
                                 const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                 return (
@@ -314,9 +345,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {sales.slice(0, 50).map(({ chainId, row }, i) => {
-                                const give = row.give_quantity ?? row.dispense_quantity ?? row.quantity;
-                                const getTick = row.get_tick || row.mainchainrate_tick || 'COIN';
-                                const get = row.get_quantity ?? row.mainchainrate ?? row.price;
+                                // A dispense row's GET_AMOUNT is what the buyer actually
+                                // paid, so it is right even for a fiat-priced dispenser.
+                                const give = row.give_amount;
+                                const soldTick = row.give_tick || tick;
+                                const payAsset = row.get_tick || row.get_coin || '';
+                                const get = row.get_amount;
                                 const ts = Number(row.timestamp || row.block_time || 0);
                                 const dateLabel = ts > 0
                                     ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
@@ -327,8 +361,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             <TickerIcon chainId={chainId} tick={tick} size={32} />
                                             <span className={styles.rowText}>
                                                 <span className={styles.rowTitle}>
-                                                    {give ? `Sold ${Number(give).toLocaleString()} ${tick}` : `Sold ${tick}`}
-                                                    {give && get ? ` for ${Number(get).toLocaleString()} ${getTick}` : ''}
+                                                    {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
+                                                    {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
                                                 </span>
                                                 <span className={styles.rowSub}>
                                                     {dateLabel}
@@ -355,10 +389,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     ) : (
                         <ul className={styles.list} role="list">
                             {dexSwaps.slice(0, 50).map(({ chainId, row }, i) => {
-                                const giveTick = row.give_tick || row.giveTick || '';
-                                const getTick = row.get_tick || row.getTick || '';
-                                const giveQty = row.give_quantity ?? null;
-                                const getQty = row.get_quantity ?? null;
+                                const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
+                                const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                const giveQty = row.give_amount ?? row.giveAmount ?? null;
+                                const getQty = row.get_amount ?? row.getAmount ?? null;
                                 const ts = Number(row.timestamp || row.block_time || 0);
                                 const dateLabel = ts > 0
                                     ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
@@ -366,10 +400,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null
-                                        ? `Sold ${Number(giveQty).toLocaleString()} ${tick} for ${Number(getQty).toLocaleString()} ${getTick}`
+                                        ? `Sold ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
                                         : `Sold ${tick}`)
                                     : (giveQty != null && getQty != null
-                                        ? `Bought ${Number(getQty).toLocaleString()} ${tick} for ${Number(giveQty).toLocaleString()} ${giveTick}`
+                                        ? `Bought ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
                                         : `Bought ${tick}`);
                                 const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                 return (

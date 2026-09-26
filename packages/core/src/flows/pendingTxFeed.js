@@ -28,6 +28,7 @@ import {
     isFailedPendingStatus,
     isLivePendingStatus,
 } from '../shared/utils/pendingHistory.js';
+import { isPrunableConfirmedPendingTx } from '../schemas/pendingTx.js';
 
 /**
  * @typedef {Object} PendingTxSummary
@@ -128,11 +129,17 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
     if (!vault) throw new Error('livePendingTxs: vault is required');
     if (!chainId) throw new Error('livePendingTxs: chainId is required');
     const all = await vault.pendingTxs.list();
+    let removedIds = new Set();
+    try {
+        removedIds = new Set(await pruneConfirmedPendingTxs({ vault, records: all }));
+    } catch {
+        removedIds = new Set();
+    }
     const descriptor = chainRegistry?.get?.(chainId) || null;
     const wanted = address ? String(address).toLowerCase() : null;
     const out = [];
     for (const record of Array.isArray(all) ? all : []) {
-        if (!record) continue;
+        if (!record || removedIds.has(record.id)) continue;
         const failed = isFailedPendingStatus(record.status);
         if (!record.txid && !failed) continue;
         if (!failed && !isLivePendingStatus(record.status) && !isChainConfirmedRecord(record)) continue;
@@ -168,4 +175,24 @@ export async function dismissFailedPendingTx({ vault, pendingTxId }) {
     const existing = await vault.pendingTxs.get(pendingTxId);
     if (!existing || !isFailedPendingStatus(existing.status)) return false;
     return await vault.pendingTxs.delete(pendingTxId);
+}
+
+/**
+ * @param {object} opts
+ * @param {import('../storage/Vault.js').Vault} opts.vault
+ * @param {() => string} [opts.now]
+ * @param {number} [opts.retentionMs]
+ * @param {object[]} [opts.records]
+ * @returns {Promise<string[]>}
+ */
+export async function pruneConfirmedPendingTxs({ vault, now, retentionMs, records } = {}) {
+    if (!vault) throw new Error('pruneConfirmedPendingTxs: vault is required');
+    const nowMs = Date.parse(typeof now === 'function' ? now() : new Date().toISOString());
+    const all = Array.isArray(records) ? records : await vault.pendingTxs.list();
+    const removed = [];
+    for (const record of Array.isArray(all) ? all : []) {
+        if (!isPrunableConfirmedPendingTx(record, nowMs, retentionMs)) continue;
+        if (await vault.pendingTxs.delete(record.id)) removed.push(record.id);
+    }
+    return removed;
 }

@@ -15,6 +15,7 @@ export {
     VaultUnavailableError,
     VaultLockedError,
     VaultCorruptError,
+    VaultEvictedError,
     vaultErrorKind,
 } from './backend.js';
 

@@ -26,6 +26,7 @@
 // number so the user understands what they're looking at.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { decimalToBaseUnits } from '../shared/utils/amountFormat.js';
 
 // Display unit for a per-vbyte chain. Per-kB chains render as
 // `${ticker}/kB` (DOGE/kB for dogecoin), see resolveFeeUnit.
@@ -200,20 +201,23 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
  * @param {object} opts
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
- * @param {number} opts.rate                   in chain's DISPLAYED unit
+ * @param {number|string} opts.rate            in chain's DISPLAYED unit
  * @returns {FeeEstimate | null}
  */
 export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
-    if (!Number.isFinite(rate) || rate < 0) return null;
+    const scaledRate = decimalToBaseUnits(rate, 8);
+    if (scaledRate === null) return null;
     const desc = chainRegistry.get(chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
     const unit = resolveFeeUnit(desc);
-    const ratePerByte = displayRateToPerByte(unit, rate);
-    const sats = computeSats(table, ratePerByte);
+    const ratePerByte = displayRateToPerByte(unit, Number(rate));
+    const divisor = isPerKbUnit(unit) ? 1000n : 100000000n;
+    const numerator = scaledRate * BigInt(table.txSize);
+    const sats = Number((numerator + divisor - 1n) / divisor);
     return {
         sats,
         coinAmount: satsToCoinDecimal(sats),

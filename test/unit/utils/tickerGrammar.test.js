@@ -28,6 +28,7 @@ import {
     TICKER_HINT,
     isAuthorableTicker,
     tickerGrammarError,
+    tickerReferenceError,
 } from '../../../packages/core/src/shared/utils/tickerGrammar.js';
 
 /** Quoted from xchain-indexer/src/config.js, so the delta below is measured. */
@@ -202,5 +203,63 @@ describe('ticker grammar', () => {
                 `the allowlist character "${char}" was refused`)
                 .toBeNull();
         }
+    });
+});
+
+// The reference half: what an existing token may be called when a form acts
+// on it. A user reported the dispenser form refusing FLAM1N-H0T-CHEET0S with
+// "Ticker must be A–Z, 0–9"; the chain had served that name all along.
+//
+// Teeth: restore `/^[A-Za-z0-9.]+$/` in any referencing form and the hyphen
+// case fails there; drop `allowRef` and the ^ID cases fail.
+describe('ticker reference grammar', () => {
+    it('accepts the reported hyphenated name that the chain already holds', () => {
+        expect(tickerReferenceError('FLAM1N-H0T-CHEET0S')).toBeNull();
+    });
+
+    it('accepts every symbol the chain allows, mid-name, in a dotted level', () => {
+        for (const char of ALLOWED_TICKER_CHARACTERS) {
+            if (char === '.') continue;
+            expect(tickerReferenceError(`PARENT.X${char}X`),
+                `the allowlist character "${char}" was refused`)
+                .toBeNull();
+        }
+    });
+
+    it('keeps case as written, because the chain does', () => {
+        expect(tickerReferenceError('lowercase.child')).toBeNull();
+    });
+
+    it('applies the chain structural dot rules', () => {
+        expect(tickerReferenceError('.A')).toMatch(/start or end with a dot/);
+        expect(tickerReferenceError('A.')).toMatch(/start or end with a dot/);
+        expect(tickerReferenceError('A..B')).toMatch(/empty level/);
+    });
+
+    it('refuses the caret name form on every surface', () => {
+        expect(tickerReferenceError('A^B')).toMatch(/cannot contain \^/);
+        expect(tickerReferenceError('^123')).toMatch(/cannot contain \^/);
+    });
+
+    it('opens the ^ID form only where the surface asks for it', () => {
+        expect(tickerReferenceError('^123', { allowRef: true })).toBeNull();
+        expect(tickerReferenceError('^0', { allowRef: true })).toMatch(/\^ followed by/);
+        expect(tickerReferenceError('^01', { allowRef: true })).toMatch(/\^ followed by/);
+        expect(tickerReferenceError('^', { allowRef: true })).toMatch(/\^ followed by/);
+        expect(tickerReferenceError('^12A', { allowRef: true })).toMatch(/\^ followed by/);
+        expect(tickerReferenceError('A^B', { allowRef: true })).toMatch(/\^ followed by/);
+    });
+
+    it('still refuses what the chain refuses', () => {
+        expect(tickerReferenceError('A|B')).toMatch(/can only use/);
+        expect(tickerReferenceError('TWO WORDS')).toMatch(/can only use/);
+        expect(tickerReferenceError('CAFÉ')).toMatch(/can only use/);
+        expect(tickerReferenceError('')).toMatch(/is required/);
+        expect(tickerReferenceError('A'.repeat(MAX_TICKER_LENGTH + 1))).toMatch(/longer than/);
+    });
+
+    it('names the field in its copy', () => {
+        expect(tickerReferenceError('A|B', { noun: 'Callback token', allowRef: true }))
+            .toMatch(/^Callback token can only use .* or a \^ID\.$/);
     });
 });

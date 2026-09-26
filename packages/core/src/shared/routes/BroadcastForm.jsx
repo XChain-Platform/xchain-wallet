@@ -34,8 +34,10 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -57,6 +59,10 @@ const MEMO_PART_SEPARATOR = ' - ';
 // appear in text the user typed. The form says so in its own words rather than
 // letting the compose call fail with the protocol's field names.
 const RESERVED_DELIMITERS = /[|;]/;
+
+// BROADCAST MESSAGE uses the same 250-character ceiling as MEMO, but the
+// indexer validates it under its own field-specific setting.
+const MAX_BROADCAST_MESSAGE_LENGTH = 250;
 
 /**
  * BROADCAST form (§40.6).
@@ -126,8 +132,9 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -135,8 +142,11 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
@@ -147,7 +157,17 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     );
                     return;
                 }
-                if (!lockedToken) setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key broadcast from the wallet's OLDEST chain forever.
+                // Open on the last-used chain instead, behind a caller-seeded
+                // one (a token context) and ahead of the first-key fallback,
+                // exactly as Send and Swap do.
+                if (!lockedToken) {
+                    setChainId((prev) => pickDefaultChainId(byChain, {
+                        explicitChainId: prev,
+                        settings,
+                    }));
+                }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -246,6 +266,14 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         return p;
     }, [feedName, text, value, feedFee, includeTimestamp]);
 
+    const messageLength = String(actionParams.MESSAGE || '').length;
+    const memoLength = String(actionParams.MEMO || '').length;
+    const messageLengthError = messageLength > MAX_BROADCAST_MESSAGE_LENGTH
+        ? `Message is ${messageLength} characters; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH}.`
+        : null;
+    const broadcastMemoLengthError = memoLengthError(actionParams.MEMO || '');
+    const broadcastLengthError = messageLengthError || broadcastMemoLengthError;
+
     // (§5.6 slice 2): software broadcasts go through the
     // single-encode confirm page; hardware + watcher keep the legacy
     // review stage. Declared before the `isHwSource`/`isWatcherMode`
@@ -290,6 +318,11 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 setFormError('Feed fee must be a non-negative number.');
                 return;
             }
+        }
+        // Refuse text the indexer would reject before the form asks the host to compose it.
+        if (broadcastLengthError) {
+            setFormError(broadcastLengthError);
+            return;
         }
         // sibling case: a user-typed delimiter. The wallet no longer
         // inserts one itself, but a pipe or semicolon in either text field is
@@ -660,7 +693,8 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
 
             <Input
                 label="Feed name (optional)"
-                hint="Stable label for an oracle or feed. Leave blank for a plain broadcast."
+                hint={`${feedName.trim().length} / ${MAX_BROADCAST_MESSAGE_LENGTH} characters. Stable label for an oracle or feed.`}
+                error={feedName.trim() ? messageLengthError || undefined : undefined}
                 value={feedName}
                 onChange={(e) => setFeedName(e.target.value)}
                 autoComplete="off"
@@ -670,7 +704,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             />
             <Input
                 label="Message"
-                hint="Broadcast body. When a feed name is set this becomes a memo instead."
+                hint={feedName.trim()
+                    ? `${memoLength} / ${MAX_MEMO_LENGTH} on-chain memo characters.`
+                    : `${messageLength} / ${MAX_BROADCAST_MESSAGE_LENGTH} characters.`}
+                error={(feedName.trim() ? broadcastMemoLengthError : messageLengthError) || undefined}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 autoComplete="off"
@@ -720,7 +757,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || (!feedName.trim() && !text.trim()) || actionConfirm.composing}
+                    disabled={!fromAddress
+                        || (!feedName.trim() && !text.trim())
+                        || !!broadcastLengthError
+                        || actionConfirm.composing}
                 >
                     {singleEncode ? 'Broadcast' : 'Preview'}
                 </Button>

@@ -26,28 +26,30 @@
 // in the source address record: no private key is touched at compose
 // time, which is what makes this flow HW- and watcher-safe (§5).
 //
-// Key custody: K is persisted to the vault's gatedKeys collection
-// BEFORE compose/broadcast. Ordering matters twice over: (a) a broadcast
-// that succeeds after a failed put would leave K recoverable only via
-// the ECIES scan, which HW/watch-only signers cannot run; (b) a put
-// that succeeds before a failed broadcast leaves a harmless, reusable
-// pack-key row (same KEY_HASH on retry). Pack extension reuses the
-// stored K by keyHash; the protocol has no pack concept beyond the
-// shared (GATE_TICKER, KEY_HASH).
+// Key custody: a generated K stays in memory through confirmation and
+// reaches the vault only after its transaction broadcasts successfully.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { buildActionPsbt } from './buildActionPsbt.js';
+import { composeActionForConfirm } from './composeActionForConfirm.js';
 import { createGatedKey, gatedKeyId } from '../schemas/gatedKey.js';
 import { maxGatedPlaintextBytes } from './fileSizeLimits.js';
 import { indexerWatermark } from './balances.js';
 import { resolveGateMinAmountActive } from './protocolActivations.js';
 
-const PROTOCOL_COIN_TICKER = {
-    bitcoin: 'BTC',
-    litecoin: 'LTC',
-    dogecoin: 'DOGE',
-};
+const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+const pendingGeneratedKeys = new Map();
+
+function rememberGeneratedKey(record) {
+    if (record) pendingGeneratedKeys.set(record.id, record);
+}
+
+async function persistGeneratedKey(vault, record) {
+    if (!record) return;
+    await vault.gatedKeys.put(record);
+    pendingGeneratedKeys.delete(record.id);
+}
 
 /**
  * Metadata-free floor on plaintext size for this lane, kept for callers
@@ -87,11 +89,15 @@ export const MAX_GATED_PLAINTEXT_BYTES = 6500;
  *                                    to emit the field early.
  * @property {number} [feePerKb]
  * @property {boolean} [trackPendingTx]
+ * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt]
+ * @property {{ action: string, params: object }} [prebuiltActionData]
+ * @property {string} [prebuiltKeyHash]
+ * @property {number} [prebuiltCiphertextLength]
  */
 
 /**
- * Shared front half: validate, resolve/generate K, encrypt, persist K,
- * and build the BATCH actionData + encoderOpts. Both the signing path
+ * Shared front half: validate, resolve/generate K, encrypt, and build
+ * the BATCH actionData + encoderOpts. Both the signing path
  * and the watcher (encode-only) path run through here so their
  * compositions cannot drift.
  *
@@ -223,15 +229,10 @@ async function prepareGatedPublish(opts, caller) {
     const handoffPayload = sdk.gatedFile.serializeKeyPayload([key]); // 0x01 || K
     const handoff = sdk.messaging.eciesEncryptBytes(handoffPayload, source.publicKey);
 
-    // --- Persist K before anything can be broadcast ----------------------
-    await opts.vault.gatedKeys.put(createGatedKey({
-        walletId: opts.walletId,
-        chainId: opts.chainId,
-        gateTicker: gate,
-        keyHash,
-        keyHex: key.toString('hex'),
-        source: 'published',
-    }));
+    const generatedKey = opts.existingKeyHash ? null : createGatedKey({
+        walletId: opts.walletId, chainId: opts.chainId, gateTicker: gate,
+        keyHash, keyHex: key.toString('hex'), source: 'published',
+    });
 
     // --- Compose the atomic BATCH ----------------------------------------
     // GATE_MIN_AMOUNT rides as an optional ninth field (PC-29); absent =
@@ -255,11 +256,55 @@ async function prepareGatedPublish(opts, caller) {
     };
     const encoderOpts = {
         pubkey: source.publicKey,
+        // Select funding UTXOs BY ADDRESS and return change to the spender.
+        // Without `change` the encoder refuses to build as soon as the
+        // leftover clears dust, with "Transaction would burn significant
+        // satoshis as fees. Please provide a change address" - it will not
+        // silently burn it - so a funded address with one large UTXO fails
+        // every time. The shared confirm lane also needs the pair before it
+        // builds, while watcher and fallback direct-sign paths use it here.
+        // Mirrors linkAction.js / advancedAction.js / composeForConfirm.js.
+        sourceAddress: source.address,
+        change: source.address,
         rawData: ciphertext.toString('binary'),
         ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
     };
 
-    return { source, actionData, encoderOpts, keyHash, ciphertextLength: ciphertext.length };
+    return { source, actionData, encoderOpts, keyHash, ciphertextLength: ciphertext.length, generatedKey };
+}
+/**
+ * Prepare the encrypted payload once and compose the exact PSBT shown on the
+ * shared confirm page. The prepared action accompanies the
+ * envelope so approval can sign it without generating a second key or cipher.
+ *
+ * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object }} opts
+ */
+export async function composeGatedPublishForConfirm(opts) {
+    const prepared = await prepareGatedPublish(opts, 'composeGatedPublishForConfirm');
+    const encoderOpts = {
+        ...prepared.encoderOpts,
+        ...(opts.confirmEncoderOpts || {}),
+        ...(opts.change ? { change: opts.change } : {}),
+    };
+    const composed = await composeActionForConfirm({
+        vault: opts.vault,
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        actionData: prepared.actionData,
+        encoderOpts,
+        source: prepared.source.address,
+        ownAddresses: opts.ownAddresses,
+    });
+    rememberGeneratedKey(prepared.generatedKey);
+    return {
+        ...composed,
+        gatedPublish: {
+            actionData: prepared.actionData,
+            keyHash: prepared.keyHash,
+            ciphertextLength: prepared.ciphertextLength,
+        },
+    };
 }
 
 /**
@@ -270,8 +315,34 @@ async function prepareGatedPublish(opts, caller) {
  * @returns {Promise<import('../sdk/submitWithSigner.js').SubmitResult & { keyHash: string }>}
  */
 export async function gatedPublishAction(opts) {
-    const { source, actionData, encoderOpts, keyHash, ciphertextLength } =
-        await prepareGatedPublish(opts, 'gatedPublishAction');
+    let prepared;
+    if (opts?.prebuiltPsbt && opts.prebuiltActionData && opts.prebuiltKeyHash) {
+        const source = normalizeSource(opts.from, 'gatedPublishAction');
+        const keyId = gatedKeyId({ walletId: opts.walletId, chainId: opts.chainId,
+            gateTicker: opts.gateTicker, keyHash: opts.prebuiltKeyHash });
+        const generatedKey = opts.existingKeyHash
+            ? null
+            : pendingGeneratedKeys.get(keyId);
+        if (!opts.existingKeyHash && !generatedKey) {
+            throw new Error('gatedPublishAction: prepared pack key is unavailable; compose again');
+        }
+        prepared = {
+            source,
+            actionData: opts.prebuiltActionData,
+            encoderOpts: {
+                pubkey: source.publicKey,
+                sourceAddress: source.address,
+                change: source.address,
+                ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+            },
+            keyHash: opts.prebuiltKeyHash,
+            ciphertextLength: Number(opts.prebuiltCiphertextLength) || 0,
+            generatedKey,
+        };
+    } else {
+        prepared = await prepareGatedPublish(opts, 'gatedPublishAction');
+    }
+    const { source, actionData, encoderOpts, keyHash, ciphertextLength } = prepared;
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -293,11 +364,14 @@ export async function gatedPublishAction(opts) {
         signingPaths: [source.derivationPath
             ? { inputIndex: 0, path: source.derivationPath }
             : { inputIndex: 0, addressId: source.addressId }],
+        prebuiltPsbt: opts.prebuiltPsbt,
         pendingTxMeta,
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
+    await persistGeneratedKey(opts.vault, prepared.generatedKey);
     return { ...result, keyHash };
 }
 
@@ -311,7 +385,7 @@ export async function gatedPublishAction(opts) {
  * @returns {Promise<object & { keyHash: string }>}
  */
 export async function buildGatedPublishPsbtRequest(opts) {
-    const { actionData, encoderOpts, keyHash } =
+    const { actionData, encoderOpts, keyHash, generatedKey } =
         await prepareGatedPublish(opts, 'buildGatedPublishPsbtRequest');
     const psbt = await buildActionPsbt({
         chainRegistry: opts.chainRegistry,
@@ -321,5 +395,6 @@ export async function buildGatedPublishPsbtRequest(opts) {
         actionData,
         encoderOpts,
     });
+    await persistGeneratedKey(opts.vault, generatedKey);
     return { ...psbt, keyHash };
 }

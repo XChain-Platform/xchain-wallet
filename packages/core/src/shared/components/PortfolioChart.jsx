@@ -17,6 +17,7 @@ import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
+import { fiatValue } from './BalanceList.jsx';
 import styles from './PortfolioChart.module.css';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
@@ -236,16 +237,8 @@ export function resampleTo(src, n) {
 // fiat value, or null when the row has no price data.
 function fiatValueOf(row) {
     if (!row) return null;
-    if (typeof row.fiatRate !== 'number' || !Number.isFinite(row.fiatRate)) return null;
-    let q;
-    try { q = BigInt(String(row.quantity || '0')); } catch { q = 0n; }
-    if (q === 0n) return 0;
-    const d = row.divisibility || 0;
-    if (d <= 0) return Number(q) * row.fiatRate;
-    const div = 10n ** BigInt(d);
-    const whole = Number(q / div);
-    const frac = Number(q % div) / Number(div);
-    return (whole + frac) * row.fiatRate;
+    const exact = fiatValue(row.quantity, row.divisibility, row.fiatRate);
+    return exact === null ? null : Number(exact);
 }
 
 function formatFiat(value, currency) {
@@ -263,4 +256,3 @@ function formatFiat(value, currency) {
         return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
     }
 }
-

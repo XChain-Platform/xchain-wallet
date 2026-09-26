@@ -10,6 +10,7 @@
             "params": {
                 "VERSION": "0",
                 "TICK": "MYTOKEN",
+                "AMOUNT": "<amount per recipient>",
                 "LIST_ACTION_INDEX": "<LIST action_index for chain A recipients>",
                 "MEMO": "airdrop chain A"
             },
@@ -21,6 +22,7 @@
             "params": {
                 "VERSION": "0",
                 "TICK": "MYTOKEN",
+                "AMOUNT": "<amount per recipient>",
                 "LIST_ACTION_INDEX": "<LIST action_index for chain B recipients>",
                 "MEMO": "airdrop chain B"
             },
@@ -32,6 +34,7 @@
             "params": {
                 "VERSION": "0",
                 "TICK": "MYTOKEN",
+                "AMOUNT": "<amount per recipient>",
                 "LIST_ACTION_INDEX": "<LIST action_index for chain C recipients>",
                 "MEMO": "airdrop chain C"
             },

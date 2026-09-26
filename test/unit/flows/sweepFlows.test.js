@@ -311,4 +311,27 @@ describe('sweepPreview', () => {
         const p = await sweepPreview({ sdkRegistry: registryFor(sdk), chainId: CHAIN, address: ADDR });
         expect(p.orders.rows.map((r) => r.actionIndex)).toEqual(['9']);
     });
+
+    it('uses order detail and swap_status for current escrow', async () => {
+        const sdk = makeSdk({
+            getOrders: vi.fn(async () => ({ data: [
+                { action_index: 10, source: ADDR, status: 'valid', give_tick: 'PEPE', give_amount: '9' },
+                { action_index: 11, source: ADDR, status: 'valid', give_tick: 'PEPE', give_amount: '8' },
+            ] })),
+            getAction: vi.fn(async (actionIndex) => ({ state: actionIndex === '10'
+                ? { status: 'open', give_remaining: '3' }
+                : { status: 'complete', give_remaining: '0' } })),
+            getSwaps: vi.fn(async () => ({ data: [
+                { action_index: 12, source: ADDR, status: 'valid', swap_status: 'complete', give_tick: 'PEPE', give_amount: '7' },
+                { action_index: 13, source: ADDR, status: 'valid', swap_status: 'open', give_tick: 'PEPE', give_amount: '6' },
+            ] })),
+        });
+        const p = await sweepPreview({ sdkRegistry: registryFor(sdk), chainId: CHAIN, address: ADDR });
+
+        expect(p.orders.rows).toEqual([{
+            actionIndex: '10', giveTick: 'PEPE', giveCoin: null,
+            giveAmount: '3', giveOwnership: false,
+        }]);
+        expect(p.swaps.rows.map((r) => r.actionIndex)).toEqual(['13']);
+    });
 });

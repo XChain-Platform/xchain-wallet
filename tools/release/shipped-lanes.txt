@@ -171,7 +171,10 @@ extension NOT-SHIPPED  store-only  xchain-wallet-extension-v*.zip
 # THE FEED COLUMN IS WHY THESE ROWS ARE NOT JUST MORE OF THE SAME. Every
 # lane above ships through a STORE, which is its own update channel, so a
 # partial release covering them carries no electron-updater pointer and
-# needs no 7.5 rehearsal - publish.sh waives both, deliberately.
+# publish.sh waives the pointer check. It waives the 7.5 rehearsal only
+# for a lane whose globs name no artifact a direct lane distributes: the
+# android row's APK is the android-direct lane in rehearsal-matrix.mjs,
+# so an android release is rehearsed whatever this column says.
 # These three DO carry pointers and DO need rehearsing, so a waiver keyed
 # on "is this partial" would silently publish a desktop release with the
 # rehearsal gate skipped. The column makes the real question - does this

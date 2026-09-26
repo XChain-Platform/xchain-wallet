@@ -225,9 +225,9 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         // the receipt promises a reminder, never an automatic send.
         expect(receipt.textContent).toMatch(/waiting in the queued-transactions banner/i);
         expect(receipt.textContent).not.toMatch(/automatically/i);
-        // No txid row: there is no txid, and "n/a" beside a Txid label reads as a
-        // broadcast that lost its receipt rather than one that never happened.
-        expect(receipt.textContent).not.toContain('Txid');
+        // No txid row: there is no txid, and "n/a" beside a Transaction ID label reads
+        // as a broadcast that lost its receipt rather than one that never happened.
+        expect(receipt.textContent).not.toContain('Transaction ID');
     });
 
     it('shows a failed submit even when the market has stopped taking bets', async () => {

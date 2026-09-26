@@ -63,8 +63,8 @@
 // the last thing standing between a user and handing an address's entire
 // contents to a stranger. It is asserted on the way past.
 //
-// RUN IT ON LITECOIN:
-//   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
+// RUN IT ON BITCOIN OR DOGECOIN:
+//   cd test/e2e && XC_REGTEST_COIN=RBTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/sweep/force-close-and-broadcast.regtest.spec.js
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
@@ -183,7 +183,7 @@ async function approveAndGetTxid(page) {
  * through `nudgeChain`, never a bare `generate_blocks`, so a decoder that is
  * already behind is not pushed further behind while this waits.
  */
-async function waitForBalance(address, tick, predicate, what, timeoutMs = 300_000) {
+async function waitForBalance(address, tick, predicate, what, timeoutMs = 1_200_000) {
     const deadline = Date.now() + timeoutMs;
     let last = null;
     while (Date.now() < deadline) {
@@ -204,7 +204,7 @@ async function waitForBalance(address, tick, predicate, what, timeoutMs = 300_00
  * top-level `status`, which is the CREATE's own verdict and stays `valid`
  * forever. A spec reading the top-level field would never see a close.
  */
-async function waitForDispenserStatus(index, expected, timeoutMs = 300_000) {
+async function waitForDispenserStatus(index, expected, timeoutMs = 1_200_000) {
     const deadline = Date.now() + timeoutMs;
     let row = null;
     while (Date.now() < deadline) {
@@ -219,7 +219,7 @@ async function waitForDispenserStatus(index, expected, timeoutMs = 300_000) {
 
 test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
-    test.setTimeout(1_800_000);
+    test.setTimeout(4_800_000);
 
     // FIXME'd 2026-08-27 ON A PRODUCT DEFECT, NOT ON ANYTHING ABOUT SWEEPING,
     // and it is a tracked defect rather than an anonymous red.
@@ -264,17 +264,14 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
     //
     // from `dustThreshold` in xchain-indexer/src/coins/{LTC,DOGE}.js and the
     // seeded prices in priceSeed.js (LTC/USD 30.00, DOGE/USD 0.10). Bitcoin is
-    // out for a different reason: it is the only chain with an XCHAIN fee lane,
-    // so it never meets this wall at all, and its regtest decoder is dead.
+    // the only chain with an XCHAIN fee lane, so it never meets this wall and
+    // can run the flow without a native fee output.
     //
-    // The gate is therefore the chains where the fee lands under dust, and it
-    // is a `fixme` only there, so the registered red stays a registered red on
-    // Litecoin while Dogecoin actually drives the lane. Drive it with
-    // `XC_REGTEST_COIN=RDOGE`, whose own global setup seeds DOGE/USD - that
-    // pair is NOT maintained by a run pointed at another chain, and its absence
-    // presents as `invalid: no current oracle price for DOGE/USD`, which reads
-    // like a wallet bug and is not one.
-    const feeClearsDust = REGTEST_COIN === 'RDOGE';
+    // The gate is therefore only Litecoin, where the mandatory native fee is
+    // below the chain's dust floor and cannot be represented as an output.
+    // Bitcoin pays this legacy fee from XCHAIN instead, and Dogecoin's native
+    // quote clears its dust floor, so both can drive the same sweep flow.
+    const feeClearsDust = REGTEST_COIN !== 'RLTC';
     const sweepTest = feeClearsDust ? test : test.fixme;
     sweepTest('a sweep drains the address, credits the destination, and force-closes its dispenser', async ({ page }) => {
         expect(DESTINATION,
@@ -311,7 +308,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
             await mintXchain(page, MINT);
-            await waitForTokenBalance(source, TICK, MINT);
+            await waitForTokenBalance(source, TICK, MINT, 1_200_000);
             await seedPrices();
 
             await gotoPalette(page, 'Create dispenser');

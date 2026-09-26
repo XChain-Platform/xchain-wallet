@@ -11,3 +11,4 @@
 export { decodeAction } from './actionDecoder.js';
 export { simulateAction } from './txSimulator.js';
 export { balancesFromSdk } from './balanceAdapter.js';
+export { listEditValue, withListRemovalDescriptions } from './list_removal_description.js';

@@ -68,6 +68,7 @@ function harness({ requiredFeeSats = 5_000_000, supported = true, valid = true }
         quoteNativeFee: vi.fn(async () => ({
             supported, valid, requiredFeeSats, feeDestination: FEE_DESTINATION,
         })),
+        wallet: { getBitcoinNetwork: () => ({ dustThreshold: 5460 }) },
         explorer: {},
     };
     return { sdk, createTx };
@@ -125,14 +126,14 @@ describe('The watcher lane composes the native-coin fee output', () => {
         expect(feeOutputs(createTx)).toHaveLength(0);
     });
 
-    it('refuses rather than composing an unpayable transaction when the quote is dust', async () => {
-        // A quote can be valid and still below the dust floor, at which point
-        // neither paying nor skipping works: attaching a dust output makes the
-        // tx non-standard, omitting it fails consensus. The lane must refuse.
+    it('rounds a below-dust quote before composing the watcher transaction', async () => {
         const { sdk, createTx } = harness({ requiredFeeSats: 2 });
-        await expect(build(sdk, { payFeeInNativeCoin: true }))
-            .rejects.toBeInstanceOf(NativeFeeForfeitError);
-        expect(createTx).not.toHaveBeenCalled();
+        const result = await build(sdk, { payFeeInNativeCoin: true });
+
+        expect(feeOutputs(createTx)).toEqual([{ address: FEE_DESTINATION, value: 5460 }]);
+        expect(result.nativeFeeQuote).toMatchObject({
+            requiredFeeSats: 5460, quotedFeeSats: 2, dustThresholdSats: 5460,
+        });
     });
 
     it('refuses when the action is unpriceable rather than composing a doomed tx', async () => {

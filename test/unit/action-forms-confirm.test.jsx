@@ -230,6 +230,16 @@ async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [],
         await drainMicrotasks();
     });
 
+    // #40, asserted here rather than per form ON PURPOSE: every test in this
+    // file drives a different form through this one helper, so the From row is
+    // pinned across all of them at once and a form added later cannot ship
+    // without it. The address is the one the drive signs with, software or
+    // device, so a blank or wrong row fails rather than passing as "present".
+    const sourceRow = utils.container.querySelector('[data-testid="confirm-source"]');
+    expect(sourceRow, 'the confirm page names the spender (#40)').toBeTruthy();
+    expect(sourceRow.querySelector('[title]')?.getAttribute('title'))
+        .toBe(HD_ADDRESS.address);
+
     await domAct(async () => {
         const approve = Array.from(utils.container.querySelectorAll('button'))
             .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);

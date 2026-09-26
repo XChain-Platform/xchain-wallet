@@ -48,6 +48,7 @@ export async function listOwnedTokens({ sdkRegistry, chainId, address, limit = 2
     const tokenRowsRaw = Array.isArray(tokensRaw)
         ? tokensRaw
         : (Array.isArray(tokensRaw?.data) ? tokensRaw.data : []);
+    const descriptions = await loadTokenDescriptions(sdk, tokenRowsRaw);
 
     // If the SDK has already enriched each token row with `youOwn` and
     // `hasOpenDispenser` (the dev-mock SDK does this), skip the
@@ -115,7 +116,7 @@ export async function listOwnedTokens({ sdkRegistry, chainId, address, limit = 2
             tick,
             totalSupply: row.supply,
             maxSupply: row.maxSupply,
-            description: row.description,
+            description: descriptions.get(tick) ?? row.description,
             locked: row.locked,
             divisibility: row.divisibility,
             youOwn: typeof raw.youOwn === 'boolean'
@@ -127,6 +128,28 @@ export async function listOwnedTokens({ sdkRegistry, chainId, address, limit = 2
         });
     }
     return out;
+}
+
+/** Fetch descriptions from the detail endpoint that carries token metadata. */
+async function loadTokenDescriptions(sdk, rows) {
+    const descriptions = new Map();
+    if (typeof sdk.getToken !== 'function') return descriptions;
+    const ticks = new Set();
+    for (const raw of rows) {
+        const row = normalizeTokenRow(raw);
+        if (row?.tick && row.description == null) ticks.add(row.tick.toUpperCase());
+    }
+    await Promise.all(Array.from(ticks, async (tick) => {
+        try {
+            const response = await sdk.getToken(tick);
+            const detail = Array.isArray(response) ? response[0] : response;
+            const description = detail?.info?.description ?? detail?.description;
+            if (typeof description === 'string') descriptions.set(tick, description);
+        } catch {
+            // Keep the list row fallback when token detail is unavailable.
+        }
+    }));
+    return descriptions;
 }
 
 // The /tokens/{address}/address endpoint returns rows as either a

@@ -28,7 +28,7 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { directFeedRejection, PAYLOAD_DIRS, parseManifest, parseUpdateInfo, sweep,
+import { directFeedRejection, FINDINGS, PAYLOAD_DIRS, parseManifest, parseUpdateInfo, sweep,
     verifyManifestSignature } from '../../../tools/release/feed-sweep.mjs';
 // The two CONSUMERS this producer has to agree with, imported so the
 // parity assertions below read the shipped rule rather than a restatement
@@ -39,7 +39,30 @@ import { parseUpdateFeed, UPDATE_FEED_MAX_BYTES }
 import { parseChannelPointer } from '../../../packages/desktop/main/updateVerify.js';
 
 const root = mkdtempSync(join(tmpdir(), 'xchain-feed-sweep-'));
-const codes = (result) => result.findings.map((f) => f.code).sort();
+// Every code a scenario below provokes must carry a reading in FINDINGS.
+const codes = (result) => result.findings.map((f) => {
+    assert.ok(Object.hasOwn(FINDINGS, f.code), `sweep emitted ${f.code}, which FINDINGS gives no reading`);
+    return f.code;
+}).sort();
+
+// FINDINGS is the one place a code's reading is written down, and nothing at
+// runtime reads it, so hold it to the emit sites here in both directions.
+{
+    const src = readFileSync(
+        join(dirname(fileURLToPath(import.meta.url)), '../../../tools/release/feed-sweep.mjs'), 'utf8');
+    const emitted = new Set();
+    for (const line of src.split('\n')) {
+        if (!/(?<![.\w])add\(/.test(line) || /^\s*(\/\/|\*)/.test(line)) continue;
+        for (const m of line.matchAll(/'([A-Z][A-Z0-9-]{2,})'/g)) emitted.add(m[1]);
+    }
+    assert.ok(emitted.size >= 10, `found only ${emitted.size} add() codes; the scan has gone blind`);
+    for (const code of emitted) {
+        assert.ok(Object.hasOwn(FINDINGS, code), `sweep can emit ${code}; add its reading to FINDINGS`);
+    }
+    for (const code of Object.keys(FINDINGS)) {
+        assert.ok(emitted.has(code), `FINDINGS lists ${code}, which no add() emits; remove the stale entry`);
+    }
+}
 
 /**
  * Call the verifier the way `sweep()` does: the manifest as BYTES already
@@ -550,7 +573,7 @@ const V2 = {
 //
 // Deliberately a COPY rather than an import, on the grounds
 // store-version-monitor.mjs states for its own: this file is deployed
-// standalone as /opt/xchain/feed-sweep.mjs, and an import reaching into
+// standalone on the release host, and an import reaching into
 // packages/web makes it unloadable there. A copy is only safe if something
 // proves the two agree, so this does - including the cap, which the app
 // applies before it parses and which therefore is part of the same rule.

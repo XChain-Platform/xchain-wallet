@@ -14,13 +14,20 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
-import { formatWithThousands, countNonCommaBefore, indexAfterNonCommaCount } from '../utils/amountFormat.js';
+import {
+    formatWithThousands,
+    countNonCommaBefore,
+    indexAfterNonCommaCount,
+    sumDecimalStrings,
+    trimAmountTail,
+} from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { unclaimedRewards, effectiveStakingRows } from '../../flows/stakingDashboard.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -37,6 +44,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { compareAmounts } from '../../market/orderMath.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -162,7 +170,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // balance for the source address; upper bound for the editable
     // Amount field (partial claim/unstake).
     const [positions, setPositions] = useState(
-        /** @type {{ stakes: any[], rewards: any[] } | null} */ (null),
+        /** @type {{ stakes: any[], rewards: any[], claims: any[], height: number|null } | null} */ (null),
     );
     useEffect(() => {
         const address = fromAddress?.address;
@@ -172,6 +180,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             try {
                 let stakes = [];
                 let rewards = [];
+                let claims = [];
+                let height = null;
                 if (isDemoWallet(walletId)) {
                     const demo = synthesizeDemoStaking(chainId);
                     // Demo stake rows carry no signing_pubkey; attribute them
@@ -180,11 +190,29 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     stakes = demo.stakes.map((s) => ({ signing_pubkey: demoKey, ...s }));
                     rewards = demo.rewards;
                 } else if (isUnstake) {
-                    stakes = extractRows(await messaging.getStakesForAddress({ chainId, address }));
+                    const [stakeResponse, watermark] = await Promise.all([
+                        messaging.getStakesForAddress({ chainId, address }),
+                        typeof messaging.getIndexerWatermark === 'function'
+                            ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                            : Promise.resolve(null),
+                    ]);
+                    stakes = extractRows(stakeResponse);
+                    height = Number.isFinite(watermark?.watermark) ? watermark.watermark : null;
                 } else {
-                    rewards = extractRows(await messaging.getRewardsForAddress({ chainId, address }));
+                    // PC-47 (propagated from StakeDetail's splitRewards): the
+                    // rewards endpoint is a pure accrual ledger with no status
+                    // column, so "available" can only be computed against the
+                    // claim ledger too, via unclaimedRewards() below.
+                    const [r, c] = await Promise.all([
+                        messaging.getRewardsForAddress({ chainId, address }),
+                        typeof messaging.getRewardClaimsForAddress === 'function'
+                            ? messaging.getRewardClaimsForAddress({ chainId, address }).catch(() => null)
+                            : Promise.resolve(null),
+                    ]);
+                    rewards = extractRows(r);
+                    claims = extractRows(c);
                 }
-                if (!cancelled) setPositions({ stakes, rewards });
+                if (!cancelled) setPositions({ stakes, rewards, claims, height });
             } catch {
                 if (!cancelled) setPositions(null);
             }
@@ -197,14 +225,18 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // buckets stakes per (address, signing_pubkey), so the key selects
     // WHICH bundle an UNSTAKE returns; the wallet already knows the
     // candidates, so prefill instead of making the user paste hex.
+    const activeStakes = useMemo(
+        () => effectiveStakingRows(positions?.stakes, positions?.height),
+        [positions],
+    );
     const stakedKeys = useMemo(() => {
         const keys = [];
-        for (const s of (positions?.stakes || [])) {
+        for (const s of activeStakes) {
             const k = s.signing_pubkey || s.SIGNING_PUBKEY;
             if (k && !keys.includes(k)) keys.push(k);
         }
         return keys;
-    }, [positions]);
+    }, [activeStakes]);
 
     useEffect(() => {
         if (isUnstake && !signingPubkey && stakedKeys.length > 0) {
@@ -216,24 +248,22 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // chosen). Claim: pending rewards for the address.
     const availableAmt = useMemo(() => {
         if (!positions) return null;
-        let total = 0;
         if (isUnstake) {
-            for (const s of positions.stakes) {
+            const amounts = [];
+            for (const s of activeStakes) {
                 const key = s.signing_pubkey || s.SIGNING_PUBKEY;
                 if (signingPubkey && key && key !== signingPubkey) continue;
-                const n = Number(s.amount ?? s.AMOUNT ?? s.quantity ?? 0);
-                if (Number.isFinite(n)) total += n;
+                amounts.push(s.amount ?? s.AMOUNT ?? s.quantity ?? 0);
             }
-        } else {
-            for (const r of positions.rewards) {
-                const status = String(r.status || '').toLowerCase();
-                if (status !== 'pending' && status !== 'unclaimed') continue;
-                const n = Number(r.amount ?? r.reward ?? 0);
-                if (Number.isFinite(n)) total += n;
-            }
+            return trimAmountTail(sumDecimalStrings(amounts));
         }
-        return total;
-    }, [positions, isUnstake, signingPubkey]);
+        // PC-47: accrual minus valid claims (unclaimedRewards), NOT a
+        // status filter - validator_rewards rows never carry `status`,
+        // so filtering on it always yielded 0 against real data (the
+        // same bug PC-47 fixed in StakeDetail's splitRewards).
+        const totals = unclaimedRewards({ rewards: positions.rewards, claims: positions.claims });
+        return totals.unclaimed;
+    }, [positions, isUnstake, signingPubkey, activeStakes]);
 
     // Prefill with the full balance (the common case is still "take it
     // all"), but stop overwriting once the user edits: a positions
@@ -419,8 +449,10 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // unknown-balance) submit keeps the legacy absent-AMOUNT bytes
     // (see the header note on the wire policy).
     const isPartial = useMemo(() => {
-        const n = Number(String(amount).replace(/,/g, ''));
-        return Number.isFinite(n) && n > 0 && availableAmt != null && n < availableAmt;
+        const normalized = String(amount).replace(/,/g, '');
+        return compareAmounts(normalized, '0') === 1
+            && availableAmt != null
+            && compareAmounts(normalized, availableAmt) === -1;
     }, [amount, availableAmt]);
 
     const actionParams = useMemo(() => {
@@ -444,12 +476,12 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 return;
             }
         }
-        const amtN = Number(String(amount).replace(/,/g, ''));
-        if (!amount || !Number.isFinite(amtN) || amtN <= 0) {
+        const normalized = String(amount).replace(/,/g, '');
+        if (!amount || compareAmounts(normalized, '0') !== 1) {
             setFormError('Amount must be greater than zero.');
             return;
         }
-        if (availableAmt != null && amtN > availableAmt) {
+        if (availableAmt != null && compareAmounts(normalized, availableAmt) === 1) {
             setFormError(`Amount exceeds the ${formatWithThousands(String(availableAmt))} XCHAIN available.`);
             return;
         }
@@ -566,7 +598,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         : 'Claim broadcast. Pending rewards will be credited after the network records the action.'}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '(pending)')}</dd>
                 </dl>
                 <div className={styles.actions}>

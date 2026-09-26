@@ -88,6 +88,33 @@ const shim3 = new RemoteSigner({
 });
 assert.equal(await shim3.getStatus(), 'disconnected', 'transport throw → disconnected');
 
+// A Ledger behind the shim can only report wrong-app when the chainId crosses it.
+const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
+const ledgerBytes = (name) => Uint8Array.from([
+    1, name.length, ...ascii(name), 5, ...ascii('2.2.3'), 1, 0, 0x90, 0x00,
+]);
+const ledger = new signers.LedgerSigner({
+    id: 'ledger-behind-shim',
+    displayName: 'Ledger',
+    model: 'nanoX',
+    deviceIdentifier: 'mockid',
+    transport: { send: async () => ledgerBytes('Bitcoin') },
+    app: {},
+});
+const ledgerShim = new RemoteSigner({
+    id: 'ledger-behind-shim', displayName: 'Ledger', kind: 'ledger',
+    transport: async ({ op, payload }) => {
+        assert.equal(op, 'status');
+        return ledger.getStatus(payload);
+    },
+});
+assert.equal(await ledgerShim.getStatus({ chainId: 'bitcoin-mainnet' }), 'available', 'Bitcoin app on bitcoin-mainnet');
+assert.equal(
+    await ledgerShim.getStatus({ chainId: 'litecoin-mainnet' }),
+    'wrong-app',
+    'the shim forwards chainId, so a Ledger on the wrong app says so',
+);
+
 // --- 4. getAddresses / getPublicKey -----------------------------------
 
 const addrs = await shim.getAddresses({

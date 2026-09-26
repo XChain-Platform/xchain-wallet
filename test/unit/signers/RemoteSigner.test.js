@@ -85,6 +85,20 @@ describe('signers/RemoteSigner', () => {
             await s.getStatus();
             expect(seen).toEqual({ op: 'status', payload: { signerId: 'sig-1' } });
         });
+
+        it('threads the caller chainId into the status payload', async () => {
+            let seen = null;
+            const s = makeSigner(async (req) => { seen = req; return 'wrong-app'; });
+            expect(await s.getStatus({ chainId: 'bitcoin-mainnet' })).toBe('wrong-app');
+            expect(seen).toEqual({ op: 'status', payload: { chainId: 'bitcoin-mainnet', signerId: 'sig-1' } });
+        });
+
+        it('keeps its own signerId when the caller passes one', async () => {
+            let seen = null;
+            const s = makeSigner(async (req) => { seen = req; return 'available'; });
+            await s.getStatus({ signerId: 'other' });
+            expect(seen.payload.signerId).toBe('sig-1');
+        });
     });
 
     describe('getAddresses', () => {

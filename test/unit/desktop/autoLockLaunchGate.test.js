@@ -54,6 +54,7 @@ import {
 } from '../../../packages/desktop/main/keychain.js';
 
 const MINUTE = 60 * 1000;
+const FILESYSTEM_FIXTURE_TIMEOUT = 60_000;
 
 /** safeStorage stand-in: the real seam KeychainSessionBackend already takes. */
 const fakeSafeStorage = {
@@ -92,7 +93,7 @@ async function runtimeWithCachedKey({ withAutoLockStore = true } = {}) {
 
 const sessionFile = () => sessionKeyPathFor(dir);
 
-describe('desktop launch auto-lock gate', () => {
+describe('desktop launch auto-lock gate', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
     it('locks when the configured window has elapsed since the last activity', async () => {
         const runtime = await runtimeWithCachedKey();
         const now = Date.now();
@@ -192,7 +193,7 @@ describe('desktop launch auto-lock gate', () => {
     });
 });
 
-describe('desktop auto-lock record', () => {
+describe('desktop auto-lock record', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
     it('is written 0600 and survives a fresh store instance (a relaunch)', async () => {
         const path = autoLockStatePathFor(dir);
         await new FileAutoLockStore(path).save({ armed: true, idleMs: 900000, lastActivity: 42 });
@@ -234,7 +235,7 @@ describe('desktop auto-lock record', () => {
     });
 });
 
-describe('desktop autolock.report IPC', () => {
+describe('desktop autolock.report IPC', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
     it('arms the record from the renderer without reaching the shared pre-host dispatcher', async () => {
         const runtime = await runtimeWithCachedKey();
         const res = await handleIpcMessage(runtime, {

@@ -263,9 +263,8 @@ async function openDispenserDetail(page, index) {
 /**
  * Drives one expiration edit to its own success screen and returns the txid.
  *
- * The edit is one of the wallet's remaining legacy sign paths: `handleEdit`
- * calls `dispenserAction` directly and lands on "Edit submitted", so there is
- * no confirm modal to approve and no prebuilt PSBT to inspect.
+ * The edit signs through the shared confirm page (its network dry run and
+ * Approve), then lands on its own "Edit submitted" screen.
  */
 async function submitExpirationEdit(page, index, targetUnix) {
     const main = await openDispenserDetail(page, index);
@@ -275,7 +274,9 @@ async function submitExpirationEdit(page, index, targetUnix) {
     await expect(field, 'the edit form has no expiration field').toBeVisible({ timeout: 30_000 });
     await field.fill(unixToLocalInput(targetUnix));
 
-    await main.getByRole('button', { name: /^Sign edit/ }).click();
+    await main.getByRole('button', { name: 'Edit dispenser' }).click();
+    await expectConfirmModal(page);
+    await page.getByTestId('confirm-approve').click();
     await expect(main.getByRole('heading', { name: 'Edit submitted' }),
         'the edit never reached its own success screen')
         .toBeVisible({ timeout: 180_000 });

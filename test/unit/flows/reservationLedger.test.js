@@ -33,6 +33,18 @@ describe('reservationLedger (in-memory)', () => {
         expect(deltas.some((d) => d.tick === 'JDOG' && d.amount === '9')).toBe(false);
     });
 
+    it('nets case variants and prototype-shaped tickers by chain identity', async () => {
+        const led = createReservationLedger();
+        await led.reserve({ id: 'a', chainId: 'btc', tick: 'MiXeD', amount: '2' });
+        await led.reserve({ id: 'b', chainId: 'btc', tick: 'MIXED', amount: '3' });
+        await led.reserve({ id: 'c', chainId: 'btc', tick: '__proto__', amount: '4' });
+
+        expect(await led.localDeltas('btc')).toEqual([
+            { tick: 'MIXED', amount: '5' },
+            { tick: '__PROTO__', amount: '4' },
+        ]);
+    });
+
     it('reserve is idempotent on id (survives a rehydrate double-register)', async () => {
         const led = createReservationLedger();
         await led.reserve({ id: 'a', chainId: 'btc', tick: 'JDOG', amount: '5' });

@@ -28,9 +28,10 @@
 //   - package.json declares xchain-sdk as a runtime dep on both shells.
 
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) {
@@ -370,6 +371,87 @@ assert.ok(/SDKWalletError/.test(desktopRow),
     );
 }
 
+// --- The dev-mock gate covers the DESKTOP MAIN process -------
+//
+// check-no-dev-mock.sh scans built bundles, and `main/` is not one:
+// electron-builder copies `main/**/*` into app.asar as source, and main
+// imports extension background modules and @xchain-wallet/core as source
+// too. So the same implementation markers the release gate greps for are
+// checked here over every file under `main/` plus every workspace module
+// statically reachable from it. Third-party packages are not walked; the
+// real SDK is one of them.
+{
+    const DEV_MOCK_MARKERS = ['Dev SDK stub', 'devmockpsbt'];
+    const mockSources = [
+        join(wsRoot, 'packages', 'extension', 'src', 'background', 'sdkFactory.js'),
+        join(wsRoot, 'packages', 'web', 'src', 'sdkFactory.js'),
+        join(wsRoot, 'packages', 'web', 'src', 'hostBridge.js'),
+    ];
+    const mainDir = join(wsRoot, 'packages', 'desktop', 'main');
+    const packagesDir = join(wsRoot, 'packages');
+
+    // Comments are dropped before scanning for specifiers so JSDoc
+    // `import('./x.js')` type references are not mistaken for edges.
+    const stripComments = (src) => src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+    const specifiersOf = (src) => {
+        const code = stripComments(src);
+        const out = [];
+        for (const m of code.matchAll(/\b(?:import|export)\b[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g)) out.push(m[1]);
+        for (const m of code.matchAll(/\bimport\s*['"]([^'"]+)['"]/g)) out.push(m[1]);
+        for (const m of code.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) out.push(m[1]);
+        return out;
+    };
+    const resolveEdge = (spec, fromFile) => {
+        if (spec.startsWith('.')) return resolve(dirname(fromFile), spec);
+        if (!spec.startsWith('@xchain-wallet/')) return null;
+        return createRequire(fromFile).resolve(spec);
+    };
+
+    const reached = new Map();
+    const queue = readdirSync(mainDir)
+        .filter((name) => name.endsWith('.js'))
+        .map((name) => [join(mainDir, name), null]);
+    while (queue.length) {
+        const [file, parent] = queue.shift();
+        if (reached.has(file)) continue;
+        assert.ok(existsSync(file),
+            `desktop main import graph resolves ${relative(wsRoot, file)} (from ${parent && relative(wsRoot, parent)})`);
+        reached.set(file, parent);
+        for (const spec of specifiersOf(readFileSync(file, 'utf8'))) {
+            const target = resolveEdge(spec, file);
+            if (target && target.startsWith(packagesDir)) queue.push([target, file]);
+        }
+    }
+
+    // Non-vacuity: the walk must cross into the source packages main pulls
+    // in, or a resolver regression would pass the gate by seeing nothing.
+    const rel = [...reached.keys()].map((f) => relative(wsRoot, f));
+    assert.ok(rel.includes('packages/desktop/main/index.js'),
+        'desktop main import graph starts at main/index.js');
+    assert.ok(rel.some((f) => f.startsWith('packages/extension/src/background/')),
+        'desktop main import graph reaches the extension background modules it ships as source');
+    assert.ok(rel.includes('packages/core/src/sdk/SDKRegistry.js'),
+        'desktop main import graph reaches core SDKRegistry');
+    // Positive control: the markers do identify the mock where it lives.
+    assert.ok(DEV_MOCK_MARKERS.some((m) => readFileSync(mockSources[0], 'utf8').includes(m)),
+        'dev-mock markers match the extension mock implementation (the scan is not blind)');
+
+    for (const [file, parent] of reached) {
+        const where = `${relative(wsRoot, file)}${parent ? ` (imported by ${relative(wsRoot, parent)})` : ''}`;
+        assert.ok(!mockSources.includes(file),
+            `desktop main does not reach a dev-mock SDK module: ${where}`);
+        const src = readFileSync(file, 'utf8');
+        for (const marker of DEV_MOCK_MARKERS) {
+            assert.ok(!src.includes(marker),
+                `desktop main ships no dev-mock implementation marker "${marker}": ${where}`);
+        }
+        assert.ok(!/\bcreateDevMockSdk\s*\(/.test(stripComments(src)),
+            `desktop main never calls createDevMockSdk: ${where}`);
+    }
+}
+
 // Both shell Vite configs must give the link:-resolved SDK the CJS
 // transform (commonjsOptions.include) and resolve the polyfill shim +
 // SDK-repl specifiers the transform surfaces.
@@ -532,5 +614,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, every web bind site awaits the SDK, venue chosen from the env + warn once + no silent fallback, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK, static worker SDK)',
+    'OK: sdk wiring smoke (web + extension factories, hostBridge + background sdkResolved, every web bind site awaits the SDK, venue chosen from the env + warn once + no silent fallback, dep declared, PROD refuses dev-mock: DCE gate + loud catch + commonjs transform of linked SDK, static worker SDK, desktop main real SDK + dev-mock-free import graph)',
 );

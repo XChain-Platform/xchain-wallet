@@ -23,8 +23,8 @@
 // as one (§3.5.5: never prettify what you cannot verify).
 
 /**
- * @param {{ inputs?: Array<{value?: number|null}>, outputs?: Array<{value?: number|null}> } | null} decomposed
- * @returns {number | null}   fee in the chain's smallest unit, or null if not knowable
+ * @param {{ inputs?: Array<{value?: number|string|null}>, outputs?: Array<{value?: number|string|null}> } | null} decomposed
+ * @returns {number | string | null} fee in the chain's smallest unit
  */
 export function exactNetworkFeeSats(decomposed) {
     const inputs = Array.isArray(decomposed?.inputs) ? decomposed.inputs : null;
@@ -32,14 +32,37 @@ export function exactNetworkFeeSats(decomposed) {
     if (!inputs || !outputs || inputs.length === 0) return null;
     // Every input value must be known. A single missing one makes the
     // subtraction meaningless, so refuse rather than under-report.
-    if (!inputs.every((i) => Number.isFinite(i?.value))) return null;
-    if (!outputs.every((o) => Number.isFinite(o?.value))) return null;
-    const totalIn = inputs.reduce((a, i) => a + Number(i.value), 0);
-    const totalOut = outputs.reduce((a, o) => a + Number(o.value), 0);
+    const inputValues = inputs.map((i) => exactSats(i?.value));
+    const outputValues = outputs.map((o) => exactSats(o?.value));
+    if (inputValues.some((value) => value === null)) return null;
+    if (outputValues.some((value) => value === null)) return null;
+    const totalIn = inputValues.reduce((sum, value) => sum + value, 0n);
+    const totalOut = outputValues.reduce((sum, value) => sum + value, 0n);
     const fee = totalIn - totalOut;
     // A negative fee is impossible in a well-formed tx; treat it as unknown
     // rather than rendering nonsense on a signing screen.
-    return fee >= 0 ? fee : null;
+    return fee >= 0n ? renderSats(fee) : null;
+}
+
+export function exactSats(value) {
+    if (typeof value === 'bigint') return value >= 0n ? value : null;
+    const raw = String(value ?? '').trim();
+    return /^\d+$/.test(raw) ? BigInt(raw) : null;
+}
+
+export function renderSats(value) {
+    return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString();
+}
+
+export function sumExactSats(values) {
+    const parsed = values.map((value) => exactSats(value));
+    if (parsed.some((value) => value === null)) return null;
+    return parsed.reduce((sum, value) => sum + value, 0n);
+}
+
+export function formatExactSats(value) {
+    const parsed = exactSats(value);
+    return parsed === null ? null : parsed.toLocaleString('en-US');
 }
 
 // On the P2SH/P2WSH chunk lanes an action is TWO transactions, and
@@ -72,12 +95,12 @@ export function exactNetworkFeeSats(decomposed) {
  * Total MINER fee an action pays across every transaction it takes, which on
  * the chunk lanes is two rather than one.
  *
- * @param {{ inputs?: Array<{value?: number|null}>, outputs?: Array<{value?: number|null, address?: string|null, scriptType?: string}> } | null} decomposed
+ * @param {{ inputs?: Array<{value?: number|string|null}>, outputs?: Array<{value?: number|string|null, address?: string|null, scriptType?: string}> } | null} decomposed
  * @param {object} [opts]
  * @param {string[]} [opts.carrierScripts]   redeem scripts create_tx committed to; [] off the chunk lanes
  * @param {Iterable<string>} [opts.ownAddresses]  addresses the wallet controls, so change is not mistaken for a carrier
- * @param {number} [opts.revealOutputSats]   TOTAL value the reveal re-emits as outputs - the whole deferred set (protocol fee, oracle usage fee, ADS donation, native payment), not the protocol fee alone - so it is not counted as miner fee
- * @returns {number | null}  fee in the chain's smallest unit, or null if not knowable
+ * @param {number|string} [opts.revealOutputSats] total value the reveal re-emits
+ * @returns {number | string | null} fee in the chain's smallest unit
  */
 export function totalNetworkFeeSats(decomposed, {
     carrierScripts = [],
@@ -99,10 +122,10 @@ export function totalNetworkFeeSats(decomposed, {
     // The encoder committed to a known number of chunks. A different count
     // means our identification is wrong, not that the fee is different.
     if (carriers.length !== carrierCount) return null;
-    if (!carriers.every((o) => Number.isFinite(o?.value))) return null;
-
-    const carrierTotal = carriers.reduce((a, o) => a + Number(o.value), 0);
-    const revealFee = carrierTotal - Number(revealOutputSats || 0);
-    if (!Number.isFinite(revealFee) || revealFee < 0) return null;
-    return fundingFee + revealFee;
+    const carrierTotal = sumExactSats(carriers.map((carrier) => carrier.value));
+    const revealOutputs = exactSats(revealOutputSats || 0);
+    if (carrierTotal === null || revealOutputs === null) return null;
+    const revealFee = carrierTotal - revealOutputs;
+    if (revealFee < 0n) return null;
+    return renderSats(BigInt(fundingFee) + revealFee);
 }

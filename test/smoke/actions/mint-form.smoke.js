@@ -151,9 +151,11 @@ assert.ok(
 // --- 5. Validation ----------------------------------------------------
 
 assert.ok(/Ticker is required/.test(src), 'MintForm rejects empty ticker');
+// The ticker goes through the shared reference grammar (the chain's full
+// TICK_CHARACTERS, dots as subtoken levels), not a local A-Z regex.
 assert.ok(
-    /\[A-Za-z0-9\.\]\+|A-Za-z0-9\./.test(src),
-    'MintForm validates ticker character set (subtokens allowed)',
+    /tickerReferenceError\(ticker\)/.test(src),
+    'MintForm validates the ticker through the shared reference grammar',
 );
 assert.ok(
     /Amount must be a positive number/.test(src),
@@ -223,7 +225,7 @@ assert.ok(
     'background host registers action.mint',
 );
 assert.ok(
-    /mintToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /mintToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry,\s*onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)\s*\}\)/.test(bg),
     'action.mint handler forwards deps to mintToken',
 );
 

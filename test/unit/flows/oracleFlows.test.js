@@ -213,6 +213,18 @@ describe('oracleConsumers', () => {
         expect(res.dispensers).toHaveLength(1);
     });
 
+    it('counts only dispensers whose current lifecycle and escrow are live', async () => {
+        const sdk = {
+            getDispensers: vi.fn(async () => ({ data: [
+                { action_index: 1, status: 'valid', current_status: 'open', escrow_remaining: '3' },
+                { action_index: 2, status: 'valid', current_status: 'cancelled', escrow_remaining: '3' },
+                { action_index: 3, status: 'valid', current_status: 'open', escrow_remaining: '0' },
+            ] })),
+        };
+        const res = await oracleConsumers({ sdkRegistry: registryWith(sdk), chainId: 'bitcoin-regtest', address: 'oracle-addr' });
+        expect(res.dispensers.map((row) => row.action_index)).toEqual([1]);
+    });
+
     // "Could not check" must stay distinguishable from "nobody is using it":
     // an operator republishing on a false all-clear is the failure this
     // guards against.

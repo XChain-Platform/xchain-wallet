@@ -199,6 +199,26 @@ XR_PROFILES=(default store)
 # not an ambiguity.
 XR_SETS=(release staging)
 
+# Select the one tree that owns BOTH signing controls for a run.
+#
+# A production signature is a claim about a tagged release, so its artifact
+# profile and dev-mock gate both come from the pristine tag tree. A staging
+# rehearsal exercises the next release's tooling against the previous
+# release's bytes, so only that mode reads both controls from the invoking
+# tool tree. Returning one root keeps the two paths structurally coupled.
+# Args: release_set tag_tree tool_tree
+xr_signing_control_root() {
+    local release_set="$1" tag_tree="$2" tool_tree="$3"
+    case "$release_set" in
+        release) printf '%s\n' "$tag_tree" ;;
+        staging) printf '%s\n' "$tool_tree" ;;
+        *)
+            echo "release/lib.sh: unknown release set '$release_set'" >&2
+            return 2
+            ;;
+    esac
+}
+
 # The OSes a staging row can name. A rehearsal is per-OS by §7.5's own
 # words - "on the arches being rehearsed", "at least one OS" - and until
 # 2026-08-07 the gate demanded every staging row at once, so a Linux-only
@@ -603,15 +623,13 @@ xr_header_field() {
 # is the only thing that makes one, and it refuses any name whose X.Y.Z
 # core differs from the release it re-signs.
 #
-# It exists because signing reads TWO trees. The scripts come from the
-# invoking checkout; `check-no-dev-mock.sh`, `shipped-lanes.txt` and
-# `expected-artifacts.txt` come from `--repo`, the tree at the tag. So a
-# defect fixed in the gate cannot reach a release already tagged, and the
-# published v0.336.0 manifest says `dev-mock-gate: enforced` for a gate
-# that read zero bytes. Correcting that record means re-signing from a
-# NEW tag, and the corrected manifest is then republished under the
-# release's own name - `RELEASE_HASHES/v0.336.0.txt`, the name every
-# existing link and every reader already has.
+# Production signing reads TWO trees. The script comes from the invoking
+# checkout, while both signing controls come from `--repo`, the tree at the
+# tag. A staging rehearsal is the narrow exception:
+# xr_signing_control_root selects the invoking tool tree for both the
+# dev-mock gate and expected-artifacts.txt. A production gate fix therefore
+# cannot change an existing tag, which is why correcting its signed record
+# requires a new re-sign tag.
 #
 # So the anchor check has to know that `v0.336.0-resign1` describes
 # `v0.336.0` while still refusing a manifest from any OTHER release,

@@ -318,6 +318,32 @@ try {
     assert.ok(!/--(x64|arm64|ia32|armv7l)\b/.test(runLine),
         'and passes no per-arch flag: one would override --universal and emit '
         + 'two packages for a store slot that holds one');
+
+    // `mas` somewhere on the line is not enough: `--mac mas dmg zip` or a
+    // bare `--mac` followed by `mas` elsewhere still rebuilds dmg and zip
+    // into the same dist/ under the store certificate, over the top of the
+    // Developer ID artifacts the direct-download step uploads.
+    const macTargets = (runLine.match(/--mac((?:\s+[^\s-][^\s]*)*)/) || [null, ''])[1]
+        .trim().split(/\s+/).filter(Boolean);
+    assert.deepEqual(macTargets, ['mas'],
+        'the store step scopes --mac to exactly the mas target, or it rebuilds '
+        + 'dmg and zip over the signed direct-download artifacts');
+
+    // The guard, env and run of that one step, bounded by the next step.
+    const stepStart = wf.lastIndexOf('- name:', wf.indexOf("XCHAIN_BUILD_MAS: '1'"));
+    const stepEnd = wf.indexOf('- name:', stepStart + 1);
+    const step = wf.slice(stepStart, stepEnd === -1 ? undefined : stepEnd);
+    assert.ok(/if:\s*env\.MAS_CSC_LINK\s*!=\s*''/.test(step),
+        'the MAS_CSC_LINK guard sits on the store step itself');
+    assert.ok(/CSC_INSTALLER_LINK:\s*\$\{\{\s*secrets\.MAS_CSC_INSTALLER_LINK\s*\}\}/.test(step),
+        'the store step imports the 3rd Party Mac Developer Installer '
+        + 'certificate: the .pkg is signed by it, and without it the build dies '
+        + 'at the pkg step with "Cannot find valid identity"');
+    assert.ok(/CSC_INSTALLER_KEY_PASSWORD:\s*\$\{\{\s*secrets\.MAS_CSC_INSTALLER_KEY_PASSWORD\s*\}\}/.test(step),
+        'and the password that unlocks it');
+    assert.ok(/CSC_LINK:\s*\$\{\{\s*secrets\.MAS_CSC_LINK\s*\}\}/.test(step),
+        'the store step signs the app with the Apple Distribution certificate, '
+        + 'not the Developer ID one');
 }
 
 // --- 8. The store package ends up where the release tooling looks -----
@@ -416,7 +442,8 @@ console.log(
         + 'mac and silently produce an unsandboxed, hardened store build; the mas target is opt-in via '
         + 'XCHAIN_BUILD_MAS and never present on a staging build, leaving the direct-download lane byte-identical '
         + 'when off; attachUpdater short-circuits on process.mas before loading electron-updater, because an '
-        + 'App Store build must never ship its own updater; the release workflow asks for --universal and no '
+        + 'App Store build must never ship its own updater; the release workflow scopes --mac to exactly mas, '
+        + 'behind the MAS_CSC_LINK guard with the installer certificate and its password, and asks for --universal and no '
         + 'per-arch flag, because naming a target on the CLI discards the config arch and emits two packages for '
         + 'a store slot that holds one; the config relocates the .pkg out of the pack directory into the '
         + 'output directory, driven on a temp tree, because every release tool reads a flat dist/; and the '

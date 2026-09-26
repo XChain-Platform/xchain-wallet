@@ -536,8 +536,13 @@ describe('the signing methods answer their published success shapes', () => {
     });
 
     it('coSign reports a policy refusal as ok:true / approved:false, not as an error', async () => {
+        // chainId + daemonDerivationPath must resolve to an address the
+        // connected site's account grant covers (addr-1 / acct-primary
+        // above), or the new connect-time account-scope gate refuses the
+        // request before this test's envelope-shape assertion ever runs.
         flowMocks.findCoSignerAccountByAddress.mockResolvedValue({
             id: 'cosigner-1', aggregateAddress: 'bcrt1pagg', name: 'Policy signer',
+            chainId: CHAIN, daemonDerivationPath: "m/84'/1'/0'/0/0",
         });
         flowMocks.passiveCoSignForAccount.mockResolvedValue({
             approved: false, reason: 'ACCOUNT_DISABLED', detail: { accountId: 'cosigner-1' },

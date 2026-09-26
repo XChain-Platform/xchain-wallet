@@ -518,20 +518,20 @@ function extractRows(resp) {
  * depending on version; pick out the fields we render and fail closed
  * (return null) if the row can't even yield a ticker pair.
  */
-function normalizeMarket(row) {
+export function normalizeMarket(row) {
     if (!row || typeof row !== 'object') return null;
     const tick1 = row.tick1 || row.tickA || row.give_tick || row.base || null;
     const tick2 = row.tick2 || row.tickB || row.get_tick || row.quote || null;
     if (!tick1 || !tick2) return null;
-    const lastPrice = row.last_price || row.lastPrice || row.last || null;
-    const change24h = row.change_24h || row.change24h || null;
+    const lastPrice = row.tick1_price ?? row.last_price ?? row.lastPrice ?? row.last ?? null;
+    const change24h = row.tick1_24hr_change ?? row.change_24h ?? row.change24h ?? null;
     const depthRaw = row.depth ?? row.open_orders ?? row.orderCount;
     const depth = typeof depthRaw === 'number' ? depthRaw : Number(depthRaw);
     return {
         tick1: String(tick1),
         tick2: String(tick2),
-        lastPrice: lastPrice ? String(lastPrice) : undefined,
-        change24h: change24h ? String(change24h) : undefined,
+        lastPrice: lastPrice != null && String(lastPrice).length > 0 ? String(lastPrice) : undefined,
+        change24h: change24h != null && String(change24h).length > 0 ? String(change24h) : undefined,
         depth: Number.isFinite(depth) ? depth : undefined,
     };
 }

@@ -15,7 +15,9 @@ import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { buildDeliveryNetworkOptions } from '../utils/deliveryNetworks.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -38,6 +40,12 @@ const chainRegistry = registryLib.defaultRegistry();
 // User-facing native ticker for a chain, used to label the network-fee
 // estimate on the review screen.
 const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+
+// Why a key request cannot go out from a wallet whose passphrase is unstored.
+// It names both ways out, since this form has no passphrase or password field.
+const UNSTORED_PASSPHRASE_REASON = 'This wallet uses a 25th-word passphrase that has not been '
+    + 'stored yet, so the key request cannot be signed. Lock the wallet; the unlock screen will '
+    + 'capture it, or pick "Plain text" above to message them without encryption.';
 
 /**
  * The address a message is funded from on its delivery chain. The chain's
@@ -159,6 +167,7 @@ export function ComposeMessage({
     // branch can confirm it without leaving the compose screen.
     const [handshakeBusy, setHandshakeBusy] = useState(false);
     const [handshakeSent, setHandshakeSent] = useState(false);
+    const [handshakeResult, setHandshakeResult] = useState(/** @type {any | null} */ (null));
     // The key request's OWN error, deliberately not `submitError`. It used to
     // write into that one, which the form stage renders nowhere (only the
     // review stage and the hardware branch do), so every failure of this button
@@ -413,6 +422,14 @@ export function ComposeMessage({
         software: 'messageAction',
         hardware: 'messageActionHw',
     });
+    const handshakeLane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId,
+        owner: fromAddress,
+        software: 'sendHandshake',
+        hardware: 'sendHandshakeHw',
+    });
 
     // Encrypt + compose + tamper-check + pre-flight all run HOST-side; Approve
     // signs the byte-identical prebuilt PSBT over the SAME ciphertext (passed
@@ -484,7 +501,20 @@ export function ComposeMessage({
     function handleReview(event) {
         event.preventDefault();
         if (stage !== 'form') return;
-        if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
+        // Require a source on the selected delivery network.
+        if (!fromAddress || !chainId) {
+            setSubmitError('No signing address is available on this delivery network.');
+            return;
+        }
+        // Require the two fields that define the message.
+        if (!toAddress.trim()) {
+            setSubmitError('Enter a recipient address.');
+            return;
+        }
+        if (!message.trim()) {
+            setSubmitError('Write a message to send.');
+            return;
+        }
         if (addressInvalid) return;
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
@@ -574,46 +604,20 @@ export function ComposeMessage({
         }
     }
 
-    // WHY THERE IS NO READY SIGNER, in words the user can act on.
-    //
-    // Two different states reach the `!signerReady` branch below and they need
-    // DIFFERENT sentences, because one of them has a remedy and the other does
-    // not. A pool entry that was merely dropped (a worker restart that could
-    // not rehydrate it) comes back on the next unlock, so "unlock it again" is
-    // true. A 25th-word passphrase wallet that has already stored its
-    // passphrase (`passphraseStored`) unlocks on the password alone, so that
-    // same sentence is still true for it. Only a LEGACY record, one that has
-    // never captured its passphrase yet (`passphraseEnabled` true,
-    // `passphraseStored` false), needs the extra step named: the unlock
-    // screen is what captures it, once, and typing it here would do nothing
-    // (this stage has no passphrase field). Naming the wrong remedy sends the
-    // user round a loop that can never succeed - the same class of
-    // un-compliable instruction this whole error state exists to kill. The
-    // surrounding banner's plain-text option stays as the no-signer way out.
-    //
-    // The lookup happens HERE rather than on mount so the screen costs nothing
-    // extra in the common case; this branch is only reached by a press that
-    // would otherwise do nothing at all.
-    async function signerNotReadyReason() {
+    // True for a wallet with a 25th-word passphrase it has never stored: the
+    // signer pool skips it, and only the unlock screen's capture step fixes it.
+    // Read on press, so the common case costs no extra lookup.
+    async function passphraseAwaitsCapture() {
         try {
-            if (typeof messaging.listWallets === 'function') {
-                const wallets = await messaging.listWallets();
-                const record = Array.isArray(wallets)
-                    ? wallets.find((w) => w?.id === walletId)
-                    : null;
-                if (record?.passphraseEnabled && !record?.passphraseStored) {
-                    return 'This wallet uses a 25th-word passphrase that has not been stored yet, so '
-                        + 'the key request cannot be signed. Lock the wallet; the unlock screen will '
-                        + 'capture it, or pick "Plain text" above to message them '
-                        + 'without encryption.';
-                }
-            }
+            const wallets = typeof messaging.listWallets === 'function'
+                ? await messaging.listWallets()
+                : null;
+            const record = Array.isArray(wallets) ? wallets.find((w) => w?.id === walletId) : null;
+            return Boolean(record?.passphraseEnabled && !record?.passphraseStored);
         } catch {
-            // A shell that cannot list wallets still gets an answer; the
-            // generic reason below is true of every not-ready signer.
+            // A shell that cannot list wallets falls through to the confirm page.
+            return false;
         }
-        return 'Your wallet is locked, so the key request cannot be signed. '
-            + 'Unlock it and press this again.';
     }
 
     // Publish our pubkey to the recipient (MESSAGE format-0 handshake) so they
@@ -622,43 +626,37 @@ export function ComposeMessage({
     // rather than sending an (impossible to encrypt) message.
     async function handleRequestSession() {
         if (handshakeBusy || !fromAddress || !chainId || !toAddress.trim()) return;
-        if (!hw && !signerReady && password.length === 0) {
-            // NAMES SOMETHING THE USER CAN ACTUALLY DO. This used to read
-            // "Enter your password to send the key request", and there is no
-            // password field on this stage to enter it into: the send path
-            // collects the password on the review screen, which a key request
-            // never reaches. See `signerNotReadyReason` for why one sentence
-            // could not be honest for both of the states that land here.
-            setHandshakeError(await signerNotReadyReason());
-            return;
-        }
-        if (hw && hwStatus !== 'available') {
-            setHandshakeError('Connect and unlock your hardware wallet to send the key request.');
-            return;
-        }
         setHandshakeBusy(true);
         setHandshakeError(null);
         try {
-            const base = {
-                walletId,
+            // Refuse here, not on the confirm page: that page only offers a
+            // password, and a password alone cannot sign for this wallet.
+            if (!hw && !handshakeLane.isWatcherMode && !signerReady
+                && await passphraseAwaitsCapture()) {
+                setHandshakeError(UNSTORED_PASSPHRASE_REASON);
+                return;
+            }
+            const { actionData } = flowsLib.buildHandshakeActionData({
+                chainRegistry,
                 chainId,
-                from: {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                    source: fromAddress.source,
-                    signerId: fromAddress.signerId,
-                },
+                from: fromAddress,
                 destination: toAddress.trim(),
                 version: 0,
-            };
-            await (hw
-                ? messaging.sendHandshakeHw({ ...base, signerId: fromAddress.signerId })
-                : messaging.sendHandshake({ ...base, password }));
+            });
+            const requestResult = await handshakeLane.run({
+                actionData,
+                encoderOpts: feePerKb != null ? { feePerKb } : {},
+                submitExtra: { destination: toAddress.trim(), version: 0 },
+            });
+            if (handshakeLane.isWatcherMode) {
+                setHandshakeResult(requestResult);
+                return;
+            }
             setHandshakeSent(true);
         } catch (err) {
-            setHandshakeError(err?.message || 'Could not send the key request.');
+            if (!isUserRejection(err)) {
+                setHandshakeError(err?.message || 'Could not send the key request.');
+            }
         } finally {
             setHandshakeBusy(false);
         }
@@ -689,6 +687,16 @@ export function ComposeMessage({
 
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+
+    if (handshakeResult) {
+        return wrap(
+            <WatcherResultPanel
+                result={handshakeResult}
+                onBuildAnother={() => setHandshakeResult(null)}
+                onDone={() => setHandshakeResult(null)}
+            />,
+        );
     }
 
     if (stage === 'done') {
@@ -788,6 +796,19 @@ export function ComposeMessage({
                     </Button>
                 </div>
             </form>,
+        );
+    }
+
+    if (handshakeLane.open) {
+        return (
+            <ActionConfirmScreen
+                {...handshakeLane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                signerReady={signerReady}
+                hintClassName={styles.hint}
+                hwSignerInfo={hwSignerInfo}
+            />
         );
     }
 
@@ -982,14 +1003,9 @@ export function ComposeMessage({
                     block
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress
-                        || !toAddress.trim()
-                        || addressInvalid
-                        || !message.trim()
-                        || actionConfirm.composing
-                        || (!sendUnencrypted && (pubkeyState === 'missing' || pubkeyState === 'checking'))}
+                    disabled={actionConfirm.composing}
                 >
-                    Send message
+                    {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
                 </Button>
             </div>
         </form>,

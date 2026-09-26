@@ -39,6 +39,15 @@ const STATUS_LABELS = {
 };
 const statusLabel = (s) => STATUS_LABELS[s] || s;
 
+// Humanize the local-sign contribution kind; the flow's enum stays wire vocabulary.
+// Covers every contributionKind flows/multisigSignLocally.js returns.
+const CONTRIBUTION_LABELS = {
+    'round-1-nonce': 'Step 1 reply',
+    'round-2-partial': 'Step 2 signature',
+    'classical-signature': 'Signature',
+};
+const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
+
 /**
  * §22.3 + §42.9 multisig sign-screen tracker (Phase 4 Step 19).
  *
@@ -47,11 +56,11 @@ const statusLabel = (s) => STATUS_LABELS[s] || s;
  *     under the redeem/witness script. The header reads
  *     "Signatures collected: 2 of 3" and finalize is reachable as
  *     soon as threshold is met.
- *   - **Taproot-MuSig2** tracks two rounds. Round 1 collects 66-byte
- *     publicNonces ("Cosigners responded: 2 of 3"); once threshold is
- *     met the wallet aggregates them via `sdk.musig2.aggregateNonces`
- *     and the header switches to "Signatures collected: 2 of 3".
- *     Round 2 collects 32-byte partial sigs which are then aggregated
+ *   - **Taproot-MuSig2** tracks two steps. Step 1 collects 66-byte
+ *     publicNonces ("Cosigners responded (step 1 of 2)"); once threshold
+ *     is met the wallet aggregates them via `sdk.musig2.aggregateNonces`
+ *     and the header switches to "Signatures collected (step 2 of 2)".
+ *     Step 2 collects 32-byte partial sigs which are then aggregated
  *     into a single 64-byte Schnorr signature (BIP327); on chain
  *     this is indistinguishable from a single-sig taproot spend
  *     (§22.4).
@@ -255,14 +264,14 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     pubkey: envelope.contribution.pubkey,
                     publicNonceHex: envelope.contribution.publicNonce,
                 });
-                setPasteResult(`Round 1 reply from ${shortPk(envelope.contribution.pubkey)} scanned.`);
+                setPasteResult(`Step 1 reply from ${shortPk(envelope.contribution.pubkey)} scanned.`);
             } else if (envelope.kind === 'multisig-round-2-reply') {
                 await messaging.contributeMultisigSignature({
                     sessionId: active.id,
                     pubkey: envelope.contribution.pubkey,
                     signatureHex: envelope.contribution.sig,
                 });
-                setPasteResult(`Round 2 signature from ${shortPk(envelope.contribution.pubkey)} scanned.`);
+                setPasteResult(`Step 2 signature from ${shortPk(envelope.contribution.pubkey)} scanned.`);
             } else if (envelope.kind === 'multisig-classical-reply') {
                 await messaging.contributeMultisigSignature({
                     sessionId: active.id,
@@ -299,7 +308,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 password:  signPassword,
             });
             setSignResult(
-                `Contributed ${result?.contributionKind || 'signature'} from ${shortPk(result?.pubkey || '')}.`,
+                `${contributionLabel(result?.contributionKind)} from ${shortPk(result?.pubkey || '')} added.`,
             );
             setSignPassword('');
             await refreshActive(active.id);
@@ -356,14 +365,14 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     pubkey: envelope.contribution.pubkey,
                     publicNonceHex: envelope.contribution.publicNonce,
                 });
-                setPasteResult(`Round 1 reply from ${shortPk(envelope.contribution.pubkey)} accepted.`);
+                setPasteResult(`Step 1 reply from ${shortPk(envelope.contribution.pubkey)} accepted.`);
             } else if (envelope.kind === 'multisig-round-2-reply') {
                 await messaging.contributeMultisigSignature({
                     sessionId: active.id,
                     pubkey: envelope.contribution.pubkey,
                     signatureHex: envelope.contribution.sig,
                 });
-                setPasteResult(`Round 2 signature from ${shortPk(envelope.contribution.pubkey)} accepted.`);
+                setPasteResult(`Step 2 signature from ${shortPk(envelope.contribution.pubkey)} accepted.`);
             } else if (envelope.kind === 'multisig-classical-reply') {
                 await messaging.contributeMultisigSignature({
                     sessionId: active.id,
@@ -485,11 +494,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const summary = progressSummary(active);
     const pending = pendingCosignerPubkeys(active);
     const isMusig2 = active.scheme === 'taproot-musig2';
-    const roundLabel = isMusig2
+    const stepLabel = isMusig2
         ? (active.status === 'collecting-nonces'
-            ? 'Round 1: Collect cosigner replies'
+            ? 'Step 1: Collect cosigner replies'
             : (active.status === 'collecting-sigs'
-                ? 'Round 2: Collect signatures'
+                ? 'Step 2: Collect signatures'
                 : null))
         : (active.status === 'collecting-sigs' ? 'Collect signatures' : null);
 
@@ -497,7 +506,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         return wrap(
             <>
                 <p className={styles.successTitle}>
-                    {roundLabel || (active.status === 'finalized' ? 'Finalized broadcast' : 'Export signing data')}
+                    {stepLabel || (active.status === 'finalized' ? 'Finalized broadcast' : 'Export signing data')}
                 </p>
                 <p className={styles.hint}>
                     Show this animated QR to a cosigner's wallet. Each frame is
@@ -548,7 +557,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             <>
                 <p className={styles.successTitle}>Sign with my key</p>
                 <p className={styles.hint}>
-                    {roundLabel || 'Contribute the local cosigner\'s signature for this session.'}
+                    {stepLabel || 'Contribute the local cosigner\'s signature for this session.'}
                 </p>
                 {/* Same wording the hardware signers throw (#5082): the screen
                     and the device error must not describe the limit two ways. */}
@@ -654,10 +663,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
             </p>
             {isMusig2 ? (
                 <p className={styles.hint}>
-                    Round 1: Cosigners responded: {active.nonces.length} of {active.threshold}
+                    Step 1: Cosigners responded: {active.nonces.length} of {active.threshold}
                     {active.aggNonce ? ' (combined)' : ''}
                     <br />
-                    Round 2: Signatures collected: {active.partialSigs.length} of {active.threshold}
+                    Step 2: Signatures collected: {active.partialSigs.length} of {active.threshold}
                     {active.aggregatedSchnorrSig ? ' (combined)' : ''}
                 </p>
             ) : null}
@@ -676,8 +685,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
             ) : (
                 <p className={styles.hint}>All cosigners have contributed.</p>
             )}
-            {roundLabel ? (
-                <p className={styles.hint} data-testid="multisig-round-label">{roundLabel}</p>
+            {stepLabel ? (
+                <p className={styles.hint} data-testid="multisig-step-label">{stepLabel}</p>
             ) : null}
             {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
             <div className={styles.actions}>

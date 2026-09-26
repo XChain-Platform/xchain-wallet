@@ -32,6 +32,7 @@ function makeSdk({ orders = [], swaps = [], dispensers = [], polls = [], votes =
         getOrders: async () => ({ data: orders }),
         getSwaps: async () => ({ data: swaps }),
         getDispensers: async () => ({ data: dispensers }),
+        getAction: async () => null,
         getPolls: async () => ({ data: polls }),
         getVotes: async () => ({ data: votes }),
     };
@@ -64,6 +65,37 @@ describe('DeadlineWatcher', () => {
         expect(n.body).toContain('order #100');
         expect(n.body).toContain('1 hour');
         expect(n.data).toMatchObject({ kind: 'order', actionIndex: '100', route: 'my-orders' });
+    });
+
+    it('hydrates a dispenser deadline from action detail state', async () => {
+        const dispenser = {
+            action: 'DISPENSER',
+            action_index: '303',
+            source: 'bcrt1qmine',
+            give_tick: 'TOKEN',
+            status: 'valid',
+            current_status: 'open',
+        };
+        const sdk = makeSdk({ dispensers: [dispenser] });
+        sdk.getAction = vi.fn(async () => ({
+            ...dispenser,
+            state: {
+                status: 'open',
+                expiration: NOW + HOUR,
+                give_remaining: '500',
+            },
+        }));
+        const { watcher, notify } = makeWatcher(sdk);
+
+        await watcher.pollOnce();
+
+        expect(sdk.getAction).toHaveBeenCalledWith('303');
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify.mock.calls[0][0].data).toMatchObject({
+            kind: 'dispenser',
+            actionIndex: '303',
+            expiration: NOW + HOUR,
+        });
     });
 
     it('does not baseline: a deadline already near at startup announces on the first tick', async () => {

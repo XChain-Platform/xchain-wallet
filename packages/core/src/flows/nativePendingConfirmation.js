@@ -28,20 +28,19 @@
 // An output only exists while it is unspent, and both outputs of a send are
 // spent in the ordinary course of using the wallet. Past that point the UTXO
 // set has nothing to say, so a record the outputs cannot settle and that is
-// older than the pending window gets two further, equally positive, checks:
+// older than the pending window gets three further, equally positive, checks:
 //
+//   - The encoder's tracker index, looked up by the exact transaction hash.
+//     This reaches every confirmed transaction, including a plain transfer
+//     whose outputs have since been spent.
+//   - The explorer's transaction record. The service writes that row for a
+//     transaction it decoded before it judges the action, so a rejected
+//     action still answers with its block.
 //   - A confirmed transaction of ours that SPENDS one of its outputs. The
 //     spend is in a block, so the parent it names is in a block at or before
 //     it. Read off the records already in the vault, at no network cost, and
 //     it covers the common shape of the problem: the change (and, for a send
 //     between our own addresses, the payment) is spent by a later send.
-//   - The explorer's transaction record, looked up by hash. The service
-//     writes that row for every transaction it decoded before it judges the
-//     action, so an action the indexer rejected still answers with its
-//     block. This is also the only check that reaches such a record: it
-//     carries an action, so the outputs check never looks at it, and it has
-//     no action row, so the feeds never retire it. A plain transfer is never
-//     decoded and gets no answer here; the child check above is its route.
 //
 // Nothing here retires a record on a silence. A tracker that refuses, an
 // explorer that errors or answers with no block, and a hash no sibling spends
@@ -67,13 +66,13 @@ import { probeTxInclusion } from './txInclusionProbe.js';
 export const INCLUSION_PROBE_AFTER_MS = NETWORK_SEEN_WINDOW_MS;
 
 /**
- * How long one negative explorer answer stands before the same hash is
- * asked again. History reads every 20s while open; a record the explorer
- * does not know is asked about once per interval, not once per read.
+ * How long one negative lookup stands before the same hash is asked again.
+ * History reads every 20s while open, so an unknown hash is asked about
+ * once per interval, not once per read.
  */
 export const INCLUSION_PROBE_INTERVAL_MS = 5 * 60 * 1000;
 
-/** When each hash was last asked of the explorer, ms; shared across reads in one host. */
+/** When each hash was last probed, ms; shared across reads in one host. */
 const lastProbedAt = new Map();
 
 /** @param {unknown} v */
@@ -212,9 +211,10 @@ function sentAtMs(r) {
  * fetched once per call however many records name it.
  *
  * What the outputs leave unresolved, and every action-carrying record, is
- * then checked past the pending window: first against the vault's own
- * confirmed records for a spend of one of its outputs, then by hash against
- * the explorer, each hash at most once per `INCLUSION_PROBE_INTERVAL_MS`.
+ * then checked past the pending window: first by exact hash against the
+ * encoder's tracker index, then against the explorer, and finally against
+ * the vault's own confirmed records for a spend of one of its outputs. Each
+ * network lookup runs at most once per `INCLUSION_PROBE_INTERVAL_MS`.
  *
  * Best-effort throughout: a tracker that is lagging, halted or unreachable
  * makes the encoder refuse the fetch, an explorer that errors answers
@@ -306,49 +306,40 @@ export async function reconcileNativePendingTxs({ vault, sdkRegistry, chainRegis
     });
     if (aged.length === 0) return { seenNow, confirmed };
 
+    const memo = opts.probeMemo instanceof Map ? opts.probeMemo : lastProbedAt;
+    const intervalMs = Number(opts.probeIntervalMs) >= 0 ? Number(opts.probeIntervalMs) : INCLUSION_PROBE_INTERVAL_MS;
+    const agedByKey = new Map(aged.map((r) => [lower(r.txid), r]));
+    const canProbe = typeof sdk?.encoder?.getTxBlock === 'function' || typeof sdk?.getTransaction === 'function';
+    const due = canProbe ? [...agedByKey.keys()].filter((key) => {
+        const last = memo.get(key);
+        return last == null || nowMs - last >= intervalMs;
+    }) : [];
+
+    const inBlock = await probeTxInclusion({ sdk, txids: due });
+    for (const [key, hit] of inBlock) {
+        const r = agedByKey.get(key);
+        const inclusion = hit.actionRecorded ? undefined : { blockIndex: hit.blockIndex };
+        await markPendingTxIndexed(vault, r ? r.txid : key, { ...stampOpts, inclusion });
+        confirmed.add(key);
+        memo.delete(key);
+    }
+
     // The records the outputs settled a moment ago are in-memory copies
     // still reading `broadcast`; they count as the confirmed evidence they
     // now are, so a send whose change they spent retires in this same pass.
+    const unincluded = [...agedByKey.keys()].filter((key) => !confirmed.has(key));
     const siblings = chainRecords.map((s) => (confirmed.has(lower(s.txid)) ? { ...s, status: 'indexed' } : s));
-    const byChild = spentByConfirmedSibling({ txids: aged.map((r) => r.txid), siblings });
-    const toProbe = [];
-    for (const r of aged) {
-        const key = lower(r.txid);
-        if (byChild.has(key)) {
-            await markPendingTxIndexed(vault, r.txid, { ...stampOpts, inclusion: { blockIndex: null } });
-            confirmed.add(key);
-        } else {
-            toProbe.push(key);
-        }
+    const byChild = spentByConfirmedSibling({ txids: unincluded, siblings });
+    for (const key of unincluded) {
+        if (!byChild.has(key)) continue;
+        const r = agedByKey.get(key);
+        await markPendingTxIndexed(vault, r ? r.txid : key, { ...stampOpts, inclusion: { blockIndex: null } });
+        confirmed.add(key);
+        memo.delete(key);
     }
-    // No explorer client, no lookup and no memo entry: a client that appears
-    // later must be asked straight away, not after a silence it never gave.
-    if (toProbe.length === 0 || typeof sdk?.getTransaction !== 'function') return { seenNow, confirmed };
 
-    const memo = opts.probeMemo instanceof Map ? opts.probeMemo : lastProbedAt;
-    const intervalMs = Number(opts.probeIntervalMs) >= 0 ? Number(opts.probeIntervalMs) : INCLUSION_PROBE_INTERVAL_MS;
-    const due = toProbe.filter((key) => {
-        const last = memo.get(key);
-        return last == null || nowMs - last >= intervalMs;
-    });
-    if (due.length === 0) return { seenNow, confirmed };
-
-    const inBlock = await probeTxInclusion({ sdk, txids: due });
     for (const key of due) {
-        const hit = inBlock.get(key);
-        if (hit) {
-            const r = aged.find((x) => lower(x.txid) === key);
-            // A valid action means the explorer's own feed lists this
-            // transaction (the sighting the feeds missed while the wallet was
-            // closed); retire it plainly and let that row be the record. Only
-            // one with no valid action needs our record to stand in for it.
-            const inclusion = hit.actionRecorded ? undefined : { blockIndex: hit.blockIndex };
-            await markPendingTxIndexed(vault, r ? r.txid : key, { ...stampOpts, inclusion });
-            confirmed.add(key);
-            memo.delete(key);
-        } else {
-            memo.set(key, nowMs);
-        }
+        if (!confirmed.has(key)) memo.set(key, nowMs);
     }
     return { seenNow, confirmed };
 }

@@ -105,13 +105,13 @@ assert.equal(
 );
 assert.equal(
     progressSummary(musig2).label,
-    'Cosigners responded (round 1 of 2)',
-    'MuSig2 round 1 tracker label is "Cosigners responded (round 1 of 2)"',
+    'Cosigners responded (step 1 of 2)',
+    'MuSig2 step 1 tracker label is "Cosigners responded (step 1 of 2)"',
 );
 assert.equal(
     progressSummary({ ...musig2, status: 'collecting-sigs' }).label,
-    'Signatures collected (round 2 of 2)',
-    'MuSig2 round 2 tracker label is "Signatures collected (round 2 of 2)"',
+    'Signatures collected (step 2 of 2)',
+    'MuSig2 step 2 tracker label is "Signatures collected (step 2 of 2)"',
 );
 
 // pendingCosignerPubkeys initially returns all cosigners.
@@ -499,9 +499,9 @@ assert.ok(/export function MultisigSigningSession\b/.test(route),
 assert.ok(/Signatures collected/.test(route),
     'route renders the P2SH/P2WSH single-round tracker copy');
 assert.ok(/Cosigners responded/.test(route),
-    'route renders the MuSig2 round-1 tracker copy');
-assert.ok(/Round 2: Signatures collected/.test(route),
-    'route renders the MuSig2 round-2 tracker copy');
+    'route renders the MuSig2 step-1 tracker copy');
+assert.ok(/Step 2: Signatures collected/.test(route),
+    'route renders the MuSig2 step-2 tracker copy');
 assert.ok(/aggregateMultisigSession|messaging\.aggregateMultisigSession/.test(route),
     'route drives aggregateMultisigSession');
 assert.ok(/cancelMultisigSigningSession|messaging\.cancelMultisigSigningSession/.test(route),

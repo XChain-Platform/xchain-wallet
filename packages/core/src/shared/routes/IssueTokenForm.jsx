@@ -45,7 +45,12 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import {
+    compareDecimalStrings,
+    subtractDecimalStrings,
+} from '../utils/amountFormat.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -104,12 +109,23 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [divisible, setDivisible] = useState(false);
     const [description, setDescription] = useState('');
     const [lockSupply, setLockSupply] = useState(false);
+    // ISSUE v0 carries two separate destinations, and a form that offers only
+    // the first reads as if it moved both: TRANSFER hands away the token's
+    // issuer rights, TRANSFER_SUPPLY says where the initial mint lands. The
+    // indexer credits MINT_SUPPLY to the issuing address and moves it only when
+    // TRANSFER_SUPPLY is set (xchain-indexer src/actions/issue/settle.js), so a
+    // tester who filled "Transfer ownership to" on testnet handed the operator
+    // control of the token and kept every minted unit, then reported it as a
+    // bug. Both fields live here so the form says what the chain will do.
     const [transferTo, setTransferTo] = useState('');
+    const [transferSupplyTo, setTransferSupplyTo] = useState('');
     const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
         useNativeFee(chainId);
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    // Which address field the one contacts picker is filling.
+    const [contactsTarget, setContactsTarget] = useState(/** @type {'owner' | 'supply'} */ ('owner'));
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
     const [stage, setStage] = useState(
@@ -129,12 +145,12 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
             chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
-            description, lockSupply, transferTo, payFeeInNativeCoin,
+            description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
-        description, lockSupply, transferTo, payFeeInNativeCoin,
+        description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -149,6 +165,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (typeof v.description === 'string') setDescription(v.description);
         if (typeof v.lockSupply === 'boolean') setLockSupply(v.lockSupply);
         if (typeof v.transferTo === 'string') setTransferTo(v.transferTo);
+        if (typeof v.transferSupplyTo === 'string') setTransferSupplyTo(v.transferSupplyTo);
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
         setDraftPending(true);
     }, [draft]);
@@ -157,8 +174,9 @@ export function IssueTokenForm({ walletId, onBack }) {
         setDraftPending(false);
     }, [draft]);
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -166,8 +184,11 @@ export function IssueTokenForm({ walletId, onBack }) {
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
@@ -178,7 +199,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key issued on the wallet's OLDEST chain forever. Open
+                // on the last-used chain instead, ahead of that fallback,
+                // exactly as Send and Swap do.
+                setChainId((prev) => pickDefaultChainId(byChain, {
+                    explicitChainId: prev,
+                    settings,
+                }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -191,8 +219,13 @@ export function IssueTokenForm({ walletId, onBack }) {
     // delegated address is never the default; it vends rather than funds.
     useEffect(() => {
         if (!chainId || !addressesByChain || !activeByChain) return;
-        const funding = (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser');
-        setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
+        const addresses = addressesByChain[chainId] || [];
+        const funding = addresses.filter((a) => a.role !== 'dispenser');
+        setFromAddressId((current) => (
+            addresses.some((address) => address.id === current)
+                ? current
+                : preferredSourceId(funding, activeByChain[chainId])
+        ));
     }, [chainId, addressesByChain, activeByChain]);
 
     useEffect(() => {
@@ -273,23 +306,25 @@ export function IssueTokenForm({ walletId, onBack }) {
             p.LOCK_MAX_SUPPLY = '1';
             p.LOCK_MINT = '1';
         }
-        if (transferTo) p.TRANSFER = transferTo.trim();
+        if (transferTo.trim()) p.TRANSFER = transferTo.trim();
+        // Only meaningful beside a MINT_SUPPLY: with nothing minted at issuance
+        // there is nothing to deliver, and the indexer would ignore the field.
+        // The submit check refuses that pairing before it gets here.
+        if (transferSupplyTo.trim() && p.MINT_SUPPLY) p.TRANSFER_SUPPLY = transferSupplyTo.trim();
         return p;
-    }, [ticker, supply, initialMint, maxMint, divisible, description, lockSupply, transferTo]);
+    }, [ticker, supply, initialMint, maxMint, divisible, description, lockSupply, transferTo, transferSupplyTo]);
 
     // What is left mintable after the initial mint, as a display string, or
     // null when the pair is blank/invalid/fully minted (nothing to say).
     const mintHeadroom = useMemo(() => {
-        const cap = Number(String(supply).trim());
+        const cap = String(supply).trim();
         const mintText = String(initialMint).trim();
-        if (!mintText || !Number.isFinite(cap) || cap <= 0) return null;
-        const mint = Number(mintText);
-        if (!Number.isFinite(mint) || mint < 0 || mint > cap) return null;
-        const left = cap - mint;
-        if (left <= 0) return null;
-        // Trim float noise from the subtraction (0.3 - 0.1 = 0.19999...).
-        return divisible ? String(Number(left.toFixed(8))) : String(left);
-    }, [supply, initialMint, divisible]);
+        if (!mintText || compareDecimalStrings(cap, '0') !== 1) return null;
+        if (compareDecimalStrings(mintText, '0') === -1
+            || compareDecimalStrings(mintText, cap) === 1) return null;
+        const left = subtractDecimalStrings(cap, mintText);
+        return compareDecimalStrings(left, '0') === 1 ? left : null;
+    }, [supply, initialMint]);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -329,7 +364,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 setFormError('Initial mint must be zero or a positive number.');
                 return;
             }
-            if (mintNum > Number(supply)) {
+            if (compareDecimalStrings(mintText, supply.trim()) === 1) {
                 setFormError('Initial mint cannot be more than the supply.');
                 return;
             }
@@ -349,6 +384,13 @@ export function IssueTokenForm({ walletId, onBack }) {
                 setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
                 return;
             }
+        }
+        // A supply destination with no initial mint would be silently dropped
+        // by the chain; say so instead of composing a transaction that does
+        // less than the form showed.
+        if (transferSupplyTo.trim() && mintText === '0') {
+            setFormError('Sending the initial mint somewhere needs an initial mint above 0.');
+            return;
         }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -709,7 +751,8 @@ export function IssueTokenForm({ walletId, onBack }) {
                 variant={variant}
                 contacts={contacts}
                 onPick={(entry) => {
-                    setTransferTo(entry.address);
+                    if (contactsTarget === 'supply') setTransferSupplyTo(entry.address);
+                    else setTransferTo(entry.address);
                     setContactsPickerOpen(false);
                 }}
                 onBack={() => setContactsPickerOpen(false)}
@@ -857,10 +900,18 @@ export function IssueTokenForm({ walletId, onBack }) {
             <AddressField
                 label="Transfer ownership to (optional)"
                 icon="contacts"
-                hint="Leave blank to keep control."
+                hint="Leave blank to keep control. This hands over the right to manage the token; the minted tokens stay with the issuing address unless you also send them below."
                 value={transferTo}
                 onChange={(e) => setTransferTo(e.target.value)}
-                onIconClick={() => setContactsPickerOpen(true)}
+                onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}
+            />
+            <AddressField
+                label="Send the initial mint to (optional)"
+                icon="contacts"
+                hint="Leave blank to keep the minted tokens at the issuing address."
+                value={transferSupplyTo}
+                onChange={(e) => setTransferSupplyTo(e.target.value)}
+                onIconClick={() => { setContactsTarget('supply'); setContactsPickerOpen(true); }}
             />
 
             {feeTiers ? (

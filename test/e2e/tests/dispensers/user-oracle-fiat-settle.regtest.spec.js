@@ -26,7 +26,7 @@
 //
 // WHY IT COULD NOT BE DRIVEN UNTIL NOW, and why it can only be driven inside a
 // 24-hour window. Every PRICE v1 publish is inert for exactly 86,400 seconds
-// (`effective_at = block_time + 86400`, PriceAggregator.js) and then usable for
+// (`effective_at = block_time + 86400`, oracle/price_aggregator/single_ingest.js) and then usable for
 // exactly 86,400 more: settlement reads `oracle_prices` with
 // `effective_at BETWEEN blockTime - 86400 AND blockTime` (db.getOraclePricesInTimeRange).
 // So one publish prices dispensers for ONE DAY, starting a day after it is made.

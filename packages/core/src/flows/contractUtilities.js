@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// contractUtilities: pure-function wrappers over sdk.contracts.* for
+// contractUtilities: pure-function wrappers over the SDK's contract tools for
 // the DEPLOY form's validate / estimate-size / suggest-gas buttons.
 // These reach through an sdkRegistry-scoped SDK so the contract
 // authoring tools (acorn-based syntax check, UTF-8 byte counting,
@@ -23,16 +23,18 @@ import { readExportedMeta } from './contractMetaPreflight.js';
 
 /**
  * Validate contract source: size check + acorn parse + float-literal
- * warnings + reserved-identifier check.
+ * warnings + reserved-identifier check. Prefer the rich validation result and
+ * fall back to the legacy string result for older SDKs.
  *
  * @param {{ sdkRegistry: any, chainId: string, code: string }} params
- * @returns {Promise<{ valid: boolean, error?: string, warnings?: string[] }>}
+ * @returns {Promise<{ valid: boolean, error?: string, errors?: object[], warnings?: Array<string|object> }>}
  */
 export async function contractValidate({ sdkRegistry, chainId, code }) {
     if (!sdkRegistry) throw new Error('contractValidate: sdkRegistry is required');
     if (!chainId) throw new Error('contractValidate: chainId is required');
     if (typeof code !== 'string') throw new Error('contractValidate: code is required');
     const sdk = sdkRegistry.get(chainId);
+    if (typeof sdk.validateContract === 'function') return sdk.validateContract(code);
     return sdk.contracts.validate(code);
 }
 

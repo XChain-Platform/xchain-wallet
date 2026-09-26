@@ -10,7 +10,7 @@
 
 // Smoke for PC-25 (gated-content publisher): the gatedPublishAction
 // flow composes an atomic BATCH(FILE gated, MESSAGE v2 to self) with
-// vault-first key custody; the gatedKeys vault collection exists with
+// post-broadcast key custody; the gatedKeys vault collection exists with
 // the keyHex-stripping list handler; the GatedPublishForm is owner-
 // gated off ManageToken and wired in all three shells with HW +
 // watcher signing parity.
@@ -32,10 +32,11 @@ assert.match(flow, /serializeKeyPayload\(\[key\]\)/, 'handoff payload is the SDK
 assert.match(flow, /eciesEncryptBytes\(handoffPayload, source\.publicKey\)/, 'handoff ECIES-encrypted to the issuer pubkey (HW-safe)');
 assert.match(flow, /action: 'BATCH'/, 'publishes as one atomic BATCH');
 assert.match(flow, /rawData: ciphertext\.toString\('binary'\)/, 'ciphertext rides rawData');
-// Custody: the vault put appears BEFORE submitAction in the source and
-// prepare() awaits it before returning actionData.
-assert.ok(flow.indexOf('vault.gatedKeys.put') < flow.indexOf('return { source, actionData'),
-    'K persisted before composition returns (vault-first custody)');
+// Custody: confirmation holds K in memory and a successful submit persists it.
+assert.match(flow, /const result = await submitAction\([\s\S]*?await persistGeneratedKey\(opts\.vault, prepared\.generatedKey\)/,
+    'K persisted after submit succeeds');
+assert.match(flow, /rememberGeneratedKey\(prepared\.generatedKey\)/,
+    'confirmation stages K without creating a vault row');
 assert.match(flow, /verifyKey\(key, keyHash\)/, 'stored pack key re-verified against its hash before reuse');
 assert.match(flow, /export async function buildGatedPublishPsbtRequest/, 'watcher encode-only path exists');
 assert.match(flow, /maxGatedPlaintextBytes\(/, 'encoding-aware plaintext ceiling enforced (PC-28)');
@@ -57,6 +58,7 @@ assert.match(codec, /gatedKeys: parsed\.gatedKeys \?\? empty\.gatedKeys/, 'codec
 const host = read('packages', 'extension', 'src', 'background', 'createBackgroundHost.js');
 assert.match(host, /host\.register\('action\.gatedPublish',/, 'software handler');
 assert.match(host, /registerHwHandler\('action\.gatedPublish\.hw', gatedPublishAction\)/, 'HW handler');
+assert.match(host, /host\.register\('action\.gatedPublish\.composeForConfirm',/, 'confirm composer handler');
 assert.match(host, /host\.register\('action\.gatedPublish\.psbt',/, 'watcher encode-only handler');
 assert.match(host, /host\.register\('gatedKeys\.list',/, 'pack list handler');
 assert.match(host, /schemas\.gatedKey\.gatedKeyMetadata\(r\)/, 'list handler strips keyHex via the schema helper');
@@ -68,7 +70,7 @@ for (const [label, ...p] of [
     ['extension', 'packages', 'extension', 'src', 'popup', 'messaging.js'],
 ]) {
     const m = read(...p);
-    for (const fn of ['gatedPublishAction', 'gatedPublishActionHw', 'buildGatedPublishPsbtRequest', 'listGatedKeys']) {
+    for (const fn of ['gatedPublishAction', 'gatedPublishActionHw', 'composeGatedPublishForConfirm', 'buildGatedPublishPsbtRequest', 'listGatedKeys']) {
         assert.match(m, new RegExp(`export function ${fn}\\(`), `${label}: exports ${fn}`);
     }
     assert.match(m, /sendMessage\('action\.gatedPublish', /, `${label}: routes to action.gatedPublish`);
@@ -81,8 +83,10 @@ assert.match(form, /existingKeyHash: packChoice/, 'pack reuse threads existingKe
 assert.match(form, /published on-chain forever/, 'irreversibility acknowledgment copy');
 assert.match(form, /ackForever/, 'publish blocked until acknowledged');
 assert.match(form, /buildGatedPublishPsbtRequest\(base\)/, 'watcher branch uses the encode-only path');
-assert.match(form, /gatedPublishActionHw\(/, 'HW branch');
-assert.match(form, /gatedPublishAction\(\{ \.\.\.base, password \}\)/, 'software branch');
+assert.match(form, /useActionConfirmFlow\(\{ messaging, walletId \}\)/, 'full wallets use the shared confirm flow');
+assert.match(form, /composeGatedPublishForConfirm\(base\)/, 'confirm compose prepares the encrypted action host-side');
+assert.match(form, /prebuiltActionData: composed\.gatedPublish\.actionData/, 'approve signs the prepared action bytes');
+assert.match(form, /<ActionConfirmScreen/, 'form swaps to the shared confirm page');
 assert.match(form, /ownerMissing/, 'blocks when the wallet lacks the owner address');
 assert.match(form, /Pack key hash/, 'done screen surfaces KEY_HASH');
 

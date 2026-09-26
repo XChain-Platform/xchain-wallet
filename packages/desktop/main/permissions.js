@@ -50,10 +50,10 @@
 // verify coverage without duplicating the constants.
 //
 // The handlers are origin-gated, not only vendor-gated. The renderer CSP
-// allow-lists `https://connect.trezor.io` in `script-src` AND `frame-src`,
-// so remote third-party content really does run inside the HID-granted
-// session; a vendor-only device handler would hand that frame a paired
-// Ledger. Electron also grants device access from a STORED device
+// admits no remote origin today, but a device grant is session-wide across
+// windows and this guard must not depend on that policy staying narrow: a
+// vendor-only device handler would hand any remote frame that did appear a
+// paired Ledger. Electron also grants device access from a STORED device
 // permission without re-running the request handler, so the request path
 // cannot cover the device path.
 //
@@ -118,18 +118,30 @@
 // could reach the picker; `isAppHidSelect` now also requires a TOP-LEVEL
 // frame, which `details.frame.parent` states directly.
 //
-// Renderer-side hardening (dropping the `connect.trezor.io`
-// `frame-src`/`script-src` allowance, or moving Trezor Connect to its own
-// partition) is still worth doing and is tracked separately; it is no
-// longer what holds this path shut.
+// §40.12: the hosted Trezor Connect script itself has since
+// moved out of this app's own renderer origin, into a dedicated Electron
+// session opened on demand by index.js (see
+// security.js#isTrezorConnectBridgeWindowOpen) that is never passed to
+// attachHidPermissions below and is instead wired to `attachHidDenial`,
+// which refuses `hid` explicitly through every handler Electron offers.
+// That session structurally cannot be granted `hid` for anything it
+// hosts, so the residual this comment used to flag (a compromised
+// connect.trezor.io script running as first-party code in the
+// HID-granted session) is closed there, not by this module. This
+// module's own guard is unchanged and was never what held that path shut.
+// The main renderer CSP (renderer/index.html) admits no remote origin:
+// `script-src 'self'` and `frame-src 'none'`.
 //
-// The check handler narrows `hid` alone and leaves every other permission
-// at the session default. The shared UI it hosts reads and writes the
-// clipboard, offers a camera QR scanner and asks for notification
-// permission, so a blanket default-deny across the check handler takes
-// working features out of the shipped wallet. A wider permission posture
-// is its own change with its own coverage, not a side effect of the
-// WebHID gate.
+// Outside `hid` the two generic callbacks take opposite answers, on
+// purpose. The check handler returns `true` for every other permission,
+// to every origin and frame in the session: an unconditional grant on the
+// check path, which the shared UI's clipboard writes and its
+// `Notification.permission` read rely on. The request handler refuses
+// every other permission, so anything that has to PROMPT is off in this
+// shell, including the QR scanner's camera (`media`) and
+// `Notification.requestPermission()`. Narrowing the check side is its own
+// change, verified against a live Electron session, not a side effect of
+// the WebHID gate.
 
 import { isRemoteFrameUrl } from './security.js';
 
@@ -261,8 +273,8 @@ export function attachHidPermissions(session, opts) {
         // live gates are the check handler and `select-hid-device` below.
         //
         // Judge the REQUESTING FRAME, not its embedder: `getURL()` reports the
-        // top-level window, which would let a connect.trezor.io subframe
-        // asking for `hid` inherit the verdict of the app page hosting it.
+        // top-level window, which would let a remote subframe asking for
+        // `hid` inherit the verdict of the app page hosting it.
         // Every other permission stays default-deny.
         if (permission === 'hid') {
             const url = requestingFrameUrl(webContents, details);
@@ -273,9 +285,9 @@ export function attachHidPermissions(session, opts) {
     });
 
     session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-        // `hid` is the one permission this module owns. Everything else
-        // keeps the session default so the clipboard, the QR scanner and
-        // the notification prompt keep working.
+        // `hid` is the one permission this module owns. Everything else is
+        // granted on this path; the request handler above still refuses
+        // anything that must prompt (see the header).
         if (permission !== 'hid') return true;
         return isAppHidCheck(details, requestingOrigin, appRoot);
     });
@@ -304,6 +316,69 @@ export function attachHidPermissions(session, opts) {
             event.preventDefault();
             callback(null);
         }
+    });
+}
+
+/**
+ * Wire an explicit, blanket HID denial onto an Electron session that must
+ * never be able to reach a paired Ledger or Trezor: the isolated Trezor
+ * Connect bridge session built in `index.js`
+ * (`getTrezorConnectSession`/`TREZOR_CONNECT_BRIDGE_WINDOW_NAME`).
+ *
+ * This is deliberately NOT the same posture as simply never calling
+ * `attachHidPermissions` on a session. Electron's documented default for
+ * an UNHANDLED `select-hid-device` request is to auto-select the first
+ * available device - the opposite of a denial - and a session with no
+ * device-permission handler at all falls back to that same
+ * first-device-wins behavior. Leaving a session unwired is therefore not
+ * safe by omission; a bridge session that never calls this function could
+ * hand a paired Ledger or Trezor straight to whatever hosted script runs
+ * inside it. Every handler Electron offers for `hid` is wired here to
+ * refuse explicitly instead.
+ *
+ * @param {import('electron').Session} session
+ */
+export function attachHidDenial(session) {
+    if (!session) throw new Error('attachHidDenial: session is required');
+    if (typeof session.setPermissionRequestHandler !== 'function') {
+        throw new Error('attachHidDenial: session.setPermissionRequestHandler is missing');
+    }
+    if (typeof session.setDevicePermissionHandler !== 'function') {
+        throw new Error('attachHidDenial: session.setDevicePermissionHandler is missing');
+    }
+    if (typeof session.setPermissionCheckHandler !== 'function') {
+        throw new Error('attachHidDenial: session.setPermissionCheckHandler is missing');
+    }
+    if (typeof session.on !== 'function') {
+        throw new Error('attachHidDenial: session.on (select-hid-device) is missing');
+    }
+
+    // Belt: `hid` is absent from this handler's permission union on the
+    // Electron build this app ships (see the handler census above), so
+    // this arm decides nothing there and is kept for any build whose
+    // request handler does carry `hid`. Denies every permission, not only
+    // `hid`: the bridge session exists to host one third-party script and has
+    // no legitimate use for anything else Electron gates this way.
+    session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+        callback(false);
+    });
+
+    // Braces: the handler Electron 43 actually consults for `hid`.
+    session.setPermissionCheckHandler((_webContents, permission) => permission !== 'hid');
+
+    // Refuses every device outright, regardless of vendor, origin or
+    // frame - the handler `setDevicePermissionHandler` consults once a
+    // permission check has passed.
+    session.setDevicePermissionHandler(() => false);
+
+    // The device picker itself, and the one place explicit refusal
+    // actually matters: an unhandled `select-hid-device` auto-selects the
+    // first available device rather than denying the request, so the
+    // bridge session would otherwise hand a paired Ledger/Trezor straight to
+    // whatever runs inside it even with every handler above in place.
+    session.on('select-hid-device', (event, _details, callback) => {
+        event.preventDefault();
+        callback();
     });
 }
 
@@ -405,9 +480,9 @@ export function isAppHidSelect(details, appRoot) {
  * deliberately one-sided, in the same posture as `isRemoteFrameUrl`:
  * reject what is provably remote, never guess about what is unknown.
  *
- * That is enough for the path this exists to close. The remote content
- * the CSP admits is `https://connect.trezor.io`, an http(s) tuple origin,
- * and any such origin is rejected here.
+ * That is enough for the path this exists to close. The renderer CSP
+ * admits no remote origin, and any http(s) tuple origin that appears
+ * anyway is rejected here.
  *
  * @param {unknown} origin   the `details.origin` Electron passes in
  * @returns {boolean}        true means refuse the device grant

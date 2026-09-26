@@ -166,6 +166,44 @@ mainnet explorers this browser cannot reach, and five specs went red with
 "Couldn't send. The network is unreachable." A test venue that flips when a
 bundler improves is not a venue.
 
+## The testnet venue
+
+`playwright.testnet.config.js` runs `*.testnet.spec.js` against the wallet's
+production build on the public Bitcoin testnet, through the explorer and
+encoder the bundled `bitcoin-testnet` descriptor names. It is separate code
+from the regtest venue, not a flag on it: nothing that makes a regtest spec
+deterministic exists on a public chain, so `fixtures/testnet.js` has no miner,
+no clock, no ssh, no docker and no database path at all. Its helpers poll and
+wait (`waitForTokenBalance`, `waitForValidAction`, `waitForActivationHeight`,
+`waitForFundingConfirmed`), sized to real blocks, and the unit suite
+(`test/unit/e2e/testnet-harness.test.js`) proves the whole healthy path with a
+venue whose forbidden members throw.
+
+Three things differ from regtest on purpose:
+
+- **No browser relaxation.** The public explorer sends CORS headers, so the
+  config launches Chromium with real origin rules. A testnet pass that needed
+  `--disable-web-security` would be reporting on a browser nobody ships.
+- **Global setup only reads.** It proves the venue is reachable, not stale,
+  halted or lagging, and that it prices a MINT of XCHAIN. It seeds nothing.
+- **Funding comes from the treasury, over stdin.** `fundFromTreasury` reads
+  one JSON object (`{ "wif": ..., "address": ... }`) from the process's stdin,
+  only once the wallet has shown the address to fund. The WIF is held in
+  memory for one signing call, the key buffer is zeroed after the address is
+  derived, and it is never logged, written, or passed in argv or the
+  environment. Before signing, the WIF must derive the declared address, every
+  selected input must be confirmed and pay that address, the value must cover
+  the spend, and change below the dust floor folds into the fee. A refusal
+  happens before any broadcast.
+
+```bash
+cat <treasury wallet json> | pnpm test:e2e:testnet   # the operator's act, never a script's
+```
+
+One worker, no retries: the specs share one treasury and one chain, and a
+retry on a public chain spends it twice. Bitcoin only, since staking is
+BTC-only at launch and the treasury holds tBTC; leave `XC_REGTEST_COIN` unset.
+
 Hardware-signer flows (Trezor / Ledger): need a paired device. Test
 in person; doc the path in the runbook at
 https://docs.xchain.io/components/wallet/release/extension/test-dapp-runbook.

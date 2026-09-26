@@ -46,7 +46,7 @@ function harness({ withReveal = true, revealSignThrows = false, revealBroadcastT
             return { txHex: 'reveal-hex', txid: 'REVEALTXID' };
         }
         trace.push('signCommit');
-        return { txHex: 'commit-hex', txid: 'COMMITTXID' };
+        return { txHex: 'commit-hex', txid: ENVELOPE.commitTxid };
     });
     const encoder = {
         createTx: vi.fn(async () => ({

@@ -82,8 +82,8 @@ assert.ok(
     'explorer offers an "All chains" option that fans out per-chain',
 );
 assert.ok(
-    /Token search accepts A–Z, 0–9, period, or \^TICK_ID/.test(explorerSrc),
-    'explorer validates token input shape',
+    /tickerReferenceError\(q, \{ noun: 'Token search', allowRef: true \}\)/.test(explorerSrc),
+    'explorer validates token input shape through the shared reference grammar',
 );
 assert.ok(
     /Search by token ticker to find open dispensers/.test(explorerSrc),
@@ -133,8 +133,10 @@ assert.ok(
     'token-paid buy targets the dispenser address',
 );
 assert.ok(
-    /fillsNum/.test(detailSrc),
-    'detail supports multi-fill buy (fills input scaled to an integer)',
+    /const fillsCount = useMemo/.test(detailSrc)
+        && /BigInt\(value\)/.test(detailSrc)
+        && /multiplyAmounts\(getAmount, fillsCount\.toString\(\)\)/.test(detailSrc),
+    'detail supports multi-fill buy with an exact integer fill count',
 );
 assert.ok(
     /Pay to buy/.test(detailSrc),

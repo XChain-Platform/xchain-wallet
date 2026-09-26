@@ -15,6 +15,8 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
+import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
@@ -167,7 +169,6 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         }
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, walletId]);
-
     // Flatten every chain's rows into one list, newest first. Each row is
     // annotated with its chainId for the network overlay + detail link.
     const allRows = useMemo(() => {
@@ -179,6 +180,11 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         out.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
         return out;
     }, [dispensersByChain]);
+
+    // This list lane serves ORACLE_ADDRESS but no price for a Mode B row, so
+    // its price comes from the oracle's own feeds.
+    const oracleEntries = useMemo(() => allRows.map((row) => ({ chainId: row.chainId, row })), [allRows]);
+    const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
     const anyLoading = useMemo(() => {
         const states = Object.values(dispensersByChain);
@@ -283,6 +289,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             key={`${row.chainId}:${row.action_index}`}
                             row={row}
                             label={row.address ? dispenserLabels[row.address] : undefined}
+                            oracleFeeds={oracleFeedsFor(row.chainId, row)}
                             onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
                         />
                     ))}
@@ -292,7 +299,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
 }
 
-function DispenserRow({ row, label, onSelect }) {
+function DispenserRow({ row, label, oracleFeeds, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
@@ -345,7 +352,7 @@ function DispenserRow({ row, label, onSelect }) {
                 <div className={local.name}>
                     {label ? `${label}: ` : ''}{row.give_tick || '?'}
                 </div>
-                <div className={local.subtitle}>{rateLabel(row)}</div>
+                <div className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</div>
                 {/* Escrow is only stated when it is known. The explorer's
                     dispenser LIST lane carries no escrow column (remaining is
                     derived per action, in the detail read path), so on real
@@ -361,11 +368,6 @@ function DispenserRow({ row, label, onSelect }) {
             </div>
             <div className={local.trailing}>
                 <span className={`${local.status} ${local[`status_${status}`] || ''}`}>{status}</span>
-                <span className={local.dispenseCount}>
-                    {row.dispense_count != null
-                        ? `${formatNum(row.dispense_count)} dispense${Number(row.dispense_count) === 1 ? '' : 's'}`
-                        : ''}
-                </span>
             </div>
         </button>
     );
@@ -380,15 +382,6 @@ function formatNum(v) {
     if (!/^\d+$/.test(int)) return s;
     const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return frac != null ? `${grouped}.${frac}` : grouped;
-}
-
-function rateLabel(row) {
-    const give = `${formatNum(row.give_amount)} ${row.give_tick || '?'}`;
-    const coin = row.get_coin || '';
-    const tick = row.get_tick || '';
-    const amt = formatNum(row.get_amount);
-    const payAsset = tick || coin || '?';
-    return `${give} per ${amt} ${payAsset}`;
 }
 
 function extractRows(resp) {

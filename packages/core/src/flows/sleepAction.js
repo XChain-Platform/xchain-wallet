@@ -93,6 +93,11 @@ export async function sleepAction(opts) {
         actionData: { action: 'SLEEP', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            // Fund from the source and return change to it: the address lock
+            // always builds live here, and without `change` the encoder refuses
+            // a funded address ("would burn significant satoshis as fees").
+            sourceAddress: source.address,
+            change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
@@ -108,5 +113,6 @@ export async function sleepAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

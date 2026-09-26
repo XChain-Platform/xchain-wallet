@@ -22,6 +22,11 @@ import {
     cooldownText,
     toBaseUnits,
     fromBaseUnits,
+    stakingRowState,
+    effectiveStakingRows,
+    latestEffectiveStakingRow,
+    sumStakingAmounts,
+    isPendingContractUnstake,
 } from '../../../packages/core/src/flows/stakingDashboard.js';
 
 describe('base-unit conversion', () => {
@@ -192,9 +197,69 @@ describe('cooldownStatus', () => {
     });
 });
 
+describe('staking lifecycle state', () => {
+    const rows = [
+        { action_index: 1, status: 'valid', activation_block: 10, deactivation_block: 90 },
+        { action_index: 2, status: 'valid', activation_block: 95, deactivation_block: null },
+        { action_index: 3, status: 'valid', activation_block: 110, deactivation_block: null },
+    ];
+
+    it('uses the activation window at the current indexed tip', () => {
+        expect(rows.map((row) => stakingRowState(row, 100)))
+            .toEqual(['inactive', 'active', 'pending']);
+        expect(effectiveStakingRows(rows, 100).map((row) => row.action_index)).toEqual([2]);
+    });
+
+    it('selects the newest effective delegation instead of historical page order', () => {
+        expect(latestEffectiveStakingRow([rows[2], rows[0], rows[1]], 100)?.action_index).toBe(2);
+    });
+
+    it('sums only the effective current amounts selected by the caller', () => {
+        const active = effectiveStakingRows([
+            { status: 'valid', amount: '10.5', activation_block: 1, deactivation_block: null },
+            { status: 'valid', amount: '99', activation_block: 1, deactivation_block: 50 },
+            { status: 'valid', amount: '2.25', activation_block: 80, deactivation_block: null },
+        ], 100);
+        expect(sumStakingAmounts(active)).toBe('12.75');
+    });
+
+    it('keeps rows from an older explorer that omits lifecycle fields', () => {
+        expect(stakingRowState({ status: 'valid' }, 100)).toBe('active');
+        expect(effectiveStakingRows([{ status: 'valid', amount: '5' }], 100)).toHaveLength(1);
+    });
+
+    it('keeps served lifecycle rows visible when the tip read is unavailable', () => {
+        expect(stakingRowState(rows[0], null)).toBe('unknown');
+        expect(effectiveStakingRows(rows, null)).toHaveLength(3);
+    });
+
+    it('distinguishes pending contract unstakes from completed and invalid history', () => {
+        expect(isPendingContractUnstake({ status: 'valid' })).toBe(true);
+        expect(isPendingContractUnstake({})).toBe(true);
+        expect(isPendingContractUnstake({ status: 'completed' })).toBe(false);
+        expect(isPendingContractUnstake({ status: 'invalid: amount' })).toBe(false);
+    });
+});
+
 describe('cooldownText', () => {
     it('says ready once matured', () => {
         expect(cooldownText({ state: 'matured' })).toBe('Ready to withdraw');
+    });
+
+    it('keeps "Ready to withdraw" for a matured validator (capability) row', () => {
+        // Validator/capability unstakes wait on a manual COLLECT-style step,
+        // so telling the holder it is ready for them to act is accurate.
+        expect(cooldownText({ state: 'matured' }, 'validator')).toBe('Ready to withdraw');
+    });
+
+    it('never says "Ready to withdraw" for a matured contract row', () => {
+        // Contract release is automatic (contract-staking.md: "there is no
+        // intermediate 'release' action"), so wording that implies a manual
+        // withdraw step would be wrong even though the wallet's own height
+        // read can call it `matured` before the indexer's sweep has run.
+        const text = cooldownText({ state: 'matured' }, 'contract');
+        expect(text).not.toBe('Ready to withdraw');
+        expect(text).toBe('Released automatically');
     });
 
     it('counts blocks, with an approximate date when one can be estimated', () => {

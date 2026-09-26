@@ -28,7 +28,7 @@
 // need to know about web-only chrome. Auto-hides when `window.xchain`
 // isn't injected, or when the user dismisses it for the session.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
@@ -50,6 +50,7 @@ import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccou
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
+import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -314,7 +315,7 @@ function AppInner() {
     // visit (e.g. entering from TokenDetail then re-entering from the
     // home menu should return to home, not back to TokenDetail).
     const [historyReturnTo, setHistoryReturnTo] = useState(
-        /** @type {'home' | 'token-detail'} */ ('home'),
+        /** @type {'home' | 'token-detail' | 'manage-token'} */ ('home'),
     );
     // Selected entry for the standalone ActionDetail view (mirror of
     // popup wiring). Set on row click in History or in Home's Activity
@@ -414,6 +415,7 @@ function AppInner() {
     const palette = useCommandPalette({
         enabled: status.state === 'unlocked',
         binding: settings?.keyboard?.bindings?.['command-palette'],
+        navigate: setUnlockedView,
     });
     // Contacts feed the palette's fuzzy search (§33.2). Loaded lazily the
     // first time the palette opens so a locked/never-opened session pays
@@ -1218,6 +1220,7 @@ function AppInner() {
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
+                        reopen={formReturnView === 'dispenser-detail' ? dispenserRef?.reopen : undefined}
                     />
                 );
             }
@@ -1264,6 +1267,12 @@ function AppInner() {
                             if (dispenserRef.origin === 'manage-token') return setUnlockedView('manage-token');
                             return setUnlockedView('dispensers-list');
                         }}
+                        // Back from the form lands on this detail page again.
+                        onOpenAgain={(terms) => {
+                            setDispenserRef({ ...dispenserRef, reopen: terms });
+                            setFormReturnView('dispenser-detail');
+                            setUnlockedView('dispenser');
+                        }}
                     />
                 );
             }
@@ -1306,6 +1315,12 @@ function AppInner() {
                         listRef={listForkRef}
                         onBack={() => setUnlockedView('list-detail')}
                         onDone={() => { setListForkRef(null); setUnlockedView('lists'); }}
+                        // Each consumer's own edit screen; Back from it lands on My Lists.
+                        repointHandlers={{
+                            'issue-lists': () => { setFormReturnView('lists'); setUnlockedView('access-lists'); },
+                            'dispenser-lists': () => { setDispensersBackTo('lists'); setUnlockedView('dispensers-list'); },
+                            'order-lists': DEX_SURFACE_ENABLED ? () => setUnlockedView('my-orders') : undefined,
+                        }}
                     />
                 );
             }
@@ -1878,6 +1893,9 @@ function AppInner() {
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
                         initialMode={contractRef.initialMode}
+                        initialTick={contractRef.initialTick}
+                        initialSigningPubkey={contractRef.initialSigningPubkey}
+                        initialFromAddress={contractRef.initialFromAddress}
                         onBack={() => {
                             // Return to whichever flow opened the form: the
                             // staking list (new-stake picker), the position's
@@ -1957,23 +1975,31 @@ function AppInner() {
                         address={stakingRef.address}
                         contractActionIndex={stakingRef.contractActionIndex}
                         onUnstake={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'unstake',
+                                    // Seed the form from THIS position (xchain-wallet#34)
+                                    // instead of letting it fall back to XCHAIN/blank/default-address.
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
                             : () => setUnlockedView('staking-unstake')}
                         onDelegate={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'delegate',
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
@@ -1982,12 +2008,15 @@ function AppInner() {
                         onClaimRewards={() => setUnlockedView('staking-claim')}
                         onOpenOperatorDashboard={() => setUnlockedView('operator-dashboard')}
                         onStakeMore={stakingRef.kind === 'contract'
-                            ? () => {
+                            ? (position) => {
                                 setContractRef({
                                     chainId: stakingRef.chainId,
                                     contractActionIndex: String(stakingRef.contractActionIndex),
                                     origin: 'stake-detail',
                                     initialMode: 'stake',
+                                    initialTick: position?.tick || undefined,
+                                    initialSigningPubkey: position?.signingPubkey || undefined,
+                                    initialFromAddress: stakingRef.address || undefined,
                                 });
                                 setUnlockedView('contract-stake');
                             }
@@ -2143,9 +2172,12 @@ function AppInner() {
                             setUnlockedView('receive');
                         }}
                         onViewActivity={() => {
-                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
-                            setHistoryInitialQuery('');
-                            setHistoryInitialChainCoin(coin);
+                            // Chain scope plus the tick as the search term for a
+                            // token; chain scope alone for the native coin. See
+                            // historyEntryScope.js for why neither half is enough.
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
@@ -2158,6 +2190,10 @@ function AppInner() {
                             });
                             setUnlockedView('markets');
                         } : undefined}
+                        // Same hop MyTokens' onSelectTick uses: tokenDetailRef
+                        // already carries this tick's chainId/tick, so Manage
+                        // Token only needs the view switch.
+                        onManageToken={() => setUnlockedView('manage-token')}
                     />
                 );
             }
@@ -2220,11 +2256,13 @@ function AppInner() {
                             setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
                         }}
                         onViewActivity={() => {
-                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
-                            setHistoryInitialQuery('');
-                            setHistoryInitialTickFilter(tokenDetailRef.tick);
-                            setHistoryInitialNetworkFilter(coin || 'all');
-                            setHistoryInitialFocus({ kind: 'tick', value: tokenDetailRef.tick });
+                            // The same hop TokenDetail makes. This block used to call
+                            // two setters that never existed, so the click threw.
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
+                            setHistoryInitialFocus(null);
+                            setHistoryReturnTo('manage-token');
                             setUnlockedView('history');
                         }}
                     />
@@ -2550,10 +2588,10 @@ function AppInner() {
             // §33: assemble the palette command list from the shared catalogue
             // (navigation + authoring + signing + wallet verbs, gated exactly
             // like the ActionsMenu) plus the lazily-loaded contacts. Every
-            // `run` closes over this shell's setUnlockedView, so selecting a
-            // command drives the same view state the nav does.
+            // `run` uses the palette navigator, so selecting a command drives
+            // the same view state with a fresh route mount.
             const paletteCtx = {
-                navigate: setUnlockedView,
+                navigate: palette.navigate,
                 lock: handleNavLock,
                 refresh,
                 scan: () => setGlobalScannerOpen(true),
@@ -2574,20 +2612,20 @@ function AppInner() {
             // drilldown; settings sections deep-link via
             // settingsInitialSection; help topics reuse both.
             const openSettingsSection = (sectionId) => {
-                if (sectionId === 'connected-sites') { setUnlockedView('connected-sites'); return; }
+                if (sectionId === 'connected-sites') { palette.navigate('connected-sites'); return; }
                 setSettingsInitialSection(sectionId);
-                setUnlockedView('settings');
+                palette.navigate('settings');
             };
             const paletteEntityCtx = {
-                openToken: (tok) => { setTokenDetailRef(tok); setUnlockedView('token-detail'); },
-                openConnectedSites: () => setUnlockedView('connected-sites'),
+                openToken: (tok) => { setTokenDetailRef(tok); palette.navigate('token-detail'); },
+                openConnectedSites: () => palette.navigate('connected-sites'),
                 openSettings: openSettingsSection,
                 openHelp: () => setShortcutHelpOpen(true),
             };
             const paletteCommands = [
                 ...buildCommands(paletteCtx),
                 ...balancesToCommands(paletteTokenRows, paletteEntityCtx),
-                ...contactsToCommands(paletteContacts, { navigate: setUnlockedView }),
+                ...contactsToCommands(paletteContacts, { navigate: palette.navigate }),
                 ...sitesToCommands(paletteSites, paletteEntityCtx),
                 ...settingsSectionsToCommands(paletteEntityCtx),
                 ...helpToCommands(paletteEntityCtx),
@@ -2600,13 +2638,13 @@ function AppInner() {
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
-                    setUnlockedView('send');
+                    palette.navigate('send');
                 },
                 searchHistory: (query) => {
                     setHistoryInitialQuery(query);
                     setHistoryInitialChainCoin('');
                     setHistoryReturnTo('home');
-                    setUnlockedView('history');
+                    palette.navigate('history');
                 },
             });
             // Assigned rather than returned directly so the whole unlocked
@@ -2697,7 +2735,7 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    {routeNode}
+                    <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

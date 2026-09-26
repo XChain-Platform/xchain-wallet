@@ -17,13 +17,15 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { siblingCheckout, skipOrFail } from '../../helpers/siblingCheckout.js';
 
 import {
     prepareGatedSend,
     gatedSendReadiness,
     resolveGatedSendKeys,
+    getGatedGroupsForSend,
     clearGatedGroupsCache,
     gatedGroupThreshold,
     GatedSendKeysMissingError,
@@ -32,6 +34,7 @@ import {
 import { PubkeyMismatchError } from '../../../packages/core/src/flows/messageAction.js';
 import {
     clearGatedContentCaches,
+    listGatedFiles,
     scanGatedKeyHandoffs,
 } from '../../../packages/core/src/flows/gatedContent.js';
 import { gatedKeyId, createGatedKey } from '../../../packages/core/src/schemas/gatedKey.js';
@@ -142,6 +145,62 @@ beforeEach(() => {
 });
 
 describe('prepareGatedSend detection', () => {
+    it('detects an unlinked gated FILE through the gate lookup', async () => {
+        const sdk = makeSdk({
+            getFiles: vi.fn(async (_tick, type) => (
+                type === 'gate' ? [{ ...gatedRow(HASH_A, '100'), status: 'valid' }] : []
+            )),
+        });
+        const vault = makeVault();
+        seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
+
+        const plan = await prepareGatedSend(makeArgs({ sdk, vault }));
+
+        expect(plan.actionData.action).toBe('BATCH');
+        expect(sdk.getFiles).toHaveBeenCalledWith('GATED', 'gate');
+        expect(sdk.getFiles).not.toHaveBeenCalledWith('GATED', 'token');
+    });
+
+    it('falls back to the token lookup when an older explorer lacks the gate route', async () => {
+        const notFound = Object.assign(new Error('Explorer returned HTTP 404 for /files/GATED/gate'), {
+            code: 'EXPLORER_HTTP_404',
+        });
+        const sdk = makeSdk({
+            getFiles: vi.fn(async (_tick, type) => {
+                if (type === 'gate') throw notFound;
+                return [{ ...gatedRow(HASH_A, '100'), status: 'valid' }];
+            }),
+        });
+
+        const groups = await listGatedFiles({ sdk, tick: 'GATED' });
+
+        expect(groups).toHaveLength(1);
+        expect(sdk.getFiles.mock.calls).toEqual([
+            ['GATED', 'gate'],
+            ['GATED', 'token'],
+        ]);
+    });
+
+    it('de-duplicates explorer rows by action index', async () => {
+        const row = { ...gatedRow(HASH_A, '100'), status: 'valid' };
+        const sdk = makeSdk({ getFiles: vi.fn(async () => [row, { ...row }]) });
+
+        const groups = await listGatedFiles({ sdk, tick: 'GATED' });
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].files).toHaveLength(1);
+    });
+
+    it('matches gate tickers case-insensitively and keeps stored spelling', async () => {
+        const row = { ...gatedRow(HASH_A, '100'), gate_ticker: 'MiXeD', status: 'valid' };
+        const sdk = makeSdk({ getFiles: vi.fn(async () => [row]) });
+
+        const groups = await listGatedFiles({ sdk, tick: 'MIXED' });
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].gateTicker).toBe('MiXeD');
+    });
+
     it('returns null for an ungated tick', async () => {
         const sdk = makeSdk({ getFiles: vi.fn(async () => []) });
         expect(await prepareGatedSend(makeArgs({ sdk }))).toBeNull();
@@ -169,6 +228,25 @@ describe('prepareGatedSend detection', () => {
     it('degrades to plain SEND when the explorer is down (listGatedFiles swallows)', async () => {
         const sdk = makeSdk({ getFiles: vi.fn(async () => { throw new Error('explorer down'); }) });
         expect(await prepareGatedSend(makeArgs({ sdk }))).toBeNull();
+    });
+
+    it('ignores explicitly invalid gated FILE rows', async () => {
+        const sdk = makeSdk({
+            getFiles: vi.fn(async () => [{ ...gatedRow(HASH_A, '100'), status: 'invalid' }]),
+        });
+        expect(await prepareGatedSend(makeArgs({ sdk }))).toBeNull();
+    });
+
+    it('does not cache an empty group result that can hide a new gated FILE', async () => {
+        const sdk = makeSdk({
+            getFiles: vi.fn()
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([{ ...gatedRow(HASH_A, '100'), status: 'valid' }]),
+        });
+        expect(await getGatedGroupsForSend({ sdk, chainId: 'btc-regtest', tick: 'GATED' })).toEqual([]);
+        const groups = await getGatedGroupsForSend({ sdk, chainId: 'btc-regtest', tick: 'GATED' });
+        expect(groups).toHaveLength(1);
+        expect(sdk.getFiles).toHaveBeenCalledTimes(2);
     });
 });
 
@@ -490,14 +568,13 @@ describe('PC-29 unlock-threshold lane', () => {
         const FIXTURE = resolve('test/fixtures/gate-min-amount-vectors.json');
         const vectors = JSON.parse(readFileSync(FIXTURE, 'utf8'));
 
-        it('is byte-identical to the canonical xchain-sdk copy', () => {
-            const sibling = resolve('../xchain-sdk/test/fixtures/gate-min-amount-vectors.json');
-            if (!existsSync(sibling)) {
-                if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1')
-                    throw new Error('sibling xchain-sdk fixture missing');
-                return;
-            }
-            expect(readFileSync(sibling, 'utf8')).toBe(readFileSync(FIXTURE, 'utf8'));
+        it('is byte-identical to the canonical xchain-sdk copy', (ctx) => {
+            const SDK_FIXTURE = process.env.XCHAIN_SDK_DIR
+                ? join(process.env.XCHAIN_SDK_DIR, 'test', 'fixtures', 'gate-min-amount-vectors.json')
+                : resolve('../xchain-sdk/test/fixtures/gate-min-amount-vectors.json');
+            const sibling = siblingCheckout(process.cwd(), SDK_FIXTURE);
+            if (!skipOrFail(ctx, sibling, 'the gate-min-amount-vectors fixture byte-identity guard')) return;
+            expect(readFileSync(sibling.path, 'utf8')).toBe(readFileSync(FIXTURE, 'utf8'));
         });
 
         for (const vec of vectors.pack_threshold) {
@@ -520,14 +597,13 @@ describe('PC-29 unlock-threshold lane', () => {
         // precisely because a value with more places cannot be represented in the
         // fixed-scale BigInt comparison here. If the two drift, the two sides disagree
         // on the last digit of a threshold neither considers malformed.
-        it('the fixed comparison scale matches the protocol constant', () => {
-            const sibling = resolve('../xchain-sdk/src/protocol/constants.js');
-            if (!existsSync(sibling)) {
-                if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1')
-                    throw new Error('sibling xchain-sdk protocol constants missing');
-                return;
-            }
-            const src = readFileSync(sibling, 'utf8');
+        it('the fixed comparison scale matches the protocol constant', (ctx) => {
+            const SDK_CONSTANTS = process.env.XCHAIN_SDK_DIR
+                ? join(process.env.XCHAIN_SDK_DIR, 'src', 'protocol', 'constants.js')
+                : resolve('../xchain-sdk/src/protocol/constants.js');
+            const sibling = siblingCheckout(process.cwd(), SDK_CONSTANTS);
+            if (!skipOrFail(ctx, sibling, 'the THRESHOLD_SCALE cross-repo constant guard')) return;
+            const src = readFileSync(sibling.path, 'utf8');
             const m = /THRESHOLD_SCALE\s*[:=]\s*(\d+)/.exec(src);
             expect(m, 'THRESHOLD_SCALE not found in the sibling protocol constants').toBeTruthy();
             // Read this side from the source rather than importing a private const.

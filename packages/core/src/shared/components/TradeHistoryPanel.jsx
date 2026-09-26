@@ -25,6 +25,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
+import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 
 /**
  * @param {object} props
@@ -223,51 +224,22 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
 }
 
 function summarizeRow(row, tick1, tick2) {
-    if (!row || typeof row !== 'object') return null;
-    const giveTick = row.give_tick || row.giveTick;
-    const getTick = row.get_tick || row.getTick;
-    if (!giveTick || !getTick) return null;
-    const giveAmt = Number(row.give_amount ?? row.giveAmount);
-    const getAmt = Number(row.get_amount ?? row.getAmount);
-    if (!Number.isFinite(giveAmt) || giveAmt <= 0) return null;
-    if (!Number.isFinite(getAmt) || getAmt <= 0) return null;
-    let price; let size; let side;
-    if (giveTick === tick1 && getTick === tick2) {
-        price = getAmt / giveAmt;
-        size = giveAmt;
-        side = 'sell';
-    } else if (giveTick === tick2 && getTick === tick1) {
-        price = giveAmt / getAmt;
-        size = getAmt;
-        side = 'buy';
-    } else {
-        return null;
-    }
-    const ts = parseTimestamp(row);
-    const txHash = row.tx_hash || row.txHash || null;
+    const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
+    if (!parsed) return null;
     return {
-        price: String(price),
-        size: String(size),
-        side,
-        timeLabel: ts ? formatTime(ts) : '--',
+        price: String(parsed.price),
+        size: String(parsed.amount),
+        side: parsed.side,
+        timeLabel: formatTime(parsed.timestamp),
         ownerAddress: row.__owner?.address || null,
-        txHash: txHash ? String(txHash) : null,
-        key: String(row.action_index ?? txHash ?? `${ts}-${price}-${size}`),
+        txHash: parsed.txHash ? String(parsed.txHash) : null,
+        key: String(parsed.actionIndex ?? parsed.txHash
+            ?? `${parsed.timestamp}-${parsed.price}-${parsed.amount}`),
     };
 }
 
-function parseTimestamp(row) {
-    if (Number.isFinite(Number(row.timestamp))) return Number(row.timestamp);
-    if (Number.isFinite(Number(row.block_time))) return Number(row.block_time);
-    if (row.created_at) {
-        const ms = Date.parse(row.created_at);
-        if (Number.isFinite(ms)) return Math.floor(ms / 1000);
-    }
-    return null;
-}
-
 function rowTime(row) {
-    const ts = parseTimestamp(row);
+    const ts = historyTimestamp(row);
     return Number.isFinite(ts) ? ts : 0;
 }
 

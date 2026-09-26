@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { normalizeOrderbook } from '../../market/orderbook.js';
 import { sampleOrderbookFor } from '../../market/sampleMarketData.js';
+import { divideDecimalStrings } from '../utils/amountFormat.js';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -39,7 +40,7 @@ const POLL_INTERVAL_MS = 5000;
  */
 export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice }) {
     const { messaging } = useMessaging();
-    const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: 0 }));
+    const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: '0' }));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [lastRefreshed, setLastRefreshed] = useState(0);
     const mountedRef = useRef(true);
@@ -161,9 +162,10 @@ function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, 
 }
 
 function LevelRow({ level, maxCumulative, side, onPick }) {
-    const depthPct = maxCumulative > 0
-        ? Math.min(100, Math.max(0, (level.cumulative / maxCumulative) * 100))
-        : 0;
+    const depthRatio = divideDecimalStrings(level.cumulative, maxCumulative, 8);
+    const depthPct = depthRatio === null
+        ? 0
+        : Math.min(100, Math.max(0, Number(depthRatio) * 100));
     const depthColor = side === 'bid'
         ? 'rgba(38, 166, 154, 0.18)'
         : 'rgba(239, 83, 80, 0.18)';

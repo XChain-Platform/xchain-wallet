@@ -35,6 +35,37 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
+const hygieneSources = [
+    'packages/core/src/market/obligationStatus.js',
+    'test/smoke/audits/feed-sweep.smoke.js',
+    'test/smoke/audits/release-tools.smoke.js',
+];
+const hygieneRules = [
+    ['internal section identifier', /\b(?:pre-PC-\d+|S\d+)\b/g],
+    ['machine-specific release path', /\/opt\/xchain(?:\/|\b)/g],
+];
+const hygieneOffenders = hygieneSources.flatMap((source) => hygieneRules.flatMap(([label, rule]) => {
+    const matches = [...read(source).matchAll(rule)].map((match) => match[0]);
+    return matches.map((match) => `${source}: ${label}: ${match}`);
+}));
+assert.deepEqual(hygieneOffenders, [],
+    `public source carries internal bookkeeping:\n  ${hygieneOffenders.join('\n  ')}`);
+
+const hygieneSentinels = [
+    ['pre-' + ['P', 'C'].join('') + '-' + 15, 'internal section identifier'],
+    [['S', 14].join(''), 'internal section identifier'],
+    [['S', 30].join(''), 'internal section identifier'],
+    [['S', 45].join(''), 'internal section identifier'],
+    [['S', 46].join(''), 'internal section identifier'],
+    [['', 'opt', 'xchain', 'tool.mjs'].join('/'), 'machine-specific release path'],
+];
+for (const [sentinel, expectedLabel] of hygieneSentinels) {
+    assert.equal(hygieneRules.find(([label, rule]) => {
+        rule.lastIndex = 0;
+        return rule.test(sentinel) && label === expectedLabel;
+    })?.[0], expectedLabel, `public-hygiene rule catches ${expectedLabel}`);
+}
+
 // ---------------------------------------------------------------- shape
 
 const files = [
@@ -59,7 +90,7 @@ for (const p of ['tools/release/sign.sh', 'tools/release/verify.sh',
         `${p} has the executable bit set`);
 }
 
-// S6. These two encode ordering rules whose violation is
+// These two encode ordering rules whose violation is
 // invisible in testing and obvious to users: a yml uploaded before the
 // binary it names, and a web release unpacked over the running site.
 const publishSrc = read('tools/release/publish.sh');
@@ -105,10 +136,10 @@ assert.ok(/xchain-wallet-ios-vX\.Y\.Z\.ipa/.test(readme),
 
 // --- A documented cron line must not arm a lane into a directory it cannot write ---
 //
-// S45. `store-version-monitor.mjs` grew a second lane in c1779605
+// `store-version-monitor.mjs` grew a second lane in c1779605
 //, and that lane keeps a latch file which defaults to sitting
-// BESIDE the script. On the release host the script lives in `/opt/xchain`, which
-// is root-owned: measured 2026-08-10, the cron user cannot create a file
+// BESIDE the script in a root-owned directory. Measured 2026-08-10, the
+// cron user cannot create a file
 // there. The resulting fault has the worst available shape, because it is
 // invisible for exactly as long as nothing is wrong: while the listing is
 // absent the lane 404s and exits 0, and the EACCES only arrives on the FIRST
@@ -151,14 +182,14 @@ for (const { origin, line } of monitorCronLines) {
     if (/--no-play\b/.test(line)) continue;   // Play disabled: no latch, no state file
     assert.ok(/PLAY_STATE_PATH=|--state[ =]/.test(line),
         'FAIL: a documented monitor cron line runs the Play lane without giving its latch a '
-        + 'writable home, so it inherits the default beside the script in root-owned '
-        + '/opt/xchain. It exits 0 while the listing is absent and dies EACCES exit 2 on the '
-        + 'first sighting of a live one, then mails that error every six hours. Add '
-        + 'PLAY_STATE_PATH=/opt/xchain/state/store-monitor-state.json (what is actually '
-        + `deployed) or --no-play. Offending line, from ${origin}: ${line.trim()}`);
+        + 'writable home, so it inherits the default beside the script in a root-owned '
+        + 'directory. It exits 0 while the listing is absent and dies EACCES exit 2 on the '
+        + 'first sighting of a live one, then mails that error every six hours. Set '
+        + 'PLAY_STATE_PATH to the deployed writable state directory or use --no-play. '
+        + `Offending line, from ${origin}: ${line.trim()}`);
 }
 
-// S46. The two lines above are the only homes this repository can
+// The two lines above are the only homes this repository can
 // reach, and there is a third one it cannot: the commented entry already
 // sitting in the crontab on the host, staged there in 2026-08 and therefore
 // predating the Play lane entirely. Measured 2026-08-10, it carries
@@ -177,7 +208,8 @@ for (const { origin, line } of monitorCronLines) {
         'FAIL: the monitor install section does not tell the operator that arming means '
         + 'REPLACING the staged crontab line rather than uncommenting it. The line already on '
         + 'the host predates the Play lane and carries no PLAY_STATE_PATH, so uncommenting it '
-        + 'arms the latch into root-owned /opt/xchain - the exact fault the recipe in this '
+        + 'arms the latch beside the script in a root-owned directory, the exact fault the '
+        + 'recipe in this '
         + 'section was fixed to avoid. That copy is a third home and nothing in this repo can '
         + 'see it, so this sentence is the only thing standing between the operator and it.');
 }
@@ -226,7 +258,7 @@ assert.ok(/\. "\$HERE\/lib\.sh"/.test(publishSrcOrder),
 assert.ok(/no channel pointers in/.test(publishSrcOrder),
     'publish.sh refuses a release with no channel pointer (invisible to every install)');
 /* Not /gpg --verify/: that string is in this file's own prose about the
- * bare check S37 replaced, so the assertion passed on a comment saying
+ * bare signature check replaced, so the assertion passed on a comment saying
  * the opposite of what it was asserting. What has to be true is that the
  * signature is attributed to an expected fingerprint, which is a
  * VALIDSIG comparison; release-verify-signer.smoke.js drives it for
@@ -234,7 +266,7 @@ assert.ok(/no channel pointers in/.test(publishSrcOrder),
 assert.ok(/--status-fd/.test(verifySrc) && /VALIDSIG/.test(verifySrc),
     'verify.sh reads gpg status output so it can attribute the signature to a key');
 assert.ok(/EXPECT_KEY/.test(verifySrc) && /--key/.test(verifySrc),
-    'verify.sh binds the signature to an expected fingerprint (S37)');
+    'verify.sh binds the signature to an expected fingerprint');
 assert.ok(/--no-sig/.test(verifySrc) && /--recompute/.test(verifySrc),
     'verify.sh accepts --no-sig and --recompute');
 
@@ -321,6 +353,9 @@ try {
     const repo = join(work, 'repo');
     mkdirSync(join(repo, 'tools', 'release'), { recursive: true });
     mkdirSync(join(repo, 'tools', 'build-reproduce'), { recursive: true });
+    // The dev-mock gate refuses a release clone without desktop main source.
+    mkdirSync(join(repo, 'packages', 'desktop', 'main'), { recursive: true });
+    writeFileSync(join(repo, 'packages', 'desktop', 'main', 'main.js'), '');
     // update-info.mjs is in this list because lib.sh calls it to decide
     // what is an artifact and what is a channel pointer. Leave it out and
     // sign.sh reports a completely empty artifact set, which reads as a
@@ -517,7 +552,7 @@ try {
     // The web tarball and the extension zip are staged as REAL archives,
     // for the same reason signedBytes() above writes real PE and
     // _CodeSignature bytes: sign.sh's pre-sign dev-mock gate now unpacks
-    // and greps them (S33), so a file merely NAMED.tar.gz reads to
+    // and greps them, so a file merely NAMED.tar.gz reads to
     // that gate as a corrupt release artifact and every case in this file
     // would fail for one reason that is not the one it is testing. Each
     // carries the real-SDK literal and none of the mock markers, which is
@@ -525,8 +560,8 @@ try {
     const realArchive = (dir, name) => {
         const src = mkdtempSync(join(work, 'bundle-'));
         writeFileSync(join(src, 'app.js'), 'throw new Error("CONTRACT_LINT_FAILED");\n');
-        // The extension zip also carries the manifest.json sign.sh reads since
-        // S46, and its version is DERIVED FROM THE NAME rather than
+        // The extension zip also carries the manifest.json sign.sh reads, and
+        // its version is DERIVED FROM THE NAME rather than
         // typed here, so the fixture cannot drift from the tag the cases sign
         // with. Same lesson as the comment above and one gate later: a fixture
         // has to be real enough for the gates that have learned to read it.
@@ -730,7 +765,7 @@ try {
     }
 
     // 7b. The tag names one version and the staged bytes are another
-    // (S33). Every gate above counts artifacts; none of them
+    // Every gate above counts artifacts; none of them
     //     asked whether they are the version the tag names, so the anchor
     //     this script exists to provide - "a manifest cannot float between
     //     versions" - was asserted in its own --tag diagnostic and derived
@@ -757,7 +792,7 @@ try {
     }
 
     // 7b. THE CHECK ABOVE READS THE NAME, AND A NAME IS A `cp` AWAY FROM
-    // BEING ANYTHING (S46). Driven on the real thing rather than
+    // BEING ANYTHING. Driven on the real thing rather than
     //     reasoned about: the CI-built xchain-wallet-extension-v0.336.0.zip
     //     from release run 31072271075, copied to a v0.337.0 filename, passed
     //     every gate in this pipeline and was hashed into the manifest.
@@ -842,7 +877,7 @@ try {
         console.log('SKIP  signed round trip (no usable gpg in this environment)');
     } else {
         /* XCHAIN_VERIFY_KEY because verify.sh binds a signature to an
-         * expected fingerprint S37, and this fixture repo
+         * expected fingerprint, and this fixture repo
          * carries no docs/release-key-pin.json to supply one. The
          * throwaway key IS the expected key here; that binding has its
          * own driver in release-verify-signer.smoke.js. */
@@ -878,7 +913,7 @@ try {
             ARTIFACTS.every((a) => manifest.includes(`./${a}`)), manifest);
         check('signature file was written', existsSync(`${manifestPath}.asc`));
 
-        // S5: the interop that actually decides whether the
+        // The interop that actually decides whether the
         // desktop update lane works. The maintainer signs with the gpg
         // CLI; the app verifies with openpgp.js. Those are two different
         // implementations of OpenPGP, and if they disagree about the

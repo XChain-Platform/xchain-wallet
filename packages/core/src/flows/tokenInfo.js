@@ -45,6 +45,8 @@ import exampleTis from './demoExampleTis.json' with { type: 'json' };
 /**
  * @typedef {Object} TisSocialEntry
  * @property {string} platform                           "facebook" / "github" / "twitter" / "reddit" / "linkedin" / "url" / …
+ * @property {string} claimedPlatform                    platform name supplied by the token issuer
+ * @property {string} host                               actual lower-case destination hostname
  * @property {string} url                                rendered as the link href
  */
 
@@ -342,6 +344,43 @@ function normalizeMediaUrl(url) {
     }
     if (/^https?:\/\//i.test(t)) return t;
     return null;
+}
+
+const SOCIAL_SERVICE_HOSTS = {
+    twitter: ['twitter.com', 'x.com'],
+    x: ['x.com', 'twitter.com'],
+    github: ['github.com'],
+    reddit: ['reddit.com'],
+    facebook: ['facebook.com'],
+    linkedin: ['linkedin.com'],
+    discord: ['discord.com', 'discord.gg'],
+    telegram: ['t.me', 'telegram.me'],
+    medium: ['medium.com'],
+    youtube: ['youtube.com', 'youtu.be'],
+    instagram: ['instagram.com'],
+};
+
+function normalizeSocialEntry(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    const url = normalizeMediaUrl(entry.data);
+    if (!url) return null;
+    let host;
+    try {
+        host = new URL(url).hostname.toLowerCase();
+    } catch {
+        return null;
+    }
+    const claimedPlatform = String(entry.type || 'url').toLowerCase();
+    const expectedHosts = SOCIAL_SERVICE_HOSTS[claimedPlatform] || [];
+    const hostMatches = expectedHosts.some(
+        (expected) => host === expected || host.endsWith(`.${expected}`),
+    );
+    return {
+        platform: hostMatches ? claimedPlatform : 'url',
+        claimedPlatform,
+        host,
+        url,
+    };
 }
 
 /**
@@ -682,12 +721,7 @@ export function tisToMediaBundle(doc) {
         };
     }
     const socials = (Array.isArray(doc.social) ? doc.social : [])
-        .map((s) => {
-            if (!s || typeof s !== 'object') return null;
-            const url = normalizeMediaUrl(s.data);
-            if (!url) return null;
-            return { platform: String(s.type || 'url'), url };
-        })
+        .map(normalizeSocialEntry)
         .filter(Boolean);
     const website = typeof doc.website === 'string' ? normalizeMediaUrl(doc.website) : null;
     // Build the de-duplicated websites array. legacyJsonToTis lifts
@@ -795,9 +829,11 @@ function extractMediaUrlsFromText(text) {
  * @param {string} tick
  * @param {any} raw                                     explorer row
  * @param {ReturnType<typeof tisToMediaBundle> | null} [tisBundle]
+ * @param {{ allowRemoteMedia?: boolean }} [options]
  * @returns {TokenInfo}
  */
-export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
+export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options = {}) {
+    const { allowRemoteMedia = true } = options;
     const row = Array.isArray(raw) ? raw[0] : raw;
     const onChainDescription = row?.info?.description ?? null;
     const creator = row?.info?.owner ?? null;
@@ -836,11 +872,12 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
         ? String(callbackRaw.block) : null;
     // PC-04 access lists (ISSUE v5): xchain-explorer's getToken groups these
     // under `lists: { allow, block }` as LIST action indexes (numeric) or
-    // null. Surface each as a string action-index (or null when unset).
+    // null. A detached list may be reported as the protocol's 0 sentinel,
+    // which is also no active policy list.
     const listsRaw = row?.lists && typeof row.lists === 'object' ? row.lists : {};
-    const allowList = (listsRaw.allow != null && String(listsRaw.allow) !== '')
+    const allowList = (listsRaw.allow != null && String(listsRaw.allow) !== '' && String(listsRaw.allow) !== '0')
         ? String(listsRaw.allow) : null;
-    const blockList = (listsRaw.block != null && String(listsRaw.block) !== '')
+    const blockList = (listsRaw.block != null && String(listsRaw.block) !== '' && String(listsRaw.block) !== '0')
         ? String(listsRaw.block) : null;
     // Bridge fields (ISSUE v7, xchain-token-bridge.md section 8 / the bridge
     // policy spec). Each is read from where the explorer's getToken grouping
@@ -898,9 +935,9 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     // with a TIS document.
     const description = tisBundle?.description || onChainDescription;
     const name = tisBundle?.name || null;
-    const images = tisBundle?.images || [];
-    const audio = tisBundle?.audio || [];
-    const video = tisBundle?.video || [];
+    const images = allowRemoteMedia ? (tisBundle?.images || []) : [];
+    const audio = allowRemoteMedia ? (tisBundle?.audio || []) : [];
+    const video = allowRemoteMedia ? (tisBundle?.video || []) : [];
     const website = tisBundle?.website || null;
     const websites = tisBundle?.websites || [];
     const socials = tisBundle?.socials || [];
@@ -912,8 +949,9 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null) {
     const contacts = tisBundle?.contacts || [];
     const pgpsig = tisBundle?.pgpsig || null;
     const dns = tisBundle?.dns || [];
-    const imageUrl = (images.length > 0 && images[0]?.url)
-        || extractImageUrl(onChainDescription);
+    const imageUrl = allowRemoteMedia
+        ? ((images.length > 0 && images[0]?.url) || extractImageUrl(onChainDescription))
+        : null;
     return {
         chainId,
         tick,
@@ -1128,7 +1166,9 @@ export async function tokenInfoFor({
         if (demo?.tis) tisBundle = tisToMediaBundle(demo.tis);
     }
     resolveMediaDataRefs(tisBundle, sdk);
-    return normalizeTokenInfo(chainId, tick, raw, tisBundle);
+    return normalizeTokenInfo(chainId, tick, raw, tisBundle, {
+        allowRemoteMedia: metadataFetchEnabled,
+    });
 }
 
 // Resolve on-chain media references (dataRef = "action:<index>") across a

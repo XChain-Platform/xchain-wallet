@@ -124,6 +124,7 @@ describe('activateChain (§48.3)', () => {
         const res = await activateChain(base(vault, signer));
         expect(res.addresses).toHaveLength(0);
         expect(res.skippedAccounts).toBe(1);
+        expect(res.skippedAccountDetails).toEqual([{ accountId: 'acct-a', name: 'A' }]);
     });
 
     it('hardware: a connected trezor signer derives source=trezor addresses tied to its id', async () => {

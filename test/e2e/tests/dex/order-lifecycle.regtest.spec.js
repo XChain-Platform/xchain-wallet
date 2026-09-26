@@ -338,8 +338,11 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await expect(main, 'the cancel panel is pointed at a different order')
                 .toContainText(`#${orderIndex}`);
-            await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-            await page.getByRole('button', { name: 'Sign cancel' }).click();
+            // Signed on the shared confirm page, after its network dry run.
+            await page.getByRole('button', { name: 'Cancel order' }).click();
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            await page.getByTestId('confirm-approve').click();
             await expect(page.getByText('Cancel broadcast'),
                 'the cancel never reported being broadcast')
                 .toBeVisible({ timeout: 120_000 });
@@ -370,8 +373,8 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
         });
     });
 
-    // The edit lane shares the cancel lane's plumbing (no confirm screen, so it
-    // always builds live) and shared exactly its defect, which is why it is
+    // The edit lane shares the cancel lane's plumbing (now the shared confirm
+    // page) and once shared exactly its defect, which is why it is
     // driven here rather than trusted to the unit pin: a fix applied to two
     // call sites and verified at one is half a fix.
     //
@@ -417,13 +420,15 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // A blank edit is refused before anything is signed: the wire has
             // no way to say "change nothing", so an empty submit would spend a
             // miner fee to say nothing.
-            await expect(main.getByRole('button', { name: 'Sign edit' }),
+            await expect(main.getByRole('button', { name: 'Edit order' }),
                 'an edit with no change offers to broadcast')
                 .toBeDisabled();
 
             await expiration.fill(localInput);
-            await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-            await page.getByRole('button', { name: 'Sign edit' }).click();
+            await main.getByRole('button', { name: 'Edit order' }).click();
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            await page.getByTestId('confirm-approve').click();
             await expect(page.getByText('Edit broadcast'),
                 'the edit never reported being broadcast')
                 .toBeVisible({ timeout: 120_000 });
