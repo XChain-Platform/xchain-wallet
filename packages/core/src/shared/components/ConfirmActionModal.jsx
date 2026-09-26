@@ -79,6 +79,8 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   already served better by the psbt variant's input enumeration, which marks
  *   which inputs the wallet owns; collapsing it to one From line would be a lie
  *   dressed as a disclosure. Pass nothing on the psbt and message variants.
+ * @param {string} [props.sourceName] the address-record label, followed by the
+ *   wallet name when more than one wallet exists
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  */
@@ -89,7 +91,7 @@ export function ConfirmActionModal({
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
     psbtPanel = null, messageText, refusal = null, headline,
-    sourceAddress = null, nativeTicker = '',
+    sourceAddress = null, sourceName = '', nativeTicker = '',
 }) {
     const headlineText = headline !== undefined
         ? headline
@@ -203,6 +205,9 @@ export function ConfirmActionModal({
                         <dl className={styles.sourceRow} data-testid="confirm-source">
                             <dt className={styles.sourceLabel}>From</dt>
                             <dd className={styles.sourceValue}>
+                                {sourceName ? (
+                                    <span className={styles.sourceName}>{sourceName}</span>
+                                ) : null}
                                 <AddressText address={sourceAddress} highlight />
                             </dd>
                         </dl>

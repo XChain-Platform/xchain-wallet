@@ -17,8 +17,10 @@
 // Forms render this in place of their own body while
 // `actionConfirm.open` is true, exactly like a picker screen.
 
+import { useContext, useEffect, useState } from 'react';
 import { Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
@@ -34,6 +36,47 @@ function nativeTickerFor(chainId) {
     const coin = chainId ? chainRegistry.get(chainId)?.coin : null;
     if (!coin) return '';
     return NATIVE_TICKER_BY_COIN[coin] || String(coin).toUpperCase();
+}
+
+function useSourceIdentity(address, chainId) {
+    const messaging = useContext(MessagingContext)?.messaging;
+    const [identity, setIdentity] = useState({ label: '', walletName: '' });
+
+    useEffect(() => {
+        let cancelled = false;
+        setIdentity({ label: '', walletName: '' });
+        if (!address || typeof messaging?.listWallets !== 'function'
+            || typeof messaging?.getAddressesByChain !== 'function') return undefined;
+
+        Promise.resolve().then(() => messaging.listWallets()).then(async (walletsValue) => {
+            const wallets = Array.isArray(walletsValue) ? walletsValue : [];
+            const matches = await Promise.all(wallets.map(async (wallet) => {
+                try {
+                    const byChain = await messaging.getAddressesByChain(wallet.id);
+                    const records = chainId
+                        ? (byChain?.[chainId] || [])
+                        : Object.values(byChain || {}).flat();
+                    const wanted = String(address).toLowerCase();
+                    const record = records.find((item) => (
+                        String(item?.address || '').toLowerCase() === wanted
+                    ));
+                    return record ? { record, wallet } : null;
+                } catch {
+                    return null;
+                }
+            }));
+            if (cancelled) return;
+            const match = matches.find((item) => item?.record?.label) || matches.find(Boolean);
+            setIdentity({
+                label: match?.record?.label || '',
+                walletName: wallets.length > 1 ? (match?.wallet?.name || '') : '',
+            });
+        }).catch(() => {});
+
+        return () => { cancelled = true; };
+    }, [address, chainId, messaging]);
+
+    return identity;
 }
 
 /**
@@ -135,6 +178,8 @@ export function ActionConfirmScreen({
     // form cannot forget to opt in. hwSource is the fallback for the same
     // value in record form, so a device signer is not the one case left blank.
     const sourceAddress = confirmAction.source || hwSource?.address || null;
+    const sourceIdentity = useSourceIdentity(sourceAddress, composed?.chainId || chainId);
+    const sourceName = [sourceIdentity.label, sourceIdentity.walletName].filter(Boolean).join(' · ');
 
     return (
         <ConfirmActionModal
@@ -168,6 +213,7 @@ export function ActionConfirmScreen({
             simulation={simulation || composed?.simulation || null}
             error={confirmAction.error}
             sourceAddress={sourceAddress}
+            sourceName={sourceName}
             chainLabel={chainLabel}
             feeText={exactFeeText || feeText}
             nativeTicker={ticker}

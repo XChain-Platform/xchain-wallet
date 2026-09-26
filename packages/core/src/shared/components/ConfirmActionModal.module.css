@@ -52,9 +52,8 @@
     color: var(--xc-text-muted);
 }
 
-/* The From row (#40). Label and address on one line, the address in the
-   monospace treatment AddressText already applies, so a user comparing it
-   against their address list is comparing like with like. */
+/* Keep the account name and address in one compact wrapping row. AddressText
+   applies the same monospace treatment used by the address list. */
 .sourceRow {
     display: flex;
     align-items: baseline;
@@ -69,10 +68,18 @@
 }
 
 .sourceValue {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     margin: 0;
     min-width: 0;
+}
+
+.sourceName {
+    font-weight: 600;
 }
 
 /* §5.3.4 in-page error (e.g. a bad password), sitting directly above the

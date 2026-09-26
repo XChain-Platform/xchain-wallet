@@ -16,8 +16,9 @@
 // remembers to pass the prop itself.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
+import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
 afterEach(() => cleanup());
 
@@ -41,6 +42,44 @@ function confirmAction(overrides = {}) {
 }
 
 describe('ActionConfirmScreen From row (#40)', () => {
+    it('shows the address label and disambiguates it with the wallet name', async () => {
+        const messaging = {
+            getAddressesByChain: async (walletId) => (walletId === 'wallet-main' ? {
+                'bitcoin-mainnet': [
+                    { address: SOFTWARE_ADDRESS, label: 'Trading account' },
+                ],
+            } : {
+                'bitcoin-mainnet': [
+                    { address: HARDWARE_ADDRESS, label: 'Offline account' },
+                ],
+            }),
+            listWallets: async () => [
+                { id: 'wallet-main', name: 'Main wallet' },
+                { id: 'wallet-cold', name: 'Cold wallet' },
+            ],
+        };
+
+        render(
+            <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
+                <ActionConfirmScreen
+                    confirmAction={confirmAction({
+                        source: SOFTWARE_ADDRESS,
+                        composed: { chainId: 'bitcoin-mainnet' },
+                    })}
+                    chainLabel="Bitcoin"
+                    signerReady={false}
+                    password="hunter2"
+                    onPasswordChange={() => {}}
+                />
+            </MessagingContext.Provider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('confirm-source').textContent)
+                .toContain('Trading account · Main wallet');
+        });
+    });
+
     it('names the spender for a software signer, from confirmAction.source', () => {
         render(
             <ActionConfirmScreen
