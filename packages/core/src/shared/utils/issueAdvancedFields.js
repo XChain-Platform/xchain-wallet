@@ -36,6 +36,8 @@
  * dangerous one, so it is enforced here instead.
  */
 
+import { tickerReferenceError } from './tickerGrammar.js';
+
 /**
  * The seven one-way lock flags (ISSUE.md "Version 3 - Edit LOCK
  * PARAMS"). `key` matches the `locks` field name getToken returns
@@ -112,7 +114,6 @@ export const LOCK_FLAGS = [
  * @property {string} [blockListIdx]
  */
 
-const TICKER_RE = /^[A-Za-z0-9.]+$/;
 const WHOLE_RE = /^\d+$/;
 
 function text(value) {
@@ -195,9 +196,8 @@ export function validateAdvancedIssueFields(advanced, ctx = {}) {
         return 'A callback needs all three: a payout token, a payout amount, and the block it unlocks at. Fill all three, or clear them to create the token without a callback.';
     }
 
-    if (tick && !TICKER_RE.test(tick)) {
-        return 'Callback token must be a valid ticker (A–Z, 0–9, and "." for subtokens).';
-    }
+    const tickError = tick ? tickerReferenceError(tick, { noun: 'Callback token' }) : null;
+    if (tickError) return tickError;
 
     if (amount) {
         if (!(Number(amount) > 0)) {

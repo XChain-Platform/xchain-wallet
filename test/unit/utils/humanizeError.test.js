@@ -46,6 +46,14 @@ describe('humanizeError: inputs on hold', () => {
         expect(out.message).toBe("Couldn't send. You don't have enough funds for this transaction.");
     });
 
+    it('keeps real encoder shortfall amounts in details', () => {
+        const raw = `Encoder RPC error: ${PLAIN}`;
+        const out = humanizeError(new Error(raw), 'send');
+        expect(out.cause).toBe('insufficient_funds');
+        expect(out.message).toBe("Couldn't send. You don't have enough funds for this transaction.");
+        expect(out.details).toBe(raw);
+    });
+
     it('reads the hold off a nested error message too', () => {
         const out = humanizeError({ message: 'compose failed', cause: { message: HELD_PARTIAL } }, 'mint');
         expect(['inputs_on_hold', 'insufficient_funds', 'unknown']).toContain(out.cause);

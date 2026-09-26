@@ -26,15 +26,18 @@
 // check people learn to ignore. It does NOT assert that Phase 4 passes: it
 // cannot, because the signature step needs K1's passphrase at a pinentry and
 // no CI run can supply one. It asserts something narrower and checkable: that
-// the signing path the ceremony would run TODAY is byte-identical to the one
-// last actually observed. When it goes red the answer is not to edit the pin
+// the script side of the signing path the ceremony would run TODAY is
+// byte-identical to the one last actually observed, and it reports the repo
+// side's divergence from the rehearsed tag tree. When it goes red the answer is not to edit the pin
 // (that turns an observation into an assertion) but to re-drive the rehearsal
 // or to record why the change cannot reach the signing path.
 
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
-import { drift, PIN_PATH, SCRIPT_PATH_FILES } from '../../../tools/release/phase4-rehearsal.mjs';
+import {
+    drift, PIN_PATH, REPO_PATH_FILES, SCRIPT_PATH_FILES,
+} from '../../../tools/release/phase4-rehearsal.mjs';
 
 assert.ok(existsSync(PIN_PATH),
     `no Phase 4 rehearsal pin at ${PIN_PATH}. Nothing would record which commit the signing path was `
@@ -63,6 +66,11 @@ assert.ok(Object.keys(pin.scriptPath || {}).length === SCRIPT_PATH_FILES.length,
     + `${SCRIPT_PATH_FILES.length} this tool tracks. A file dropped from the pin is drift that nothing `
     + 'will ever see, and it fails silently in the direction that looks green.');
 
+assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
+    `the rehearsal pin records no hash for some of ${REPO_PATH_FILES.join(', ')}. The repo side is `
+    + 'what the rehearsed tag tree declared, and a file missing from the pin cannot be reported as '
+    + 'diverged. Re-drive the rehearsal and re-pin it rather than hand-editing the pin.');
+
 const d = drift();
 
 assert.ok(!d.missing, 'the pin vanished between two reads of the same file.');
@@ -84,9 +92,19 @@ assert.equal(d.moved.length, 0,
     + 'and re-pin it, or record in the release record why these changes cannot affect signing. Do NOT '
     + 'hand-edit the pin: the whole value of that file is that only an observation can set it.');
 
-console.log(`OK: release phase4-rehearsal smoke (row 89: the signing path at HEAD is`
-    + `byte-identical to the rehearsal observed ${pin.observedAt}; pinned at script `
-    + `${String(pin.scriptRef).slice(0, 8)} / repo ${String(pin.repoRef).slice(0, 8)}, tag ${pin.tag}, `
-    + `lane ${pin.lane || 'all'}, reached '${pin.reached}'`
+// Reported, not gated: the repo side is the tag's copy, and only a rehearsal at
+// a newer tag can re-pin it, so failing here would stay red on correct work.
+if (d.repoDiverged.length) {
+    console.log(`NOTE: release phase4-rehearsal smoke - ${d.repoDiverged.length} of `
+        + `${REPO_PATH_FILES.length} repo-side files differ from the ${pin.tag} tree the rehearsal read: `
+        + `${d.repoDiverged.map((m) => m.path).join(', ')}. The next tag's ceremony reads these copies, `
+        + 'which no rehearsal has run against; re-pin against that tag once it is cut.');
+}
+
+console.log(`OK: release phase4-rehearsal smoke (row 89: the ${SCRIPT_PATH_FILES.length} script-side `
+    + `signing-path files at HEAD are byte-identical to the rehearsal observed ${pin.observedAt}; `
+    + `pinned at script ${String(pin.scriptRef).slice(0, 8)} / repo ${String(pin.repoRef).slice(0, 8)}, `
+    + `tag ${pin.tag}, lane ${pin.lane || 'all'}, reached '${pin.reached}'`
     + `${pin.reachedSignature ? '' : ' - short of the signature, which needs K1 at a pinentry'}; `
-    + `${SCRIPT_PATH_FILES.length} signing-path files tracked)`);
+    + `${REPO_PATH_FILES.length - d.repoDiverged.length} of ${REPO_PATH_FILES.length} repo-side files `
+    + 'match the tag tree, reported and not gated)');

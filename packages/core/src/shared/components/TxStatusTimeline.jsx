@@ -22,7 +22,7 @@ import { pendingDisplayState } from '../utils/pendingHistory.js';
 // sitting muted at the bottom of the list where an unreached stage sits.
 const MEMPOOL_STAGE_COPY = {
     seen: {
-        label: 'In mempool',
+        label: 'Held by the network',
         done: true,
         sub: 'A node is holding it, waiting for a miner to include it in a block',
     },
@@ -67,7 +67,7 @@ const MEMPOOL_STAGE_COPY = {
  *                 broadcast / hardware-signer records), OR a `txHash` is
  *                 present (a broadcast tx was necessarily signed first).
  *   - **Broadcast**: txHash is present (mempool or confirmed)
- *   - **In mempool**: only once a node has actually reported holding the
+ *   - **Held by the network**: only once a node has actually reported holding the
  *                     transaction. `pendingDisplayState` decides that, from
  *                     the entry's pending metadata; a blockless entry with a
  *                     hash used to be enough, which claimed the network had

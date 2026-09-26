@@ -1329,7 +1329,8 @@ console.log(
     + ' URLs to the browser, plus the inbound xchain: scheme and no'
     + ' http downgrade, all on the one exported activity; XChainLinks queues the cold-start link and'
     + ' clears it on read; the JS half agrees on the plugin name and refuses lookalike hosts;'
-    + ' assetlinks ships as a two-fingerprint template rather than invented values; camera is optional'
+    + ` assetlinks ships as a ${fingerprints.length}-fingerprint template (${playSlots.length} Play`
+    + ' app-signing slots plus K10) rather than invented values; camera is optional'
     + ' hardware; the ceremony refuses to run in CI, passes no password VALUE on any command line (0600 files by path only), refuses to sign a dirty tree or a tag that is not HEAD, records provenance beside the bytes, and never regenerates its own dependency-verification metadata, derives'
     + ' the APK from the AAB, and both artifact names are declared in expected-artifacts.txt.'
     + ' S4: allowBackup=false with BOTH the cloud-backup and device-transfer surfaces excluded and'

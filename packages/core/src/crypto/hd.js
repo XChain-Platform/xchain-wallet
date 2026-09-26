@@ -79,6 +79,21 @@ export function accountXpub(root, path) {
     return child.publicExtendedKey;
 }
 
+/**
+ * BIP32 master key fingerprint: the first 4 bytes of HASH160 of the
+ * root public key, as 8 hex chars. Multisig cosigner records and PSBT
+ * key origins name a key by it (§22.2). Public data; derives nothing.
+ *
+ * @param {HDKey} root   the master node (depth 0)
+ * @returns {string}
+ */
+export function masterFingerprint(root) {
+    if (!root || root.depth !== 0) {
+        throw new Error('hd: masterFingerprint needs the master (depth 0) node');
+    }
+    return fingerprintHex(root.fingerprint);
+}
+
 function fingerprintHex(fp) {
     // @scure/bip32 exposes `fingerprint` as a Number32. Render as 4-byte hex.
     if (typeof fp === 'number') {

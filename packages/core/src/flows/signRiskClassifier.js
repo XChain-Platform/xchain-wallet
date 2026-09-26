@@ -36,14 +36,14 @@
  * @property {'trezor' | 'ledger' | string | null | undefined} signerKind
  *   The chosen signer's source. The classifier returns `requireExplicitConfirm: false`
  *   for non-HW signers (the cross-check block isn't even rendered for them).
- * @property {number | string | null | undefined} amountSats
+ * @property {number | string | bigint | null | undefined} amountSats
  *   Send amount in base units. Compared against `testSendThresholdSats`. Optional.
  * @property {boolean} [recipientNovel]
  *   Output of `checkRecipientNovelty`. Optional.
  * @property {boolean} [multisig]
  *   True when the user is signing as a cosigner in a multisig flow.
  *   Always triggers explicit confirm.
- * @property {{ testSendThresholdSats?: number, alwaysRequireHwExplicitConfirm?: boolean }} [settings]
+ * @property {{ testSendThresholdSats?: number|string, alwaysRequireHwExplicitConfirm?: boolean }} [settings]
  *   Settings used by the classifier. Both fields optional.
  */
 
@@ -99,12 +99,14 @@ export function classifySignRisk(input = {}) {
     // Large amount: `testSendThresholdSats` is the user-configured
     // "above this is large enough to need extra confirmation" knob.
     // 0 disables the threshold entirely.
-    const threshold = Number.isFinite(settings?.testSendThresholdSats)
-        ? Number(settings.testSendThresholdSats)
-        : 0;
-    if (threshold > 0) {
-        const amount = Number(amountSats);
-        if (Number.isFinite(amount) && amount >= threshold) {
+    const exactInteger = (value) => {
+        const raw = String(value ?? '').trim();
+        return /^\d+$/.test(raw) ? BigInt(raw) : null;
+    };
+    const threshold = exactInteger(settings?.testSendThresholdSats) ?? 0n;
+    if (threshold > 0n) {
+        const amount = exactInteger(amountSats);
+        if (amount !== null && amount >= threshold) {
             return {
                 requireExplicitConfirm: true,
                 reason: `Large amount (${amount.toLocaleString()} sats). Confirm both path and address on your device.`,

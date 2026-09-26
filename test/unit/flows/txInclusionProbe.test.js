@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The explorer's transaction record, read for one fact: which block.
+// Transaction inclusion probes, read for one fact: which block.
 
 import { describe, it, expect } from 'vitest';
 import { inclusionOf, probeTxInclusion } from '../../../packages/core/src/flows/txInclusionProbe.js';
@@ -17,7 +17,9 @@ const A = 'aa'.repeat(32);
 const B = 'bb'.repeat(32);
 
 describe('inclusionOf', () => {
-    it('names the block off the bare record and off a data envelope', () => {
+    it('names the block off encoder and explorer replies, including a data envelope', () => {
+        expect(inclusionOf({ block_hash: B, block_height: 123, sync: { committed_height: 125 } }))
+            .toEqual({ blockIndex: 123, actionRecorded: false });
         expect(inclusionOf({ tx_hash: A, block_index: 67881853, actions: [], tx_data: 'COINPAY|0|648' }))
             .toEqual({ blockIndex: 67881853, actionRecorded: false });
         // The deployed explorer serves the block as a string.
@@ -44,36 +46,84 @@ describe('inclusionOf', () => {
 });
 
 describe('probeTxInclusion', () => {
-    const sdkOf = (answers, calls = []) => ({
-        getTransaction: async (query, type) => {
-            calls.push([query, type]);
-            const a = answers[query];
+    const sdkOf = ({
+        blocks = {}, transactions = {}, blockCalls = [], txCalls = [], calls = [],
+        encoder = true, explorer = true,
+    } = {}) => {
+        const sdk = {};
+        if (encoder) sdk.encoder = {
+            getTxBlock: async (txid) => {
+                blockCalls.push(txid);
+                calls.push(['block', txid]);
+                const a = blocks[txid];
+                if (a instanceof Error) throw a;
+                return a ?? null;
+            },
+        };
+        if (explorer) sdk.getTransaction = async (query, type) => {
+            txCalls.push([query, type]);
+            calls.push(['explorer', query, type]);
+            const a = transactions[query];
             if (a instanceof Error) throw a;
             return a;
-        },
-    });
+        };
+        return sdk;
+    };
 
-    it('asks once per distinct hash, by hash, and returns only the ones in a block', async () => {
-        const calls = [];
+    it('asks the encoder once per distinct hash and skips the explorer on a hit', async () => {
+        const blockCalls = [];
+        const txCalls = [];
         const out = await probeTxInclusion({
-            sdk: sdkOf({ [A]: { block_index: 10 }, [B]: { actions: [] } }, calls),
+            sdk: sdkOf({
+                blocks: { [A]: { block_height: 10 }, [B]: null },
+                transactions: { [B]: { block_index: 11 } },
+                blockCalls,
+                txCalls,
+            }),
             txids: [A.toUpperCase(), A, B],
         });
-        expect(calls.map(([q, t]) => `${q}:${t}`).sort()).toEqual([`${A}:tx_hash`, `${B}:tx_hash`]);
-        expect(out).toEqual(new Map([[A, { blockIndex: 10, actionRecorded: false }]]));
+        expect(blockCalls.sort()).toEqual([A, B]);
+        expect(txCalls).toEqual([[B, 'tx_hash']]);
+        expect(out).toEqual(new Map([
+            [A, { blockIndex: 10, actionRecorded: false }],
+            [B, { blockIndex: 11, actionRecorded: false }],
+        ]));
     });
 
-    it('swallows a failing lookup and answers nothing for it, without failing the batch', async () => {
+    it.each([
+        ['returns null', null],
+        ['fails', new Error('tracker unavailable')],
+    ])('falls back to the explorer after getTxBlock %s', async (_label, blockAnswer) => {
+        const calls = [];
         const out = await probeTxInclusion({
-            sdk: sdkOf({ [A]: new Error('ECONNRESET'), [B]: { block_index: 11 } }),
+            sdk: sdkOf({
+                blocks: { [A]: blockAnswer },
+                transactions: { [A]: { block_index: 11 } },
+                calls,
+            }),
+            txids: [A],
+        });
+        expect(calls).toEqual([
+            ['block', A],
+            ['explorer', A, 'tx_hash'],
+        ]);
+        expect(out).toEqual(new Map([[A, { blockIndex: 11, actionRecorded: false }]]));
+    });
+
+    it('swallows failing encoder and explorer lookups without failing the batch', async () => {
+        const out = await probeTxInclusion({
+            sdk: sdkOf({
+                blocks: { [A]: new Error('tracker unavailable'), [B]: null },
+                transactions: { [A]: new Error('explorer unavailable'), [B]: { block_index: 11 } },
+            }),
             txids: [A, B],
         });
         expect(out).toEqual(new Map([[B, { blockIndex: 11, actionRecorded: false }]]));
     });
 
-    it('answers nothing without an explorer client or without hashes', async () => {
+    it('answers nothing without a lookup client or without hashes', async () => {
         expect(await probeTxInclusion({ sdk: null, txids: [A] })).toEqual(new Map());
         expect(await probeTxInclusion({ sdk: {}, txids: [A] })).toEqual(new Map());
-        expect(await probeTxInclusion({ sdk: sdkOf({}), txids: [] })).toEqual(new Map());
+        expect(await probeTxInclusion({ sdk: sdkOf(), txids: [] })).toEqual(new Map());
     });
 });

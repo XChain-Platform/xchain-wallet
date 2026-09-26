@@ -42,6 +42,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -104,6 +105,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     const ticker = (initialTick || '').toUpperCase();
     const [memo, setMemo] = useState('');
+    const trimmedMemo = memo.trim();
+    const memoTooLong = memoLengthError(trimmedMemo);
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
@@ -368,9 +371,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(`Callback is not allowed until block ${cbBlock?.toLocaleString('en-US')}. The chain is at ${currentHeight?.toLocaleString('en-US')}.`);
             return false;
         }
-        const m = memo.trim();
+        const m = trimmedMemo;
         if (m.includes('|') || m.includes(';')) {
             setFormError('Memo cannot contain "|" or ";".');
+            return false;
+        }
+        // Refuse a memo the indexer would reject before the form composes it.
+        if (memoTooLong) {
+            setFormError(memoTooLong);
             return false;
         }
         return true;
@@ -696,6 +704,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
             <Input
                 label="Memo (optional)"
+                hint={`${trimmedMemo.length} / ${MAX_MEMO_LENGTH} characters.`}
+                error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
@@ -721,7 +731,11 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     variant="primary"
                     block
                     loading={confirmAction.composing}
-                    disabled={!fromAddress || !configComplete || !blockReached || confirmAction.composing}
+                    disabled={!fromAddress
+                        || !configComplete
+                        || !blockReached
+                        || !!memoTooLong
+                        || confirmAction.composing}
                 >
                     {!isWatcherMode ? 'Execute callback' : 'Preview'}
                 </Button>

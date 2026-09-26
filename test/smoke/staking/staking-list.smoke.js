@@ -74,6 +74,7 @@ for (const call of [
     'messaging.getStakesForAddress',
     'messaging.getDelegationsForAddress',
     'messaging.getRewardsForAddress',
+    'messaging.getRewardClaimsForAddress',
     'messaging.getContractStakesForAddress',
     'messaging.getContractUnstakesForAddress',
 ]) {
@@ -112,6 +113,8 @@ assert.ok(/coinFromChainId/.test(listSrc),
 // pending/lifetime strip, that detail lives on StakeDetail).
 assert.ok(/rewardChip/.test(listSrc) && /XCHAIN reward/.test(listSrc),
     'StakingList surfaces unclaimed rewards as a per-row chip');
+assert.ok(/unclaimedRewards\(\{[\s\S]{0,120}rewards,[\s\S]{0,120}claims: rewardClaims/.test(listSrc),
+    'StakingList computes each reward chip from accruals and claim-ledger rows');
 assert.ok(!/Pending rewards/.test(listSrc),
     'StakingList has no page-level pending/lifetime rewards strip');
 

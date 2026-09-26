@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A plain native-coin send is retired by the chain's UTXO set, the
-// one feed that can see a transaction carrying no XChain action.
+// A plain native-coin send is retired by exact block lookup or positive
+// transaction evidence when no XChain action feed can name it.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -323,11 +323,13 @@ function coinpayRecord(over = {}) {
 }
 
 /**
- * An SDK whose encoder answers UTXOs per address and whose explorer answers
- * transaction lookups per txid (an Error value throws; `undefined` resolves
- * to the empty record the explorer returns for a hash it never decoded).
+ * An SDK whose encoder answers UTXOs and block lookups and whose explorer
+ * answers transaction lookups per txid. An Error value throws.
  */
-function sdkWith({ utxos = {}, tx = {}, utxoCalls = [], txCalls = [], explorer = true } = {}) {
+function sdkWith({
+    utxos = {}, blocks = {}, tx = {}, utxoCalls = [], blockCalls = [], txCalls = [],
+    txBlock = true, explorer = true,
+} = {}) {
     const sdk = {
         encoder: {
             getUTXOs: async (address) => {
@@ -338,6 +340,14 @@ function sdkWith({ utxos = {}, tx = {}, utxoCalls = [], txCalls = [], explorer =
             },
         },
     };
+    if (txBlock) {
+        sdk.encoder.getTxBlock = async (txid) => {
+            blockCalls.push(txid);
+            const a = blocks[txid];
+            if (a instanceof Error) throw a;
+            return a ?? null;
+        };
+    }
     if (explorer) {
         sdk.getTransaction = async (query, type) => {
             txCalls.push([query, type]);
@@ -389,16 +399,18 @@ describe('spentByConfirmedSibling', () => {
 });
 
 describe('reconcileNativePendingTxs past the pending window', () => {
-    it('retires a native send whose outputs are all spent once the explorer names its block', async () => {
+    it('retires a plain transfer by txid when getTxBlock names its block', async () => {
         const vault = vaultOf([record({ broadcastAt: iso(OLD), createdAt: iso(OLD + 1000) })]);
+        const blockCalls = [];
         const txCalls = [];
         const out = await run(vault, sdkWith({
             utxos: { [THEIRS]: { utxos: [] }, [OURS]: { utxos: [] } },
-            tx: { [TXID.toLowerCase()]: { tx_hash: TXID.toLowerCase(), block_index: 67881853, actions: [], tx_data: null } },
-            txCalls,
+            blocks: { [TXID.toLowerCase()]: { block_hash: 'ab'.repeat(32), block_height: 67881853 } },
+            blockCalls, txCalls,
         }));
         expect(out.confirmed).toEqual(new Set([TXID.toLowerCase()]));
-        expect(txCalls).toEqual([[TXID.toLowerCase(), 'tx_hash']]);
+        expect(blockCalls).toEqual([TXID.toLowerCase()]);
+        expect(txCalls).toEqual([]);
         const row = vault.rows[0];
         expect(row.status).toBe('indexed');
         expect(row.chainConfirmed).toBe(true);
@@ -419,13 +431,15 @@ describe('reconcileNativePendingTxs past the pending window', () => {
     it('retires an action-carrying record with no tick and no action row once its block is named', async () => {
         const vault = vaultOf([coinpayRecord()]);
         const utxoCalls = [];
+        const blockCalls = [];
         const txCalls = [];
         const out = await run(vault, sdkWith({
             tx: { [COINPAY_TXID]: { tx_hash: COINPAY_TXID, block_index: 67881869, actions: [], tx_data: 'COINPAY|0|648' } },
-            utxoCalls, txCalls,
+            utxoCalls, blockCalls, txCalls,
         }));
-        // Not a native send: the tracker is never asked about it.
+        // Not a native send: the encoder is never asked for address UTXOs.
         expect(utxoCalls).toEqual([]);
+        expect(blockCalls).toEqual([COINPAY_TXID]);
         expect(txCalls).toEqual([[COINPAY_TXID, 'tx_hash']]);
         expect(out.confirmed).toEqual(new Set([COINPAY_TXID]));
         const row = vault.rows[0];
@@ -466,23 +480,28 @@ describe('reconcileNativePendingTxs past the pending window', () => {
         expect(bare.rows).toEqual(rows);
     });
 
-    it('takes a confirmed spend of its own output as proof, before asking anyone', async () => {
+    it.each([
+        ['returns null', null],
+        ['fails', new Error('tracker unavailable')],
+    ])('falls back to a confirmed later spend when getTxBlock %s', async (_label, blockAnswer) => {
         const vault = vaultOf([
             record({ broadcastAt: iso(OLD), createdAt: iso(OLD + 1000) }),
-            // Our later send, already confirmed by a feed, spending the change output.
             record({
                 id: 'later', txid: 'cc'.repeat(32), fromAddress: 'mRotatedChange', toAddress: THEIRS,
                 status: 'indexed', confirmedAt: iso(1000), txHex: rawTxSpending(TXID, 1),
             }),
         ]);
+        const blockCalls = [];
         const txCalls = [];
-        const out = await run(vault, sdkWith({ txCalls }));
-        expect(txCalls).toEqual([]);
+        const out = await run(vault, sdkWith({
+            blocks: { [TXID.toLowerCase()]: blockAnswer }, blockCalls, txCalls,
+        }));
+        expect(blockCalls).toEqual([TXID.toLowerCase()]);
+        expect(txCalls).toEqual([[TXID.toLowerCase(), 'tx_hash']]);
         expect(out.confirmed).toEqual(new Set([TXID.toLowerCase()]));
         const row = vault.rows.find((r) => r.id === 'ptx-1');
         expect(row.status).toBe('indexed');
         expect(row.chainConfirmed).toBe(true);
-        // A descendant proves inclusion, not the block; none is invented.
         expect(row.confirmedBlockIndex).toBeNull();
     });
 
@@ -497,12 +516,14 @@ describe('reconcileNativePendingTxs past the pending window', () => {
             }),
         ]);
         const txCalls = [];
+        const blockCalls = [];
         const out = await run(vault, sdkWith({
             utxos: { [THEIRS]: { utxos: [{ txid: CHILD, vout: 0, confirmations: 2, height: 9001 }] } },
-            txCalls,
+            blockCalls, txCalls,
         }));
         expect(out.confirmed).toEqual(new Set([TXID.toLowerCase(), CHILD]));
-        expect(txCalls).toEqual([]);
+        expect(blockCalls).toEqual([TXID.toLowerCase()]);
+        expect(txCalls).toEqual([[TXID.toLowerCase(), 'tx_hash']]);
         expect(vault.rows.map((r) => r.status)).toEqual(['indexed', 'indexed']);
         expect(vault.rows[0].confirmedBlockIndex).toBeNull();
         expect(vault.rows[1].confirmedBlockIndex).toBe(9001);

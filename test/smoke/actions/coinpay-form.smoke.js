@@ -14,7 +14,7 @@
 //   1. coinpayAction + query flows exported from @xchain-wallet/core.
 //   2. coinpayAction guards its required inputs.
 //   3. CoinpayForm.jsx exists and wires messaging.getCoinpayObligationsForAddress
-//      + coinpayAction / Hw + SignCredentials.
+//      plus the software and hardware shared confirmation lane.
 //   4. Background host registers action.coinpay, action.coinpay.hw,
 //      coinpays.obligationsForAddress, coinpays.forAddress.
 //   5. Three shells' messaging.js expose coinpayAction / coinpayActionHw /
@@ -99,11 +99,18 @@ const formSrc = readFileSync(formPath, 'utf8');
 assert.ok(/export function CoinpayForm\b/.test(formSrc), 'CoinpayForm is a named export');
 assert.ok(/messaging\.getCoinpayObligationsForAddress\s*\(/.test(formSrc),
     'CoinpayForm fans out messaging.getCoinpayObligationsForAddress');
-assert.ok(/messaging\.coinpayAction\s*\(/.test(formSrc)
-    && /messaging\.coinpayActionHw\s*\(/.test(formSrc),
-    'CoinpayForm branches coinpayAction / coinpayActionHw on isHwSource');
-assert.ok(/SignCredentials/.test(formSrc) && /isHwSource/.test(formSrc),
-    'CoinpayForm reuses SignCredentials + isHwSource');
+assert.ok(
+    /useOwnerActionLane\(\{[\s\S]*?software: 'coinpayAction',[\s\S]*?hardware: 'coinpayActionHw',[\s\S]*?\}\)/.test(formSrc),
+    'CoinpayForm sends software and hardware signing through the owner confirm lane',
+);
+assert.ok(
+    /ownerLane\.run\(\{[\s\S]*?action: 'COINPAY'[\s\S]*?customOutputs: \[\{ address: summary\.payeeAddress, value: summary\.coinAmount \}\]/.test(formSrc),
+    'CoinpayForm confirms the COINPAY action with its native payment output',
+);
+assert.ok(
+    /if \(ownerLane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.ownerLane\.confirmProps\}/.test(formSrc),
+    'CoinpayForm renders the shared dry-run confirmation screen',
+);
 assert.ok(/pending_coinpay/.test(formSrc),
     'CoinpayForm filters obligations on pending_coinpay status');
 assert.ok(/payer_address/.test(formSrc),
@@ -117,15 +124,14 @@ assert.ok(/handleReview/.test(formSrc),
     'CoinpayForm has a handleReview handler that gates sign/broadcast');
 assert.ok(/setStage\('review'\)/.test(formSrc),
     "CoinpayForm transitions to 'review' before submitting");
-// SignCredentials must not appear at form stage; verify it lives inside
-// the review/submitting block by checking it follows the stage guard.
+// The local review hands signing to the shared confirmation screen.
 assert.ok(
-    /(stage\s*===\s*'review'\s*\|\|\s*stage\s*===\s*'submitting'[\s\S]*?SignCredentials|SignCredentials[\s\S]*?stage\s*===\s*'review'\s*\|\|\s*stage\s*===\s*'submitting')/.test(formSrc),
-    'SignCredentials is scoped to the review/submitting stage',
+    /ownerLane\.isWatcherMode[\s\S]*?'Create unsigned transaction'[\s\S]*?: 'Continue to confirmation'/.test(formSrc),
+    'CoinpayForm continues from local review to confirmation for signing wallets',
 );
 // handleSubmit must only be reachable from the review stage form.
 assert.ok(
-    /stage\s*===\s*'submitting'\s*\)\s*return/.test(formSrc),
+    /stage\s*===\s*'submitting'\s*\|\|\s*ownerLane\.composing\)\s*return/.test(formSrc),
     'handleSubmit guards against duplicate submits in review stage',
 );
 // Network fee row appears on the review screen.
@@ -211,15 +217,14 @@ assert.ok(!/messaging\.getCoinpayObligationsForAddress/.test(homeSrc),
 
 // --- 7b. the obligation-rebuild chokepoint -----------------------------
 //
-// CoinpayForm is the one action form whose payload is a direct native-coin
-// payment to an address, and it is NOT on the shared confirm lane, so no
-// output-set tamper check binds the payee the user read to the outputs that
-// get signed. What stands in for it is host-side: every COINPAY lane runs
-// prepareCoinpay, which re-reads the obligation FROM THE CHAIN and builds the
-// payment from `obligation.payee_address` rather than from the caller's copy.
-// That one chokepoint carries the whole payment-integrity argument and
-// nothing pinned it, so a refactor threading the caller's payee straight
-// through would have read like a tidy-up.
+// CoinpayForm pays native coin directly to an address. The shared confirm lane
+// binds the reviewed payee and amount to the output set that gets signed.
+// The host-side flow also runs prepareCoinpay, which re-reads the obligation
+// from the chain and builds the payment from `obligation.payee_address` rather
+// than trusting the caller's copy. Both checks protect the payment boundary:
+// confirmation pins the composed bytes, while prepareCoinpay pins their source
+// data to the live obligation. A caller-supplied payee cannot replace the
+// verified address in either the signing or watcher lane.
 const flowSrc = readFileSync(join(core, 'src', 'flows', 'coinpayAction.js'), 'utf8');
 
 assert.ok(/async function prepareCoinpay\(/.test(flowSrc),
@@ -257,5 +262,5 @@ for (const [shell, pkgPath] of [
 }
 
 console.log(
-    'OK: coinpay-form smoke (§41.4 COINPAY: core flow guards + CoinpayForm fans out getCoinpayObligationsForAddress + review stage gates coinpayAction/Hw + SignCredentials on review/submitting only + Network fee row + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry + Home resume card filters pending_coinpay on payer_address + xchain-sdk ^1.9.1 pin)',
+    'OK: coinpay-form smoke (§41.4 COINPAY: core flow guards + CoinpayForm fans out getCoinpayObligationsForAddress + review stage enters the shared confirm lane for coinpayAction/Hw + Network fee row + 3-shell messaging + 3-shell App.jsx + ActionsMenu entry + Home resume card filters pending_coinpay on payer_address + exact xchain-sdk pin)',
 );

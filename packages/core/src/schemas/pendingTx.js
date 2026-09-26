@@ -48,6 +48,8 @@ export const PENDING_TX_STATUSES = /** @type {const} */ ([
     'rbf-replaced',
 ]);
 
+export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /**
  * @typedef {Object} PendingTx
  * @property {1} schemaVersion
@@ -201,4 +203,16 @@ export function validatePendingTx(record) {
         'must be null or a positive integer',
     );
     return result(errors);
+}
+
+/**
+ * @param {{ status?: string, confirmedAt?: string | null } | null | undefined} record
+ * @param {number} nowMs
+ * @param {number} [retentionMs]
+ * @returns {boolean}
+ */
+export function isPrunableConfirmedPendingTx(record, nowMs, retentionMs = CONFIRMED_RETENTION_MS) {
+    if (!record || record.status !== 'indexed') return false;
+    if (!isIsoTimestamp(record.confirmedAt)) return false;
+    return nowMs - Date.parse(record.confirmedAt) >= retentionMs;
 }

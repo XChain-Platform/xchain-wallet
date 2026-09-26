@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -27,29 +27,37 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { memoLengthError } from '../utils/memoLimit.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { currentListItems, findListOwner } from '../../flows/listMembership.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
 
-// PC-10 fork-repoint rail (spec §3): the three consumer classes that
-// actually have (or will have) an edit action capable of repointing at
-// a new list index. AIRDROP isn't here: an airdrop is a one-shot
-// distribution against whatever list existed when it was signed, so
-// there's nothing on an already-broadcast airdrop to repoint.
+/** A long address as its first 8 and last 6 characters. */
+function shortAddress(addr) {
+    const s = String(addr || '');
+    return s.length > 16 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s;
+}
+
+// PC-10 fork-repoint rail (spec §3): the three consumer classes with an
+// edit screen that can point them at a different list index. AIRDROP isn't
+// here: an airdrop is a one-shot distribution against whatever list existed
+// when it was signed, so there's nothing on an already-broadcast airdrop to
+// repoint. Each row opens its screen through the shell's `repointHandlers`.
 const REPOINT_TARGETS = [
-    { id: 'issue-lists', label: 'Token allow/block lists', pcItem: 'PC-04', built: false },
-    { id: 'dispenser-lists', label: 'Dispenser allow/block lists', pcItem: 'PC-19', built: false },
-    { id: 'order-lists', label: 'Order allow/block lists', pcItem: 'PC-17', built: false },
+    { id: 'issue-lists', label: 'Token allow/block lists', pcItem: 'PC-04', built: true },
+    { id: 'dispenser-lists', label: 'Dispenser allow/block lists', pcItem: 'PC-19', built: true },
+    { id: 'order-lists', label: 'Order allow/block lists', pcItem: 'PC-17', built: true },
 ];
 
 /**
- * PC-10 "Fork & edit" (LIST v1): clone an existing list with ADD and/or
- * REMOVE deltas. Each v1 action produces a brand-new list index; the
- * protocol has no in-place edit (LIST.md), so this is always a fork,
- * never a mutation of the old index.
+ * PC-10 "Fork & edit" (LIST v1): edit an existing list with ADD and/or
+ * REMOVE deltas. Each v1 action gets its own list index, and under
+ * list-edit resolution (below) it also becomes what every reference to
+ * the original list resolves to.
  *
  * The protocol only lets one v1 action carry ONE edit direction
  * (EDIT=1 add, or EDIT=2 remove; LIST.md's format is
@@ -65,25 +73,37 @@ const REPOINT_TARGETS = [
  * watcher wallet can't observe the first leg landing on-chain to build
  * the second.
  *
- * Ends on a "now referenced by" step (§3): the OLD index keeps working
- * everywhere it's referenced (gates, dispensers, orders), so forking
- * never repoints anything by itself. That step lists the consumer
- * classes capable of repointing and deep-links to each one's edit
- * surface where it exists; today none of PC-04/17/19 ship that surface
- * yet (verified at HEAD), so every row renders disabled ("coming
- * soon") rather than a broken link. Whether or not the user visits any
- * of them, the warning that the old list stays live is unconditional:
- * there's no way for the wallet to know whether every consumer has
- * been repointed, so it can't promise otherwise.
+ * What a fork does to the OLD index depends on list-edit resolution
+ * (LIST_EDIT_RESOLUTION_ACTIVATION, read from the explorer's
+ * `state.edit_resolution_active` and carried in `listRef`). After it,
+ * every reference to the list resolves to its newest valid edit, so the
+ * edit changes what every gate, dispenser, order, airdrop and callback
+ * sees, and repointing is optional. Before it, the old index keeps its
+ * own membership until each consumer is repointed by hand, and the
+ * "stays live" warning is unconditional. When the flag is unknown (an
+ * explorer that does not report it) the copy names both rules.
+ *
+ * Ends on a "now referenced by" step (§3) listing the consumer classes
+ * that can repoint, each opening its edit screen when the shell passes a
+ * handler for it.
+ *
+ * FROM defaults to the list's owner, the creator of the root of its edit
+ * chain, whenever this wallet holds that address: once LIST_OWNER_ACTIVATION
+ * is armed on a chain, an edit from any other address is invalid there. When
+ * the wallet does not hold it, the form warns instead, because today such an
+ * edit is still accepted on chains where that rule is not armed yet.
  *
  * @param {object} props
  * @param {string} props.walletId
- * @param {{ chainId: string, actionIndex: string, type: '1' | '2', items: string[] }} props.listRef
+ * @param {{ chainId: string, actionIndex: string, type: '1' | '2', items: string[], editResolutionActive?: boolean | null, source?: string | null, parentIndex?: string | null }} props.listRef
  * @param {() => void} props.onBack
  * @param {() => void} props.onDone
+ * @param {Partial<Record<'issue-lists' | 'dispenser-lists' | 'order-lists', () => void>>} [props.repointHandlers]
  */
-export function ListForkForm({ walletId, listRef, onBack, onDone }) {
+export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandlers = {} }) {
     const { chainId, actionIndex: oldIndex, type: listType, items: currentItems } = listRef;
+    // true / false from the explorer, null when it does not say.
+    const resolution = typeof listRef.editResolutionActive === 'boolean' ? listRef.editResolutionActive : null;
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -105,6 +125,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
     // unchecked item is a REMOVE. New items typed/pasted below are ADDs.
     const [keep, setKeep] = useState(() => new Set(currentItems));
     const [addText, setAddText] = useState('');
+    const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
 
     const [stage, setStage] = useState(
@@ -122,6 +143,29 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
     const [tx2Txid, setTx2Txid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Close re-entry before React renders the visible submitting state.
+    const firstLegInFlightRef = useRef(false);
+    // The list's owner: undefined while resolving, null when it cannot be read.
+    const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
+
+    // Walk from the list being forked up to its root create, whose SOURCE owns
+    // every edit in the chain. ListDetail hands over the row it already read.
+    useEffect(() => {
+        let cancelled = false;
+        // An older host build without the list read yields no owner claim
+        const readList = (idx) => (typeof messaging.getListByActionIndex === 'function'
+            ? messaging.getListByActionIndex({ chainId, actionIndex: idx })
+            : Promise.reject(new Error('list read unavailable')));
+        const known = listRef.source !== undefined || listRef.parentIndex !== undefined;
+        const start = known
+            ? Promise.resolve({ source: listRef.source, list_action_index: listRef.parentIndex })
+            : Promise.resolve().then(() => readList(String(oldIndex)));
+        start
+            .then((detail) => findListOwner({ detail, readList }))
+            .then((o) => { if (!cancelled) setOwner(o); })
+            .catch(() => { if (!cancelled) setOwner(null); });
+        return () => { cancelled = true; };
+    }, [chainId, oldIndex, listRef.source, listRef.parentIndex, messaging]);
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -196,6 +240,25 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         if (picked) setFromAddressId(picked);
     }, [addressesByChain, activeByChain, chainId, fromAddressId]);
 
+    // Once the owner is known, sign from it whenever this wallet holds it:
+    // it is the one address whose edit stays valid under owner-only edits.
+    const ownerRecord = useMemo(() => {
+        if (!owner || !addressesByChain) return null;
+        return (addressesByChain[chainId] || []).find((a) => a.address === owner) || null;
+    }, [owner, addressesByChain, chainId]);
+    useEffect(() => {
+        if (stage === 'compose' && ownerRecord) setFromAddressId(ownerRecord.id);
+    }, [ownerRecord, stage]);
+    // Warn when the wallet cannot sign as the owner (owner unknown: no claim).
+    const notOwnerWarning = owner && !ownerRecord && fromAddress && fromAddress.address !== owner
+        ? `List #${oldIndex} was created by ${shortAddress(owner)}, which is not an address in this wallet, so this edit is signed from ${shortAddress(fromAddress.address)}. Some chains accept an edit from any address today, but once owner-only list edits are active on this chain, only the list's creator can edit it and this edit would be invalid.`
+        : null;
+    const notOwnerNotice = notOwnerWarning ? (
+        <div role="alert" className={styles.warnings}>
+            <p className={styles.warning}>{notOwnerWarning}</p>
+        </div>
+    ) : null;
+
     const hw = isHwSource(fromAddress);
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -269,19 +332,23 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         });
     }
 
+    // MEMO is optional and rides both legs; it sits before the ITEM tail.
+    const trimmedMemo = memo.trim();
     const firstParams = useMemo(() => ({
         VERSION: '1',
         EDIT: needsAdd ? '1' : '2',
         LIST_ACTION_INDEX: String(oldIndex),
+        ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: needsAdd ? toAdd : toRemove,
-    }), [needsAdd, toAdd, toRemove, oldIndex]);
+    }), [needsAdd, toAdd, toRemove, oldIndex, trimmedMemo]);
 
     const secondParams = useMemo(() => ({
         VERSION: '1',
         EDIT: '2',
         LIST_ACTION_INDEX: intermediateIndex || '',
+        ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: toRemove,
-    }), [intermediateIndex, toRemove]);
+    }), [intermediateIndex, toRemove, trimmedMemo]);
 
     const firstDecoded = useMemo(() => (
         stage === 'review-1' || stage === 'wait-index'
@@ -366,22 +433,53 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
         }
     }
 
-    function handleReview(event) {
+    /**
+     * Re-read the list and say so when its members differ from the ones this
+     * screen was opened with, else null. The network applies the edit to the
+     * list's newest valid edit at that moment, so a change made in between
+     * would be carried into this edit without the user ever seeing it.
+     * Best-effort: an unreadable list is no claim either way.
+     *
+     * @returns {Promise<string | null>}
+     */
+    async function membershipChangedMessage() {
+        if (typeof messaging.getListByActionIndex !== 'function') return null;
+        let fresh;
+        try {
+            fresh = currentListItems(await messaging.getListByActionIndex({ chainId, actionIndex: String(oldIndex) }));
+        } catch {
+            return null;
+        }
+        if (!Array.isArray(fresh)) return null;
+        const asKey = (xs) => xs.map(String).sort().join('\n');
+        if (asKey(fresh) === asKey(currentItems)) return null;
+        return `List #${oldIndex} changed since this screen loaded: it now has ${fresh.length} member${fresh.length === 1 ? '' : 's'}, not ${currentItems.length}. `
+            + 'Go back and open the list again so this edit starts from its current members.';
+    }
+
+    async function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
         if (!needsAdd && !needsRemove) {
             setFormError('Nothing changed: add or remove at least one item.');
             return;
         }
+        // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
+        if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return; }
+        // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
+        const memoTooLong = memoLengthError(trimmedMemo);
+        if (memoTooLong) { setFormError(memoTooLong); return; }
+        // Verify the list has not changed since this screen loaded it
+        const changed = await membershipChangedMessage();
+        if (changed) { setFormError(changed); return; }
         setFormError(null);
         setStage('review-1');
     }
 
-    async function handleSignFirst(event) {
-        event.preventDefault();
-        if (submitting) return;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
-        if (!isWatcherMode && hw && hwStatus !== 'available') return;
+    async function signFirst() {
+        // Verify again at signing: the list may have changed while this sat on review
+        const changed = await membershipChangedMessage();
+        if (changed) { setSubmitError(changed); return; }
         if (singleEncode) {
             await runLegThroughConfirm(firstParams, (res) => {
                 const txid = res?.txid || res?.broadcast?.txid;
@@ -392,8 +490,6 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             });
             return;
         }
-        setSubmitting(true);
-        setSubmitError(null);
         try {
             const from = sourceDescriptor();
             const base = { walletId, chainId, from, params: firstParams, payFeeInNativeCoin: nativeFee.flag, ...(feePerKb != null ? { feePerKb } : {}) };
@@ -435,7 +531,21 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'List fork broadcast failed.',
             }));
             if (!hw && !isWatcherMode) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        }
+    }
+
+    async function handleSignFirst(event) {
+        event.preventDefault();
+        if (submitting || firstLegInFlightRef.current) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
+        if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        firstLegInFlightRef.current = true;
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+            await signFirst();
         } finally {
+            firstLegInFlightRef.current = false;
             setSubmitting(false);
         }
     }
@@ -547,36 +657,58 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                         <code className={styles.txid}>{tx2Txid}</code>
                     </>
                 ) : null}
-                <p className={styles.hint}>
-                    This fork gets a brand-new list index once indexed (check My
-                    Lists to find it). List #{oldIndex} itself is unchanged and
-                    keeps working exactly as before.
-                </p>
+                {resolution === true ? (
+                    <p className={styles.hint}>
+                        Once indexed, this edit is list #{oldIndex}&apos;s current
+                        membership: every gate, dispenser, order, airdrop and
+                        callback that references #{oldIndex} uses it. The edit
+                        also has its own index, shown in My Lists.
+                    </p>
+                ) : resolution === false ? (
+                    <p className={styles.hint}>
+                        This fork gets a brand-new list index once indexed (check My
+                        Lists to find it). List #{oldIndex} itself is unchanged and
+                        keeps working exactly as before.
+                    </p>
+                ) : (
+                    <p className={styles.hint}>
+                        This edit gets its own index once indexed (check My Lists
+                        to find it). Where list-edit resolution is active, everything
+                        that references #{oldIndex} uses the edited membership;
+                        before that, #{oldIndex} keeps its old membership until each
+                        consumer is repointed.
+                    </p>
+                )}
 
-                <h3 className={styles.successLabel}>Now referenced by</h3>
+                <h3 className={styles.successLabel}>
+                    {resolution === true ? 'Repoint (optional)' : 'Now referenced by'}
+                </h3>
                 <p className={styles.hint}>
-                    Every gate, dispenser, and order that references list
-                    #{oldIndex} keeps using that index until someone repoints it
-                    at the new fork. Repoint from each consumer's own edit
-                    surface as it ships:
+                    {resolution === true
+                        ? `Gates, dispensers, and orders that reference list #${oldIndex} already follow this edit, so nothing needs repointing. Open one only to point it at a different list:`
+                        : `Every gate, dispenser, and order that references list #${oldIndex} keeps using its membership until someone repoints it at the new fork. Repoint from each consumer's own edit screen:`}
                 </p>
                 <ul className={styles.detailsList} style={{ display: 'block' }}>
-                    {REPOINT_TARGETS.map((t) => (
-                        <li key={t.id} style={{ padding: '4px 0' }}>
-                            <Button type="button" variant="ghost" disabled={!t.built}>
-                                {t.label} {t.built ? '' : `(coming soon, ${t.pcItem})`}
-                            </Button>
-                        </li>
-                    ))}
+                    {REPOINT_TARGETS.map((t) => {
+                        const open = t.built ? repointHandlers[t.id] : undefined;
+                        return (
+                            <li key={t.id} style={{ padding: '4px 0' }}>
+                                <Button type="button" variant="ghost" disabled={!open} onClick={open}>
+                                    {t.label}
+                                </Button>
+                            </li>
+                        );
+                    })}
                 </ul>
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        List #{oldIndex} stays live everywhere it is referenced
-                        until you repoint each consumer by hand. The wallet has
-                        no way to confirm whether that has happened, so this
-                        warning shows regardless of what you do next.
-                    </p>
-                </div>
+                {resolution === true ? null : (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            {resolution === false
+                                ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
+                                : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                        </p>
+                    </div>
+                )}
 
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onDone}>Done</Button>
@@ -626,7 +758,14 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                     <dd className={styles.detailsValue}>#{intermediateIndex}</dd>
                     <dt className={styles.detailsLabel}>Removing</dt>
                     <dd className={styles.detailsValue}>{toRemove.length} item{toRemove.length === 1 ? '' : 's'}</dd>
+                    {trimmedMemo ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}>{trimmedMemo}</dd>
+                        </>
+                    ) : null}
                 </dl>
+                {notOwnerNotice}
                 <SignCredentials
                     unlocked={signerReady}
                     fromAddress={fromAddress}
@@ -689,16 +828,25 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                     <dd className={styles.detailsValue}>#{oldIndex}</dd>
                     <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
                     <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                    {trimmedMemo ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}>{trimmedMemo}</dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
                     </dd>
                 </dl>
+                {notOwnerNotice}
                 {twoPhase ? (
                     <p className={styles.hint}>
                         This fork both adds and removes items, so it's two
                         transactions: this add first, then a remove once the add
-                        is indexed. {hw ? 'You will confirm on your hardware device twice.' : 'You will enter your password twice.'}
+                        is indexed. {hw
+                            ? 'You will confirm on your hardware device twice.'
+                            : signerReady ? 'You will approve each one; the wallet is unlocked, so no password is needed.' : 'You will enter your password twice.'}
                     </p>
                 ) : null}
                 {isWatcherMode ? (
@@ -739,8 +887,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
             <p className={styles.summary}>
                 Forking {isTick ? 'token' : 'address'} list #{oldIndex}
                 {' '}({currentItems.length} current member{currentItems.length === 1 ? '' : 's'}).
-                This publishes a new list at a new index; #{oldIndex} itself never changes.
+                {resolution === true
+                    ? ` This edit becomes list #${oldIndex}'s current membership: everything that references #${oldIndex} will use it once it is indexed.`
+                    : resolution === false
+                        ? ` This publishes a new list at a new index; #${oldIndex} itself never changes.`
+                        : ` This publishes an edit at a new index. Where list-edit resolution is active, everything that references #${oldIndex} follows it; before that, #${oldIndex} keeps its old membership.`}
             </p>
+            {fromAddress ? (
+                <p className={styles.hint}>Signed from <AddressText address={fromAddress.address} /></p>
+            ) : null}
+            {notOwnerNotice}
 
             {currentItems.length > 0 ? (
                 <>
@@ -784,6 +940,14 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
                 </p>
             ) : null}
 
+            <Input
+                label="Memo (optional)"
+                hint="Protocol rejects | or ;."
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                autoComplete="off"
+            />
+
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"
@@ -798,7 +962,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone }) {
 
             {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
             <div className={styles.actions}>
-                <Button type="submit" variant="primary" block disabled={!needsAdd && !needsRemove}>
+                <Button type="submit" variant="primary" block>
                     Review
                 </Button>
             </div>

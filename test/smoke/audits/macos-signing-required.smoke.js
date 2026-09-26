@@ -36,6 +36,20 @@
 //      credential check but by `forceCodeSigning`, which turns
 //      app-builder-lib's `handleNullIdentity` from a log line into a throw.
 //
+// AND TWO MORE, found by driving the lane on the release machine rather than
+// on a hosted runner:
+//   5. a name qualifier that matches the WRONG certificate - `Dankest, LLC`
+//      is a substring of both the Developer ID and the Apple Distribution
+//      identity, and the lookup tests the qualifier before the certificate
+//      type, so a signing lane names its certificate by SHA-1 or refuses to
+//      load;
+//   6. a non-null identity that matches nothing on a lane that did NOT
+//      declare the requirement - app-builder-lib logs `skipped macOS
+//      application code signing` and exits 0. Any build that named an
+//      identity now forces signing, and an `afterSign` check reads the
+//      bundle's actual signature, which also catches the skips
+//      `forceCodeSigning` never reaches.
+//
 // THE OTHER HALF OF THIS FILE IS THE WORKFLOW, and it is the half most likely
 // to rot. The requirement is opt-in (an unsigned dev build is legitimate), so
 // a mac build step added later without the flag is exactly as silent as the
@@ -44,7 +58,9 @@
 // remembered.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -199,10 +215,20 @@ function loadError(env) {
 
 // ------------------------------------------ the complete environment builds
 
+// A certificate fingerprint as `security find-identity` prints it.
+const SHA1 = /^[0-9A-F]{40}$/;
+
+// The fingerprint a signing lane resolves to with no CSC_IDENTITY_NAME at
+// all. Read from the config rather than copied here, so the workflow
+// assertion below compares release.yml against the config and not against a
+// third copy.
+const PINNED = loadConfig(SIGNED_ENV).mac.identity;
+
 {
     const cfg = loadConfig(SIGNED_ENV);
-    assert.equal(cfg.mac.identity, 'Dankest, LLC',
-        'a complete environment resolves the Developer ID qualifier');
+    assert.match(cfg.mac.identity, SHA1,
+        'a complete environment resolves the Developer ID certificate by SHA-1, not by a'
+        + ' name qualifier that also matches the Apple Distribution certificate');
     assert.equal(cfg.mac.notarize, true, 'and notarizes');
     assert.equal(cfg.dmg.sign, true, 'and signs the disk image');
 
@@ -228,8 +254,144 @@ function loadError(env) {
     // inside a credential check.
     const cfg = loadConfig({ CSC_KEYCHAIN: 'xchain-release.keychain', ...NOTARIZE_ENV,
         [REQUIRE_VAR]: '1' });
-    assert.equal(cfg.mac.identity, 'Dankest, LLC',
-        'an already-imported certificate satisfies the requirement');
+    assert.equal(cfg.mac.identity, PINNED,
+        'an already-imported certificate satisfies the requirement, under the same pin');
+}
+
+// ------------------ 5. a signing lane names its certificate, not its team
+
+{
+    // The release machine holds both Developer ID Application and Apple
+    // Distribution identities for the same organization and team id, so every
+    // name that matches one matches the other, including the full team
+    // string. Each is refused by name before anything is packed.
+    for (const name of ['Dankest, LLC', 'ID Application: Dankest, LLC (829JG9YLH3)', '829JG9YLH3']) {
+        const err = loadError({ ...SIGNED_ENV, CSC_IDENTITY_NAME: name });
+        assert.ok(err, `a signing lane refuses the name qualifier '${name}'`);
+        assert.equal(err.name, 'MacSigningIdentityNotPinned',
+            'and says it is the pin that is missing, not the certificate');
+        assert.ok(err.message.includes(PINNED),
+            'the message names the fingerprint the lane should use');
+    }
+
+    // A fingerprint pasted from `openssl x509 -fingerprint` (colons, any
+    // case) is the same fingerprint. The lookup is a case-sensitive
+    // substring test against upper-case hex, so it is normalised rather than
+    // passed through to match nothing.
+    const pasted = PINNED.toLowerCase().match(/../g).join(':');
+    assert.equal(loadConfig({ ...SIGNED_ENV, CSC_IDENTITY_NAME: pasted }).mac.identity, PINNED,
+        'a colon-separated lower-case fingerprint resolves to the form find-identity prints');
+
+    // The pin is the Developer ID certificate's, and one fingerprint cannot
+    // name the store lane's two certificates, so the store lane keeps its
+    // team qualifier even when a fingerprint is in the environment.
+    const withMas = loadConfig({ CSC_IDENTITY_NAME: PINNED, XCHAIN_BUILD_MAS: '1' });
+    assert.equal(withMas.mas.identity, 'Dankest, LLC',
+        'a Developer ID fingerprint in CSC_IDENTITY_NAME never becomes the store identity');
+}
+
+// ------- 6. any build that NAMED an identity fails when it signs nothing
+
+{
+    // A named identity is a claim that this build signs; the mac packager
+    // is forced to require it, so a name matching nothing throws rather
+    // than silently skipping the signature.
+    assert.equal(loadConfig({ CSC_LINK: 'file:///dev/null' }).mac.forceCodeSigning, true,
+        'a build handed a certificate forces the mac signature');
+    assert.equal(loadConfig({ CSC_IDENTITY_NAME: 'Nobody In This Keychain' }).mac.forceCodeSigning,
+        true, 'and so does a build handed only a name');
+
+    // Scoped to `mac`, and absent rather than false otherwise: a false here
+    // would override the top-level flag for the store build, and a top-level
+    // true would reach Windows and Linux builds that happen to see CSC_LINK.
+    const dev = loadConfig();
+    assert.equal('forceCodeSigning' in dev.mac, false,
+        'a dev build with no identity carries no mac-level signing flag at all');
+    assert.equal(loadConfig({ CSC_LINK: 'file:///dev/null' }).forceCodeSigning, false,
+        'the certificate alone does not force signing for every platform');
+}
+
+// ---------------------- the afterSign hook reads the signature it produced
+
+{
+    // `forceCodeSigning` only guards the paths that consult it. app-builder-lib
+    // returns before it on a non-darwin host and in a pull-request context,
+    // and `signApp` reports success regardless, so the hook checks the bundle
+    // itself. Driven against real bundles on disk rather than stubbed.
+    const PRODUCT = 'XChain Wallet';
+    const context = (dir, platform = 'darwin') => ({
+        electronPlatformName: platform,
+        appOutDir: dir,
+        packager: { appInfo: { productFilename: PRODUCT } },
+    });
+    const rejection = async (cfg, ctx) => {
+        try {
+            await cfg.afterSign(ctx);
+            return null;
+        } catch (err) {
+            return err;
+        }
+    };
+
+    const scratch = mkdtempSync(join(tmpdir(), 'xchain-aftersign-'));
+    try {
+        // A bundle with an executable and nothing else: exactly what a build
+        // that skipped signing leaves behind.
+        const app = join(scratch, `${PRODUCT}.app`);
+        mkdirSync(join(app, 'Contents', 'MacOS'), { recursive: true });
+        writeFileSync(join(app, 'Contents', 'Info.plist'),
+            '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>'
+            + `<key>CFBundleExecutable</key><string>${PRODUCT}</string>`
+            + '<key>CFBundleIdentifier</key><string>io.xchain.wallet.smoke</string>'
+            + '</dict></plist>\n');
+        copyFileSync(existsSync('/usr/bin/true') ? '/usr/bin/true' : process.execPath,
+            join(app, 'Contents', 'MacOS', PRODUCT));
+
+        // No identity is the dev build, and it stays quiet.
+        assert.equal(await rejection(loadConfig(), context(scratch)), null,
+            'a build with no identity is not asked for a signature');
+
+        const signing = loadConfig(SIGNED_ENV);
+        assert.equal(await rejection(signing, context(scratch, 'mas')), null,
+            'the store build is left to its own checks');
+
+        // The case this row is about: an identity was named and nothing was
+        // signed. Node's own binary carries its vendor's signature, so strip
+        // it first; `codesign --remove-signature` is a darwin tool, and off
+        // darwin the hook refuses before it looks at the bundle anyway.
+        if (process.platform === 'darwin') {
+            const strip = spawnSync('codesign', ['--remove-signature', join(app, 'Contents', 'MacOS', PRODUCT)]);
+            assert.equal(strip.status, 0, 'the fixture executable can be unsigned');
+        }
+        const unsigned = await rejection(signing, context(scratch));
+        assert.ok(unsigned, 'an unsigned bundle from a build that named an identity fails');
+        assert.equal(unsigned.name, 'MacAppNotSigned');
+        assert.ok(unsigned.message.includes(PINNED),
+            'and the failure names the identity the build was asked to use');
+
+        if (process.platform === 'darwin') {
+            // An ad-hoc signature verifies, so `codesign --verify` alone would
+            // pass it; it carries no certificate, and Gatekeeper refuses it.
+            const adhoc = spawnSync('codesign', ['--force', '--sign', '-', app], { encoding: 'utf8' });
+            assert.equal(adhoc.status, 0, `the fixture bundle can be ad-hoc signed: ${adhoc.stderr}`);
+            const err = await rejection(signing, context(scratch));
+            assert.ok(err, 'an ad-hoc signature is not the Developer ID signature that was asked for');
+            assert.equal(err.name, 'MacAppNotSigned');
+            assert.ok(/ad-hoc/.test(err.message), 'and the failure says it was ad-hoc');
+
+            // The same bundle under a name qualifier on an unrequired lane:
+            // still refused, because the check follows the identity, not the
+            // requirement.
+            const named = loadConfig({ CSC_IDENTITY_NAME: 'Dankest, LLC' });
+            assert.ok(await rejection(named, context(scratch)),
+                'a lane that only named an identity is held to it too');
+        } else {
+            assert.ok(/only be produced and checked on macOS/.test(unsigned.message),
+                'off darwin the hook refuses rather than assuming the signature landed');
+        }
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
 }
 
 // --------------------------------------------------- the status helper
@@ -290,6 +452,14 @@ function loadError(env) {
         assert.ok(new RegExp(`${REQUIRE_VAR}:\\s*'1'`).test(step),
             `the mac build step '${name}' must set ${REQUIRE_VAR}: '1', or a missing`
             + ' signing secret produces unsigned artifacts and a green lane');
+        // Pinned by fingerprint, and to the SAME fingerprint the config
+        // defaults to. A name here is refused at load, so this catches it
+        // earlier; a stale fingerprint after a renewal is not refused by
+        // anything but this comparison and the afterSign check at build time.
+        const pin = (/^\s*CSC_IDENTITY_NAME:\s*(\S+)\s*$/m.exec(step) || [])[1];
+        assert.equal(pin, PINNED,
+            `the mac build step '${name}' must name the Developer ID certificate by the SHA-1`
+            + ' the builder config pins, not by a name qualifier');
         // The requirement without the values is a lane that can only fail, so
         // both halves are asserted together: certificate AND notarization.
         for (const [envVar, secret] of [

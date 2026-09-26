@@ -21,12 +21,12 @@
 //
 // The dev server runs the mock because it is TOLD to
 // (`VITE_XCHAIN_REAL_SDK=0`, pinned in `playwright.config.js`), not
-// because the real SDK fails to load there. It used to be the latter -
+// because the real SDK fails to load there. Without the pin, vite's
+// pre-bundling of the SDK makes the dev server a real-SDK-against-mainnet
+// venue, where every compose fails "unreachable" (before pre-bundling,
 // vite dev threw `require is not defined` on the CJS import and
-// `resolveSdkFactory` caught it - and when vite learned to pre-bundle
-// the SDK that venue silently became a real-SDK-against-mainnet venue,
-// where every compose fails "unreachable". Same venue as before, chosen
-// on purpose now.
+// `resolveSdkFactory` caught it, which is how the mock got chosen by
+// accident rather than on purpose).
 //
 // `playwright.regtest.config.js` serves a `vite preview` of the
 // PRODUCTION build instead, which rollup bundles the CJS into - the
@@ -48,7 +48,7 @@
 //   ssh -N -L 18080:localhost:18080 -L 10000:localhost:10000 \
 //          -L 3023:localhost:3023 -L 3025:localhost:3025 \
 //          -L 3223:localhost:3223 -L 3225:localhost:3225 \
-//          -L 3123:localhost:3123 -L 3125:localhost:3125 jdog@localhost
+//          -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
 //
 // `assertVenueReachable()` (called from global setup) fails once, fast,
 // with that command in the message, rather than letting every spec die
@@ -259,7 +259,8 @@ export async function assertVenueReachable() {
     const hint =
         `Regtest venue (${REGTEST_COIN}) unreachable. Open the tunnels:\n`
         + `  ssh -N -L 18080:localhost:18080 -L ${VENUE.encoderPort}:localhost:${VENUE.encoderPort} `
-        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} jdog@localhost`;
+        + `-L 10000:localhost:10000 -L ${VENUE.minerPort}:localhost:${VENUE.minerPort} `
+        + '"$XC_REGTEST_SSH_HOST"';
 
     let status;
     try {
@@ -288,12 +289,8 @@ export async function assertVenueReachable() {
     }
 }
 
-/**
- * The venue host the tunnels already go to, and the SSH identity used to reach
- * it. Overridable for a stack that lives somewhere else; never a credential,
- * just a host, and the key is the operator's own agent.
- */
-const SSH_HOST = process.env.XC_REGTEST_SSH_HOST || 'jdog@localhost';
+/** SSH destination for the regtest rail. */
+const SSH_HOST = process.env.XC_REGTEST_SSH_HOST?.trim() || 'localhost';
 
 /**
  * Whether this run may write a price snapshot at all.
@@ -394,11 +391,36 @@ async function probePrice() {
     return priceVerdict(body);
 }
 
-/** How long to let the indexer finish a block before probing it anyway. */
-const INDEXER_CATCHUP_BUDGET_MS = 150_000;
+/** Caps reads that depend on the indexer reaching the chain tip. */
+export const INDEX_WAIT_TIMEOUT_MS = 1_200_000;
+/** Spaces visible progress reports one minute apart during an index wait. */
+const INDEX_PROGRESS_INTERVAL_MS = 60_000;
 /** How many times to re-ask a BUSY quote engine, and how long between asks. */
 const BUSY_REPROBES = 20;
 const BUSY_REPROBE_MS = 5_000;
+
+/** Reports the indexer's current height against the chain height once per minute. */
+export function createIndexWaitProgress(waitingFor, {
+    coin = REGTEST_COIN,
+    fetchStatus = () => explorerJson('status'),
+    log = console.log,
+    now = Date.now,
+} = {}) {
+    let nextReportAt = now() + INDEX_PROGRESS_INTERVAL_MS;
+    return async () => {
+        const currentTime = now();
+        if (currentTime < nextReportAt) return;
+        nextReportAt = currentTime + INDEX_PROGRESS_INTERVAL_MS;
+
+        let status = null;
+        try {
+            status = await fetchStatus();
+        } catch { /* Keep the wait visible when status is temporarily unavailable. */ }
+        const indexed = status?.last_block?.[coin] ?? 'unknown';
+        const target = status?.chain_tip?.[coin] ?? 'unknown';
+        log(`[regtest ${coin}] waiting for ${waitingFor}: indexer height ${indexed} / target ${target}`);
+    };
+}
 
 /**
  * Waits until the indexer and decoder have caught up to the chain tip.
@@ -415,8 +437,9 @@ const BUSY_REPROBE_MS = 5_000;
  * one about waiting, and a status endpoint that has stopped answering must not
  * turn into a second, misleading failure mode.
  */
-async function waitForIndexedTip({ budgetMs = INDEXER_CATCHUP_BUDGET_MS } = {}) {
+async function waitForIndexedTip({ budgetMs = INDEX_WAIT_TIMEOUT_MS } = {}) {
     const deadline = Date.now() + budgetMs;
+    const reportProgress = createIndexWaitProgress('the indexer to reach the chain tip');
     while (Date.now() < deadline) {
         try {
             const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
@@ -430,6 +453,7 @@ async function waitForIndexedTip({ budgetMs = INDEXER_CATCHUP_BUDGET_MS } = {}) 
             // Status blip: keep waiting rather than reporting a venue failure
             // from a helper whose only job is to be patient.
         }
+        await reportProgress();
         await new Promise((r) => setTimeout(r, 2_000));
     }
     return false;
@@ -817,28 +841,64 @@ export async function warmFeeQuote({ action, params, source, feeOutputSats }, ti
     if (feeOutputSats !== undefined) q.set('feeOutputSats', String(feeOutputSats));
     const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/feequote?${q.toString()}`;
 
+    return readQuote(url, { action, timeoutMs });
+}
+
+/**
+ * Sorts one fee-quote body into what the caller should do next.
+ *
+ * verdict: the chain answered. A string `status` is the venue's own word and
+ *   `valid: true` is a priced quote. A refusal always carries a named status,
+ *   so it lands here too and is returned, never retried.
+ * retry: a transient the venue clears on its own (the explorer's indexer-hop
+ *   `UPSTREAM_ERROR`, or a 5xx with no body worth reading).
+ * unreadable: anything else, notably an error body with a `code` and no
+ *   `status`. It is not a verdict and must never be read as a refusal.
+ *
+ * @param {any} body
+ * @param {number} httpStatus
+ * @returns {'verdict'|'retry'|'unreadable'}
+ */
+export function classifyQuote(body, httpStatus = 200) {
+    if (body && typeof body === 'object') {
+        if (body.valid === true || typeof body.status === 'string') return 'verdict';
+        if (body.code === 'UPSTREAM_ERROR') return 'retry';
+    }
+    if (httpStatus >= 500) return 'retry';
+    return 'unreadable';
+}
+
+const UNREADABLE_RE_ASKS = 3;
+
+/**
+ * Asks `url` until the quote classifies as a verdict. Transients are re-asked
+ * until the deadline; an unreadable body is re-asked a few times and then
+ * returned so the caller can see exactly what came back.
+ *
+ * @param {string} url
+ * @param {{ action: string, timeoutMs: number, fetchImpl?: typeof fetch, pauseMs?: number }} opts
+ */
+export async function readQuote(url, { action, timeoutMs, fetchImpl = fetch, pauseMs = 1_000 }) {
     const deadline = Date.now() + timeoutMs;
     let last = null;
+    let unreadable = 0;
     while (Date.now() < deadline) {
+        let kind = 'retry';
         try {
-            const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-            last = await res.json();
-            // `valid` is the only success signal that matters: a 200 carrying
-            // `valid: false` means the venue really cannot price this action
-            // (a stale oracle), which is a different problem and must NOT be
-            // retried into a timeout - so return it and let the spec assert.
-            if (last && last.valid === true) return last;
-            if (last && last.code !== 'UPSTREAM_ERROR') return last;
+            const res = await fetchImpl(url, { signal: AbortSignal.timeout(30_000) });
+            last = await res.json().catch(() => null);
+            kind = classifyQuote(last, res.status);
         } catch {
             // Transport-level blip; same treatment as an UPSTREAM_ERROR.
         }
-        await new Promise((r) => setTimeout(r, 1_000));
+        if (kind === 'verdict') return last;
+        if (kind === 'unreadable' && ++unreadable >= UNREADABLE_RE_ASKS) return last;
+        await new Promise((r) => setTimeout(r, pauseMs));
     }
     throw new Error(
-        `fee quote for ${action} never came back valid within ${timeoutMs}ms. Every attempt was `
-        + `UPSTREAM_ERROR (the explorer's 5s indexer-hop timeout,) rather than an`
-        + `invalid quote, so this is venue state and not a wallet defect - last: `
-        + `${JSON.stringify(last)}`,
+        `fee quote for ${action} never came back within ${timeoutMs}ms. Every attempt was a `
+        + 'transient (the explorer 5s indexer-hop timeout or a transport error), so this is '
+        + `venue state and not a wallet defect - last: ${JSON.stringify(last)}`,
     );
 }
 
@@ -927,8 +987,9 @@ export async function assertNoActionRecorded(txid) {
  * while the action in question was sitting on chain, so the timeout message
  * now reports the lag rather than leaving the next reader to guess.
  */
-export async function waitForValidAction(txid, timeoutMs = 300_000) {
+export async function waitForValidAction(txid, timeoutMs = INDEX_WAIT_TIMEOUT_MS) {
     const deadline = Date.now() + timeoutMs;
+    const reportProgress = createIndexWaitProgress(`action ${txid}`);
     while (Date.now() < deadline) {
         // `nudgeChain`, never a bare `generate_blocks`: this loop ran for up to
         // five minutes mining on EVERY pass, which is the exact hazard
@@ -956,6 +1017,7 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
             }
             return detail;
         }
+        await reportProgress();
         await new Promise((r) => setTimeout(r, 2_000));
     }
     const status = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
@@ -971,6 +1033,52 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
 }
 
 /**
+ * Every action the explorer recorded under `txid`, oldest first, as full
+ * details, WITHOUT asserting any of them valid.
+ *
+ * A BATCH indexes as its parent row plus one row per leg, all under the one
+ * tx hash, and the actions list is newest-first, so `waitForValidAction`
+ * (which takes the first match) hands back the LAST leg, not the BATCH. A
+ * gated publish is BATCH(FILE, MESSAGE) and a guarded gated send is
+ * BATCH(SEND, MESSAGE), so asserting "this was a FILE" or "this was a BATCH"
+ * on that one row fails on a perfectly good transaction. Callers read every
+ * row here and assert on the one they mean; `actionStatuses` gives each
+ * row's verdicts.
+ *
+ * Retries a refused read until the deadline: the shared explorer answers an
+ * occasional DB_ERROR under load that clears on the next request.
+ *
+ * @param {string} txid
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<object[]>}
+ */
+export async function txActions(txid, { timeoutMs = INDEX_WAIT_TIMEOUT_MS } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastError = null;
+    const reportProgress = createIndexWaitProgress(`actions for transaction ${txid}`);
+    while (Date.now() < deadline) {
+        try {
+            const list = await explorerJson('actions?limit=100');
+            const rows = (list?.data || [])
+                .filter((r) => r.tx_hash === txid)
+                .sort((a, b) => Number(a.action_index) - Number(b.action_index));
+            if (rows.length > 0) {
+                const details = [];
+                for (const row of rows) details.push(await explorerJson(`action/${row.action_index}`));
+                return details;
+            }
+        } catch (err) {
+            lastError = err;
+        }
+        await nudgeChain();
+        await reportProgress();
+        await new Promise((r) => setTimeout(r, 2_000));
+    }
+    throw new Error(`No XChain action recorded for ${txid} within ${Math.round(timeoutMs / 1000)}s`
+        + (lastError ? ` (last read: ${lastError.message})` : ''));
+}
+
+/**
  * Every status an action detail exposes, across both shapes the explorer
  * uses.
  *
@@ -981,7 +1089,7 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
  * on finding nothing rather than returning an empty list - a caller looping
  * over zero statuses asserts nothing and passes.
  */
-function actionStatuses(detail) {
+export function actionStatuses(detail) {
     const statuses = [];
     if (typeof detail.status === 'string') statuses.push(detail.status);
     for (const leg of Array.isArray(detail.sends) ? detail.sends : []) {
@@ -1193,7 +1301,7 @@ export async function priceFamilyRefusal() {
  *
  * The Mode B dispenser lane settles against a PRICE v1 feed published by a
  * specific address, and a PRICE v1 publish is inert for 24 hours
- * (`PriceAggregator.js`, `effective_at = block_time + 86400`, unconditional).
+ * (`oracle/price_aggregator/single_ingest.js`, `effective_at = block_time + 86400`, unconditional).
  * So the ten feeds those specs use were planted on 2026-07-30 and matured the
  * next day, and the 2026-08-24 re-genesis removed them. **A spec cannot
  * make itself a replacement inside a run**: the earliest a fresh publish could
@@ -1519,9 +1627,10 @@ export async function healVenueClock() {
  * timer turns every balance-dependent spec into an intermittent failure that
  * reads like a wallet bug.
  */
-export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_000) {
+export async function waitForTokenBalance(address, tick, min, timeoutMs = INDEX_WAIT_TIMEOUT_MS) {
     const deadline = Date.now() + timeoutMs;
     let last = null;
+    const reportProgress = createIndexWaitProgress(`${tick} balance for ${address}`);
     while (Date.now() < deadline) {
         try {
             // Same read as `tokenBalance`, and through the same guard: a poll
@@ -1538,6 +1647,7 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_00
         // which cost this campaign a whole coverage row: the symptom is a
         // balance that never arrives, and the cause is the code asking for it.
         await nudgeChain();
+        await reportProgress();
         await new Promise((r) => setTimeout(r, 1_500));
     }
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);

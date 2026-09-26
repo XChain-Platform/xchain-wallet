@@ -409,7 +409,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     {verb} broadcast. The network will credit the {isDeposit ? 'contract' : 'address'} shortly.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'N/A')}</dd>
                 </dl>
                 <div className={styles.actions}>

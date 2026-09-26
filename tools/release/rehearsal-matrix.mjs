@@ -104,6 +104,8 @@
 // the fence around the one substitution that would make all of this
 // pointless.
 
+import { readFileSync } from 'node:fs';
+
 /**
  * @typedef {Object} Lane
  * @property {string} id        stable identifier, used in records
@@ -349,6 +351,50 @@ export function lanesByOs() {
     return out;
 }
 
+/**
+ * The direct lanes a set of shipped-lanes.txt lanes distributes artifacts for.
+ *
+ * Matched by FORMAT, the test `rehearse.mjs assert` applies to a release
+ * directory, so publish.sh and the gate it runs answer "does this release
+ * ship a direct lane" by one rule. Throws on an unknown lane name or an
+ * empty set, so a caller cannot read "could not tell" as "none".
+ *
+ * @param {string} lanesText   the contents of shipped-lanes.txt
+ * @param {string[]} names     lane names, as a manifest's `# lanes:` header lists them
+ * @returns {DirectLane[]}
+ */
+export function directLanesForShipped(lanesText, names) {
+    if (!Array.isArray(names) || names.length === 0) throw new Error('no lane names given');
+    const globs = new Map();
+    for (const line of String(lanesText).split('\n')) {
+        const [lane, , , ...rest] = line.trim().split(/\s+/);
+        if (!lane || lane.startsWith('#')) continue;
+        globs.set(lane, rest.map((g) => g.toLowerCase()));
+    }
+    const wanted = [];
+    for (const name of names) {
+        if (!globs.has(name)) throw new Error(`'${name}' is not a lane declared in shipped-lanes.txt`);
+        wanted.push(...globs.get(name));
+    }
+    return DIRECT_LANES.filter(
+        (l) => wanted.some((g) => g.endsWith(`.${l.format.toLowerCase()}`)),
+    );
+}
+
+// Answer `--direct-lanes-for` for publish.sh: exit 0 some, 1 none, 2 cannot tell.
+function printDirectLanesFor(argv) {
+    const [file, ...names] = argv.slice(argv.indexOf('--direct-lanes-for') + 1);
+    let found;
+    try {
+        found = directLanesForShipped(readFileSync(file, 'utf8'), names);
+    } catch (err) {
+        process.stderr.write(`rehearsal-matrix.mjs: ${String(err?.message || err)}\n`);
+        return 2;
+    }
+    for (const lane of found) process.stdout.write(`${lane.id} ${lane.feed}\n`);
+    return found.length ? 0 : 1;
+}
+
 // A DATA MODULE IS STILL A FILE AN OPERATOR CAN RUN. This one sits
 // among ten executable tools in tools/release/, and `node rehearsal-matrix.mjs
 // --help` printed NOTHING and exited 0 - indistinguishable, to a person and to
@@ -365,6 +411,9 @@ smoked on (§2, §7.5, DD4).
 Usage:
   node tools/release/rehearsal-matrix.mjs           # print the lane table
   node tools/release/rehearsal-matrix.mjs --json    # the same as JSON
+  node tools/release/rehearsal-matrix.mjs --direct-lanes-for <shipped-lanes.txt> <lane>...
+      # the direct lanes those lanes ship artifacts for, one "<id> <feed>"
+      # per line; exits 0 if any, 1 if none, 2 if it cannot tell
   node tools/release/rehearsal-matrix.mjs --help
 
 A DATA MODULE, not a command. It runs nothing and changes nothing; it is
@@ -385,13 +434,16 @@ Two kinds of lane, and they are rehearsed by different probes:
                 user performs by hand.
 
 Exports: LANES, DIRECT_LANES, ALL_LANES, LINUX_FORMAT_UPDATE_SUPPORT,
-ALL_OS_TRIGGER_PATHS, laneById(id), isDirectLane(id), lanesByOs().
+ALL_OS_TRIGGER_PATHS, laneById(id), isDirectLane(id), lanesByOs(),
+directLanesForShipped(lanesText, names).
 `;
 
 if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
     const argv = process.argv.slice(2);
     if (argv.some((a) => a === '--help' || a === '-h')) {
         process.stdout.write(USAGE);
+    } else if (argv.includes('--direct-lanes-for')) {
+        process.exitCode = printDirectLanesFor(argv);
     } else if (argv.includes('--json')) {
         process.stdout.write(`${JSON.stringify(
             {

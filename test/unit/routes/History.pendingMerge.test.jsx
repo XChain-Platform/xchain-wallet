@@ -21,6 +21,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { livePendingTxs } from '../../../packages/core/src/flows/pendingTxFeed.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -28,7 +29,7 @@ const THEIRS = 'moV6MFm6cLkPXAhLKGRAGyPTPtFYPMYLW1';
 const PENDING_HASH = 'aa11bb22cc33dd44ee55ff6677889900aabbccddeeff00112233445566778899';
 const CONFIRMED_HASH = '99887766554433221100ffeeddccbbaa00998877665544332211ffeeddccbbaa';
 
-function mountHistory({ mempool = [], pendingTxs = [], history = [] } = {}) {
+function mountHistory({ mempool = [], pendingTxs = [], history = [], pendingRead = null } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ address: OURS }],
@@ -36,7 +37,7 @@ function mountHistory({ mempool = [], pendingTxs = [], history = [] } = {}) {
         getAddressHistory: vi.fn().mockResolvedValue(history),
         getLinksForAddress: vi.fn().mockResolvedValue([]),
         getAddressMempool: vi.fn().mockResolvedValue(mempool),
-        getPendingTxsForAddress: vi.fn().mockResolvedValue(pendingTxs),
+        getPendingTxsForAddress: vi.fn(pendingRead ?? (() => Promise.resolve(pendingTxs))),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
         getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
         getSettings: vi.fn().mockResolvedValue({}),
@@ -75,6 +76,42 @@ function confirmedRow(txHash, over = {}) {
         tx_hash: txHash,
         source: THEIRS,
         ...over,
+    };
+}
+
+function vaultWith(records) {
+    const store = new Map(records.map((record) => [record.id, record]));
+    return {
+        pendingTxs: {
+            delete: async (id) => store.delete(id),
+            list: async () => [...store.values()],
+        },
+    };
+}
+
+function staleConfirmedRecord() {
+    return {
+        id: 'stale-settled',
+        chain: 'LTC',
+        network: 'regtest',
+        fromAddress: OURS,
+        toAddress: THEIRS,
+        action: 'SEND',
+        actionSummary: 'Send 100 XCHAIN',
+        psbtHex: '',
+        txHex: null,
+        txid: CONFIRMED_HASH.toUpperCase(),
+        status: 'indexed',
+        createdAt: '2000-01-01T00:00:00.000Z',
+        broadcastAt: '2000-01-01T00:00:05.000Z',
+        confirmedAt: '2000-01-01T00:05:00.000Z',
+        rbfReplacement: null,
+        error: null,
+        tick: 'XCHAIN',
+        amount: '100',
+        mempoolSeenAt: null,
+        chainConfirmed: true,
+        confirmedBlockIndex: 5001,
     };
 }
 
@@ -208,5 +245,26 @@ describe('History shows unconfirmed transactions', () => {
         vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(2));
+    });
+});
+
+describe('History after confirmed PendingTx retention', () => {
+    it('renders the indexer record after the real pending read prunes its stale local record', async () => {
+        const vault = vaultWith([staleConfirmedRecord()]);
+        const chainRegistry = { get: () => ({ coin: 'LTC', networkKind: 'regtest' }) };
+        const { view } = mountHistory({
+            history: [confirmedRow(CONFIRMED_HASH)],
+            pendingRead: ({ chainId, address }) => livePendingTxs({
+                vault,
+                chainRegistry,
+                chainId,
+                address,
+            }),
+        });
+
+        await waitFor(() => expect(screen.getByText('Confirmed')).toBeTruthy());
+        expect(screen.queryByText('Pending')).toBeNull();
+        expect(view.container.textContent.match(/Send/g) || []).toHaveLength(1);
+        await waitFor(async () => expect(await vault.pendingTxs.list()).toHaveLength(0));
     });
 });

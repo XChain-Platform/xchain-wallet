@@ -168,7 +168,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
         // row renders as pending too. What only survives a NON-swap is the
         // pending METADATA, which a normalized explorer row does not carry, so
         // the state-specific headline is the distinguishing evidence.
-        expect(screen.getByText(/In the mempool, waiting for a block/i)).toBeTruthy();
+        expect(screen.getByText(/Held by the network, waiting for a block/i)).toBeTruthy();
         expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
     });
 

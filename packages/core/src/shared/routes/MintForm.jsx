@@ -46,6 +46,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -370,8 +371,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
             setFormError('Ticker is required.');
             return;
         }
-        if (!/^[A-Za-z0-9.]+$/.test(ticker.trim())) {
-            setFormError('Ticker must be A–Z, 0–9 (subtokens may include a period).');
+        const tickerError = tickerReferenceError(ticker);
+        if (tickerError) {
+            setFormError(tickerError);
             return;
         }
         const amt = String(amount).trim();

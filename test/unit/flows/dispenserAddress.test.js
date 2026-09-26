@@ -185,6 +185,64 @@ describe('dispenserAddress (§16)', () => {
         expect(rec.derivationPath).toBe("m/84'/0'/0'/0/1");
     });
 
+    it('reuses a gap left by an address that was never funded on-chain', async () => {
+        // Indices 0 and 2 are held; index 1 is a gap. An explorer with no
+        // history at all for the gap's address means it was never funded,
+        // so the next dispenser fills it instead of growing past index 2.
+        const seeded = [0, 2].map((i) => createAddress({
+            accountId: 'acct-a',
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: `m/84'/0'/0'/0/${i}`,
+            address: `seed_${i}`,
+            publicKey: `seedpub_${i}`,
+            role: 'dispenser',
+        }));
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: seeded });
+        const neverFundedSdkRegistry = {
+            get: () => ({ explorer: { getHistory: async () => [] } }),
+        };
+        const rec = await dispenserAddress(
+            base(vault, signer, { sdkRegistry: neverFundedSdkRegistry }),
+        );
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/1");
+    });
+
+    it('does not reuse a gap left by a previously-funded, now-deleted dispenser address', async () => {
+        // Same 0/2 gap shape, but the explorer reports history for the
+        // gap's address (index 1): it was funded once, so the deleted
+        // dispenser's index stays skipped and the next one takes index 3,
+        // the highest-index-plus-one behavior this flow otherwise replaced.
+        const seeded = [0, 2].map((i) => createAddress({
+            accountId: 'acct-a',
+            chain: 'bitcoin',
+            network: 'regtest',
+            source: 'hd',
+            addressType: 'p2wpkh',
+            derivationPath: `m/84'/0'/0'/0/${i}`,
+            address: `seed_${i}`,
+            publicKey: `seedpub_${i}`,
+            role: 'dispenser',
+        }));
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: seeded });
+        const fundedGapAddress = 'addr_0_0_1';
+        const fundedSdkRegistry = {
+            get: () => ({
+                explorer: {
+                    getHistory: async (address) => (
+                        address === fundedGapAddress ? [{ tx_hash: 'deadbeef' }] : []
+                    ),
+                },
+            }),
+        };
+        const rec = await dispenserAddress(
+            base(vault, signer, { sdkRegistry: fundedSdkRegistry }),
+        );
+        expect(rec.derivationPath).toBe("m/84'/0'/0'/0/3");
+    });
+
     it('persists the record so it is retrievable from the vault', async () => {
         const vault = makeVault({ accounts: [ACCOUNT_A] });
         const rec = await dispenserAddress(base(vault, signer));

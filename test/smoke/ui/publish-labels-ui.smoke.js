@@ -87,12 +87,17 @@ assert.ok(
     /host\.register\('wallet\.publishLabels'/.test(bg),
     'background host registers wallet.publishLabels',
 );
+const publishHandler = bg.slice(
+    bg.indexOf("host.register('wallet.publishLabels'"),
+    bg.indexOf("host.register('wallet.labelSyncStatus'"),
+);
 assert.ok(
-    /publishLabelsNow\s*\(\s*\{[^}]*walletId:\s*req\?\.walletId/.test(bg),
+    /const common = \{[\s\S]{0,160}?walletId:\s*req\?\.walletId/.test(publishHandler)
+        && /publishLabelsNow\(\{\s*\.\.\.common,/.test(publishHandler),
     'wallet.publishLabels handler forwards walletId',
 );
 assert.ok(
-    /chainId:\s*req\?\.chainId/.test(bg),
+    /publishLabelsNow\(\{[\s\S]{0,160}?chainId:\s*req\?\.chainId/.test(publishHandler),
     'wallet.publishLabels handler forwards chainId',
 );
 
@@ -153,7 +158,7 @@ assert.ok(
 assert.ok(
     /Encrypted size/.test(bs)
         && /Discovery name/.test(bs)
-        && /Txid/.test(bs),
+        && /Transaction ID/.test(bs),
     'PublishLabelsReport surfaces txid + size + discovery name',
 );
 

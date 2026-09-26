@@ -136,10 +136,14 @@ assert.ok(
 
 const background = readFileSync(join(extension, 'src', 'background.js'), 'utf8');
 assert.ok(
-    /attachWipeStorageListener\(\{\s*onWiped:\s*\(\)\s*=>\s*tearDownHost\(\)\s*\}\)/.test(background),
-    'background.js runs the wipe in the service worker and tears the host down after it',
+    /attachWipeStorageListener\(\{\s*beforeWipe:\s*\(\)\s*=>\s*sealBroadcastQueues\(\),\s*onWiped:\s*\(\)\s*=>\s*tearDownHost\(\),?\s*\}\)/.test(background),
+    'background.js seals the broadcast queue before the wipe and tears the host down after it',
+);
+assert.ok(
+    /host\.sealBroadcastQueue/.test(background) && /retireQueueSeal\(host\.sealBroadcastQueue\)/.test(background),
+    'background.js seals the live host and the hosts a lock tore down, not only the live one',
 );
 
 console.log(
-    `OK: wipe-hook conformance smoke (core still routes through xchainWalletBridge.wipeStorage; desktop preload, native mobile shell and the extension all publish one; ${checked.length} extension page entries install it (${checked.join(', ')}); the worker-side clear covers the vault, meta, throttle and the whole session store, is sender-gated, and tears the host down)`,
+    `OK: wipe-hook conformance smoke (core still routes through xchainWalletBridge.wipeStorage; desktop preload, native mobile shell and the extension all publish one; ${checked.length} extension page entries install it (${checked.join(', ')}); the worker-side clear covers the vault, meta, throttle and the whole session store, is sender-gated, seals the broadcast queue before the clear, and tears the host down)`,
 );

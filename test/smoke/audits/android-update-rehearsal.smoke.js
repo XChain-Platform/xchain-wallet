@@ -41,7 +41,9 @@ import {
     lanesInRelease,
     RECORD_VERSION,
 } from '../../../tools/release/rehearse.mjs';
-import { LANES, DIRECT_LANES, laneById, isDirectLane } from '../../../tools/release/rehearsal-matrix.mjs';
+import {
+    LANES, DIRECT_LANES, laneById, isDirectLane, directLanesForShipped,
+} from '../../../tools/release/rehearsal-matrix.mjs';
 import { UPDATE_FEED_URL, updateNoticeText } from '../../../packages/web/src/update/directUpdateCheck.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -538,6 +540,32 @@ function assertRecordAgainst(lane, over) {
         `the matrix says the feed is ${LANE.feed} and the client reads ${UPDATE_FEED_URL}`);
     assert.ok(UPDATE_FEED_URL.startsWith('https://downloads.xchain.io/'),
         'the direct feed is served from the downloads host and nowhere else');
+}
+
+{
+    // publish.sh asks which direct lanes a partial release's lanes ship for,
+    // and waives the rehearsal only on a clean "none". Read against the REAL
+    // lane list: android ships the APK whatever its feed column says.
+    const lanesFile = join(root, 'tools/release/shipped-lanes.txt');
+    const lanesText = readFileSync(lanesFile, 'utf8');
+    assert.deepEqual(directLanesForShipped(lanesText, ['android']).map((l) => l.id),
+        ['android-direct']);
+    assert.deepEqual(directLanesForShipped(lanesText, ['ios']), [],
+        'a store lane with no APK glob ships no direct lane');
+    assert.deepEqual(directLanesForShipped(lanesText, ['mac', 'linux']), []);
+    assert.throws(() => directLanesForShipped(lanesText, ['andriod']), /not a lane declared/,
+        'a mistyped lane is an error, never an empty answer');
+    assert.throws(() => directLanesForShipped(lanesText, []), /no lane names/);
+
+    const ask = (...args) => spawnSync(process.execPath,
+        [join(root, 'tools/release/rehearsal-matrix.mjs'), '--direct-lanes-for', ...args],
+        { encoding: 'utf8' });
+    const yes = ask(lanesFile, 'android');
+    assert.equal(yes.status, 0);
+    assert.equal(yes.stdout, `android-direct ${LANE.feed}\n`, 'the feed path publish.sh stages');
+    assert.equal(ask(lanesFile, 'ios').status, 1);
+    assert.equal(ask(lanesFile, 'andriod').status, 2, 'could not tell is its own exit, not "none"');
+    assert.equal(ask(join(work, 'no-such-lanes.txt'), 'ios').status, 2);
 }
 
 server.close();

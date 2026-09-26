@@ -99,14 +99,22 @@ assert.ok(/counterparty/i.test(src),
 
 assert.ok(/function SessionRequestRow\b/.test(src),
     'MessagingInbox defines SessionRequestRow for encrypted-session replies');
-assert.ok(/messaging\.sendHandshake\s*\(/.test(src),
-    'MessagingInbox reply calls messaging.sendHandshake');
-assert.ok(/version:\s*1/.test(src),
-    'MessagingInbox reply sends a format-1 (response) handshake');
+assert.ok(
+    /useOwnerActionLane\(\{[\s\S]*?software: 'sendHandshake',[\s\S]*?hardware: 'sendHandshakeHw',[\s\S]*?\}\)/.test(src),
+    'MessagingInbox sends handshake software and hardware signing through the owner confirm lane',
+);
+assert.ok(
+    /buildHandshakeActionData\(\{[\s\S]*?version:\s*1,[\s\S]*?lane\.run\(\{[\s\S]*?actionData/.test(src),
+    'MessagingInbox confirms a format-1 response handshake before signing',
+);
+assert.ok(
+    /if \(lane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.lane\.confirmProps\}/.test(src),
+    'MessagingInbox renders the shared dry-run confirmation screen for the reply',
+);
 assert.ok(/Share my key/.test(src),
     'MessagingInbox renders a "Share my key" reply action');
-assert.ok(/useSignerReady\b/.test(src),
-    'MessagingInbox uses signer-ready state to gate the inline password prompt');
+assert.ok(/<ActionConfirmScreen[\s\S]*?signerReady=\{signerReady\}/.test(src),
+    'MessagingInbox passes signer readiness to the confirmation screen');
 
 // --- 2c. Docked composer hands replies to the New-message form --------
 

@@ -17,20 +17,27 @@
 // Status derivation mirrors MyOrdersView: a single swap's
 // getAction(...).state.status does NOT promptly reflect a cancel, so
 // "cancelled" is read from the authoritative + immediate swap_cancels
-// table (getSwapCancelsForAddress) and "expired" from the swap's own
-// EXPIRATION vs wall clock. Unlike the order list, the swap list feed
-// (getSwapsForAddress) carries the indexer's lifecycle status inline as
-// `swap_status` on every row, so "settled" needs no separate detail read:
-// a 'complete' row is shown as Settled. Cancel/edit are offered only
-// while open.
+// table (getSwapCancelsForAddress). The list feed carries lifecycle inline
+// as `swap_status`, while action detail carries edited expiration. A failed
+// or older detail read falls back to the creation expiration. Cancel/edit
+// are offered only while open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
+import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useNativeFee } from '../hooks/useNativeFee.js';
+import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { boundListIndex } from '../../flows/accessListSlots.js';
+import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -58,16 +65,56 @@ const CLOSED_LABELS = Object.freeze({
     invalid: 'Invalid',
 });
 
+const STATE_READ_CONCURRENCY = 6;
+
+export function swapStateOf(detail) {
+    const state = detail?.state || detail?.data?.state;
+    if (!state || typeof state !== 'object') return null;
+    return { status: String(state.status || ''), expiration: state.expiration ?? null };
+}
+
+async function readSwapStates(messaging, candidates) {
+    const states = new Map();
+    if (typeof messaging?.getSwapDetail !== 'function') return states;
+    for (let i = 0; i < candidates.length; i += STATE_READ_CONCURRENCY) {
+        const slice = candidates.slice(i, i + STATE_READ_CONCURRENCY);
+        const details = await Promise.all(slice.map((item) => messaging.getSwapDetail({
+            chainId: item.chainId,
+            actionIndex: String(item.row.action_index),
+        }).catch(() => null)));
+        slice.forEach((item, index) => {
+            const state = swapStateOf(details[index]);
+            if (state) states.set(item.key, state);
+        });
+    }
+    return states;
+}
+
 export function deriveStatus(item, cancelledKeys, nowSec) {
     if (cancelledKeys.has(item.key)) return 'cancelled';
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
-    const swapStatus = String(item.row.swap_status || '').toLowerCase().trim();
+    const swapStatus = String(item.row.swap_status || item.live?.status || '').toLowerCase().trim();
     if (swapStatus === 'complete') return 'settled';
     if (swapStatus === 'cancelled') return 'cancelled';
     if (swapStatus === 'expired') return 'expired';
-    const exp = Number(item.row.expiration);
+    const exp = Number(item.live?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
+}
+
+// A cancel row only cancels its swap when the indexer marked the cancel
+// itself valid; an invalid SWAP cancel action leaves the swap open.
+export function collectCancelledKeys(results) {
+    const keys = new Set();
+    for (const r of results) {
+        for (const c of r.cancels) {
+            if (String(c.status || 'valid') !== 'valid') continue;
+            if (String(c.source) === r.p.owner.address) {
+                keys.add(`${r.p.chainId}:${c.swap_action_index}`);
+            }
+        }
+    }
+    return keys;
 }
 
 function fmtDate(unixSec) {
@@ -120,14 +167,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     : Promise.resolve(null)),
             ]).then(([s, c]) => ({ p, swaps: extractRows(s), cancels: extractRows(c) }))));
 
-            const cancelledKeys = new Set();
-            for (const r of results) {
-                for (const c of r.cancels) {
-                    if (String(c.source) === r.p.owner.address) {
-                        cancelledKeys.add(`${r.p.chainId}:${c.swap_action_index}`);
-                    }
-                }
-            }
+            const cancelledKeys = collectCancelledKeys(results);
             const seen = new Set();
             const all = [];
             for (const r of results) {
@@ -140,7 +180,10 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 }
             }
             all.sort((a, b) => Number(b.row.action_index || 0) - Number(a.row.action_index || 0));
-            setItems(all.map((it) => ({ ...it, cancelledKeys })));
+            const candidates = all.filter((it) => !cancelledKeys.has(it.key)
+                && String(it.row.status || 'valid') === 'valid');
+            const states = await readSwapStates(messaging, candidates);
+            setItems(all.map((it) => ({ ...it, cancelledKeys, live: states.get(it.key) || null })));
             setLoadError(null);
         } catch (err) {
             setLoadError(err?.message || 'Failed to load swaps.');
@@ -198,7 +241,9 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
-        const expText = fmtDate(it.row.expiration);
+        const expText = fmtDate(it.live?.expiration ?? it.row.expiration);
+        const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
+        const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
         const chip = status === 'open'
             ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
             : <span className={`${L.chip} ${L.chipExpired}`}>{CLOSED_LABELS[status] || 'Invalid'}</span>;
@@ -215,6 +260,9 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                         {' · '}<AddressText address={it.owner.address} />
                     </div>
                     {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
+                    <div className={L.rowDetail}>
+                        Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
+                    </div>
                 </div>
                 <div className={L.rowActions}>
                     <Button
@@ -263,26 +311,30 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
 
 /**
  * Cancel (SWAP v1) or Edit (SWAP v2) an open swap, signed from its owner
- * address through the shared swapAction flow (VERSION picks the op).
+ * address through the shared swapAction flow (VERSION picks the op). The
+ * form is the input step; signing happens on the shared confirm page with
+ * its network pre-flight, or, in watcher mode, the form builds an unsigned
+ * transaction.
  */
 function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
     const { chainId, owner, row } = item;
     const descriptor = chainRegistry.get(chainId);
-    const hw = isHwSource(owner);
-    const from = {
-        address: owner.address,
-        publicKey: owner.publicKey,
-        derivationPath: owner.derivationPath,
-        addressId: owner.id,
-        source: owner.source,
-        signerId: owner.signerId,
-    };
+    const isCancel = type === 'cancel';
+    const currentAllowList = boundListIndex(row.allow_list ?? row.allowList);
+    const currentBlockList = boundListIndex(row.block_list ?? row.blockList);
+    const canRemoveList = isListEditRemoveActive({ chainId });
+    const signerReady = useSignerReady(walletId);
+    const lane = useOwnerActionLane({
+        messaging, walletId, chainId, owner, software: 'swapAction', hardware: 'swapActionHw',
+    });
+    // Off Bitcoin any protocol fee these owe is a native-coin output the
+    // transaction must carry; the flag is unset on Bitcoin.
+    const nativeFee = useNativeFee(chainId);
 
-    const [password, setPassword] = useState('');
-    const [hwStatus, setHwStatus] = useState('idle');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [done, setDone] = useState(false);
+    const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const done = result !== null;
 
     const [expInput, setExpInput] = useState('');
     const [allowListIdx, setAllowListIdx] = useState('');
@@ -305,9 +357,7 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
 
     async function submit(event) {
         event.preventDefault();
-        if (submitting) return;
-        if (!hw && password.length === 0) return;
-        if (hw && hwStatus !== 'available') return;
+        if (submitting || lane.composing) return;
         if (type === 'edit') {
             if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
             if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
@@ -317,22 +367,29 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
         setSubmitting(true);
         setError(null);
         const idx = String(row.action_index);
-        const params = type === 'cancel'
+        const params = isCancel
             ? { VERSION: '1', SWAP_ACTION_INDEX: idx }
             : { VERSION: '2', SWAP_ACTION_INDEX: idx, ...editParams };
-        const base = { walletId, chainId, from, params };
         try {
-            if (hw) await messaging.swapActionHw({ ...base, signerId: owner.signerId });
-            else await messaging.swapAction({ ...base, password });
-            setDone(true);
+            const res = await lane.run({
+                actionData: { action: 'SWAP', params },
+                encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
+                submitExtra: { params },
+            });
+            setResult(res || {});
         } catch (err) {
-            const bad = err?.name === 'InvalidPasswordError';
-            setError(bad ? 'Incorrect password.' : (err?.message || `${type === 'cancel' ? 'Cancel' : 'Edit'} failed.`));
+            if (!isUserRejection(err)) {
+                setError(err?.name === 'InvalidPasswordError' ? 'Incorrect password.' : submitFailureMessage(err, {
+                    chainId,
+                    mandatory: nativeFee.mandatory,
+                    fallback: err?.message || `${isCancel ? 'Cancel' : 'Edit'} failed.`,
+                }));
+            }
+        } finally {
             setSubmitting(false);
         }
     }
 
-    const isCancel = type === 'cancel';
     const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel swap' : 'Edit swap'} />;
     const isFull = variant === 'full';
     const wrap = (children) => (
@@ -359,7 +416,24 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
         );
     }
 
+    if (lane.open) {
+        return (
+            <ActionConfirmScreen
+                {...lane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                signerReady={signerReady}
+                hintClassName={F.hint}
+            />
+        );
+    }
+
     if (done) {
+        // Signed but not broadcast yet: nothing changed on chain, so no success copy.
+        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what={isCancel ? 'swap cancel' : 'swap edit'} />);
+        if (result.psbtHex && !(result.txid || result.broadcast?.txid)) {
+            return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
+        }
         return wrap(
             <>
                 <h2 className={F.successTitle}>{isCancel ? 'Cancel broadcast' : 'Edit broadcast'}</h2>
@@ -402,40 +476,41 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                     <p className={F.successLabel}>Access lists (optional)</p>
                     <div className={F.actions}>
                         <Button variant="secondary" size="sm" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list'}
+                            {allowListIdx === '0' ? 'Remove allow list' : (allowListIdx ? `Allow-list #${allowListIdx}` : 'Set allow-list')}
                         </Button>
                         <Button variant="secondary" size="sm" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list'}
+                            {blockListIdx === '0' ? 'Remove block list' : (blockListIdx ? `Block-list #${blockListIdx}` : 'Set block-list')}
                         </Button>
+                        {canRemoveList && currentAllowList && allowListIdx !== '0' ? (
+                            <Button type="button" variant="secondary" size="sm" onClick={() => setAllowListIdx('0')}>Remove allow list</Button>
+                        ) : null}
+                        {canRemoveList && currentBlockList && blockListIdx !== '0' ? (
+                            <Button type="button" variant="secondary" size="sm" onClick={() => setBlockListIdx('0')}>Remove block list</Button>
+                        ) : null}
                     </div>
                     <p className={F.hint}>
-                        A blank field is left unchanged. A bound list can be replaced but not removed
-                        (point it at an empty list to lift a restriction).
+                        Current: allow list {currentAllowList ? `#${currentAllowList}` : 'none'};
+                        {' '}block list {currentBlockList ? `#${currentBlockList}` : 'none'}. A blank choice is left unchanged.
                     </p>
                 </>
             )}
 
-            <SignCredentials
-                unlocked={false}
-                fromAddress={from}
-                chainId={chainId}
-                password={password}
-                onPasswordChange={(v) => { setPassword(v); if (error) setError(null); }}
-                onStatusChange={setHwStatus}
-                submitError={error}
-                disabled={submitting}
-                getSignerStatus={messaging.getSignerStatus}
-            />
-            {error && hw ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
+            {lane.isWatcherMode ? (
+                <p className={F.hint}>
+                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                </p>
+            ) : null}
+            {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
 
             <div className={F.actions}>
                 <Button
                     type="submit"
                     variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting}
-                    disabled={hw ? hwStatus !== 'available' : (password.length === 0 || (type === 'edit' && !editHasChange))}
+                    loading={submitting || lane.composing}
+                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
                 >
-                    {hw ? `Sign on ${owner.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (isCancel ? 'Sign cancel' : 'Sign edit')}
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Edit swap')}
                 </Button>
             </div>
         </form>,

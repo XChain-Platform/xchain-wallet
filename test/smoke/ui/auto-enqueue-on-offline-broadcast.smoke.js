@@ -19,12 +19,13 @@
 //      onBroadcastFailure callback.
 //   3. createBackgroundHost ships a `pushQueueEntry` helper, registers
 //      a `broadcast.queue.enqueue` route, and threads onBroadcastFailure
-//      through action.send + every registerHwHandler invocation.
+//      through every signing action route, software and hardware, and
+//      every flow forwards it to submitAction.
 //   4. All three messaging shims export `enqueueBroadcastRequest`
 //      hitting the new route.
 
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -96,13 +97,31 @@ assert.ok(
     'submitAction still flips PendingTx to failed for non-broadcast errors',
 );
 
-// --- 3. sendToken passes onBroadcastFailure through ----------------------
+// --- 3. Every flow passes onBroadcastFailure through ---------------------
 
-const sendAssetSrc = readFileSync(join(core, 'src', 'flows', 'sendToken.js'), 'utf8');
-assert.ok(
-    /onBroadcastFailure: opts\.onBroadcastFailure/.test(sendAssetSrc),
-    'sendToken threads onBroadcastFailure into submitAction',
-);
+// Every submitAction call site forwards the hook, so a failed broadcast on
+// any action lands on the queue the confirm modal tells the user it is on.
+// A file listed here is exempt on purpose and says why.
+const FORWARD_EXEMPT = new Map([
+    ['labelSync.js', 'label publish stamps no PendingTx and has no queued-result surface'],
+]);
+const flowsDir = join(core, 'src', 'flows');
+const submitterNames = new Set();
+let forwardingFiles = 0;
+for (const file of readdirSync(flowsDir).filter((f) => f.endsWith('.js') && f !== 'submitAction.js')) {
+    const src = readFileSync(join(flowsDir, file), 'utf8');
+    const calls = (src.match(/\bsubmitAction\(\{/g) || []).length;
+    if (calls === 0) continue;
+    for (const m of src.matchAll(/export async function (\w+)/g)) submitterNames.add(m[1]);
+    if (FORWARD_EXEMPT.has(file)) continue;
+    const forwards = (src.match(/onBroadcastFailure: opts\.onBroadcastFailure,/g) || []).length;
+    assert.equal(forwards, calls, `${file} forwards onBroadcastFailure from each of its ${calls} submitAction call(s)`);
+    forwardingFiles += 1;
+}
+assert.ok(forwardingFiles >= 30, `the forward check reached ${forwardingFiles} flow files`);
+for (const file of FORWARD_EXEMPT.keys()) {
+    assert.ok(existsSync(join(flowsDir, file)), `exempt flow ${file} still exists`);
+}
 
 // --- 4. createBackgroundHost wires the queue + auto-enqueue --------------
 
@@ -115,16 +134,31 @@ assert.ok(
     /host\.register\('broadcast\.queue\.enqueue'/.test(bg),
     'createBackgroundHost registers broadcast.queue.enqueue',
 );
-// action.send wires onBroadcastFailure that calls pushQueueEntry.
+// One hook builder feeds every signing route, and it pushes onto the queue.
 assert.ok(
-    /host\.register\('action\.send'[\s\S]+?onBroadcastFailure[\s\S]+?pushQueueEntry\(walletId, entry\)/.test(bg),
-    'action.send wires onBroadcastFailure → pushQueueEntry',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(bg),
+    'enqueueOnBroadcastFailure builds a hook that pushes onto the queue',
+);
+assert.ok(
+    /host\.register\('action\.send'[^\n]*\n(?:(?!host\.register)[\s\S])*?onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)/.test(bg),
+    'action.send wires onBroadcastFailure through enqueueOnBroadcastFailure',
 );
 // Every registerHwHandler invocation gets the same wiring.
 assert.ok(
-    /function registerHwHandler\([\s\S]+?onBroadcastFailure[\s\S]+?pushQueueEntry\(walletId, entry\)[\s\S]+?return flow\(\{[^}]*onBroadcastFailure[^}]*\}\)/.test(bg),
+    /function registerHwHandler\([\s\S]+?const onBroadcastFailure = enqueueOnBroadcastFailure\(req\?\.walletId\);[\s\S]+?return flow\(\{[^}]*onBroadcastFailure[^}]*\}\)/.test(bg),
     'registerHwHandler injects onBroadcastFailure into the flow call',
 );
+// Every software-signer route that runs a submitting flow wires it too.
+let softwareRoutes = 0;
+for (const m of bg.matchAll(/return (\w+)\(\{ \.\.\.req, signer: await sessionSigner\(req, vault, signerPool\)[^\n]*/g)) {
+    if (!submitterNames.has(m[1])) continue;
+    assert.ok(
+        m[0].includes('onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId)'),
+        `the ${m[1]} route wires onBroadcastFailure`,
+    );
+    softwareRoutes += 1;
+}
+assert.ok(softwareRoutes >= 40, `the route check reached ${softwareRoutes} software-signer routes`);
 
 // --- 5. Messaging shims expose enqueueBroadcastRequest -------------------
 

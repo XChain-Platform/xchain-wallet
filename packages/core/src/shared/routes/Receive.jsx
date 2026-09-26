@@ -38,6 +38,7 @@ import {
     countNonCommaBefore,
     indexAfterNonCommaCount,
 } from '../utils/amountFormat.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -137,14 +138,26 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         let cancelled = false;
         (async () => {
             try {
-                const byChain = await messaging.getAddressesByChain(walletId, accountId);
+                const [byChain, chainSettings] = await Promise.all([
+                    messaging.getAddressesByChain(walletId, accountId),
+                    typeof messaging.getSettings === 'function'
+                        ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                        : Promise.resolve(null),
+                ]);
                 if (cancelled) return;
                 setChainsByWallet(byChain);
-                const firstChain = Object.keys(byChain || {})[0];
-                if (firstChain) {
-                    // Preserve a chainId set by ReceivePicker prefill so
-                    // the user lands on the chain they actually picked.
-                    setActiveChainId((prev) => prev || firstChain);
+                if (Object.keys(byChain || {}).length > 0) {
+                    // `byChain` is in address-creation order, so opening on
+                    // its first key opened Receive on the wallet's OLDEST
+                    // chain forever whenever ReceivePicker sent no prefill.
+                    // Prefer the last-used chain instead, behind a chainId
+                    // set by ReceivePicker's prefill (or a chain the user
+                    // already picked here), and ahead of the first-key
+                    // fallback, exactly as Send does.
+                    setActiveChainId((prev) => pickDefaultChainId(byChain, {
+                        explicitChainId: prev,
+                        settings: chainSettings,
+                    }));
                     setNoAddresses(false);
                 } else {
                     setNoAddresses(true);

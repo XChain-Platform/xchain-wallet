@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { divideDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -361,7 +361,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // and are only reachable after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress || !chainId) return;
+        if (!fromAddress || !chainId) {
+            setFormError('Pick a source address first.');
+            return;
+        }
         if (validationError || expError) return;
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
@@ -539,9 +542,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         <DetailRow
                             label="Price"
                             value={
-                                Number(giveAmount) > 0 && Number(getAmount) > 0
+                                divideDecimalStrings(getAmount, giveAmount, 8) !== null
                                     ? `1 ${giveTick.trim().toUpperCase()} = ${
-                                        (Number(getAmount) / Number(giveAmount)).toFixed(8).replace(/\.?0+$/, '')
+                                        divideDecimalStrings(getAmount, giveAmount, 8)
                                     } ${getTick.trim().toUpperCase()}`
                                     : 'n/a'
                             }
@@ -895,14 +898,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!!validationError || !!expError
-                        || !fromAddress
-                        || !giveTick || !getTick
-                        || (!giveOwnership && !giveAmount)
-                        || (!getOwnership && !getAmount)
-                        || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Swap' : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? 'Swap' : 'Review')}
                 </Button>
             </div>
         </form>,

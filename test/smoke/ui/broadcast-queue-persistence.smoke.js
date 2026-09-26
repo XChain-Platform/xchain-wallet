@@ -159,12 +159,29 @@ assert.ok(
 {
     // The transient path must NOT splice: a still-valid signed tx that hit a
     // dead node has to remain retryable, and losing it loses its fee.
+    //
+    // Exactly two branches of the catch remove an entry, and each removes it
+    // because the bytes are settled rather than retryable: a PERMANENT
+    // rejection, whose inputs are gone so nothing can confirm; and a resumed
+    // claim the node answers as already known, which means those exact bytes
+    // reached it and the record is delivered. Everything else stays queued.
     const catchBlock = broadcastBlock.slice(
         broadcastBlock.indexOf('} catch (err)'),
         broadcastBlock.indexOf('throw err;'),
     );
     const splices = (catchBlock.match(/q\.splice/g) || []).length;
-    assert.equal(splices, 1, 'only the permanent branch removes the entry');
+    assert.equal(splices, 2,
+        'only the permanent branch and the already-on-network resumed claim remove the entry');
+    assert.ok(
+        /if \(entry\.resumedClaim === true && saysAlreadyOnNetwork\(failure\)\) \{/.test(catchBlock),
+        'the second removal is guarded on a resumed claim the node already knows',
+    );
+    // A resumed claim settles as delivered, never as failed: recording a landed
+    // transaction as failed is what invites the re-compose that can spend twice.
+    assert.ok(
+        /alreadyOnNetwork: true/.test(catchBlock) && /status: 'broadcast'/.test(catchBlock),
+        'the resumed-claim branch settles the record as broadcast and says so to the caller',
+    );
 }
 
 const discardBlock = sliceRouteBody(bg, 'broadcast.queue.discard');
@@ -185,12 +202,12 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /onBroadcastFailure: walletId\s*\?\s*async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \}/.test(bg),
-    'action.send onBroadcastFailure awaits ensureQueueLoaded before pushing',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(bg),
+    'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing',
 );
 assert.ok(
-    /const onBroadcastFailure = walletId\s*\?\s*async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \}/.test(bg),
-    'registerHwHandler injects an ensureQueueLoaded-awaiting onBroadcastFailure',
+    !/async \(entry\) => \{ pushQueueEntry\(/.test(bg),
+    'no route builds its own hook that skips the rehydrate',
 );
 
 // --- 6. Eager load at construction -------------------------------------

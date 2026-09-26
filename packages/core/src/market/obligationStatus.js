@@ -29,7 +29,7 @@ export const AT_RISK_SECONDS = 30 * 60;
  *   - 'open'    payable; `secondsLeft` > AT_RISK_SECONDS (or null when
  *               the row carries no usable expiration: no countdown is
  *               shown, but payment stays allowed, matching the
- *               pre-PC-15 CoinpayForm behavior for such rows).
+ *               earlier CoinpayForm behavior for such rows).
  *   - 'at-risk' payable, but the deadline is close; act now.
  *   - 'expired' wall-clock deadline passed. Paying now risks a
  *               confirm-after-expiry, which burns the coin with no

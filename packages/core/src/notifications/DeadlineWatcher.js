@@ -329,9 +329,12 @@ export class DeadlineWatcher {
                     this._log.warn(`DeadlineWatcher: ${lane.method} failed`, e);
                     continue;
                 }
-                for (const row of normalizeRows(raw)) {
+                for (const listedRow of normalizeRows(raw)) {
+                    const row = lane.kind === 'dispenser'
+                        ? await hydrateDispenserDeadline(sdk, listedRow)
+                        : listedRow;
                     if (!isOpenRow(row)) continue;
-                    const expiration = toNumber(row.expiration);
+                    const expiration = toNumber(row.state?.expiration ?? row.expiration);
                     // 0 / absent means "never expires" in every one of these
                     // three actions, so it is not a deadline at all.
                     if (!Number.isFinite(expiration) || expiration <= 0) continue;
@@ -457,9 +460,26 @@ function isOpenRow(row) {
     if (!row) return false;
     // `status` is the action's validity; `*_status` is the lifecycle state.
     if (row.status != null && String(row.status) !== 'valid') return false;
-    const lifecycle = row.order_status ?? row.swap_status ?? row.dispenser_status ?? null;
+    const lifecycle = row.state?.status ?? row.current_status
+        ?? row.order_status ?? row.swap_status ?? row.dispenser_status ?? null;
     if (lifecycle != null && String(lifecycle) !== 'open') return false;
     return true;
+}
+
+/** Read the live dispenser expiration and status from action detail. */
+async function hydrateDispenserDeadline(sdk, row) {
+    const actionIndex = row?.action_index;
+    if (actionIndex == null || typeof sdk?.getAction !== 'function') return row;
+    try {
+        const response = await sdk.getAction(String(actionIndex));
+        const detail = response?.data && typeof response.data === 'object'
+            ? response.data
+            : response;
+        if (!detail || typeof detail !== 'object') return row;
+        return { ...row, ...detail, state: detail.state || row.state };
+    } catch {
+        return row;
+    }
 }
 
 function dedupeByKey(rows) {

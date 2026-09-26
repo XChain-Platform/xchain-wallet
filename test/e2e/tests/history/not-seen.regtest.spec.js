@@ -69,9 +69,7 @@ import {
     mempoolRowFor,
     pendingRowFor,
     pickAssetByChainAndTick,
-    PINNED_SDK,
     readOwnAddress,
-    SDK_HAS_UNCONFIRMED,
     searchForTx,
 } from '../../fixtures/pendingHistory.js';
 import {
@@ -117,7 +115,7 @@ async function reloadToHome(page) {
 test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     // Fund + mint (mined), then a 180s window held deliberately still, then a
     // decoder poll (60s) and a confirmation. The long pole is the window.
-    test.setTimeout(900_000);
+    test.setTimeout(1_800_000);
     test.use({ actionTimeout: 30_000 });
 
     // The most important lines in the file: a frozen decoder or a parked
@@ -129,13 +127,6 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
     });
 
     test('shows the "not seen by network" warning, distinct from healthy pending, and clears it once the network catches up', async ({ page }) => {
-        // Without the network half of the merge this row can never be `seen`,
-        // so CLAIM 4 would be red for a reason that is not the wallet's (rows
-        // 26/27). Skip by name rather than fail deep in the recovery.
-        test.skip(!SDK_HAS_UNCONFIRMED, `the web shell pins xchain-sdk@${PINNED_SDK}, which has no `
-            + 'getUnconfirmed; the row could never leave "awaiting network" on its own and the '
-            + 'not-seen state would be reached for the wrong reason.');
-
         let own;
         let sendTxid;
         let heldBlocks;

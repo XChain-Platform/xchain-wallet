@@ -30,11 +30,11 @@
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
         "undici": "^8.9.0",
-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.18.0"
+        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.20.0"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",
-        "electron": "^43.3.0",
+        "electron": "^44.4.5",
         "electron-builder": "^26.15.7",
         "electron-builder-squirrel-windows": "^26.15.7",
         "vite": "^6.4.3",

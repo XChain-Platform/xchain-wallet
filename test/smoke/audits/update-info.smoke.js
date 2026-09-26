@@ -27,8 +27,10 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 
-import { classify, isUpdateInfoContent, parseFlatYaml, readBundledFeedConfigs, readPublishConfig }
-    from '../../../tools/release/update-info.mjs';
+import {
+    classify, isUpdateInfoContent, parseFlatYaml, pointerNameFor, readBundledFeedConfigs, readPublishConfig,
+} from '../../../tools/release/update-info.mjs';
+import { channelPointerName } from '../../../packages/desktop/main/updateVerify.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -94,6 +96,50 @@ const EXPECTED_POINTERS = [
         'desktop publishes on channel `stable` (the §7.1 pointer names assume it)');
     assert.ok(/const PROD_FEED_URL = 'https:\/\/downloads\.xchain\.io\/wallet\/desktop\/';/.test(cfg),
         'desktop publishes to the downloads.xchain.io feed');
+}
+
+// ------------------------------------------ one rule, two spellings
+
+// The producer names pointers with `pointerNameFor` (update-info.mjs) and the
+// installed client fetches with `channelPointerName` (updateVerify.js, bundled
+// into the Electron main process, so it cannot import the release tooling).
+// A one-sided edit makes the client ask for a file nothing publishes, which is
+// the silent no-update failure above, so both are driven over one table. The
+// armv7l row is the one where they agree by different routes: the producer
+// maps builder's `armv7l` to `arm`, the client reads Node's `arm` as is.
+{
+    const rows = [
+        // [builder os, builder arch, node platform, node arch, pointer suffix]
+        ['win32', 'x64', 'win32', 'x64', '.yml'],
+        ['darwin', 'x64', 'darwin', 'x64', '-mac.yml'],
+        ['darwin', 'arm64', 'darwin', 'arm64', '-mac.yml'],
+        ['linux', 'x64', 'linux', 'x64', '-linux.yml'],
+        ['linux', 'arm64', 'linux', 'arm64', '-linux-arm64.yml'],
+        ['linux', 'armv7l', 'linux', 'arm', '-linux-arm.yml'],
+    ];
+    for (const channel of ['stable', 'staging']) {
+        for (const [os, builderArch, platform, nodeArch, suffix] of rows) {
+            const want = `${channel}${suffix}`;
+            const row = `${channel} ${os}/${builderArch}`;
+            assert.equal(pointerNameFor({ channel, os, arch: builderArch }), want,
+                `producer pointerNameFor drifted on ${row}`);
+            assert.equal(channelPointerName({ channel, platform, arch: nodeArch }), want,
+                `consumer channelPointerName drifted on ${row}`);
+        }
+    }
+
+    // The shipped lanes name exactly the pointer set the classifier expects.
+    const shipped = [
+        { os: 'win32', arch: 'x64' },
+        { os: 'darwin', arch: 'x64' },
+        { os: 'linux', arch: 'x64' },
+        { os: 'linux', arch: 'arm64' },
+    ];
+    assert.deepEqual(shipped.map((l) => pointerNameFor({ channel: 'stable', ...l })).sort(),
+        EXPECTED_POINTERS.slice().sort(), 'producer names the four shipped pointers');
+    assert.deepEqual(
+        shipped.map((l) => channelPointerName({ channel: 'stable', platform: l.os, arch: l.arch })).sort(),
+        EXPECTED_POINTERS.slice().sort(), 'consumer fetches the four shipped pointers');
 }
 
 // Nothing in the release path may go back to globbing for `latest`.

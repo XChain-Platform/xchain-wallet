@@ -12,8 +12,8 @@
 // security-critical surface: the BATCH must bind the published
 // ciphertext to sha256(K) via KEY_HASH, carry the self-addressed
 // ECIES handoff in the SAME transaction, and K must be durably in the
-// vault BEFORE anything can broadcast (an HW issuer can never recover
-// K from the on-chain envelope).
+// vault after a successful broadcast (an HW issuer can never recover K
+// from the on-chain envelope).
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -23,15 +23,22 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
 vi.mock('../../../packages/core/src/flows/buildActionPsbt.js', () => ({
     buildActionPsbt: vi.fn(async () => ({ psbtHex: 'deadbeef', encoding: 'p2wsh' })),
 }));
+vi.mock('../../../packages/core/src/flows/composeActionForConfirm.js', () => ({
+    composeActionForConfirm: vi.fn(async () => ({
+        psbt: 'confirm-psbt', encoding: 'P2WSH', actionString: 'BATCH|0|...', version: '0',
+    })),
+}));
 
 import {
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
 } from '../../../packages/core/src/flows/gatedPublishAction.js';
 import { maxGatedPlaintextBytes, gatedBatchActionString } from '../../../packages/core/src/flows/fileSizeLimits.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { buildActionPsbt } from '../../../packages/core/src/flows/buildActionPsbt.js';
+import { composeActionForConfirm } from '../../../packages/core/src/flows/composeActionForConfirm.js';
 
 // --- Deterministic fake SDK crypto -----------------------------------
 // Real shapes (Buffer in/out, hex hashes) with predictable contents so
@@ -89,6 +96,7 @@ function makeOpts(overrides = {}) {
 beforeEach(() => {
     vi.mocked(submitAction).mockClear();
     vi.mocked(buildActionPsbt).mockClear();
+    vi.mocked(composeActionForConfirm).mockClear();
 });
 
 describe('gatedPublishAction validation', () => {
@@ -129,6 +137,31 @@ describe('gatedPublishAction validation', () => {
 });
 
 describe('gatedPublishAction composition', () => {
+    it('composes once for confirmation and signs those prepared bytes', async () => {
+        const sdk = makeSdk();
+        const vault = makeVault();
+        const opts = makeOpts({ sdk, vault });
+        const composed = await composeGatedPublishForConfirm({ ...opts, ownAddresses: [opts.from.address] });
+
+        expect(composed.psbt).toBe('confirm-psbt');
+        expect(composed.gatedPublish.keyHash).toBe(FIXED_KEY_HASH);
+        expect(vault.gatedKeys.put).not.toHaveBeenCalled();
+        const prepared = composed.gatedPublish;
+        await gatedPublishAction({
+            ...opts,
+            prebuiltPsbt: { psbtHex: composed.psbt, encoding: composed.encoding },
+            prebuiltActionData: prepared.actionData,
+            prebuiltKeyHash: prepared.keyHash,
+            prebuiltCiphertextLength: prepared.ciphertextLength,
+        });
+
+        expect(sdk.gatedFile.generateKey).toHaveBeenCalledOnce();
+        expect(vault.gatedKeys.put).toHaveBeenCalledOnce();
+        const submit = vi.mocked(submitAction).mock.calls[0][0];
+        expect(submit.prebuiltPsbt.psbtHex).toBe('confirm-psbt');
+        expect(submit.actionData).toEqual(prepared.actionData);
+    });
+
     it('composes BATCH(FILE gated fields, MESSAGE v2 to self) with ciphertext as rawData', async () => {
         const opts = makeOpts();
         const result = await gatedPublishAction(opts);
@@ -181,7 +214,7 @@ describe('gatedPublishAction composition', () => {
         expect(pubkey).toBe('02'.padEnd(66, 'ab'));
     });
 
-    it('persists K to the vault BEFORE submitAction runs', async () => {
+    it('persists K to the vault after submitAction succeeds', async () => {
         const vault = makeVault();
         const order = [];
         vault.gatedKeys.put.mockImplementation(async (record) => {
@@ -193,7 +226,7 @@ describe('gatedPublishAction composition', () => {
             return { txid: 't' };
         });
         await gatedPublishAction(makeOpts({ vault }));
-        expect(order).toEqual(['vault-put', 'submit']);
+        expect(order).toEqual(['submit', 'vault-put']);
 
         const [record] = [...vault.store.values()];
         expect(record).toMatchObject({
@@ -242,6 +275,51 @@ describe('gatedPublishAction composition', () => {
         await expect(gatedPublishAction(makeOpts({ sdk, vault, existingKeyHash: FIXED_KEY_HASH })))
             .rejects.toThrow(/fails its hash check/);
         expect(vi.mocked(submitAction)).not.toHaveBeenCalled();
+    });
+});
+
+// --- Issue #37: the encoder refuses to build without a change address ---
+// fee_settlement.js throws CHANGE_ADDRESS_REQUIRED as soon as the leftover
+// clears dust and no `change` was supplied; it will not silently burn it as
+// fee. So a funded address with one large UTXO fails every time, which is
+// what made Encrypted & token-gated publishing unusable from both signer
+// kinds while the public lane worked.
+//
+// The public FILE lane never hit this because its confirm lane injects the
+// pair. BATCH is fee-quote denied by design, so the gated form has no confirm
+// lane and always builds live here, which is why this flow has to supply them
+// itself. `change` is set to the spender so submitAction can then rotate the
+// self-change default onto a fresh internal address.
+describe('gated publish funding (issue #37)', () => {
+    it('selects funding by address and returns change to the spender', async () => {
+        const opts = makeOpts();
+        await gatedPublishAction(opts);
+
+        const { encoderOpts } = vi.mocked(submitAction).mock.calls[0][0];
+        expect(encoderOpts.sourceAddress).toBe(opts.from.address);
+        expect(encoderOpts.change).toBe(opts.from.address);
+    });
+
+    it('still carries the ciphertext and pubkey alongside the funding pair', async () => {
+        // Guards the shape of the fix rather than only its presence: adding
+        // the pair must not displace what the encoder already needed.
+        const opts = makeOpts();
+        await gatedPublishAction(opts);
+
+        const { encoderOpts } = vi.mocked(submitAction).mock.calls[0][0];
+        expect(encoderOpts.pubkey).toBe(opts.from.publicKey);
+        expect(typeof encoderOpts.rawData).toBe('string');
+        expect(encoderOpts.rawData.length).toBeGreaterThan(0);
+    });
+
+    it('supplies the pair on the watcher path too', async () => {
+        // buildGatedPublishPsbtRequest shares prepareGatedPublish, so the
+        // encode-only lane must carry the same funding instructions.
+        await buildGatedPublishPsbtRequest(makeOpts());
+        const call = vi.mocked(buildActionPsbt).mock.calls[0][0];
+        const opts = makeOpts();
+        expect(call.encoderOpts?.sourceAddress ?? call.sourceAddress).toBe(opts.from.address);
+        expect(call.encoderOpts?.change ?? call.change).toBe(opts.from.address);
     });
 });
 

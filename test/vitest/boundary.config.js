@@ -25,9 +25,7 @@ export default defineConfig({
         // steady-state cost and the blast radius. Raise on a dedicated runner
         // if suite wall-time regresses.
         pool: 'forks',
-        poolOptions: {
-            forks: { maxForks },
-        },
+        maxWorkers: maxForks,
         environment: 'jsdom',
         include: ['test/boundary/**/*.test.{js,jsx}'],
         setupFiles: ['./test/boundary/setup.js'],

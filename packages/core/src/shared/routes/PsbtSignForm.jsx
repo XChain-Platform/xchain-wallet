@@ -63,6 +63,11 @@ import { useDropZone } from '../hooks/useDropZone.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
+import {
+    exactNetworkFeeSats,
+    formatExactSats,
+    sumExactSats,
+} from '../../flows/psbtNetworkFee.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -77,6 +82,7 @@ import {
 } from '../../uri/psbtQr.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 
 function arrayBufferToHex(buf) {
     const view = new Uint8Array(buf);
@@ -400,8 +406,17 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         },
     });
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default). This
+    // reads its own settings snapshot rather than the `useSettings()` one
+    // used below for developerMode, so the chain default resolves in the
+    // same batch as the address list instead of racing that hook's own load.
+    //
+    // The chain here only tells the parser which network's rules to apply
+    // to the pasted PSBT (`parsePsbtRequest({ chainId, psbtHex })`) - a PSBT
+    // does not self-identify its chain, so this is a genuine default the
+    // user can retarget, not a value derived from the PSBT itself.
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -409,19 +424,28 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, chainSettings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
                 setActiveByChain(active || {});
-                const first = Object.keys(byChain)[0];
-                if (!first) {
+                if (Object.keys(byChain || {}).length === 0) {
                     setLoadError(
                         'No addresses on any chain yet. Use Receive to generate one before signing.',
                     );
                     return;
                 }
-                setChainId(first);
+                // `byChain` is in address-creation order, so opening on its
+                // first key opened PSBT sign on the wallet's OLDEST chain
+                // forever. Open on the last-used chain instead, ahead of the
+                // first-key fallback, exactly as Send does.
+                setChainId((prev) => pickDefaultChainId(byChain, {
+                    explicitChainId: prev,
+                    settings: chainSettings,
+                }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -535,14 +559,14 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     }, [decomposed, selectedAddress]);
 
     const totalIn = useMemo(() => {
-        if (!decomposed) return 0;
-        return decomposed.inputs.reduce((acc, inp) => acc + (inp.value || 0), 0);
+        if (!decomposed) return 0n;
+        return sumExactSats(decomposed.inputs.map((input) => input.value)) ?? 0n;
     }, [decomposed]);
     const totalOut = useMemo(() => {
-        if (!decomposed) return 0;
-        return decomposed.outputs.reduce((acc, o) => acc + (o.value || 0), 0);
+        if (!decomposed) return 0n;
+        return sumExactSats(decomposed.outputs.map((output) => output.value)) ?? 0n;
     }, [decomposed]);
-    const fee = totalIn - totalOut;
+    const fee = exactNetworkFeeSats(decomposed) ?? 0;
 
     // Own addresses on the selected chain, used to mark outputs that pay back
     // to this wallet (change) vs external recipients. Same signal the
@@ -856,11 +880,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <strong>Outputs:</strong> {decomposed.outputs.length}
             </div>
             <div>
-                <strong>Total in:</strong> {totalIn.toLocaleString()} sats
+                <strong>Total in:</strong> {formatExactSats(totalIn)} sats
                 {' · '}
-                <strong>Total out:</strong> {totalOut.toLocaleString()} sats
+                <strong>Total out:</strong> {formatExactSats(totalOut)} sats
                 {' · '}
-                <strong>Fee:</strong> {fee.toLocaleString()} sats
+                <strong>Fee:</strong> {formatExactSats(fee)} sats
             </div>
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
@@ -891,7 +915,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 </span>
                             )}
                             <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                                {(o.value || 0).toLocaleString()} sats
+                                {formatExactSats(o.value ?? 0)} sats
                             </span>
                         </div>
                     );

@@ -59,6 +59,13 @@ describe('DispenserEscrowWatcher', () => {
         expect(n.data).toMatchObject({ dispensesLeft: 2, route: 'dispenser-detail', intent: 'refill' });
     });
 
+    it('counts decimal fills without binary division drift', async () => {
+        const row = listing({ give_amount: '0.1' });
+        const { watcher, notify } = makeWatcher(makeSdk([row], { 2592: detail('0.3') }));
+        await watcher.pollOnce();
+        expect(notify.mock.calls[0][0].data.dispensesLeft).toBe(3);
+    });
+
     it('says "empty" and drops the buyer count at zero', async () => {
         const { watcher, notify } = makeWatcher(makeSdk([listing()], { 2592: detail(5) }));
         await watcher.pollOnce();

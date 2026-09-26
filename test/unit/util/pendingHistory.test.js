@@ -399,6 +399,58 @@ describe('compareMergedEntries', () => {
         const list = [conf(3, 30), conf(9, 91), conf(9, 92)].sort(compareMergedEntries);
         expect(list.map((e) => e.actionIndex)).toEqual(['92', '91', '30']);
     });
+
+    // The reported defect: History merges every chain into one list, and a
+    // block height is a per-chain counter. Dogecoin's heights run millions
+    // above Bitcoin's, so height alone parked a three-day-old DOGE send above
+    // sends made today and kept it there.
+    describe('across chains', () => {
+        const SEC = Math.floor(NOW / 1000);
+        const DAY = 86400;
+        // Heights on the scale each chain actually runs at, so the test fails
+        // for the original reason rather than on a contrived pair.
+        const doge = (secs) => ({
+            chainId: 'dogecoin', blockIndex: 5900000, actionIndex: '10', timestamp: secs,
+        });
+        const btc = (secs) => ({
+            chainId: 'bitcoin', blockIndex: 920000, actionIndex: '20', timestamp: secs,
+        });
+
+        it('orders by time, not by the taller chain’s block height', () => {
+            const list = [doge(SEC - 3 * DAY), btc(SEC)].sort(compareMergedEntries);
+            expect(list.map((e) => e.chainId)).toEqual(['bitcoin', 'dogecoin']);
+        });
+
+        it('orders the other way round when the DOGE row really is newer', () => {
+            const list = [btc(SEC - 3 * DAY), doge(SEC)].sort(compareMergedEntries);
+            expect(list.map((e) => e.chainId)).toEqual(['dogecoin', 'bitcoin']);
+        });
+
+        it('reads a confirmed second and a pending millisecond on one clock', () => {
+            // Both rows land at the same instant on different scales. Raw
+            // subtraction would call the pending row fifty thousand years
+            // newer; only the pending-first rule may separate them.
+            const pending = fromMempool({ first_seen: SEC - 10 * DAY });
+            const confirmed = btc(SEC);
+            const list = [confirmed, pending].sort(compareMergedEntries);
+            expect(list[0].blockIndex).toBe(0);
+        });
+
+        it('keeps block and action index as the tie-break within one chain', () => {
+            const sameBlockTime = [
+                { chainId: 'bitcoin', blockIndex: 920000, actionIndex: '30', timestamp: SEC },
+                { chainId: 'bitcoin', blockIndex: 920001, actionIndex: '31', timestamp: SEC },
+                { chainId: 'bitcoin', blockIndex: 920000, actionIndex: '29', timestamp: SEC },
+            ].sort(compareMergedEntries);
+            expect(sameBlockTime.map((e) => e.actionIndex)).toEqual(['31', '30', '29']);
+        });
+
+        it('sinks a confirmed row with no usable timestamp below every dated one', () => {
+            const undated = { chainId: 'litecoin', blockIndex: 3100000, actionIndex: '1', timestamp: 0 };
+            const list = [undated, btc(SEC - 30 * DAY)].sort(compareMergedEntries);
+            expect(list.map((e) => e.chainId)).toEqual(['bitcoin', 'litecoin']);
+        });
+    });
 });
 
 // ---------------------------------------------------------------------------

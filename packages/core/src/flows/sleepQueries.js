@@ -31,6 +31,18 @@ function rowsOf(resp) {
 }
 
 /**
+ * Whether a SLEEP row pauses a token (v1) rather than an address (v0).
+ * The indexer stores type 2 for a tick sleep and 1 for an address sleep;
+ * a named tick settles it when the type is missing.
+ */
+function isTickSleepRow(r) {
+    const t = String(r.type ?? '').toUpperCase();
+    if (t === '2' || t === 'TICK') return true;
+    if (t === '1' || t === 'ADDRESS') return false;
+    return r.tick != null && String(r.tick) !== '';
+}
+
+/**
  * Fetch the latest valid SLEEP row for a query (tick name or address)
  * and return its RESUME_BLOCK. Returns `{ resumeBlock: null }` when the
  * target was never slept.
@@ -50,7 +62,11 @@ export async function sleepStateFor({ sdkRegistry, chainId, query, type }) {
     const sdk = sdkRegistry.get(chainId);
     if (typeof sdk.getSleeps !== 'function') return { resumeBlock: null, memo: null, blockIndex: null, actionIndex: null };
     const resp = await sdk.getSleeps(String(query), type === 'token' ? 'token' : 'address');
-    const rows = rowsOf(resp).filter((r) => String(r.status || 'valid') === 'valid');
+    // The address list holds every SLEEP the address SIGNED, tick pauses
+    // included; only an ADDRESS sleep (no TICK) locks the address itself.
+    const rows = rowsOf(resp)
+        .filter((r) => String(r.status || 'valid') === 'valid')
+        .filter((r) => type !== 'address' || !isTickSleepRow(r));
     if (rows.length === 0) return { resumeBlock: null, memo: null, blockIndex: null, actionIndex: null };
     // Latest by action_index (monotonic), falling back to block_index.
     rows.sort((a, b) => {

@@ -189,6 +189,10 @@ assert.ok(
     /p\.TRANSFER\s*=\s*transferTo/.test(src),
     'composer sets TRANSFER from transferTo',
 );
+assert.ok(
+    /p\.TRANSFER_SUPPLY\s*=\s*transferSupplyTo/.test(src),
+    'composer sets TRANSFER_SUPPLY from transferSupplyTo (ownership and minted supply move separately)',
+);
 
 // --- 7. ActionsMenu surface --------------------------------------------
 

@@ -1,0 +1,418 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+// The content and registry flows: attach artwork to a token, link two
+// arbitrary actions across chains, publish and fork an address list
+// (reading the resulting membership back from ListDetail), and publish
+// a project's official-token roster.
+//
+// AttachContentForm and ProjectRosterForm are both bespoke two-signature
+// stage machines (compose -> review-file/list -> wait-index -> review-link
+// -> done), each ending in the same shape: a FILE or LIST goes on chain
+// first, the wallet polls the explorer for its own ACTION_INDEX, then a
+// LINK is signed pairing that index with the token's ISSUE. Rather than
+// pay for that setup four times, ONE issue + FILE + LINK is built here
+// and its action indices are reused by the Link test (which drives
+// LinkForm directly, pairing the same two actions in the opposite
+// order) and the list manager test builds its own list independently,
+// since a list has nothing to do with a token's genesis record.
+//
+// Every step asserts an ON-CHAIN read (waitForValidAction, the
+// explorer's /links or /sleeps rows, or the wallet's own ListDetail
+// screen, which is itself backed by a live indexer read) rather than
+// only the form's own success copy.
+
+import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import {
+    explorerJson,
+    expectConfirmModal,
+    fundAddress,
+    mintXchain,
+    nudgeChain,
+    REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_LABEL,
+    REGTEST_COIN,
+    REGTEST_DESTINATION,
+    selectVenueChain,
+    switchToRegtest,
+    unlockAfterReload,
+    waitForTokenBalance,
+    waitForValidAction,
+} from '../../fixtures/regtest.js';
+
+const PASSWORD = 'regtestpassword123';
+// Off Bitcoin the protocol fee is paid in the native coin: about 20 DOGE per
+// fee-bearing action at the venue's seeded DOGE price, and this test makes
+// about ten of them, so one DOGE cannot even pay for the first ISSUE.
+const FUNDING = REGTEST_COIN === 'RDOGE' ? 1000 : 1;
+const SUPPLY = '1000';
+/** Pays the XCHAIN protocol fee on the three ISSUEs, the FILE, three LINKs and three LISTs, with room to spare. */
+const MINT_XCHAIN = 100;
+const STAMP = Date.now().toString().slice(-6);
+
+/** Opens the command palette and runs the named command. */
+async function gotoPalette(page, title) {
+    await page.keyboard.press('ControlOrMeta+k');
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const combobox = dialog.getByRole('combobox').first();
+    await expect(combobox).toBeEditable({ timeout: 15_000 });
+    await combobox.fill(title);
+    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
+    await expect(row, `no palette command matching "${title}"`).toBeVisible();
+    await row.click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+}
+
+/** Approves the open confirm screen and returns the broadcast txid. */
+async function approveAndGetTxid(page) {
+    await page.getByTestId('confirm-approve').click();
+    const main = page.getByRole('main');
+    await expect(main, 'no transaction id ever appeared after Approve')
+        .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
+    const txid = (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
+    expect(txid, 'success screen showed no transaction id').toBeTruthy();
+    return txid;
+}
+
+/**
+ * Approves the open confirm screen and returns the txid printed under
+ * `label` on the flow's done screen. A two-signature flow's wait-index
+ * screen already prints the FIRST transaction's hash behind the confirm, so
+ * the generic read above would return that one for the LINK; this waits for
+ * the done heading and reads the labelled hash instead.
+ */
+async function approveAndReadTxid(page, doneHeading, label = 'Link transaction') {
+    await page.getByTestId('confirm-approve').click();
+    return readLabelledTxid(page, doneHeading, label);
+}
+
+/** Waits for `doneHeading` and returns the txid the screen prints under `label`. */
+async function readLabelledTxid(page, doneHeading, label = 'Link transaction') {
+    const main = page.getByRole('main');
+    await expect(main.getByRole('heading', { name: doneHeading, exact: true }),
+        `the flow never reached "${doneHeading}" after Approve`)
+        .toBeVisible({ timeout: 180_000 });
+    const txid = (await main.locator(`p:text-is("${label}") + code`).innerText()).trim();
+    expect(txid, `"${doneHeading}" printed no ${label} hash`).toMatch(/^[0-9a-f]{64}$/);
+    return txid;
+}
+
+/**
+ * Opens Manage Token for `tick` and clicks the named action. Manage Token
+ * splits its actions between page buttons and a "More" overflow menu
+ * once there are more than three, so both are checked (same split
+ * `collectible-one-of-one.regtest.spec.js` already reads around).
+ */
+async function openManageTokenAction(page, tick, label) {
+    await gotoPalette(page, 'My Tokens');
+    const main = page.getByRole('main');
+    const row = main.getByRole('button').filter({ hasText: tick }).first();
+    await expect(row, `${tick} is on chain but My Tokens does not list it`)
+        .toBeVisible({ timeout: 60_000 });
+    await row.click();
+    await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
+
+    const primary = main.getByRole('button', { name: label, exact: true });
+    if (await primary.count() > 0 && await primary.first().isVisible()) {
+        await primary.first().click();
+        return;
+    }
+    const more = main.getByRole('button', { name: /^More/ });
+    await expect(more, `Manage Token offers neither a "${label}" button nor a More menu`)
+        .toBeVisible({ timeout: 15_000 });
+    await more.first().click();
+    const item = page.getByRole('menuitem', { name: label, exact: true });
+    await expect(item, `no "${label}" action available for ${tick}`).toBeVisible({ timeout: 15_000 });
+    await item.click();
+}
+
+/** Issues `tick` on the venue chain from `source` and returns its ISSUE action index. */
+async function issueToken(page, source, tick) {
+    // Opening Issue token from the palette while its own "Token issued" screen
+    // is showing keeps that screen (same view, no remount), so a second issue in
+    // a row would find no Ticker field. Leave for another view first.
+    await gotoPalette(page, 'My Tokens');
+    await gotoPalette(page, 'Issue token');
+    const main = page.getByRole('main');
+    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await selectVenueChain(main);
+    expect(await main.getByLabel('From').inputValue(),
+        `the Issue token form defaulted away from ${source}, so the issued token would not be owned `
+        + 'by the address this test funded')
+        .toBe(source);
+    await main.getByLabel('Ticker').fill(tick);
+    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+    const password = main.getByLabel('Password', { exact: true });
+    if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
+    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+
+    await expectConfirmModal(page, 'this action', 60_000);
+    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+    const txid = await approveAndGetTxid(page);
+    const action = await waitForValidAction(txid);
+    return { txid, actionIndex: String(action.action_index) };
+}
+
+test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
+    test.use({ actionTimeout: 30_000 });
+    test.setTimeout(1_800_000);
+
+    test('attach content, Link, the list manager and the project roster', async ({ page }) => {
+        const TICK = `CNT${STAMP}`;
+        let source;
+        let fileActionIndex;
+        let issueActionIndex;
+
+        await test.step('shared fixture: onboard, fund, issue a token, attach content (FILE then LINK)', async () => {
+            await createWallet(page, { password: PASSWORD, name: 'Content Registry Wallet' });
+            await switchToRegtest(page, PASSWORD);
+
+            await gotoPalette(page, 'Issue token');
+            const issueMain = page.getByRole('main');
+            await expect(issueMain.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await selectVenueChain(issueMain);
+            source = await issueMain.getByLabel('From').inputValue();
+            expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
+                .toMatch(REGTEST_ADDRESS_RE);
+            await fundAddress(source, FUNDING);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+            // Every action below charges an XCHAIN protocol fee, and the preflight
+            // disables Approve on a wallet that holds none.
+            await mintXchain(page, MINT_XCHAIN);
+            await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+
+            const issued = await issueToken(page, source, TICK);
+            issueActionIndex = issued.actionIndex;
+
+            await openManageTokenAction(page, TICK, 'Artwork');
+            await expect(page.getByText(`Attach artwork to ${TICK}`)).toBeVisible({ timeout: 30_000 });
+
+            await page.setInputFiles('input[aria-label="Choose file to attach"]', {
+                name: 'nft.svg',
+                mimeType: 'image/svg+xml',
+                buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'),
+            });
+            await page.getByRole('button', { name: 'Review upload', exact: true }).click();
+
+            const fileMain = page.getByRole('main');
+            await expect(fileMain.getByRole('button', { name: 'Upload file', exact: true }))
+                .toBeVisible({ timeout: 30_000 });
+            const filePassword = fileMain.getByLabel('Password', { exact: true });
+            if (await filePassword.count() > 0 && await filePassword.isVisible()) await filePassword.fill(PASSWORD);
+            await fileMain.getByRole('button', { name: 'Upload file', exact: true }).click();
+
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            // After Approve the form shows "File is on its way" with the FILE txid
+            // until its own index poll clears, which on a quiet chain can happen
+            // before a check for it runs. So nothing is read here: the wait is on
+            // the LINK leg's button, and both txids come off the done screen.
+            await page.getByTestId('confirm-approve').click();
+            const linkButton = page.getByRole('button', { name: `Link artwork to ${TICK}`, exact: true });
+            const deadline = Date.now() + 300_000;
+            while (Date.now() < deadline) {
+                if (await linkButton.isVisible().catch(() => false)) break;
+                await nudgeChain();
+                await new Promise((r) => setTimeout(r, 2_000));
+            }
+            await expect(linkButton,
+                'the wallet never advanced past "File is on its way"; either the FILE never '
+                + 'broadcast or the wait-index poll never saw it indexed')
+                .toBeVisible({ timeout: 60_000 });
+
+            const linkPassword = page.getByRole('main').getByLabel('Password', { exact: true });
+            if (await linkPassword.count() > 0 && await linkPassword.isVisible()) await linkPassword.fill(PASSWORD);
+            await linkButton.click();
+
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const linkTxid = await approveAndReadTxid(page, 'Artwork attached');
+            const fileTxid = await readLabelledTxid(page, 'Artwork attached', 'File transaction');
+            fileActionIndex = String((await waitForValidAction(fileTxid)).action_index);
+            await waitForValidAction(linkTxid);
+
+            const rows = await explorerJson(`links/${source}/address`);
+            const list = Array.isArray(rows?.data) ? rows.data : Array.isArray(rows) ? rows : [];
+            const linked = list.find((r) => r.tx_hash === linkTxid);
+            expect(linked, 'the LINK the attach-content flow broadcast is not on the explorer\'s '
+                + `links list for ${source}`).toBeTruthy();
+            expect(String(linked.coin1_action_index)).toBe(fileActionIndex);
+            expect(String(linked.coin2_action_index)).toBe(issueActionIndex);
+            expect(String(linked.status)).toBe('valid');
+        });
+
+        await test.step('Link: pair the same two actions again, in the opposite order', async () => {
+            await gotoPalette(page, 'All actions');
+            await page.getByRole('main').getByText('Link cross-chain actions', { exact: true })
+                .first().click();
+
+            const panelA = page.locator('fieldset').filter({ hasText: 'Chain A' });
+            const panelB = page.locator('fieldset').filter({ hasText: 'Chain B' });
+            await selectVenueChain(panelA, 'Chain');
+            await selectVenueChain(panelB, 'Chain');
+            await panelA.getByLabel('Action to reference').fill(issueActionIndex);
+            await panelB.getByLabel('Action to reference').fill(fileActionIndex);
+
+            const main = page.getByRole('main');
+            const password = main.getByLabel('Password', { exact: true });
+            const linkAction = main.getByRole('button', { name: 'Link', exact: true });
+            await linkAction.click();
+            if (await password.count() > 0 && await password.isVisible()) {
+                await password.fill(PASSWORD);
+                await linkAction.click();
+            }
+
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const txid = await approveAndGetTxid(page);
+            await waitForValidAction(txid);
+
+            const rows = await explorerJson(`links/${source}/address`);
+            const list = Array.isArray(rows?.data) ? rows.data : Array.isArray(rows) ? rows : [];
+            const linked = list.find((r) => r.tx_hash === txid);
+            expect(linked, `the LinkForm broadcast is not on the explorer's links list for ${source}`)
+                .toBeTruthy();
+            expect(String(linked.coin1_action_index),
+                'LinkForm did not encode Chain A\'s action number as COIN1_ACTION_INDEX')
+                .toBe(issueActionIndex);
+            expect(String(linked.coin2_action_index),
+                'LinkForm did not encode Chain B\'s action number as COIN2_ACTION_INDEX')
+                .toBe(fileActionIndex);
+        });
+
+        await test.step('the list manager: create, fork, and read the membership back from ListDetail', async () => {
+            await gotoPalette(page, 'Create a list');
+            const main = page.getByRole('main');
+            await selectVenueChain(main);
+            // The first textbox on this form is the read-only From field; the
+            // members go in the paste area, which has no label of its own.
+            await main.getByPlaceholder('Paste addresses, one per line or comma-separated.').fill(source);
+            await expect(main).toContainText('1 valid address');
+            await main.getByRole('button', { name: 'Publish list', exact: true }).click();
+
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const createTxid = await approveAndGetTxid(page);
+            const created = await waitForValidAction(createTxid);
+            const listActionIndex = String(created.action_index);
+
+            await gotoPalette(page, 'My Lists');
+            const listRow = page.getByRole('listitem', { name: `Open address list #${listActionIndex}` });
+            await expect(listRow, `the list just published (#${listActionIndex}) is not in My Lists`)
+                .toBeVisible({ timeout: 60_000 });
+            await listRow.click();
+
+            await expect(page.getByText(/^Members as published \(1\)$|^Current members \(1\)$/))
+                .toBeVisible({ timeout: 30_000 });
+            await expect(page.getByRole('main')).toContainText(source);
+
+            await page.getByRole('button', { name: 'Fork & edit', exact: true }).click();
+            const forkMain = page.getByRole('main');
+            await expect(forkMain.getByRole('button', { name: 'Review', exact: true }))
+                .toBeVisible({ timeout: 30_000 });
+            // The fork adds a member the parent does not already hold: ListForkForm
+            // drops additions that are already on the list, so re-adding `source`
+            // would leave nothing to publish and Review disabled.
+            await forkMain.getByLabel(/^Add addresses/).fill(REGTEST_DESTINATION);
+            await forkMain.getByRole('button', { name: 'Review', exact: true }).click();
+
+            const publishAdd = forkMain.getByRole('button', { name: 'Publish add', exact: true });
+            await expect(publishAdd).toBeVisible({ timeout: 30_000 });
+            const forkPassword = forkMain.getByLabel('Password', { exact: true });
+            if (await forkPassword.count() > 0 && await forkPassword.isVisible()) await forkPassword.fill(PASSWORD);
+            await publishAdd.click();
+
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const forkTxid = await approveAndReadTxid(page, 'Fork submitted', 'Fork transaction');
+            const forked = await waitForValidAction(forkTxid);
+            const forkActionIndex = String(forked.action_index);
+
+            await gotoPalette(page, 'My Lists');
+            const forkRow = page.getByRole('listitem', { name: `Open address list #${forkActionIndex}` });
+            await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
+                .toBeVisible({ timeout: 60_000 });
+            await forkRow.click();
+            // "Forked from" lives in a <dt> and "#N (...)" in the sibling <dd>
+            // (ListDetail.jsx), two DOM nodes with no text of their own in
+            // common, so this locates the label then reads its own value
+            // rather than searching for one node holding both.
+            const forkedFromValue = page.locator('dt:has-text("Forked from") + dd');
+            await expect(forkedFromValue,
+                `ListDetail for fork #${forkActionIndex} does not name #${listActionIndex} as its parent`)
+                .toContainText(`#${listActionIndex}`, { timeout: 30_000 });
+            await expect(page.getByRole('main'),
+                `ListDetail for fork #${forkActionIndex} does not show the member it added`)
+                .toContainText(REGTEST_DESTINATION);
+        });
+
+        await test.step('the project roster: publish a token list and link it to the project', async () => {
+            const PROJECT = `PRJ${STAMP}`;
+            const MEMBER = `MEM${STAMP}`;
+            const project = await issueToken(page, source, PROJECT);
+            await issueToken(page, source, MEMBER);
+
+            await openManageTokenAction(page, PROJECT, 'Official list');
+            const rosterMain = page.getByRole('main');
+            await expect(rosterMain.getByLabel('Tokens (one per line)')).toBeVisible({ timeout: 30_000 });
+            await rosterMain.getByLabel('Tokens (one per line)').fill(MEMBER);
+            await rosterMain.getByRole('button', { name: 'Review list', exact: true }).click();
+
+            await expect(rosterMain.getByRole('button', { name: 'Publish list', exact: true }))
+                .toBeVisible({ timeout: 30_000 });
+            const listPassword = rosterMain.getByLabel('Password', { exact: true });
+            if (await listPassword.count() > 0 && await listPassword.isVisible()) await listPassword.fill(PASSWORD);
+            await rosterMain.getByRole('button', { name: 'Publish list', exact: true }).click();
+
+            // ProjectRosterForm signs both of its legs from its own review screens;
+            // unlike the attach-content and Link forms it never opens the shared
+            // confirm modal, so there is no Approve to press here. It goes straight
+            // to "List is on its way", which the index poll can clear before a
+            // check for it would run, so the wait is on the next leg's button.
+            const officialButton = page.getByRole('button', { name: 'Make it official', exact: true });
+            const deadline = Date.now() + 300_000;
+            while (Date.now() < deadline) {
+                if (await officialButton.isVisible().catch(() => false)) break;
+                await nudgeChain();
+                await new Promise((r) => setTimeout(r, 2_000));
+            }
+            await expect(officialButton,
+                'the wallet never advanced past "List is on its way"; either the LIST never '
+                + 'broadcast or the wait-index poll never saw it indexed')
+                .toBeVisible({ timeout: 60_000 });
+
+            const linkPassword = page.getByRole('main').getByLabel('Password', { exact: true });
+            if (await linkPassword.count() > 0 && await linkPassword.isVisible()) await linkPassword.fill(PASSWORD);
+            await officialButton.click();
+
+            const rosterLinkTxid = await readLabelledTxid(page, 'Official list published');
+            const listTxid = await readLabelledTxid(page, 'Official list published', 'List transaction');
+            const listAction = await waitForValidAction(listTxid);
+            const rosterListIndex = String(listAction.action_index);
+            await waitForValidAction(rosterLinkTxid);
+
+            const rows = await explorerJson(`links/${source}/address`);
+            const list = Array.isArray(rows?.data) ? rows.data : Array.isArray(rows) ? rows : [];
+            const linked = list.find((r) => r.tx_hash === rosterLinkTxid);
+            expect(linked, `the roster LINK is not on the explorer's links list for ${source}`).toBeTruthy();
+            expect(String(linked.coin1_action_index),
+                'the roster LINK did not encode the token-list index as COIN1_ACTION_INDEX')
+                .toBe(rosterListIndex);
+            expect(String(linked.coin2_action_index),
+                'the roster LINK did not encode the project ISSUE index as COIN2_ACTION_INDEX')
+                .toBe(project.actionIndex);
+            expect(String(linked.status)).toBe('valid');
+        });
+    });
+});

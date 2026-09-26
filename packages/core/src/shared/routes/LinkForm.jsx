@@ -29,9 +29,11 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -114,8 +116,9 @@ export function LinkForm({ walletId, onBack }) {
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
     );
 
-    // The active map is best-effort: a host without `getActiveAddresses`, or
-    // one whose call fails, still yields a usable form (newest-HD fallback).
+    // The active map and the settings read are best-effort: a host without
+    // `getActiveAddresses` / `getSettings`, or one whose call fails, still
+    // yields a usable form (newest-HD source, first-chain default).
     useEffect(() => {
         let cancelled = false;
         Promise.all([
@@ -123,8 +126,11 @@ export function LinkForm({ walletId, onBack }) {
             typeof messaging.getActiveAddresses === 'function'
                 ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
         ])
-            .then(([byChain, active]) => {
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
@@ -137,8 +143,17 @@ export function LinkForm({ walletId, onBack }) {
                     );
                     return;
                 }
-                setChain1Id(chains[0]);
-                setChain2Id(chains[1] || chains[0]);
+                // `chains` is in address-creation order, so opening COIN1 on
+                // its first entry opened every link on the wallet's OLDEST
+                // chain forever. COIN1 defaults to the last-used chain
+                // instead (restricted to chains with addresses, so the
+                // fallback still lands on `chains[0]` exactly as before);
+                // COIN2 still just needs to be the OTHER side of the pair,
+                // so it takes the next distinct chain.
+                const restricted = Object.fromEntries(chains.map((cid) => [cid, byChain[cid]]));
+                const chain1 = pickDefaultChainId(restricted, { settings }) || chains[0];
+                setChain1Id(chain1);
+                setChain2Id(chains.find((cid) => cid !== chain1) || chain1);
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -219,7 +234,11 @@ export function LinkForm({ walletId, onBack }) {
         }
     }, [stage]);
 
+    const trimmedMemo = memo.trim();
+    const memoTooLong = memoLengthError(trimmedMemo);
+
     const validationError = useMemo(() => {
+        if (memoTooLong) return memoTooLong;
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
         if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
@@ -228,7 +247,7 @@ export function LinkForm({ walletId, onBack }) {
             return 'Cannot link an action to itself.';
         }
         return null;
-    }, [ticker1, ticker2, actionIndex1, actionIndex2]);
+    }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong]);
 
     const { isWatcherMode } = useWalletMode();
 
@@ -347,9 +366,18 @@ export function LinkForm({ walletId, onBack }) {
     // reachable from the review screen is in an invalid state.
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress || !submitChainId) return;
-        if (!chain1Id || !chain2Id) return;
-        if (validationError) return;
+        if (!chain1Id || !chain2Id) {
+            setFormError('Pick both chains before reviewing.');
+            return;
+        }
+        if (!fromAddress || !submitChainId) {
+            setFormError('Pick a source address first.');
+            return;
+        }
+        if (validationError) {
+            setFormError(validationError);
+            return;
+        }
         if (!actionIndex1 || !actionIndex2) {
             setFormError('Provide both action indices before reviewing.');
             return;
@@ -667,6 +695,8 @@ export function LinkForm({ walletId, onBack }) {
 
             <Input
                 label="Memo (optional)"
+                hint={`${trimmedMemo.length} / ${MAX_MEMO_LENGTH} characters.`}
+                error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
@@ -744,12 +774,11 @@ export function LinkForm({ walletId, onBack }) {
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!!validationError
-                        || !fromAddress
-                        || !actionIndex1 || !actionIndex2
-                        || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Link' : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Link' : 'Review'}
                 </Button>
             </div>
         </form>,

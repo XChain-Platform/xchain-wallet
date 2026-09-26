@@ -23,6 +23,10 @@ import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
+import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
+import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
+import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { useActionForm } from '../../../packages/core/src/shared/hooks/useActionForm.js';
 
 const BTC = 'bitcoin-mainnet';
@@ -168,6 +172,36 @@ describe('useActionForm chain default follows the last-used chain', () => {
     it('a locked token context keeps its chain and is never re-pointed at the last-used one', async () => {
         const { last } = await probe({ options: { initialChainId: BTC, lockedToken: true } });
         expect(last().chainId).toBe(BTC);
+    });
+});
+
+// TokenAdminForm, BroadcastForm, IssueTokenForm and DividendForm never went
+// through useActionForm; each loads its own addresses/active/settings batch
+// and calls pickDefaultChainId directly. One pin per form so a regression to
+// `Object.keys(byChain)[0]` in any of them fails here, not just in the shared
+// hook's own forms above.
+const chainName = async () => {
+    const button = await screen.findByRole('button', { name: /^Network: / });
+    return button.getAttribute('aria-label') || button.textContent;
+};
+
+describe('the non-hook Token Actions forms also open on the last-used chain', () => {
+    it.each([
+        ['TokenAdminForm', TokenAdminForm, { mode: 'description' }],
+        ['BroadcastForm', BroadcastForm, {}],
+        ['IssueTokenForm', IssueTokenForm, {}],
+        ['DividendForm', DividendForm, {}],
+    ])('%s opens on Dogecoin when Bitcoin was created first and Dogecoin was used last', async (_name, Form, props) => {
+        const messaging = messagingWith();
+        render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(Form, { walletId: 'w', onBack() {}, ...props }),
+            ),
+        );
+        await waitFor(async () => expect(await chainName()).toMatch(/^Network: Dogecoin/));
+        expect(messaging.getSettings).toHaveBeenCalled();
     });
 });
 

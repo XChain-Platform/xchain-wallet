@@ -246,7 +246,7 @@ async function payTheSubject(browser, page, { beforePayment } = {}) {
 test.describe(`Incoming pending payment on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     // Two onboardings, a mint, a real broadcast, and up to 210s of holding the
     // chain still while the decoder catches up.
-    test.setTimeout(900_000);
+    test.setTimeout(1_800_000);
     test.use({ actionTimeout: 30_000 });
     test.skip(VENUE_HAS_NO_MEMPOOL, `${REGTEST_COIN} has no mempool store this spec can read: its `
         + 'regtest decoder is in a restart loop and the decoder is the only mempool '

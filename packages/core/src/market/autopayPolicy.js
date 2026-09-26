@@ -61,10 +61,6 @@ export const DEFAULT_CONFIRM_DEPTH = 2;
 // raise is a one-line change with the policy tests pinning it.
 const CONFIRM_DEPTH_BY_CHAIN = {};
 
-/** Native-coin precision (BTC/LTC/DOGE base units per coin). */
-const COIN_DECIMALS = 8n;
-const COIN_SCALE = 10n ** COIN_DECIMALS;
-
 /**
  * @param {string} chainId
  * @returns {number}
@@ -74,20 +70,15 @@ export function confirmDepthForChain(chainId) {
 }
 
 /**
- * Exact decimal-string -> base-unit BigInt at coin scale (8dp).
- * Returns null on garbage or on more fractional digits than the coin
- * has (which would silently truncate value).
+ * Compatibility export for callers that require a decimal string.
+ * Amount parsing and scaling are owned by obligationBaseUnits.
  *
  * @param {unknown} decimalStr
  * @returns {bigint | null}
  */
 export function decimalToBaseUnits(decimalStr) {
     if (typeof decimalStr !== 'string') return null;
-    const m = /^(\d+)(?:\.(\d+))?$/.exec(decimalStr.trim());
-    if (!m) return null;
-    const frac = m[2] ?? '';
-    if (BigInt(frac.length) > COIN_DECIMALS) return null;
-    return BigInt(m[1]) * COIN_SCALE + BigInt(frac.padEnd(8, '0') || '0');
+    return obligationBaseUnits(decimalStr);
 }
 
 /**
@@ -137,7 +128,7 @@ export function paidBase(consent) {
  * @returns {bigint | null}
  */
 export function remainingGiveBase(consent) {
-    const total = decimalToBaseUnits(consent.giveCoinAmount);
+    const total = obligationBaseUnits(consent.giveCoinAmount);
     if (total === null) return null;
     const left = total - paidBase(consent);
     return left > 0n ? left : 0n;
@@ -159,7 +150,7 @@ export function orientMatch(matchRow, orderActionIndex) {
     const get = matchRow.get_action_index != null ? String(matchRow.get_action_index) : null;
     // THE TWO COLUMN FAMILIES ON THIS ROW DO NOT PAIR UP, and reading them as
     // if they did is what kept auto-pay from ever paying. From the indexer's
-    // own row construction (xchain-indexer db.js createOrderMatch):
+    // own row construction (xchain-indexer src/db/orders/match_rows.js createOrderMatch):
     //
     //     give_amount = data['MATCH_GIVE_AMOUNT']   // the TRIGGERING order's give
     //     get_amount  = data['MATCH_GET_AMOUNT']    // the TRIGGERING order's get
@@ -294,12 +285,12 @@ export function evaluateObligation({
     // obligation "amount-mismatch", which makes auto-pay inert rather than
     // wrong.
     const owedBase = obligationBaseUnits(obligation.coin_amount ?? obligation.coinAmount);
-    const coinFillBase = decimalToBaseUnits(oriented.coinFill);
+    const coinFillBase = obligationBaseUnits(oriented.coinFill);
     if (owedBase === null || coinFillBase === null || owedBase !== coinFillBase) {
         return { action: 'notify-manual', reason: 'amount-mismatch' };
     }
 
-    const giveTotalBase = decimalToBaseUnits(consent.giveCoinAmount);
+    const giveTotalBase = obligationBaseUnits(consent.giveCoinAmount);
     const scaled = toCommonScale(oriented.tokenFill, consent.getAmount);
     if (giveTotalBase === null || scaled === null || scaled.b === 0n) {
         return { action: 'notify-manual', reason: 'terms-unparseable' };

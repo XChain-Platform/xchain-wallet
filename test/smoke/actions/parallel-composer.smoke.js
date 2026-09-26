@@ -52,10 +52,13 @@ assert.ok(/acknowledgedNoRollback/.test(src),
 assert.ok(/Sign all/.test(src),
     'ParallelComposer renders the "Sign all" submit button');
 
-// Sequential sign loop reuses the existing advanced-action handler.
+// Each row signs through the owner-action lane, which composes, dry-runs and
+// then calls the existing advanced-action handlers by name.
+assert.ok(/software:\s*'advancedAction'/.test(src),
+    'ParallelComposer signs software rows with advancedAction');
+assert.ok(/hardware:\s*'advancedActionHw'/.test(src),
+    'ParallelComposer signs hardware rows with advancedActionHw');
 for (const call of [
-    'messaging.advancedAction',
-    'messaging.advancedActionHw',
     'messaging.getAddressesByChain',
     'messaging.listActions',
 ]) {
@@ -68,9 +71,10 @@ assert.ok(/'skipped'/.test(src),
 assert.ok(/'failed'/.test(src),
     'ParallelComposer tracks per-row failure state');
 
-// HW vs software signing branches.
-assert.ok(/SignCredentials/.test(src), 'ParallelComposer uses SignCredentials');
-assert.ok(/isHwSource/.test(src), 'ParallelComposer branches on isHwSource');
+// Signing, device or password, happens on the shared Confirm screen after
+// each row's network dry-run.
+assert.ok(/useOwnerActionLane/.test(src), 'ParallelComposer signs through the owner-action lane');
+assert.ok(/ActionConfirmScreen/.test(src), 'ParallelComposer renders the shared Confirm screen');
 
 // --- App.jsx wiring (all three shells) ---
 

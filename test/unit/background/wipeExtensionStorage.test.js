@@ -24,6 +24,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
     WALLET_LOCAL_KEYS,
     WIPE_STORAGE_MESSAGE_TYPE,
+    BEFORE_WIPE_TIMEOUT_MS,
     wipeExtensionStorage,
     attachWipeStorageListener,
 } from '@xchain-wallet/extension/src/background/wipeExtensionStorage.js';
@@ -146,6 +147,52 @@ describe('background/attachWipeStorageListener', () => {
         const res = await runtime.emit({ type: WIPE_STORAGE_MESSAGE_TYPE }, trusted);
         expect(res).toEqual({ ok: true, result: { ok: true, cleared: ['x'] } });
         expect(order).toEqual(['wipe', 'teardown']);
+    });
+
+    it('seals before the clear, then wipes, then tears the host down', async () => {
+        const order = [];
+        const runtime = fakeRuntime();
+        attachWipeStorageListener({
+            beforeWipe: async () => { order.push('seal'); },
+            wipe: async () => { order.push('wipe'); return { ok: true, cleared: ['x'] }; },
+            onWiped: () => { order.push('teardown'); },
+        }, runtime);
+        const res = await runtime.emit({ type: WIPE_STORAGE_MESSAGE_TYPE }, trusted);
+        expect(res.ok).toBe(true);
+        expect(order).toEqual(['seal', 'wipe', 'teardown']);
+    });
+
+    it('still wipes and reports the wipe verdict when the pre-wipe step throws', async () => {
+        const order = [];
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const runtime = fakeRuntime();
+        attachWipeStorageListener({
+            beforeWipe: async () => { order.push('seal'); throw new Error('seal broke'); },
+            wipe: async () => { order.push('wipe'); return { ok: false, error: 'partial' }; },
+            onWiped: () => { order.push('teardown'); },
+        }, runtime);
+        const res = await runtime.emit({ type: WIPE_STORAGE_MESSAGE_TYPE }, trusted);
+        errSpy.mockRestore();
+        expect(order).toEqual(['seal', 'wipe', 'teardown']);
+        expect(res.ok).toBe(false);
+    });
+
+    it('still wipes when the pre-wipe step never settles', async () => {
+        vi.useFakeTimers();
+        try {
+            const wipe = vi.fn(async () => ({ ok: true, cleared: [] }));
+            const runtime = fakeRuntime();
+            attachWipeStorageListener({ beforeWipe: () => new Promise(() => {}), wipe }, runtime);
+            const pending = runtime.emit({ type: WIPE_STORAGE_MESSAGE_TYPE }, trusted);
+            await vi.advanceTimersByTimeAsync(BEFORE_WIPE_TIMEOUT_MS - 1);
+            expect(wipe).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            const res = await pending;
+            expect(wipe).toHaveBeenCalledTimes(1);
+            expect(res.ok).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('tears the host down even when the clear only partly succeeded', async () => {

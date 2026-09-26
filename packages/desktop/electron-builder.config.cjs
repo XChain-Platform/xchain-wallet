@@ -117,7 +117,43 @@ const buildMas = process.env.XCHAIN_BUILD_MAS === '1' && !isStaging;
 // share exactly this substring, and that shared part is the only value
 // `line.includes(qualifier)` matches across all of them.
 const TEAM_QUALIFIER = 'Dankest, LLC';
-const MAS_IDENTITY = process.env.MAS_IDENTITY_NAME || process.env.CSC_IDENTITY_NAME || TEAM_QUALIFIER;
+
+// The Developer ID Application certificate, by SHA-1 fingerprint: the value
+// `security find-identity` prints in its first column, and the only thing
+// `line.includes(qualifier)` can match on exactly one row. The team qualifier
+// above cannot do that for this channel. This org's Developer ID and Apple
+// Distribution certificates share both the organization name and the team id,
+// and `_findIdentity` tests the qualifier BEFORE the `<type>:` prefix, so on a
+// machine that holds both, `Dankest, LLC` was measured resolving to Apple
+// Distribution and signing a direct-download build with the store
+// certificate. A hosted runner never shows it (its temp keychain holds one
+// certificate); the release machine, which is the signing venue, does.
+//
+// Read from the published v0.339.0 app with `codesign -d
+// --extract-certificates`. The certificate expires 2027-02-01, and the
+// renewal changes this value; release.yml repeats it and
+// macos-signing-required.smoke.js fails when the two disagree.
+const DEVELOPER_ID_SHA1 = '92EA61B6FFD757FE524F3F5F4D4E28FD0A19FDAF';
+
+/**
+ * A certificate fingerprint in the form `security find-identity` prints it
+ * (40 upper-case hex digits), or null when `value` is not one. Colons and
+ * spaces are dropped so an `openssl x509 -fingerprint` paste also works;
+ * case matters because the identity lookup is a plain substring test.
+ */
+function asSha1(value) {
+    const compact = String(value || '').replace(/[:\s]/g, '');
+    return /^[0-9a-fA-F]{40}$/.test(compact) ? compact.toUpperCase() : null;
+}
+
+const CSC_IDENTITY = (process.env.CSC_IDENTITY_NAME || '').trim() || null;
+
+// A fingerprint names ONE certificate, and the store build needs two (app
+// and installer), so a Developer ID pin in CSC_IDENTITY_NAME is never handed
+// to the store lane: it would find no installer identity and die at the pkg.
+const MAS_IDENTITY = process.env.MAS_IDENTITY_NAME
+    || (asSha1(CSC_IDENTITY) ? null : CSC_IDENTITY)
+    || TEAM_QUALIFIER;
 
 // Whether this build was handed a Developer ID certificate to sign with.
 // CSC_LINK is how release.yml supplies one; CSC_KEYCHAIN is how a local
@@ -137,7 +173,13 @@ const macSigningCertSupplied = Boolean(process.env.CSC_LINK || process.env.CSC_K
 // matching certificate makes app-builder-lib shell out to `security
 // find-identity` and warn on every build. So the certificate itself is the
 // trigger, which is a thing the lane cannot lose without failing loudly.
-const MAC_IDENTITY = process.env.CSC_IDENTITY_NAME || (macSigningCertSupplied ? TEAM_QUALIFIER : null);
+//
+// A lane that REQUIRES a signature defaults to the fingerprint rather than
+// the team qualifier, for the ambiguity described at DEVELOPER_ID_SHA1, and
+// is refused below if it was handed a name instead.
+const macSigningRequired = macosSigningStatus(process.env).required;
+const MAC_IDENTITY = (asSha1(CSC_IDENTITY) || CSC_IDENTITY)
+    || (macSigningCertSupplied ? (macSigningRequired ? DEVELOPER_ID_SHA1 : TEAM_QUALIFIER) : null);
 
 // A lane that must ship a SIGNED, NOTARIZED macOS build fails HERE, by name,
 // rather than packing artifacts that Gatekeeper blocks and letting the
@@ -155,8 +197,88 @@ const MAC_IDENTITY = process.env.CSC_IDENTITY_NAME || (macSigningCertSupplied ? 
 // XCHAIN_REQUIRE_MAC_SIGNING=1 on every step that builds a mainline mac
 // artifact, and test/smoke/audits/macos-signing-required.smoke.js fails if a
 // step is added that does not.
-const macSigningRequired = macosSigningStatus(process.env).required;
 assertMacosSigningMaterial(process.env);
+
+// And a lane that requires a signature names its certificate by fingerprint.
+// A name is a substring test that can admit the wrong certificate (see
+// DEVELOPER_ID_SHA1), so it is refused here rather than resolved at sign time.
+if (macSigningRequired && !asSha1(MAC_IDENTITY)) {
+    const err = new Error(
+        `CSC_IDENTITY_NAME is '${MAC_IDENTITY}', a name qualifier, and this lane sets `
+        + `XCHAIN_REQUIRE_MAC_SIGNING=1. A name is matched by substring against every `
+        + `identity in the keychain and can resolve to the Apple Distribution certificate; `
+        + `set CSC_IDENTITY_NAME to the Developer ID certificate's SHA-1 (the first column `
+        + `of \`security find-identity -v -p codesigning\`), or unset it to use ${DEVELOPER_ID_SHA1}.`,
+    );
+    err.name = 'MacSigningIdentityNotPinned';
+    throw err;
+}
+
+/**
+ * Refuse a macOS app bundle that did not end up signed by the certificate
+ * this build named. app-builder-lib has more than one way to sign nothing and
+ * exit 0 that `forceCodeSigning` does not reach: `isSignAllowed()` returns
+ * false on a non-darwin host or in a pull-request context before the flag is
+ * ever read. `macPackager.signApp` reports success whatever `sign` returned,
+ * so `afterSign` runs on every mac build and is the one seam that can look at
+ * the result instead of the intent.
+ *
+ * Checks, in order: the bundle verifies (`codesign --verify --strict`); its
+ * leaf authority is a Developer ID Application certificate, which is what a
+ * name qualifier cannot guarantee; and, when the identity is a fingerprint,
+ * the leaf is exactly that certificate.
+ */
+function assertMacAppSigned(appPath, identity) {
+    const { spawnSync } = require('node:child_process');
+    const { createHash } = require('node:crypto');
+    const { mkdtempSync, readFileSync: readFile, rmSync } = require('node:fs');
+    const { tmpdir } = require('node:os');
+
+    const fail = (detail) => {
+        const err = new Error(`${appPath} was not signed as required (${detail}). `
+            + `The build was asked to sign with '${identity}' and signed nothing or the `
+            + `wrong thing; refusing to package it.`);
+        err.name = 'MacAppNotSigned';
+        return err;
+    };
+
+    if (process.platform !== 'darwin') {
+        throw fail('a macOS signature can only be produced and checked on macOS');
+    }
+    // codesign writes its report to stderr, on success as well as failure.
+    const codesign = (args) => {
+        const res = spawnSync('codesign', args, { encoding: 'utf8' });
+        const report = `${res.stdout || ''}${res.stderr || ''}`.trim();
+        if (res.error || res.status !== 0) {
+            throw fail(`codesign ${args[0]}: ${report || (res.error && res.error.message)}`);
+        }
+        return report;
+    };
+    codesign(['--verify', '--strict', appPath]);
+
+    const scratch = mkdtempSync(join(tmpdir(), 'xchain-mac-leaf-'));
+    try {
+        const report = codesign(['-d', '--verbose=2',
+            `--extract-certificates=${join(scratch, 'cert')}`, appPath]);
+        let leaf;
+        try {
+            leaf = readFile(join(scratch, 'cert0'));
+        } catch {
+            throw fail('the signature carries no certificate, which is an ad-hoc signature');
+        }
+        const authority = (/^Authority=(.*)$/m.exec(report) || [])[1] || '(none)';
+        if (!authority.startsWith('Developer ID Application:')) {
+            throw fail(`signed by '${authority}', which is not a Developer ID Application certificate`);
+        }
+        const pinned = asSha1(identity);
+        const actual = createHash('sha1').update(leaf).digest('hex').toUpperCase();
+        if (pinned && actual !== pinned) {
+            throw fail(`signed by certificate ${actual}, not the pinned ${pinned}`);
+        }
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+}
 
 // The Microsoft Store lane (§15), opt-in for the same three
 // reasons as MAS. It needs a Partner-Center-assigned publisher identity
@@ -349,6 +471,22 @@ const config = {
     // matches nothing in the keychain reaches `handleNullIdentity`, which
     // logs and returns false unless this flag is on.
     forceCodeSigning: buildMas || macSigningRequired,
+
+    // A mac build that was handed an identity and signed nothing fails, on
+    // every lane, required or not. `forceCodeSigning` above covers an
+    // identity that matches no certificate (without it, app-builder-lib's
+    // `reportError` logs `skipped macOS application code signing` and the
+    // build exits 0); this covers the skips that flag never reaches, and a
+    // signature made with the wrong certificate. See assertMacAppSigned.
+    // The store lane is left to its own checks: its identity is a qualifier
+    // for two certificates, neither of them Developer ID.
+    afterSign: async (context) => {
+        if (context.electronPlatformName !== 'darwin' || !MAC_IDENTITY) {
+            return;
+        }
+        const app = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+        assertMacAppSigned(app, MAC_IDENTITY);
+    },
 
     // --- Reproducible AppImage (DD7) ----------------------------
     //
@@ -559,11 +697,21 @@ const config = {
             // gives the store no way to offer them anything.
             ...(buildMas ? [{ target: 'mas', arch: ['universal'] }] : []),
         ],
-        // Signing identity, resolved at MAC_IDENTITY above: the team
-        // qualifier whenever a certificate was supplied, null only when one
-        // was not. A build with no certificate produces an unsigned .app,
-        // which is fine for dev and rejected by Gatekeeper on user machines.
+        // Signing identity, resolved at MAC_IDENTITY above: the certificate
+        // fingerprint on a lane that requires a signature, the team
+        // qualifier when a certificate was supplied without that requirement,
+        // null only when none was. A build with no certificate produces an
+        // unsigned .app, which is fine for dev and rejected by Gatekeeper on
+        // user machines.
         identity: MAC_IDENTITY,
+        // A build that NAMED an identity meant to sign, required or not, so
+        // an identity that matches nothing throws instead of logging
+        // `skipped macOS application code signing` and exiting 0. Set on
+        // `mac` rather than the top level so it cannot reach a Windows or
+        // Linux build that happens to see CSC_LINK, and only when true: an
+        // explicit false here would override the top-level flag the store
+        // lane relies on.
+        ...(MAC_IDENTITY ? { forceCodeSigning: true } : {}),
         // Notarization only runs when the Apple credentials are present.
         //
         // v26 changed this from an object to a BOOLEAN: the team id and

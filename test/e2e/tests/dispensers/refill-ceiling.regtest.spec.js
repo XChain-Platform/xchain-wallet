@@ -162,15 +162,12 @@ async function approveAndGetTxid(page) {
 }
 
 /**
- * The txid off a screen that signed WITHOUT a confirm modal.
- *
- * The refill lane is one of the wallet's remaining legacy sign paths: Sign
- * refill calls `dispenserAction` directly and lands on its own "Refill
- * submitted" screen, so there is no `confirm-approve` to click and no prebuilt
- * PSBT. That is also why the fee pre-flight's refusal reaches this screen as an
- * inline error rather than as a blocked Approve.
+ * Approve a refill on the shared confirm page, then read the txid off the
+ * refill's own "Refill submitted" screen.
  */
 async function signedTxid(page) {
+    await expectConfirmModal(page);
+    await page.getByTestId('confirm-approve').click();
     const main = page.getByRole('main');
     await expect(main.getByRole('heading', { name: 'Refill submitted' }),
         'the refill never reached its own success screen')
@@ -265,7 +262,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
                     .toContainText(/of 5 refills used/, { timeout: 60_000 });
 
                 await main.getByLabel('Refill amount').fill(String(REFILL));
-                await main.getByRole('button', { name: /^Sign refill/ }).click();
+                await main.getByRole('button', { name: 'Refill dispenser' }).click();
 
                 const done = await waitForIndexedAction(await signedTxid(page));
                 expect(String(done.status),
@@ -296,7 +293,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'owner has no way to know they are on their sixth')
                 .toContainText(/used all 5 of its refills|5 of 5 refills used/, { timeout: 60_000 });
 
-            const signButton = main.getByRole('button', { name: /^Sign refill/ });
+            const signButton = main.getByRole('button', { name: 'Refill dispenser' });
             if (!(await signButton.isEnabled())) {
                 // The venue serves per-edit give_escrow, so the count is exact and
                 // the wallet refuses outright. Nothing is signed, nothing is spent.
@@ -309,26 +306,25 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
             // change shipped alongside this spec), so the count is INFERRED and
             // the wallet deliberately declines to block on it: over-counting
             // would refuse a refill the chain would have taken. The owner is
-            // warned and can still proceed, which is the state this venue is in
-            // until the explorer is redeployed.
+            // warned and can still proceed to the confirm page, whose network
+            // dry run is what stops the sixth: the chain answers MAX_REFILLS
+            // there, before anything is signed.
             // eslint-disable-next-line no-console
             console.log('[note] this venue serves no per-edit give_escrow, so the refill count is '
-                + 'inferred and the sixth is warned about rather than blocked; the chain is asked '
-                + 'for the verdict instead');
+                + 'inferred and the sixth is warned about rather than blocked; the confirm page dry run '
+                + 'is asked for the verdict instead');
             await main.getByLabel('Refill amount').fill(String(REFILL));
             await signButton.click();
 
-            const rejected = await waitForIndexedAction(await signedTxid(page));
-            expect(String(rejected.status),
-                'the chain accepted a sixth refill, so MAX_REFILLS is not enforced on this venue '
-                + 'and the whole cap is unproven')
-                .toContain('MAX_REFILLS');
+            await expect(page.getByTestId('preflight-chip'),
+                'the confirm page dry run did not refuse a sixth refill')
+                .toHaveText('Will likely fail', { timeout: 120_000 });
+            await expect(page.getByTestId('confirm-approve'),
+                'Approve is offered on a refill the network refuses').toBeDisabled();
 
-            // The money half. The transaction is on chain and cost a miner fee;
-            // what must NOT have happened is the escrow moving, and what the
-            // owner is left believing is the point of the disclosure above.
+            // The money half: nothing was signed, so nothing moved and no fee was paid.
             expect(await giveRemaining(dispenserIndex),
-                'a refill the chain recorded invalid still moved the escrow')
+                'the escrow moved on a refill the dry run refused')
                 .toBe(before);
         });
 

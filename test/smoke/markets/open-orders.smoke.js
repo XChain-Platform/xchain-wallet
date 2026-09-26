@@ -26,11 +26,15 @@ assert.ok(/export function OpenOrdersPanel\b/.test(src),
     'OpenOrdersPanel is a named export');
 assert.ok(/messaging\.getMarketOrders\(/.test(src),
     'OpenOrdersPanel fetches via messaging.getMarketOrders per-address');
-assert.ok(/messaging\.cancelOrder\(/.test(src)
-    && /messaging\.cancelOrderHw\(/.test(src),
-    'OpenOrdersPanel branches between cancelOrder and cancelOrderHw on isHwSource');
-assert.ok(/SignCredentials/.test(src) && /isHwSource/.test(src),
-    'OpenOrdersPanel reuses SignCredentials + isHwSource');
+assert.ok(/useOwnerActionLane/.test(src)
+    && /software:\s*'cancelOrder'/.test(src)
+    && /hardware:\s*'cancelOrderHw'/.test(src),
+    'OpenOrdersPanel routes cancellation through the shared owner-action lane');
+assert.ok(/<ActionConfirmScreen/.test(src) && /if \(cancelLane\.open\)/.test(src),
+    'OpenOrdersPanel replaces its content with the shared confirmation screen');
+assert.ok(/action:\s*'ORDER'/.test(src)
+    && /ORDER_ACTION_INDEX:\s*orderActionIndex/.test(src),
+    'OpenOrdersPanel composes the ORDER cancel before signing');
 assert.ok(/POLL_INTERVAL_MS\s*=\s*5000/.test(src),
     'OpenOrdersPanel polls every 5s');
 assert.ok(/document\.visibilityState === 'hidden'/.test(src),
@@ -39,5 +43,5 @@ assert.ok(/variant="danger"/.test(src),
     'Cancel button renders as danger variant');
 
 console.log(
-    'OK: open-orders smoke (OpenOrdersPanel §41.3.5 fetches getMarketOrders per wallet address; polls every 5s with visibilitychange pause; cancel path branches cancelOrder/cancelOrderHw on isHwSource behind SignCredentials; danger-variant Cancel button)',
+    'OK: open-orders smoke (OpenOrdersPanel §41.3.5 fetches getMarketOrders per wallet address; polls every 5s with visibilitychange pause; cancel composes through useOwnerActionLane and replaces the panel with ActionConfirmScreen; danger-variant Cancel button)',
 );

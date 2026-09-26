@@ -285,9 +285,20 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!decision || !decision.approved) {
             throw new UserRejectedError('connect');
         }
+        // The approval screen echoes back the dApp's own requested account
+        // list verbatim (ConnectApproval.jsx has no account selector to
+        // correct it against), so `decision.accounts` is still page-supplied
+        // input at this point. Drop any id that is not a real vault account
+        // before it can become a grant: otherwise a page naming a foreign or
+        // made-up id would get it stored in site.permissions.accounts and
+        // handed back unchanged by every reader that trusts that list.
+        const vaultAccounts = await deps.vault.accounts.list();
+        const knownAccountIds = new Set(vaultAccounts.map((a) => a.id));
         const permissions = {
             chains: Array.isArray(decision.chains) ? decision.chains : [],
-            accounts: Array.isArray(decision.accounts) ? decision.accounts : [],
+            accounts: Array.isArray(decision.accounts)
+                ? decision.accounts.filter((id) => knownAccountIds.has(id))
+                : [],
             canSignMessage: decision.canSignMessage === true,
             canSignAction: decision.canSignAction ?? {},
         };
@@ -297,12 +308,13 @@ export function registerBridgeHandlers(host, opts = {}) {
         // selector and ConnectOpts has no account field, so the prompt path
         // approved a chain and stored `accounts: []`, handing the site every
         // account and address with no account review. Narrow an
-        // empty grant to the primary account, which is exactly what
+        // empty grant (also reached when every requested id above was
+        // dropped as unknown) to the primary account, which is exactly what
         // resolveAutoApproveScope already does on the auto-approve path and for
         // the same reason. Left empty when the vault has no accounts: there is
         // nothing to grant, and the read handlers return empty sets anyway.
         if (permissions.accounts.length === 0) {
-            const [primaryAccount] = await deps.vault.accounts.list();
+            const [primaryAccount] = vaultAccounts;
             if (primaryAccount) permissions.accounts = [primaryAccount.id];
         }
         const site = schemas.createConnectedSite({
@@ -553,10 +565,13 @@ export function registerBridgeHandlers(host, opts = {}) {
 
     // §22 / P4: the wallet as passive MuSig2 co-signer. An agent sends the
     // PSBT + its public nonce + the aggregate address of the 2-of-2 account it
-    // wants co-signed. We resolve the stored CoSignerAccount, ALWAYS prompt the
-    // user (the policy is a safety net; the human is the final gate), and on
-    // approval derive the daemon key transiently to return the partial
-    // signature or a structured refusal.
+    // wants co-signed. We resolve the stored CoSignerAccount, check it against
+    // the connect-time account grant (the same gate signMessage/signAction/
+    // signPsbt enforce, so a site can only ask this wallet to co-sign for an
+    // account it was actually granted), ALWAYS prompt the user (the policy is
+    // a safety net; the human is the final gate), and on approval derive the
+    // daemon key transiently to return the partial signature or a structured
+    // refusal.
     register('bridge.coSign', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
@@ -570,6 +585,11 @@ export function registerBridgeHandlers(host, opts = {}) {
         if (!account) {
             throw bridgeError('UNKNOWN_COSIGNER_ACCOUNT', `no enabled co-signer account for ${req.aggregateAddress} on ${req.chainId}`);
         }
+        // A site connected for account A must not be able to ask this wallet
+        // to co-sign for account B just because it can name B's aggregate
+        // address; the approval prompt below is a second gate, not the only
+        // one, exactly like assertAddressPermitted for signMessage.
+        await assertCoSignerAccountPermitted(deps, site, account);
         const decision = await approvals.coSign({
             origin: req.origin,
             kind: 'coSign',
@@ -1386,6 +1406,31 @@ async function assertAddressPermitted(deps, site, chainId, address) {
     }
     const ok = await siteHasAddress(deps.vault, site, chainId, address, deps.chainRegistry);
     if (!ok) throw bridgeError('ADDRESS_NOT_PERMITTED', address);
+}
+
+// Enforce the connect-time per-account scope for a co-signer account, the
+// same gate assertAddressPermitted enforces for signMessage. A CoSignerAccount
+// has no accountId of its own (its `walletId` names the whole seed, not one
+// vault Account), so ownership is resolved the same way resolveBridgeSigningPaths
+// resolves a derivationPath: through the vault Address record the daemon key
+// was provisioned from, which does carry an accountId. Throws
+// ADDRESS_NOT_PERMITTED, matching every sibling signing route, when that
+// address is out of scope, unknown, or was deleted after provisioning.
+async function assertCoSignerAccountPermitted(deps, site, account) {
+    const accountIds = site.permissions?.accounts ?? [];
+    if (accountIds.length === 0) return;  // empty = all permitted
+    const descriptor = deps.chainRegistry.get(account.chainId);
+    const owner = descriptor
+        ? (await deps.vault.addresses.list()).find(
+            (a) =>
+                a.chain === descriptor.coin &&
+                a.network === descriptor.networkKind &&
+                a.derivationPath === account.daemonDerivationPath,
+        )
+        : null;
+    if (!owner || !owner.accountId || !accountIds.includes(owner.accountId)) {
+        throw bridgeError('ADDRESS_NOT_PERMITTED', account.aggregateAddress);
+    }
 }
 
 async function siteHasAddress(vault, site, chainId, address, chainRegistry) {

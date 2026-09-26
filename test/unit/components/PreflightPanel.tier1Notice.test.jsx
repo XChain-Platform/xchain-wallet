@@ -31,12 +31,14 @@
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { existsSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { requireSdkDeep, sdkInstalled } from '../../helpers/sdkDeepPaths.js';
 import { PreflightPanel, TIER1_NOTICE_CODES, SUPPORTED_SCHEMA_VERSION }
     from '../../../packages/core/src/shared/components/PreflightPanel.jsx';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 // WHERE THE SDK COMES FROM, and it is not a sibling any more.
 //
@@ -68,26 +70,14 @@ import { PreflightPanel, TIER1_NOTICE_CODES, SUPPORTED_SCHEMA_VERSION }
 // three only so a partially-installed shell falls through instead of failing
 // the run; they pin the identical alias spec, so the order is arbitrary. Same
 // correction, same reasoning, as
-// test/integration/hd/wallet-sdk-derivation-parity.test.js:65-99, whose
+// test/integration/hd/wallet-sdk-derivation-parity.test.js, whose
 // XCHAIN_REQUIRE_SIBLINGS escape the gate below still mirrors.
-const here = dirname(fileURLToPath(import.meta.url));
-const SDK_ANCHOR_SHELLS = ['web', 'extension', 'desktop'];
-const shellRequires = SDK_ANCHOR_SHELLS.map((shell) =>
-    createRequire(join(here, '..', '..', '..', 'packages', shell, 'package.json')));
-const sdkFile = (...parts) => {
-    const spec = `xchain-sdk/${parts.join('/')}`;
-    for (const requireFromShell of shellRequires) {
-        try {
-            return requireFromShell.resolve(spec);
-        } catch {
-            // Next shell; the sibling fallback below is the last resort.
-        }
-    }
-    const sibling = join(here, '..', '..', '..', '..', 'xchain-sdk', ...parts);
-    return existsSync(sibling) ? sibling : null;
-};
-const constantsPath = sdkFile('src', 'preflight', 'constants.js');
-const preflightConstants = constantsPath === null ? null : createRequire(import.meta.url)(constantsPath);
+
+// That resolver is shared, in test/helpers/sdkDeepPaths.js, which also holds
+// both SDK spellings of every module. Presence is asked of package.json, the
+// one path a structure pass cannot move, so an absent SDK (the skip below)
+// stays distinct from a module the SDK moved, which throws naming the path.
+const preflightConstants = sdkInstalled() ? requireSdkDeep('preflightConstants') : null;
 
 afterEach(cleanup);
 

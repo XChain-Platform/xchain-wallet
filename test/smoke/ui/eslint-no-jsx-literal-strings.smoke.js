@@ -393,6 +393,48 @@ assert.match(v[0].message, /Inline JSX text/, 'and reports it as JSX text, not a
 v = findViolations(jsxAttr('value', literal('bc1qexampleaddress')));
 assert.strictEqual(v.length, 0, 'value stays out of the set (CopyButton clipboard payload)');
 
+// 22. Copy hoisted into a module-scope constant table reaches a sink
+// through an identifier, which the four inline gates read as invisible.
+// The sink decides: an unread table, a technical attribute and a
+// non-string entry all stay silent.
+const prop = (name, value) => ({ type: 'Property', key: identifier(name), value, computed: false });
+const objectExpr = (...properties) => ({ type: 'ObjectExpression', properties });
+// `computed` models HINTS[mode]: the property is a runtime value, not a key.
+const member = (object, name, computed = false) => ({
+    type: 'MemberExpression', object, computed, property: identifier(name),
+});
+const constTable = (name, init) => ({
+    type: 'VariableDeclaration', kind: 'const',
+    declarations: [{ type: 'VariableDeclarator', id: identifier(name), init }],
+});
+const program = (...body) => ({ type: 'Program', body });
+const hints = () => constTable('HINTS', objectExpr(
+    prop('flat', literal('One address, one vote')),
+    prop('balance', literal('Weight = token balance')),
+    prop('id', literal('-')),
+    prop('nested', objectExpr(prop('tone', literal('warning')))),
+));
+const sinkRef = (name, value) => jsxElement([jsxAttr(name, jsxExpr(value))]);
+
+v = findViolations(program(hints(), sinkRef('hint', member(identifier('HINTS'), 'mode', true))));
+assert.deepStrictEqual(v.map((x) => x.node.value), ['One address, one vote', 'Weight = token balance'],
+    'a computed read judges every string entry and skips trivial and nested values');
+assert.match(v[0].message, /reaches hint via HINTS/, 'the message names the sink and the table');
+v = findViolations(program(hints(), sinkRef('hint', member(identifier('HINTS'), 'flat'))));
+assert.deepStrictEqual(v.map((x) => x.node.value), ['One address, one vote'], 'a static key judges only that entry');
+v = findViolations(program(hints(), jsxElement([jsxExpr(member(identifier('HINTS'), 'balance'))])));
+assert.strictEqual(v.length, 1, 'a JSX-content read is a sink too');
+v = findViolations(program(hints(), sinkRef('className', member(identifier('HINTS'), 'mode', true))));
+assert.strictEqual(v.length, 0, 'a technical attribute reading the table is not a sink');
+v = findViolations(program(hints(), sinkRef('hint', identifier('OTHER'))));
+assert.strictEqual(v.length, 0, 'a table no sink reads is never judged');
+v = findViolations(program(hints(),
+    sinkRef('hint', member(identifier('HINTS'), 'mode', true)),
+    sinkRef('aria-label', member(identifier('HINTS'), 'mode', true))));
+assert.strictEqual(v.length, 2, 'each table value is judged once, however many sinks read it');
+v = findViolations(jsxElement([jsxAttr('hint', jsxExpr(member(identifier('HINTS'), 'mode', true)))]));
+assert.strictEqual(v.length, 0, 'without a Program root there are no tables and nothing changes');
+
 // ─── Export surface ───────────────────────────────────────────────
 //
 // The rule once exported isTechnicalAttr plus a TECHNICAL_ATTR_NAMES
@@ -536,12 +578,50 @@ const skipVisitors = pluginRule.create(smokeContext);
 assert.strictEqual(Object.keys(skipVisitors).length, 0,
     'create() returns empty visitors for ignored files (test paths)');
 
+// The shipping side of test 22: Program collects the tables, the sink
+// visitors judge them, and a second sink on the same table adds nothing.
+const tableReports = [];
+const tableVisitors = pluginRule.create({ ...fakeContext, report(r) { tableReports.push(r); } });
+tableVisitors.Program(program(hints()));
+tableVisitors.JSXAttribute(jsxAttr('hint', jsxExpr(member(identifier('HINTS'), 'mode', true))));
+assert.strictEqual(tableReports.length, 2, 'create() flags table copy a sink reads');
+tableVisitors.JSXExpressionContainer({
+    ...jsxExpr(member(identifier('HINTS'), 'flat')),
+    parent: { type: 'JSXElement' },
+});
+assert.strictEqual(tableReports.length, 2, 'create() judges each table value once per file');
+
+// `ignoreFiles` takes regex sources tested against the absolute filename;
+// glob notation fails loudly rather than dying on a SyntaxError or
+// silently skipping the wrong files.
+const { shouldSkipFile } = rule;
+const abs = (p) => `/repo/xchain-wallet/${p}`;
+assert.ok(shouldSkipFile(abs('packages/core/src/legacy/Foo.jsx'), ['/src/legacy/']), 'a regex source skips its directory');
+assert.ok(!shouldSkipFile(abs('packages/core/src/app/Foo.jsx'), ['/src/legacy/']), 'and nothing outside it');
+assert.ok(shouldSkipFile(abs('packages/core/src/Old.jsx'), [/Old\.jsx$/]), 'a RegExp instance passes through');
+assert.ok(!shouldSkipFile(abs('packages/core/src/legacy/Foo.jsx'), ['^src/legacy/']),
+    'a repo-root anchor never matches the absolute filename, which is why the header example is unanchored');
+for (const glob of ['src/legacy/**', 'src/*.jsx', '*.test.jsx', 'src/(legacy']) {
+    assert.throws(() => shouldSkipFile(abs('packages/core/src/Foo.jsx'), [glob]),
+        (err) => err.message.includes(`"${glob}"`) && /not a regular-expression source/.test(err.message),
+        `ignoreFiles refuses "${glob}" with a message naming it`);
+}
+assert.doesNotThrow(() => shouldSkipFile(abs('a.jsx'), ['\\/legacy\\/*']), 'an escaped slash before * is a real regex');
+assert.ok(shouldSkipFile(abs('dist/app.jsx')), 'the defaults skip dist/');
+assert.ok(shouldSkipFile(abs('node_modules/pkg/index.jsx')), 'the defaults skip node_modules/');
+
 // ─── Documentation header pin ─────────────────────────────────────
 
 const ruleSrc = read('tools/eslint/rules/no-jsx-literal-strings.js');
 assert.match(ruleSrc, /§54.*G172/, 'rule header references §54 / G172');
 assert.match(ruleSrc, /eslint-disable-next-line @xchain\/no-jsx-literal-strings/,
     'rule documents the per-line disable comment');
+assert.doesNotMatch(ruleSrc, /ignoreFiles` glob/, 'the header does not document ignoreFiles as globs');
+assert.match(ruleSrc, /ignoreFiles: \['\/src\/legacy\/'\]/, 'the header shows a regex-source ignoreFiles example');
+for (const dir of ['dist', 'node_modules']) {
+    assert.match(ruleSrc, new RegExp(`\`/${dir}/\``), `the header lists the ${dir} default`);
+}
+assert.match(ruleSrc, /What the rule cannot see/, 'the header names what a clean run does not prove');
 
 // The wiring recipe has to be the flat-config one, and this is the only
 // thing standing between the prose and a fourth drift back. Both headers

@@ -60,12 +60,12 @@ function scenario(over = {}) {
     };
     const matchRow = over.matchRow === null ? null : {
         action_index: '900',
-        // The row's two column families do NOT pair up (xchain-indexer db.js
+        // The row's two column families do NOT pair up (xchain-indexer src/db/orders/match_rows.js
         // createOrderMatch): the amounts are the TRIGGERING order's give/get, and
         // that order is the one named by get_action_index, while
-        // give_action_index names the counterparty. This fixture used to be
-        // written the other way round - the same misreading the code carried -
-        // which is why the bug passed its own tests for as long as it existed.
+        // give_action_index names the counterparty. A fixture written the other
+        // way round shares the misreading a faulty reader makes, so that fault
+        // passes its own tests; this one follows the column families as stored.
         give_action_index: '600', // the counterparty's order
         get_action_index: '500',  // MY order: it triggered the match
         give_amount: '0.005',     // my give: the coin-side fill

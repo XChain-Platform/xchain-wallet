@@ -66,13 +66,17 @@ const hardcoded = [];
 const unwired = [];
 for (const f of configs) {
     const src = read(`test/vitest/${f}`);
-    if (/maxForks:\s*\d/.test(src)) hardcoded.push(f);
+    // Both spellings: vitest 3 took the ceiling as poolOptions.forks.maxForks,
+    // vitest 4 as the top-level maxWorkers. Watching only the old name would
+    // leave the guard passing while a literal count walked back in under the
+    // new one.
+    if (/(maxForks|maxWorkers):\s*['"]?\d/.test(src)) hardcoded.push(f);
     if (!src.includes("from './poolSize.js'")) unwired.push(f);
 }
 
 assert.deepEqual(
     hardcoded, [],
-    'a vitest config sets a NUMERIC maxForks again. A literal fork count is a statement about '
+    'a vitest config sets a NUMERIC worker ceiling again. A literal fork count is a statement about '
     + 'one machine: 8 caps a 32-core dev box and oversubscribes a hosted runner 2-4x, which is '
     + 'what made an Argon2id derivation cost 104s in CI against 5.0s here, and what kept ci.yml '
     + `red. Import { maxForks } from './poolSize.js' instead. Offenders: ${hardcoded.join(', ')}`,

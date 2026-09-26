@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
+import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import { getSettings, resolveApproval } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './ConnectApproval.module.css';
@@ -38,7 +39,7 @@ const chainRegistry = registryLib.defaultRegistry();
  */
 export function ConnectApproval({ id, payload, onReject }) {
     const origin = payload?.origin || '';
-    const appName = payload?.appName || origin;
+    const appName = neutralizeControlText(payload?.appName || '', { maxLength: 80 });
     const requestedChains = useMemo(
         () => (Array.isArray(payload?.requestedChains) ? payload.requestedChains : []),
         [payload],
@@ -148,14 +149,24 @@ export function ConnectApproval({ id, payload, onReject }) {
                 </div>
             }
         >
+            <section className={styles.identity} aria-label="Requesting site">
+                <p className={styles.identityLabel}>Verified site</p>
+                <p className={styles.identityOrigin}>{origin}</p>
+                {appName ? (
+                    <>
+                        <p className={styles.declaredNameLabel}>The site calls itself</p>
+                        <p className={styles.declaredName}>{appName}</p>
+                    </>
+                ) : null}
+            </section>
             <p className={styles.lede}>
-                <strong>{appName}</strong> wants to connect to your wallet.
+                This site wants to connect to your wallet.
             </p>
 
             <fieldset className={styles.fieldset}>
                 <legend className={styles.legend}>Chains</legend>
                 <p className={styles.hint}>
-                    Pick which chains {appName} can see. You can change this later.
+                    Pick which chains this site can see. You can change this later.
                 </p>
                 <ul className={styles.chainList}>
                     {supported.map((d) => {
@@ -183,7 +194,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                     checked={canSignMessage}
                     onChange={(e) => setCanSignMessage(e.target.checked)}
                 />
-                <span>Allow {appName} to request message signatures</span>
+                <span>Allow this site to request message signatures</span>
             </label>
 
             {error ? <div className={shared.error} role="alert">{error}</div> : null}

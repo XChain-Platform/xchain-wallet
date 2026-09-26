@@ -29,6 +29,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { latestEffectiveStakingRow } from '../../flows/stakingDashboard.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -126,12 +127,16 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         const addr = (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId);
         if (!addr) return;
         let cancelled = false;
-        messaging.getDelegationsForAddress({ chainId, address: addr.address })
-            .then((resp) => {
+        Promise.all([
+            messaging.getDelegationsForAddress({ chainId, address: addr.address }),
+            typeof messaging.getIndexerWatermark === 'function'
+                ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([resp, watermark]) => {
                 if (cancelled) return;
                 const rows = extractRows(resp);
-                rows.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
-                const latest = rows[0];
+                const latest = latestEffectiveStakingRow(rows, watermark?.watermark);
                 const pk = latest?.signing_pubkey || latest?.SIGNING_PUBKEY;
                 if (pk && typeof pk === 'string' && /^[0-9a-fA-F]{64}$/.test(pk)) {
                     setPubkey(pk.toLowerCase());
@@ -376,7 +381,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                         : 'Revocation broadcast. The signing key will stop voting on your behalf once the network records the action.'}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}>

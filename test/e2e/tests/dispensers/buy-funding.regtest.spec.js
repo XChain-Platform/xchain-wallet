@@ -249,14 +249,7 @@ async function waitForDispenser(source, giveTick, timeoutMs = 420_000) {
 
 /** Navigates the BUYER from an unlocked Home to the fixture's dispenser. */
 async function openDispenserAsBuyer(page, sellerAddress) {
-    // Two hops, because the palette does NOT carry the dispenser explorer.
-    // Its registry has `Dispensers` (the owner list) and `Create dispenser`,
-    // and nothing for `dispenser-explorer`; typing "Browse dispensers" into it
-    // returns "No matches". The buyer-facing browse surface lives only in the
-    // Token Actions catalogue, which the palette reaches as "All actions" -
-    // and that is the walk a real buyer makes too.
-    await gotoPalette(page, 'All actions');
-    await page.getByRole('button', { name: /^Browse dispensers/ }).click();
+    await gotoPalette(page, 'Browse dispensers');
 
     // Anchored on a CONTROL, not on the page title: PageHeader renders its
     // title as a plain <span>, so there is no heading role to wait for here.

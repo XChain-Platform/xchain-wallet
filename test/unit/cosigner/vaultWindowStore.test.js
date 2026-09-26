@@ -106,6 +106,21 @@ describe('cosigner/VaultWindowStore snapshot + record', () => {
         expect(snap.perTick).toEqual({ XCHAIN: '3.75', FOO: '10' });
     });
 
+    it('sums ticker case variants into the chain identity bucket', async () => {
+        const now = () => 1_000_000_000_000;
+        const persistence = createInMemoryWindowPersistence({
+            entries: [
+                { t: now(), action: 'SEND', tick: 'MiXeD', amount: '1.5' },
+                { t: now(), action: 'SEND', tick: 'MIXED', amount: '2.25' },
+                { t: now(), action: 'SEND', tick: '__proto__', amount: '3' },
+            ],
+        });
+        const store = new VaultWindowStore({ persistence, hours: 24, now });
+        await store.load();
+
+        expect(store.snapshot().perTick).toEqual({ MIXED: '3.75', __PROTO__: '3' });
+    });
+
     it('prunes entries older than the window', async () => {
         const nowMs = 1_000_000_000_000;
         const hourMs = 3600 * 1000;

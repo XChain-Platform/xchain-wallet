@@ -39,15 +39,26 @@ const BTC_ADDRESS = {
  * @param {object} [opts]
  * @param {Record<string, any[]>} [opts.byChain]
  * @param {'1' | '2'} [opts.initialType]
+ * @param {string} [opts.tokenTick]
  */
 function mount(opts = {}) {
     const byChain = opts.byChain || { [BTC]: [BTC_ADDRESS] };
+    const tokenTick = opts.tokenTick || 'MiXeD!';
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(byChain),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        getWalletBalances: vi.fn().mockResolvedValue({
+            [BTC]: [{
+                address: BTC_ADDRESS.address,
+                balances: {
+                    native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                    tokens: [{ tick: tokenTick, quantity: '1', divisibility: 0 }],
+                },
+            }],
+        }),
     };
     const messaging = new Proxy(base, {
         get(target, prop) {
@@ -112,5 +123,16 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
         expect(await screen.findByText(
             /allow-list or block-list.*can never be bridged.*binding itself can never be cleared/is,
         )).toBeInTheDocument();
+    });
+
+    it('keeps a symbol ticker spelling selected from the token picker', async () => {
+        mount({ initialType: '1', tokenTick: 'MiXeD!' });
+        const textarea = await screen.findByLabelText('Tokens (one per line)');
+        expect(textarea).toHaveAttribute('autocapitalize', 'none');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
+        fireEvent.click(await screen.findByLabelText('Open MiXeD! details'));
+
+        expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('MiXeD!');
     });
 });

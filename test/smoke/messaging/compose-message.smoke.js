@@ -16,8 +16,8 @@
 //   2. ComposeMessage.jsx exists, debounces the pubkey lookup via
 //      messaging.getRecipientPubkey, tracks pubkey state
 //      ('idle' | 'checking' | 'found' | 'missing'), offers the
-//      unencrypted fallback when pubkey is missing, and signs via
-//      SignCredentials with both messageAction + messageActionHw.
+//      unencrypted fallback when pubkey is missing, and signs through
+//      the shared confirm flow with messageAction + messageActionHw.
 //   3. Background host registers action.message, action.message.hw,
 //      and messaging.pubkey.
 //   4. Three shells' messaging.js expose messageAction,
@@ -100,8 +100,20 @@ assert.ok(/FeeSelector/.test(src) && /feePick/.test(src),
     'ComposeMessage includes the network-fee tier selector');
 assert.ok(/isValidAddressAnyNetwork/.test(src) && /addressInvalid/.test(src),
     'ComposeMessage validates the recipient address (any network) before review');
-assert.ok(/messaging\.sendHandshake\s*\(/.test(src) && /Request encrypted session/.test(src),
-    'ComposeMessage can publish a key-exchange handshake when the recipient pubkey is unknown');
+assert.ok(/Request encrypted session/.test(src),
+    'ComposeMessage offers a key-exchange handshake when the recipient pubkey is unknown');
+assert.ok(
+    /useOwnerActionLane\(\{[\s\S]*?software: 'sendHandshake',[\s\S]*?hardware: 'sendHandshakeHw',[\s\S]*?\}\)/.test(src),
+    'ComposeMessage sends handshake software and hardware signing through the owner confirm lane',
+);
+assert.ok(
+    /buildHandshakeActionData\(\{[\s\S]*?version: 0,[\s\S]*?handshakeLane\.run\(\{[\s\S]*?actionData/.test(src),
+    'ComposeMessage confirms a format-0 handshake action before signing',
+);
+assert.ok(
+    /if \(handshakeLane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.handshakeLane\.confirmProps\}/.test(src),
+    'ComposeMessage renders the shared dry-run confirmation screen for handshakes',
+);
 
 // --- 2b. messageAction ECDH send path ---------------------------------
 const messageActionSrc = readFileSync(join(core, 'src', 'flows', 'messageAction.js'), 'utf8');
@@ -110,18 +122,28 @@ assert.ok(/deriveSharedSecret\s*\(/.test(messageActionSrc)
     'messageAction derives a shared secret + session-encrypts for ECDH (method 2)');
 assert.ok(/hardware wallet/i.test(messageActionSrc),
     'messageAction blocks ECDH from hardware signers (no exposed key)');
-assert.ok(/messaging\.messageAction\s*\(/.test(src)
-    && /messaging\.messageActionHw\s*\(/.test(src),
-    'ComposeMessage branches messageAction / messageActionHw on isHwSource');
+assert.ok(
+    /useConfirmSubmit\(\{[\s\S]*?software: 'messageAction',[\s\S]*?hardware: 'messageActionHw',[\s\S]*?\}\)/.test(src),
+    'ComposeMessage dispatches confirmed bytes to messageAction or messageActionHw',
+);
+assert.ok(
+    /useActionConfirmFlow\(\{ messaging, walletId, slice: 'bespokeFlows' \}\)/.test(src)
+        && /compose: \(\) => messaging\.composeMessageForConfirm\(base\)/.test(src),
+    'ComposeMessage composes its encrypted payload through the shared confirm flow',
+);
+assert.ok(
+    /if \(actionConfirm\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?confirmAction=\{actionConfirm\.confirmAction\}/.test(src),
+    'ComposeMessage renders the shared dry-run confirmation screen for messages',
+);
 assert.ok(/SignCredentials/.test(src) && /isHwSource/.test(src),
-    'ComposeMessage reuses SignCredentials + isHwSource');
+    'ComposeMessage keeps the credential gate for the locked ECDH fallback');
 assert.ok(/PubkeyNotFoundError/.test(src),
     'ComposeMessage handles PubkeyNotFoundError from the background flow');
 
 // --- 2c. Review/confirm gate ------------------------------------------
-// The message must not be signed/broadcast until the user reviews the
-// recipient + cost and confirms. The form submits to a review stage; the
-// real send (messageAction / messageActionHw) fires only from review.
+// The message must not be signed or broadcast until the user reviews the
+// recipient and cost. Normal sends open shared confirmation, while locked
+// ECDH and demo sends use the local review fallback.
 for (const stage of ['form', 'review', 'submitting', 'done']) {
     assert.ok(src.includes(`'${stage}'`),
         `ComposeMessage stage machine includes "${stage}"`);
@@ -131,16 +153,16 @@ assert.ok(/function handleReview\b/.test(src),
 assert.ok(/onSubmit=\{handleReview\}/.test(src),
     'ComposeMessage form submits to handleReview (review first, not send)');
 assert.ok(/setStage\('review'\)/.test(src),
-    'ComposeMessage advances to the review stage before sending');
-// The real send lives in handleSubmit, reached only from the review-stage
-// form. handleReview must NOT call messageAction itself: the send is gated.
+    'ComposeMessage advances fallback sends to the review stage before sending');
+// handleReview never calls a signing method directly. It either opens shared
+// confirmation or advances the fallback path to local review.
 const reviewBody = src.slice(
     src.indexOf('function handleReview'),
     src.indexOf('async function handleSubmit'),
 );
 assert.ok(reviewBody.length > 0, 'handleReview precedes handleSubmit');
 assert.ok(!/messaging\.messageAction(Hw)?\s*\(/.test(reviewBody),
-    'handleReview does not send: messageAction is gated behind the review confirm');
+    'handleReview does not directly sign or broadcast a message');
 assert.ok(/estimateNativeSendFee\s*\(/.test(src),
     'ComposeMessage review estimates the network fee (recipient + cost shown)');
 assert.ok(/Review message/.test(src),
@@ -205,5 +227,5 @@ assert.ok(/Reply/.test(inboxSrc),
     'MessagingInbox renders "Reply" button when counterparty selected');
 
 console.log(
-    'OK: compose-message smoke (§41.7.3: messageAction + getRecipientPubkey + PubkeyNotFoundError; ComposeMessage debounced pubkey lookup, 4-state UI, unencrypted fallback, SignCredentials gate; background handlers + 3-shell messaging + 3-shell App.jsx + Inbox Reply/New button)',
+    'OK: compose-message smoke (§41.7.3: messageAction + getRecipientPubkey + PubkeyNotFoundError; ComposeMessage debounced pubkey lookup, 4-state UI, unencrypted fallback, shared message and handshake confirmation; background handlers + 3-shell messaging + 3-shell App.jsx + Inbox Reply/New button)',
 );

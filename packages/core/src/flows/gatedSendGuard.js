@@ -104,11 +104,9 @@ export class GatedRecipientPubkeyMissingError extends Error {
     }
 }
 
-// Per-(chainId, tick) gated-group memo so compose retries and the
-// readiness probe don't re-hit the explorer on every call. Short TTL:
-// a newly published gated FILE must start guarding sends within a
-// minute, and a false "gated" after the last file deactivates is
-// harmless (an extra MESSAGE sibling never invalidates a SEND).
+// Cache positive groups per (chainId, tick) to spare repeat explorer calls.
+// Skip empty results so a newly published gated FILE guards the next send.
+// Expire positives after one minute to bound stale explorer answers.
 const GROUPS_TTL_MS = 60_000;
 /** @type {Map<string, { at: number, groups: any[] }>} */
 const GROUPS_CACHE = new Map();
@@ -246,7 +244,7 @@ export async function splitGroupsByThreshold({ sdkRegistry, chainId, sdk, to, ti
 }
 
 /**
- * Real (non-demo) gated groups for a tick, TTL-memoized. Demo fixtures
+ * Real (non-demo) gated groups for a tick, positive-result TTL-memoized. Demo fixtures
  * are display-only and must never make a real send compose as gated.
  *
  * @param {{ sdk: object, chainId: string, tick: string }} params
@@ -261,7 +259,8 @@ export async function getGatedGroupsForSend({ sdk, chainId, tick }) {
         const files = Array.isArray(g?.files) ? g.files : [];
         return files.length > 0 && !files.every((f) => isDemoGatedActionIndex(f.actionIndex));
     });
-    GROUPS_CACHE.set(cacheKey, { at: Date.now(), groups });
+    if (groups.length > 0) GROUPS_CACHE.set(cacheKey, { at: Date.now(), groups });
+    else GROUPS_CACHE.delete(cacheKey);
     return groups;
 }
 

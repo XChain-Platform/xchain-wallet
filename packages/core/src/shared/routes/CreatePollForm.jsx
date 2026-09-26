@@ -447,7 +447,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     it closes at block {endBlock}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}>
@@ -738,10 +738,9 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick.trim() || cleanOptions.length < 2 || !endBlock.trim()
-                        || bindingErrors.length > 0 || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Create poll' : 'Preview'}
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Create poll' : 'Preview'}
                 </Button>
             </div>
         </form>,

@@ -29,7 +29,8 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
+import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -109,19 +110,31 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
     useEffect(() => {
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
+        Promise.all([
+            messaging.getAddressesByChain(walletId),
+            typeof messaging.getActiveAddresses === 'function'
+                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                : Promise.resolve({}),
+            typeof messaging.getSettings === 'function'
+                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                : Promise.resolve(null),
+        ])
+            .then(([byChain, active, settings]) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
                 // D-153: opened WITHOUT a token (the address-controller lane),
-                // there is no chain to inherit, so default to the first chain
-                // the wallet has an address on - the same rule `useActionForm`
-                // applies to every other free-entry form. Without it the form
-                // renders its "no address on this chain" error over a wallet
-                // that has plenty, because `chainId` is simply undefined.
+                // there is no chain to inherit, so default to the last-used
+                // chain, else the first chain the wallet has an address on -
+                // the same rule `useActionForm` applies to every other
+                // free-entry form. `byChain` is in address-creation order, so
+                // the first-key fallback alone opened the address-controller
+                // lane on the wallet's OLDEST chain forever. Without a chain
+                // at all here the form renders its "no address on this
+                // chain" error over a wallet that has plenty, because
+                // `chainId` is simply undefined.
                 let cid = chainId;
                 if (!cid) {
-                    cid = Object.keys(byChain || {})[0];
+                    cid = pickDefaultChainId(byChain, { settings });
                     if (!cid) {
                         setLoadError('No addresses on any chain yet. Use Receive to generate one first.');
                         return;
@@ -135,12 +148,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     setLoadError('No address on this chain to sign from. Use Receive to generate one first.');
                     return;
                 }
-                const sorted = [...addrs].sort((a, b) => {
-                    const ai = (externalIndexOf(a.derivationPath) ?? -1);
-                    const bi = (externalIndexOf(b.derivationPath) ?? -1);
-                    return bi - ai;
-                });
-                setFromAddressId(sorted[0].id);
+                setFromAddressId(preferredSourceId(addrs, active?.[cid]));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -458,7 +466,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     {verb} broadcast. The network will apply the controller change shortly.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || '-')}</dd>
                 </dl>
                 <div className={styles.actions}>

@@ -16,10 +16,9 @@
 // dispenser_caps_activation.js - genesis-active on regtest, mainnet from the
 // 2026-08-17 flag-day).
 //
-// The wallet used to keep no count at all and state the ceiling as policy copy,
-// so an owner had no way to know they were on their sixth. That is not a
-// cosmetic gap: the refill lane has no confirm screen and owes no protocol fee,
-// so it runs NO network dry run, and the sixth refill was signed, broadcast,
+// Without a count the ceiling is only policy copy, and an owner has no way to
+// know they are on their sixth. That is not a cosmetic gap: a refill owes no
+// protocol fee, so without a network dry run the sixth refill is signed, broadcast,
 // and shown a "Refill submitted" screen with a transaction id - for an action
 // the chain always records invalid. The owner pays a miner fee and watches an
 // escrow that never moves. Measured live: DISPENSER_EDIT 1683 on Litecoin

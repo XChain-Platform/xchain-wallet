@@ -299,8 +299,12 @@ describe('(c) the confirm screens name the outcome the market names', () => {
         });
         const utils = await openMarket(messaging);
         expect(utils.container.textContent).toContain('No outcomes recorded');
-        // Nothing to pick means nothing to review: the button stays disabled.
-        expect(button(utils, /Review bet/i).disabled).toBe(true);
+        // Keep Review active when the feed has no outcomes so the form can explain
+        // why it cannot continue.
+        const review = button(utils, /Review bet/i);
+        expect(review.disabled).toBe(false);
+        fireEvent.click(review);
+        expect(utils.container.textContent).toContain('Choose an outcome.');
     });
 });
 

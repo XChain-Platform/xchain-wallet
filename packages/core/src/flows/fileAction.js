@@ -28,6 +28,7 @@
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
 
 /**
  * @typedef {Object} FileActionOpts
@@ -115,6 +116,7 @@ export async function fileAction(opts) {
         actionData: { action: 'FILE', params },
         encoderOpts: {
             pubkey: source.publicKey,
+            ...fundingEncoderOpts(source),
             rawData: opts.rawData,
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
@@ -131,5 +133,6 @@ export async function fileAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

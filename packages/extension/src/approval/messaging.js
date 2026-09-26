@@ -111,10 +111,21 @@ export function getSettings() {
  * swap for a drain transaction.
  *
  * @param {{ chainId: string, psbtHex: string }} opts
- * @returns {Promise<{ decomposed: import('@xchain-wallet/core/signers/types').DecomposedPsbt, action: object | null, actionDecodeReason: string | null }>}
+ * @returns {Promise<import('../background/createBackgroundHost.js').ParsedPsbtResult>}
  */
 export function parsePsbt(opts) {
     return /** @type {any} */ (sendMessage('psbt.parse', opts));
+}
+
+/**
+ * Read the protocol fee destination for a decoded PSBT action. The approval
+ * surface compares it with the transaction outputs before choosing fee mode.
+ *
+ * @param {{ chainId: string, actionString: string, source?: string }} opts
+ * @returns {Promise<{ feeDestination?: string }>}
+ */
+export function requoteNativeFee(opts) {
+    return /** @type {any} */ (sendMessage('action.requoteNativeFee', opts));
 }
 
 /**
@@ -133,7 +144,7 @@ export function parsePsbt(opts) {
  * exists in the SDK repo and reaches here on the next release the pin moves to;
  * until then read it as intent, not as a checked binding.
  *
- * @param {{ chainId: string, actionString: string, source?: string, mode?: string }} opts
+ * @param {{ chainId: string, actionString: string, source?: string, feeMode?: string, mode?: string }} opts
  * @returns {Promise<import('xchain-sdk').PreflightReport>}
  */
 export function preflight(opts) {

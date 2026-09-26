@@ -211,9 +211,15 @@ export function AddressList({
         return () => { cancelled = true; };
     }, [messaging, selected?.address, selected?.chainId]);
 
-    // "+" menu in the header: Add address / Import address.
+    // "+" menu in the header: ordinary or advanced generation, plus import.
     const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showAdvancedGenerate, setShowAdvancedGenerate] = useState(false);
+    const [advancedChainId, setAdvancedChainId] = useState('');
+    const [advancedAddressType, setAdvancedAddressType] = useState('');
+    const [advancedDerivationIndex, setAdvancedDerivationIndex] = useState('');
+    const [advancedBusy, setAdvancedBusy] = useState(false);
+    const [advancedError, setAdvancedError] = useState(/** @type {string | null} */ (null));
     const addMenuRef = useRef(null);
     useEffect(() => {
         if (!addMenuOpen) return undefined;
@@ -508,6 +514,66 @@ export function AddressList({
         [addressesByChain, settings],
     );
 
+    const effectiveAdvancedChainId = advancedChainId || wifChainIds[0] || '';
+    const advancedDescriptor = effectiveAdvancedChainId
+        ? chainRegistry.get(effectiveAdvancedChainId)
+        : null;
+    const effectiveAdvancedAddressType = advancedAddressType
+        || (advancedDescriptor
+            ? flowsLib.defaultAddressTypeForFormat(advancedDescriptor, walletFormat)
+            : '');
+
+    function resetAdvancedGenerate() {
+        setAdvancedAddressType('');
+        setAdvancedChainId('');
+        setAdvancedDerivationIndex('');
+        setAdvancedError(null);
+    }
+
+    async function handleAdvancedGenerate(event) {
+        event.preventDefault();
+        if (advancedBusy) return;
+        const derivationIndex = Number(advancedDerivationIndex);
+        if (!effectiveAdvancedChainId) {
+            setAdvancedError('Pick a coin.');
+            return;
+        }
+        if (
+            advancedDerivationIndex.trim() === ''
+            || !Number.isInteger(derivationIndex)
+            || derivationIndex < 0
+            || derivationIndex > 0x7fffffff
+        ) {
+            setAdvancedError('Enter a whole-number derivation index from 0 to 2147483647.');
+            return;
+        }
+        if (typeof messaging.generateReceiveAddress !== 'function') {
+            setAdvancedError('Address generation is not available in this shell.');
+            return;
+        }
+        setAdvancedBusy(true);
+        setAdvancedError(null);
+        try {
+            await messaging.generateReceiveAddress({
+                walletId,
+                chainId: effectiveAdvancedChainId,
+                accountId,
+                addressType: effectiveAdvancedAddressType,
+                derivationIndex,
+            });
+            resetAdvancedGenerate();
+            setShowAdvancedGenerate(false);
+            setReloadKey((k) => k + 1);
+        } catch (err) {
+            setAdvancedError(userFacingMessage(
+                err,
+                'Could not generate that address. Check the derivation index and try again.',
+            ));
+        } finally {
+            setAdvancedBusy(false);
+        }
+    }
+
     const rows = useMemo(() => {
         if (!addressesByChain) return [];
         const multisigByAddress = new Map(
@@ -593,6 +659,99 @@ export function AddressList({
                 onClose={() => setShowAddModal(false)}
                 onGenerated={() => setReloadKey((k) => k + 1)}
             />
+        );
+    }
+
+    if (showAdvancedGenerate) {
+        return (
+            <Screen
+                variant={variant}
+                header={(
+                    <PageHeader
+                        onBack={advancedBusy ? undefined : () => {
+                            resetAdvancedGenerate();
+                            setShowAdvancedGenerate(false);
+                        }}
+                        title="Generate at index"
+                        titleIcon={<Icon.PlusIcon />}
+                    />
+                )}
+            >
+                <form className={wifStyles.wifForm} onSubmit={handleAdvancedGenerate} noValidate>
+                    <p className={wifStyles.wifNotice}>
+                        Advanced option for recovering or recreating a known receive address.
+                        The index must not already be held by this account.
+                    </p>
+                    <ChainPicker
+                        label="Coin"
+                        value={effectiveAdvancedChainId}
+                        onChange={(nextChainId) => {
+                            setAdvancedChainId(nextChainId);
+                            setAdvancedAddressType('');
+                            setAdvancedError(null);
+                        }}
+                        chainIds={wifChainIds}
+                        chainRegistry={chainRegistry}
+                        disabled={advancedBusy}
+                    />
+                    {advancedDescriptor ? (
+                        <label className={wifStyles.wifField}>
+                            <span className={wifStyles.wifLabel}>Address type</span>
+                            <select
+                                value={effectiveAdvancedAddressType}
+                                onChange={(e) => {
+                                    setAdvancedAddressType(e.target.value);
+                                    setAdvancedError(null);
+                                }}
+                                disabled={advancedBusy}
+                                className={wifStyles.wifSelect}
+                            >
+                                {(advancedDescriptor.addressTypes || []).map((type) => {
+                                    const hint = addressTypeHint(advancedDescriptor, type);
+                                    return (
+                                        <option key={type} value={type}>
+                                            {type.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </label>
+                    ) : null}
+                    <Input
+                        label="Derivation index"
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={0x7fffffff}
+                        step={1}
+                        value={advancedDerivationIndex}
+                        onChange={(e) => {
+                            setAdvancedDerivationIndex(e.target.value);
+                            setAdvancedError(null);
+                        }}
+                        hint="Use the exact external address index you want to derive."
+                        disabled={advancedBusy}
+                        autoFocus
+                    />
+                    {advancedError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {advancedError}
+                        </StatusMessage>
+                    ) : null}
+                    <div className={wifStyles.wifActions}>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="md"
+                            loading={advancedBusy}
+                            disabled={advancedBusy || !effectiveAdvancedChainId}
+                            data-testid="advanced-address-generate"
+                        >
+                            Generate
+                        </Button>
+                    </div>
+                </form>
+            </Screen>
         );
     }
 
@@ -759,6 +918,22 @@ export function AddressList({
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                                     Add address
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    className={local.addMenuItem}
+                                    onClick={() => {
+                                        setAddMenuOpen(false);
+                                        setAdvancedError(null);
+                                        setShowAdvancedGenerate(true);
+                                    }}
+                                    data-testid="address-add-at-index"
+                                >
+                                    <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                                    Generate at index (advanced)
                                 </button>
                             </li>
                             <li>

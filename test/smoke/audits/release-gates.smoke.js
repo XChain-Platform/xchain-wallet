@@ -420,6 +420,95 @@ try {
     } finally {
         rmSync(unreadable, { recursive: true, force: true });
     }
+
+    // The installer check reads app.asar and nothing else in the package.
+    // The Electron runtime, shared libraries and unpacked addons are not the
+    // renderer bundle, so a real-SDK literal found among them must not stand
+    // in for one missing from the asar. Scan the whole tree again and the
+    // first case below passes.
+    const stageDeb = (dir, name, files) => {
+        const payloadDir = join(dir, 'payload');
+        for (const [rel, body] of files) {
+            mkdirSync(dirname(join(payloadDir, rel)), { recursive: true });
+            writeFileSync(join(payloadDir, rel), body);
+        }
+        const dataMember = join(dir, 'data.tar.gz');
+        assert.equal(
+            spawnSync('tar', ['czf', dataMember, '-C', payloadDir, '.'], { encoding: 'utf8' }).status,
+            0, `staged the data member of ${name}`,
+        );
+        writeFileSync(join(dir, name), arArchive([
+            { name: 'debian-binary', data: Buffer.from('2.0\n') },
+            { name: 'data.tar.gz', data: readFileSync(dataMember) },
+        ]));
+        rmSync(dataMember);
+        rmSync(payloadDir, { recursive: true, force: true });
+    };
+
+    const outsideAsar = mkdtempSync(join(tmpdir(), 'xchain-devmock-deb-outside-'));
+    try {
+        stageDeb(outsideAsar, 'xchain-wallet_0.0.0_amd64.deb', [
+            ['opt/XChain Wallet/resources/app.asar',
+                Buffer.concat([Buffer.from([0x04, 0x00]), Buffer.from('{"files":{}}'), Buffer.from([0x00])])],
+            ['opt/XChain Wallet/resources/app.asar.unpacked/leftover.js',
+                Buffer.from('throw new Error("SDKWalletError");\n')],
+        ]);
+        const r = spawnSync('bash', [checkScript, '--artifacts', outsideAsar], {
+            cwd: wsRoot, encoding: 'utf8',
+        });
+        assert.equal(r.status, 1,
+            'a real-SDK literal outside app.asar must not satisfy the installer check; '
+            + `stdout: ${r.stdout}`);
+        assert.match(r.stdout, /xchain-wallet_0\.0\.0_amd64\.deb does not contain the real xchain-sdk/,
+            'and the failure names the package, not the unpack directory');
+    } finally {
+        rmSync(outsideAsar, { recursive: true, force: true });
+    }
+
+    const noAsar = mkdtempSync(join(tmpdir(), 'xchain-devmock-deb-noasar-'));
+    try {
+        stageDeb(noAsar, 'xchain-wallet_0.0.0_amd64.deb', [
+            ['opt/XChain Wallet/xchain-wallet', Buffer.from('SDKWalletError\n')],
+        ]);
+        const r = spawnSync('bash', [checkScript, '--artifacts', noAsar], {
+            cwd: wsRoot, encoding: 'utf8',
+        });
+        assert.equal(r.status, 1, `a .deb with no app.asar must fail the gate; stdout: ${r.stdout}`);
+        assert.match(r.stdout, /opened, but holds no app\.asar/,
+            'and say what was missing, not that the package was unreadable');
+        assert.doesNotMatch(r.stdout, /OK - /, 'and never print a receipt for it');
+    } finally {
+        rmSync(noAsar, { recursive: true, force: true });
+    }
+
+    // AppImages with no `.deb` are REFUSED, even beside a clean bundle. The
+    // web tarball makes `scanned` 1, so a refusal that only came from the
+    // empty-scan rule would let this set through with `enforced` in the
+    // signed header and the Linux renderer never read.
+    const appImageOnly = mkdtempSync(join(tmpdir(), 'xchain-devmock-appimage-'));
+    try {
+        const bundle = join(appImageOnly, 'bundle');
+        mkdirSync(bundle, { recursive: true });
+        writeFileSync(join(bundle, 'app.js'), 'throw new Error("CONTRACT_LINT_FAILED");\n');
+        assert.equal(
+            spawnSync('tar', ['czf', join(appImageOnly, 'xchain-wallet-web-v0.0.0.tar.gz'), '-C', bundle, '.'],
+                { encoding: 'utf8' }).status,
+            0, 'staged a clean web tarball beside the AppImage',
+        );
+        rmSync(bundle, { recursive: true, force: true });
+        writeFileSync(join(appImageOnly, 'xchain-wallet-0.0.0-x86_64.AppImage'),
+            Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.from('SDKWalletError')]));
+        const r = spawnSync('bash', [checkScript, '--artifacts', appImageOnly], {
+            cwd: wsRoot, encoding: 'utf8',
+        });
+        assert.equal(r.status, 1,
+            `a set with AppImages and no .deb must be refused, not waved through; stdout: ${r.stdout}`);
+        assert.match(r.stdout, /ships AppImages and no \.deb/, 'and say why');
+        assert.match(r.stdout, /xchain-wallet-0\.0\.0-x86_64\.AppImage/, 'and name the AppImage');
+        assert.doesNotMatch(r.stdout, /OK - /, 'and never print a receipt for it');
+    } finally {
+        rmSync(appImageOnly, { recursive: true, force: true });
+    }
 } finally {
     rmSync(debStaged, { recursive: true, force: true });
 }
@@ -545,6 +634,6 @@ try {
 
 console.log(
     'OK: release-gates smoke (threat model §1–§7, reproducible-build README + check script, dry-run exit 0, '
-    + 'artifact mode reads a desktop-only staging set - .deb and mac zip - judges an installer on the real-SDK half and says so, '
-    + 'refuses one that will not open, and reads an android-only set: both containers, marker scan, empty payload, bad zip)',
+    + 'artifact mode reads a desktop-only staging set - .deb and mac zip - judges an installer on the real-SDK half of its app.asar and says so, '
+    + 'refuses one that will not open or holds no app.asar, refuses AppImages with no .deb, and reads an android-only set: both containers, marker scan, empty payload, bad zip)',
 );

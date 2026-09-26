@@ -14,7 +14,9 @@
 // via chrome.runtime; the web shell runs the whole thing in one
 // process. This module owns module-scoped `vault` + `host` so state
 // survives component re-renders but is gone on tab close / reload (the
-// web key-isolation tradeoff the spec calls out).
+// web key-isolation tradeoff the spec calls out). While the vault is open,
+// the page also holds an origin-scoped Web Lock so another tab cannot open
+// a stale copy and replace the whole encrypted document on its next write.
 //
 // Session semantics:
 //   - The master key lives in `vault` (in-memory). There is no
@@ -102,7 +104,9 @@ import {
     createMetaBackend,
     installNativeWipeHook,
     installNativeScreenGuard,
+    usingNativeVault,
 } from './storage/backends.js';
+import { requestPersistentStorage } from './storage/storagePersistence.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
@@ -586,6 +590,12 @@ let deadlineWatcher = null;
 let dispenserEscrowWatcher = null;
 let priceOracleInstance = null;
 
+const WEB_VAULT_LOCK_NAME = 'xchain-wallet:vault-session';
+/** @type {{ release: () => Promise<void> } | null} */
+let webVaultLease = null;
+/** @type {Promise<{ release: () => Promise<void> } | null> | null} */
+let webVaultLeaseAcquisition = null;
+
 // Seen-state key for the governance-poll watcher (localStorage): notify-once
 // bookkeeping only (chain → open-poll ids already announced), no secrets.
 const GOV_POLL_SEEN_KEY = 'xchain.governancePolls.seen';
@@ -825,6 +835,16 @@ export async function getSessionStatus() {
         // A provider that cannot install must not stop the wallet from
         // opening: the password form is the path that always works.
     }
+    // Browser only: ask for the persistent storage bucket so the vault is
+    // not best-effort data the browser may evict. Not awaited: Firefox
+    // answers with a prompt, and the session status must not wait on it.
+    try {
+        if (!usingNativeVault()) void requestPersistentStorage();
+    } catch (_err) {
+        // A native shell whose plugin never registered throws here; the
+        // storage backend below raises the same VaultUnavailableError on
+        // purpose, so nothing is lost by ignoring it at this point.
+    }
     const storage = createStorageBackend();
     // A throw here is deliberate and must NOT be caught into a default. On a
     // native shell `load()` distinguishes "no wallet" from "locked keystore"
@@ -832,6 +852,26 @@ export async function getSessionStatus() {
     // which is the whole point. Swallowing it would report no-wallet and
     // offer to create one over the top of the vault that is still there.
     const blob = await storage.load();
+    if (blob === null && !usingNativeVault()) {
+        // The browser split: the blob lives in IndexedDB, the kdfParams meta
+        // in localStorage, and only the create/import lanes write them (blob
+        // first, meta second), so meta with no blob is never a half-finished
+        // create. It means a wallet was set up on this origin and the
+        // IndexedDB side has since been removed from outside the app (an
+        // eviction, a clear-on-exit, a cleaner). Reported 2026-09-16 by two
+        // users as "it asked for my recovery phrase again": the silent
+        // no-wallet answer put them on the create screen with no hint that
+        // the browser, not the wallet, had done it. Throwing here routes them
+        // to the VaultUnavailable screen for `evicted` instead.
+        let meta = null;
+        try {
+            meta = /** @type {any} */ (await createMetaBackend().load());
+        } catch (_err) {
+            // Unreadable meta says nothing either way; fall through to the
+            // factual no-wallet answer rather than inventing an eviction.
+        }
+        if (meta && meta.kdfParams) throw new storageLib.VaultEvictedError();
+    }
     const hasWallet = blob !== null;
     const hasSession = host !== null;
     return {
@@ -853,6 +893,97 @@ export class NoVaultError extends Error {
         super('No wallet exists to unlock.');
         this.name = 'NoVaultError';
     }
+}
+
+export class VaultInUseError extends Error {
+    constructor() {
+        super('This wallet is already open in another tab. Lock or close that tab, then try again.');
+        this.name = 'VaultInUseError';
+    }
+}
+
+export class VaultCoordinationUnavailableError extends Error {
+    constructor() {
+        super('This browser cannot safely coordinate wallet writes across tabs. Update the browser and try again.');
+        this.name = 'VaultCoordinationUnavailableError';
+    }
+}
+
+/**
+ * Claim the browser vault for the lifetime of the unlocked session.
+ * Returns the newly acquired lease, or null when this page already owns it
+ * or when running outside a browser. Native shells have only one WebView and
+ * use their native vault backend, so they do not need a browser lease.
+ *
+ * @returns {Promise<{ release: () => Promise<void> } | null>}
+ */
+async function acquireWebVaultLease() {
+    const lockManager = globalThis.navigator?.locks;
+    if (!lockManager || typeof lockManager.request !== 'function') {
+        if (typeof globalThis.window === 'undefined' || !globalThis.indexedDB) return null;
+        if (usingNativeVault()) return null;
+        throw new VaultCoordinationUnavailableError();
+    }
+    if (usingNativeVault()) return null;
+    if (webVaultLease) return null;
+    if (webVaultLeaseAcquisition) {
+        const lease = await webVaultLeaseAcquisition;
+        if (!lease) throw new VaultInUseError();
+        return null;
+    }
+
+    let resolveHold;
+    const hold = new Promise((resolve) => { resolveHold = resolve; });
+    webVaultLeaseAcquisition = new Promise((resolve, reject) => {
+        try {
+            const request = lockManager.request(
+                WEB_VAULT_LOCK_NAME,
+                { mode: 'exclusive', ifAvailable: true },
+                async (lock) => {
+                    if (!lock) {
+                        resolve(null);
+                        return;
+                    }
+                    let released = false;
+                    let resolveReleased;
+                    const releaseComplete = new Promise((done) => { resolveReleased = done; });
+                    const lease = {
+                        release() {
+                            if (!released) {
+                                released = true;
+                                resolveHold();
+                            }
+                            return releaseComplete;
+                        },
+                    };
+                    webVaultLease = lease;
+                    resolve(lease);
+                    try {
+                        await hold;
+                    } finally {
+                        if (webVaultLease === lease) webVaultLease = null;
+                        resolveReleased();
+                    }
+                },
+            );
+            Promise.resolve(request).catch(reject);
+        } catch (err) {
+            reject(err);
+        }
+    });
+
+    try {
+        const lease = await webVaultLeaseAcquisition;
+        if (!lease) throw new VaultInUseError();
+        return lease;
+    } finally {
+        webVaultLeaseAcquisition = null;
+    }
+}
+
+/** @param {{ release: () => Promise<void> } | null} [lease] */
+async function releaseWebVaultLease(lease = webVaultLease) {
+    if (lease && webVaultLease === lease) await lease.release();
 }
 
 /**
@@ -877,11 +1008,13 @@ export async function createWalletLocal(req) {
     } = req;
 
     const meta = createMetaBackend();
-    await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
-
-    const kdfParams = cryptoLib.makeFreshKdfParams();
-    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    const lease = await acquireWebVaultLease();
+    let masterKey = null;
+    let sessionStarted = false;
     try {
+        await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
+        const kdfParams = cryptoLib.makeFreshKdfParams();
+        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         await v.open();  // blank document
@@ -916,10 +1049,12 @@ export async function createWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
         });
         startNotifications();
+        sessionStarted = true;
         await meta.save({ kdfParams });
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } finally {
-        masterKey.fill(0);
+        if (masterKey) masterKey.fill(0);
+        if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
 }
 
@@ -944,10 +1079,10 @@ export async function importMnemonicLocal(req) {
         name = 'Imported Wallet',
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+        origin,
     } = req;
 
     const meta = createMetaBackend();
-    await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
 
     // Reject an unusable phrase BEFORE deriving the master key. Argon2id
     // is synchronous and pegs the main thread for seconds, and the vault
@@ -962,9 +1097,13 @@ export async function importMnemonicLocal(req) {
         );
     }
 
-    const kdfParams = cryptoLib.makeFreshKdfParams();
-    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    const lease = await acquireWebVaultLease();
+    let masterKey = null;
+    let sessionStarted = false;
     try {
+        await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
+        const kdfParams = cryptoLib.makeFreshKdfParams();
+        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         await v.open();
@@ -977,6 +1116,7 @@ export async function importMnemonicLocal(req) {
             activeChainIds,
             name,
             bip39Passphrase,
+            origin,
             kdfParams,
         });
         await v.save();
@@ -998,6 +1138,7 @@ export async function importMnemonicLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
         });
         startNotifications();
+        sessionStarted = true;
         await meta.save({ kdfParams });
         // §19.5.2 restore half: bring back the labels + contacts this seed
         // published earlier. Runs after sdkBound() so the explorer endpoints
@@ -1026,7 +1167,8 @@ export async function importMnemonicLocal(req) {
             labelSync,
         };
     } finally {
-        masterKey.fill(0);
+        if (masterKey) masterKey.fill(0);
+        if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
 }
 
@@ -1100,12 +1242,14 @@ export async function importBackupLocal(req) {
     }
 
     const meta = createMetaBackend();
-    await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
-
-    const flowsNs = await getFlows();
-    const kdfParams = cryptoLib.makeFreshKdfParams();
-    const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    const lease = await acquireWebVaultLease();
+    let masterKey = null;
+    let sessionStarted = false;
     try {
+        await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
+        const flowsNs = await getFlows();
+        const kdfParams = cryptoLib.makeFreshKdfParams();
+        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         await v.open();
@@ -1147,6 +1291,7 @@ export async function importBackupLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
         });
         startNotifications();
+        sessionStarted = true;
         await meta.save({ kdfParams });
         return {
             walletId: result.walletId,
@@ -1156,7 +1301,8 @@ export async function importBackupLocal(req) {
             rekeyed: result.rekeyed,
         };
     } finally {
-        masterKey.fill(0);
+        if (masterKey) masterKey.fill(0);
+        if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
 }
 
@@ -1203,8 +1349,11 @@ export async function unlockWalletLocal(req) {
     // on the native shells by `installNativeGuardPersistence`). That gate is
     // UI-level: a caller reaching this function directly is not counted, and
     // every attempt costs a full KDF.
-    const masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
+    const lease = await acquireWebVaultLease();
+    let masterKey = null;
+    let sessionStarted = false;
     try {
+        masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         try {
@@ -1251,6 +1400,7 @@ export async function unlockWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
         });
         startNotifications();
+        sessionStarted = true;
         // Legacy passphrase wallets the password opened but that hold no
         // stored 25th word yet. The pool reports them as two parallel arrays;
         // zip them here so the caller cannot pair the wrong name with the
@@ -1263,7 +1413,8 @@ export async function unlockWalletLocal(req) {
             })),
         };
     } finally {
-        masterKey.fill(0);
+        if (masterKey) masterKey.fill(0);
+        if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
 }
 
@@ -1284,6 +1435,7 @@ export async function lockWalletLocal() {
     }
     vault = null;
     host = null;
+    await releaseWebVaultLease();
     return { locked: true };
 }
 
@@ -1324,6 +1476,7 @@ export function __resetForTests() {
     stopNotifications();
     vault = null;
     host = null;
+    void releaseWebVaultLease();
 }
 
 // Only a GCM tag mismatch is a wrong password. Matching error TEXT instead

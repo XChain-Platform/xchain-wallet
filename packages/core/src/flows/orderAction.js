@@ -128,8 +128,8 @@ export async function orderAction(opts) {
             // answers "has no matching Script". The confirm screen hides this
             // on the create path by handing down a prebuiltPsbt, which skips
             // createTx entirely - so it bites exactly the callers that build
-            // live: watcher mode here, and cancel/edit below, which have no
-            // confirm screen at all. Inert on the prebuiltPsbt path.
+            // live: watcher mode, here and on cancel/edit below. Inert on the
+            // prebuiltPsbt path.
             sourceAddress: source.address,
             change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
@@ -145,6 +145,7 @@ export async function orderAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 
     // PC-16: persist the auto-pay consent + terms record once the order
@@ -228,10 +229,9 @@ export async function cancelOrder(opts) {
         actionData: { action: 'ORDER', params },
         encoderOpts: {
             pubkey: source.publicKey,
-            // Cancel has no confirm screen, so it ALWAYS builds live: without
-            // these the encoder funds from the public key and the utxo-tracker
-            // refuses it ("has no matching Script"), which made releasing an
-            // order's escrow impossible from the wallet.
+            // A watcher-mode cancel builds live: without these the encoder
+            // funds from the public key and the utxo-tracker refuses it
+            // ("has no matching Script"). Inert on the prebuiltPsbt path.
             sourceAddress: source.address,
             change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
@@ -247,6 +247,7 @@ export async function cancelOrder(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }
 
@@ -255,15 +256,13 @@ export async function cancelOrder(opts) {
  * via ORDER VERSION 2 (`VERSION|ORDER_ACTION_INDEX|EXPIRATION|ALLOW_LIST|BLOCK_LIST|MEMO`).
  * A blank field leaves that property unchanged (indexer getOrderEdits
  * overlays only truthy edit values), so the caller OMITS a field it
- * does not mean to touch - it never clears one. Two protocol facts the
+ * does not mean to touch. Two protocol facts the
  * form copy must reflect (both verified against xchain-indexer order.js):
  *   - EXPIRATION is a wall-clock Unix timestamp, not a block height; it
  *     must be strictly in the future (`EXPIRATION > BLOCK_TIME`) or the
  *     edit indexes invalid as `EXPIRATION (past)`.
- *   - There is no null-clear for the lists: passing `0` is numeric but
- *     resolves to no LIST (`ALLOW_LIST (unknown)`); a bound list can be
- *     replaced but not removed (lift a restriction by pointing at an
- *     empty address list, same as ISSUE v5).
+ *   - After LIST_EDIT_REMOVE activates, `0` removes an allow-list or
+ *     block-list binding. A blank field continues to mean unchanged.
  * An edit re-charges the expiration fee.
  *
  * @param {OrderActionOpts & { orderActionIndex: string }} opts  params carries the fields to change (EXPIRATION as a future Unix timestamp string, ALLOW_LIST/BLOCK_LIST as LIST action indexes, optional MEMO). VERSION + ORDER_ACTION_INDEX are set here.
@@ -310,7 +309,7 @@ export async function editOrder(opts) {
         actionData: { action: 'ORDER', params },
         encoderOpts: {
             pubkey: source.publicKey,
-            // Edit builds live too (no confirm screen); see cancelOrder above.
+            // Same as cancelOrder above: needed whenever the edit builds live.
             sourceAddress: source.address,
             change: source.address,
             ...(opts.fee !== undefined && { fee: opts.fee }),
@@ -326,5 +325,6 @@ export async function editOrder(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

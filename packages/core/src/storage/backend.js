@@ -63,7 +63,23 @@ export class VaultCorruptError extends VaultUnavailableError {
 }
 
 /**
- * Which of the three this error is, or null when it is not one of them.
+ * The blob is gone but the device still carries the vault's kdfParams meta,
+ * so a wallet WAS set up here and something outside the app removed its
+ * encrypted store: a browser evicting best-effort IndexedDB under storage
+ * pressure, Safari's seven-day script-storage purge, a clear-on-exit
+ * setting, a system cleaner. Distinct from ABSENT on purpose: shown the
+ * create-a-wallet screen, a user who imported yesterday reads it as "my
+ * wallet reset itself" and cannot tell it apart from a defect.
+ */
+export class VaultEvictedError extends VaultUnavailableError {
+    constructor(detail = 'the encrypted vault store is missing but its meta record remains') {
+        super(detail);
+        this.name = 'VaultEvictedError';
+    }
+}
+
+/**
+ * Which of the four this error is, or null when it is not one of them.
  *
  * The shells catch a boot failure and keep only `err.message`, which throws
  * the type away exactly where it is needed: the screen a user sees for a
@@ -81,15 +97,17 @@ export class VaultCorruptError extends VaultUnavailableError {
  * sets its own `name` is still classified.
  *
  * @param {unknown} err
- * @returns {'corrupt' | 'locked' | 'unavailable' | null}
+ * @returns {'corrupt' | 'locked' | 'evicted' | 'unavailable' | null}
  */
 export function vaultErrorKind(err) {
     const name = /** @type {any} */ (err)?.name;
     if (name === 'VaultCorruptError') return 'corrupt';
     if (name === 'VaultLockedError') return 'locked';
+    if (name === 'VaultEvictedError') return 'evicted';
     if (name === 'VaultUnavailableError') return 'unavailable';
     if (err instanceof VaultCorruptError) return 'corrupt';
     if (err instanceof VaultLockedError) return 'locked';
+    if (err instanceof VaultEvictedError) return 'evicted';
     if (err instanceof VaultUnavailableError) return 'unavailable';
     return null;
 }

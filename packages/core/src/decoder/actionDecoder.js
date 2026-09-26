@@ -38,6 +38,13 @@
 // action list so a new protocol action cannot quietly reopen the gap.
 
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
+import {
+    compareDecimalStrings,
+    decimalQuotientFloor,
+    multiplyDecimalStrings,
+    roundDecimalString,
+} from '../shared/utils/amountFormat.js';
+import { listEditValue } from './list_removal_description.js';
 
 /**
  * @typedef {Object} DecodedAction
@@ -396,8 +403,8 @@ function decodeOrderSwap(action, p, chainSuffix) {
             details: [
                 ...(idx ? [{ label: `${properNoun} action index`, value: idx }] : []),
                 ...(expiration ? [{ label: 'Expiration', value: expiration }] : []),
-                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
-                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: listEditValue(allowList, 'allow') }] : []),
+                ...(blockList ? [{ label: 'Block list', value: listEditValue(blockList, 'block') }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [...(!idx ? [`${properNoun} action index is empty.`] : []), ...memoWarnings],
@@ -728,6 +735,7 @@ function decodeFile(p, chainSuffix) {
     const name = str(p.NAME);
     const type = str(p.TYPE);
     const title = str(p.TITLE);
+    const memo = str(p.MEMO);
     const gate = str(p.GATE_TICKER);
     return {
         summary: `Publish file ${name || '?'}${chainSuffix}${gate ? ` (gated by ${gate})` : ''}`,
@@ -735,10 +743,20 @@ function decodeFile(p, chainSuffix) {
             { label: 'Name', value: name },
             { label: 'Type', value: type },
             ...(title ? [{ label: 'Title', value: title }] : []),
+            // The memo is committed on-chain and is public forever, so the one
+            // screen the user checks before signing has to show it. Every other
+            // memo-carrying action renders this row; FILE was the outlier.
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ...(gate ? [{ label: 'Gate token', value: gate }] : []),
             ...(str(p.ENCRYPTION_METHOD) ? [{ label: 'Encryption', value: str(p.ENCRYPTION_METHOD) }] : []),
         ],
         warnings: [
+            // Defensive: the form refuses both characters before Confirm, but a
+            // decoder that reads a memo states the same rule as its siblings
+            // rather than trusting one caller's validation.
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
             ...(!name ? ['File name is empty.'] : []),
             'File contents are permanent and public on the blockchain (encrypted if gated).',
         ],
@@ -751,6 +769,7 @@ function decodeLink(p, chainSuffix) {
     const idx1 = str(p.COIN1_ACTION_INDEX);
     const coin2 = str(p.COIN2);
     const idx2 = str(p.COIN2_ACTION_INDEX);
+    const memo = str(p.MEMO);
     return {
         summary: `Link ${coin1 || '?'} action #${idx1 || '?'} to ${coin2 || '?'} action #${idx2 || '?'}${chainSuffix}`,
         details: [
@@ -758,25 +777,37 @@ function decodeLink(p, chainSuffix) {
             { label: 'Action 1', value: idx1 ? `#${idx1}` : '' },
             { label: 'Chain 2', value: coin2 },
             { label: 'Action 2', value: idx2 ? `#${idx2}` : '' },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
             ...(!coin1 || !coin2 ? ['Both chains must be specified.'] : []),
         ],
     };
 }
 
-/* SLEEP decoder: pause a token until a resume block. */
+/* SLEEP decoder: v1 pauses a token, v0 locks the signing address; 0 resumes, -1 is indefinite. */
 function decodeSleep(p, chainSuffix) {
     const resumeBlock = str(p.RESUME_BLOCK);
     const tick = str(p.TICK);
+    const isAddress = str(p.VERSION) === '0';
+    const until = resumeBlock === '-1' ? ' indefinitely' : ` until block ${resumeBlock || '?'}`;
+    let summary;
+    if (resumeBlock === '0') summary = `Resume ${isAddress ? 'this address' : (tick || 'token activity')}${chainSuffix}`;
+    else if (isAddress) summary = `Lock this address${chainSuffix}${until}`;
+    else summary = `Pause ${tick || 'token activity'}${chainSuffix}${until}`;
     return {
-        summary: `Pause ${tick || 'token activity'}${chainSuffix} until block ${resumeBlock || '?'}`,
+        summary,
         details: [
             ...(tick ? [{ label: 'Token', value: tick }] : []),
             { label: 'Resume block', value: resumeBlock },
         ],
         warnings: [
-            'While asleep, transfers of the affected token are rejected.',
+            ...(resumeBlock === '0' ? []
+                : isAddress ? ['While locked, this address cannot send anything, including a wake-up.']
+                    : ['While asleep, transfers of the affected token are rejected.']),
             ...(!resumeBlock ? ['Resume block is empty.'] : []),
         ],
     };
@@ -1159,8 +1190,8 @@ function decodeDispenser(p, chainSuffix) {
                 ...(idx ? [{ label: 'Dispenser action index', value: idx }] : []),
                 ...(giveEscrow ? [{ label: 'Refill escrow by', value: giveEscrow }] : []),
                 ...(expiration ? [{ label: 'Expiration (unix)', value: expiration }] : []),
-                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
-                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: listEditValue(allowList, 'allow') }] : []),
+                ...(blockList ? [{ label: 'Block list', value: listEditValue(blockList, 'block') }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [
@@ -1196,8 +1227,8 @@ function decodeDispenser(p, chainSuffix) {
                 ? `${getAmount || '?'} ${getTick}`
                 : `${getAmount || '?'} ${getCoin || '?'}`;
 
-    const fillsEstimate = giveAmount && giveEscrow && Number(giveAmount) > 0
-        ? Math.floor(Number(giveEscrow) / Number(giveAmount))
+    const fillsEstimate = giveAmount && giveEscrow
+        ? decimalQuotientFloor(giveEscrow, giveAmount)
         : null;
 
     const summary = `Create dispenser${chainSuffix}: lock ${giveEscrow || '?'} ${giveTick || '?'}, give ${giveAmount || '?'} ${giveTick || '?'} per ${payPriceLabel}`;
@@ -1208,12 +1239,18 @@ function decodeDispenser(p, chainSuffix) {
         ...(giveAmount ? [{ label: 'Per-fill amount', value: giveAmount }] : []),
         ...(giveEscrow ? [{ label: 'Escrow (locked)', value: giveEscrow }] : []),
         ...(fillsEstimate !== null ? [{ label: 'Estimated fills', value: String(fillsEstimate) }] : []),
-        ...(getAmount ? [{ label: 'Trigger amount', value: getAmount }] : []),
-        ...(getTick ? [{ label: 'Buyer pays (token)', value: getTick }] : []),
-        ...(!getTick && getCoin ? [{ label: 'Buyer pays (coin)', value: getCoin }] : []),
-        ...(fiatCode ? [{ label: 'Priced in', value: fiatCode }] : []),
-        ...(fiatAmount ? [{ label: 'Fiat amount', value: fiatAmount }] : []),
-        ...(oracle ? [{ label: 'Oracle address', value: oracle }] : []),
+        ...(oracle ? [
+            { label: 'Pricing mode', value: 'Oracle-priced (Mode B)' },
+            { label: 'Fiat code', value: fiatCode || 'Not set' },
+            { label: 'Fiat amount', value: fiatAmount || 'Set by oracle' },
+            { label: 'Oracle address', value: oracle },
+        ] : [
+            ...(getAmount ? [{ label: 'Trigger amount', value: getAmount }] : []),
+            ...(getTick ? [{ label: 'Buyer pays (token)', value: getTick }] : []),
+            ...(!getTick && getCoin ? [{ label: 'Buyer pays (coin)', value: getCoin }] : []),
+            ...(fiatCode ? [{ label: 'Priced in', value: fiatCode }] : []),
+            ...(fiatAmount ? [{ label: 'Fiat amount', value: fiatAmount }] : []),
+        ]),
         ...(getAddress ? [{ label: 'Dispenser address', value: getAddress }] : []),
         ...(expiration ? [{ label: 'Expiration (unix)', value: expiration }] : []),
         ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
@@ -1229,7 +1266,7 @@ function decodeDispenser(p, chainSuffix) {
         ...(!giveEscrow || Number(giveEscrow) <= 0
             ? ['Escrow amount is not positive.']
             : []),
-        ...(giveAmount && giveEscrow && Number(giveEscrow) < Number(giveAmount)
+        ...(giveAmount && giveEscrow && compareDecimalStrings(giveEscrow, giveAmount) === -1
             ? ['Escrow is smaller than a single fill, so the dispenser will never dispense.']
             : []),
         ...(!getAmount ? ['Trigger amount is empty.'] : []),
@@ -1288,8 +1325,12 @@ function decodePrice(p, chainSuffix) {
 
     // FEE is a fraction on the wire (0.01 = 1%); show both so a publisher
     // who typed one and meant the other notices before signing.
-    const feePct = fee && Number.isFinite(Number(fee))
-        ? `${fee} (${(Number(fee) * 100).toFixed(2).replace(/\.?0+$/, '')}% of a dispenser's projected proceeds)`
+    const feePercentRaw = multiplyDecimalStrings(fee, '100');
+    const feePercent = feePercentRaw === null
+        ? null
+        : roundDecimalString(feePercentRaw, 2)?.replace(/\.?0+$/, '');
+    const feePct = fee && feePercent !== null
+        ? `${fee} (${feePercent}% of a dispenser's projected proceeds)`
         : fee;
 
     return {
@@ -1513,8 +1554,8 @@ function decodeIssue(p, chainName, chainSuffix) {
             summary: `Update allow/block list for ${tick || '?'}${chainSuffix}`,
             details: [
                 { label: 'Token', value: tick },
-                ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
-                ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
+                ...(allowList ? [{ label: 'Allow list', value: listEditValue(allowList, 'allow') }] : []),
+                ...(blockList ? [{ label: 'Block list', value: listEditValue(blockList, 'block') }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: baseWarnings,

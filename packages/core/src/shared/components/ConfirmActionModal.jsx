@@ -27,11 +27,13 @@
 // click handler's tick, before any await.
 
 import { useState, useCallback } from 'react';
-import { Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
+import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
+import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -70,6 +72,17 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   blocking alert INSTEAD of the credentials + Approve, for requests the wallet
  *   will not sign at all. Distinct from a pre-flight error, which the user may
  *   acknowledge; a refusal has no override.
+ * @param {string|null} [props.sourceAddress]: the ONE address that signs and pays
+ *   (#40). ACTION VARIANT ONLY, and the restriction is the whole design: an action
+ *   is composed from a single spender, so naming it is always correct, while a
+ *   caller-supplied PSBT may spend several owned addresses at once. That case is
+ *   already served better by the psbt variant's input enumeration, which marks
+ *   which inputs the wallet owns; collapsing it to one From line would be a lie
+ *   dressed as a disclosure. Pass nothing on the psbt and message variants.
+ * @param {string} [props.sourceName] the address-record label, followed by the
+ *   wallet name when more than one wallet exists
+ * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
+ *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
@@ -78,6 +91,7 @@ export function ConfirmActionModal({
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
     psbtPanel = null, messageText, refusal = null, headline,
+    sourceAddress = null, sourceName = '', nativeTicker = '',
 }) {
     const headlineText = headline !== undefined
         ? headline
@@ -107,6 +121,16 @@ export function ConfirmActionModal({
     // payment has no protocol fee at all.
     const protocolFee = (variant === 'action' && !preflightNotApplicable)
         ? xchainProtocolFeeLine({ report, composed })
+        : null;
+    // A Mode B dispenser's oracle usage fee: a coin output in these bytes that
+    // neither fee line covers. Action variant only, for the reason above.
+    const oracleFee = variant === 'action'
+        ? oracleUsageFeeLine({ composed, ticker: nativeTicker })
+        : null;
+    // A Taproot envelope is a commit and a reveal signed on one Approve; list
+    // both with their own fees so the total above is not read as one transaction.
+    const envelopeLines = variant === 'action'
+        ? envelopeTransactionLines({ composed, ticker: nativeTicker })
         : null;
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
@@ -169,6 +193,26 @@ export function ConfirmActionModal({
                         </pre>
                     ) : null}
 
+                    {/* WHO PAYS, above what happens (#40). The wallet holds
+                        several addresses per chain and the form's From picker
+                        is gone by the time this page renders, so without this
+                        row the only hint of the spender is a balance debit the
+                        user would have to match against their address list.
+                        The legacy review stage this page replaced always had
+                        it; the single-encode page dropped it. Action variant
+                        only - see the sourceAddress prop doc. */}
+                    {variant === 'action' && sourceAddress ? (
+                        <dl className={styles.sourceRow} data-testid="confirm-source">
+                            <dt className={styles.sourceLabel}>From</dt>
+                            <dd className={styles.sourceValue}>
+                                {sourceName ? (
+                                    <span className={styles.sourceName}>{sourceName}</span>
+                                ) : null}
+                                <AddressText address={sourceAddress} highlight />
+                            </dd>
+                        </dl>
+                    ) : null}
+
                     {variant === 'action' && decoded ? (
                         <ActionIntentSummary decoded={decoded} simulation={simulation} />
                     ) : null}
@@ -196,11 +240,24 @@ export function ConfirmActionModal({
                         <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
                     ) : null}
 
+                    {envelopeLines ? (
+                        <div className={styles.fee} data-testid="confirm-envelope-transactions">
+                            <div>Two transactions, both signed now and broadcast in order:</div>
+                            {envelopeLines.map((line) => (
+                                <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
+                            ))}
+                        </div>
+                    ) : null}
+
                     {/* Directly under the miner fee so the two costs read as
                         one section, and named as itself so neither passes for
                         the other (the same rule the delta rows follow). */}
                     {protocolFee ? (
                         <div className={styles.fee} data-testid="confirm-protocol-fee">{protocolFee.text}</div>
+                    ) : null}
+
+                    {oracleFee ? (
+                        <div className={styles.fee} data-testid="confirm-oracle-fee">{oracleFee.text}</div>
                     ) : null}
 
                     {/* Fail-closed refusal (§5.5): no credentials, no Approve,
@@ -218,7 +275,9 @@ export function ConfirmActionModal({
                         so the message is adjacent to the field it refers to. */}
                     {error ? (
                         <div className={styles.error} role="alert" data-testid="confirm-error">
-                            {typeof error === 'string' ? error : (error?.message || 'Something went wrong.')}
+                            {typeof error === 'string'
+                                ? error
+                                : (error?.message || 'The request stopped because the wallet service returned no explanation.')}
                         </div>
                     ) : null}
 

@@ -12,7 +12,11 @@
 // (`livePendingTxs`) and the unconfirmed explorer rows (`addressMempool`).
 
 import { describe, it, expect } from 'vitest';
-import { livePendingTxs, dismissFailedPendingTx } from '../../../packages/core/src/flows/pendingTxFeed.js';
+import {
+    livePendingTxs,
+    dismissFailedPendingTx,
+    pruneConfirmedPendingTxs,
+} from '../../../packages/core/src/flows/pendingTxFeed.js';
 import { addressMempool } from '../../../packages/core/src/flows/balances.js';
 
 const CHAIN_ID = 'litecoin-regtest';
@@ -44,6 +48,18 @@ function record(over = {}) {
 
 const vaultOf = (records) => ({ pendingTxs: { list: async () => records } });
 const registry = { get: () => ({ coin: 'LTC', networkKind: 'regtest' }) };
+
+function vaultWith(records) {
+    const store = new Map(records.map((r) => [r.id, r]));
+    return {
+        pendingTxs: {
+            get: async (id) => store.get(id) ?? null,
+            delete: async (id) => store.delete(id),
+            list: async () => [...store.values()],
+        },
+        store,
+    };
+}
 
 describe('livePendingTxs', () => {
     it('returns the sends that are on the network and not yet confirmed', async () => {
@@ -108,29 +124,17 @@ describe('livePendingTxs', () => {
 });
 
 describe('dismissFailedPendingTx', () => {
-    function vaultWith(records) {
-        const store = new Map(records.map((r) => [r.id, r]));
-        return {
-            pendingTxs: {
-                get: async (id) => store.get(id) ?? null,
-                delete: async (id) => store.delete(id),
-                list: async () => [...store.values()],
-            },
-            _store: store,
-        };
-    }
-
     it('removes a failed record and reports it', async () => {
         const vault = vaultWith([record({ status: 'failed' })]);
         expect(await dismissFailedPendingTx({ vault, pendingTxId: 'ptx-1' })).toBe(true);
-        expect(vault._store.size).toBe(0);
+        expect(vault.store.size).toBe(0);
     });
 
     it('refuses anything that is not failed, so a live send cannot be hidden', async () => {
         for (const status of ['broadcast', 'broadcasting', 'queued', 'indexed', 'rbf-replaced']) {
             const vault = vaultWith([record({ status })]);
             expect(await dismissFailedPendingTx({ vault, pendingTxId: 'ptx-1' }), status).toBe(false);
-            expect(vault._store.size, status).toBe(1);
+            expect(vault.store.size, status).toBe(1);
         }
     });
 
@@ -282,5 +286,64 @@ describe('livePendingTxs keeps the records this wallet proved into a block', () 
         const live = await livePendingTxs({ vault: vaultOf([record()]), chainRegistry: registry, chainId: CHAIN_ID });
         expect(live[0].chainConfirmed).toBe(false);
         expect(live[0].confirmedBlockIndex).toBeNull();
+    });
+});
+
+describe('confirmed PendingTx retention', () => {
+    const NOW = () => '2026-09-22T00:00:00.000Z';
+    const STALE = '2026-01-01T00:00:00.000Z';
+
+    it('prunes an expired chain-confirmed record during a real livePendingTxs read', async () => {
+        const vault = vaultWith([
+            record({
+                id: 'stale',
+                status: 'indexed',
+                chainConfirmed: true,
+                confirmedAt: '2000-01-01T00:00:00.000Z',
+            }),
+            record({ id: 'live' }),
+        ]);
+
+        const out = await livePendingTxs({ vault, chainRegistry: registry, chainId: CHAIN_ID });
+
+        expect(out.map((item) => item.id)).toEqual(['live']);
+        expect(await vault.pendingTxs.list()).toEqual([expect.objectContaining({ id: 'live' })]);
+    });
+
+    it('keeps confirmed records inside the retention window', async () => {
+        const recent = new Date(Date.parse(NOW()) - 1000).toISOString();
+        const vault = vaultWith([record({ id: 'recent', status: 'indexed', confirmedAt: recent })]);
+
+        expect(await pruneConfirmedPendingTxs({ vault, now: NOW })).toEqual([]);
+        expect(vault.store.has('recent')).toBe(true);
+    });
+
+    it('does not prune live, queued, or failed records based on age', async () => {
+        const vault = vaultWith([
+            record({ id: 'live', status: 'broadcast', createdAt: STALE }),
+            record({ id: 'queued', status: 'queued', createdAt: STALE }),
+            record({ id: 'failed', status: 'failed', createdAt: STALE }),
+        ]);
+
+        expect(await pruneConfirmedPendingTxs({ vault, now: NOW })).toEqual([]);
+        expect(vault.store.size).toBe(3);
+    });
+
+    it('does not infer confirmation age from createdAt', async () => {
+        const vault = vaultWith([
+            record({ id: 'unknown-age', status: 'indexed', createdAt: STALE, confirmedAt: null }),
+        ]);
+
+        expect(await pruneConfirmedPendingTxs({ vault, now: NOW })).toEqual([]);
+        expect(vault.store.has('unknown-age')).toBe(true);
+    });
+
+    it('supports an explicit retention window', async () => {
+        const confirmedAt = new Date(Date.parse(NOW()) - 3600_001).toISOString();
+        const vault = vaultWith([record({ id: 'hour-old', status: 'indexed', confirmedAt })]);
+
+        expect(await pruneConfirmedPendingTxs({ vault, now: NOW, retentionMs: 3600_000 }))
+            .toEqual(['hour-old']);
+        expect(vault.store.size).toBe(0);
     });
 });

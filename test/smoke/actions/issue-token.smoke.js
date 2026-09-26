@@ -91,7 +91,7 @@ assert.ok(
     'createBackgroundHost registers action.issue',
 );
 assert.ok(
-    /issueToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /issueToken\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry,\s*onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)\s*\}\)/.test(bg),
     'action.issue handler forwards to issueToken with injected deps',
 );
 assert.ok(

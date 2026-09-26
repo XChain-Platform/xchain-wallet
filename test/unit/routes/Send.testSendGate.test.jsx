@@ -145,6 +145,12 @@ describe('Send: test-send gate reaches the screen', () => {
         expect(screen.queryByText(/First send to this address/i)).toBeNull();
     });
 
+    it('warns when amount and threshold differ above 2^53 sats', async () => {
+        mount({ thresholdSats: '9007199254740992' });
+        await fillNativeSend({ amount: '90071992.54740993' });
+        expect(await screen.findByText(/First send to this address/i)).toBeInTheDocument();
+    });
+
     it('stays quiet for an address the user has already sent to', async () => {
         const messaging = mount({
             thresholdSats: 1,

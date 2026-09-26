@@ -59,7 +59,7 @@
 // ONE THING THE WALLET CANNOT DO HERE, AND IT IS BY DESIGN. The public
 // `/feequote` and `/preflight` dry-runs refuse to enter a controller guard at
 // all (`GUARD_INERT` -> `FEE_QUOTE_CONTROLLER_UNSUPPORTED`, xchain-indexer
-// utility._invokeController): running caller-influenced VM code would hand an
+// utility.invokeController): running caller-influenced VM code would hand an
 // unauthenticated endpoint an unmetered compute primitive. So on a
 // controller-bound token the wallet has NO network verdict to show, and the one
 // thing it must not do is claim one. The refused leg asserts that the confirm

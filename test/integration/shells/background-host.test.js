@@ -29,8 +29,14 @@
 // (`handle(message)` in, `{ok}`/`{ok:false,error}` out), which is exactly what
 // makes it testable without a browser, a service worker, or Electron.
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import { PRE_HOST_MESSAGE_TYPES } from '../../../packages/extension/src/background/sessionMeta.js';
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 /**
  * The host needs a vault, a chain registry and an SDK registry. Everything else
@@ -63,9 +69,9 @@ function makeHost(overrides = {}) {
 const CRITICAL_ROUTES = [
     // Vault lifecycle. (There is no `wallet.unlock`: the session is gated by
     // `wallet.checkPassword` plus the auto-lock timer, per "password only at
-    // unlock".)
-    'wallet.create',
-    'wallet.import',
+    // unlock". `wallet.create` / `wallet.import` are pre-host fresh-install
+    // types, not host routes; the in-session add lane is `wallet.add.import`.)
+    'wallet.add.import',
     'wallet.checkPassword',
     'session.autolock',
     // Signing paths. `action.coinpay.psbt` is the encode-only watcher route
@@ -182,5 +188,70 @@ describe('background message host (all three shells)', () => {
         expect(() => host.register('wallet.list', async () => 'shadowed')).toThrow(
             /already registered/i,
         );
+    });
+});
+
+// The client modules whose sends must land on a handler. `preHost` says
+// whether that module's transport diverts PRE_HOST_MESSAGE_TYPES to the
+// pre-host listener (extension and desktop do); web sends every type to the
+// host. `floor` refuses a pass that parsed nothing.
+const CLIENT_MODULES = [
+    { file: 'packages/extension/src/popup/messaging.js', preHost: true, floor: 250 },
+    { file: 'packages/desktop/renderer/messaging.js', preHost: true, floor: 250 },
+    { file: 'packages/web/src/messaging.js', preHost: false, floor: 250 },
+    { file: 'packages/extension/src/approval/messaging.js', preHost: true, floor: 5 },
+];
+
+/**
+ * Every message type a messaging module sends, read from source because each
+ * module binds its shell's transport at import. `computed` lists sends whose
+ * type is not a string literal, which this check cannot follow.
+ */
+function sentTypes(file) {
+    const src = readFileSync(join(REPO_ROOT, file), 'utf8');
+    const literal = [...src.matchAll(/sendMessage\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    const computed = [...src.matchAll(/sendMessage\(\s*[^'"\s)]/g)].map((m) => m[0]);
+    return { literal, computed };
+}
+
+/** A host as the extension builds it, approval window routes included. */
+function makeFullHost() {
+    return makeHost({
+        approvals: {
+            request: async () => ({ approved: true }),
+            fetch: () => null,
+            resolve: async () => false,
+        },
+    });
+}
+
+describe('client message types against the host route table', () => {
+    it('claims no type on both the host and the pre-host lane', () => {
+        // Both transports divert the pre-host set before the host sees it, so
+        // a host handler for one of those types can never run. Give the host
+        // lane its own name instead, as wallet.importBackup vs
+        // wallet.importBackup.fresh does.
+        const registered = new Set(makeFullHost().types());
+        const shadowed = [...PRE_HOST_MESSAGE_TYPES].filter((t) => registered.has(t));
+        expect(shadowed, `host handlers no shell can reach: ${shadowed.join(', ')}`).toEqual([]);
+    });
+
+    it('routes every type a client module sends to a handler', () => {
+        // The shell parity smoke compares the shells to EACH OTHER; this binds
+        // them to the router, so a host-side rename fails here rather than as
+        // UnknownMessageTypeError on every shell at once.
+        const registered = new Set(makeFullHost().types());
+        expect(registered.size).toBeGreaterThan(200);
+        const unrouted = [];
+        for (const { file, preHost, floor } of CLIENT_MODULES) {
+            const { literal, computed } = sentTypes(file);
+            expect(literal.length, `${file} parsed as ${literal.length} sends`).toBeGreaterThan(floor);
+            expect(computed, `${file} sends a computed type this check cannot follow`).toEqual([]);
+            for (const type of new Set(literal)) {
+                if (registered.has(type) || (preHost && PRE_HOST_MESSAGE_TYPES.has(type))) continue;
+                unrouted.push(`${file} -> '${type}'`);
+            }
+        }
+        expect(unrouted, `no handler answers: ${unrouted.join(' | ')}`).toEqual([]);
     });
 });

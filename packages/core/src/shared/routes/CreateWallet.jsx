@@ -165,10 +165,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                const r = await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg });
+                const r = await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
             } else {
-                const r = await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg });
+                const r = await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
             }
             // §19.7 / G034: record that the user just verified the seed

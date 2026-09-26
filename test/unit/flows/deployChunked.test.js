@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // PC-38: the chunked-DEPLOY orchestrator. What these pin are the three
-// consensus rules the flow is built around (xchain-indexer actions/deploy.js):
+// consensus rules the flow is built around (xchain-indexer actions/deploy/index.js):
 // carriers all come from ONE deployer, each carrier is INDEXED before the next
 // leg is built, and a resumed run only skips chunks the chain still reports
 // valid for this group + position. Getting any of them wrong burns real fees:

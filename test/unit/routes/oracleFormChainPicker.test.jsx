@@ -85,6 +85,12 @@ function recordingMessaging() {
             calls.push({ method: 'oracleConsumers', args });
             return Promise.resolve({ supported: true, dispensers: [] });
         },
+        // The confirm lane: compose host-side, pre-flight, then sign those bytes.
+        composeForConfirm: (args) => {
+            calls.push({ method: 'composeForConfirm', args });
+            return Promise.resolve({ psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1 });
+        },
+        preflight: (args) => { calls.push({ method: 'preflight', args }); return Promise.resolve({ verdict: 'pass', findings: [] }); },
         oraclePriceAction: record('oraclePriceAction'),
         oraclePriceActionHw: record('oraclePriceActionHw'),
         buildActionPsbtRequest: record('buildActionPsbtRequest'),
@@ -137,13 +143,12 @@ async function publish(utils, { tick, value }) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish price' }));
         await drainMicrotasks();
     });
     await domAct(async () => {
         const btn = Array.from(utils.container.querySelectorAll('button'))
-            .filter((b) => b.type === 'submit' && !b.disabled)
-            .pop();
+            .find((b) => b.getAttribute('data-testid') === 'confirm-approve' && !b.disabled);
         if (btn) fireEvent.click(btn);
         await drainMicrotasks();
     });

@@ -46,11 +46,16 @@ for (const f of ['fuzzyMatch.js', 'commandRegistry.js', 'CommandPalette.jsx', 'C
 
 // commandRegistry exports the builders the shells depend on.
 const registrySrc = read(`${moduleDir}/commandRegistry.js`);
+const paletteHookSrc = read(`${moduleDir}/useCommandPalette.js`);
 assert.ok(/export function buildCommands\b/.test(registrySrc), 'buildCommands is exported');
 assert.ok(/export function contactsToCommands\b/.test(registrySrc), 'contactsToCommands is exported');
 for (const fn of ['balancesToCommands', 'sitesToCommands', 'settingsSectionsToCommands', 'helpToCommands']) {
     assert.ok(new RegExp(`export function ${fn}\\b`).test(registrySrc), `${fn} is exported (entity search)`);
 }
+assert.ok(
+    /const navigate = useCallback\(\(view\) => \{[\s\S]{0,120}?setRoute\?\.\(view\)/.test(paletteHookSrc),
+    'useCommandPalette navigation forwards the selected view to the shell route setter',
+);
 
 // --- every shell App mounts the palette ---------------------------------
 
@@ -78,6 +83,10 @@ for (const [label, path] of Object.entries(shells)) {
     assert.ok(
         /useCommandPalette\(\{\s*enabled:\s*status\.state === 'unlocked'/.test(src),
         `${label} App installs the Cmd/Ctrl+K listener gated on the unlocked state`,
+    );
+    assert.ok(
+        /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*setUnlockedView/.test(src),
+        `${label} App backs palette navigation with setUnlockedView`,
     );
     // Command list assembled from the shared catalogue.
     assert.ok(/buildCommands\(/.test(src), `${label} App builds its command list via buildCommands`);
@@ -126,7 +135,7 @@ for (const [label, path] of Object.entries(shells)) {
 for (const label of ['web', 'extension popup', 'desktop']) {
     const src = read(shells[label]);
     assert.ok(/balancesToCommands\(/.test(src), `${label} App folds token balances into the palette`);
-    assert.ok(/openToken:\s*\(tok\)\s*=>\s*\{\s*setTokenDetailRef\(tok\);\s*setUnlockedView\('token-detail'\)/.test(src),
+    assert.ok(/openToken:\s*\(tok\)\s*=>\s*\{\s*setTokenDetailRef\(tok\);\s*palette\.navigate\('token-detail'\)/.test(src),
         `${label} App's openToken sets the full token ref and opens token-detail`);
 }
 // desktop parity: token-detail route mounted and Home rows clickable.

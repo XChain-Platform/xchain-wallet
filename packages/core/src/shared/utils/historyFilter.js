@@ -25,6 +25,8 @@
 // All inputs are passed in explicitly so the function stays pure and
 // testable without mocking React state.
 
+import { entryTimeMs } from './pendingHistory.js';
+
 /**
  * @typedef {{
  *   key: string, chainId: string, address: string, actionIndex: string,
@@ -177,11 +179,10 @@ function entrySource(entry) {
     return String(entry.source || raw.source || raw.SOURCE || '');
 }
 
-function entryTimestampMs(entry) {
-    const t = Number(entry?.timestamp || 0);
-    if (!t) return null;
-    return t < 1e12 ? t * 1000 : t;
-}
+// The seconds-or-milliseconds reading lives with the merge that creates the
+// two scales, so the date filter and the sort order can never drift into
+// disagreeing about when an entry happened.
+const entryTimestampMs = entryTimeMs;
 
 const SEARCH_RAW_KEYS = [
     'memo', 'MEMO',

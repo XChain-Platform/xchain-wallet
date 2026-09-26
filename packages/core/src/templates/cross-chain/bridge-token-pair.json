@@ -10,9 +10,9 @@
             "params": {
                 "VERSION": "0",
                 "TICK": "BRIDGEME",
-                "AMOUNT": "1000000",
-                "DIVISIBLE": "true",
-                "DESCRIPTION": "BRIDGEME on chain A - paired with chain B via LINK"
+                "DECIMALS": "8",
+                "DESCRIPTION": "BRIDGEME on chain A - paired with chain B via LINK",
+                "MINT_SUPPLY": "1000000"
             },
             "note": "Issue the canonical supply on chain A (typically the chain with the most liquidity)."
         },
@@ -22,9 +22,9 @@
             "params": {
                 "VERSION": "0",
                 "TICK": "BRIDGEME",
-                "AMOUNT": "1000000",
-                "DIVISIBLE": "true",
-                "DESCRIPTION": "BRIDGEME on chain B - paired with chain A via LINK"
+                "DECIMALS": "8",
+                "DESCRIPTION": "BRIDGEME on chain B - paired with chain A via LINK",
+                "MINT_SUPPLY": "1000000"
             },
             "note": "Issue the mirror supply on chain B. The supplies are independent on-chain - the cross-link is metadata, not a balance bridge."
         },

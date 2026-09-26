@@ -88,6 +88,10 @@ const header = wf.split('\njobs:')[0];
 assert.ok(/on:\s*\n\s*push:\s*\n\s*tags:\s*\n\s*- 'v\*'/.test(header),
     'release.yml triggers on v* tags');
 
+assert.match(header,
+    /^  workflow_dispatch:\s*\n    inputs:\s*\n      dry_run:\s*\n(?: {8,}.*\n)*?        type:\s*boolean\s*\n(?: {8,}.*\n)*?        default:\s*true\s*$/m,
+    'release.yml exposes a boolean workflow_dispatch dry_run input that defaults true');
+
 // The one that matters most. `pull_request_target` in particular runs
 // with repository context and would expose secrets to a fork's branch.
 for (const trigger of ['pull_request', 'pull_request_target', 'issue_comment',
@@ -120,6 +124,26 @@ for (const [name, block] of jobs) {
 const gated = [...jobs].filter(([, b]) => /environment:\s*release-signing/.test(b));
 assert.ok(gated.length >= 2,
     `expected the macOS and Windows signing lanes to be gated (found ${gated.length})`);
+for (const [name, block] of gated) {
+    assert.match(block, /^ {4}if:\s*github\.event_name == 'push'\s*$/m,
+        `signing job '${name}' must be skipped on a workflow_dispatch dry run`);
+}
+
+const dispatchVerifyTag = jobs.get('verify-tag');
+assert.ok(dispatchVerifyTag, 'release.yml must keep a verify-tag job');
+for (const step of [
+    'Restore the annotated tag object',
+    'Tag must be GPG-signed by the release maintainer',
+    'Tag commit must have a green CI run',
+]) {
+    const block = stepBlocks(dispatchVerifyTag)
+        .find((candidate) => candidate.includes(`- name: ${step}`));
+    assert.ok(block, `release.yml must keep tag-only step '${step}'`);
+    assert.match(block, /^ {8}if: github\.event_name == 'push'$/m,
+        `tag-only step '${step}' must be skipped on a workflow_dispatch dry run`);
+}
+assert.match(dispatchVerifyTag, /VERSION="DRYRUN-[^\n]+"/,
+    'workflow_dispatch builds must use a visibly non-release version');
 
 // --- 2b. This file must not claim the controls that do not exist -------
 //

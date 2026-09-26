@@ -59,8 +59,8 @@ const MINT = 1000;
 /** The escrowed token side. */
 const GIVE_TOKENS = 100;
 /** The ask, in native coin, and the exact amount the obligation will demand. */
-const ASK = '0.5';
-const ASK_SATS = 50_000_000;
+const ASK = '1';
+const ASK_SATS = 100_000_000;
 const COIN = REGTEST_COIN.replace(/^R/, '');
 
 async function explorerJson(path) {
@@ -73,8 +73,8 @@ async function explorerJson(path) {
 /**
  * Asks the venue to quote the order wallet B is about to place.
  *
- * VENUE PRECONDITION, not a wallet assertion. An ORDER that fills on arrival
- * against a native-coin counterparty used to be quoted
+ * VENUE PRECONDITION, not a wallet assertion. An unfixed indexer quotes an ORDER
+ * that fills on arrival against a native-coin counterparty as
  * `valid:false, error:"pending_coinpay", xchainFee:null` - the verdict of the
  * MATCH it triggers rather than of the order itself - because the matcher is
  * handed the originating action's record and overwrites its STATUS and
@@ -83,7 +83,7 @@ async function explorerJson(path) {
  * action the chain accepts, which made the taker side of this whole lane
  * unreachable. Fixed in xchain-indexer (actions.js: the quoted action's own
  * verdict is captured before the matcher takes the record over) and pinned by
- * test/unit/feeQuotePrimaryVerdict.test.js, but a REGTEST VENUE runs a built
+ * test/unit/fees/fee_quote_primary_verdict.test.js, but a REGTEST VENUE runs a built
  * image, so this spec stays skipped until that image is rebuilt. Skipped LOUDLY
  * with the cause named, because a silent skip is how a suite reports coverage it
  * does not have.
@@ -214,7 +214,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
-    test('two crossing orders match, and the coin side owes a payment it can make from the wallet', async ({ page }) => {
+    test('two crossing orders match, and a whole-coin payment settles at the full amount', async ({ page }) => {
         let maker;
         let taker;
         let makerOrder;
@@ -278,8 +278,8 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             test.skip(quote?.valid === false && String(quote?.error).includes('pending_coinpay'),
                 'this venue\'s indexer still quotes an instantly-filling ORDER as its MATCH\'s '
                 + '"pending_coinpay" (valid:false, xchainFee:null), so the wallet cannot place the '
-                + 'taker side at all. Fixed in xchain-indexer/src/actions.js and pinned by '
-                + 'test/unit/feeQuotePrimaryVerdict.test.js; rebuild the regtest indexer image to '
+                + 'taker side at all. Fixed in xchain-indexer/src/actions/index.js and pinned by '
+                + 'test/unit/fees/fee_quote_primary_verdict.test.js; rebuild the regtest indexer image to '
                 + 'run this lane. Wallet A\'s order is left open on the venue by this skip.');
 
             const { main } = await openCreateOrder(page);
@@ -355,9 +355,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
             // The debt must be named in COIN units. Reading it as base units is
             // D-137: the explorer serves a decimal here, and a wallet that
-            // demanded all digits labelled a 0.5 LTC debt "0.5 base units".
+            // demanded all digits labelled a 1 LTC debt "1 base unit".
             await expect(pending, 'the queue does not name the amount owed in coin units')
-                .toContainText(new RegExp(`0\\.5\\s*${COIN}`));
+                .toContainText(new RegExp(`(^|\\s)${ASK}(?:\\.0+)?\\s*${COIN}(?=\\s|$)`));
             await expect(pending, 'the queue labels the debt in the wrong unit (D-137)')
                 .not.toContainText(/base units/);
 
@@ -412,11 +412,11 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
     // Two mechanisms have been ruled OUT already, so do not start there:
     //   - the web-shell acknowledgement gate (the run ticks it and the success
     //     screen confirms "Auto-pay is armed");
-    //   - a missing signer for the payer wallet: `wallet.create` did not adopt
-    //     the created wallet into the signer pool while `wallet.add.import`
-    //     did, which is fixed and pinned (test/smoke/core/
-    //     wallet-create-signer-adoption.smoke.js) - and the lane still did not
-    //     pay, so that was a real gap but not this one.
+    //   - a missing signer for the payer wallet: the Add Wallet create screen
+    //     persists through `wallet.add.import`, which adopts the new wallet
+    //     into the signer pool (pinned by test/smoke/core/
+    //     wallet-create-signer-adoption.smoke.js), and the lane still does not
+    //     pay.
     // NEXT PROBE, cheapest first: CoinpayAutopayWatcher is constructed with
     // `logger: console`, so run this spec with a console listener attached and
     // read its own verdict - `evaluateObligation` returns a NAMED reason

@@ -124,6 +124,11 @@ for (const [shell, appPath] of [
         /setUnlockedView\('markets'\)/.test(app),
         `${shell} App market-view back button returns to the markets list`,
     );
+    const marketViewMount = (app.match(/<MarketView\b[\s\S]*?\/>/) || [''])[0];
+    assert.ok(
+        /\bonSwap=\{/.test(marketViewMount),
+        `${shell} App passes onSwap to MarketView so the reverse-pair control renders`,
+    );
 }
 
 console.log(

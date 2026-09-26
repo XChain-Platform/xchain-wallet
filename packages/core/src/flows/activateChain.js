@@ -59,6 +59,7 @@ import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
  * @property {string} chainId
  * @property {Array<{ accountId: string, address: import('../schemas/address.js').Address }>} addresses   newly persisted addresses (skipped accounts are absent)
  * @property {number} skippedAccounts                              count of accounts that already had an address on chainId
+ * @property {Array<{ accountId: string, name: string }>} skippedAccountDetails   accounts that already had an address on chainId
  */
 
 /**
@@ -108,7 +109,7 @@ export async function activateChain({
 
     const accounts = await vault.accounts.findBy('walletId', walletId);
     if (accounts.length === 0) {
-        return { chainId, addresses: [], skippedAccounts: 0 };
+        return { chainId, addresses: [], skippedAccounts: 0, skippedAccountDetails: [] };
     }
 
     const signer = providedSigner
@@ -135,6 +136,7 @@ export async function activateChain({
     try {
         const created = [];
         let skipped = 0;
+        const skippedAccountDetails = [];
         for (const account of accounts) {
             const accountAddrs = allAddresses.filter((a) => a.accountId === account.id);
             const alreadyHasOnChain = accountAddrs.some(
@@ -142,6 +144,7 @@ export async function activateChain({
             );
             if (alreadyHasOnChain) {
                 skipped += 1;
+                skippedAccountDetails.push({ accountId: account.id, name: account.name || '' });
                 continue;
             }
             const [derived] = await signer.getAddresses({
@@ -167,7 +170,12 @@ export async function activateChain({
             await vault.addresses.put(record);
             created.push({ accountId: account.id, address: record });
         }
-        return { chainId, addresses: created, skippedAccounts: skipped };
+        return {
+            chainId,
+            addresses: created,
+            skippedAccounts: skipped,
+            skippedAccountDetails,
+        };
     } finally {
         if (ownsSigner && typeof signer.lock === 'function') signer.lock();
     }

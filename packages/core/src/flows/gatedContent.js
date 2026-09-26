@@ -572,8 +572,9 @@ export async function copyGatedKeysToWallet({ vault, fromWalletId, toWalletId, c
 
 /**
  * List the gated files for a token by querying the explorer's
- * `/api/files/{tick}/token` endpoint and filtering for rows with a
- * non-empty `gate_ticker`. Results are grouped by `key_hash` so the
+ * `/api/files/{tick}/gate` endpoint. Explorers predating that route
+ * fall back to `/api/files/{tick}/token`. Results are de-duplicated by
+ * action index and grouped by `key_hash` so the
  * caller can render packs as a single header with all member files
  * underneath. Single-file gated entries are returned as one-element
  * groups.
@@ -612,14 +613,31 @@ export async function listGatedFiles({ sdk, tick }) {
         throw new Error('listGatedFiles: sdk is required');
     }
 
-    const rows = await sdk.getFiles(tick, 'token').catch(() => []);
+    let rows;
+    try {
+        rows = await sdk.getFiles(tick, 'gate');
+    } catch (error) {
+        const status = error?.details?.status ?? error?.response?.status ?? error?.status;
+        const notFound = status === 404
+            || error?.code === 'EXPLORER_HTTP_404'
+            || /Explorer returned HTTP 404\b/.test(String(error?.message || ''));
+        if (!notFound) rows = [];
+        else rows = await sdk.getFiles(tick, 'token').catch(() => []);
+    }
     const list = Array.isArray(rows) ? rows : (rows && Array.isArray(rows.data) ? rows.data : []);
     const byKeyHash = /** @type {Map<string, any>} */ (new Map());
+    const seenActionIndexes = new Set();
     for (const row of list) {
         const gate = row && row.gate_ticker ? String(row.gate_ticker) : null;
-        if (!gate || gate !== String(tick)) continue;
+        if (!gate || gate.toLowerCase() !== String(tick).toLowerCase()) continue;
+        // Ignore FILE rows that consensus rejected while accepting older
+        // explorer responses that do not expose a status field.
+        if (row.status != null && String(row.status) !== 'valid') continue;
         const keyHash = row.key_hash ? String(row.key_hash).toLowerCase() : null;
         if (!keyHash) continue;
+        const actionIndex = String(row.action_index);
+        if (seenActionIndexes.has(actionIndex)) continue;
+        seenActionIndexes.add(actionIndex);
         if (!byKeyHash.has(keyHash)) {
             byKeyHash.set(keyHash, {
                 keyHash,
@@ -629,7 +647,7 @@ export async function listGatedFiles({ sdk, tick }) {
             });
         }
         byKeyHash.get(keyHash).files.push({
-            actionIndex: String(row.action_index),
+            actionIndex,
             name: row.name ? String(row.name) : '(unnamed)',
             type: row.type ? String(row.type) : null,
             title: row.title ? String(row.title) : null,

@@ -98,7 +98,7 @@ export function nav(page) {
 /**
  * The unlocked shell's signal that onboarding finished, in ANY shell.
  *
- * Anchored on Home's `<section aria-label="Total balance">` (core's
+ * Anchored on Home's `<section aria-label="Active address balance">` (core's
  * `TotalBalanceHero`, rendered via `HomeTabs` by every shell) rather than on
  * navigation, because the three shells do not agree on navigation at all:
  * web/desktop render the rail or the bottom bar, and the MV3 popup renders
@@ -110,7 +110,7 @@ export function nav(page) {
  * lives inside the More sheet, which is closed by default.
  */
 export function unlockedShell(page) {
-    return page.getByRole('region', { name: 'Total balance' }).first();
+    return page.getByRole('region', { name: 'Active address balance' }).first();
 }
 
 /**

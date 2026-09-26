@@ -18,7 +18,8 @@
 //   - `listQueuedBroadcasts`      : read all status='queued' records
 //   - `drainQueuedBroadcast`      : attempt to broadcast a single queued
 //                                   record; transition state on result
-//   - `discardQueuedBroadcast`    : delete a queued record ("Discard" button)
+//   - `discardQueuedBroadcast`    : delete a queued or interrupted record
+//                                   ("Discard" button)
 //
 // `submitAction` remains the normal path; this module is the offline
 // fallback. Callers wrap `submitAction` calls with try/catch; on a
@@ -249,6 +250,11 @@ export async function drainQueuedBroadcast({
 /**
  * Discard a queued broadcast (the "Discard" button). Idempotent.
  *
+ * Removes a record in either status a drain will send: 'queued', or
+ * 'broadcasting' left behind by an interrupted claim. A claimed record left in
+ * place keeps netting its spend and is rebuilt into the queue on the next boot.
+ * A claim this context is draining right now is kept: that drain settles it.
+ *
  * @param {{ vault: import('../storage/Vault.js').Vault, pendingTxId: string }} opts
  * @returns {Promise<boolean>}   true if a record was removed
  */
@@ -258,6 +264,8 @@ export async function discardQueuedBroadcast({ vault, pendingTxId }) {
         throw new Error('discardQueuedBroadcast: pendingTxId is required');
     }
     const existing = await vault.pendingTxs.get(pendingTxId);
-    if (!existing || existing.status !== 'queued') return false;
+    if (!existing) return false;
+    if (existing.status !== 'queued' && existing.status !== 'broadcasting') return false;
+    if (inFlightDrains.has(pendingTxId)) return false;
     return await vault.pendingTxs.delete(pendingTxId);
 }

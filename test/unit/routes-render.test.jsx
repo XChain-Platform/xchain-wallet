@@ -88,6 +88,33 @@ import React from 'react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { MintForm } from '../../packages/core/src/shared/routes/MintForm.jsx';
 import { DestroyForm } from '../../packages/core/src/shared/routes/DestroyForm.jsx';
+import {
+    formatSmokeSummary,
+    isSmokeSkipOutput,
+    smokeRunFailed,
+} from '../smoke/_run-smokes.js';
+
+describe('smoke runner outcome accounting', () => {
+    it('recognizes explicit skip announcements without matching ordinary output', () => {
+        expect(isSmokeSkipOutput('SKIP: docs checkout absent\n')).toBe(true);
+        expect(isSmokeSkipOutput('release.smoke.js: SKIPPED - gpg absent\n')).toBe(true);
+        expect(isSmokeSkipOutput('OK: offline checks passed; drift check SKIPPED\n')).toBe(false);
+    });
+
+    it('reports skipped smoke names separately from passes', () => {
+        expect(formatSmokeSummary(3, ['a.smoke.js', 'nested/b.smoke.js'])).toBe(
+            '3 smoke(s) passed / 2 skipped\n' +
+            'SKIP a.smoke.js\n' +
+            'SKIP nested/b.smoke.js',
+        );
+    });
+
+    it('fails strict runs on skips and all runs on child failures', () => {
+        expect(smokeRunFailed(0, ['a.smoke.js'], {})).toBe(false);
+        expect(smokeRunFailed(0, ['a.smoke.js'], { XCHAIN_REQUIRE_SIBLINGS: '1' })).toBe(true);
+        expect(smokeRunFailed(1, [], {})).toBe(true);
+    });
+});
 
 // `domAct` (Testing Library's `act`, bound to the installed React) flushes
 // React effects/state in Layer 2.

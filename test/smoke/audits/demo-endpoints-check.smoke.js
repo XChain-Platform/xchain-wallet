@@ -130,45 +130,46 @@ assert.equal(classifyProbe(explorerProbe, { status: 200, body: '{}' }).state, 'f
 // because the payload can distinguish three situations and the old message
 // collapsed them into the most alarming one.
 
-// Withdrawn: configured, but dropped from service, and the reason is named.
+const NOW = 1_786_000_000_000;
+const secondsAgo = (ms) => Math.floor((NOW - ms) / 1000);
+
+// Withdrawn: configured, but dropped from the served set. Freshness is reported
+// as a separate observation, not asserted as the cause of withdrawal.
 const withdrawn = classifyProbe(explorerProbe, {
     status: 200,
     body: JSON.stringify({
         available: { BTC: 'BTC (mainnet)' },
         supported: { BTC: 'BTC (mainnet)', TBTC: 'BTC (testnet)' },
         stale: { TBTC: true },
-        last_block_time: { TBTC: Math.floor(Date.now() / 1000) - 40 * 86400 },
+        last_block_time: { TBTC: secondsAgo(40 * 86400 * 1000) },
     }),
-});
+}, { nowMs: NOW });
 assert.equal(withdrawn.state, 'failure', 'a withdrawn chain is still fatal for the demo coin');
-assert.match(withdrawn.detail, /CONFIGURED for TBTC/, 'it says the explorer IS configured for the coin');
-assert.match(withdrawn.detail, /withdrawn from service/, 'and that the coin was withdrawn rather than removed');
+assert.match(withdrawn.detail, /TBTC is configured/, 'it says the explorer is configured for the coin');
+assert.match(withdrawn.detail, /WITHDRAWN from the served set/, 'and that the coin was withdrawn rather than removed');
+assert.match(withdrawn.detail, /freshness: its newest indexed block is 40d old/, 'it reports the measured freshness reason');
 assert.ok(
-    !/not in its configured set/.test(withdrawn.detail),
+    !/not configured on this deployment/.test(withdrawn.detail),
     'a withdrawn chain is never described as deconfigured, which is the defect this branch exists for',
 );
 
-// Withdrawn, but the body carries no reason: the gate must NOT supply one.
-// This case exists because the first draft of the branch above hardcoded "the
-// explorer marked it stale" as its fallback, and driving the live payload
-// printed that sentence for a coin whose own stale flag was false - the same
-// invented-cause defect, one level down from the one being fixed.
-const withdrawnNoReason = classifyProbe(explorerProbe, {
+// Withdrawn without a usable clock remains a failure because withdrawal was
+// measured. The unavailable freshness reading must not become an invented
+// explanation for why the explorer withdrew it.
+const withdrawnNoClock = classifyProbe(explorerProbe, {
     status: 200,
     body: JSON.stringify({
         available: { BTC: 'BTC (mainnet)' },
         supported: { BTC: 'BTC (mainnet)', TBTC: 'BTC (testnet)' },
-        stale: { TBTC: false },
-        last_block_time: { TBTC: Math.floor(Date.now() / 1000) - 60 },
-        decoder_lag_blocks: { TBTC: 1 },
+        stale: { TBTC: true },
+        last_block_time: { TBTC: null },
+        decoder_lag_blocks: { TBTC: null },
     }),
-});
-assert.equal(withdrawnNoReason.state, 'failure');
-assert.match(withdrawnNoReason.detail, /gives no reason/, 'an unexplained withdrawal is reported as unexplained');
-assert.ok(
-    !/stale/.test(withdrawnNoReason.detail),
-    'staleness is never asserted for a coin the body does not flag as stale',
-);
+}, { nowMs: NOW });
+assert.equal(withdrawnNoClock.state, 'failure', 'withdrawal stays fatal even when freshness cannot be measured');
+assert.match(withdrawnNoClock.detail, /WITHDRAWN from the served set/);
+assert.match(withdrawnNoClock.detail, /freshness: the status body carries no indexer clock/);
+assert.doesNotMatch(withdrawnNoClock.detail, /because|caused by|marks it stale/, 'the gate claims no unmeasured cause');
 
 // Genuinely deconfigured: absent from `supported` too.
 const deconfigured = classifyProbe(explorerProbe, {
@@ -179,7 +180,11 @@ const deconfigured = classifyProbe(explorerProbe, {
     }),
 });
 assert.equal(deconfigured.state, 'failure');
-assert.match(deconfigured.detail, /not in its configured set/, 'a truly absent chain is named as such');
+assert.match(
+    deconfigured.detail,
+    /not configured on this deployment at all/,
+    'a truly absent chain is named as never configured on this deployment',
+);
 
 // No `supported` map: no evidence, so no cause is claimed either way.
 const noEvidence = classifyProbe(explorerProbe, {
@@ -189,7 +194,7 @@ const noEvidence = classifyProbe(explorerProbe, {
 assert.equal(noEvidence.state, 'failure');
 assert.match(noEvidence.detail, /absent from the networks it currently serves/);
 assert.ok(
-    !/not in its configured set/.test(noEvidence.detail) && !/CONFIGURED for/.test(noEvidence.detail),
+    !/not configured on this deployment/.test(noEvidence.detail) && !/is configured/.test(noEvidence.detail),
     'with nothing to consult, the gate reports the absence and asserts no cause',
 );
 
@@ -202,8 +207,6 @@ assert.ok(
 // empty balance screen - the same failure a later change fixed one layer up, where the
 // notes sent the reviewer to a network the demo phrase was not funded on.
 
-const NOW = 1_786_000_000_000;
-const secondsAgo = (ms) => Math.floor((NOW - ms) / 1000);
 // `halted` defaults to `false` so every freshness-focused fixture below keeps
 // exercising the freshness branch unchanged; a test of the halt signal itself
 // passes `halted` explicitly or `omitHalted: true` to build a body with no

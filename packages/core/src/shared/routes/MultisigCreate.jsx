@@ -13,6 +13,7 @@ import { Button, ChainBadge, ChainPicker, Icon, Input, PageHeader, Screen, Statu
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { MultisigCosignerShare } from './MultisigCosignerShare.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -59,7 +60,8 @@ const newRowId = () => `cosigner-${++_idCounter}`;
  *   - **local**: a software account or paired HW signer that the
  *     wallet already owns. Picked by selecting one of the wallet's
  *     own addresses; pubkey + derivationPath auto-fill from the
- *     address record.
+ *     address record and the master fingerprint from the unlocked
+ *     signer (`multisig.cosignerInfo`). At most one row may be local.
  *   - **external-xpub**: an xpub copied in from another wallet. The
  *     wallet can build PSBTs but cannot sign for this cosigner.
  *   - **external-hardware**: a HW device controlled by someone else.
@@ -154,18 +156,32 @@ export function MultisigCreate({ walletId, onBack }) {
 
     const handleLocalAddressPick = (rowId, address) => {
         // Auto-fill pubkey + derivationPath from the picked address
-        // record. Fingerprint is left for the user to fill in; deriving the
-        // BIP32 master fingerprint requires unlocking the seed, which
-        // is out of Step 17's scope. The user can copy the value from
-        // their wallet's "Show xpub" surface.
+        // record, then ask the host for the BIP32 master fingerprint,
+        // which only the unlocked signer can compute.
         updateRow(rowId, {
             addressId: address?.id || null,
             pubkey: address?.publicKey || '',
             derivationPath: address?.derivationPath || '',
+            fingerprint: '',
+            fingerprintNote: null,
             // Local cosigner doesn't need a separate signer id slot
             // unless the address is HW-backed; preserve that.
             localSignerId: address?.signerId || `wallet:${walletId}`,
         });
+        if (!address?.id || typeof messaging.getMultisigCosignerInfo !== 'function') return;
+        messaging.getMultisigCosignerInfo({ walletId, addressId: address.id })
+            .then((info) => {
+                // Only fill the row if the user has not since picked another address.
+                setRows((rs) => rs.map((r) => (r.id === rowId && r.addressId === address.id
+                    ? { ...r, fingerprint: info?.fingerprint || '', fingerprintNote: null }
+                    : r)));
+            })
+            .catch((err) => {
+                // The field stays editable, so a failed read falls back to typing it in.
+                setRows((rs) => rs.map((r) => (r.id === rowId && r.addressId === address.id
+                    ? { ...r, fingerprintNote: `${userFacingMessage(err, 'Could not read the master fingerprint.')} Enter it by hand.` }
+                    : r)));
+            });
     };
 
     const composeError = useMemo(() => {
@@ -178,6 +194,11 @@ export function MultisigCreate({ walletId, onBack }) {
         // Steer the user to P2WSH for a genuine T-of-N policy.
         if (scheme === 'taproot-musig2' && t !== rows.length) {
             return `Taproot multi-signature requires all ${rows.length} cosigners to sign (set the threshold to ${rows.length}). To let ${t} of ${rows.length} sign, pick SegWit multi-signature instead.`;
+        }
+        // Only one cosigner can be this wallet's own key: local signing
+        // signs for exactly one, so a second could never add its signature.
+        if (rows.filter((r) => r.origin === 'local').length > 1) {
+            return 'Only one cosigner can be this wallet\'s own key. Add the others as external cosigners.';
         }
         for (let i = 0; i < rows.length; i += 1) {
             const r = rows[i];
@@ -274,7 +295,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <p className={styles.hint}>
                     The shared address now appears on the Receive screen. Spending
                     from it opens a signing session where each cosigner approves in
-                    turn, in the app or by scanning the round's QR code.
+                    turn, in the app or by scanning the transaction QR code.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -293,7 +314,8 @@ export function MultisigCreate({ walletId, onBack }) {
                 network this multisig configuration belongs to, then add at
                 least 2 cosigners. The current wallet contributes the
                 "local" cosigner; external cosigners come in via xpub paste
-                or hardware-pairing.
+                or hardware-pairing. To join someone else's multisig, open
+                "Share this wallet as a cosigner" below and send them the values.
             </p>
 
             <ChainPicker
@@ -324,6 +346,8 @@ export function MultisigCreate({ walletId, onBack }) {
                     </Button>
                 </div>
             </fieldset>
+
+            <MultisigCosignerShare walletId={walletId} addresses={localAddresses} />
 
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Scheme</legend>
@@ -409,6 +433,10 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
                         xpub: '',
                         addressId: null,
                         localSignerId: null,
+                        fingerprintNote: null,
+                        // Keys auto-filled from this wallet must not ride along
+                        // into an external cosigner row.
+                        ...(row.origin === 'local' ? { pubkey: '', fingerprint: '', derivationPath: '' } : {}),
                     })}
                 >
                     <option value="local">Local (software account or paired HW signer)</option>
@@ -460,6 +488,9 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
                 onChange={(e) => onChange({ fingerprint: e.target.value.trim() })}
                 placeholder="73c5da0a"
             />
+            {row.fingerprintNote ? (
+                <p className={styles.hint} style={{ textAlign: 'left' }}>{row.fingerprintNote}</p>
+            ) : null}
 
             <Input
                 label="Derivation path"
@@ -487,6 +518,7 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
  *   xpub: string,
  *   localSignerId: string | null,
  *   addressId: string | null,
+ *   fingerprintNote?: string | null,
  * }} CosignerRow
  */
 

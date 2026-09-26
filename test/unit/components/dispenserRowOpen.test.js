@@ -8,13 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// isDispenserRowOpen(): the explorer's /dispensers/{TICK}/token endpoint
-// returns a string status label ('valid', 'reverted', 'invalid: ...'),
-// never a numeric code. ManageToken's Dispensers tab used to compare it
-// with Number(status) !== 0, and Number('valid') is NaN, so every real
-// dispenser was always filtered out - the tab could never show anything,
-// no matter how many open dispensers a token actually had (found testing
-// MINTQA on regtest, 2026-08-04/05).
+// isDispenserRowOpen(): the explorer returns frozen action validity beside
+// current lifecycle and escrow fields. The badge counts only live stock.
 
 import { describe, it, expect } from 'vitest';
 import { isDispenserRowOpen } from '../../../packages/core/src/shared/components/DispenserBadge.jsx';
@@ -25,6 +20,15 @@ describe('isDispenserRowOpen()', () => {
     });
     it('treats an explicit "open" status label as open', () => {
         expect(isDispenserRowOpen({ status: 'open' })).toBe(true);
+    });
+    it('lets current lifecycle overrule valid creation status', () => {
+        expect(isDispenserRowOpen({ status: 'valid', current_status: 'cancelled', escrow_remaining: '5' })).toBe(false);
+    });
+    it('drops an open row after its current escrow reaches zero', () => {
+        expect(isDispenserRowOpen({ status: 'valid', current_status: 'open', escrow_remaining: '0' })).toBe(false);
+    });
+    it('keeps an open row with positive current escrow', () => {
+        expect(isDispenserRowOpen({ status: 'valid', current_status: 'open', escrow_remaining: '0.5' })).toBe(true);
     });
     it('treats a reverted dispenser as not open', () => {
         expect(isDispenserRowOpen({ status: 'reverted' })).toBe(false);

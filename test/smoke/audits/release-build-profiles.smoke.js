@@ -474,6 +474,60 @@ for (const pkg of ['desktop', 'extension']) {
     );
 }
 
+// The hidden-surface guard is the fail-shut half of the store compile-out, and
+// it fails OPEN when weakened: as anything but `enforce: 'pre'`, Vite's own
+// resolver answers resolveId first and the guard never sees an import, so a
+// store build SUCCEEDS with a DEX route inside while its labels say otherwise.
+// Checked on the resolved plugin object, so dropping it from the array, moving
+// the flag or gutting the matcher all turn this red.
+const { SURFACE_MODULES } = await import(
+    pathToFileURL(join(repo, 'packages', 'web', 'src', 'surfaces', 'registry.js')).href
+);
+const surfaceGuardOf = (config) => config.plugins
+    .flat(Infinity)
+    .find((p) => p && p.name === 'xchain-hidden-surface-guard');
+const storeGuard = surfaceGuardOf(await viteConfigFor('web', 'store'));
+assert.ok(storeGuard, 'the `store` web config registers the xchain-hidden-surface-guard plugin');
+assert.equal(
+    storeGuard.enforce,
+    'pre',
+    'the hidden-surface guard must be `enforce: \'pre\'`: otherwise its resolveId never runs,'
+    + ' the guard fails OPEN, and a store build ships a hidden surface its manifest says is absent',
+);
+const hiddenModule = SURFACE_MODULES.dex[0];
+assert.ok(hiddenModule, 'the registry names at least one dex route module for the guard to match');
+const guardContext = (id) => {
+    const calls = [];
+    return {
+        calls,
+        async resolve(source, importer, options) {
+            calls.push(options);
+            return { id, external: false };
+        },
+        error(msg) { throw new Error(msg); },
+    };
+};
+const hitCtx = guardContext(`/repo/packages/core/src/${hiddenModule}?import`);
+await assert.rejects(
+    storeGuard.resolveId.call(hitCtx, './stray.jsx', '/repo/src/stray-importer.jsx', {}),
+    (err) => err.message.includes(hiddenModule) && err.message.includes('/repo/src/stray-importer.jsx'),
+    'the guard refuses a hidden route module and names the module and its importer',
+);
+assert.equal(hitCtx.calls[0]?.skipSelf, true, 'the guard resolves with skipSelf, or it recurses into itself');
+assert.equal(
+    await storeGuard.resolveId.call(guardContext('/repo/packages/core/src/shared/routes/Receive.jsx'), './Receive.jsx', '/repo/src/a.jsx', {}),
+    null,
+    'the guard passes a module no hidden surface owns',
+);
+const hostedGuard = surfaceGuardOf(await viteConfigFor('web', undefined));
+const hostedCtx = guardContext(`/repo/packages/core/src/${hiddenModule}`);
+assert.equal(
+    await hostedGuard.resolveId.call(hostedCtx, './MarketsList.jsx', '/repo/src/a.jsx', {}),
+    null,
+    'the hosted profile hides nothing, so its guard is inert',
+);
+assert.equal(hostedCtx.calls.length, 0, 'the inert guard does not even resolve');
+
 console.log(
     'OK: release build-profile smoke (manifest-version 2 carries one'
     + ' `# profile <name>: <artifact>` line per artifact, written from the committed'
@@ -486,5 +540,7 @@ console.log(
     + ' lib.sh and csp.js agree on the profile names, and a release build refuses'
     + ' to stage a web bundle that is not the store profile. §5: a `store` web'
     + ' bundle emits no sourcemaps, resolved from the config rather than grepped, while the'
-    + ' hosted shell keeps them and desktop/extension stay as they were)',
+    + ' hosted shell keeps them and desktop/extension stay as they were; the store'
+    + ' config registers the hidden-surface guard as `enforce: \'pre\'` and its resolveId'
+    + ' refuses a hidden route module while the hosted profile\'s guard stays inert)',
 );

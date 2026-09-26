@@ -24,7 +24,7 @@
 // signing path. The plan itself comes from sdk.planDeploy so the chunk math
 // stays consensus-exact (see the SDK's chunkHelper).
 //
-// THREE CONSENSUS RULES SHAPE THIS FLOW (xchain-indexer actions/deploy.js):
+// THREE CONSENSUS RULES SHAPE THIS FLOW (xchain-indexer actions/deploy/index.js):
 //   1. The assembler gathers chunks from THIS deployer only, so every leg
 //      MUST be signed by the same source address. Resuming from a different
 //      address silently orphans every chunk already paid for; the flow pins
@@ -676,6 +676,7 @@ export async function deployChunkedRun(opts) {
                 stamp.catch(() => {});
             }
         },
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 
     // Phase 1: carriers, in order, each indexed before the next.

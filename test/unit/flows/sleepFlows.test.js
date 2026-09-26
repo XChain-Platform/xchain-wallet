@@ -57,6 +57,13 @@ describe('sleepAction', () => {
         expect(call.actionData.params).toEqual({ VERSION: '0', RESUME_BLOCK: '900000' });
     });
 
+    it('funds a live build from the source and returns change to it', async () => {
+        await sleepAction(opts({ VERSION: '0', RESUME_BLOCK: '900000' }));
+        const call = vi.mocked(submitAction).mock.calls[0][0];
+        expect(call.prebuiltPsbt).toBeUndefined();
+        expect(call.encoderOpts).toMatchObject({ pubkey: '02ab', sourceAddress: 'addr-1', change: 'addr-1' });
+    });
+
     it('requires RESUME_BLOCK', async () => {
         await expect(sleepAction(opts({ VERSION: '0' }))).rejects.toThrow(/RESUME_BLOCK/);
         expect(submitAction).not.toHaveBeenCalled();
@@ -64,6 +71,12 @@ describe('sleepAction', () => {
 
     it('requires TICK on a v1 tick sleep', async () => {
         await expect(sleepAction(opts({ VERSION: '1', RESUME_BLOCK: '0' }))).rejects.toThrow(/TICK/);
+    });
+
+    it('forwards the host auto-enqueue hook to submitAction', async () => {
+        const onBroadcastFailure = vi.fn();
+        await sleepAction(opts({ VERSION: '0', RESUME_BLOCK: '900000' }, { onBroadcastFailure }));
+        expect(vi.mocked(submitAction).mock.calls[0][0].onBroadcastFailure).toBe(onBroadcastFailure);
     });
 
     it('accepts RESUME_BLOCK 0 (resume now)', async () => {
@@ -124,6 +137,31 @@ describe('sleepStateFor', () => {
             ]),
             chainId: 'c', query: 'JDOG', type: 'token',
         });
+        expect(s.resumeBlock).toBe(900);
+    });
+
+    it('an address query skips the tick pauses that address signed', async () => {
+        const rows = [
+            { action_index: 60, type: 2, tick: 'JDOG', resume_block: -1, status: 'valid' },
+            { action_index: 40, type: 1, tick: null, resume_block: 900, status: 'valid' },
+        ];
+        const s = await sleepStateFor({ sdkRegistry: makeSdk(rows), chainId: 'c', query: 'addr-1', type: 'address' });
+        expect(s.resumeBlock).toBe(900);
+        expect(s.actionIndex).toBe(40);
+    });
+
+    it('an address that only ever paused a token reads as never slept', async () => {
+        const rows = [{ action_index: 60, type: 2, tick: 'JDOG', resume_block: -1, status: 'valid' }];
+        const s = await sleepStateFor({ sdkRegistry: makeSdk(rows), chainId: 'c', query: 'addr-1', type: 'address' });
+        expect(s.resumeBlock).toBeNull();
+    });
+
+    it('falls back to the tick field when a row carries no type', async () => {
+        const rows = [
+            { action_index: 60, tick: 'JDOG', resume_block: -1, status: 'valid' },
+            { action_index: 40, tick: '', resume_block: 900, status: 'valid' },
+        ];
+        const s = await sleepStateFor({ sdkRegistry: makeSdk(rows), chainId: 'c', query: 'addr-1', type: 'address' });
         expect(s.resumeBlock).toBe(900);
     });
 });

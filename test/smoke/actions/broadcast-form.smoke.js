@@ -234,7 +234,7 @@ assert.ok(
     'background host registers action.broadcast',
 );
 assert.ok(
-    /broadcastAction\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry\s*\}\)/.test(bg),
+    /broadcastAction\(\{\s*\.\.\.req,\s*signer:[^}]+vault,\s*chainRegistry,\s*sdkRegistry,\s*onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)\s*\}\)/.test(bg),
     'action.broadcast handler forwards deps to broadcastAction',
 );
 

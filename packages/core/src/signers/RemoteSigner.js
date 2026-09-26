@@ -93,9 +93,16 @@ export class RemoteSigner extends Signer {
     get kind() { return this._kind; }
     get requiresPhysicalConfirmation() { return true; }
 
-    async getStatus() {
+    /**
+     * Forward the caller's opts so a device signer can key its answer off them
+     * (LedgerSigner needs `chainId` to report 'wrong-app' / 'unsupported-network').
+     *
+     * @param {{ chainId?: string }} [params]
+     * @returns {Promise<import('./Signer.js').SignerStatus>}
+     */
+    async getStatus(params = {}) {
         try {
-            const res = await this._transport({ op: 'status', payload: { signerId: this._id } });
+            const res = await this._transport({ op: 'status', payload: { ...params, signerId: this._id } });
             if (typeof res === 'string') return res;
             if (res && typeof res.status === 'string') return res.status;
             return 'error';

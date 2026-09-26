@@ -86,6 +86,12 @@ function recordingMessaging({ feeds = [], consumers = { supported: true, dispens
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         oracleFeeds: (args) => { calls.push({ method: 'oracleFeeds', args }); return Promise.resolve(feeds); },
         oracleConsumers: (args) => { calls.push({ method: 'oracleConsumers', args }); return Promise.resolve(consumers); },
+        // The confirm lane: compose host-side, pre-flight, then sign those bytes.
+        composeForConfirm: (args) => {
+            calls.push({ method: 'composeForConfirm', args });
+            return Promise.resolve({ psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1 });
+        },
+        preflight: (args) => { calls.push({ method: 'preflight', args }); return Promise.resolve({ verdict: 'pass', findings: [] }); },
         oraclePriceAction: record('oraclePriceAction'),
         oraclePriceActionHw: record('oraclePriceActionHw'),
         buildActionPsbtRequest: record('buildActionPsbtRequest'),
@@ -138,16 +144,16 @@ async function fill(utils, { tick = 'pepecash', value = '0.05', fee } = {}) {
 
 async function preview(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Publish price' }));
         await drainMicrotasks();
     });
 }
 
+// Approve on the confirm page; a disabled Approve (the typed gate) is a no-op.
 async function clickSubmit(utils) {
     await domAct(async () => {
         const btn = Array.from(utils.container.querySelectorAll('button'))
-            .filter((b) => b.type === 'submit' && !b.disabled)
-            .pop();
+            .find((b) => b.getAttribute('data-testid') === 'confirm-approve' && !b.disabled);
         if (btn) fireEvent.click(btn);
         await drainMicrotasks();
     });
@@ -254,6 +260,27 @@ describe('OracleForm consumer disclosure', () => {
         await preview(utils);
         // Only the PEPECASH dispenser reprices; the other feed's is noise.
         expect(utils.getByText(/1 open dispenser price/i)).toBeTruthy();
+    });
+
+    it('expands to show every dispenser included in the affected count', async () => {
+        const dispensers = Array.from({ length: 6 }, (_, index) => ({
+            action_index: index + 1,
+            give_tick: 'PEPECASH',
+            give_amount: String((index + 1) * 100),
+            address: `bc1qdispenser${index + 1}`,
+        }));
+        const { utils } = await mountForm({
+            feeds: liveFeed('0.05'),
+            consumers: { supported: true, dispensers },
+        });
+        await fill(utils, { tick: 'PEPECASH', value: '0.06' });
+        await preview(utils);
+
+        const summary = utils.getByText('Affected dispensers (6)');
+        expect(summary.closest('details').open).toBe(false);
+        fireEvent.click(summary);
+        expect(summary.closest('details').open).toBe(true);
+        expect(utils.getByText(/600 PEPECASH per dispense/)).toBeTruthy();
     });
 
     // "Could not check" and "nobody is using it" must not render the same,

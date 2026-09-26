@@ -221,21 +221,24 @@ describe('MyOrdersView: fills', () => {
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
     });
 
-    it('reads the detail only for orders the feeds still call open', async () => {
+    it('reads detail before treating the creation expiration as terminal', async () => {
+        const past = Math.floor(Date.now() / 1000) - 60;
         const { messaging, calls } = harness({
             orders: [
                 orderRow(710),
-                orderRow(711, { expiration: Math.floor(Date.now() / 1000) - 60 }),
+                orderRow(711, { expiration: past }),
                 orderRow(712),
                 orderRow(713, { status: 'invalid: GIVE_AMOUNT (insufficient balance)' }),
             ],
             cancels: [cancelRow(720, 712, 'valid')],
-            details: { 710: detail(710, 'open', '500') },
+            details: { 710: detail(710, 'open', '500'), 711: detail(711, 'open', '500') },
         });
-        await open(messaging);
+        const utils = await open(messaging);
 
         const reads = calls.filter((c) => c.method === 'getOrderDetail').map((c) => c.args.actionIndex);
-        expect(reads).toEqual(['710']);
+        expect(reads.sort()).toEqual(['710', '711']);
+        const row = rowFor(section(utils, 'Open orders'), 711);
+        expect(within(row).getByText(`Expires ${new Date(FUTURE * 1000).toLocaleString()}`)).toBeTruthy();
     });
 
     it('falls back to the feeds when the detail read fails or lacks a state block', async () => {
@@ -272,7 +275,9 @@ describe('deriveStatus with a fill state', () => {
     });
 
     it('reads the state block off a detail and nothing else', () => {
-        expect(fillStateOf(detail(1, 'complete', '0'))).toEqual({ status: 'complete', giveRemaining: '0' });
+        expect(fillStateOf(detail(1, 'complete', '0'))).toEqual({
+            status: 'complete', giveRemaining: '0', expiration: String(FUTURE),
+        });
         expect(fillStateOf({ action: 'ORDER' })).toBeNull();
         expect(fillStateOf(null)).toBeNull();
         expect(fillStateOf([])).toBeNull();

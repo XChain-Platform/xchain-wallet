@@ -538,15 +538,14 @@ assert.equal(isAllowedHidVendor(0x046D), false, 'unrelated vendor (Logitech) rej
         false,
         'hid check denied to a local file outside the app dir when a frame URL is supplied',
     );
-    // Non-hid permissions keep the session default. The shipped renderer
-    // bundle reads and writes the clipboard, scans QR codes through
-    // getUserMedia and asks for notification permission; denying them here
-    // takes three working features out of the wallet.
+    // Non-hid permissions are granted on the check path, which the shared
+    // UI's clipboard writes and its Notification.permission read rely on.
+    // Anything that must prompt is refused by the request handler instead.
     for (const permission of ['clipboard-read', 'clipboard-sanitized-write', 'media', 'notifications']) {
         assert.equal(
             checkHandler(null, permission, 'file://', { isMainFrame: true, requestingUrl: appIndex }),
             true,
-            `${permission} check is left at the session default`,
+            `${permission} check is granted`,
         );
     }
 

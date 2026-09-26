@@ -70,18 +70,59 @@ describe('humanizeError', () => {
         expect(out.cause).to.equal('backend_behind');
     });
 
-    // D-42: the module's contract is that the raw message is "never lost", but
-    // every call site renders `message` alone, so an unrecognized error used to
-    // reach the user as a dead end with no cause at all.
     it('keeps the raw detail in the message for unrecognized errors', () => {
         const out = humanizeError(new Error('sendToken: params.TICK is required'), 'send');
         expect(out.cause).to.equal('unknown');
         expect(out.message).to.equal("Couldn't send. sendToken: params.TICK is required");
+        expect(out.details).to.equal('');
         expect(out.raw).to.equal('sendToken: params.TICK is required');
     });
 
     it('uses the verb in the fallback copy', () => {
         expect(humanizeError(new Error('boom'), 'stake').message).to.equal("Couldn't stake. boom");
+    });
+
+    it('hides positively identified technical text behind plain copy', () => {
+        const out = humanizeError(new Error('Request failed with status code 500'), 'stake');
+        expect(out.message).to.equal("Couldn't stake. Something went wrong. Try again.");
+        expect(out.details).to.equal('Request failed with status code 500');
+    });
+
+    it.each([
+        'insufficient EGGS balance: have 5, need 10',
+        'Error: address tb1qxyz is not on allow-list #42',
+        'RPC error -26: min relay fee not met, 100 < 110',
+    ])('keeps specific text visible: %s', (raw) => {
+        const out = humanizeError(new Error(raw), 'send');
+        expect(out.message).toContain(raw);
+        expect(out.message).not.toMatch(/Something went wrong/);
+    });
+
+    it.each([
+        'Encoder RPC error: dust',
+        '64: dust',
+    ])('gives raise-the-amount guidance for dust text: %s', (raw) => {
+        const out = humanizeError(new Error(raw), 'send');
+        expect(out.cause).to.equal('rejected');
+        expect(out.message).toMatch(/Raise the amount and try again/);
+    });
+
+    it.each([
+        'Network request failed',
+        'timeout of 30000ms exceeded',
+        'You are offline',
+    ])('restores connection guidance for: %s', (raw) => {
+        const out = humanizeError(new Error(raw), 'send');
+        expect(out.cause).to.equal('network');
+        expect(out.message).toMatch(/network is unreachable/i);
+    });
+
+    it('handles a 200 KB repeated-prefix message in under 100 ms', () => {
+        const raw = 'indexer '.repeat(25_000);
+        expect(raw).toHaveLength(200_000);
+        const started = performance.now();
+        humanizeError(new Error(raw), 'send');
+        expect(performance.now() - started).toBeLessThan(100);
     });
 
     it('says only the generic line when there is no detail to add', () => {

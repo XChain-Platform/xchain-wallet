@@ -17,13 +17,16 @@
 // Forms render this in place of their own body while
 // `actionConfirm.open` is true, exactly like a picker screen.
 
+import { useContext, useEffect, useState } from 'react';
 import { Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
+import { readActiveWallet } from '../utils/activeWalletMemory.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -36,9 +39,56 @@ function nativeTickerFor(chainId) {
     return NATIVE_TICKER_BY_COIN[coin] || String(coin).toUpperCase();
 }
 
+function useSourceIdentity(address, chainId, walletId) {
+    const messaging = useContext(MessagingContext)?.messaging;
+    const [identity, setIdentity] = useState({ label: '', walletName: '' });
+
+    useEffect(() => {
+        let cancelled = false;
+        setIdentity({ label: '', walletName: '' });
+        if (!address || typeof messaging?.listWallets !== 'function'
+            || typeof messaging?.getAddressesByChain !== 'function') return undefined;
+
+        Promise.resolve().then(() => messaging.listWallets()).then(async (walletsValue) => {
+            const wallets = Array.isArray(walletsValue) ? walletsValue : [];
+            const matches = await Promise.all(wallets.map(async (wallet) => {
+                try {
+                    const byChain = await messaging.getAddressesByChain(wallet.id);
+                    const records = chainId
+                        ? (byChain?.[chainId] || [])
+                        : Object.values(byChain || {}).flat();
+                    const wanted = String(address).toLowerCase();
+                    const record = records.find((item) => (
+                        String(item?.address || '').toLowerCase() === wanted
+                    ));
+                    return record ? { record, wallet } : null;
+                } catch {
+                    return null;
+                }
+            }));
+            if (cancelled) return;
+            const signingMatch = walletId
+                ? matches.find((item) => item?.wallet?.id === walletId)
+                : null;
+            const match = signingMatch
+                || matches.find((item) => item?.record?.label)
+                || matches.find(Boolean);
+            setIdentity({
+                label: match?.record?.label || '',
+                walletName: wallets.length > 1 ? (match?.wallet?.name || '') : '',
+            });
+        }).catch(() => {});
+
+        return () => { cancelled = true; };
+    }, [address, chainId, messaging, walletId]);
+
+    return identity;
+}
+
 /**
  * @param {object} props
  * @param {ReturnType<typeof import('../hooks/useActionConfirmFlow.js').useActionConfirmFlow>['confirmAction']} props.confirmAction
+ * @param {string} [props.walletId]              wallet whose source record signs the action
  * @param {'small'|'full'} [props.screenVariant]
  * @param {string} props.chainLabel
  * @param {string} [props.feeText]               the form's rate ESTIMATE, used only as a
@@ -75,6 +125,7 @@ function nativeTickerFor(chainId) {
  */
 export function ActionConfirmScreen({
     confirmAction,
+    walletId = readActiveWallet(),
     screenVariant = 'small',
     chainLabel,
     feeText,
@@ -116,8 +167,10 @@ export function ActionConfirmScreen({
     const composed = confirmAction.composed;
     const exactSats = composed?.networkFeeSats;
     const ticker = coinTicker || nativeTickerFor(composed?.chainId);
+    // An envelope's total covers its commit and its reveal, and says so.
+    const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
     const exactFeeText = Number.isFinite(exactSats)
-        ? `Network fee: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
+        ? `${feeLabel}: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
         : null;
 
     // (c): still the host's decode of the composed bytes, with the
@@ -125,6 +178,16 @@ export function ActionConfirmScreen({
     // survives verbatim, and a decode carrying no outcome row (every action
     // that is not a bet or a resolve) comes back untouched.
     const decoded = withOutcomeLabels(composed?.decoded, outcomeLabels);
+
+    // #40: the spender, taken from the confirm hook rather than from a new
+    // prop on all ~38 calling forms. Every form already passes `from` into
+    // useActionConfirmFlow.run, which forwards it as `source`; the hook now
+    // keeps it, so the row appears on every action surface at once and a new
+    // form cannot forget to opt in. hwSource is the fallback for the same
+    // value in record form, so a device signer is not the one case left blank.
+    const sourceAddress = confirmAction.source || hwSource?.address || null;
+    const sourceIdentity = useSourceIdentity(sourceAddress, composed?.chainId || chainId, walletId);
+    const sourceName = [sourceIdentity.label, sourceIdentity.walletName].filter(Boolean).join(' · ');
 
     return (
         <ConfirmActionModal
@@ -157,8 +220,11 @@ export function ActionConfirmScreen({
             // simulation still wins, for surfaces that have a better one.
             simulation={simulation || composed?.simulation || null}
             error={confirmAction.error}
+            sourceAddress={sourceAddress}
+            sourceName={sourceName}
             chainLabel={chainLabel}
             feeText={exactFeeText || feeText}
+            nativeTicker={ticker}
             credentialsReady={credsComplete}
             credentials={(
                 <>

@@ -41,7 +41,7 @@ import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
  * real figure. The wording itself lives in flows/protocolFeeRow.js.
  *
  * Mount this on any QUOTABLE authoring action. Per the indexer's
- * classifyFeeQuoteAction (xchain-indexer/src/actions.js), every action is
+ * classifyFeeQuoteAction (xchain-indexer/src/actions/index.js), every action is
  * quotable EXCEPT the denied set {XEXEC, BATCH} and the exempt
  * settlement/emitted set {COINPAY, DISPENSE, *_MATCH, *_EXPIRE,
  * DISPENSER_CLOSE, CROSS_SETTLE, XCALL, ATTEST}; denied/exempt actions reject

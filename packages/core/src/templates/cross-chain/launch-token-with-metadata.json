@@ -10,9 +10,9 @@
             "params": {
                 "VERSION": "0",
                 "TICK": "MYTOKEN",
-                "AMOUNT": "1000000",
-                "DIVISIBLE": "true",
-                "DESCRIPTION": "MYTOKEN - see metadata FILE action on the secondary chain"
+                "DECIMALS": "8",
+                "DESCRIPTION": "MYTOKEN - see metadata FILE action on the secondary chain",
+                "MINT_SUPPLY": "1000000"
             },
             "note": "Pick the chain you want the canonical issuance on (e.g. Bitcoin)."
         },
@@ -21,8 +21,10 @@
             "action": "FILE",
             "params": {
                 "VERSION": "0",
-                "MIME_TYPE": "application/json",
-                "DATA": "{\"name\":\"MYTOKEN\",\"image\":\"ipfs://...\",\"attributes\":[]}"
+                "NAME": "MYTOKEN.json",
+                "TYPE": "application/json",
+                "TITLE": "MYTOKEN metadata",
+                "MEMO": "Cross-chain metadata for MYTOKEN"
             },
             "note": "Upload the metadata JSON on a cheaper chain (e.g. Dogecoin or Litecoin) - the data is hex / utf8 encoded."
         },

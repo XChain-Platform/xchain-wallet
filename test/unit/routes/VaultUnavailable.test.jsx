@@ -31,9 +31,12 @@ import { VaultUnavailable } from '../../../packages/core/src/shared/routes/Vault
 import {
     vaultErrorKind,
     VaultCorruptError,
+    VaultEvictedError,
     VaultLockedError,
     VaultUnavailableError,
 } from '../../../packages/core/src/storage/backend.js';
+
+const KINDS = ['corrupt', 'locked', 'unavailable', 'evicted'];
 
 afterEach(cleanup);
 
@@ -48,9 +51,10 @@ function renderScreen(props = {}) {
 }
 
 describe('vaultErrorKind', () => {
-    it('narrows each of the three', () => {
+    it('narrows each of the four', () => {
         expect(vaultErrorKind(new VaultCorruptError())).toBe('corrupt');
         expect(vaultErrorKind(new VaultLockedError())).toBe('locked');
+        expect(vaultErrorKind(new VaultEvictedError())).toBe('evicted');
         expect(vaultErrorKind(new VaultUnavailableError())).toBe('unavailable');
     });
 
@@ -78,11 +82,12 @@ describe('vaultErrorKind', () => {
         // vaguest of the three screens.
         expect(vaultErrorKind(new VaultLockedError())).not.toBe('unavailable');
         expect(vaultErrorKind(new VaultCorruptError())).not.toBe('unavailable');
+        expect(vaultErrorKind(new VaultEvictedError())).not.toBe('unavailable');
     });
 });
 
 describe('VaultUnavailable: what every kind says', () => {
-    it.each(['corrupt', 'locked', 'unavailable'])(
+    it.each(KINDS)(
         'tells a %s user their recovery phrase still holds everything',
         (kind) => {
             renderScreen({ kind });
@@ -93,7 +98,7 @@ describe('VaultUnavailable: what every kind says', () => {
         },
     );
 
-    it.each(['corrupt', 'locked', 'unavailable'])(
+    it.each(KINDS)(
         'gives a %s user something to do',
         (kind) => {
             renderScreen({ kind });
@@ -111,12 +116,23 @@ describe('VaultUnavailable: what every kind says', () => {
 
     it('says something different for each kind', () => {
         const seen = new Set();
-        for (const kind of ['corrupt', 'locked', 'unavailable']) {
+        for (const kind of KINDS) {
             cleanup();
             renderScreen({ kind });
             seen.add(screen.getByRole('heading').textContent);
         }
-        expect(seen.size).toBe(3);
+        expect(seen.size).toBe(KINDS.length);
+    });
+
+    it('tells an evicted user the browser did it, and how to stop it recurring', () => {
+        // Reported 2026-09-16 by two users as "it asked for my recovery
+        // phrase again": the fact that matters is that the wallet did not
+        // reset itself, and the fix is a storage tier the browser will not
+        // evict (an installed app, a home-screen icon).
+        renderScreen({ kind: 'evicted' });
+        expect(screen.getByRole('heading').textContent).toMatch(/browser removed/i);
+        expect(screen.getByText(/The wallet did not do this/i)).toBeTruthy();
+        expect(screen.getByText(/add this site to your home screen/i)).toBeTruthy();
     });
 
     it('tells a locked user the actual fix: unlock the device', () => {
@@ -138,6 +154,29 @@ describe('VaultUnavailable: the destructive escape', () => {
     it('is offered for corrupt, because nothing else lets that user proceed', () => {
         renderScreen({ kind: 'corrupt' });
         expect(screen.getByText(/start over from my recovery phrase/i)).toBeTruthy();
+    });
+
+    it('is offered for evicted, behind the same WIPE gate, with its own wording', async () => {
+        // The gate stays: the escape also drops the kdfParams meta, and a
+        // blob that came back after a transient empty read could never be
+        // opened without it. So Try again first, WIPE second.
+        const wipe = vi.fn().mockResolvedValue(undefined);
+        renderScreen({ kind: 'evicted', wipe });
+        expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /clear and start over/i })).toBeNull();
+
+        fireEvent.click(screen.getByText(/start over from my recovery phrase/i));
+        // Never called "damaged": nothing here is damaged, it is gone.
+        expect(screen.queryByText(/damaged/i)).toBeNull();
+        const confirm = screen.getByRole('button', { name: /clear and start over/i });
+        expect(confirm.disabled).toBe(true);
+        fireEvent.click(confirm);
+        expect(wipe).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText(/type wipe to confirm/i), { target: { value: 'WIPE' } });
+        await waitFor(() => expect(confirm.disabled).toBe(false));
+        fireEvent.click(confirm);
+        await waitFor(() => expect(wipe).toHaveBeenCalledTimes(1));
     });
 
     it('is never one tap: it needs the panel opened AND the word typed', async () => {

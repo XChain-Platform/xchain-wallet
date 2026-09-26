@@ -544,12 +544,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             }),
             onBroadcast: (res) => {
                 const txid = res?.txid || res?.broadcast?.txid;
-                if (!txid) throw new Error('LINK broadcast did not return a txid.');
+                if (!txid) throw new Error('Cross-chain link broadcast did not return a transaction ID.');
                 setLinkTxid(txid);
                 setPassword('');
                 setStage(setAsTokenInfo ? 'review-tis' : 'done');
             },
-            fallback: 'LINK broadcast failed.',
+            fallback: 'Cross-chain link broadcast failed.',
         });
     }
 
@@ -1185,7 +1185,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!fileMeta || !fromAddress}
                 >
                     Review upload
                 </Button>

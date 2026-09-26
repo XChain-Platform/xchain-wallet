@@ -313,10 +313,36 @@ const kdfParams = cryptoLib.makeFreshKdfParams();
     assert.equal(caught.name, 'VaultClosedError');
 }
 
+// 2f. The browser deleted IndexedDB but localStorage survived (an
+//      eviction, a clear-on-exit, a cleaner: reported 2026-09-16 by two
+//      users as "it asked for my recovery phrase again"). The meta slot
+//      still says a wallet was set up here, so the status must NOT be the
+//      factual no-wallet answer that drops the user on the create screen;
+//      it is a typed VaultEvictedError the App routes to its own screen.
+{
+    await fakeKv.delete('wallet-vault');
+    assert.ok(fakeLocalStorage.getItem('xchain-wallet:vault-meta'), 'meta survives the eviction');
+    let caught = null;
+    try {
+        await hostBridge.getSessionStatus();
+    } catch (err) {
+        caught = err;
+    }
+    assert.ok(caught, 'meta without blob rejects rather than answering no-wallet');
+    assert.equal(caught.name, 'VaultEvictedError');
+    assert.equal(storageLib.vaultErrorKind(caught), 'evicted');
+
+    // The escape (wipeWalletStorage) clears the meta too; once both are
+    // gone it is a genuinely fresh browser and no-wallet is the truth.
+    fakeLocalStorage.removeItem('xchain-wallet:vault-meta');
+    const status = await hostBridge.getSessionStatus();
+    assert.equal(status.state, 'no-wallet', 'no meta and no blob is a fresh device');
+}
+
 // Cleanup: restore the original opener so other smokes that import
 // IndexedDBStorageBackend aren't affected.
 IndexedDBStorageBackend.prototype._openStore = originalOpen;
 
 console.log(
-    'OK: web shell smoke (static wiring + hostBridge: no-wallet / locked / wrong / unlocked / lock)',
+    'OK: web shell smoke (static wiring + hostBridge: no-wallet / locked / wrong / unlocked / lock / evicted)',
 );

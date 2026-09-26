@@ -16,7 +16,7 @@
 //      watcher-mode wire mirror. A field present in one and missing from the
 // other is the drift class was about.
 //   2. The turnout floor is enforced before a transaction is built, and the
-//      submit button is disabled while it fails.
+//      submit button stays enabled so it can explain the refusal.
 //   3. CALLBACK_DELAY_BLOCKS is emitted ONLY when its flag-day is active on the
 //      chain, and the activation is measured against the CHAIN's block time,
 //      never the local clock. This is the item's silent-drop guard: before the
@@ -64,14 +64,14 @@ for (const [camel, wire] of [
     );
 }
 
-// 2: the turnout floor gates both the review step and the submit button.
+// 2: the turnout floor gates the review step without silencing its message.
 assert.ok(
     /if \(bindingErrors\.length > 0\) \{ setFormError\(bindingErrors\[0\]\); return; \}/.test(formSrc),
     'review is refused while the binding-poll rules fail',
 );
 assert.ok(
-    /disabled=\{[\s\S]{0,240}bindingErrors\.length > 0/.test(formSrc),
-    'submit stays disabled while the binding-poll rules fail',
+    !/disabled=\{[\s\S]{0,240}bindingErrors\.length > 0/.test(formSrc),
+    'submit stays enabled so the binding-poll refusal can be shown',
 );
 assert.equal(typeof flows.bindingPollErrors, 'function', 'bindingPollErrors is exported from the flows barrel');
 assert.equal(typeof flows.isBindingPoll, 'function', 'isBindingPoll is exported from the flows barrel');

@@ -233,7 +233,7 @@ export class VaultWindowStore {
             // every wildcard window cap see a used total of '0' for them forever,
             // so the cap bound each transaction independently rather than the window.
             const key = (e.tick === undefined || e.tick === null)
-                ? UNRESOLVED_TICK_BUCKET : String(e.tick);
+                ? UNRESOLVED_TICK_BUCKET : String(e.tick).toUpperCase();
             try {
                 perTick[key] = addDecimalStrings(perTick[key] ?? '0', e.amount);
             } catch (err) {

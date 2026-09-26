@@ -409,14 +409,15 @@ export function indexerFreshness(json, coin, nowMs = Date.now(), maxLagBlocks = 
  * observation from outside, and only `supported` tells them apart.
  *
  * The rule this encodes is the one this gate keeps re-learning: report what was
- * measured, and name a cause only when the payload carries the evidence for it.
+ * measured, and do not turn a freshness observation into an unmeasured cause.
  * An absence with no `supported` map to consult stays an absence.
  *
  * @param {any} json    the explorer's /{COIN}/api/status body
  * @param {string} coin
+ * @param {number} nowMs
  * @returns {string}
  */
-export function absenceCause(json, coin) {
+export function absenceCause(json, coin, nowMs = Date.now()) {
     const available = json?.available ?? {};
     const served = Object.keys(available).join(', ') || 'none';
     const supported = json?.supported;
@@ -428,24 +429,15 @@ export function absenceCause(json, coin) {
         return `up, but ${coin} is absent from the networks it currently serves (${served})`;
     }
     if (isSupported) {
-        // The explorer's OWN stale flag decides, not our freshness arithmetic:
-        // that flag is what actually drives the deletion from `available`.
-        // Freshness only supplies detail, and when it has none this says so
-        // rather than inventing one. The first draft of this branch hardcoded
-        // "the explorer marked it stale" as its fallback, which reproduced
-        // this row's entire defect one level down - and only driving the LIVE
-        // payload exposed it, because the sentence appeared for a coin whose
-        // `stale` flag was false.
-        const flagged = json?.stale?.[coin] === true;
-        const why = indexerFreshness(json, coin);
-        let because;
-        if (why.state === 'stale') because = why.detail;
-        else if (flagged) because = 'the explorer marks it stale, without saying why in this body';
-        else because = 'its status body gives no reason';
-        return `up and CONFIGURED for ${coin}, but currently withdrawn from service: ${because}`
-            + ` (serving ${served})`;
+        // Membership in `supported` measures configuration, while absence from
+        // `available` measures withdrawal. Freshness is reported alongside
+        // those facts, never promoted into a claim about why withdrawal
+        // happened. That remains honest even when the clock is unusable.
+        const freshness = indexerFreshness(json, coin, nowMs);
+        return `up: ${coin} is configured but WITHDRAWN from the served set`
+            + ` (serving ${served}); freshness: ${freshness.detail}`;
     }
-    return `up, and ${coin} is not in its configured set at all (serving ${served})`;
+    return `up, but ${coin} is not configured on this deployment at all (serving ${served})`;
 }
 
 /**
@@ -655,7 +647,7 @@ export function classifyProbe(probe, raw, { nowMs = Date.now() } = {}) {
         if (!Object.prototype.hasOwnProperty.call(available, probe.coin)) {
             return {
                 state: 'failure',
-                detail: `${absenceCause(json, probe.coin)}: the demo's balance screen would be empty`,
+                detail: `${absenceCause(json, probe.coin, nowMs)}: the demo's balance screen would be empty`,
             };
         }
 

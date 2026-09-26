@@ -132,5 +132,6 @@ export async function linkAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

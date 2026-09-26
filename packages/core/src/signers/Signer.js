@@ -312,8 +312,11 @@ export class Signer {
         return false;
     }
 
-    /** @returns {Promise<SignerStatus>} */
-    async getStatus() {
+    /**
+     * @param {{ chainId?: string }} [_opts]   Chain the caller is about to use; a signer may ignore it
+     * @returns {Promise<SignerStatus>}
+     */
+    async getStatus(_opts) {
         throw new AbstractMethodError('getStatus');
     }
 

@@ -21,6 +21,7 @@
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
 
 /**
  * @typedef {Object} ExecuteActionOpts
@@ -82,6 +83,7 @@ export async function executeAction(opts) {
         actionData: { action: 'EXECUTE', params: opts.params },
         encoderOpts: {
             pubkey: source.publicKey,
+            ...fundingEncoderOpts(source),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
@@ -95,5 +97,6 @@ export async function executeAction(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

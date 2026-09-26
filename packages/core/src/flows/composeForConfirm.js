@@ -31,13 +31,15 @@
 
 import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
+import { assertCompleteEnvelope, isEnvelopePair } from '../sdk/submitWithSigner.js';
 import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativeFeeLane.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
-import { pushPrefixSize } from './fileSizeLimits.js';
+import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
+import { envelopeEncoderOpts } from './envelopeSelection.js';
 
 // FILE v0's COMPRESSION field index in the full action string, and the encoder's
 // own field-setting rule mirrored byte for byte (pad the optional fields up to
@@ -161,10 +163,13 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @property {{ address: string, value: number|string }|null} deferredFeeOutput  protocol fee the reveal emits
  * @property {Array<{ address: string, value: number|string }>} deferredOutputs  EVERY output the reveal emits
  * @property {{ change: string|null, rawData: string|null }|null} revealOpts     what the reveal must be built with
+ * @property {string|null} revealPsbt          TAPROOT envelope reveal PSBT built against `psbt`; NULL off the envelope lane
+ * @property {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string, internalPubkey?: string, tapleafHash: string }|null} envelope  TAPROOT recovery record; NULL off the envelope lane
  * @property {object|null} oracleFeeQuote      Mode B dispenser oracle usage fee quote, when one was priced
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
  * @property {object} encoderOpts              the FINAL encoderOpts used to build the PSBT (fee + ADS folded in)
+ * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not compress
  */
 
 /**
@@ -176,11 +181,13 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @param {{ action: string, params: object }} args.actionData
  * @param {object} args.encoderOpts            must include pubkey/change per the encoder contract
  * @param {string} [args.source]               spender address for the native-fee quote
+ * @param {{ source?: string }|null} [args.signer]  the spending Address record; decides whether an
+ *   oversized payload may ask for the Taproot envelope
  * @param {AbortSignal} [args.signal]
  * @returns {Promise<ComposedAction>}
  */
 export async function composeForConfirm({
-    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts, source, signal,
+    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: requestedEncoderOpts, source, signal, signer = null,
 }) {
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`composeForConfirm: unknown chain "${chainId}"`);
@@ -198,6 +205,30 @@ export async function composeForConfirm({
 
     // 1. Action string (pure formatting, no network). None for a bare payment.
     const createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
+
+    // 1b. A payload over the legacy carrier asks for the Taproot envelope when
+    // this chain and signer can carry one, whichever action it is.
+    const compiledBytes = createResult
+        ? compiledPayloadByteLen(createResult.actionString, requestedEncoderOpts?.rawData, null)
+        : 0;
+    const envelopeRequest = createResult
+        ? envelopeEncoderOpts({
+            descriptor,
+            signer,
+            encoderOpts: requestedEncoderOpts,
+            compiledBytes,
+        })
+        : null;
+    // Refuse an oversized legacy payload before the encoder can expose its raw
+    // carrier error. Larger payloads need both Taproot on the chain and a local
+    // software key that can sign the envelope reveal.
+    if (compiledBytes > MAX_COMPILED_ACTION_BYTES && !envelopeRequest) {
+        const subject = actionData.action === 'FILE' ? 'Files' : 'Payloads';
+        throw new Error(
+            `${subject} over 8 KB can only be published on a Taproot-capable chain from a software-key address.`,
+        );
+    }
+    const encoderOpts = envelopeRequest ? { ...requestedEncoderOpts, ...envelopeRequest } : requestedEncoderOpts;
 
     // 2. Native-coin fee pre-flight (folds the FEE_DESTINATION output into
     // customOutputs when payFeeInNativeCoin is set; throws NativeFeeForfeitError
@@ -289,6 +320,12 @@ export async function composeForConfirm({
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
     }
 
+    // A TAPROOT envelope rides this lane as a pair: the commit PSBT, the reveal
+    // PSBT and the recovery record all go to the signer, and a pair missing one
+    // is refused before the modal opens. Keyed off the encoder's answer, not the request.
+    assertCompleteEnvelope(encoded, actionData?.action);
+    const envelope = isEnvelopePair(encoded) ? encoded.envelope : null;
+
     // What the PSBT just built really carries, compression included. Everything
     // below that describes these bytes - the confirm string, the carrier
     // allowance, what the reveal is rebuilt from - reads THIS, not the request.
@@ -370,10 +407,19 @@ export async function composeForConfirm({
         ...deferredOutputs,
         ...(deferredFeeOutput ? [deferredFeeOutput] : []),
     ];
-    const expectedCustomOutputs = deferredFromExpected.reduce(
+    const remainingCustomOutputs = deferredFromExpected.reduce(
         (opts, out) => withoutCustomOutput(opts, out),
         finalEncoderOpts,
     ).customOutputs;
+    // The envelope's commit output pays the tapscript the reveal spends. It is
+    // expected at the exact address and value the recovery record names, so the
+    // output-set check refuses a commit that funds anything else.
+    const expectedCustomOutputs = envelope
+        ? [
+            ...(Array.isArray(remainingCustomOutputs) ? remainingCustomOutputs : []),
+            { address: envelope.commitAddress, value: envelope.commitValue },
+        ]
+        : remainingCustomOutputs;
     // The action string these PSBT bytes carry: the wallet's composed string
     // unless the encoder's transparent FILE compression rewrote the COMPRESSION
     // field, in which case it is the string the encoder wrote and reported.
@@ -467,9 +513,24 @@ export async function composeForConfirm({
         // What the phase-2 reveal must be built with to agree with this
         // commit. Null off the chunk lane.
         revealOpts,
+        // TAPROOT only: the reveal the encoder built against `psbt`, signed
+        // byte-identically on Approve before the commit is broadcast.
+        revealPsbt: envelope ? encoded.revealPsbt : null,
+        // TAPROOT only: the recovery record the submit path persists before the
+        // commit goes out, since the key-path cancel cannot be rebuilt without it.
+        envelope,
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,
         encoderOpts: finalEncoderOpts,
+        // The encoder's transparent-compression report, so the submit path can
+        // hand it back to the success screen. Every non-watcher publish now
+        // goes through this lane, and the result envelope is the only route
+        // from here to `storedSizeSummary`; without it the screen silently
+        // shows nothing, which hides the one number the feature exists to
+        // surface (how many bytes the user actually paid to store). Already
+        // validated above by `carriedPayloadOf`, which refuses a report that
+        // contradicts the approved action, so carrying it widens nothing.
+        compression: encoded.compression ?? null,
     };
 }

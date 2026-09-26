@@ -21,16 +21,14 @@
 //     rows, holders may have shifted. The UI surfaces this as a hint
 //     so the user understands the list isn't a frozen historical view.
 //
-//   - AIRDROP distributes to addresses in a referenced LIST. The row
-//     payload carries LIST_ACTION_INDEX. We fetch the LIST action via
-//     `sdk.getAction(idx)` and read its TYPE=2 (ADDRESS) ITEM array.
-//     Older multi-airdrop variants (v1/v2/v3) reference multiple lists;
-//     those are out of scope for this FOLLOWUP. The v0 path is the common
-//     authored shape.
+//   - AIRDROP recipients are the addresses in the action's immutable
+//     credit rows. Reading the referenced LIST would show its current
+//     membership after later edits rather than the historical payout.
 //
-// Both flows accept optional pre-resolved fields (`tick`, `listAction-
-// Index`) so callers that already have them on the History row don't
-// pay an extra `getAction` round-trip.
+// DIVIDEND accepts an optional pre-resolved `tick`. AIRDROP always reads
+// its action because the credit rows are the historical source of truth.
+
+import { extractHolderRows } from '../shared/utils/holderRows.js';
 
 /**
  * @typedef {Object} Recipient
@@ -70,13 +68,7 @@ export async function getDividendRecipients(args) {
     }
 
     const holdersResp = await sdk.getHolders(tick);
-    const rawList = Array.isArray(holdersResp)
-        ? holdersResp
-        : Array.isArray(holdersResp?.holders)
-            ? holdersResp.holders
-            : Array.isArray(holdersResp?.rows)
-                ? holdersResp.rows
-                : [];
+    const rawList = extractHolderRows(holdersResp);
     /** @type {Recipient[]} */
     const recipients = [];
     const seen = new Set();
@@ -106,7 +98,7 @@ export async function getDividendRecipients(args) {
 }
 
 /**
- * @param {{ sdkRegistry: any, chainId: string, actionIndex?: string, listActionIndex?: string }} args
+ * @param {{ sdkRegistry: any, chainId: string, actionIndex: string, listActionIndex?: string }} args
  * @returns {Promise<{ recipients: Recipient[], listActionIndex: string, listType: string | null }>}
  */
 export async function getAirdropRecipients(args) {
@@ -116,47 +108,31 @@ export async function getAirdropRecipients(args) {
     const sdk = sdkRegistry.get(chainId);
     if (!sdk) throw new Error(`getAirdropRecipients: SDK not registered for ${chainId}`);
 
-    let listActionIndex = typeof args.listActionIndex === 'string' && args.listActionIndex.length > 0
-        ? args.listActionIndex
-        : null;
-    if (!listActionIndex) {
-        if (typeof args.actionIndex !== 'string' || args.actionIndex.length === 0) {
-            throw new Error(
-                'getAirdropRecipients: either listActionIndex or actionIndex is required',
-            );
-        }
-        const action = await sdk.getAction(args.actionIndex);
-        const params = action?.params || action || {};
-        listActionIndex = String(
-            params.LIST_ACTION_INDEX || params.list_action_index || '',
-        ).trim() || null;
-        if (!listActionIndex) {
-            throw new Error(
-                `getAirdropRecipients: action ${args.actionIndex} has no LIST_ACTION_INDEX field`,
-            );
-        }
+    if (typeof args.actionIndex !== 'string' || args.actionIndex.length === 0) {
+        throw new Error('getAirdropRecipients: actionIndex is required');
     }
 
-    const list = await sdk.getAction(listActionIndex);
-    const params = list?.params || list || {};
-    const items = params.ITEM ?? params.item ?? params.ITEMS ?? params.items;
-    const arr = Array.isArray(items) ? items : items != null ? [items] : [];
-    const listType = params.TYPE != null ? String(params.TYPE) : params.type != null ? String(params.type) : null;
+    const action = await sdk.getAction(args.actionIndex);
+    const params = action?.params || action || {};
+    const listActionIndex = String(
+        params.LIST_ACTION_INDEX || params.list_action_index || args.listActionIndex || '',
+    ).trim() || null;
+    const credits = Array.isArray(action?.credits)
+        ? action.credits
+        : Array.isArray(params.credits)
+            ? params.credits
+            : [];
 
     /** @type {Recipient[]} */
     const recipients = [];
     const seen = new Set();
-    for (const it of arr) {
-        let address = null;
-        if (typeof it === 'string') address = it.trim();
-        else if (it && typeof it === 'object') {
-            address = String(it.address || it.ADDRESS || '').trim();
-        }
+    for (const credit of credits) {
+        const address = String(credit?.address || credit?.ADDRESS || '').trim();
         if (!address) continue;
         if (seen.has(address)) continue;
         seen.add(address);
         recipients.push({ address });
     }
 
-    return { recipients, listActionIndex, listType };
+    return { recipients, listActionIndex, listType: null };
 }

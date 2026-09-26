@@ -191,6 +191,12 @@ export function buildCommands(ctx) {
     }
     if (ctx.hasBtcAddress) {
         list.push({ id: 'nav-staking', category: 'Navigate', title: 'Staking', subtitle: 'Your staking positions', keywords: ['stake', 'validator', 'rewards'], Icon: Icon.StakeIcon, run: go('staking-dashboard') });
+        // Multisig is Bitcoin-only (§10.3), so it shares the staking gate. The
+        // actions menu already listed both; the palette found neither.
+        list.push(
+            { id: 'nav-multisig-create', category: 'Navigate', title: 'Create multisig', subtitle: 'Shared wallet that needs several approvals', keywords: ['multisig', 'cosigner', 'shared', 'xpub', 'fingerprint', 'n-of-m'], Icon: Icon.UsersIcon, run: go('multisig-create') },
+            { id: 'nav-multisig-sign', category: 'Navigate', title: 'Multisig signing', subtitle: 'Add your approval to a shared-wallet payment', keywords: ['multisig', 'cosigner', 'approve', 'psbt'], Icon: Icon.SignIcon, run: go('multisig-sign') },
+        );
     }
     if (ctx.hasGovernanceAddress) {
         list.push({ id: 'nav-governance', category: 'Navigate', title: 'Governance', subtitle: 'Polls and voting', keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });

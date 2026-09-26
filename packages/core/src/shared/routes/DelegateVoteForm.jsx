@@ -333,7 +333,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                         : `Delegation set. Your ${tick} voting weight flows to the delegate for polls you do not vote on directly.`}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Txid</dt>
+                    <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>

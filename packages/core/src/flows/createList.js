@@ -123,8 +123,8 @@ export async function createList(opts) {
             // Only the live-build callers were hit: the confirm-modal path
             // hands submitAction a prebuiltPsbt, so createTx (and these opts
             // with it) is skipped. The legacy direct-dispatch publishes -
-            // official-token list (ProjectRosterForm), list fork, airdrop and
-            // the watcher/HW branches of ListCreateForm - build the tx here.
+            // list fork, airdrop and the watcher/HW branches of ListCreateForm
+            // build the tx here.
             // Same family as advancedAction's D-17/D-18 and dispenserAction's
             sourceAddress: source.address,
             change: source.address,
@@ -143,5 +143,6 @@ export async function createList(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

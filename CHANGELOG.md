@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A batch can compose a parent token and its sub-tokens in one action.
 
 ### Changed
+- The test runner moves to Vitest 4.1.11, closing the @vitest/mocker path-traversal advisory (GHSA-82fw-gwwq-j7x9) that affected development only.
 - The wallet moves to xchain-sdk 0.15.3, whose deploy workflow resolves a chunked contract through the explorer.
 - Release tooling transcribes the zone's current edge rules: the API hosts are rate limited per client over 10-second windows instead of skipped.
 - Contracts are named by the name, version and description their own source exports, shown as "Escrow v1.0.0 (C:BTC:12)" in history, the contracts list and the contract page, with the description on the contract page.
@@ -33,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
+- History now orders transactions from different chains by when they happened, so a Dogecoin send no longer sits above newer Bitcoin ones because Dogecoin counts its blocks higher.
+- Opening History from a token now lists only that token's activity instead of the whole parent chain, in the web app and the extension; the native coin's page still shows its plain transfers.
+- Manage Token's activity View all no longer throws on click.
+- The issue form and the wizard's Custom template offer a separate address for the initial mint, and the ownership field now says the minted tokens stay with the issuer unless sent there.
+- Deep `xchain-sdk/src/...` paths are resolved through one inventory that knows both the pre- and post-0.19.0 module layouts and names the path when neither resolves, so an SDK file move no longer kills the testnet harness suite at collect time.
 - Contract detail renders state keys and decoded values from the explorer's real field names.
 - Execution history shows the method name, a valid/reverted/invalid marker and gas used.
 - A matched order owing a whole number of coins (10 DOGE, not 10.5) is now paid in full; the payment was built at one hundred-millionth of the debt, so it confirmed but never settled the match.

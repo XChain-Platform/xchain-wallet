@@ -19,8 +19,8 @@
 // one that can't be priced or sized correctly:
 //   - supported === false → the indexer can't price this action's fee (client should pay in XCHAIN)
 //   - valid === false      → the oracle price is missing/stale, or a proposed output is too small
-// When the quote is good we size the FEE_DESTINATION output to `requiredFeeSats` so the on-chain
-// check lands inside the tolerance band.
+// When the quote is good we size the FEE_DESTINATION output to at least the chain's dust floor.
+// Consensus accepts that payment because native protocol fees have a minimum but no maximum.
 //
 // a later change added a THIRD answer, `valid === null` (`staticQuote:true, validated:false`): the VM
 // actions (DEPLOY/EXECUTE) are priced from the indexer's gas schedule WITHOUT a dry-run, because
@@ -37,7 +37,8 @@
 /**
  * Thrown to refuse a native-coin-fee transaction that would forfeit the fee on-chain.
  * `reason` is 'unsupported' (indexer can't price it), 'invalid' (stale price / bad sizing),
- * or 'dust' (priced fine, but below the chain's dust threshold - see the check below).
+ * or 'dust'. Dust remains readable from serialized boundary errors while this helper rounds
+ * its own output up to the relay floor.
  */
 export class NativeFeeForfeitError extends Error {
     /** @param {{ reason: 'unsupported' | 'invalid' | 'dust', quote: object | null }} fields */
@@ -303,30 +304,39 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     if (!quote || quote.supported === false) throw new NativeFeeForfeitError({ reason: 'unsupported', quote });
     if (quote.valid === false) throw new NativeFeeForfeitError({ reason: 'invalid', quote });
 
-    // A quote can be perfectly valid and still unpayable: the fee scales with the action
-    // (AIRDROP/DIVIDEND per recipient, BET per credit), so a small one prices BELOW the chain's
-    // dust threshold - a DIVIDEND to a single holder quotes 2 sats on Bitcoin regtest. Attaching
-    // that output builds a transaction every node rejects outright ("dust"), and unlike the
-    // ORACLE fee (whose consensus check waives a below-dust amount, see oracleFeePreflight)
-    // there is no waiver here: omitting the output fails the indexer's own check with
-    // "no fee output to FEE_DESTINATION". So neither paying nor skipping works, and the only
-    // honest answer is to refuse before signing and point at the XCHAIN lane.
-    const feeSats = Number(quote.requiredFeeSats);
+    // Relay policy rejects a positive output below dust, while protocol validation requires
+    // only a minimum payment. Raise a small quote to the relay floor and carry both amounts so
+    // approval-time re-quoting can distinguish necessary dust rounding from an accidental overpay.
+    const quotedFeeSats = Number(quote.requiredFeeSats);
     const dustThreshold = resolveDustThreshold(sdk);
-    if (feeSats > 0 && feeSats < dustThreshold) {
-        throw new NativeFeeForfeitError({ reason: 'dust', quote });
-    }
+    const feeSats = quotedFeeSats > 0 ? Math.max(quotedFeeSats, dustThreshold) : quotedFeeSats;
+    const payableQuote = feeSats > quotedFeeSats
+        ? {
+            ...quote,
+            quotedFeeSats,
+            quotedFeeNative: quote.requiredFeeNative,
+            requiredFeeSats: feeSats,
+            requiredFeeNative: nativeDecimalFromSats(feeSats),
+            dustThresholdSats: dustThreshold,
+        }
+        : quote;
 
     const outs = Array.isArray(encoderOpts.customOutputs) ? encoderOpts.customOutputs.slice() : [];
     if (feeSats > 0) {
         outs.push({ address: quote.feeDestination, value: feeSats });
     }
 
-    if (typeof onProgress === 'function') onProgress('native_fee_quoted', { quote });
+    if (typeof onProgress === 'function') onProgress('native_fee_quoted', { quote: payableQuote });
 
     // Strip our own flag so it isn't forwarded to the encoder as an unknown param.
     const { payFeeInNativeCoin, ...rest } = encoderOpts;
-    return { encoderOpts: { ...rest, customOutputs: outs }, quote };
+    return { encoderOpts: { ...rest, customOutputs: outs }, quote: payableQuote };
+}
+
+function nativeDecimalFromSats(sats) {
+    const whole = Math.floor(sats / 100000000);
+    const fraction = String(sats % 100000000).padStart(8, '0');
+    return `${whole}.${fraction}`;
 }
 
 // The dust floor per coin, in satoshis, mirroring xchain-sdk/src/coins/{BTC,LTC,DOGE}.js.

@@ -25,10 +25,13 @@
 // never in the helper: it was the hook not calling it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, act, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx';
+import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
+import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
+import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
 import { useActionForm } from '../../../packages/core/src/shared/hooks/useActionForm.js';
 
@@ -321,5 +324,57 @@ describe('useActionForm single-render load', () => {
         // And the switch itself never passes through a sourceless render.
         const sourceless = log.filter((r) => r.addressesLoaded && r.fromAddress === null);
         expect(sourceless).toEqual([]);
+    });
+});
+
+describe('bespoke forms source default', () => {
+    it('ControllerBindForm opens on the chain ACTIVE address', async () => {
+        mountWith({ Form: ControllerBindForm, props: { chainId: CHAIN, tick: 'TICK' } });
+        expect(await fromValue()).toBe(ADDR_ACTIVE.address);
+    });
+
+    async function sellSource(activeAddresses) {
+        const composeForConfirm = vi.fn().mockRejectedValue(new Error('stop'));
+        mountWith({
+            Form: SellOwnershipForm,
+            props: { chainId: CHAIN, tick: 'TICK' },
+            overrides: { composeForConfirm, getActiveAddresses: vi.fn().mockResolvedValue(activeAddresses) },
+        });
+        const price = await screen.findByLabelText(/^Price/);
+        fireEvent.change(price, { target: { value: '1' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'List name for sale' }));
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
+        return composeForConfirm.mock.calls[0][0].from.address;
+    }
+
+    it('SellOwnershipForm composes from the chain ACTIVE address', async () => {
+        expect(await sellSource({ [CHAIN]: { id: ADDR_ACTIVE.id } })).toBe(ADDR_ACTIVE.address);
+    });
+
+    it('SellOwnershipForm falls back to the newest HD address without an active entry', async () => {
+        expect(await sellSource({})).toBe(ADDR_NEWEST.address);
+    });
+
+    it('DispenserDetail preselects the ACTIVE address as the buyer', async () => {
+        mountWith({
+            Form: DispenserDetail,
+            props: { chainId: CHAIN, actionIndex: '7' },
+            overrides: {
+                getDispenserByActionIndex: vi.fn().mockResolvedValue({
+                    action_index: '7',
+                    source: 'bc1qownerownerownerownerownerownerownerow',
+                    give_tick: 'AAA',
+                    give_amount: '1',
+                    get_tick: 'BBB',
+                    get_amount: '1',
+                    escrow_remaining: '10',
+                    status: 'open',
+                    current_status: 'open',
+                }),
+                getDispenses: vi.fn().mockResolvedValue({ data: [] }),
+            },
+        });
+        const select = await screen.findByRole('combobox');
+        await waitFor(() => expect(select.value).toBe(ADDR_ACTIVE.id));
     });
 });

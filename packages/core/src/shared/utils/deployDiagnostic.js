@@ -33,11 +33,9 @@
 // ceiling", an internal the author cannot see or set, so they are rewritten in
 // terms of what the author does control: the deploy running out of gas.
 //
-// Every rewrite is LOSSLESS: each one carries forward every number and
-// identifier the raw string held, so there is nothing left to keep in an
-// "advanced detail" and the form does not need a disclosure widget to stay
-// honest. A string no rule matches is returned unchanged, so an SDK rephrasing
-// degrades to today's behavior rather than to a wrong translation.
+// Every rewrite is lossless: each one carries forward every number and
+// identifier the raw string held. A string no rule matches is returned
+// unchanged so new diagnostics keep all the facts a contract author needs.
 //
 // `userFacingMessage` is the sibling FILTER (swap developer output for a
 // fallback) and `humanizeError` classifies node/SDK failures into recovery
@@ -126,8 +124,7 @@ const RULES = [
 const RATIONALE = /^(\d+) bytes, (\d+) functions, (\d+) loops \((\d+) indexed for, charged 2x\/iteration\), (\d+) emit calls, (\d+) state ops$/;
 
 /**
- * Translate one deploy diagnostic. Returns the input unchanged when no rule
- * matches, so unrecognized text keeps today's behavior.
+ * Translate one deploy diagnostic without discarding unknown diagnostics.
  *
  * @param {unknown} input   an Error, a string, or anything
  * @returns {{ message: string, matched: boolean, rule: (string|null) }}

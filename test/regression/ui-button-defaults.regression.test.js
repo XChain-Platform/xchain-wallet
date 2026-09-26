@@ -27,12 +27,29 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const cssPath = join(here, '..', '..', 'packages', 'core', 'src', 'ui', 'Button.module.css');
 const css = readFileSync(cssPath, 'utf8');
+const tokensPath = join(here, '..', '..', 'packages', 'core', 'src', 'ui', 'tokens.css');
+const tokensCss = readFileSync(tokensPath, 'utf8');
+
+// `--xc-on-accent` / `--xc-on-danger` default to #FFFFFF in :root, then get
+// re-paired to system colours (Canvas/MarkText) under a forced-colors media
+// query, so a variant declaring `color: var(--xc-on-accent)` is still white
+// text by default - resolve the token rather than requiring a literal.
+function resolvedColor(variant) {
+    const ruleMatch = css.match(new RegExp(`\\.${variant}\\s*\\{[^}]*\\}`, 'i'));
+    if (!ruleMatch) return null;
+    const colorMatch = ruleMatch[0].match(/color:\s*([^;]+);/i);
+    if (!colorMatch) return null;
+    const value = colorMatch[1].trim();
+    const varMatch = value.match(/^var\((--[\w-]+)\)$/);
+    if (!varMatch) return value;
+    const tokenMatch = tokensCss.match(new RegExp(`:root\\s*\\{[^}]*${varMatch[1]}:\\s*([^;]+);`, 'i'));
+    return tokenMatch ? tokenMatch[1].trim() : null;
+}
 
 describe('regression/ui-button-defaults', () => {
-    it('[REGRESSION P1] every variant declares color #FFFFFF (no dark text bleeding through)', () => {
+    it('[REGRESSION P1] every variant resolves to #FFFFFF text by default (no dark text bleeding through)', () => {
         for (const variant of ['primary', 'secondary', 'ghost', 'danger']) {
-            const re = new RegExp(`\\.${variant}\\s*\\{[^}]*color:\\s*#FFFFFF`, 'i');
-            expect(css).toMatch(re);
+            expect(resolvedColor(variant)).toMatch(/^#FFFFFF$/i);
         }
     });
 

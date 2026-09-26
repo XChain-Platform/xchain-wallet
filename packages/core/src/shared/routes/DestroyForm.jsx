@@ -43,6 +43,7 @@ import {
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -297,8 +298,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             setFormError('Ticker is required.');
             return;
         }
-        if (!/^[A-Za-z0-9.]+$/.test(ticker.trim())) {
-            setFormError('Ticker must be A–Z, 0–9 (subtokens may include a period).');
+        const tickerError = tickerReferenceError(ticker);
+        if (tickerError) {
+            setFormError(tickerError);
             return;
         }
         const amt = String(amount).trim();
