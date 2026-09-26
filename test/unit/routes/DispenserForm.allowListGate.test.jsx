@@ -122,13 +122,13 @@ async function step(fn) {
     await domAct(async () => { fn(); await drainMicrotasks(); });
 }
 
-async function mountForm(messaging) {
+async function mountForm(messaging, initialTick = 'JDOG') {
     let utils;
     await domAct(async () => {
         utils = render(React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(DispenserForm, { walletId: 'w', initialChainId: CHAIN, initialTick: 'JDOG', onBack() {} }),
+            React.createElement(DispenserForm, { walletId: 'w', initialChainId: CHAIN, initialTick, onBack() {} }),
         ));
         await drainMicrotasks();
     });
@@ -221,6 +221,36 @@ describe('DispenserForm allow-list self-check judges the address the dispenser o
 
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Clear' })));
         expect(utils.container.textContent).not.toContain(warning);
+    });
+});
+
+describe('DispenserForm Create feedback', () => {
+    it('names a missing token instead of disabling Create', async () => {
+        const { messaging } = recordingMessaging({ created: [], current: [] });
+        const utils = await mountForm(messaging, '');
+        const create = utils.getByRole('button', { name: 'Create' });
+        expect(create.disabled).toBe(false);
+
+        await clickCreate(utils);
+        expect(utils.getByRole('alert').textContent).toContain('Token ticker is required.');
+    });
+
+    it('keeps Create actionable and names each missing required amount', async () => {
+        const { messaging } = recordingMessaging({ created: [], current: [] });
+        const utils = await mountForm(messaging);
+        const create = utils.getByRole('button', { name: 'Create' });
+        expect(create.disabled).toBe(false);
+
+        await clickCreate(utils);
+        expect(utils.getByRole('alert').textContent)
+            .toContain('Per-fill give amount must be a positive number.');
+
+        await step(() => {
+            fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
+        });
+        await clickCreate(utils);
+        expect(utils.getByRole('alert').textContent)
+            .toContain('Escrow amount must be a positive number.');
     });
 });
 

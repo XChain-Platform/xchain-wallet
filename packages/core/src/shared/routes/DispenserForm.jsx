@@ -1470,9 +1470,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || derivingGetAddress || !ticker || !giveAmount || !escrow || actionConfirm.composing}
+                    disabled={derivingGetAddress || actionConfirm.composing}
                 >
-                    {derivingGetAddress ? 'Preparing…' : 'Create'}
+                    {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
                 </Button>
             </div>
         </form>,
