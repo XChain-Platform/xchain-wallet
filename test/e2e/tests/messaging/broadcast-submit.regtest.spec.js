@@ -46,6 +46,13 @@ import {
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
 const STAMP = Date.now().toString().slice(-6);
+// How long to wait for the indexer to record the broadcast. The fixture's 300s
+// default is too short on a rail in the mirror-admission era: block B is indexed
+// only after the hub stamps an oracle_prices admission height of B - 1 for this
+// chain, and that stamp trails the tip. Measured 2026-09-26 on RLTC, a valid
+// BROADCAST mined at 03:49:28 was indexed 9 to 10 minutes later. Fits inside the
+// 30-minute test timeout below with room left for onboarding and funding.
+const INDEX_BUDGET_MS = 1_200_000;
 
 /** Opens the command palette and runs the first matching entry. */
 async function gotoPalette(page, title) {
@@ -134,7 +141,7 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             await approveConfirm(page, 'the plain broadcast');
             const txid = await readDoneTxid(page);
 
-            const action = await waitForValidAction(txid);
+            const action = await waitForValidAction(txid, INDEX_BUDGET_MS);
             expect(action.action, 'the submit did not record a BROADCAST action').toBe('BROADCAST');
             expect(action.source, 'the broadcast was not signed by the funded address').toBe(address);
             expect(String(action.action_format), 'a plain broadcast with none of feed/value/fee/memo set was not sent as v0')
@@ -166,7 +173,7 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             await approveConfirm(page, 'the oracle broadcast');
             const txid = await readDoneTxid(page);
 
-            const action = await waitForValidAction(txid);
+            const action = await waitForValidAction(txid, INDEX_BUDGET_MS);
             expect(action.action, 'the submit did not record a BROADCAST action').toBe('BROADCAST');
             expect(action.source, 'the broadcast was not signed by the funded address').toBe(address);
             expect(String(action.action_format),
