@@ -90,6 +90,7 @@ export function fillStateOf(detail) {
     return {
         status: String(state.status || ''),
         giveRemaining: state.give_remaining ?? null,
+        expiration: state.expiration ?? null,
     };
 }
 
@@ -104,7 +105,7 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
         const remaining = Number(fill.giveRemaining);
         if (fill.status === 'open' && Number.isFinite(remaining) && remaining <= 0) return 'filled';
     }
-    const exp = Number(item.row.expiration);
+    const exp = Number(fill?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
 }
@@ -217,9 +218,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             }
             all.sort((a, b) => Number(b.row.action_index || 0) - Number(a.row.action_index || 0));
             for (const it of all) it.cancelled = cancelledKeys.has(it.key);
-            // Only the orders the feeds still call open pay for a detail read.
-            const now = Math.floor(Date.now() / 1000);
-            const candidates = all.filter((it) => deriveStatus(it, cancelledKeys, now) === 'open');
+            // Read valid, uncancelled candidates before applying mutable expiration.
+            const candidates = all.filter((it) => !cancelledKeys.has(it.key)
+                && String(it.row.status || 'valid') === 'valid');
             const fills = await readFillStates(messaging, candidates);
             setItems(all.map((it) => ({ ...it, cancelledKeys, fill: fills.get(it.key) || null })));
             setLoadError(null);
@@ -302,7 +303,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
-        const expText = fmtDate(it.row.expiration);
+        const expText = fmtDate(it.fill?.expiration ?? it.row.expiration);
         const remaining = partialRemaining(it);
         const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
         const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);

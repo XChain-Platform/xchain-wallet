@@ -109,7 +109,7 @@ describe('isOpenOffer', () => {
         expect(isOpenOffer({ status: 'valid' })).toBe(true);
         expect(isOpenOffer({ status: 'valid', order_status: 'open' })).toBe(true);
         expect(isOpenOffer({ status: 'valid', order_status: 'cancelled' })).toBe(false);
-        expect(isOpenOffer({ status: 'valid', swap_status: 'settled' })).toBe(false);
+        expect(isOpenOffer({ status: 'valid', swap_status: 'complete' })).toBe(false);
     });
 
     it('rejects an invalid create row', () => {

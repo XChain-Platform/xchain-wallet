@@ -41,7 +41,7 @@ import { isDemoGatedActionIndex } from './demoGatedContent.js';
 // an over-inclusive preview only over-states what moves - the safe
 // direction for an indicative display.
 const CLOSED_STATUSES = new Set([
-    'cancelled', 'cancelling', 'closed', 'expired', 'filled', 'invalid',
+    'cancelled', 'cancelling', 'closed', 'complete', 'empty', 'expired', 'filled', 'invalid', 'settled',
 ]);
 
 function rowsOf(resp) {
@@ -52,7 +52,7 @@ function rowsOf(resp) {
 }
 
 function liveStatus(row) {
-    return String(row?.current_status || row?.status || '').toLowerCase();
+    return String(row?.current_status || row?.swap_status || row?.state?.status || row?.status || '').toLowerCase();
 }
 
 function isOpenRow(row, address) {
@@ -71,6 +71,19 @@ async function leg(fn) {
     }
 }
 
+async function enrichOrderRows(sdk, rows) {
+    if (typeof sdk?.getAction !== 'function') return rows;
+    return Promise.all(rows.map(async (row) => {
+        try {
+            const detail = await sdk.getAction(String(row.action_index ?? row.actionIndex ?? ''));
+            const state = detail?.state || detail?.data?.state;
+            return state && typeof state === 'object' ? { ...row, state } : row;
+        } catch {
+            return row;
+        }
+    }));
+}
+
 /**
  * The address's open ORDERs, SWAPs and DISPENSERs with what each still holds
  * in escrow, one leg per kind so a failed read reports on its own instead of
@@ -82,16 +95,20 @@ async function leg(fn) {
 export async function openOfferRows({ sdk, address }) {
     const trimmed = address.trim();
     const [orders, swaps, dispensers] = await Promise.all([
-        leg(async () => rowsOf(await sdk.getOrders(trimmed, 'address'))
-            .filter((r) => isOpenRow(r, trimmed))
-            .map((r) => ({
+        leg(async () => {
+            const listed = rowsOf(await sdk.getOrders(trimmed, 'address'))
+                .filter((r) => !r.source || r.source === trimmed);
+            const rows = await enrichOrderRows(sdk, listed);
+            return rows.filter((r) => isOpenRow(r, trimmed)).map((r) => ({
                 actionIndex: String(r.action_index ?? r.actionIndex ?? ''),
                 giveTick: r.give_tick ?? r.giveTick ?? null,
                 giveCoin: r.give_coin ?? r.giveCoin ?? null,
-                giveAmount: r.give_remaining != null ? String(r.give_remaining)
+                giveAmount: r.state?.give_remaining != null ? String(r.state.give_remaining)
+                    : r.give_remaining != null ? String(r.give_remaining)
                     : (r.give_amount != null ? String(r.give_amount) : null),
                 giveOwnership: Number(r.give_ownership ?? r.giveOwnership ?? 0) === 1,
-            }))),
+            }));
+        }),
         leg(async () => rowsOf(await sdk.getSwaps(trimmed, 'address'))
             .filter((r) => isOpenRow(r, trimmed))
             .map((r) => ({

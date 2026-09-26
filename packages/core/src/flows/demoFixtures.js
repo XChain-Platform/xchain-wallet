@@ -943,9 +943,9 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     ].map(wrap);
 
     const dexSwaps = [
-        { action_index: 900301, tx_hash: `demo-${chainId}-swap-1`, status: 'valid', swap_status: 'settled', give_tick: tick, give_coin: coinTick, give_amount: '1500', get_tick: null, get_coin: coinTick, get_amount: String(px(1500)), timestamp: sec(7_200) },
-        { action_index: 900302, tx_hash: `demo-${chainId}-swap-2`, status: 'valid', swap_status: 'settled', give_tick: null, give_coin: coinTick, give_amount: String(px(800)), get_tick: tick, get_coin: coinTick, get_amount: '800', timestamp: sec(18_000) },
-        { action_index: 900303, tx_hash: `demo-${chainId}-swap-3`, status: 'valid', swap_status: 'settled', give_tick: tick, give_coin: coinTick, give_amount: '4200', get_tick: null, get_coin: coinTick, get_amount: String(px(4200)), timestamp: sec(90_000) },
+        { action_index: 900301, tx_hash: `demo-${chainId}-swap-1`, status: 'valid', swap_status: 'complete', give_tick: tick, give_coin: coinTick, give_amount: '1500', get_tick: null, get_coin: coinTick, get_amount: String(px(1500)), timestamp: sec(7_200) },
+        { action_index: 900302, tx_hash: `demo-${chainId}-swap-2`, status: 'valid', swap_status: 'complete', give_tick: null, give_coin: coinTick, give_amount: String(px(800)), get_tick: tick, get_coin: coinTick, get_amount: '800', timestamp: sec(18_000) },
+        { action_index: 900303, tx_hash: `demo-${chainId}-swap-3`, status: 'valid', swap_status: 'complete', give_tick: tick, give_coin: coinTick, give_amount: '4200', get_tick: null, get_coin: coinTick, get_amount: String(px(4200)), timestamp: sec(90_000) },
     ].map(wrap);
 
     return { offers, sales, dexOrders, dexSwaps };

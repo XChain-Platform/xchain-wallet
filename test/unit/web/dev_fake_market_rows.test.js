@@ -23,7 +23,7 @@ describe('dev fake market rows', () => {
     it('uses the explorer swap list shape', () => {
         const rows = fakeSwapsFor('PEPECASH', 'bitcoin-mainnet');
         expect(rows.every((row) => row.status === 'valid'
-            && row.swap_status === 'settled'
+            && row.swap_status === 'complete'
             && row.give_amount != null && row.get_amount != null
             && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
         expect(rows.some((row) => row.give_tick === null && row.give_coin === 'BTC')).toBe(true);

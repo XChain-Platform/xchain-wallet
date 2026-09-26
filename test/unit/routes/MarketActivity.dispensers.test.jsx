@@ -51,6 +51,8 @@ function renderMarket(extra = {}) {
         getDispenses: once(DISPENSES),
         getOrdersForToken: vi.fn().mockResolvedValue({ data: [] }),
         getSwapsForToken: vi.fn().mockResolvedValue({ data: [] }),
+        getOrderDetail: vi.fn(async () => null),
+        getSwapDetail: vi.fn(async () => null),
         oracleFeeds: vi.fn().mockResolvedValue([{ tick: 'XCHAIN', fiat: 'USD', live: { value: '0.5' } }]),
         ...extra,
     };
@@ -99,7 +101,7 @@ describe('Marketplace on explorer-shaped rows', () => {
 
     it('shows open DEX orders using explorer amount and coin fields', async () => {
         const open = {
-            action_index: '40', status: 'valid', order_status: 'open',
+            action_index: '40', status: 'valid',
             give_tick: 'XCHAIN', give_coin: 'BTC', give_amount: '25',
             get_tick: null, get_coin: 'BTC', get_amount: '0.01',
         };
@@ -108,23 +110,28 @@ describe('Marketplace on explorer-shaped rows', () => {
             getOrdersForToken: vi.fn()
                 .mockResolvedValueOnce({ data: [open, closed] })
                 .mockResolvedValue({ data: [] }),
+            getOrderDetail: vi.fn(async ({ actionIndex }) => ({ state: actionIndex === '40'
+                ? { status: 'open', give_remaining: '10', get_remaining: '0.004' }
+                : { status: 'cancelled', give_remaining: '0', get_remaining: '0' } })),
         });
-        expect(await screen.findByText('Sell 25 XCHAIN for 0.01 BTC')).toBeInTheDocument();
+        expect(await screen.findByText('Sell 10 XCHAIN for 0.004 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/Sell 99 XCHAIN/)).toBeNull();
     });
 
     it('shows DEX swaps using explorer amount and coin fields', async () => {
         const settled = {
-            action_index: '50', status: 'valid', swap_status: 'settled',
+            action_index: '50', status: 'valid', swap_status: 'complete',
             give_tick: null, give_coin: 'BTC', give_amount: '0.08',
             get_tick: 'XCHAIN', get_coin: 'BTC', get_amount: '3200', timestamp: 1785186698,
         };
+        const cancelled = { ...settled, action_index: '51', swap_status: 'cancelled', get_amount: '9999' };
         renderMarket({
             getSwapsForToken: vi.fn()
-                .mockResolvedValueOnce({ data: [settled] })
+                .mockResolvedValueOnce({ data: [settled, cancelled] })
                 .mockResolvedValue({ data: [] }),
         });
         expect(await screen.findByText('Bought 3,200 XCHAIN for 0.08 BTC')).toBeInTheDocument();
+        expect(screen.queryByText(/9,999 XCHAIN/)).toBeNull();
     });
 });
 
@@ -143,7 +150,7 @@ describe('demo Marketplace feed', () => {
             && row.give_amount != null && row.get_amount != null
             && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
         expect(demo.dexSwaps.every(({ row }) => row.status === 'valid'
-            && row.swap_status === 'settled'
+            && row.swap_status === 'complete'
             && row.give_amount != null && row.get_amount != null
             && row.give_quantity === undefined && row.get_quantity === undefined)).toBe(true);
     });

@@ -104,6 +104,60 @@ export function dispenserRateLabel(row, oracleFeeds) {
 }
 
 /**
+ * Overlay a detail response's mutable offer state onto its creation row.
+ * Each missing state field keeps the list value for older explorer versions.
+ *
+ * @param {any} row
+ * @param {any} detail
+ * @returns {any}
+ */
+export function mergeOfferState(row, detail) {
+    const payload = detail?.state ? detail : detail?.data;
+    const state = payload?.state;
+    if (!state || typeof state !== 'object') return row;
+    const merged = { ...row, state: { ...(row?.state || {}), ...state } };
+    if (state.status != null) merged.current_status = state.status;
+    if (state.expiration != null) merged.expiration = state.expiration;
+    if (state.give_remaining != null) merged.give_remaining = state.give_remaining;
+    if (state.get_remaining != null) merged.get_remaining = state.get_remaining;
+    return merged;
+}
+
+/**
+ * Read mutable state for each offer while preserving rows whose detail fails.
+ *
+ * @param {any[]} rows
+ * @param {((row: any) => Promise<any>) | null | undefined} readDetail
+ * @returns {Promise<any[]>}
+ */
+export async function enrichOfferRows(rows, readDetail) {
+    if (typeof readDetail !== 'function') return rows;
+    return Promise.all(rows.map(async (row) => {
+        try {
+            return mergeOfferState(row, await readDetail(row));
+        } catch {
+            return row;
+        }
+    }));
+}
+
+export function offerAmounts(row) {
+    return {
+        give: row?.give_remaining ?? row?.give_amount ?? row?.giveAmount ?? null,
+        get: row?.get_remaining ?? row?.get_amount ?? row?.getAmount ?? null,
+    };
+}
+
+export function offerLifecycle(row) {
+    return String(row?.current_status || row?.order_status || row?.swap_status || row?.state?.status || '')
+        .toLowerCase().trim();
+}
+
+export function isCompleteSwap(row) {
+    return offerLifecycle(row) === 'complete';
+}
+
+/**
  * Whether an offer row is valid and still open. List rows keep action
  * validity in `status`; a served lifecycle field overrides that fallback.
  *
@@ -114,8 +168,8 @@ export function isOpenOffer(row) {
     if (!row || typeof row !== 'object') return false;
     const validity = String(row.status || '').toLowerCase();
     if (validity && validity !== 'valid' && validity !== 'open') return false;
-    const lifecycle = row.current_status || row.order_status || row.swap_status || row.state?.status;
-    return !lifecycle || String(lifecycle).toLowerCase() === 'open';
+    const lifecycle = offerLifecycle(row);
+    return !lifecycle || lifecycle === 'open';
 }
 
 /**

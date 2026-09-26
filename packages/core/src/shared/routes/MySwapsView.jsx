@@ -17,12 +17,10 @@
 // Status derivation mirrors MyOrdersView: a single swap's
 // getAction(...).state.status does NOT promptly reflect a cancel, so
 // "cancelled" is read from the authoritative + immediate swap_cancels
-// table (getSwapCancelsForAddress) and "expired" from the swap's own
-// EXPIRATION vs wall clock. Unlike the order list, the swap list feed
-// (getSwapsForAddress) carries the indexer's lifecycle status inline as
-// `swap_status` on every row, so "settled" needs no separate detail read:
-// a 'complete' row is shown as Settled. Cancel/edit are offered only
-// while open.
+// table (getSwapCancelsForAddress). The list feed carries lifecycle inline
+// as `swap_status`, while action detail carries edited expiration. A failed
+// or older detail read falls back to the creation expiration. Cancel/edit
+// are offered only while open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
@@ -67,14 +65,39 @@ const CLOSED_LABELS = Object.freeze({
     invalid: 'Invalid',
 });
 
+const STATE_READ_CONCURRENCY = 6;
+
+export function swapStateOf(detail) {
+    const state = detail?.state || detail?.data?.state;
+    if (!state || typeof state !== 'object') return null;
+    return { status: String(state.status || ''), expiration: state.expiration ?? null };
+}
+
+async function readSwapStates(messaging, candidates) {
+    const states = new Map();
+    if (typeof messaging?.getSwapDetail !== 'function') return states;
+    for (let i = 0; i < candidates.length; i += STATE_READ_CONCURRENCY) {
+        const slice = candidates.slice(i, i + STATE_READ_CONCURRENCY);
+        const details = await Promise.all(slice.map((item) => messaging.getSwapDetail({
+            chainId: item.chainId,
+            actionIndex: String(item.row.action_index),
+        }).catch(() => null)));
+        slice.forEach((item, index) => {
+            const state = swapStateOf(details[index]);
+            if (state) states.set(item.key, state);
+        });
+    }
+    return states;
+}
+
 export function deriveStatus(item, cancelledKeys, nowSec) {
     if (cancelledKeys.has(item.key)) return 'cancelled';
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
-    const swapStatus = String(item.row.swap_status || '').toLowerCase().trim();
+    const swapStatus = String(item.row.swap_status || item.live?.status || '').toLowerCase().trim();
     if (swapStatus === 'complete') return 'settled';
     if (swapStatus === 'cancelled') return 'cancelled';
     if (swapStatus === 'expired') return 'expired';
-    const exp = Number(item.row.expiration);
+    const exp = Number(item.live?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
 }
@@ -157,7 +180,10 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 }
             }
             all.sort((a, b) => Number(b.row.action_index || 0) - Number(a.row.action_index || 0));
-            setItems(all.map((it) => ({ ...it, cancelledKeys })));
+            const candidates = all.filter((it) => !cancelledKeys.has(it.key)
+                && String(it.row.status || 'valid') === 'valid');
+            const states = await readSwapStates(messaging, candidates);
+            setItems(all.map((it) => ({ ...it, cancelledKeys, live: states.get(it.key) || null })));
             setLoadError(null);
         } catch (err) {
             setLoadError(err?.message || 'Failed to load swaps.');
@@ -215,7 +241,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
-        const expText = fmtDate(it.row.expiration);
+        const expText = fmtDate(it.live?.expiration ?? it.row.expiration);
         const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
         const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
         const chip = status === 'open'

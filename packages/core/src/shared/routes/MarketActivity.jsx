@@ -19,10 +19,13 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
     dispenserRateLabel,
+    enrichOfferRows,
     formatDecimal,
+    isCompleteSwap,
     isDispenserPriceStale,
     isOpenDispenserSelling,
     isOpenOffer,
+    offerAmounts,
 } from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
 
@@ -137,8 +140,11 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         const ordersByChain = chains.map((cid) =>
             typeof messaging.getOrdersForToken === 'function'
                 ? messaging.getOrdersForToken({ chainId: cid, tick })
-                    .then((resp) => extractRows(resp)
-                        .filter((row) => isOpenOffer(row))
+                    .then(async (resp) => enrichOfferRows(extractRows(resp),
+                        typeof messaging.getOrderDetail === 'function'
+                            ? (row) => messaging.getOrderDetail({ chainId: cid, actionIndex: String(row.action_index) })
+                            : null))
+                    .then((rows) => rows.filter((row) => isOpenOffer(row))
                         .map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
@@ -146,7 +152,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         const swapsByChain = chains.map((cid) =>
             typeof messaging.getSwapsForToken === 'function'
                 ? messaging.getSwapsForToken({ chainId: cid, tick })
-                    .then((resp) => extractRows(resp).map((row) => ({ chainId: cid, row })))
+                    .then(async (resp) => enrichOfferRows(extractRows(resp),
+                        typeof messaging.getSwapDetail === 'function'
+                            ? (row) => messaging.getSwapDetail({ chainId: cid, actionIndex: String(row.action_index) })
+                            : null))
+                    .then((rows) => rows.filter((row) => isCompleteSwap(row))
+                        .map((row) => ({ chainId: cid, row })))
                     .catch(() => [])
                 : Promise.resolve([]),
         );
@@ -295,8 +306,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             {dexOrders.slice(0, 50).map(({ chainId, row }, i) => {
                                 const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
                                 const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
-                                const giveQty = row.give_amount ?? row.giveAmount ?? null;
-                                const getQty = row.get_amount ?? row.getAmount ?? null;
+                                const { give: giveQty, get: getQty } = offerAmounts(row);
                                 const isSell = giveTick.toUpperCase() === tick;
                                 const title = isSell
                                     ? (giveQty != null && getQty != null

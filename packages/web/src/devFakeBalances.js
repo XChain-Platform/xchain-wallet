@@ -355,7 +355,7 @@ export function fakeSwapsFor(tick, chainId) {
             timestamp: now - s.ago,
             block_time: now - s.ago,
             status: 'valid',
-            swap_status: 'settled',
+            swap_status: 'complete',
         };
     });
 }

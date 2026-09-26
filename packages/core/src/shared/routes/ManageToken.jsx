@@ -25,7 +25,10 @@ import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
     dispenserRateLabel,
+    enrichOfferRows,
     formatDecimal,
+    offerAmounts,
+    offerLifecycle,
     isDispenserPriceStale,
     isOpenDispenserSelling,
     isOpenOffer,
@@ -311,10 +314,13 @@ export function ManageToken({
         }
         let cancelled = false;
         messaging.getOrdersForToken({ chainId, tick })
-            .then((resp) => {
+            .then(async (resp) => {
                 if (cancelled) return;
                 const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
-                setOrders(rows.filter((row) => isOpenOffer(row)));
+                const enriched = await enrichOfferRows(rows, typeof messaging.getOrderDetail === 'function'
+                    ? (row) => messaging.getOrderDetail({ chainId, actionIndex: String(row.action_index) })
+                    : null);
+                if (!cancelled) setOrders(enriched.filter((row) => isOpenOffer(row)));
             })
             .catch((err) => { if (!cancelled) setOrdersError(err?.message || 'Failed to load orders.'); });
         return () => { cancelled = true; };
@@ -327,10 +333,13 @@ export function ManageToken({
         }
         let cancelled = false;
         messaging.getSwapsForToken({ chainId, tick })
-            .then((resp) => {
+            .then(async (resp) => {
                 if (cancelled) return;
                 const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
-                setSwaps(rows);
+                const enriched = await enrichOfferRows(rows, typeof messaging.getSwapDetail === 'function'
+                    ? (row) => messaging.getSwapDetail({ chainId, actionIndex: String(row.action_index) })
+                    : null);
+                if (!cancelled) setSwaps(enriched);
             })
             .catch((err) => { if (!cancelled) setSwapsError(err?.message || 'Failed to load swaps.'); });
         return () => { cancelled = true; };
@@ -947,8 +956,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
             {orders.slice(0, 50).map((o, i) => {
                 const giveTick = o.give_tick || o.give_coin || o.giveTick || o.giveCoin || '';
                 const getTick = o.get_tick || o.get_coin || o.getTick || o.getCoin || '';
-                const giveQty = o.give_amount ?? o.giveAmount ?? null;
-                const getQty = o.get_amount ?? o.getAmount ?? null;
+                const { give: giveQty, get: getQty } = offerAmounts(o);
                 const summary =
                     `${giveQty != null ? Number(giveQty).toLocaleString() : '?'} ${giveTick}` +
                     ' → ' +
@@ -987,6 +995,9 @@ function SwapsPanel({ swaps, error, tick }) {
                 const getTick = s.get_tick || s.get_coin || s.getTick || s.getCoin || '';
                 const giveQty = s.give_amount ?? s.giveAmount ?? null;
                 const getQty = s.get_amount ?? s.getAmount ?? null;
+                const lifecycle = offerLifecycle(s);
+                const statusLabel = lifecycle === 'complete' ? 'Filled'
+                    : lifecycle ? lifecycle[0].toUpperCase() + lifecycle.slice(1) : 'Status unavailable';
                 const summary =
                     `${giveQty != null ? Number(giveQty).toLocaleString() : '?'} ${giveTick}` +
                     ' ⇄ ' +
@@ -996,8 +1007,8 @@ function SwapsPanel({ swaps, error, tick }) {
                         key={String(s.action_index || s.tx_hash || i)}
                         chainId={s.chainId}
                         action="SWAP"
-                        status="success"
-                        statusLabel="Filled"
+                        status={lifecycle === 'complete' ? 'success' : lifecycle || 'unknown'}
+                        statusLabel={statusLabel}
                         summary={summary}
                         blockIndex={s.block_index || s.blockIndex}
                         timestamp={s.timestamp || s.block_time}

@@ -34,13 +34,13 @@ const MODE_B = { ...base, action_index: '11', give_amount: '2', get_amount: '0',
 const CLOSED = { ...base, action_index: '12', give_amount: '7', get_amount: '0.03', current_status: 'cancelled', escrow_remaining: '0' };
 const BUYS_IT = { ...base, action_index: '13', give_tick: 'OTHER', get_tick: 'S18PROBE', get_coin: null, give_amount: '9', get_amount: '4' };
 const OPEN_ORDER = {
-    action_index: '20', status: 'valid', order_status: 'open',
+    action_index: '20', status: 'valid',
     give_tick: 'S18PROBE', give_coin: 'BTC', give_amount: '5000',
     get_tick: null, get_coin: 'BTC', get_amount: '0.125',
 };
 const INVALID_ORDER = { ...OPEN_ORDER, action_index: '21', give_amount: '999', status: 'invalid: expired' };
 const SETTLED_SWAP = {
-    action_index: '30', status: 'valid', swap_status: 'settled',
+    action_index: '30', status: 'valid', swap_status: 'complete',
     give_tick: null, give_coin: 'BTC', give_amount: '0.08',
     get_tick: 'S18PROBE', get_coin: 'BTC', get_amount: '3200',
 };
@@ -55,6 +55,10 @@ function renderPanel(extra = {}) {
         getDispensersForToken: vi.fn().mockResolvedValue({ data: [FIXED, MODE_B, CLOSED, BUYS_IT] }),
         getOrdersForToken: vi.fn().mockResolvedValue({ data: [OPEN_ORDER, INVALID_ORDER] }),
         getSwapsForToken: vi.fn().mockResolvedValue({ data: [SETTLED_SWAP] }),
+        getOrderDetail: vi.fn(async ({ actionIndex }) => ({ state: actionIndex === '20'
+            ? { status: 'open', give_remaining: '1250', get_remaining: '0.03125' }
+            : { status: 'cancelled', give_remaining: '0', get_remaining: '0' } })),
+        getSwapDetail: vi.fn(async () => ({ state: { status: 'complete' } })),
         oracleFeeds: vi.fn().mockResolvedValue([{ tick: 'S18PROBE', fiat: 'USD', live: { value: '1.5' } }]),
         ...extra,
     };
@@ -101,7 +105,7 @@ describe('ManageToken DEX panels on explorer-shaped rows', () => {
     it('shows only open orders with explorer amounts and native coin names', async () => {
         renderPanel();
         fireEvent.click(screen.getByRole('tab', { name: 'Orders' }));
-        expect(await screen.findByText('5,000 S18PROBE → 0.125 BTC')).toBeInTheDocument();
+        expect(await screen.findByText('1,250 S18PROBE → 0.031 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/999 S18PROBE/)).toBeNull();
     });
 
