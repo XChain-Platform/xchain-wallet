@@ -16,7 +16,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { isHwSource } from '../components/SignCredentials.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { PreflightPanel } from '../components/PreflightPanel.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -55,7 +55,8 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
-import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
+import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -221,12 +222,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // Buy state, shared by the token-paid and coin-paid lanes.
     const [fills, setFills] = useState('1');
     const [buyStage, setBuyStage] = useState(
-        /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
+        /** @type {'idle' | 'submitting' | 'done'} */ ('idle'),
     );
     const [buyPassword, setBuyPassword] = useState('');
     const [buyError, setBuyError] = useState(/** @type {string | null} */ (null));
     const [buyResult, setBuyResult] = useState(/** @type {any | null} */ (null));
-    const buyPasswordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const buyPasswordRef = useRef('');
+    buyPasswordRef.current = buyPassword;
     const [copied, setCopied] = useState(/** @type {string | null} */ (null));
 
     const descriptor = chainRegistry.get(chainId);
@@ -410,12 +412,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         });
         return () => { cancelled = true; };
     }, [walletId, chainId, actionIndex, messaging, reloadKey]);
-
-    useEffect(() => {
-        if (buyStage === 'confirm') {
-            setTimeout(() => buyPasswordRef.current?.focus(), 0);
-        }
-    }, [buyStage]);
 
     const cancelParams = useMemo(() => ({
         VERSION: '1',
@@ -623,7 +619,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     const totalPayAmount = useMemo(() => {
         if (!getAmount || fillsNum <= 0) return null;
-        // `handleBuy` sends this exact value on the wire as the SEND amount,
+        // `buyRequest` sends this exact value on the wire as the SEND amount,
         // so it must be computed in exact decimal space. Float multiplication
         // drifts ('0.1' x 3 -> '0.30000000000000004') and collapses tiny
         // amounts to scientific notation ('0.00000001' x 3 -> '3e-8'), either
@@ -784,11 +780,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return payerVerdict.verdict === 'refused' || payToVerdict.verdict === 'refused';
     }, [buyerAddress, dispAddr, readBuyerPolicies]);
 
-    const beginBuy = useCallback(async () => {
-        if (await refreshBuyerEligibility()) return;
-        setBuyStage('confirm');
-    }, [refreshBuyerEligibility]);
-
     // D-37: what the paying address actually holds of the payment
     // token, through the same hook that backs every other form's Max +
     // "N available" footer. Without it the buy panel was the one spending
@@ -879,6 +870,73 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const buyHw = isHwSource(buyerAddress);
     const [buyHwStatus, setBuyHwStatus] = useState('idle');
     const onBuyHwStatusChange = useCallback(({ status }) => setBuyHwStatus(status), []);
+    const buyConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'send' });
+    const buyFrom = useMemo(() => (buyerAddress ? {
+        address: buyerAddress.address,
+        publicKey: buyerAddress.publicKey,
+        derivationPath: buyerAddress.derivationPath,
+        addressId: buyerAddress.id,
+        source: buyerAddress.source,
+        signerId: buyerAddress.signerId,
+    } : null), [buyerAddress]);
+    const submitConfirmedBuy = useConfirmSubmit({
+        messaging,
+        isHw: buyHw,
+        signerId: buyerAddress?.signerId,
+        passwordRef: buyPasswordRef,
+        software: 'sendToken',
+        hardware: 'sendAssetHw',
+    });
+    const buyRequest = useMemo(() => {
+        if (!buyFrom || !payTick || !dispAddr || !totalPayAmount) return null;
+        return {
+            walletId,
+            chainId,
+            from: buyFrom,
+            to: dispAddr,
+            tick: payTick,
+            amount: totalPayAmount,
+            ...(feePerKb != null ? { feePerKb } : {}),
+            // Label the pending payment as a buy instead of a plain send.
+            actionSummary: `Buy ${fillsNum} fill${fillsNum === 1 ? '' : 's'} from dispenser #${actionIndex}:`
+                + ` ${totalPayAmount} ${payTick}`
+                + (totalReceive ? ` for ${totalReceive} ${giveTick || ''}`.trimEnd() : ''),
+        };
+    }, [buyFrom, payTick, dispAddr, totalPayAmount, walletId, chainId, feePerKb,
+        fillsNum, actionIndex, totalReceive, giveTick]);
+    const dispensersAtBuyDestination = useDispenserDestination({
+        messaging,
+        chainId,
+        to: dispAddr || '',
+        enabled: coinBuyable,
+    });
+    const buyDestinationNotice = useMemo(() => dispenserDestinationNotice({
+        dispensers: dispensersAtBuyDestination,
+        payer: buyerAddress?.address,
+        amount: totalPayAmount || '',
+    }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
+    const buyConfirmNotes = (
+        <>
+            {buyDestinationNotice ? (
+                <div data-testid="buy-dispenser-notice">
+                    <StatusMessage variant="status">{buyDestinationNotice.summary}</StatusMessage>
+                    {buyDestinationNotice.warnings.length > 0 ? (
+                        <div role="alert" className={styles.warnings}>
+                            {buyDestinationNotice.warnings.map((warning) => (
+                                <p key={warning} className={styles.warning}>{warning}</p>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+            <p className={styles.hint}>
+                The dispenser triggers when your payment confirms. If the dispenser
+                closes or runs out before then, the payment reaches the creator but
+                no {giveTick} is released. This is a normal risk when buying on
+                these chains.
+            </p>
+        </>
+    );
     // Close, refill and edit all sign through the shared confirm page, which
     // runs the network dry run and signs the bytes it previewed.
     const ownerLane = useOwnerActionLane({
@@ -929,77 +987,38 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             fallback: err?.message || fallback,
         }));
 
-    async function handleBuy(event) {
-        event.preventDefault();
-        if (buyStage === 'submitting' || !buyerAddress) return;
-        if (!buyHw && (!signerReady && buyPassword.length === 0)) return;
-        if (buyHw && buyHwStatus !== 'available') return;
-        if (!payTick || !dispAddr || !totalPayAmount) return;
-        // Refresh immediately before signing because list edits can land while
-        // the review screen is open.
-        if (await refreshBuyerEligibility()) {
-            setBuyError('The selected paying address or dispenser address is refused by a current access list.');
-            setBuyStage('confirm');
-            return;
-        }
-        // D-37: last gate before signing. The balance can also resolve (or
-        // drop) while the review screen is open, so the check is repeated
-        // here rather than trusted from the panel's disabled button.
-        if (buyUnderfunded) {
-            setBuyError(isTokenPaid
-                ? 'Not enough of the payment token at this address.'
-                : `Not enough ${payTick} at this address.`);
-            return;
-        }
-        // Same D-37 reasoning: the Buy button is already disabled on this, but
-        // the review screen can sit open while Fills or the escrow change.
-        if (buyDustBlock) {
-            buyDustErrorRef.current = buyDustBlock;
-            setBuyError(buyDustBlock);
-            return;
-        }
+    const beginBuy = useCallback(async () => {
+        if (buyStage === 'submitting' || !buyRequest) return;
+        // Resolve every buyer and pay-to list before any transaction reaches Confirm.
+        if (await refreshBuyerEligibility()) return;
+        if (buyUnderfunded || buyDustBlock) return;
         setBuyStage('submitting');
         setBuyError(null);
         try {
-            const base = {
-                walletId,
+            const res = await buyConfirm.run({
                 chainId,
-                from: {
-                    address: buyerAddress.address,
-                    publicKey: buyerAddress.publicKey,
-                    derivationPath: buyerAddress.derivationPath,
-                    addressId: buyerAddress.id,
-                    source: buyerAddress.source,
-                    signerId: buyerAddress.signerId,
+                from: buyRequest.from,
+                compose: () => messaging.composeForConfirm(buyRequest),
+                onApprove: async (prebuiltPsbt) => {
+                    // Recheck at approval because list edits can land while Confirm is open.
+                    if (await refreshBuyerEligibility()) {
+                        throw new Error(
+                            'The selected paying address or dispenser address is refused by a current access list.',
+                        );
+                    }
+                    return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
                 },
-                to: dispAddr,
-                // The coin lane sends the native ticker: that is what makes
-                // the flow build a real payment output (see the lane note).
-                tick: payTick,
-                // Coin-scale, exact; the flow scales it to base units.
-                amount: totalPayAmount,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // History labels the pending record from this, so the buy
-                // reads as a buy and not as a plain send to a stranger.
-                actionSummary: `Buy ${fillsNum} fill${fillsNum === 1 ? '' : 's'} from dispenser #${actionIndex}:`
-                    + ` ${totalPayAmount} ${payTick}`
-                    + (totalReceive ? ` for ${totalReceive} ${giveTick || ''}`.trimEnd() : ''),
-            };
-            const res = buyHw
-                ? await messaging.sendAssetHw({ ...base, signerId: buyerAddress.signerId })
-                : await messaging.sendToken({ ...base, password: buyPassword });
+            });
             setBuyResult(res);
-            setBuyPassword('');
             setBuyStage('done');
         } catch (err) {
-            setBuyError(submitFailureText(err, 'Buy failed.'));
-            setBuyStage('confirm');
-            if (!buyHw) {
-                buyPasswordRef.current?.focus();
-                buyPasswordRef.current?.select();
-            }
+            setBuyStage('idle');
+            if (!isUserRejection(err)) setBuyError(submitFailureText(err, 'Buy failed.'));
+        } finally {
+            setBuyPassword('');
         }
-    }
+    }, [buyStage, buyRequest, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
+        buyConfirm, chainId, messaging, submitConfirmedBuy]);
 
     /**
      * Sign one owner action (close, refill or edit) and settle its stage.
@@ -1132,8 +1151,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ? 'Refill dispenser'
                         : editStage === 'confirm' || editStage === 'submitting'
                             ? 'Edit dispenser'
-                            : buyStage === 'confirm' || buyStage === 'submitting'
-                                ? 'Review buy'
+                            : buyStage === 'submitting'
+                                ? 'Confirm buy'
                                 : 'Dispenser detail'}
         />
     );
@@ -1165,6 +1184,30 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         refillNote={refillCeilingMessage(refillCount)}
                     />
                 )}
+            />
+        );
+    }
+
+    if (buyConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={buyConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                coinTicker={feeCoinTicker}
+                signerReady={signerReady}
+                password={buyPassword}
+                onPasswordChange={(value) => {
+                    setBuyPassword(value);
+                    if (buyError) setBuyError(null);
+                }}
+                hintClassName={styles.hint}
+                hwSource={buyHw ? buyerAddress : null}
+                hwStatus={buyHwStatus}
+                onHwStatusChange={onBuyHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                extraCredentials={buyConfirmNotes}
             />
         );
     }
@@ -1422,86 +1465,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
             </>,
-        );
-    }
-
-    if (buyStage === 'confirm' || buyStage === 'submitting') {
-        return wrap(
-            <form onSubmit={handleBuy} noValidate>
-                <p className={styles.summary}>
-                    Buy {fillsNum} fill{fillsNum === 1 ? '' : 's'}: pay {totalPayAmount} {payTick}
-                    {' '}→ receive ~{totalReceive} {giveTick}
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={buyerAddress?.address || ''} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Dispenser</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={dispAddr || ''} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Per-fill price</dt>
-                    <dd className={styles.detailsValue}>{getAmount} {payTick}</dd>
-                    <dt className={styles.detailsLabel}>Per-fill give</dt>
-                    <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
-                    <dt className={styles.detailsLabel}>Your balance</dt>
-                    <dd className={styles.detailsValue}>
-                        {buyBalance == null
-                            ? 'Checking…'
-                            : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()}`}
-                    </dd>
-                </dl>
-                {buyPreflight ? (
-                    <PreflightPanel
-                        report={buyPreflight}
-                        acknowledged={NO_ACKNOWLEDGMENTS}
-                        onAcknowledge={() => {}}
-                    />
-                ) : null}
-                <p className={styles.hint}>
-                    The dispenser triggers when your payment confirms. If the dispenser
-                    closes or runs out before then, the payment reaches the creator but
-                    no {giveTick} is released. This is a normal risk when buying on
-                    these chains.
-                </p>
-                {feeSelector}
-                <SignCredentials
-                        unlocked={signerReady}
-                    fromAddress={buyerAddress}
-                    chainId={chainId}
-                    password={buyPassword}
-                    onPasswordChange={(v) => {
-                        setBuyPassword(v);
-                        if (buyError) setBuyError(null);
-                    }}
-                    onStatusChange={onBuyHwStatusChange}
-                    passwordRef={buyPasswordRef}
-                    submitError={buyError}
-                    disabled={buyStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {buyHw && buyError ? (
-                    <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={buyStage === 'submitting'}
-                        disabled={buyUnderfunded || Boolean(buyDustBlock)
-                            || (buyHw ? buyHwStatus !== 'available' : (!signerReady && buyPassword.length === 0))}
-                    >
-                        {buyHw
-                            ? `Sign buy on ${buyerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign buy on ${descriptor.displayName}` : 'Sign buy')}
-                    </Button>
-                </div>
-            </form>,
         );
     }
 
@@ -1955,12 +1918,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             onAcknowledge={() => {}}
                         />
                     ) : null}
+                    {buyError ? (
+                        <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
+                    ) : null}
                     <Button
                         variant="primary"
                         onClick={beginBuy}
+                        loading={buyStage === 'submitting' || buyConfirm.composing}
                         disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr
                             || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
-                            || buyerEligibilityBarred || dispenserSelfBarred}
+                            || buyerEligibilityBarred || dispenserSelfBarred
+                            || buyStage === 'submitting' || buyConfirm.composing}
                     >
                         Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
                     </Button>

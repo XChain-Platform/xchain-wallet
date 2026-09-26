@@ -99,7 +99,12 @@ function mount(dispenser, {
                 },
             })),
         }),
+        getSettings: vi.fn().mockResolvedValue({}),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        composeForConfirm: vi.fn().mockResolvedValue({
+            psbt: '70736274ff', encoding: 'P2SH', actionString: 'SEND|1|PAY', version: 1,
+        }),
+        preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
         getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve(tokenInfo[tick] || {})),
         getListByActionIndex: getListByActionIndex || vi.fn().mockImplementation(
@@ -276,11 +281,12 @@ describe('restricted dispenser, buyer view (D-148)', () => {
             reads += 1;
             return Promise.resolve(list(reads === 1 ? [BUYER, OWNER] : [OWNER]));
         });
-        mount(ALLOW_GATED, { getListByActionIndex });
+        const messaging = mount(ALLOW_GATED, { getListByActionIndex });
         await waitFor(() => expect(buyButton()).toBeEnabled());
         fireEvent.click(buyButton());
         await expectSelectedPayerRefused();
-        expect(screen.queryByText(/Review buy/i)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('confirm-approve')).not.toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refreshes membership again before signing', async () => {
@@ -294,7 +300,7 @@ describe('restricted dispenser, buyer view (D-148)', () => {
         fireEvent.click(buyButton());
         const password = await screen.findByLabelText(/Password/i);
         fireEvent.change(password, { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: /Sign buy/i }));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         expect(await screen.findByText(/refused by a current access list/i)).toBeInTheDocument();
         expect(messaging.sendToken).not.toHaveBeenCalled();
     });

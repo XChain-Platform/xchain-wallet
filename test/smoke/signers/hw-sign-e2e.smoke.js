@@ -753,8 +753,9 @@ assert.ok(
     'DispenserDetail imports SignCredentials + isHwSource',
 );
 assert.ok(
-    /messaging\.sendAssetHw\(/.test(dispDetailSrc),
-    'DispenserDetail buy path calls messaging.sendAssetHw for HW buyers',
+    /hardware: 'sendAssetHw'/.test(dispDetailSrc)
+        && /hwSource=\{buyHw \? buyerAddress : null\}/.test(dispDetailSrc),
+    'DispenserDetail buy confirmation dispatches sendAssetHw for HW buyers',
 );
 assert.ok(
     /hardware: 'dispenserActionHw'/.test(dispDetailSrc),

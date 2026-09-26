@@ -68,7 +68,12 @@ function mount({ buyerHolds }) {
                 },
             }],
         }),
+        getSettings: vi.fn().mockResolvedValue({}),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        composeForConfirm: vi.fn().mockResolvedValue({
+            psbt: '70736274ff', encoding: 'P2SH', actionString: 'SEND|1|MEMEVALID', version: 1,
+        }),
+        preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
     };
     render(
@@ -135,10 +140,11 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         expect(await buyButton()).toBeEnabled();
     });
 
-    it('lets a funded buyer reach the signing step', async () => {
+    it('lets a funded buyer reach the shared Confirm screen', async () => {
         mount({ buyerHolds: '250' });
         await screen.findByText(/250 MEMEVALID available/);
         fireEvent.click(await buyButton());
-        expect(await screen.findByRole('button', { name: /Sign buy/ })).toBeInTheDocument();
+        expect(await screen.findByTestId('confirm-approve')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
     });
 });

@@ -59,8 +59,17 @@ const TOKEN_PAID = {
 const FIAT_PRICED = {
     ...COIN_PAID, action_index: '818', get_amount: '0.00000000', fiat: 'USD', fiat_amount: '1.50',
 };
+const COMPOSED = {
+    psbt: '70736274ff', encoding: 'P2SH', actionString: 'SEND|1|MEMEVALID', version: 1,
+    decoded: { summary: 'Send payment', details: [], warnings: [] },
+};
+const PASS = { verdict: 'pass', findings: [] };
 
-function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000' } = {}) {
+function mount(dispenser, {
+    addresses = [buyerAddress],
+    dogeSats = '1000000000',
+    destinationRows = [],
+} = {}) {
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: addresses }),
@@ -74,7 +83,19 @@ function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000' 
                 },
             })),
         }),
+        getSettings: vi.fn().mockResolvedValue({}),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        getDispensersForAddress: vi.fn().mockResolvedValue({ data: destinationRows }),
+        composeForConfirm: vi.fn().mockImplementation(({ tick }) => Promise.resolve({
+            ...COMPOSED,
+            actionString: `SEND|1|${tick}`,
+            bareNativePayment: tick === 'DOGE',
+        })),
+        preflight: vi.fn().mockResolvedValue(PASS),
+        reserve: vi.fn().mockResolvedValue(null),
+        releaseReservation: vi.fn().mockResolvedValue(null),
+        checkInputLiveness: vi.fn().mockResolvedValue({ verdict: 'live', spent: [] }),
+        requoteNativeFee: vi.fn().mockResolvedValue(null),
         sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
         sendAssetHw: vi.fn(),
     };
@@ -115,12 +136,16 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);
 
-        // Review: the exact total, then the same approval screen the token lane uses.
-        expect(await screen.findByText(/pay 6 DOGE/)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'pw' } });
-        const sign = await screen.findByRole('button', { name: /Sign buy/ });
-        await waitFor(() => expect(sign).toBeEnabled());
-        fireEvent.click(sign);
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0]).toMatchObject({
+            walletId: 'w', chainId: CHAIN, to: OWNER, tick: 'DOGE', amount: '6',
+            from: { address: BUYER },
+        });
+        expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
+        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        const approve = screen.getByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
 
         await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledTimes(1));
         const req = messaging.sendToken.mock.calls[0][0];
@@ -129,6 +154,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(req.amount).toBe('6');
         expect(req.from.address).toBe(BUYER);
         expect(req.password).toBe('pw');
+        expect(req.prebuiltPsbt).toMatchObject({ psbtHex: COMPOSED.psbt, encoding: COMPOSED.encoding });
         expect(req.actionSummary).toMatch(/^Buy 3 fills from dispenser #816: 6 DOGE for 300 DOGESWAP$/);
         // What the flow turns that request into on the wire: the destination
         // output, in base units, exact.
@@ -149,12 +175,46 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);
         fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
-        const sign = await screen.findByRole('button', { name: /Sign buy/ });
-        await waitFor(() => expect(sign).toBeEnabled());
-        fireEvent.click(sign);
+        const approve = screen.getByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
 
         expect(await screen.findByText(/This address has no DOGE to spend/)).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/no spendable UTXOs/);
+    });
+
+    it('shows the dispenser destination notice on the shared Confirm screen', async () => {
+        const messaging = mount(COIN_PAID, { destinationRows: [COIN_PAID] });
+        await screen.findByText(/10 DOGE available/);
+        await waitFor(() => expect(messaging.getDispensersForAddress).toHaveBeenCalled(), { timeout: 3000 });
+        fireEvent.click(await buyButton());
+
+        expect(await screen.findByText(/This pays dispenser #816/, {}, { timeout: 3000 }))
+            .toBeInTheDocument();
+        expect(screen.getByText(/you would receive 100 DOGESWAP/)).toBeInTheDocument();
+    });
+
+    it('dry-runs a token-paid buy before signing the composed bytes', async () => {
+        const messaging = mount(TOKEN_PAID);
+        await screen.findByText(/250 MEMEVALID available/);
+        fireEvent.click(await buyButton());
+
+        await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0]).toMatchObject({
+            walletId: 'w', chainId: CHAIN, to: OWNER, tick: 'MEMEVALID', amount: '5',
+            from: { address: BUYER },
+        });
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+        expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
+
+        fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'pw' } });
+        const approve = screen.getByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
+
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledTimes(1));
+        expect(messaging.sendToken.mock.calls[0][0].prebuiltPsbt)
+            .toMatchObject({ psbtHex: COMPOSED.psbt, actionString: 'SEND|1|MEMEVALID' });
     });
 
     it('blocks a fill count the native balance cannot cover', async () => {
