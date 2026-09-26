@@ -27,7 +27,7 @@ import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigne
 function harness({ progressDelayMs = 0, progressThrows = false } = {}) {
     const trace = [];
     const encoder = {
-        createTx: vi.fn(async () => ({ psbt: '70736274ff', encoding: 'TAPROOT' })),
+        createTx: vi.fn(async () => ({ psbt: '70736274ff', encoding: 'OP_RETURN' })),
         broadcastTx: vi.fn(async () => { trace.push('broadcast'); return {}; }),
         spendP2sh: vi.fn(async () => ({ psbt: '70736274ff' })),
     };
