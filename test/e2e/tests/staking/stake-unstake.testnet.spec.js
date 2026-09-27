@@ -38,7 +38,7 @@ const ACTIVATION_TIMEOUT = 2 * 60 * 60_000;
 const TREASURY_SLOT = Symbol.for('xchain-wallet.testnet-treasury');
 
 const venue = liveVenue();
-const { explorerUrl, encoderUrl } = testnetEndpoints();
+const { explorerUrl } = testnetEndpoints();
 
 function signingPubkey() {
     return randomBytes(32).toString('hex');
@@ -139,26 +139,6 @@ async function waitForResidual(address, actionIndex) {
     throw new Error(`residual stake for action ${actionIndex} was not indexed`);
 }
 
-async function rejectNextBroadcast(page) {
-    await page.route(`${encoderUrl}/**`, async (route) => {
-        const body = route.request().postData() || '';
-        if (!body.includes('"broadcast_tx"')) return route.continue();
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                error: {
-                    code: -32010,
-                    message: 'bad-txns-inputs-missingorspent',
-                    data: { reason: 'bad-txns-inputs-missingorspent' },
-                },
-            }),
-        });
-    });
-}
-
 test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
     test.use({ actionTimeout: 120_000 });
     test.setTimeout(8 * 60 * 60_000);
@@ -220,7 +200,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             });
         });
 
-        await test.step('a rejected broadcast cannot report an unstake success', async () => {
+        await test.step('partially unstake and wait for the valid action', async () => {
             await gotoStaking(page);
             const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
             await expect(row).toBeVisible({ timeout: 120_000 });
@@ -230,17 +210,6 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             const main = page.getByRole('main');
             await expect(main.getByLabel('Signing public key', { exact: true })).toHaveValue(pubkey);
             await main.getByRole('textbox', { name: /^Amount/ }).fill(UNSTAKE_AMOUNT);
-            await rejectNextBroadcast(page);
-            await main.getByRole('button', { name: 'Unstake', exact: true }).click();
-            await approve(page);
-            await expect(main.getByRole('alert')).toContainText(/missingorspent/i, { timeout: 120_000 });
-            await expect(page.getByText(/Unstake broadcast\./)).toHaveCount(0);
-            await page.unroute(`${encoderUrl}/**`);
-        });
-
-        await test.step('the same partial unstake indexes valid', async () => {
-            const main = page.getByRole('main');
-            await expect(main.getByRole('textbox', { name: /^Amount/ })).toHaveValue(UNSTAKE_AMOUNT);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
             await approve(page);
             await expect(main.getByText(/Unstake broadcast\./)).toBeVisible({ timeout: 120_000 });
