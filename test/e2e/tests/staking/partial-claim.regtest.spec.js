@@ -87,7 +87,7 @@ async function useRailEncoder(page) {
                 contentType: 'application/json',
                 body: JSON.stringify({
                     jsonrpc: '2.0',
-                    id: 1,
+                    id: body.id ?? 1,
                     error: { code: -32010, message: reason, data: { reason } },
                 }),
             });
@@ -396,8 +396,14 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             const main = page.getByRole('main');
             await expect(main.getByText(`${Number(REWARD_AMOUNT)} XCHAIN available`))
                 .toBeVisible({ timeout: 30_000 });
+            encoder.composedData = null;
             await amountField(main).fill(PARTIAL_CLAIM);
             await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+
+            const confirm = page.getByTestId('confirm-modal');
+            await expect(confirm).toBeVisible({ timeout: 60_000 });
+            expect(encoder.composedData, 'the successful partial claim carries AMOUNT on the wire')
+                .toBe(`COLLECT|0|${PARTIAL_CLAIM}`);
             await approveConfirm(page);
             await expect(main.getByText(/Claim broadcast\./)).toBeVisible({ timeout: 120_000 });
 
