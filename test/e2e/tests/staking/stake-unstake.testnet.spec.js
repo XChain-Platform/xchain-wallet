@@ -15,6 +15,7 @@ import {
     TESTNET_COIN,
     assertTreasuryKey,
     buildTreasuryFunding,
+    checkTestnetVenue,
     liveVenue,
     mintXchain,
     readTestnetReceiveAddress,
@@ -160,10 +161,15 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
     test.use({ actionTimeout: 120_000 });
     test.setTimeout(8 * 60 * 60_000);
 
-    test('mints, stakes, waits for activation, and partially unstakes', async ({ page }) => {
-        const treasury = await sharedRunInput();
-        test.skip(!treasury, 'pipe the stdin-only testnet run JSON to run live writes');
+    let treasury;
 
+    test.beforeAll(async () => {
+        treasury = await sharedRunInput();
+        test.skip(!treasury, 'pipe the stdin-only testnet run JSON to run live writes');
+        await checkTestnetVenue(venue);
+    });
+
+    test('mints, stakes, waits for activation, and partially unstakes', async ({ page }) => {
         let address;
         let pubkey;
         let stake;

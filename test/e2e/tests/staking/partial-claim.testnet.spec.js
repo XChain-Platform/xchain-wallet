@@ -12,6 +12,7 @@ import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     TESTNET_COIN,
     assertTreasuryKey,
+    checkTestnetVenue,
     liveVenue,
     switchToTestnet,
     testnetEndpoints,
@@ -151,9 +152,15 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
     test.use({ actionTimeout: 120_000 });
     test.setTimeout(3 * 60 * 60_000);
 
-    test('claims part of an existing validator reward and leaves the remainder pending', async ({ page }) => {
-        const input = await sharedRunInput();
+    let input;
+
+    test.beforeAll(async () => {
+        input = await sharedRunInput();
         test.skip(!input, 'pipe the stdin-only testnet run JSON to run live writes');
+        await checkTestnetVenue(venue);
+    });
+
+    test('claims part of an existing validator reward and leaves the remainder pending', async ({ page }) => {
         const claimantInput = input.claimant ?? input.validator;
         if (typeof claimantInput?.wif !== 'string'
             || typeof (claimantInput?.address ?? claimantInput?.segwitAddress) !== 'string') {
