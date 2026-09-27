@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { OperatorDashboard } from '../../../packages/core/src/shared/routes/OperatorDashboard.jsx';
@@ -90,20 +90,22 @@ async function reachConfirm() {
     await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: '123.45' } });
     fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));
-    return screen.findByTestId('confirm-approve');
+    return screen.findByTestId('confirm-modal');
 }
 
 describe('operator dashboard confirm layout', () => {
     it('shows fee, decoded summary and a disabled Approve when the dry run fails hard', async () => {
         const methods = mount(HARD_FAIL);
-        const approve = await reachConfirm();
+        const modal = await reachConfirm();
+        const confirm = within(modal);
+        const approve = confirm.getByTestId('confirm-approve');
         await waitFor(() => expect(methods.preflight).toHaveBeenCalledTimes(1));
 
-        expect(await screen.findByText('The dry run rejected this action.')).toBeTruthy();
-        expect(screen.getByTestId('confirm-modal')).toBeTruthy();
-        expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
-        expect(screen.getAllByText(/Publish 123\.45 to feed 700/).length).toBeGreaterThan(0);
-        expect(screen.getByTestId('confirm-reject')).toBeEnabled();
+        expect(await confirm.findByText('The dry run rejected this action.')).toBeTruthy();
+        expect(confirm.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
+        expect(within(confirm.getByTestId('action-intent'))
+            .getByText('Publish 123.45 to feed 700')).toBeTruthy();
+        expect(confirm.getByTestId('confirm-reject')).toBeEnabled();
         expect(approve).toBeDisabled();
 
         fireEvent.click(approve);
@@ -113,11 +115,14 @@ describe('operator dashboard confirm layout', () => {
 
     it('enables Approve on the same layout when the dry run passes', async () => {
         const methods = mount({ verdict: 'pass', findings: [] });
-        const approve = await reachConfirm();
+        const modal = await reachConfirm();
+        const confirm = within(modal);
+        const approve = confirm.getByTestId('confirm-approve');
         await waitFor(() => expect(methods.preflight).toHaveBeenCalledTimes(1));
 
         await waitFor(() => expect(approve).toBeEnabled());
-        expect(screen.getByTestId('confirm-fee')).toBeTruthy();
-        expect(screen.getAllByText(/Publish 123\.45 to feed 700/).length).toBeGreaterThan(0);
+        expect(confirm.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
+        expect(within(confirm.getByTestId('action-intent'))
+            .getByText('Publish 123.45 to feed 700')).toBeTruthy();
     });
 });
