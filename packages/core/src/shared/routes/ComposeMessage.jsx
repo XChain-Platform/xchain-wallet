@@ -497,7 +497,7 @@ export function ComposeMessage({
             // a bare "Send failed."
             const failure = humanizeError(err);
             setSubmitError(submitFailureMessage(err, {
-                chainId, coinTicker: nativeTicker, fallback: err?.message || 'Send failed.',
+                chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || 'Send failed.',
             }), failure.details);
         }
     }
@@ -601,7 +601,7 @@ export function ComposeMessage({
                 // wording on the other.
                 const failure = humanizeError(err);
                 setSubmitError(submitFailureMessage(err, {
-                    chainId, coinTicker: nativeTicker, fallback: err?.message || 'Send failed.',
+                    chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || 'Send failed.',
                 }), failure.details);
             }
             setStage('review');
