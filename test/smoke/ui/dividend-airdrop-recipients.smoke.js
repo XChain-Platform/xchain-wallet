@@ -133,55 +133,43 @@ function makeSdkRegistry({ holders, action, list }) {
 
 // ─── 3. Behavioral AIRDROP round-trip ───────────────────────────────────
 
-// Pre-resolved listActionIndex: skips the AIRDROP action lookup.
-{
-    const sdkRegistry = makeSdkRegistry({
-        holders: [],
-        list: {
-            actionIndex: 'list-1',
-            params: { TYPE: '2', ITEM: ['addr-1', 'addr-2', 'addr-1'] },
-        },
-    });
-    const r = await getAirdropRecipients({
-        sdkRegistry, chainId: 'bitcoin-regtest', listActionIndex: 'list-1',
-    });
-    assert.equal(r.listActionIndex, 'list-1');
-    assert.equal(r.listType, '2', 'listType captured');
-    assert.equal(r.recipients.length, 2, 'duplicate item deduped');
-    assert.deepEqual(r.recipients.map((x) => x.address), ['addr-1', 'addr-2']);
-}
-
-// Action lookup path: pulls LIST_ACTION_INDEX from AIRDROP, then fetches list.
+// Recipients come from the AIRDROP action's own credit rows, never from the
+// referenced LIST, whose members may have been edited since the payout.
 {
     const sdkRegistry = makeSdkRegistry({
         holders: [],
         action: {
             actionIndex: 'air-1',
             params: { TICK: 'XCP', AMOUNT: '10', LIST_ACTION_INDEX: 'list-1' },
+            credits: [
+                { address: 'addr-A', tick: 'XCP', amount: '10' },
+                { address: 'addr-B', tick: 'XCP', amount: '10' },
+                { address: 'addr-A', tick: 'XCP', amount: '10' },
+            ],
         },
         list: {
             actionIndex: 'list-1',
-            params: { TYPE: '2', ITEM: [{ address: 'addr-A' }, { ADDRESS: 'addr-B' }] },
+            params: { TYPE: '2', ITEM: ['addr-EDITED-IN-LATER'] },
         },
     });
     const r = await getAirdropRecipients({
         sdkRegistry, chainId: 'bitcoin-regtest', actionIndex: 'air-1',
     });
     assert.equal(r.listActionIndex, 'list-1', 'listActionIndex resolved');
-    assert.equal(r.recipients.length, 2);
-    assert.equal(r.recipients[0].address, 'addr-A');
-    assert.equal(r.recipients[1].address, 'addr-B');
+    assert.deepEqual(r.recipients.map((x) => x.address), ['addr-A', 'addr-B'],
+        'credits deduped, the edited list ignored');
 }
 
-// Missing both throws.
+// A list index alone is not enough: the payout lives on the AIRDROP action.
 {
     await assert.rejects(
         () => getAirdropRecipients({
             sdkRegistry: makeSdkRegistry({ holders: [] }),
             chainId: 'bitcoin-regtest',
+            listActionIndex: 'list-1',
         }),
-        /listActionIndex or actionIndex/i,
-        'missing fields throws',
+        /actionIndex is required/i,
+        'missing actionIndex throws',
     );
 }
 

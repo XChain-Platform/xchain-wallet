@@ -33,6 +33,7 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -233,7 +234,11 @@ export function LinkForm({ walletId, onBack }) {
         }
     }, [stage]);
 
+    const trimmedMemo = memo.trim();
+    const memoTooLong = memoLengthError(trimmedMemo);
+
     const validationError = useMemo(() => {
+        if (memoTooLong) return memoTooLong;
         if (!ticker1 || !ticker2) return null;
         if (!actionIndex1 || !actionIndex2) return null;
         if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
@@ -242,7 +247,7 @@ export function LinkForm({ walletId, onBack }) {
             return 'Cannot link an action to itself.';
         }
         return null;
-    }, [ticker1, ticker2, actionIndex1, actionIndex2]);
+    }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong]);
 
     const { isWatcherMode } = useWalletMode();
 
@@ -361,9 +366,18 @@ export function LinkForm({ walletId, onBack }) {
     // reachable from the review screen is in an invalid state.
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress || !submitChainId) return;
-        if (!chain1Id || !chain2Id) return;
-        if (validationError) return;
+        if (!chain1Id || !chain2Id) {
+            setFormError('Pick both chains before reviewing.');
+            return;
+        }
+        if (!fromAddress || !submitChainId) {
+            setFormError('Pick a source address first.');
+            return;
+        }
+        if (validationError) {
+            setFormError(validationError);
+            return;
+        }
         if (!actionIndex1 || !actionIndex2) {
             setFormError('Provide both action indices before reviewing.');
             return;
@@ -681,6 +695,8 @@ export function LinkForm({ walletId, onBack }) {
 
             <Input
                 label="Memo (optional)"
+                hint={`${trimmedMemo.length} / ${MAX_MEMO_LENGTH} characters.`}
+                error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
@@ -758,12 +774,11 @@ export function LinkForm({ walletId, onBack }) {
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!!validationError
-                        || !fromAddress
-                        || !actionIndex1 || !actionIndex2
-                        || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Link' : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Link' : 'Review'}
                 </Button>
             </div>
         </form>,

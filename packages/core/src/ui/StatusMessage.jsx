@@ -35,9 +35,10 @@ import styles from './StatusMessage.module.css';
  * @param {string} [props.id]
  * @param {import('react').ReactNode} props.children
  * @param {string} [props.className]                          appended after the variant class so callers can space-suffix layout adjustments
+ * @param {string} [props.details]                            technical text shown only in a collapsed disclosure
  * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string }} [props.recovery]   one-click fix shown inline with the message
  */
-export function StatusMessage({ variant = 'status', id, children, className, recovery }) {
+export function StatusMessage({ variant = 'status', id, children, className, details, recovery }) {
     if (children === null || children === undefined || children === '') return null;
     const role = variant === 'error' ? 'alert' : 'status';
     const live = variant === 'error' ? 'assertive' : 'polite';
@@ -49,7 +50,15 @@ export function StatusMessage({ variant = 'status', id, children, className, rec
     const classNames = [styles.row, variantClass, className].filter(Boolean).join(' ');
     return (
         <div role={role} aria-live={live} id={id} className={classNames}>
-            <span className={styles.text}>{children}</span>
+            <div className={styles.text}>
+                <span>{children}</span>
+                {details ? (
+                    <details className={styles.details}>
+                        <summary>Technical details</summary>
+                        <code>{details}</code>
+                    </details>
+                ) : null}
+            </div>
             {recovery && recovery.label && typeof recovery.onAction === 'function' ? (
                 <button
                     type="button"

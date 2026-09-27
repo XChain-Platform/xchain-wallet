@@ -65,7 +65,6 @@ export function SignMessageForm({ walletId, onBack }) {
     const [message, setMessage] = useState('');
     const [password, setPassword] = useState('');
 
-    const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [signature, setSignature] = useState(/** @type {string | null} */ (null));
     const [signedMessage, setSignedMessage] = useState('');
@@ -151,7 +150,11 @@ export function SignMessageForm({ walletId, onBack }) {
             return;
         }
         const own = addrs.filter((a) => a.role !== 'dispenser');
-        setAddressId(preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id);
+        setAddressId((current) => (
+            addrs.some((address) => address.id === current)
+                ? current
+                : preferredSourceId(own, activeByChain[chainId]) || own[0]?.id || addrs[0].id
+        ));
     }, [chainId, addressesByChain, activeByChain]);
 
     const chainOptions = useMemo(() => {
@@ -219,7 +222,7 @@ export function SignMessageForm({ walletId, onBack }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (busy) return;
+        if (confirmAction.composing) return;
         setError(null);
         if (!chainId) { setError('Pick a chain.'); return; }
         if (!addressId) { setError('Pick an address.'); return; }
@@ -235,7 +238,7 @@ export function SignMessageForm({ walletId, onBack }) {
     }
 
     const header = (
-        <PageHeader onBack={onBack} backDisabled={busy} title="Sign message" />
+        <PageHeader onBack={onBack} backDisabled={confirmAction.composing} title="Sign message" />
     );
 
     if (loadError) {
@@ -432,13 +435,10 @@ export function SignMessageForm({ walletId, onBack }) {
                 type="submit"
                 variant="primary"
                 block
-                loading={busy}
-                disabled={busy
-                    || message.length === 0
-                    || !addressId
-                    }
+                loading={confirmAction.composing}
+                disabled={confirmAction.composing}
             >
-                Sign message
+                {confirmAction.composing ? 'Preparing signature…' : 'Sign message'}
             </Button>
         </form>
     );

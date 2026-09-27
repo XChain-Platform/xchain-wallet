@@ -164,6 +164,8 @@ for (const label of ['Creator', 'Total supply', 'Status']) {
 // the §27.6 redesign).
 assert.ok(/descriptionBody/.test(td),
     'TokenDetail still renders the description body block');
+assert.ok(/socialLabel\(s\.platform\)[\s\S]*?s\.host/.test(td),
+    'TokenDetail shows the actual destination host beside each social label');
 
 // --- 7. Locked / Mutable status copy ------------------------------------
 

@@ -89,8 +89,8 @@ assert.ok(
 
 // 4: dispenses, computed off the detail read.
 assert.ok(
-    /Math\.floor\(remaining \/ d\.giveAmount\)/.test(src),
-    'the alert is measured in dispenses, not raw escrow',
+    /decimalQuotientFloor\(remaining, d\.giveAmount\)/.test(src),
+    'the alert is measured in exact whole dispenses, not raw escrow',
 );
 assert.ok(
     /state\.give_remaining/.test(src) && /sdk\.getAction\(/.test(src),

@@ -75,4 +75,12 @@ describe('normalizeTokenInfo access-list fields (PC-04, ISSUE v5)', () => {
         expect(normalizeTokenInfo('bitcoin-mainnet', 'JDOG', { lists: { allow: null, block: null } }).allowList).toBeNull();
         expect(normalizeTokenInfo('bitcoin-mainnet', 'JDOG', { info: {} }).blockList).toBeNull();
     });
+
+    it('normalizes detached zero sentinels to no policy list', () => {
+        const info = normalizeTokenInfo('bitcoin-regtest', 'JDOG', {
+            lists: { allow: 0, block: '0' },
+        });
+        expect(info.allowList).toBeNull();
+        expect(info.blockList).toBeNull();
+    });
 });

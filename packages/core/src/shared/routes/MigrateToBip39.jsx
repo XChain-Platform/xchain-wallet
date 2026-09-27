@@ -139,6 +139,10 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     async function handleCreate(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
+        if (!password || !confirm) {
+            setError('Enter and confirm a password.');
+            return;
+        }
         if (password.length < MIN_PASSWORD_LENGTH) {
             setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
             return;
@@ -361,9 +365,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     type="submit"
                     variant="primary"
                     loading={stage === 'submitting'}
-                    disabled={password.length === 0 || confirm.length === 0}
+                    disabled={stage === 'submitting'}
                 >
-                    Create BIP39 wallet
+                    {stage === 'submitting' ? 'Creating wallet…' : 'Create BIP39 wallet'}
                 </Button>
             </div>
         </form>,

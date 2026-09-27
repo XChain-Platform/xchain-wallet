@@ -64,11 +64,16 @@ function cancelRow(actionIndex, swapActionIndex, status) {
     return { action_index: String(actionIndex), swap_action_index: String(swapActionIndex), source: OWN, status };
 }
 
-function harness({ swaps = [], cancels = [] } = {}) {
+function swapDetail(actionIndex, status, expiration) {
+    return { action: 'SWAP', action_index: String(actionIndex), state: { status, expiration } };
+}
+
+function harness({ swaps = [], cancels = [], details = {} } = {}) {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getSwapsForAddress: () => Promise.resolve({ data: swaps }),
         getSwapCancelsForAddress: () => Promise.resolve({ data: cancels }),
+        getSwapDetail: ({ actionIndex }) => Promise.resolve(details[String(actionIndex)] ?? null),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
     };
     const messaging = new Proxy(target, {
@@ -138,6 +143,19 @@ describe('MySwapsView: settled status', () => {
         expect(within(row).getByText('Open')).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Edit' })).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    });
+
+    it('uses an edited expiration from swap detail', async () => {
+        const past = Math.floor(Date.now() / 1000) - 60;
+        const { messaging } = harness({
+            swaps: [swapRow(702, { swap_status: 'open', expiration: past })],
+            details: { 702: swapDetail(702, 'open', FUTURE) },
+        });
+        const utils = await open(messaging);
+
+        const row = rowFor(section(utils, 'Open swaps'), 702);
+        expect(within(row).getByText('Open')).toBeTruthy();
+        expect(within(row).getByText(`Expires ${new Date(FUTURE * 1000).toLocaleString()}`)).toBeTruthy();
     });
 
     it('treats a missing swap_status as no information (older explorer compatibility)', async () => {

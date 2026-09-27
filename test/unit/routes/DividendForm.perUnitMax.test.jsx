@@ -69,8 +69,12 @@ function mountDividend({
         getHoldersForToken: vi.fn().mockResolvedValue({
             tick: 'S19MINT', total: holders.length, data: holders,
         }),
+        // creator/totalSupply mark this as a resolved, real token so the
+        // dividend-ticker existence check (DividendForm.tickChecks) reads it
+        // as found, not as an empty "no such token" record.
         getTokenInfo: vi.fn().mockResolvedValue({
-            chainId: CHAIN, tick: 'XCHAIN', divisibility, locks: {},
+            chainId: CHAIN, tick: 'XCHAIN', creator: '1xchainCreatorAddr', totalSupply: '10000',
+            divisibility, locks: {},
         }),
         getWalletBalances: vi.fn().mockResolvedValue({
             [CHAIN]: [{

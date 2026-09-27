@@ -33,6 +33,7 @@ import { PreflightPanel } from './PreflightPanel.jsx';
 import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
+import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -78,8 +79,10 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   already served better by the psbt variant's input enumeration, which marks
  *   which inputs the wallet owns; collapsing it to one From line would be a lie
  *   dressed as a disclosure. Pass nothing on the psbt and message variants.
+ * @param {string} [props.sourceName] the address-record label, followed by the
+ *   wallet name when more than one wallet exists
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
- *   read off the composed envelope (the oracle usage fee)
+ *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
@@ -88,7 +91,7 @@ export function ConfirmActionModal({
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
     psbtPanel = null, messageText, refusal = null, headline,
-    sourceAddress = null, nativeTicker = '',
+    sourceAddress = null, sourceName = '', nativeTicker = '',
 }) {
     const headlineText = headline !== undefined
         ? headline
@@ -123,6 +126,11 @@ export function ConfirmActionModal({
     // neither fee line covers. Action variant only, for the reason above.
     const oracleFee = variant === 'action'
         ? oracleUsageFeeLine({ composed, ticker: nativeTicker })
+        : null;
+    // A Taproot envelope is a commit and a reveal signed on one Approve; list
+    // both with their own fees so the total above is not read as one transaction.
+    const envelopeLines = variant === 'action'
+        ? envelopeTransactionLines({ composed, ticker: nativeTicker })
         : null;
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
@@ -197,6 +205,9 @@ export function ConfirmActionModal({
                         <dl className={styles.sourceRow} data-testid="confirm-source">
                             <dt className={styles.sourceLabel}>From</dt>
                             <dd className={styles.sourceValue}>
+                                {sourceName ? (
+                                    <span className={styles.sourceName}>{sourceName}</span>
+                                ) : null}
                                 <AddressText address={sourceAddress} highlight />
                             </dd>
                         </dl>
@@ -229,6 +240,15 @@ export function ConfirmActionModal({
                         <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
                     ) : null}
 
+                    {envelopeLines ? (
+                        <div className={styles.fee} data-testid="confirm-envelope-transactions">
+                            <div>Two transactions, both signed now and broadcast in order:</div>
+                            {envelopeLines.map((line) => (
+                                <div key={line.role} data-testid={`confirm-envelope-${line.role}`}>{line.text}</div>
+                            ))}
+                        </div>
+                    ) : null}
+
                     {/* Directly under the miner fee so the two costs read as
                         one section, and named as itself so neither passes for
                         the other (the same rule the delta rows follow). */}
@@ -255,7 +275,9 @@ export function ConfirmActionModal({
                         so the message is adjacent to the field it refers to. */}
                     {error ? (
                         <div className={styles.error} role="alert" data-testid="confirm-error">
-                            {typeof error === 'string' ? error : (error?.message || 'Something went wrong.')}
+                            {typeof error === 'string'
+                                ? error
+                                : (error?.message || 'The request stopped because the wallet service returned no explanation.')}
                         </div>
                     ) : null}
 

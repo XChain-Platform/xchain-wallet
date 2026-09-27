@@ -849,9 +849,11 @@ export function PublishFileForm({ walletId, onBack }) {
                             type="submit"
                             variant="primary"
                             loading={actionConfirm.composing}
-                            disabled={!fileMeta || !fromAddress || actionConfirm.composing}
+                            disabled={actionConfirm.composing}
                         >
-                            {singleEncode ? 'Publish file' : 'Review publish'}
+                            {actionConfirm.composing
+                                ? 'Preparing review…'
+                                : singleEncode ? 'Publish file' : 'Review publish'}
                         </Button>
                     </div>
                 </>

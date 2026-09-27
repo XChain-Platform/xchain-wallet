@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../../useMessaging.js';
 import { useDropZone } from '../../hooks/useDropZone.js';
+import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 const ACTION_BTN = {
@@ -38,7 +39,10 @@ export function ContactsSection() {
     const { messaging } = useMessaging();
     const [count, setCount] = useState(/** @type {number | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [importStatus, setImportStatus] = useState(/** @type {string | null} */ (null));
+    const [importResult, setImportResult] = useState(
+        /** @type {{ imported: number, failures: Array<{ subject: string, message: string }> } | null} */
+        (null),
+    );
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const reload = async () => {
@@ -68,7 +72,7 @@ export function ContactsSection() {
     };
 
     const importFromText = async (text) => {
-        setImportStatus(null);
+        setImportResult(null);
         setError(null);
         try {
             const parsed = JSON.parse(text);
@@ -76,18 +80,23 @@ export function ContactsSection() {
                 throw new Error('Expected a JSON array of contact records.');
             }
             let imported = 0;
-            let failed = 0;
-            for (const record of parsed) {
+            const failures = [];
+            for (const [index, record] of parsed.entries()) {
                 try {
                     await messaging.saveContact({ record });
                     imported += 1;
                 } catch (err) {
-                    failed += 1;
+                    failures.push({
+                        subject: record?.name || record?.id || `Record ${index + 1}`,
+                        message: err instanceof Error
+                            ? err.message
+                            : (String(err || '') || 'The wallet returned no explanation.'),
+                    });
                     // eslint-disable-next-line no-console
                     console.warn('contacts.import: skipping invalid record:', err);
                 }
             }
-            setImportStatus(`Imported ${imported} contact${imported === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`);
+            setImportResult({ imported, failures });
             await reload();
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
@@ -164,7 +173,17 @@ export function ContactsSection() {
                     Import…
                 </button>
             </div>
-            {importStatus ? <Status text={importStatus} /> : null}
+            {importResult ? (
+                <>
+                    <Status
+                        text={`Imported ${importResult.imported} contact${importResult.imported === 1 ? '' : 's'}${importResult.failures.length > 0 ? `; ${importResult.failures.length} skipped` : ''}.`}
+                    />
+                    <DiagnosticDetails
+                        summary={`Skipped contacts (${importResult.failures.length})`}
+                        items={importResult.failures}
+                    />
+                </>
+            ) : null}
             {error ? <Status text={error} tone="error" /> : null}
         </div>
     );

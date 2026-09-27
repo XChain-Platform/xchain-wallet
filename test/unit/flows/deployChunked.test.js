@@ -15,7 +15,7 @@
 // valid for this group + position. Getting any of them wrong burns real fees:
 // every leg is its own transaction.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: vi.fn(),
@@ -822,5 +822,176 @@ describe('a fresh run records the contract index the explorer resolves', () => {
         const { opts } = baseOpts({ vault, sdk });
         await deployChunkedRun(opts);
         expect([...vault.store.values()][0].contractActionIndex).toBe('1004');
+    });
+});
+
+// An indexer can hold a mined block for several minutes (a price time-sync
+// barrier on Dogecoin testnet is one real cause), which outlasts one round of
+// the SDK's indexer wait. A leg the chain already holds must keep waiting,
+// and must never be sent twice.
+describe('a leg that outlasts one indexer-wait round keeps waiting while it is on chain', () => {
+    const ROUND_MS = 120000;
+    const MINED = 67937853;
+
+    beforeEach(() => {
+        submitAction.mockReset();
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-09-26T12:00:00Z'));
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
+    function timeoutError(txid) {
+        return Object.assign(new Error(`Transaction ${txid} was not indexed within ${ROUND_MS}ms. `
+            + 'It may still be in the mempool awaiting a block; check the transaction '
+            + 'before rebuilding it, since re-sending would spend the same inputs again.'), {
+            code: 'CONFIRMATION_TIMEOUT',
+        });
+    }
+
+    /**
+     * A waiter that spends one full round (on the faked clock) before timing
+     * out, `timeouts[txid]` times per txid, then answers with the leg indexed.
+     */
+    function roundWaiter(timeouts) {
+        const left = { ...timeouts };
+        let next = 5000;
+        return vi.fn(async (txid) => {
+            if ((left[txid] ?? 0) !== 0) {
+                if (left[txid] > 0) left[txid] -= 1;
+                vi.setSystemTime(Date.now() + ROUND_MS);
+                throw timeoutError(txid);
+            }
+            next += 1;
+            return { tx_hash: txid, actions: [{ action: 'DEPLOY', action_index: String(next), status: 'valid' }] };
+        });
+    }
+
+    /** submitAction the way submitWithSigner drives it: stamp at broadcast, then wait. */
+    function submitThroughWait() {
+        let n = 0;
+        submitAction.mockImplementation(async (args) => {
+            n += 1;
+            const txid = `tx${n}`;
+            args.onProgress('waiting', { txid });
+            const indexed = await args.waitForTxid(txid, args.waitOpts);
+            return { txid, indexed };
+        });
+    }
+
+    function encoderSaying({ block = null, utxos = [] } = {}) {
+        return {
+            getTxBlock: vi.fn(async () => (block ? { block_hash: 'bh', block_height: block } : null)),
+            getUTXOs: vi.fn(async () => ({ utxos })),
+        };
+    }
+
+    it('continues to the next chunk once a confirmed chunk indexes on a later round', async () => {
+        submitThroughWait();
+        const sdk = fakeSdk({ waitForAction: roundWaiter({ tx1: 2 }), encoder: encoderSaying({ block: MINED }) });
+        const vault = fakeVault();
+        const events = [];
+        const { opts } = baseOpts({ vault, sdk, opts: { onProgress: (phase, data) => events.push([phase, data]) } });
+        await deployChunkedRun(opts);
+        const sent = submitAction.mock.calls.map((c) => c[0].actionData.params);
+        // Every chunk once, in order, then the assembler: nothing was re-sent.
+        expect(sent.map((p) => p.CHUNK_INDEX || 'asm')).toEqual(['0', '1', '2', 'asm']);
+        expect(sdk.waitForAction.mock.calls.filter((c) => c[0] === 'tx1')).toHaveLength(3);
+        const record = [...vault.store.values()][0];
+        expect(record.stage).toBe('done');
+        expect(record.chunks[0]).toMatchObject({ txid: 'tx1', actionIndex: '5001' });
+        expect(record.indexerWait).toBeNull();
+        expect(events.filter(([phase]) => phase === 'chunk-indexer-wait')).toHaveLength(2);
+    });
+
+    it('reports the waiting state through the progress callback and on the record', async () => {
+        submitThroughWait();
+        const sdk = fakeSdk({
+            waitForAction: roundWaiter({ tx1: 1 }),
+            encoder: encoderSaying({ utxos: [{ txid: 'tx1', vout: 1, confirmations: 0 }] }),
+        });
+        const vault = fakeVault();
+        const notes = [];
+        const put = vault.pendingDeploys.put;
+        vault.pendingDeploys.put = vi.fn(async (r) => { if (r.indexerWait) notes.push(r.indexerWait); return put(r); });
+        const events = [];
+        const { opts } = baseOpts({ vault, sdk, opts: { onProgress: (phase, data) => events.push([phase, data]) } });
+        await deployChunkedRun(opts);
+        const waits = events.filter(([phase]) => phase === 'chunk-indexer-wait').map(([, d]) => d);
+        expect(waits).toEqual([expect.objectContaining({ index: 0, total: 3, txid: 'tx1', chainState: 'mempool' })]);
+        expect(notes[0]).toMatchObject({ leg: 0, total: 3, txid: 'tx1', chainState: 'mempool' });
+        expect(typeof notes[0].since).toBe('string');
+    });
+
+    it('fails after the patience runs out when the chunk is confirmed but never indexed', async () => {
+        submitThroughWait();
+        const sdk = fakeSdk({ waitForAction: roundWaiter({ tx1: -1 }), encoder: encoderSaying({ block: MINED }) });
+        const vault = fakeVault();
+        const { opts } = baseOpts({ vault, sdk });
+        const started = Date.now();
+        const err = await deployChunkedRun(opts).catch((e) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect(err.chainState).toBe('confirmed');
+        expect(err.message).toMatch(/Chunk 1 of 3 \(tx1\) is confirmed on chain/);
+        expect(err.message).toMatch(/Do not send it again/);
+        expect(err.message).not.toMatch(/re-sending would spend|send this chunk again/);
+        expect(Date.now() - started).toBeGreaterThanOrEqual(15 * 60 * 1000);
+        expect(submitAction).toHaveBeenCalledTimes(1);
+        // The txid stays on the record, so a resume waits on it instead of re-sending.
+        expect([...vault.store.values()][0].chunks[0]).toMatchObject({ txid: 'tx1', actionIndex: null });
+    });
+
+    it('fails with the dropped message when the chunk is neither confirmed nor in the mempool', async () => {
+        submitThroughWait();
+        const sdk = fakeSdk({ waitForAction: roundWaiter({ tx1: -1 }), encoder: encoderSaying() });
+        const { opts } = baseOpts({ sdk });
+        const err = await deployChunkedRun(opts).catch((e) => e);
+        expect(err.chainState).toBe('dropped');
+        expect(err.message).toMatch(/neither confirmed on chain nor in the mempool/);
+        expect(err.message).toMatch(/send this chunk again/);
+        // Two readings a round apart, not the whole patience.
+        expect(sdk.waitForAction).toHaveBeenCalledTimes(2);
+    });
+
+    function interruptedVault() {
+        const vault = fakeVault();
+        vault.store.set('r1', {
+            id: 'r1', walletId: 'w1', chainId: 'c', sourceAddress: FROM.address,
+            codeHash: HASH, code: 'x'.repeat(500), totalChunks: 3, stage: 'chunking',
+            assembleParams: { VERSION: '2', CODE_HASH: HASH, GAS_LIMIT: '100000' },
+            chunks: [
+                { index: 0, txid: 'mined', actionIndex: null },
+                { index: 1, txid: null, actionIndex: null },
+                { index: 2, txid: null, actionIndex: null },
+            ],
+        });
+        return vault;
+    }
+
+    it('a resume waits out the indexer on a mined chunk instead of re-sending it', async () => {
+        submitThroughWait();
+        const sdk = fakeSdk({
+            // The explorer transaction record comes from the indexer that is behind.
+            getTransaction: vi.fn(async () => ({ tx_hash: 'mined', actions: [] })),
+            waitForAction: roundWaiter({ mined: 3 }),
+            encoder: encoderSaying({ block: MINED }),
+        });
+        const vault = interruptedVault();
+        const { opts } = baseOpts({ vault, sdk, opts: { resumeId: 'r1' } });
+        await deployChunkedRun(opts);
+        const sent = submitAction.mock.calls.map((c) => c[0].actionData.params);
+        expect(sent.filter((p) => p.VERSION === '4').map((p) => p.CHUNK_INDEX)).toEqual(['1', '2']);
+        expect(vault.store.get('r1').chunks[0].actionIndex).toBe('5001');
+    });
+
+    it('a resume stops without sending anything when a mined chunk is still not indexed', async () => {
+        submitThroughWait();
+        const sdk = fakeSdk({
+            getTransaction: vi.fn(async () => ({ tx_hash: 'mined', actions: [] })),
+            waitForAction: roundWaiter({ mined: -1 }),
+            encoder: encoderSaying({ block: MINED }),
+        });
+        const { opts } = baseOpts({ vault: interruptedVault(), sdk, opts: { resumeId: 'r1' } });
+        await expect(deployChunkedRun(opts)).rejects.toThrow(/Chunk 1 of 3 \(mined\) is confirmed on chain/);
+        expect(submitAction).not.toHaveBeenCalled();
     });
 });

@@ -47,7 +47,7 @@ const CLAIM_ROWS = [
     { id: 2, amount: '100', status: 'rejected' },
 ];
 
-function mountForm(extra = {}) {
+function mountForm(extra = {}, mode = 'claim-rewards') {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getRewardsForAddress: vi.fn().mockResolvedValue(REWARD_ROWS),
@@ -60,7 +60,7 @@ function mountForm(extra = {}) {
             MessagingProvider,
             { shell: 'web', messaging },
             React.createElement(StakingActionForm, {
-                mode: 'claim-rewards', walletId: 'w', chainId: 'bitcoin-mainnet', onBack() {},
+                mode, walletId: 'w', chainId: 'bitcoin-mainnet', onBack() {},
             }),
         ),
     );
@@ -101,5 +101,20 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
 
         expect(await screen.findByText('Amount exceeds the 12 XCHAIN available.')).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('offers only tip-effective stake amounts and signing keys for unstake', async () => {
+        const activeKey = 'a'.repeat(64);
+        const oldKey = 'b'.repeat(64);
+        mountForm({
+            getStakesForAddress: vi.fn().mockResolvedValue([
+                { signing_pubkey: oldKey, status: 'valid', amount: '90', activation_block: 1, deactivation_block: 80 },
+                { signing_pubkey: activeKey, status: 'valid', amount: '12', activation_block: 90, deactivation_block: null },
+            ]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        }, 'unstake');
+
+        expect(await screen.findByText('12 XCHAIN available')).toBeInTheDocument();
+        expect(screen.getByLabelText(/Signing public key/)).toHaveValue(activeKey);
     });
 });

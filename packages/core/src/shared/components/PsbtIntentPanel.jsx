@@ -25,6 +25,11 @@
 
 import { AddressText } from '@xchain-wallet/core/ui';
 import { isUnreadableActionReason } from './psbtDecodeReasons.js';
+import {
+    exactNetworkFeeSats,
+    formatExactSats,
+    sumExactSats,
+} from '../../flows/psbtNetworkFee.js';
 import styles from './PsbtIntentPanel.module.css';
 
 /**
@@ -62,13 +67,14 @@ export function PsbtIntentPanel({
     const inputs = Array.isArray(decomposed.inputs) ? decomposed.inputs : [];
     const outputs = Array.isArray(decomposed.outputs) ? decomposed.outputs : [];
 
-    const inputsHaveValue = inputs.length > 0 && inputs.every((i) => typeof i.value === 'number');
-    const totalIn = inputsHaveValue ? inputs.reduce((a, i) => a + (i.value || 0), 0) : null;
-    const totalOut = outputs.reduce((a, o) => a + (o.value || 0), 0);
-    const fee = totalIn != null ? totalIn - totalOut : null;
-    const leaving = outputs
-        .filter((o) => !o.address || !own.has(o.address))
-        .reduce((a, o) => a + (o.value || 0), 0);
+    const totalIn = inputs.length > 0
+        ? sumExactSats(inputs.map((input) => input.value))
+        : null;
+    const totalOut = sumExactSats(outputs.map((output) => output.value));
+    const fee = exactNetworkFeeSats(decomposed);
+    const leaving = sumExactSats(outputs
+        .filter((output) => !output.address || !own.has(output.address))
+        .map((output) => output.value));
 
     return (
         <div className={styles.panel} data-testid="psbt-intent-panel">
@@ -111,7 +117,9 @@ export function PsbtIntentPanel({
                                 ? <span className={styles.addr}><AddressText address={inp.address} /></span>
                                 : <span className={styles.dataOutput}>(unknown source script)</span>}
                             <span className={styles.value}>
-                                {typeof inp.value === 'number' ? `${inp.value.toLocaleString()} sats` : 'amount unknown'}
+                                {formatExactSats(inp.value) !== null
+                                    ? `${formatExactSats(inp.value)} sats`
+                                    : 'amount unknown'}
                             </span>
                         </div>
                     );
@@ -133,7 +141,7 @@ export function PsbtIntentPanel({
                                 ? <span className={styles.addr}><AddressText address={o.address} /></span>
                                 : <span className={styles.dataOutput}>(data / non-address output)</span>}
                             <span className={styles.value}>
-                                {(o.value || 0).toLocaleString()} sats
+                                {formatExactSats(o.value ?? 0)} sats
                             </span>
                         </div>
                     );
@@ -142,16 +150,18 @@ export function PsbtIntentPanel({
 
             <dl className={styles.totals}>
                 <dt className={styles.totalsLabel}>Leaving this wallet</dt>
-                <dd className={styles.totalsValue}>{leaving.toLocaleString()} sats</dd>
+                <dd className={styles.totalsValue}>{formatExactSats(leaving ?? 0n)} sats</dd>
                 <dt className={styles.totalsLabel}>Total in</dt>
                 <dd className={styles.totalsValue}>
-                    {totalIn != null ? `${totalIn.toLocaleString()} sats` : 'unavailable'}
+                    {totalIn != null ? `${formatExactSats(totalIn)} sats` : 'unavailable'}
                 </dd>
                 <dt className={styles.totalsLabel}>Total out</dt>
-                <dd className={styles.totalsValue}>{totalOut.toLocaleString()} sats</dd>
+                <dd className={styles.totalsValue}>
+                    {totalOut != null ? `${formatExactSats(totalOut)} sats` : 'unavailable'}
+                </dd>
                 <dt className={styles.totalsLabel}>Network fee</dt>
                 <dd className={styles.totalsValue}>
-                    {fee != null ? `${fee.toLocaleString()} sats` : 'unavailable'}
+                    {fee != null ? `${formatExactSats(fee)} sats` : 'unavailable'}
                 </dd>
             </dl>
         </div>

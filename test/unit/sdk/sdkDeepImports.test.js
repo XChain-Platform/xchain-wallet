@@ -24,7 +24,8 @@
 // repo for deep SDK specifiers and fails on any that is not registered.
 
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SDK_DEEP_PATHS, resolveSdkDeep, sdkInstalled } from '../../helpers/sdkDeepPaths.js';
@@ -47,16 +48,19 @@ const SCAN_EXTS = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx'];
 // comments are backticked or bare, some name modules that no longer exist, and
 // a documentation mention is not a resolution the build performs.
 const DEEP_SPEC = /['"]((?:\.\.\/)*xchain-sdk\/src\/[A-Za-z0-9_./-]+\.(?:js|cjs|mjs|json))['"]/g;
+const INDEX_SCAN_TIMEOUT = 60_000;
 
-function walk(dir, out = []) {
-    for (const entry of readdirSync(dir)) {
-        if (SKIP_DIRS.has(entry) || entry.startsWith('.')) continue;
-        const full = join(dir, entry);
-        const st = statSync(full);
-        if (st.isDirectory()) walk(full, out);
-        else if (SCAN_EXTS.some((ext) => entry.endsWith(ext))) out.push(full);
-    }
-    return out;
+function sdkReferenceFiles() {
+    return execFileSync('git', [
+        '-C', repoRoot, 'grep', '-z', '-l', '-F', 'xchain-sdk/src/', '--', ...SCAN_ROOTS,
+    ], {
+        encoding: 'utf8',
+    })
+        .split('\0')
+        .filter(Boolean)
+        .filter((file) => !file.split('/').some((part) => SKIP_DIRS.has(part) || part.startsWith('.')))
+        .filter((file) => SCAN_EXTS.some((ext) => file.endsWith(ext)))
+        .map((file) => join(repoRoot, file));
 }
 
 /** Strip the leading `../` walk-up so a sibling-relative spelling and a
@@ -96,10 +100,9 @@ describe('deep xchain-sdk paths resolve against the installed SDK', () => {
     }
 
     it('every deep SDK specifier written in this repo is registered and resolvable', () => {
-        const files = SCAN_ROOTS
-            .map((r) => join(repoRoot, r))
-            .filter((d) => { try { return statSync(d).isDirectory(); } catch { return false; } })
-            .flatMap((d) => walk(d));
+        // Ask the index for candidate references so dependency stores, generated
+        // trees and unrelated source never enter this exact-specifier scan.
+        const files = sdkReferenceFiles();
 
         /** @type {string[]} */
         const unregistered = [];
@@ -123,5 +126,5 @@ describe('deep xchain-sdk paths resolve against the installed SDK', () => {
             + 'structure pass. Register each one, listing the current spelling first and any '
             + 'pre-pass spelling after it:\n  ' + unregistered.join('\n  ')
         ).toEqual([]);
-    });
+    }, INDEX_SCAN_TIMEOUT);
 });

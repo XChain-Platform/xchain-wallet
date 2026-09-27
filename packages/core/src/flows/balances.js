@@ -421,19 +421,33 @@ export async function indexerWatermark({ sdkRegistry, chainId }) {
  * is keyed by coin prefix. Never throws: any gap returns `blockTime: null`,
  * which every caller must treat as "not active" (fail-closed).
  *
- * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string }} params
- * @returns {Promise<{ chainId: string, blockTime: number | null }>}
+ * `withProtocolTime` adds `protocolTime`, the time the indexer will date the
+ * NEXT block by on networks where that differs from the tip's own stamp (see
+ * nextBlockProtocolTime); null elsewhere and on any read gap.
+ *
+ * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string, withProtocolTime?: boolean }} params
+ * @returns {Promise<{ chainId: string, blockTime: number | null, protocolTime?: number | null }>}
  */
-export async function chainTipBlockTime({ sdkRegistry, chainId }) {
+export async function chainTipBlockTime({ sdkRegistry, chainId, withProtocolTime = false }) {
     if (!sdkRegistry) throw new Error('chainTipBlockTime: sdkRegistry is required');
     if (!chainId) throw new Error('chainTipBlockTime: chainId is required');
-    let sdk;
-    try { sdk = sdkRegistry.get(chainId); } catch { return { chainId, blockTime: null }; }
-    if (!sdk || typeof sdk.getStatus !== 'function') return { chainId, blockTime: null };
+    let sdk = null;
+    try { sdk = sdkRegistry.get(chainId); } catch { sdk = null; }
+    if (!withProtocolTime) return { chainId, blockTime: await tipBlockTimeOf(sdk) };
+    const [blockTime, protocolTime] = await Promise.all([
+        tipBlockTimeOf(sdk),
+        nextBlockProtocolTime(sdk, chainId),
+    ]);
+    return { chainId, blockTime, protocolTime };
+}
+
+// The tip's own block stamp from `/status`, or null on any gap.
+async function tipBlockTimeOf(sdk) {
+    if (!sdk || typeof sdk.getStatus !== 'function') return null;
     let status;
-    try { status = await sdk.getStatus(); } catch { return { chainId, blockTime: null }; }
+    try { status = await sdk.getStatus(); } catch { return null; }
     const times = status && typeof status === 'object' ? status.last_block_time : null;
-    if (!times || typeof times !== 'object') return { chainId, blockTime: null };
+    if (!times || typeof times !== 'object') return null;
     const coinPrefix = sdk.explorer && typeof sdk.explorer.coin === 'string'
         ? sdk.explorer.coin
         : null;
@@ -442,8 +456,50 @@ export async function chainTipBlockTime({ sdkRegistry, chainId }) {
     // "has been indexed"; here a sibling chain's timestamp would be a claim
     // about a DIFFERENT chain's flag-day progress, so no fallback.
     const own = coinPrefix ? times[coinPrefix] : undefined;
-    if (own == null || !Number.isFinite(Number(own))) return { chainId, blockTime: null };
-    return { chainId, blockTime: Number(own) };
+    if (own == null || !Number.isFinite(Number(own))) return null;
+    return Number(own);
+}
+
+// Networks where the indexer dates a block by the median time of the eleven
+// blocks below it instead of the block's own stamp, mirroring the indexer's
+// protocol-time table. On the others a block's own stamp, which tracks the
+// wall clock, is its protocol time, so there is nothing to read here.
+const MEDIAN_TIME_NETWORKS = new Set(['testnet']);
+const MEDIAN_TIME_SPAN = 11;
+
+/**
+ * The protocol time the indexer will give the next block: the median of the
+ * newest eleven indexed block stamps, which is what any time-keyed rule (such
+ * as a dispenser's close window) is compared against. On testnet this can
+ * trail the wall clock by half an hour or more.
+ *
+ * @param {any} sdk
+ * @param {string} chainId  e.g. 'litecoin-testnet'
+ * @returns {Promise<number|null>} UNIX seconds, or null when not applicable or unreadable
+ */
+async function nextBlockProtocolTime(sdk, chainId) {
+    const network = String(chainId).split('-').pop();
+    if (!MEDIAN_TIME_NETWORKS.has(network)) return null;
+    const explorer = sdk && sdk.explorer;
+    if (!explorer || typeof explorer.get !== 'function') return null;
+    let res;
+    try {
+        res = await explorer.get('/blocks', { limit: MEDIAN_TIME_SPAN, noRetry: true });
+    } catch {
+        return null;
+    }
+    const rows = res && Array.isArray(res.data) ? res.data : [];
+    const newest = rows
+        .map((row) => ({ height: Number(row?.block_index), time: Number(row?.timestamp) }))
+        .filter((b) => Number.isFinite(b.height) && Number.isFinite(b.time) && b.time > 0)
+        .sort((a, b) => b.height - a.height)
+        .slice(0, MEDIAN_TIME_SPAN);
+    // Require eleven consecutive heights: a short or gapped page would median
+    // a different set of blocks than the indexer does.
+    if (newest.length < MEDIAN_TIME_SPAN) return null;
+    if (newest[0].height - newest[MEDIAN_TIME_SPAN - 1].height !== MEDIAN_TIME_SPAN - 1) return null;
+    const times = newest.map((b) => b.time).sort((a, b) => a - b);
+    return times[Math.floor(times.length / 2)];
 }
 
 // The entry every read path returns, before any answer has landed. One builder

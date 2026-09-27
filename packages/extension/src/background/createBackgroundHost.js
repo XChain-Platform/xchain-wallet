@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { flows, registry, schemas } from '@xchain-wallet/core';
+import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
@@ -96,6 +96,7 @@ const {
     fileAction,
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    composeGatedPublishForConfirm,
     getProjectForTick,
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
@@ -275,6 +276,8 @@ const {
     checkReachability,
     revealMnemonic,
     dryRunRestore,
+    prepareLabelsPublication,
+    submitLabelsPublication,
     publishLabelsNow,
     createLabelSyncScheduler,
     importWif,
@@ -494,6 +497,28 @@ function deviceHardenedEncoderOpts(req, encoderOpts) {
     const kind = req?.from?.source;
     if (kind === 'ledger' || kind === 'trezor') return { ...encoderOpts, attachPrevTx: true };
     return encoderOpts;
+}
+
+/**
+ * The spending Address record that decides whether an oversized payload may
+ * ride the Taproot envelope: the vault's own record when the request names one,
+ * else the request's `from`. A wrong claim cannot strand coin, because the
+ * submit path signs the reveal before it broadcasts the commit.
+ *
+ * @param {any} vault
+ * @param {any} req
+ * @returns {Promise<{ source?: string }|null>}
+ */
+async function envelopeSignerOf(vault, req) {
+    const id = req?.from?.addressId;
+    if (typeof id === 'string' && id.length > 0) {
+        // An unreadable record falls back to the request, never to a guess.
+        try {
+            const record = await vault.addresses.get(id);
+            if (record) return record;
+        } catch { /* fall through */ }
+    }
+    return req?.from && typeof req.from === 'object' ? req.from : null;
 }
 
 /**
@@ -1565,18 +1590,56 @@ export function createBackgroundHost(deps) {
         return { wallet: toSafeWallet(r.wallet), address: r.address };
     });
 
-    host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
-        const r = await publishLabelsNow({
+    host.register('wallet.prepareLabels', async (req, { vault, chainRegistry }) => {
+        // Fund the FILE tx from the same address Send would use.
+        // Same walletId-only resolution useActionForm/Send use for
+        // `addresses.active` (no accountId), so the source lines up with
+        // whatever Home/Send show as this wallet's chain balance instead of
+        // the highest-index HD address, which is very often unfunded.
+        const active = await resolveActiveAddresses({ vault, walletId: req?.walletId, chainRegistry });
+        return prepareLabelsPublication({
             vault,
             walletId: req?.walletId,
             password: req?.password,
             bip39Passphrase: req?.bip39Passphrase,
             chainId: req?.chainId,
             chainRegistry,
-            sdkRegistry,
+            activeEntry: active?.[req?.chainId],
             fee: req?.fee,
             feePerKb: req?.feePerKb,
         });
+    });
+
+    host.register('wallet.publishLabels', async (req, { vault, chainRegistry, sdkRegistry }) => {
+        const common = {
+            vault,
+            walletId: req?.walletId,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        };
+        const r = req?.preparation
+            ? await submitLabelsPublication({
+                ...common,
+                preparation: req.preparation,
+                prebuiltPsbt: req?.prebuiltPsbt,
+            })
+            : await publishLabelsNow({
+                ...common,
+                chainId: req?.chainId,
+                // Same active-address preference as wallet.prepareLabels
+                // This branch runs when the caller skipped the
+                // separate prepare/confirm step and asked publishLabelsNow
+                // to prepare AND submit in one call.
+                activeEntry: (await resolveActiveAddresses({
+                    vault,
+                    walletId: req?.walletId,
+                    chainRegistry,
+                }))?.[req?.chainId],
+                fee: req?.fee,
+                feePerKb: req?.feePerKb,
+            });
         // The payload just published carries every pending edit,
         // whether the user got here from the auto-sync prompt or hit
         // "Publish now" by hand. Either way the batch is satisfied.
@@ -1605,6 +1668,36 @@ export function createBackgroundHost(deps) {
     host.register('wallet.labelSyncDismiss', async () => {
         labelSyncPending = null;
         return { ok: true };
+    });
+
+    // §19.5.2 restore, on-demand half: the Backup panel's "Check chain for
+    // backed-up contacts" button. The automatic restore only ever runs once,
+    // inside a from-seed import; a wallet that already exists (or that
+    // published from a different device since) has no other way to re-pull
+    // that payload. 'preserve' because, unlike the fresh vault an import
+    // writes into, this wallet may already hold edits made since the last
+    // publish that a stale chain copy must not clobber. Password errors and
+    // bad arguments throw here (unlike `restoreLabelSyncBestEffort`, which
+    // swallows everything for the best-effort import path) so the panel can
+    // show the user why the check failed.
+    host.register('wallet.restoreLabels', async (req, { vault, sdkRegistry }) => {
+        const walletId = req?.walletId;
+        const chainId = req?.chainId;
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('wallet.restoreLabels: walletId is required');
+        }
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('wallet.restoreLabels: chainId is required');
+        }
+        return restoreLabelSyncAfterImport({
+            vault,
+            walletId,
+            password: req?.password,
+            bip39Passphrase: req?.bip39Passphrase,
+            chainIds: [chainId],
+            sdkRegistry,
+            onConflict: 'preserve',
+        });
     });
 
     // §19.4 encrypted backup: returns the pretty-printed JSON envelope
@@ -2174,6 +2267,7 @@ export function createBackgroundHost(deps) {
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
             source: source.address, ownAddresses,
+            signer: await envelopeSignerOf(vault, req),
         });
     });
 
@@ -2300,14 +2394,16 @@ export function createBackgroundHost(deps) {
         if (typeof sdk?.decoder?.describe !== 'function') {
             throw new Error(`action.describe: SDK for "${chainId}" lacks decoder.describe`);
         }
-        return sdk.decoder.describe(
-            { action: req.action, version: req.version, params: req.params || {} },
+        const parsed = { action: req.action, version: req.version, params: req.params || {} };
+        const described = sdk.decoder.describe(
+            parsed,
             {
                 chainId,
                 chainRegistry,
                 ...(Array.isArray(req.ownAddresses) && { ownAddresses: req.ownAddresses }),
             },
         );
+        return decoder.withListRemovalDescriptions(described, parsed);
     });
 
     // Confirm-session persistence.
@@ -4186,6 +4282,26 @@ export function createBackgroundHost(deps) {
     host.register('action.gatedPublish', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         return gatedPublishAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
+    host.register('action.gatedPublish.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        const source = normalizeSource(req?.from, 'action.gatedPublish.composeForConfirm');
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
+            req,
+            vault,
+            chainRegistry,
+            signerPool,
+            chainId: req?.chainId,
+            sourceAddress: source.address,
+        });
+        return composeGatedPublishForConfirm({
+            ...req,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            change,
+            ownAddresses,
+            confirmEncoderOpts: deviceHardenedEncoderOpts(req, {}),
+        });
+    });
     host.register('action.gatedPublish.psbt', async (req, { vault, chainRegistry, sdkRegistry }) => {
         return buildGatedPublishPsbtRequest({ ...req, vault, chainRegistry, sdkRegistry });
     });
@@ -4296,6 +4412,7 @@ export function createBackgroundHost(deps) {
             }),
             source: source.address,
             ownAddresses,
+            signer: await envelopeSignerOf(vault, req),
         });
         return { ...composed, messageParams: params };
     });
@@ -5212,4 +5329,3 @@ export function createBackgroundHost(deps) {
 
     return host;
 }
-

@@ -22,6 +22,7 @@
 import { useEffect, useState } from 'react';
 import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
+import { currentListMemberCount } from '../../flows/listMembership.js';
 
 function extractListRows(resp) {
     if (!resp) return [];
@@ -29,14 +30,6 @@ function extractListRows(resp) {
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     return [];
-}
-
-// A LIST detail row exposes its current members as `list` (the
-// explorer's getActionData shape). Count them tolerant of naming.
-function memberCountOf(detail) {
-    const members = detail?.list ?? detail?.items ?? detail?.members;
-    if (Array.isArray(members)) return members.length;
-    return null;
 }
 
 /**
@@ -98,7 +91,8 @@ export function ListPickerScreen({
                 try {
                     const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
                     if (cancelled) return;
-                    setCounts((prev) => ({ ...prev, [idx]: memberCountOf(detail) }));
+                    // Count the newest valid edit's members: what a gate bound to this index checks
+                    setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
                 } catch {
                     if (cancelled) return;
                     setCounts((prev) => ({ ...prev, [idx]: null }));

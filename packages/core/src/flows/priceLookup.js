@@ -31,6 +31,7 @@
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultRegistry } from '../registry/index.js';
+import { divideDecimalStrings } from '../shared/utils/amountFormat.js';
 
 // Oracle rounds finalize every ~10 minutes (ORACLE_ROUND_INTERVAL
 // 600s on the hub). A snapshot older than three missed rounds means
@@ -550,13 +551,6 @@ export function coinToFiat(coinAmount, rate) {
  */
 export function fiatToCoin(fiatAmount, rate, decimals = 8) {
     if (!rate || typeof rate.rate !== 'number' || rate.rate === 0) return null;
-    const n = typeof fiatAmount === 'number' ? fiatAmount : parseFloat(fiatAmount);
-    if (!Number.isFinite(n) || n < 0) return null;
-    const coin = n / rate.rate;
-    // Keep the value in fixed-notation string space and only trim insignificant
-    // trailing zeros. Round-tripping through Number(...).toString() re-introduces
-    // exponential notation below 1e-6 (e.g. "9e-8" for $0.01 at a 110k rate),
-    // which is the canonical SEND amount and is rejected by the consensus amount
-    // grammar /^[0-9]+(\.[0-9]+)?$/.
-    return coin.toFixed(decimals).replace(/\.?0+$/, '');
+    if (!/^\d+(\.\d+)?$/.test(String(fiatAmount).trim())) return null;
+    return divideDecimalStrings(fiatAmount, String(rate.rate), decimals);
 }

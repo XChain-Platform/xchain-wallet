@@ -171,7 +171,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
     // Two real broadcasts, one indexing wait, and up to 210s of deliberately
     // holding the chain still while the decoder catches up. The long pole here
     // is the decoder's own 60s cadence, not the app.
-    test.setTimeout(900_000);
+    test.setTimeout(1_800_000);
     // Without this, actions inherit the TEST budget, so one unmatched locator
     // costs fifteen minutes instead of thirty seconds.
     test.use({ actionTimeout: 30_000 });

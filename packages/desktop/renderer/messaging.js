@@ -1354,6 +1354,11 @@ export function gatedPublishActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.hw', opts));
 }
 
+/** @param {object} opts gated publish compose for the shared confirm page */
+export function composeGatedPublishForConfirm(opts) {
+    return /** @type {any} */ (sendMessage('action.gatedPublish.composeForConfirm', opts));
+}
+
 /** @param {object} opts watcher-mode encode-only gated publish */
 export function buildGatedPublishPsbtRequest(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.psbt', opts));
@@ -1730,6 +1735,16 @@ export function dryRunRestoreRequest(opts) {
 }
 
 /**
+ * Prepare the encrypted label FILE payload and resolve its funding address.
+ * The caller sends this result through the shared confirmation lane.
+ *
+ * @param {{ walletId: string, password: string, chainId: string }} opts
+ */
+export function prepareLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.prepareLabels', opts));
+}
+
+/**
  * §19.5.2 / G037: manual on-chain label publish. Encrypts the wallet's
  * labels + contacts and broadcasts the ciphertext as a FILE action on
  * the chosen chain.
@@ -1754,6 +1769,17 @@ export function labelSyncStatusRequest() {
 /** Dismiss the pending auto-sync prompt for this unlock window. */
 export function labelSyncDismissRequest() {
     return /** @type {any} */ (sendMessage('wallet.labelSyncDismiss', {}));
+}
+
+/**
+ * §19.5.2 restore, on-demand half: the Backup panel's "Check chain for
+ * backed-up contacts" button. Fetches + decrypts this wallet's published
+ * labels FILE on one chain and merges anything found into the vault.
+ *
+ * @param {{ walletId: string, password: string, chainId: string, bip39Passphrase?: string }} opts
+ */
+export function restoreLabelsRequest(opts) {
+    return /** @type {any} */ (sendMessage('wallet.restoreLabels', opts));
 }
 
 /**

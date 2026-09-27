@@ -20,6 +20,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -214,7 +215,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Parse the tick textarea into uppercased items, counting duplicates
+    // Parse tickers with chain grammar while counting duplicates
     // and malformed names the way the address branch does.
     const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
     const memberTicks = tickItems.valid;
@@ -256,7 +257,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         () => memberTicks.filter((t) => tickStatus[t] === 'found'),
         [memberTicks, tickStatus],
     );
-    const uncheckedTicks = memberTicks.length - missingTicks.length - foundTicks.length;
+    const uncheckedTickItems = useMemo(
+        () => memberTicks.filter((tick) => tickStatus[tick] !== 'missing' && tickStatus[tick] !== 'found'),
+        [memberTicks, tickStatus],
+    );
+    const uncheckedTicks = uncheckedTickItems.length;
 
     const items = listType === '2' ? recipients.valid : memberTicks;
     const trimmedMemo = memo.trim();
@@ -605,7 +610,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 walletId={walletId}
                 title="Add a token"
                 onSelect={(sel) => {
-                    const t = String(sel.tick || '').toUpperCase();
+                    const t = String(sel.tick || '');
                     if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
                     setTokenPickerOpen(false);
                 }}
@@ -668,11 +673,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 <>
                     <label
                         className={styles.pickerLabel}
+                        htmlFor="list-addresses"
                         {...recipientsDrop.rootProps}
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
                         Addresses
                         <textarea
+                            id="list-addresses"
                             className={styles.picker}
                             value={pasteText}
                             onChange={(e) => setPasteText(e.target.value)}
@@ -724,6 +731,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
                                 This list is published on {descriptor?.displayName || chainId}.
                             </p>
+                            <DiagnosticDetails
+                                summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                items={recipients.wrongNetwork.map((address) => ({
+                                    subject: address,
+                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                }))}
+                            />
                         </div>
                     ) : null}
                     {/* PC-10: pasted or contact-book addresses become permanent
@@ -763,7 +777,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="characters"
+                        autoCapitalize="none"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>
@@ -795,6 +809,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 not be a member.
                             </p>
                         </div>
+                    ) : null}
+                    {!tickChecking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
+                        <p className={styles.hint}>Not checked: {uncheckedTickItems.join(', ')}.</p>
                     ) : null}
                 </>
             )}
@@ -829,9 +846,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || (items.length === 0 && invalidTicks.length === 0) || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Publish list' : 'Review'}
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
                 </Button>
             </div>
         </form>,

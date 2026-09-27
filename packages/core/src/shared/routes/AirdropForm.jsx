@@ -39,6 +39,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -52,6 +53,8 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { classifyTickItems } from '../utils/listTickItems.js';
+import { currentListItems } from '../../flows/listMembership.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -190,8 +193,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // (typed in 'holders' mode, or read off an 'existing' TYPE=1 list).
     // Always a preview, never a promise: see the file-level doc comment.
     const [holderPreview, setHolderPreview] = useState(
-        /** @type {{ loading: boolean, total: number | null, error: string | null }} */
-        ({ loading: false, total: null, error: null }),
+        /** @type {{ loading: boolean, total: number | null, error: string | null, failures: Array<{ subject: string, message: string }> }} */
+        ({ loading: false, total: null, error: null, failures: [] }),
     );
 
     const [stage, setStage] = useState(
@@ -349,23 +352,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         ));
     }, [pasteText, stage, recipientCoin, recipientNetwork]);
 
-    // 'holders' mode tick parsing: identical shape to ListCreateForm's
-    // TYPE=1 memberTicks/invalidTicks so validation matches exactly.
-    const memberTicks = useMemo(() => {
-        const seen = new Set();
-        const out = [];
-        for (const raw of ticksText.split(/[\n,]+/)) {
-            const t = raw.trim().toUpperCase();
-            if (!t || seen.has(t)) continue;
-            seen.add(t);
-            out.push(t);
-        }
-        return out;
-    }, [ticksText]);
-    const invalidTicks = useMemo(
-        () => memberTicks.filter((t) => !/^[A-Z0-9.^]+$/.test(t)),
-        [memberTicks],
-    );
+    // Parse holder tickers with the same chain grammar as every token-list form.
+    const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
+    const memberTicks = tickItems.valid;
+    const invalidTicks = tickItems.invalid;
 
     // 'existing' mode: once a list is picked, fetch its type + current
     // members (same read ListDetail.jsx uses) so the review stage can
@@ -382,7 +372,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             .then((row) => {
                 if (cancelled) return;
                 const kind = String(row?.type) === '1' ? 'tick' : 'address';
-                const items = Array.isArray(row?.list) ? row.list : [];
+                // The airdrop pays the list's newest valid edit, not its created members
+                const items = currentListItems(row) || [];
                 setExistingListDetail({ loading: false, kind, items, error: null });
             })
             .catch((err) => {
@@ -412,11 +403,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const previewTicksKey = previewTicks.join('|');
     useEffect(() => {
         if (previewTicks.length === 0 || !chainId) {
-            setHolderPreview({ loading: false, total: null, error: null });
+            setHolderPreview({ loading: false, total: null, error: null, failures: [] });
             return undefined;
         }
         let cancelled = false;
-        setHolderPreview((prev) => ({ ...prev, loading: true, error: null }));
+        setHolderPreview((prev) => ({ ...prev, loading: true, error: null, failures: [] }));
         const handle = setTimeout(() => {
             // Retry once, and KEEP THE CAUSE. Both halves were missing, and a
             // single transient read failure was therefore permanent AND
@@ -433,27 +424,34 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 for (let attempt = 0; attempt < 2; attempt += 1) {
                     if (attempt > 0) {
                         await new Promise((resolve) => { setTimeout(resolve, 1200); });
-                        if (cancelled) return { count: null, error: null };
+                        if (cancelled) return { tick: t, count: null, error: null };
                     }
                     try {
                         const resp = await messaging.getHoldersForToken({ chainId, tick: t });
-                        return { count: extractHolderRows(resp).length, error: null };
+                        return { tick: t, count: extractHolderRows(resp).length, error: null };
                     } catch (err) {
                         lastErr = err;
                     }
                 }
-                return { count: null, error: lastErr?.message || 'unknown error' };
+                return {
+                    tick: t,
+                    count: null,
+                    error: lastErr?.message || 'The explorer returned no explanation.',
+                };
             };
             Promise.all(previewTicks.map(countHolders))
                 .then((results) => {
                     if (cancelled) return;
                     const valid = results.filter((r) => r.count !== null);
-                    const firstError = results.find((r) => r.count === null)?.error || 'unknown error';
+                    const failures = results
+                        .filter((r) => r.count === null)
+                        .map((r) => ({ subject: r.tick, message: r.error }));
                     if (valid.length === 0) {
                         setHolderPreview({
                             loading: false,
                             total: null,
-                            error: `Failed to load holder counts: ${firstError}`,
+                            error: `Holder counts unavailable for ${failures.length} token${failures.length === 1 ? '' : 's'}`,
+                            failures,
                         });
                         return;
                     }
@@ -461,9 +459,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setHolderPreview({
                         loading: false,
                         total,
-                        error: valid.length < results.length
-                            ? `Some token holder counts failed to load: ${firstError}`
+                        error: failures.length > 0
+                            ? `Holder counts unavailable for ${failures.length} of ${results.length} tokens`
                             : null,
+                        failures,
                     });
                 });
         }, 400);
@@ -495,7 +494,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         messaging.getListByActionIndex({ chainId, actionIndex: listActionIndex })
             .then((row) => {
                 if (cancelled) return;
-                const stored = Array.isArray(row?.list) ? row.list : [];
+                // Reconcile against what the airdrop will resolve the list to
+                const stored = currentListItems(row) || [];
                 setListReconcile(airdropLib.reconcileStoredList(submitted, stored));
             })
             .catch(() => {
@@ -797,12 +797,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         }
         if (sourceMode === 'holders') {
-            if (memberTicks.length === 0) {
-                setFormError('Add at least one token.');
-                return;
-            }
+            // Verify every token name is well formed before counting valid items.
             if (invalidTicks.length > 0) {
                 setFormError(`These don't look like token names: ${invalidTicks.join(', ')}`);
+                return;
+            }
+            if (memberTicks.length === 0) {
+                setFormError('Add at least one token.');
                 return;
             }
         } else if (recipients.valid.length === 0) {
@@ -1400,6 +1401,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             : 'Estimate unavailable'}
                     />
                 </dl>
+                <DiagnosticDetails
+                    summary={`Holder count details (${holderPreview.failures.length})`}
+                    items={holderPreview.failures}
+                    className={styles.hint}
+                />
                 {airdropDecoded && airdropDecoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {airdropDecoded.warnings.map((w, i) => (
@@ -1545,7 +1551,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 walletId={walletId}
                 title="Add a token"
                 onSelect={(sel) => {
-                    const t = String(sel.tick || '').toUpperCase();
+                    const t = String(sel.tick || '');
                     if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
                     setHolderTicksPickerOpen(false);
                 }}
@@ -1743,6 +1749,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 {' '}{descriptor?.displayName || chainId}, which cannot deliver to
                                 {' '}{recipients.wrongNetwork.length === 1 ? 'it' : 'them'}.
                             </p>
+                            <DiagnosticDetails
+                                summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                items={recipients.wrongNetwork.map((address) => ({
+                                    subject: address,
+                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                }))}
+                            />
                         </div>
                     ) : null}
                 </>
@@ -1758,7 +1771,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="characters"
+                        autoCapitalize="none"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>
@@ -1773,7 +1786,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             {holderPreview.loading
                                 ? 'counting holders…'
                                 : holderPreview.error
-                                    ? `holder count unavailable (${holderPreview.error})`
+                                    ? holderPreview.error
                                     : holderPreview.total != null
                                         ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now`
                                         : ''}
@@ -1818,7 +1831,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             {' '}{holderPreview.loading
                                 ? 'Counting holders…'
                                 : holderPreview.error
-                                    ? `Couldn't count holders: ${holderPreview.error}`
+                                    ? `${holderPreview.error}.`
                                     : holderPreview.total != null
                                         ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now.`
                                         : ''}
@@ -1832,6 +1845,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     ) : null}
                 </>
             ) : null}
+
+            <DiagnosticDetails
+                summary={`Holder count details (${holderPreview.failures.length})`}
+                items={holderPreview.failures}
+                className={styles.hint}
+            />
 
             <Input
                 label="Memo (optional)"
@@ -1861,12 +1880,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     type="submit"
                     variant="primary"
                     block
-                    disabled={
-                        !fromAddress || !token || !amountPer
-                        || (sourceMode === 'paste' && recipients.valid.length === 0)
-                        || (sourceMode === 'holders' && memberTicks.length === 0)
-                        || (sourceMode === 'existing' && !listActionIndex)
-                    }
                 >
                     {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
                 </Button>

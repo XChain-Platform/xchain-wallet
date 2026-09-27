@@ -44,6 +44,7 @@ const WS_ROOT = process.cwd();
 const SCRIPT = join(WS_ROOT, 'bin', 'sync-chain-registry.mjs');
 const FINGERPRINT = join(WS_ROOT, 'bin', 'chain-registry.sync.json');
 const DESCRIPTORS_REL = join('packages', 'core', 'src', 'registry', 'descriptors');
+const GIT_FIXTURE_TIMEOUT = 60_000;
 
 /** The digest the sync script records: sha256 over the serialized descriptors. */
 function digestOf(descriptors) {
@@ -147,7 +148,7 @@ const scrub = (...dirs) => dirs.forEach((d) => rmSync(d, { recursive: true, forc
 
 // ---- the gate ---------------------------------------------------------------
 
-describe('chain-registry sync gate @regression', () => {
+describe('chain-registry sync gate @regression', { timeout: GIT_FIXTURE_TIMEOUT }, () => {
     it('the committed fingerprint matches the bundled descriptors', () => {
         // THE gate. Red means a descriptor changed and the hub snapshot was
         // never resynced: run xchain-wallet/bin/sync-chain-registry.mjs and

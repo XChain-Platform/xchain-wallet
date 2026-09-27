@@ -15,6 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     encoderErrorCode,
+    encoderErrorDetails,
     isEncoderError,
     encoderErrorMessage,
     annotateEncoderFeeRequirement,
@@ -101,6 +102,29 @@ describe('isEncoderError', () => {
 });
 
 describe('encoderErrorMessage', () => {
+    const CURRENT_RPC_REFUSALS = [
+        'Payload too large: compiled size 9000 bytes exceeds maximum 8192 bytes (compiled on-chain ACTION push)',
+        'Transaction would burn significant satoshis as fees. Please provide a change address.',
+        'Node did not report a positive relayfee; transaction fee safety cannot be verified',
+        'fee 19 is below the node relay minimum 20 base units for a ~190-byte transaction',
+        'feePerKb 100 base units/kB produces fee 19, below the node relay minimum 20 base units for a ~190-byte transaction',
+        'fee 90000 exceeds the maximum allowed 20000 satoshis for a ~200-byte transaction (fee-rate cap)',
+        'fee 90000 exceeds 100x the estimated fair fee (800 satoshis) for a ~200-byte transaction',
+        'selected input count (701) exceeds the maximum (700) inputs for a single transaction',
+        'input selection raced a concurrent reservation: the obfuscation key is bound to an outpoint that is not the first input; retry the request',
+        'refusing to rebuild a transaction identical to one built in the last 5 minutes (same inputs and outputs, same txid abc); broadcast the one you already have, or change the inputs or outputs',
+        'OP_RETURN encoding requires compiled payload <= 80 bytes; got 120. Use P2SH for larger payloads.',
+    ];
+
+    it('keeps the specifics in every current encoder refusal', () => {
+        for (const reason of CURRENT_RPC_REFUSALS) {
+            const raw = `Encoder RPC error: ${reason}`;
+            const copy = encoderErrorMessage(sdkEncoderError('ENCODER_RPC_ERROR', raw), {});
+            expect(copy, reason).toContain(reason);
+            expect(copy, reason).not.toContain('Encoder RPC error:');
+        }
+    });
+
     it('maps every throw site to a sentence, and never leaks the wire wording', () => {
         for (const [code, message] of THROW_SITES) {
             const copy = encoderErrorMessage(sdkEncoderError(code, message), { coinTicker: 'DOGE' });
@@ -179,6 +203,25 @@ describe('encoderErrorMessage', () => {
         expect(copy).not.toContain('Encoder RPC error:');
     });
 
+    it('uses safe generic copy for an unknown RPC refusal and unknown SDK message', () => {
+        const rpc = encoderErrorMessage(
+            sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: future internal refusal'), {});
+        const future = new Error('future SDK wording');
+        future.name = 'SDKEncoderError';
+        expect(rpc).toMatch(/could not be built/i);
+        expect(rpc).not.toContain('future internal refusal');
+        expect(encoderErrorMessage(future, {})).toMatch(/transaction service could not complete/i);
+        expect(encoderErrorMessage(future, {})).not.toContain('future SDK wording');
+        expect(encoderErrorDetails(future)).toBe('future SDK wording');
+    });
+
+    it('hides the encoder service\'s uninformative internal error', () => {
+        const raw = 'Encoder RPC error: Internal encoder error';
+        const copy = encoderErrorMessage(sdkEncoderError('ENCODER_RPC_ERROR', raw), {});
+        expect(copy).toBe('This transaction could not be built. Nothing was signed or sent, so nothing was spent.');
+        expect(copy).not.toContain('Internal encoder error');
+    });
+
     it('has a safe answer for an ENCODER_* code minted after this mapper', () => {
         const copy = encoderErrorMessage(sdkEncoderError('ENCODER_QUANTUM_FLUX', 'Encoder went sideways'), {});
         expect(copy).toMatch(/nothing was signed or sent/i);
@@ -252,5 +295,24 @@ describe('submitFailureMessage adopts the encoder mapper', () => {
 
     it('still falls through to the caller copy for an unrelated error', () => {
         expect(submitFailureMessage(new Error('boom'), { fallback: 'Mint failed.' })).toBe('Mint failed.');
+    });
+
+    it('humanizes a raw caller fallback instead of displaying it', () => {
+        const err = new Error('internal refusal');
+        const copy = submitFailureMessage(err, { fallback: err.message });
+        expect(copy).toBe("Couldn't complete this. Something went wrong. Try again.");
+        expect(copy).not.toContain('internal refusal');
+    });
+
+    it('keeps a form-authored opener when its fallback includes the raw error', () => {
+        const err = new Error('sendToken: params.TICK is required');
+        const fallback = `Couldn't mint. ${err.message}`;
+        expect(submitFailureMessage(err, { fallback })).toBe(fallback);
+    });
+
+    it('humanizes a connection error when the fallback is exactly the raw text', () => {
+        const err = new Error('ECONNREFUSED');
+        expect(submitFailureMessage(err, { fallback: err.message }))
+            .toBe("Couldn't complete this. The network is unreachable. Check your connection and try again.");
     });
 });

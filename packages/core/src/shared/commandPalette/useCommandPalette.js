@@ -26,16 +26,24 @@ import { useCallback, useEffect, useState } from 'react';
  * @param {boolean} [opts.enabled=true]  install the global shortcut listener
  * @param {string} [opts.binding='mod+k']  §34.1: the (rebindable) combo that
  *        toggles the palette; only 'mod+<key>' shapes are honored.
- * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void }}
+ * @param {(view: string) => void} [opts.navigate]  shell route setter
+ * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number }}
  */
 export function useCommandPalette(opts = {}) {
-    const { enabled = true, binding = 'mod+k' } = opts;
+    const { enabled = true, binding = 'mod+k', navigate: setRoute } = opts;
     const comboKey = binding.startsWith('mod+') ? binding.slice(4).toLowerCase() : 'k';
     const [open, setOpen] = useState(false);
+    const [navigationKey, setNavigationKey] = useState(0);
 
     const openPalette = useCallback(() => setOpen(true), []);
     const closePalette = useCallback(() => setOpen(false), []);
     const togglePalette = useCallback(() => setOpen((v) => !v), []);
+    // Give every palette selection a fresh route mount, including when the
+    // selected action is already showing a completed form.
+    const navigate = useCallback((view) => {
+        setNavigationKey((key) => key + 1);
+        setRoute?.(view);
+    }, [setRoute]);
 
     // Force-close whenever the shortcut is disabled (lock / onboarding), so
     // a palette left open when the wallet locks can't linger over the
@@ -58,5 +66,5 @@ export function useCommandPalette(opts = {}) {
         return () => window.removeEventListener('keydown', onKey);
     }, [enabled, comboKey]);
 
-    return { open, openPalette, closePalette, togglePalette };
+    return { open, openPalette, closePalette, togglePalette, navigate, navigationKey };
 }

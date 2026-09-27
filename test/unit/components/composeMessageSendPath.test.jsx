@@ -113,10 +113,26 @@ async function openFilledForm(messaging) {
         fireEvent.change(utils.getByLabelText('Message'), { target: { value: 'hello there' } });
         await drainMicrotasks();
     });
-    // The recipient-pubkey lookup is debounced; the Send button stays disabled
-    // until it settles.
+    // Settle the debounced recipient-key lookup before testing the encrypted path.
     await domAct(async () => {
         vi.advanceTimersByTime(500);
+        await drainMicrotasks();
+    });
+    return utils;
+}
+
+async function openEmptyPlaintextForm(messaging) {
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(ComposeMessage, {
+                    walletId: 'w', chainId: CHAIN, fixedEncryption: 'plaintext', onBack() {},
+                }),
+            ),
+        );
         await drainMicrotasks();
     });
     return utils;
@@ -143,6 +159,22 @@ function alertText(utils) {
         .map((n) => n.textContent || '')
         .join(' | ');
 }
+
+describe('message validation is visible from the primary action', () => {
+    it('asks for the recipient and message when Send message is pressed', async () => {
+        const utils = await openEmptyPlaintextForm(stubMessaging());
+        const action = sendButton(utils);
+
+        expect(action).toBeEnabled();
+        fireEvent.click(action);
+        expect(alertText(utils)).toMatch(/Enter a recipient address/);
+
+        fireEvent.change(utils.getByLabelText('Address'), { target: { value: RECIPIENT } });
+        expect(action).toBeEnabled();
+        fireEvent.click(action);
+        expect(alertText(utils)).toMatch(/Write a message to send/);
+    });
+});
 
 describe('a failed compose is shown on the form stage (issue #12)', () => {
     it('renders the host reason where Send was pressed, and clears it on the next edit', async () => {

@@ -25,9 +25,11 @@
 // TWO THINGS ASSERTED THAT FORM STATE ALONE CANNOT SHOW
 //
 // 1. THE TYPED-CONFIRMATION GATE ACTUALLY GATES. Approve stays disabled with
-//    no text and with the wrong text typed, and only enables once "DESTROY"
-//    is typed exactly - checked against the live button state, not against
-//    the source that defines it.
+//    no text and with a near-miss typed, and only enables once the word is
+//    DESTROY - checked against the live button state, not against the source
+//    that defines it. The match is case-insensitive and trimmed by design
+//    (DestroyForm.jsx `typedConfirmOk`, the same rule CallbackForm and
+//    OracleForm use), so the near-miss here is a misspelling, not a lowercase.
 // 2. THE BALANCE ACTUALLY DROPS BY THE DESTROYED AMOUNT, ONCE, on the chain's
 //    own read of it - not a balance the wallet only claims to have burned.
 
@@ -35,6 +37,7 @@ import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     fundAddress,
+    mintXchain,
     nudgeChain,
     readReceiveAddress,
     REGTEST_CHAIN_ID,
@@ -52,6 +55,8 @@ const STAMP = Date.now().toString().slice(-6);
 const TICK = `DST${STAMP}`;
 const SUPPLY = 1000;
 const DESTROY_AMOUNT = 250;
+/** Pays the ISSUE and DESTROY protocol fees, with room to spare. */
+const MINT_XCHAIN = 10;
 
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
@@ -130,6 +135,12 @@ test.describe('DESTROY on regtest', () => {
             await fundAddress(source, FUNDING_BTC);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
+            // ISSUE charges an XCHAIN protocol fee, and the preflight disables
+            // Approve on a wallet that holds none.
+            await mintXchain(page, MINT_XCHAIN);
+            await waitForTokenBalance(source, 'XCHAIN', MINT_XCHAIN);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
 
             await gotoPalette(page, 'Issue token');
             const main = page.getByRole('main');
@@ -184,7 +195,7 @@ test.describe('DESTROY on regtest', () => {
             await expect(intent).toContainText(`Destroy ${DESTROY_AMOUNT} ${TICK}`);
         });
 
-        await test.step('the typed "DESTROY" gate stays closed until typed exactly', async () => {
+        await test.step('the typed "DESTROY" gate stays closed until the word is right', async () => {
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
                 await password.fill(PASSWORD);
@@ -194,8 +205,8 @@ test.describe('DESTROY on regtest', () => {
 
             await expect(approve, 'Approve is enabled with no typed confirmation at all').toBeDisabled();
 
-            await typed.fill('destroy');
-            await expect(approve, 'Approve is enabled on a lowercase/mistyped confirmation').toBeDisabled();
+            await typed.fill('DESTORY');
+            await expect(approve, 'Approve is enabled on a misspelled confirmation').toBeDisabled();
 
             await typed.fill('');
             await typed.fill('DESTROY');

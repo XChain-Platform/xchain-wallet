@@ -36,9 +36,10 @@ import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativ
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
-import { pushPrefixSize } from './fileSizeLimits.js';
+import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
+import { envelopeEncoderOpts } from './envelopeSelection.js';
 
 // FILE v0's COMPRESSION field index in the full action string, and the encoder's
 // own field-setting rule mirrored byte for byte (pad the optional fields up to
@@ -180,11 +181,13 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @param {{ action: string, params: object }} args.actionData
  * @param {object} args.encoderOpts            must include pubkey/change per the encoder contract
  * @param {string} [args.source]               spender address for the native-fee quote
+ * @param {{ source?: string }|null} [args.signer]  the spending Address record; decides whether an
+ *   oversized payload may ask for the Taproot envelope
  * @param {AbortSignal} [args.signal]
  * @returns {Promise<ComposedAction>}
  */
 export async function composeForConfirm({
-    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts, source, signal,
+    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: requestedEncoderOpts, source, signal, signer = null,
 }) {
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`composeForConfirm: unknown chain "${chainId}"`);
@@ -202,6 +205,30 @@ export async function composeForConfirm({
 
     // 1. Action string (pure formatting, no network). None for a bare payment.
     const createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
+
+    // 1b. A payload over the legacy carrier asks for the Taproot envelope when
+    // this chain and signer can carry one, whichever action it is.
+    const compiledBytes = createResult
+        ? compiledPayloadByteLen(createResult.actionString, requestedEncoderOpts?.rawData, null)
+        : 0;
+    const envelopeRequest = createResult
+        ? envelopeEncoderOpts({
+            descriptor,
+            signer,
+            encoderOpts: requestedEncoderOpts,
+            compiledBytes,
+        })
+        : null;
+    // Refuse an oversized legacy payload before the encoder can expose its raw
+    // carrier error. Larger payloads need both Taproot on the chain and a local
+    // software key that can sign the envelope reveal.
+    if (compiledBytes > MAX_COMPILED_ACTION_BYTES && !envelopeRequest) {
+        const subject = actionData.action === 'FILE' ? 'Files' : 'Payloads';
+        throw new Error(
+            `${subject} over 8 KB can only be published on a Taproot-capable chain from a software-key address.`,
+        );
+    }
+    const encoderOpts = envelopeRequest ? { ...requestedEncoderOpts, ...envelopeRequest } : requestedEncoderOpts;
 
     // 2. Native-coin fee pre-flight (folds the FEE_DESTINATION output into
     // customOutputs when payFeeInNativeCoin is set; throws NativeFeeForfeitError

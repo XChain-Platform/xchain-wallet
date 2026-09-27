@@ -19,24 +19,29 @@
 //   { asks: [[price, amount], …], bids: [[price, amount], …] }
 //
 // (or the same object wrapped in a one-element array, depending on
-// the endpoint wrapper). Prices come back as strings to preserve
-// precision; this helper coerces to Number for comparison but
-// preserves the original string in `displayPrice` for render.
+// the endpoint wrapper). Keep prices and sizes as decimal strings through
+// sorting and cumulative totals, converting only the final bounded depth
+// percentage to Number.
+
+import {
+    compareDecimalStrings,
+    sumDecimalStrings,
+} from '../shared/utils/amountFormat.js';
 
 /**
  * @typedef {Object} Level
- * @property {number} price         numeric price for sort / depth math
+ * @property {string} price         exact decimal price for sorting
  * @property {string} displayPrice  original string (preserves precision)
- * @property {number} size          size at this price level
+ * @property {string} size          exact size at this price level
  * @property {string} displaySize   original string
- * @property {number} cumulative    cumulative size at this level or better
+ * @property {string} cumulative    cumulative size at this level or better
  */
 
 /**
  * @typedef {Object} Orderbook
  * @property {Level[]} bids         descending by price
  * @property {Level[]} asks         ascending by price
- * @property {number} maxCumulative  the larger of bids.lastCumulative / asks.lastCumulative; callers divide per-row cumulative / maxCumulative for the depth bar width
+ * @property {string} maxCumulative the larger exact cumulative amount
  */
 
 /**
@@ -49,9 +54,10 @@ export function normalizeOrderbook(resp) {
     const asks = sortLevels(parseLevels(raw?.asks), 'asc');
     withCumulative(bids);
     withCumulative(asks);
-    const bidsMax = bids.length > 0 ? bids[bids.length - 1].cumulative : 0;
-    const asksMax = asks.length > 0 ? asks[asks.length - 1].cumulative : 0;
-    return { bids, asks, maxCumulative: Math.max(bidsMax, asksMax, 0) };
+    const bidsMax = bids.length > 0 ? bids[bids.length - 1].cumulative : '0';
+    const asksMax = asks.length > 0 ? asks[asks.length - 1].cumulative : '0';
+    const maxCumulative = compareDecimalStrings(bidsMax, asksMax) >= 0 ? bidsMax : asksMax;
+    return { bids, asks, maxCumulative };
 }
 
 function extractBook(resp) {
@@ -86,29 +92,30 @@ function parseLevel(row) {
     } else {
         return null;
     }
-    const price = Number(priceStr);
-    const size = Number(sizeStr);
-    if (!Number.isFinite(price) || price <= 0) return null;
-    if (!Number.isFinite(size) || size <= 0) return null;
+    if (compareDecimalStrings(priceStr, '0') !== 1) return null;
+    if (compareDecimalStrings(sizeStr, '0') !== 1) return null;
     return {
-        price,
+        price: priceStr,
         displayPrice: priceStr,
-        size,
+        size: sizeStr,
         displaySize: sizeStr,
-        cumulative: 0,
+        cumulative: '0',
     };
 }
 
 function sortLevels(levels, direction) {
     const out = levels.slice();
-    out.sort((a, b) => direction === 'desc' ? b.price - a.price : a.price - b.price);
+    out.sort((a, b) => {
+        const compared = compareDecimalStrings(a.price, b.price) || 0;
+        return direction === 'desc' ? -compared : compared;
+    });
     return out;
 }
 
 function withCumulative(levels) {
-    let sum = 0;
+    let sum = '0';
     for (const level of levels) {
-        sum += level.size;
+        sum = sumDecimalStrings([sum, level.size]);
         level.cumulative = sum;
     }
 }

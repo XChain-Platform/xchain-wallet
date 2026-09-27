@@ -20,6 +20,7 @@ import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
 import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
@@ -29,6 +30,11 @@ import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
+import {
+    compareDecimalStrings,
+    decimalFromBaseUnits,
+    multiplyDecimalStrings,
+} from '../utils/amountFormat.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -63,6 +69,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onSend]                navigate to Send route
  * @param {() => void} [props.onReceive]             navigate to Receive route
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
+ * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
  */
 export function TokenDetail({
     walletId,
@@ -79,6 +86,7 @@ export function TokenDetail({
     onReceive,
     onBuy,
     onViewActivity,
+    onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
@@ -94,6 +102,17 @@ export function TokenDetail({
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
     const assetInfo = useTokenInfo({ chainId, tick, skip: isNative });
+
+    // A holder who is also the issuer gets a way back to the admin
+    // surface: without this, ManageToken was reachable only via Menu ->
+    // My Tokens, several taps away from the token they just opened.
+    // Native coins have no issuer, so the check is skipped there.
+    const isTokenOwner = useIsTokenIssuer({
+        messaging,
+        walletId,
+        chainId,
+        issuerAddress: isNative ? null : (assetInfo?.creator || null),
+    });
 
     // Native-coin price oracle (BTC / LTC / DOGE mainnet). Gated by
     // settings.privacy.priceDataEnabled; the hook surfaces a `disabled`
@@ -288,6 +307,17 @@ export function TokenDetail({
             label: 'History',
             icon: <Icon.HistoryIcon />,
             onClick: () => { setMoreOpen(false); onViewActivity(); },
+        });
+    }
+    // Issuer-only hop into ManageToken; gated on isTokenOwner (not just
+    // the handler being wired) so a holder who isn't the issuer never
+    // sees an entry that would 404 or open someone else's token.
+    if (typeof onManageToken === 'function' && isTokenOwner) {
+        moreOptions.push({
+            id: 'manage-token',
+            label: 'Manage token',
+            icon: <Icon.GearIcon />,
+            onClick: () => { setMoreOpen(false); onManageToken(); },
         });
     }
 
@@ -737,9 +767,12 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
     if (marketPriceNum != null && Number.isFinite(marketPriceNum)) {
         priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
-            const supply = Number(String(assetInfo.totalSupply).replace(/[,_]/g, ''));
-            if (Number.isFinite(supply)) {
-                marketCapCell = `${(marketPriceNum * supply).toLocaleString('en-US', { maximumFractionDigits: 4 })} ${nativeTick}`;
+            const supply = String(assetInfo.totalSupply).replace(/[,_]/g, '');
+            const marketCap = multiplyDecimalStrings(assetInfo.marketPrice, supply);
+            if (marketCap !== null) {
+                const formatted = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
+                    .format(marketCap);
+                marketCapCell = `${formatted} ${nativeTick}`;
             }
         }
         const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
@@ -1394,7 +1427,7 @@ function LinksAndFiles({ assetInfo }) {
                             title={s.url}
                         >
                             <SocialIcon platform={s.platform} />
-                            {socialLabel(s.platform)}
+                            {socialLabel(s.platform)} · {s.host}
                         </a>
                     ))}
                 </div>
@@ -2050,23 +2083,22 @@ function groupThousands(s) {
 
 function fiatValue(quantityStr, divisibility, fiatRate) {
     if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
-    const q = safeBigInt(quantityStr);
-    if (q === 0n) return 0;
-    if (!divisibility || divisibility <= 0) return Number(q) * fiatRate;
-    const div = 10n ** BigInt(divisibility);
-    const whole = Number(q / div);
-    const frac = Number(q % div) / Number(div);
-    return (whole + frac) * fiatRate;
+    const amount = decimalFromBaseUnits(safeBigInt(quantityStr), divisibility || 0);
+    return multiplyDecimalStrings(amount, String(fiatRate));
 }
 
 function formatFiat(usd) {
     if (usd === null || usd === undefined) return 'N/A';
-    if (usd === 0) return '$0.00';
-    if (usd > 0 && usd < 0.01) return '<$0.01';
-    return '$' + usd.toLocaleString('en-US', {
+    if (compareDecimalStrings(usd, '0') === 0) return '$0.00';
+    if (compareDecimalStrings(usd, '0') === 1 && compareDecimalStrings(usd, '0.01') === -1) {
+        return '<$0.01';
+    }
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-    });
+    }).format(String(usd));
 }
 
 // Returns just the symbol-prefixed numeric portion of a fiat value in

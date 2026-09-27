@@ -738,10 +738,9 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick.trim() || cleanOptions.length < 2 || !endBlock.trim()
-                        || bindingErrors.length > 0 || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Create poll' : 'Preview'}
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Create poll' : 'Preview'}
                 </Button>
             </div>
         </form>,

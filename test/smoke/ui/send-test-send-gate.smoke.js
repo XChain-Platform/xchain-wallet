@@ -66,8 +66,8 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /exactSatsFromDecimalString\(amount\)/,
-    'amount converted to sats exactly (BigInt string math, )',
+    /exactSatsBigIntFromDecimalString\(amount\)/,
+    'amount converted to sats exactly with BigInt string math',
 );
 assert.match(
     sendSrc,

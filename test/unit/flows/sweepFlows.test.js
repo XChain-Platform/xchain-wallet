@@ -282,6 +282,17 @@ describe('sweepPreview', () => {
         expect(p.gatedTicks.rows).toEqual([]);
     });
 
+    it('leaves a dispenser in its close window out of the sweep preview', async () => {
+        const sdk = makeSdk({
+            getDispensers: vi.fn(async () => ({ data: [
+                { action_index: 5, source: ADDR, current_status: 'open', tick: 'PEPE', give_remaining: '40', give_ownership: 0 },
+                { action_index: 7, source: ADDR, current_status: 'cancelling', tick: 'PEPE', give_remaining: '12', give_ownership: 0 },
+            ] })),
+        });
+        const p = await sweepPreview({ sdkRegistry: registryFor(sdk), chainId: CHAIN, address: ADDR });
+        expect(p.dispensers.rows).toEqual([{ actionIndex: '5', tick: 'PEPE', escrowRemaining: '40', giveOwnership: false }]);
+    });
+
     it('detects gated ticks across balances and ownerships', async () => {
         const sdk = makeSdk({
             getBalances: vi.fn(async () => ({ data: [{ tick: 'GATEDTICK', amount: '3', decimals: 0 }] })),
@@ -310,5 +321,28 @@ describe('sweepPreview', () => {
         });
         const p = await sweepPreview({ sdkRegistry: registryFor(sdk), chainId: CHAIN, address: ADDR });
         expect(p.orders.rows.map((r) => r.actionIndex)).toEqual(['9']);
+    });
+
+    it('uses order detail and swap_status for current escrow', async () => {
+        const sdk = makeSdk({
+            getOrders: vi.fn(async () => ({ data: [
+                { action_index: 10, source: ADDR, status: 'valid', give_tick: 'PEPE', give_amount: '9' },
+                { action_index: 11, source: ADDR, status: 'valid', give_tick: 'PEPE', give_amount: '8' },
+            ] })),
+            getAction: vi.fn(async (actionIndex) => ({ state: actionIndex === '10'
+                ? { status: 'open', give_remaining: '3' }
+                : { status: 'complete', give_remaining: '0' } })),
+            getSwaps: vi.fn(async () => ({ data: [
+                { action_index: 12, source: ADDR, status: 'valid', swap_status: 'complete', give_tick: 'PEPE', give_amount: '7' },
+                { action_index: 13, source: ADDR, status: 'valid', swap_status: 'open', give_tick: 'PEPE', give_amount: '6' },
+            ] })),
+        });
+        const p = await sweepPreview({ sdkRegistry: registryFor(sdk), chainId: CHAIN, address: ADDR });
+
+        expect(p.orders.rows).toEqual([{
+            actionIndex: '10', giveTick: 'PEPE', giveCoin: null,
+            giveAmount: '3', giveOwnership: false,
+        }]);
+        expect(p.swaps.rows.map((r) => r.actionIndex)).toEqual(['13']);
     });
 });

@@ -31,7 +31,8 @@ assert.match(view, /getSwapCancelsForAddress/, 'cancelled derived from swap_canc
 assert.match(view, /String\(s\.source\) !== r\.p\.owner\.address/, 'keeps only swaps this wallet is the SOURCE of');
 assert.match(view, /VERSION: '1', SWAP_ACTION_INDEX/, 'cancel composes SWAP v1');
 assert.match(view, /VERSION: '2', SWAP_ACTION_INDEX/, 'edit composes SWAP v2');
-assert.match(view, /messaging\.swapActionHw|messaging\.swapAction\b/, 'cancel/edit route through swapAction');
+assert.match(view, /software: 'swapAction', hardware: 'swapActionHw'/, 'cancel/edit route through swapAction');
+assert.match(view, /<ActionConfirmScreen/, 'cancel/edit sign on the shared confirm page');
 assert.match(view, /status === 'open' \?/, 'cancel/edit gated on open');
 assert.ok(!/autopay/i.test(view), 'no auto-pay toggle (SWAP settles atomically)');
 

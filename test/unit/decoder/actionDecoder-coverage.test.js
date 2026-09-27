@@ -70,6 +70,9 @@ describe('decodeAction summary coverage', () => {
         ['MESSAGE', { VERSION: '3', DESTINATION: 'addr9', PLAINTEXT_MESSAGE: 'hi' }, /^Send public message to addr9/],
         ['DEPLOY', { VERSION: '4', CHUNK_INDEX: '1', TOTAL_CHUNKS: '4' }, /chunk 1 of 4/],
         ['ADDRESS', { VERSION: '1', CONTROLLER: '42', ACTION_CLASS: 'transfer', UNBIND: '1' }, /^Unbind controller from this address \(transfer\)$/],
+        ['SLEEP', { VERSION: '0', RESUME_BLOCK: '900' }, /^Lock this address until block 900$/],
+        ['SLEEP', { VERSION: '1', RESUME_BLOCK: '-1', TICK: 'JDOG' }, /^Pause JDOG indefinitely$/],
+        ['SLEEP', { VERSION: '1', RESUME_BLOCK: '0', TICK: 'JDOG' }, /^Resume JDOG$/],
     ];
     for (const [action, params, re] of versioned) {
         it(`${action} v${params.VERSION} names its own semantics`, () => {

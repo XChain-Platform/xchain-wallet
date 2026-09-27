@@ -64,6 +64,22 @@ describe('CoSignerPolicyEditor helpers', () => {
         expect(out.allowedOutputs).toEqual([]);
     });
 
+    it('case-folds ticker cap keys without losing prototype-shaped names', () => {
+        const out = buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            maxPerAction: [{ action: 'SEND', tick: 'mixed', cap: '1' }],
+            windowEnabled: true,
+            windowHours: '24',
+            windowPerTick: [{ tick: '__proto__', cap: '2' }],
+            confirmAbove: [{ tick: 'c#', amount: '3' }],
+        });
+
+        expect(out.policy.maxPerAction.SEND.MIXED).toBe('1');
+        expect(out.policy.maxPerWindow.perTick.__PROTO__).toBe('2');
+        expect(out.policy.confirmAbove.perTick['C#']).toBe('3');
+    });
+
     it('flags an incomplete per-action row and a zero-length window', () => {
         expect(buildPolicyDraft({ ...emptyPolicyDraft(), allowedActionsText: 'SEND', maxPerAction: [{ action: 'SEND', tick: '*', cap: '' }] }).error)
             .toMatch(/amount/i);

@@ -66,6 +66,22 @@ function recordingFetch(body = TIS_JSON) {
 }
 
 describe('SSC-5 second control: metadataFetchEnabled gates the issuer-chosen fetch', () => {
+    it('does not expose an on-chain remote image when metadata fetching is off', async () => {
+        const image = 'https://tracker.invalid/pixel.png?token=BEACON';
+        const info = await tokenInfoFor({
+            sdkRegistry: registryFor(JSON.stringify({ image })),
+            chainId: 'BTC',
+            tick: 'BEACON',
+            metadataFetchEnabled: false,
+            fetch: recordingFetch(),
+        });
+
+        expect(info.imageUrl).toBeNull();
+        expect(info.images).toEqual([]);
+        expect(info.audio).toEqual([]);
+        expect(info.video).toEqual([]);
+    });
+
     it('makes NO request when the control is off, however hostile the description', async () => {
         const fetchImpl = recordingFetch();
         await tokenInfoFor({
@@ -127,5 +143,34 @@ describe('SSC-5 second control: metadataFetchEnabled gates the issuer-chosen fet
             fetch: fetchImpl,
         });
         expect(fetchImpl.calls).toEqual([]);
+    });
+});
+
+describe('social destination identity', () => {
+    it('drops trusted branding from a mismatched host and exposes the destination', async () => {
+        const { tisToMediaBundle } = await import('../../../packages/core/src/flows/tokenInfo.js');
+        const bundle = tisToMediaBundle({
+            social: [{ type: 'github', data: 'https://phish.invalid/xchain-wallet' }],
+        });
+
+        expect(bundle.socials).toEqual([{
+            platform: 'url',
+            claimedPlatform: 'github',
+            host: 'phish.invalid',
+            url: 'https://phish.invalid/xchain-wallet',
+        }]);
+    });
+
+    it('keeps service branding when the destination host matches', async () => {
+        const { tisToMediaBundle } = await import('../../../packages/core/src/flows/tokenInfo.js');
+        const bundle = tisToMediaBundle({
+            social: [{ type: 'github', data: 'https://github.com/XChain-Platform' }],
+        });
+
+        expect(bundle.socials[0]).toMatchObject({
+            platform: 'github',
+            claimedPlatform: 'github',
+            host: 'github.com',
+        });
     });
 });

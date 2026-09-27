@@ -46,6 +46,7 @@ import {
     REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     expectConfirmModal,
+    explorerJson,
     fundAddress,
     healVenueClock,
     selectVenueChain,
@@ -82,8 +83,16 @@ async function gotoPalette(page, title) {
  * "From address" the same way Send does (active address, else newest HD
  * external), which for a wallet that has never touched a second address is
  * necessarily this one.
+ *
+ * `utxos` is how many separate funding outputs the address gets. The
+ * Parallel composer needs one per row: each row is its own transaction
+ * built straight after the previous one, and the encoder will not spend a
+ * change output that has not confirmed yet (it reserves the input row 1
+ * used and refuses row 2 with "all 1 candidate input(s) are reserved").
+ * A user with one coin sees the same refusal and retries the row once the
+ * change confirms; this spec gives each row its own coin instead.
  */
-async function onboardFundedWallet(page, walletName) {
+async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
@@ -94,11 +103,19 @@ async function onboardFundedWallet(page, walletName) {
     const address = await main.getByLabel('From').inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
 
-    await fundAddress(address, FUNDING);
+    for (let i = 0; i < utxos; i += 1) await fundAddress(address, FUNDING);
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
     return address;
 }
+
+// The composers' fields are plain <label><span>Name</span><select>, and
+// getByLabel reads a wrapping label's WHOLE text, options included, so
+// "Chain" also matched the Action select once an option description said
+// "cross-chain" (a strict-mode failure on the first rail run). The
+// accessible name is just the span, so match on role plus exact name.
+const picker = (scope, name) => scope.getByRole('combobox', { name, exact: true });
+const paramsBox = (scope) => scope.getByRole('textbox', { name: 'Params (JSON object)', exact: true });
 
 /** Opens the catch-all Actions page ("More actions", off the pancake menu). */
 async function gotoMoreActions(page) {
@@ -124,7 +141,7 @@ async function gotoBatchComposer(page) {
     const menu = page.getByRole('main');
     await menu.getByRole('button', { name: /^Batch/ }).click();
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Chain'), 'the Batch composer never rendered').toBeVisible({ timeout: 30_000 });
+    await expect(picker(main, 'Chain'), 'the Batch composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
 }
 
@@ -133,7 +150,7 @@ async function gotoParallelComposer(page) {
     const menu = page.getByRole('main');
     await menu.getByRole('button', { name: /^Parallel cross-chain actions/ }).click();
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Chain'), 'the Parallel composer never rendered').toBeVisible({ timeout: 30_000 });
+    await expect(picker(main, 'Chain').first(), 'the Parallel composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;
 }
 
@@ -145,6 +162,25 @@ async function approveConfirm(page, what = 'this action') {
     const approve = page.getByTestId('confirm-approve');
     await expect(approve, 'Approve never became enabled on the confirm screen').toBeEnabled({ timeout: 120_000 });
     await approve.click();
+}
+
+/**
+ * Signs the Parallel composer's active row.
+ *
+ * SignCredentials asks for a password only while the vault is locked. A
+ * wallet this run just created and unlocked shows "Wallet unlocked. No
+ * password needed." with no field at all, so the field is filled when it
+ * is there and never required.
+ */
+async function signParallelRow(main) {
+    const sign = main.getByRole('button', { name: 'Sign', exact: true });
+    await expect(sign, 'the signing stage shows no Sign button').toBeVisible({ timeout: 15_000 });
+    const password = main.getByLabel('Password', { exact: true });
+    if (await password.count() > 0 && await password.isVisible() && !(await password.inputValue())) {
+        await password.fill(PASSWORD);
+    }
+    await expect(sign, 'Sign never became enabled for this row').toBeEnabled({ timeout: 30_000 });
+    await sign.click();
 }
 
 /** Reads the 64-hex-char transaction id printed on a form's done screen. */
@@ -217,18 +253,18 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('queue two BROADCASTs and sign them as one batch', async () => {
             const main = await gotoBatchComposer(page);
-            await main.getByLabel('Chain').selectOption(REGTEST_CHAIN_ID);
-            expect(await main.getByLabel('From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
+            await picker(main, 'Chain').selectOption(REGTEST_CHAIN_ID);
+            expect(await picker(main, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'the batch composer defaulted to a different address than the one this run funded')
                 .toBe(owner);
 
-            await main.getByLabel('Action').nth(0).selectOption('BROADCAST');
-            await main.getByLabel('Params (JSON object)').nth(0)
+            await picker(main, 'Action').nth(0).selectOption('BROADCAST');
+            await paramsBox(main).nth(0)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgOne }));
 
             await main.getByRole('button', { name: '+ Add action', exact: true }).click();
-            await main.getByLabel('Action').nth(1).selectOption('BROADCAST');
-            await main.getByLabel('Params (JSON object)').nth(1)
+            await picker(main, 'Action').nth(1).selectOption('BROADCAST');
+            await paramsBox(main).nth(1)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgTwo }));
 
             await main.getByRole('button', { name: 'Review', exact: true }).click();
@@ -246,17 +282,32 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 180_000 });
             const txid = await readDoneTxid(page);
 
-            const action = await waitForValidAction(txid);
-            expect(action.action, 'the two BROADCASTs did not ride as one BATCH action').toBe('BATCH');
-            expect(action.source, 'the batch was not signed by the funded address').toBe(owner);
+            // Waits until the transaction is indexed; every action it produced
+            // is then read off the transaction endpoint below.
+            await waitForValidAction(txid);
 
-            // Independent of the wallet's own "Batch broadcast" screen: the
-            // chain's own wire content for the action, which is what proves
-            // BOTH sub-commands actually rode inside the one signed tx rather
-            // than only the first (or only the last) surviving compose.
-            const wire = String(action.tx_data ?? action.TX_DATA ?? '');
+            // The indexer records a BATCH as its own action plus one action
+            // per sub-command, all sharing the one tx_hash, so the newest row
+            // for this txid is the LAST sub-command, not the BATCH. Reading
+            // the whole transaction is what proves both sub-commands landed
+            // from one signed tx, each with its own verdict.
+            const tx = await explorerJson(`transaction/${txid}/tx_hash`);
+            expect(tx.source, 'the batch was not signed by the funded address').toBe(owner);
+            const wire = String(tx.tx_data ?? '');
+            expect(wire.startsWith('BATCH|'), `the transaction is not a BATCH on the wire: ${wire}`).toBe(true);
             expect(wire, `the on-chain BATCH command carries no trace of "${msgOne}"`).toContain(msgOne);
             expect(wire, `the on-chain BATCH command carries no trace of "${msgTwo}"`).toContain(msgTwo);
+
+            const actions = Array.isArray(tx.actions) ? tx.actions : [];
+            const batchRow = actions.find((a) => a.action === 'BATCH');
+            expect(batchRow, `no BATCH action recorded for ${txid}: ${JSON.stringify(actions)}`).toBeTruthy();
+            expect(batchRow.status, 'the chain rejected the BATCH itself').toBe('valid');
+            const broadcasts = actions.filter((a) => a.action === 'BROADCAST');
+            expect(broadcasts.map((a) => a.status), 'both BROADCAST sub-actions must be recorded valid')
+                .toEqual(['valid', 'valid']);
+            expect(broadcasts.map((a) => a.details?.message).sort(),
+                'the recorded BROADCAST messages do not match what was typed')
+                .toEqual([msgOne, msgTwo].sort());
         });
     });
 
@@ -267,26 +318,26 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
         let owner;
 
         await test.step('onboard and fund the venue chain', async () => {
-            owner = await onboardFundedWallet(page, 'Parallel Composer Wallet');
+            owner = await onboardFundedWallet(page, 'Parallel Composer Wallet', { utxos: 2 });
         });
 
         await test.step('queue two independent BROADCASTs and sign them one at a time', async () => {
             const main = await gotoParallelComposer(page);
-            await main.getByLabel('Chain').nth(0).selectOption(REGTEST_CHAIN_ID);
-            expect(await main.getByLabel('From address').nth(0).evaluate((el) => el.options[el.selectedIndex]?.text || ''),
+            await picker(main, 'Chain').nth(0).selectOption(REGTEST_CHAIN_ID);
+            expect(await picker(main, 'From address').nth(0).evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 1 defaulted to a different address than the one this run funded')
                 .toBe(owner);
-            await main.getByLabel('Action').nth(0).selectOption('BROADCAST');
-            await main.getByLabel('Params (JSON object)').nth(0)
+            await picker(main, 'Action').nth(0).selectOption('BROADCAST');
+            await paramsBox(main).nth(0)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgOne }));
 
             await main.getByRole('button', { name: '+ Add action', exact: true }).click();
-            await main.getByLabel('Chain').nth(1).selectOption(REGTEST_CHAIN_ID);
-            expect(await main.getByLabel('From address').nth(1).evaluate((el) => el.options[el.selectedIndex]?.text || ''),
+            await picker(main, 'Chain').nth(1).selectOption(REGTEST_CHAIN_ID);
+            expect(await picker(main, 'From address').nth(1).evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 2 defaulted to a different address than the one this run funded')
                 .toBe(owner);
-            await main.getByLabel('Action').nth(1).selectOption('BROADCAST');
-            await main.getByLabel('Params (JSON object)').nth(1)
+            await picker(main, 'Action').nth(1).selectOption('BROADCAST');
+            await paramsBox(main).nth(1)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgTwo }));
 
             await main.getByRole('button', { name: 'Review', exact: true }).click();
@@ -296,23 +347,15 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByText('Signing action 1 of 2'),
                 'the composer never entered the sequential signing stage')
                 .toBeVisible({ timeout: 30_000 });
-            const password = main.getByLabel('Password', { exact: true });
-            await expect(password, 'the signing stage never asked for a password').toBeVisible({ timeout: 15_000 });
-            await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Sign', exact: true }).click();
-
-            // No confirm modal here (§42.8.2: ParallelComposer signs each row
-            // directly, with no ActionConfirmScreen), so the FIRST broadcast
-            // this test's own network listener sees is row 1's.
+            await signParallelRow(main);
+            await approveConfirm(page, 'parallel row 1');
             const txidOne = await settledTxid(txids, 0);
 
             await expect(main.getByText('Signing action 2 of 2'),
                 'row 1 did not succeed and advance to row 2')
                 .toBeVisible({ timeout: 60_000 });
-            // The password field is the same component instance carrying the
-            // same state across rows; only refill it if the transition reset it.
-            if (!(await password.inputValue())) await password.fill(PASSWORD);
-            await main.getByRole('button', { name: 'Sign', exact: true }).click();
+            await signParallelRow(main);
+            await approveConfirm(page, 'parallel row 2');
 
             const txidTwo = await settledTxid(txids, 1);
 

@@ -16,7 +16,7 @@
 // so the wallet has to tolerate both wire formats.
 
 import { describe, it, expect } from 'vitest';
-import { normalizeTokenRow } from '../../../packages/core/src/flows/listOwnedTokens.js';
+import { listOwnedTokens, normalizeTokenRow } from '../../../packages/core/src/flows/listOwnedTokens.js';
 import { normalizeGenesisRow } from '../../../packages/core/src/shared/routes/ManageToken.jsx';
 
 describe('normalizeTokenRow', () => {
@@ -102,6 +102,41 @@ describe('normalizeTokenRow', () => {
     it('keyed shape: aggregate `locked` boolean still wins', () => {
         const row = normalizeTokenRow({ tick: 'A', locked: true });
         expect(row.locked).toBe(true);
+    });
+});
+
+describe('listOwnedTokens', () => {
+    it('hydrates descriptions from the token detail response', async () => {
+        const sdk = {
+            getTokens: async () => ({
+                total: 1,
+                data: [{
+                    tick: 'MYTOKEN',
+                    supply: '100',
+                    max_supply: '1000',
+                    decimals: 0,
+                }],
+            }),
+            getBalances: async () => ({
+                data: [{ tick: 'MYTOKEN', amount: '25' }],
+            }),
+            getDispensers: async () => ({ data: [] }),
+            getToken: async () => ({
+                info: {
+                    tick: 'MYTOKEN',
+                    description: 'A production-shaped token description.',
+                },
+            }),
+        };
+
+        const rows = await listOwnedTokens({
+            sdkRegistry: { get: () => sdk },
+            chainId: 'bitcoin-regtest',
+            address: 'bcrt1qowner',
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].description).toBe('A production-shaped token description.');
     });
 });
 

@@ -697,9 +697,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick || !value.trim() || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {isWatcherMode ? 'Preview' : 'Publish price'}
+                    {actionConfirm.composing ? 'Preparing review…' : isWatcherMode ? 'Preview' : 'Publish price'}
                 </Button>
             </div>
         </form>,
@@ -773,16 +773,16 @@ function OraclePublishNotes({
                         {pairConsumers.length === 1 ? 's' : ''} {tick} from this oracle and will sell at the
                         new price once it takes effect:
                     </p>
-                    <ul>
-                        {pairConsumers.slice(0, 5).map((d) => (
-                            <li key={d.action_index} className={styles.hint}>
-                                <AddressText address={d.address || d.source} /> · {d.give_amount} {tick} per dispense
-                            </li>
-                        ))}
-                    </ul>
-                    {pairConsumers.length > 5 ? (
-                        <p className={styles.hint}>and {pairConsumers.length - 5} more.</p>
-                    ) : null}
+                    <details>
+                        <summary>Affected dispensers ({pairConsumers.length})</summary>
+                        <ul>
+                            {pairConsumers.map((d) => (
+                                <li key={d.action_index} className={styles.hint}>
+                                    <AddressText address={d.address || d.source} /> · {d.give_amount} {tick} per dispense
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
                 </div>
             ) : (
                 <p className={styles.hint}>No open dispensers price {tick} from this oracle right now.</p>

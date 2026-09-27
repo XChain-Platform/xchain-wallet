@@ -805,9 +805,9 @@ export function CreateBetFeedForm({
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    Review market
+                    {actionConfirm.composing ? 'Preparing review…' : 'Review market'}
                 </Button>
             </div>
             <p className={styles.hint}>

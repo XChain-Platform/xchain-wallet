@@ -23,7 +23,7 @@
 // rather than the callers that reach it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
@@ -59,7 +59,7 @@ const ADDRESSES = {
 
 const POSITION_PUBKEY = '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9';
 
-function mountForm(props = {}) {
+function mountForm(props = {}, messagingExtra = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         // Shaped like the real host's getActiveAddresses(): a map of chainId
@@ -73,6 +73,7 @@ function mountForm(props = {}) {
         }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        ...messagingExtra,
     };
     // Anything else the form's hooks reach for (native-fee quotes, staked
     // balance lookups) answers empty rather than throwing: this suite is
@@ -136,5 +137,72 @@ describe('ContractStakeForm seeds from the position that opened it', () => {
         // No initialFromAddress: the ordinary active-address default wins.
         const fromField = await screen.findByLabelText('From');
         expect(fromField.value).toBe(ACTIVE_ADDRESS);
+    });
+});
+
+describe('ContractStakeForm unstake availability', () => {
+    it('bounds unstake by tip-effective contract positions only', async () => {
+        mountForm({
+            initialMode: 'unstake',
+            initialTick: 'PEPECASH',
+            initialSigningPubkey: POSITION_PUBKEY,
+            initialFromAddress: POSITION_ADDRESS,
+        }, {
+            getContractStakesForAddress: vi.fn().mockResolvedValue([
+                {
+                    target_contract_index: CONTRACT_INDEX,
+                    tick: 'PEPECASH',
+                    signing_pubkey: POSITION_PUBKEY,
+                    amount: '100',
+                    status: 'valid',
+                    activation_block: 1,
+                    deactivation_block: 90,
+                },
+                {
+                    target_contract_index: CONTRACT_INDEX,
+                    tick: 'PEPECASH',
+                    signing_pubkey: POSITION_PUBKEY,
+                    amount: '7',
+                    status: 'valid',
+                    activation_block: 95,
+                    deactivation_block: null,
+                },
+            ]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        });
+
+        expect(await screen.findByText('7 PEPECASH staked')).toBeInTheDocument();
+    });
+});
+
+describe('ContractStakeForm exact partial unstake', () => {
+    it('keeps a one-atomic-unit-smaller unstake partial', async () => {
+        const signingPubkey = 'a'.repeat(64);
+        const composeForConfirm = vi.fn(() => new Promise(() => {}));
+        mountForm({
+            initialMode: 'unstake',
+            initialTick: 'PEPECASH',
+            initialSigningPubkey: signingPubkey,
+            initialFromAddress: POSITION_ADDRESS,
+        }, {
+            getContractStakesForAddress: vi.fn().mockResolvedValue([{
+                target_contract_index: CONTRACT_INDEX,
+                tick: 'PEPECASH',
+                signing_pubkey: signingPubkey,
+                amount: '90071992.54740902',
+            }]),
+            composeForConfirm,
+        });
+
+        expect(await screen.findByText('90,071,992.54740902 PEPECASH staked'))
+            .toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/^Amount/), {
+            target: { value: '90071992.54740901' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(composeForConfirm.mock.calls[0][0].actionData.params.AMOUNT)
+            .toBe('90071992.54740901');
     });
 });

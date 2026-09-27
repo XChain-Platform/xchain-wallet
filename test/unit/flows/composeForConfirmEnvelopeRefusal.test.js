@@ -148,7 +148,8 @@ function submitHarness(prebuiltPsbt) {
         kind: 'software',
         signPsbt: vi.fn(async ({ psbtHex, envelopeReveal }) => {
             trace.push({ step: envelopeReveal ? 'signReveal' : 'signCommit', psbtHex });
-            return { txHex: `TX(${psbtHex})`, txid: `txid-${psbtHex}` };
+            // The commit's real txid is the one the recovery record names.
+            return { txHex: `TX(${psbtHex})`, txid: psbtHex === 'COMMIT' ? ENVELOPE.commitTxid : `txid-${psbtHex}` };
         }),
     };
     return {
@@ -210,10 +211,26 @@ describe('submitWithSigner prebuilt branch carries a TAPROOT envelope', () => {
         });
         h.signer.signPsbt.mockImplementation(async ({ envelopeReveal }) => {
             if (envelopeReveal) throw new Error('this signer cannot sign a script path');
-            return { txHex: 'TX(COMMIT)', txid: 'txid-COMMIT' };
+            return { txHex: 'TX(COMMIT)', txid: ENVELOPE.commitTxid };
         });
         await expect(submitWithSigner(h.args)).rejects.toThrow(/script path/);
         expect(h.broadcastTx).not.toHaveBeenCalled();
+    });
+
+    it('broadcasts nothing when the signed commit is not the one the reveal spends', async () => {
+        const h = submitHarness({
+            psbtHex: 'COMMIT', encoding: 'TAPROOT', actionString: 'FILE|0|a.png',
+            revealPsbt: 'REVEAL', envelope: { ...ENVELOPE },
+        });
+        h.signer.signPsbt.mockImplementation(async ({ psbtHex }) => ({ txHex: `TX(${psbtHex})`, txid: 'dd'.repeat(32) }));
+        const err = await submitWithSigner(h.args).catch((e) => e);
+        expect(err).toBeInstanceOf(EnvelopeConfirmLaneError);
+        expect(err.commitMismatch).toBe(true);
+        expect(isWatcherChunkLane({ name: err.name, message: err.message })).toBe(true);
+        // Only the commit was signed; the reveal never was, and nothing went out.
+        expect(h.signer.signPsbt).toHaveBeenCalledTimes(1);
+        expect(h.broadcastTx).not.toHaveBeenCalled();
+        expect(listPendingCommits()).toHaveLength(0);
     });
 
     it('refuses before signing when the prebuilt commit lost its reveal', async () => {

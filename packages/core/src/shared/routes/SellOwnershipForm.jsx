@@ -292,7 +292,10 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     // happens only after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
-        if (!fromAddress || !chainId) return;
+        if (!fromAddress || !chainId) {
+            setFormError('Pick a source address first.');
+            return;
+        }
         if (validationError) return;
         if (!priceReady || !getTickReady) {
             setFormError(`Enter what you want in return and a price greater than 0.`);
@@ -690,10 +693,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!!validationError || !fromAddress || !priceReady || !getTickReady
-                        || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'List name for sale' : 'Review'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? 'List name for sale' : 'Review')}
                 </Button>
             </div>
         </form>,

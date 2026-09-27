@@ -12,12 +12,17 @@
 //
 // Shares the `getMarketHistory` fetch with the chart, but renders the
 // match rows directly instead of bucketing. Each row = one filled
-// order match; side is inferred from the match orientation vs the
-// (tick1, tick2) the view is looking at.
+// order match; the explorer projects its pair-relative side as `type`.
+// Raw give/get rows retain orientation support for older explorers.
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
+import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import {
+    compareDecimalStrings,
+    roundDecimalString,
+} from '../utils/amountFormat.js';
 
 const MAX_ROWS = 30;
 
@@ -146,59 +151,30 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
 }
 
 function summarizeRow(row, tick1, tick2) {
-    if (!row || typeof row !== 'object') return null;
-    const giveTick = row.give_tick || row.giveTick;
-    const getTick = row.get_tick || row.getTick;
-    if (!giveTick || !getTick) return null;
-    const giveAmt = Number(row.give_amount ?? row.giveAmount);
-    const getAmt = Number(row.get_amount ?? row.getAmount);
-    if (!Number.isFinite(giveAmt) || giveAmt <= 0) return null;
-    if (!Number.isFinite(getAmt) || getAmt <= 0) return null;
-    let price; let size; let side;
-    if (giveTick === tick1 && getTick === tick2) {
-        price = getAmt / giveAmt;
-        size = giveAmt;
-        side = 'sell';
-    } else if (giveTick === tick2 && getTick === tick1) {
-        price = giveAmt / getAmt;
-        size = getAmt;
-        side = 'buy';
-    } else {
-        return null;
-    }
-    const ts = parseTimestamp(row);
+    const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
+    if (!parsed) return null;
     return {
-        price: formatPrice(price),
-        size: formatSize(size),
-        side,
-        timeLabel: ts ? formatTime(ts) : 'N/A',
+        price: formatPrice(parsed.price),
+        size: formatSize(parsed.amount),
+        side: parsed.side,
+        timeLabel: formatTime(parsed.timestamp),
         counterparty: row.destination || row.give_address || row.get_address || null,
     };
 }
 
 function formatPrice(n) {
-    if (!Number.isFinite(n)) return 'N/A';
-    if (n === 0) return '0';
-    if (n >= 1) return n.toFixed(4);
-    if (n >= 0.01) return n.toFixed(6);
-    return n.toFixed(8);
+    if (compareDecimalStrings(n, '0') === null) return 'N/A';
+    if (compareDecimalStrings(n, '0') === 0) return '0';
+    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
+    if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
+    return roundDecimalString(n, 8);
 }
 
 function formatSize(n) {
-    if (!Number.isFinite(n)) return 'N/A';
-    if (Number.isInteger(n)) return String(n);
-    if (n >= 1) return n.toFixed(2);
-    return n.toFixed(4);
-}
-
-function parseTimestamp(row) {
-    if (Number.isFinite(Number(row.timestamp))) return Number(row.timestamp);
-    if (Number.isFinite(Number(row.block_time))) return Number(row.block_time);
-    if (row.created_at) {
-        const ms = Date.parse(row.created_at);
-        if (Number.isFinite(ms)) return Math.floor(ms / 1000);
-    }
-    return null;
+    if (compareDecimalStrings(n, '0') === null) return 'N/A';
+    if (!String(n).includes('.')) return String(n);
+    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 2);
+    return roundDecimalString(n, 4);
 }
 
 function formatTime(unixSeconds) {

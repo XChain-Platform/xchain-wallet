@@ -70,7 +70,10 @@ function harness({ byChain = { [CHAIN]: [SOFTWARE] }, dropReveal = false } = {})
     const trace = [];
     const chainRegistry = defaultRegistry();
     const createTx = vi.fn(async (opts) => {
-        const envelope = opts.encoding === 'AUTO' && opts.options?.signerSupportsTapscript === true;
+        // As xchain-encoder decides: AUTO reaches the envelope only with the signer's
+        // capability asserted AND a compressed internal key, else it falls to P2WSH.
+        const envelope = opts.encoding === 'AUTO' && opts.options?.signerSupportsTapscript === true
+            && /^(02|03)[0-9a-f]{64}$/.test(opts.compressedPubKey ?? '');
         return envelope
             ? { psbt: COMMIT_PSBT, encoding: 'TAPROOT', revealPsbt: REVEAL_PSBT, carrierScripts: ['00'], envelope: { ...ENVELOPE } }
             : { psbt: '70736274ff03', encoding: 'P2WSH', carrierScripts: [] };
@@ -92,7 +95,7 @@ function harness({ byChain = { [CHAIN]: [SOFTWARE] }, dropReveal = false } = {})
         trace.push({ step: envelopeReveal ? 'signReveal' : 'signCommit', psbtHex });
         return envelopeReveal
             ? { txHex: `REVEALHEX(${psbtHex})`, txid: 'REVEALTXID' }
-            : { txHex: `COMMITHEX(${psbtHex})`, txid: 'COMMITTXID' };
+            : { txHex: `COMMITHEX(${psbtHex})`, txid: ENVELOPE.commitTxid };
     });
     // Everything crossing the host boundary is serialized, as it is in every shell.
     const wire = (v) => JSON.parse(JSON.stringify(v));
@@ -113,6 +116,8 @@ function harness({ byChain = { [CHAIN]: [SOFTWARE] }, dropReveal = false } = {})
                 actionData: req.actionData,
                 encoderOpts: { pubkey: req.from.publicKey, ...(req.encoderOpts || {}) },
                 source: req.from.address,
+                // The host hands over the spending record the same way.
+                signer: req.from,
             });
             const envelope = wire(composed);
             if (dropReveal) { envelope.revealPsbt = null; envelope.envelope = null; }
@@ -192,6 +197,9 @@ describe('a public file above the legacy cap publishes as a Taproot envelope thr
         expect(FILE_BYTES).toBeGreaterThan(MAX_COMPILED_ACTION_BYTES);
         // Built once, at compose; Approve rebuilds nothing.
         expect(h.createTx).toHaveBeenCalledTimes(1);
+        // The encoder is handed the spender's key as the envelope internal key;
+        // without it AUTO lands on P2WSH and refuses anything over 8 KB.
+        expect(h.createTx.mock.calls[0][0].compressedPubKey).toBe(SOFTWARE.publicKey);
 
         const submitted = h.calls.find((c) => c.method === 'fileAction').req.prebuiltPsbt;
         expect(submitted).toMatchObject({

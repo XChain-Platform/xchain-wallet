@@ -142,6 +142,7 @@ export { fileAction, fileActionParams } from './fileAction.js';
 export {
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
 } from './gatedPublishAction.js';
 export {
@@ -191,10 +192,13 @@ export {
     gateMinAmountScheduledHeight,
     isGateMinAmountActive,
     resolveGateMinAmountActive,
+    LIST_EDIT_REMOVE_ACTIVATION_HEIGHTS,
+    isListEditRemoveActive,
 } from './protocolActivations.js';
 export {
     messageAction,
     buildMessageParams,
+    buildHandshakeActionData,
     handshakeAction,
     getRecipientPubkey,
     PubkeyNotFoundError,
@@ -535,6 +539,8 @@ export { dryRunRestore, DEFAULT_DRY_RUN_GAP } from './dryRunRestore.js';
 export {
     buildLabelSyncPayload,
     applyLabelSyncPayload,
+    prepareLabelsPublication,
+    submitLabelsPublication,
     publishLabelsNow,
     fetchAndDecryptLabelSync,
     restoreLabelSyncAfterImport,

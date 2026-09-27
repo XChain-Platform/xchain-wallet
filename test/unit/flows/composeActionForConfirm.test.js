@@ -148,6 +148,30 @@ describe('composeActionForConfirm', () => {
         expect(ctx.chainId).toBe('btc');
     });
 
+    it('describes zero list edits as removals on the signing review', async () => {
+        const h = makeHarness({ inputs: [{ value: 5000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'ORDER',
+            version: 2,
+            params: { ORDER_ACTION_INDEX: '42', ALLOW_LIST: '0', BLOCK_LIST: '0' },
+        }));
+        h.sdk.decoder.describe = vi.fn(() => ({
+            summary: 'Edit order #42',
+            details: [
+                { label: 'Allow list', value: '0' },
+                { label: 'Block list', value: '0' },
+            ],
+            warnings: [],
+        }));
+
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.decoded.details).toEqual([
+            { label: 'Allow list', value: 'Remove allow list' },
+            { label: 'Block list', value: 'Remove block list' },
+        ]);
+    });
+
     it('leaves the intent null when the composed action cannot be described', async () => {
         // Null, so the caller's own `decoded` still renders: a confirm page
         // with no intent line is worse than one described from the params that

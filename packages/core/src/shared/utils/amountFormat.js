@@ -90,6 +90,126 @@ export function sumDecimalStrings(values) {
     return `${negative ? '-' : ''}${int}.${frac}`;
 }
 
+// Parse money values as scaled integers so arithmetic never crosses the
+// binary floating-point boundary.
+function parseDecimal(value) {
+    if (value === null || value === undefined) return null;
+    const raw = String(value).trim();
+    const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
+    if (!match) return null;
+    const frac = match[3] || '';
+    const magnitude = BigInt(`${match[2]}${frac}`);
+    return {
+        units: match[1] === '-' ? -magnitude : magnitude,
+        scale: frac.length,
+    };
+}
+
+function renderDecimal(units, scale, trim = true) {
+    const negative = units < 0n;
+    const abs = (negative ? -units : units).toString().padStart(scale + 1, '0');
+    if (scale === 0) return `${negative ? '-' : ''}${abs}`;
+    const whole = abs.slice(0, -scale);
+    const rawFraction = abs.slice(-scale);
+    const fraction = trim ? rawFraction.replace(/0+$/, '') : rawFraction;
+    return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
+}
+
+function rescaleDecimal(parsed, scale) {
+    return parsed.units * (10n ** BigInt(scale - parsed.scale));
+}
+
+/** Compare two plain decimal values exactly. */
+export function compareDecimalStrings(a, b) {
+    const left = parseDecimal(a);
+    const right = parseDecimal(b);
+    if (!left || !right) return null;
+    const scale = Math.max(left.scale, right.scale);
+    const leftUnits = rescaleDecimal(left, scale);
+    const rightUnits = rescaleDecimal(right, scale);
+    if (leftUnits === rightUnits) return 0;
+    return leftUnits < rightUnits ? -1 : 1;
+}
+
+/** Multiply two plain decimal values exactly. */
+export function multiplyDecimalStrings(a, b) {
+    const left = parseDecimal(a);
+    const right = parseDecimal(b);
+    if (!left || !right) return null;
+    return renderDecimal(left.units * right.units, left.scale + right.scale);
+}
+
+/** Subtract two plain decimal values exactly. */
+export function subtractDecimalStrings(a, b) {
+    const left = parseDecimal(a);
+    const right = parseDecimal(b);
+    if (!left || !right) return null;
+    const scale = Math.max(left.scale, right.scale);
+    return renderDecimal(
+        rescaleDecimal(left, scale) - rescaleDecimal(right, scale),
+        scale,
+    );
+}
+
+/** Divide two decimal values and round half up to the requested precision. */
+export function divideDecimalStrings(a, b, precision = 8) {
+    const numerator = parseDecimal(a);
+    const denominator = parseDecimal(b);
+    if (!numerator || !denominator || denominator.units === 0n) return null;
+    if (!Number.isInteger(precision) || precision < 0 || precision > 100) return null;
+    const negative = (numerator.units < 0n) !== (denominator.units < 0n);
+    const left = (numerator.units < 0n ? -numerator.units : numerator.units)
+        * (10n ** BigInt(denominator.scale + precision));
+    const right = (denominator.units < 0n ? -denominator.units : denominator.units)
+        * (10n ** BigInt(numerator.scale));
+    let quotient = left / right;
+    const remainder = left % right;
+    if (remainder * 2n >= right) quotient += 1n;
+    return renderDecimal(negative ? -quotient : quotient, precision);
+}
+
+/** Return floor(a / b) for non-negative decimal amounts. */
+export function decimalQuotientFloor(a, b) {
+    const numerator = parseDecimal(a);
+    const denominator = parseDecimal(b);
+    if (!numerator || !denominator || numerator.units < 0n || denominator.units <= 0n) return null;
+    const left = numerator.units * (10n ** BigInt(denominator.scale));
+    const right = denominator.units * (10n ** BigInt(numerator.scale));
+    return String(left / right);
+}
+
+/** Convert a non-negative decimal amount to exact base units. */
+export function decimalToBaseUnits(value, decimals = 8) {
+    const parsed = parseDecimal(value);
+    if (!parsed || parsed.units < 0n || parsed.scale > decimals) return null;
+    return parsed.units * (10n ** BigInt(decimals - parsed.scale));
+}
+
+/** Convert an integer quantity and divisibility into a decimal amount. */
+export function decimalFromBaseUnits(value, decimals = 8) {
+    try {
+        return renderDecimal(BigInt(String(value)), decimals);
+    } catch {
+        return null;
+    }
+}
+
+/** Round a decimal half up while retaining the requested trailing places. */
+export function roundDecimalString(value, precision = 2) {
+    const parsed = parseDecimal(value);
+    if (!parsed || !Number.isInteger(precision) || precision < 0) return null;
+    if (parsed.scale <= precision) {
+        const units = parsed.units * (10n ** BigInt(precision - parsed.scale));
+        return renderDecimal(units, precision, false);
+    }
+    const negative = parsed.units < 0n;
+    const magnitude = negative ? -parsed.units : parsed.units;
+    const divisor = 10n ** BigInt(parsed.scale - precision);
+    let rounded = magnitude / divisor;
+    if ((magnitude % divisor) * 2n >= divisor) rounded += 1n;
+    return renderDecimal(negative ? -rounded : rounded, precision, false);
+}
+
 // Count non-comma characters before `cursorPos`, used to map cursor
 // position across a reformat.
 export function countNonCommaBefore(value, cursorPos) {

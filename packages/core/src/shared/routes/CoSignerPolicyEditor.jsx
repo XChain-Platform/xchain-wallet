@@ -65,6 +65,10 @@ function parseActions(text) {
     return out;
 }
 
+function tickerPolicyKey(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
 /**
  * Rebuild an editor draft from a stored CoSignerAccount, so the edit screen
  * pre-fills exactly what provisioning stored (round-trips through
@@ -139,13 +143,13 @@ export function buildPolicyDraft(draft) {
     let maxPerAction = null;
     for (const row of draft.maxPerAction) {
         const action = String(row.action || '').trim().toUpperCase();
-        const tick = String(row.tick || '').trim() || '*';
+        const tick = tickerPolicyKey(row.tick) || '*';
         const cap = String(row.cap || '').trim();
         if (!action && !cap) continue;
         if (!action) return { error: 'A per-action limit is missing its action name.' };
         if (!cap) return { error: `Per-action limit for ${action} is missing an amount.` };
-        maxPerAction = maxPerAction || {};
-        maxPerAction[action] = maxPerAction[action] || {};
+        maxPerAction = maxPerAction || Object.create(null);
+        maxPerAction[action] = maxPerAction[action] || Object.create(null);
         maxPerAction[action][tick] = cap;
     }
 
@@ -165,11 +169,11 @@ export function buildPolicyDraft(draft) {
         }
         let perTick = null;
         for (const row of draft.windowPerTick) {
-            const tick = String(row.tick || '').trim();
+            const tick = tickerPolicyKey(row.tick);
             const cap = String(row.cap || '').trim();
             if (!tick && !cap) continue;
             if (!tick || !cap) return { error: 'A rolling per-token limit row is incomplete.' };
-            perTick = perTick || {};
+            perTick = perTick || Object.create(null);
             perTick[tick] = cap;
         }
         if (perTick) maxPerWindow.perTick = perTick;
@@ -179,11 +183,11 @@ export function buildPolicyDraft(draft) {
     let confirmAbove = null;
     let confirmPerTick = null;
     for (const row of draft.confirmAbove) {
-        const tick = String(row.tick || '').trim();
+        const tick = tickerPolicyKey(row.tick);
         const amount = String(row.amount || '').trim();
         if (!tick && !amount) continue;
         if (!tick || !amount) return { error: 'A confirmation-threshold row is incomplete.' };
-        confirmPerTick = confirmPerTick || {};
+        confirmPerTick = confirmPerTick || Object.create(null);
         confirmPerTick[tick] = amount;
     }
     if (confirmPerTick) confirmAbove = { perTick: confirmPerTick };

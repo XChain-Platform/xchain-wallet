@@ -30,6 +30,8 @@
 //      matures. So "my current price" is the newest row whose effective_at
 //      has passed, and a pending row is visible but inert.
 
+import { isOpenDispenserSelling } from '../shared/utils/dispenserPricing.js';
+
 // Seconds between a PRICE v1 publish and the moment it can price anything.
 // Frozen protocol behavior, not a wallet preference: the hub applies it
 // unconditionally, so the wallet only ever displays it.
@@ -200,7 +202,7 @@ export async function oracleConsumers({ sdkRegistry, chainId, address }) {
     if (typeof sdk.getDispensers !== 'function') return { supported: false, dispensers: [] };
     try {
         const resp = await sdk.getDispensers(String(address), 'oracle');
-        const open = rowsOf(resp).filter((r) => String(r.status || 'valid') === 'valid');
+        const open = rowsOf(resp).filter(isOpenDispenserSelling);
         return { supported: true, dispensers: open };
     } catch {
         return { supported: false, dispensers: [] };

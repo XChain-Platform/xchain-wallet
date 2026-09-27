@@ -391,11 +391,36 @@ async function probePrice() {
     return priceVerdict(body);
 }
 
-/** How long to let the indexer finish a block before probing it anyway. */
-const INDEXER_CATCHUP_BUDGET_MS = 150_000;
+/** Caps reads that depend on the indexer reaching the chain tip. */
+export const INDEX_WAIT_TIMEOUT_MS = 1_200_000;
+/** Spaces visible progress reports one minute apart during an index wait. */
+const INDEX_PROGRESS_INTERVAL_MS = 60_000;
 /** How many times to re-ask a BUSY quote engine, and how long between asks. */
 const BUSY_REPROBES = 20;
 const BUSY_REPROBE_MS = 5_000;
+
+/** Reports the indexer's current height against the chain height once per minute. */
+export function createIndexWaitProgress(waitingFor, {
+    coin = REGTEST_COIN,
+    fetchStatus = () => explorerJson('status'),
+    log = console.log,
+    now = Date.now,
+} = {}) {
+    let nextReportAt = now() + INDEX_PROGRESS_INTERVAL_MS;
+    return async () => {
+        const currentTime = now();
+        if (currentTime < nextReportAt) return;
+        nextReportAt = currentTime + INDEX_PROGRESS_INTERVAL_MS;
+
+        let status = null;
+        try {
+            status = await fetchStatus();
+        } catch { /* Keep the wait visible when status is temporarily unavailable. */ }
+        const indexed = status?.last_block?.[coin] ?? 'unknown';
+        const target = status?.chain_tip?.[coin] ?? 'unknown';
+        log(`[regtest ${coin}] waiting for ${waitingFor}: indexer height ${indexed} / target ${target}`);
+    };
+}
 
 /**
  * Waits until the indexer and decoder have caught up to the chain tip.
@@ -412,8 +437,9 @@ const BUSY_REPROBE_MS = 5_000;
  * one about waiting, and a status endpoint that has stopped answering must not
  * turn into a second, misleading failure mode.
  */
-async function waitForIndexedTip({ budgetMs = INDEXER_CATCHUP_BUDGET_MS } = {}) {
+async function waitForIndexedTip({ budgetMs = INDEX_WAIT_TIMEOUT_MS } = {}) {
     const deadline = Date.now() + budgetMs;
+    const reportProgress = createIndexWaitProgress('the indexer to reach the chain tip');
     while (Date.now() < deadline) {
         try {
             const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
@@ -427,6 +453,7 @@ async function waitForIndexedTip({ budgetMs = INDEXER_CATCHUP_BUDGET_MS } = {}) 
             // Status blip: keep waiting rather than reporting a venue failure
             // from a helper whose only job is to be patient.
         }
+        await reportProgress();
         await new Promise((r) => setTimeout(r, 2_000));
     }
     return false;
@@ -960,8 +987,9 @@ export async function assertNoActionRecorded(txid) {
  * while the action in question was sitting on chain, so the timeout message
  * now reports the lag rather than leaving the next reader to guess.
  */
-export async function waitForValidAction(txid, timeoutMs = 300_000) {
+export async function waitForValidAction(txid, timeoutMs = INDEX_WAIT_TIMEOUT_MS) {
     const deadline = Date.now() + timeoutMs;
+    const reportProgress = createIndexWaitProgress(`action ${txid}`);
     while (Date.now() < deadline) {
         // `nudgeChain`, never a bare `generate_blocks`: this loop ran for up to
         // five minutes mining on EVERY pass, which is the exact hazard
@@ -989,6 +1017,7 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
             }
             return detail;
         }
+        await reportProgress();
         await new Promise((r) => setTimeout(r, 2_000));
     }
     const status = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/status`, {
@@ -1004,6 +1033,52 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
 }
 
 /**
+ * Every action the explorer recorded under `txid`, oldest first, as full
+ * details, WITHOUT asserting any of them valid.
+ *
+ * A BATCH indexes as its parent row plus one row per leg, all under the one
+ * tx hash, and the actions list is newest-first, so `waitForValidAction`
+ * (which takes the first match) hands back the LAST leg, not the BATCH. A
+ * gated publish is BATCH(FILE, MESSAGE) and a guarded gated send is
+ * BATCH(SEND, MESSAGE), so asserting "this was a FILE" or "this was a BATCH"
+ * on that one row fails on a perfectly good transaction. Callers read every
+ * row here and assert on the one they mean; `actionStatuses` gives each
+ * row's verdicts.
+ *
+ * Retries a refused read until the deadline: the shared explorer answers an
+ * occasional DB_ERROR under load that clears on the next request.
+ *
+ * @param {string} txid
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<object[]>}
+ */
+export async function txActions(txid, { timeoutMs = INDEX_WAIT_TIMEOUT_MS } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastError = null;
+    const reportProgress = createIndexWaitProgress(`actions for transaction ${txid}`);
+    while (Date.now() < deadline) {
+        try {
+            const list = await explorerJson('actions?limit=100');
+            const rows = (list?.data || [])
+                .filter((r) => r.tx_hash === txid)
+                .sort((a, b) => Number(a.action_index) - Number(b.action_index));
+            if (rows.length > 0) {
+                const details = [];
+                for (const row of rows) details.push(await explorerJson(`action/${row.action_index}`));
+                return details;
+            }
+        } catch (err) {
+            lastError = err;
+        }
+        await nudgeChain();
+        await reportProgress();
+        await new Promise((r) => setTimeout(r, 2_000));
+    }
+    throw new Error(`No XChain action recorded for ${txid} within ${Math.round(timeoutMs / 1000)}s`
+        + (lastError ? ` (last read: ${lastError.message})` : ''));
+}
+
+/**
  * Every status an action detail exposes, across both shapes the explorer
  * uses.
  *
@@ -1014,7 +1089,7 @@ export async function waitForValidAction(txid, timeoutMs = 300_000) {
  * on finding nothing rather than returning an empty list - a caller looping
  * over zero statuses asserts nothing and passes.
  */
-function actionStatuses(detail) {
+export function actionStatuses(detail) {
     const statuses = [];
     if (typeof detail.status === 'string') statuses.push(detail.status);
     for (const leg of Array.isArray(detail.sends) ? detail.sends : []) {
@@ -1552,9 +1627,10 @@ export async function healVenueClock() {
  * timer turns every balance-dependent spec into an intermittent failure that
  * reads like a wallet bug.
  */
-export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_000) {
+export async function waitForTokenBalance(address, tick, min, timeoutMs = INDEX_WAIT_TIMEOUT_MS) {
     const deadline = Date.now() + timeoutMs;
     let last = null;
+    const reportProgress = createIndexWaitProgress(`${tick} balance for ${address}`);
     while (Date.now() < deadline) {
         try {
             // Same read as `tokenBalance`, and through the same guard: a poll
@@ -1571,6 +1647,7 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = 120_00
         // which cost this campaign a whole coverage row: the symptom is a
         // balance that never arrives, and the cause is the code asking for it.
         await nudgeChain();
+        await reportProgress();
         await new Promise((r) => setTimeout(r, 1_500));
     }
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);

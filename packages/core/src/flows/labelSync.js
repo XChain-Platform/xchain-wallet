@@ -54,6 +54,7 @@ import { counterwalletMnemonicToSeedBytes } from '../crypto/counterwallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { submitAction } from './submitAction.js';
 import { ENVELOPE_MAX_PAYLOAD } from './fileSizeLimits.js';
+import { activeSourceId } from '../shared/addressSelection.js';
 
 export const LABEL_SYNC_PAYLOAD_VERSION = 1;
 
@@ -287,8 +288,19 @@ export async function applyLabelSyncPayload({
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {(walletId: string, chainId: string) => Promise<import('../schemas/address.js').Address | null>} [pickFromAddress]   override how the source address for the FILE tx is selected; defaults to "newest external HD address on this (account, chain)"
+ * @property {{ id?: string, address?: string }} [activeEntry]   the chain's active address (addressSelection.js's `getActiveAddresses()[chainId]`); when it resolves to an eligible address it wins over the newest-HD default, same as Send
  * @property {number} [fee]
  * @property {number} [feePerKb]
+ */
+
+/**
+ * @typedef {Object} PublishLabelsPreparation
+ * @property {string} chainId
+ * @property {import('../schemas/address.js').Address} from
+ * @property {{ action: 'FILE', params: object }} actionData
+ * @property {object} encoderOpts
+ * @property {string} discoveryName
+ * @property {number} sizeBytes
  */
 
 /**
@@ -318,45 +330,36 @@ export class WifOnlyLabelSyncUnsupportedError extends Error {
 }
 
 /**
- * §19.5.2 manual publish: builds the encrypted labels payload from
- * the wallet's seed and broadcasts it as a FILE action on the chosen
- * chain. The from-address is the wallet's newest external HD address
- * on that chain (callers can override via `pickFromAddress`).
+ * Build the encrypted FILE payload and resolve the address that will fund it.
+ * Keeping this separate from submission lets the shared confirm flow compose,
+ * dry-run and display the exact payload before any signature is produced.
  *
- * This flow powers both the manual "Publish now" button and the
- * auto-sync path: `createLabelSyncScheduler` decides WHEN a publish is
- * due, the shell prompts for the password, and the write lands here.
- * `fetchAndDecryptLabelSync` reads the result back on restore. HW
- * wallets are not supported here because the commitment key is derived
- * from the seed, which only exists for software wallets.
- *
- * @param {PublishLabelsNowOpts} opts
- * @returns {Promise<PublishLabelsNowResult>}
+ * @param {Omit<PublishLabelsNowOpts, 'sdkRegistry'>} opts
+ * @returns {Promise<PublishLabelsPreparation>}
  */
-export async function publishLabelsNow({
+export async function prepareLabelsPublication({
     vault,
     walletId,
     password,
     bip39Passphrase = '',
     chainId,
     chainRegistry,
-    sdkRegistry,
     pickFromAddress,
+    activeEntry,
     fee,
     feePerKb,
 }) {
-    if (!vault) throw new Error('publishLabelsNow: vault is required');
+    if (!vault) throw new Error('prepareLabelsPublication: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
-        throw new Error('publishLabelsNow: walletId is required');
+        throw new Error('prepareLabelsPublication: walletId is required');
     }
     if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('publishLabelsNow: password is required');
+        throw new Error('prepareLabelsPublication: password is required');
     }
     if (typeof chainId !== 'string' || chainId.length === 0) {
-        throw new Error('publishLabelsNow: chainId is required');
+        throw new Error('prepareLabelsPublication: chainId is required');
     }
-    if (!chainRegistry) throw new Error('publishLabelsNow: chainRegistry is required');
-    if (!sdkRegistry) throw new Error('publishLabelsNow: sdkRegistry is required');
+    if (!chainRegistry) throw new Error('prepareLabelsPublication: chainRegistry is required');
 
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
@@ -367,13 +370,14 @@ export async function publishLabelsNow({
 
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) {
-        throw new Error(`publishLabelsNow: unknown chain "${chainId}"`);
+        throw new Error(`prepareLabelsPublication: unknown chain "${chainId}"`);
     }
 
-    // Source address: caller override, or newest external HD address.
+    // Source address: caller override, or the chain's active address
+    // falling back to newest external HD address.
     const fromAddress = pickFromAddress
         ? await pickFromAddress(walletId, chainId)
-        : await defaultPickFromAddress({ vault, walletId, descriptor });
+        : await defaultPickFromAddress({ vault, walletId, descriptor, activeEntry });
     if (!fromAddress) throw new NoFundedAddressError(walletId, chainId);
 
     const seed = await deriveLabelSyncSeed({ wallet, password, bip39Passphrase });
@@ -387,14 +391,9 @@ export async function publishLabelsNow({
 
     const { ciphertext, discoveryName } = payload;
     const sizeBytes = ciphertext.length;
-    const result = await submitAction({
-        vault,
-        walletId,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
+    return {
         chainId,
+        from: fromAddress,
         actionData: {
             action: 'FILE',
             params: {
@@ -426,9 +425,59 @@ export async function publishLabelsNow({
             ...(fee !== undefined && { fee }),
             ...(feePerKb !== undefined && { feePerKb }),
         },
-        signingPaths: [fromAddress.derivationPath
-            ? { inputIndex: 0, path: fromAddress.derivationPath }
-            : { inputIndex: 0, addressId: fromAddress.id }],
+        discoveryName,
+        sizeBytes,
+    };
+}
+
+/**
+ * Submit a prepared label payload, optionally signing the exact PSBT already
+ * shown by the shared confirm flow.
+ *
+ * @param {object} opts
+ * @param {import('../storage/Vault.js').Vault} opts.vault
+ * @param {string} opts.walletId
+ * @param {string} [opts.password]
+ * @param {any} [opts.signer]
+ * @param {string} [opts.bip39Passphrase]
+ * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
+ * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
+ * @param {PublishLabelsPreparation} opts.preparation
+ * @param {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [opts.prebuiltPsbt]
+ * @returns {Promise<PublishLabelsNowResult>}
+ */
+export async function submitLabelsPublication({
+    vault,
+    walletId,
+    password,
+    signer,
+    bip39Passphrase = '',
+    chainRegistry,
+    sdkRegistry,
+    preparation,
+    prebuiltPsbt,
+}) {
+    if (!preparation?.from || !preparation?.actionData || !preparation?.encoderOpts) {
+        throw new Error('submitLabelsPublication: preparation is required');
+    }
+    if (!sdkRegistry) throw new Error('submitLabelsPublication: sdkRegistry is required');
+
+    const { chainId, from, actionData, encoderOpts, discoveryName, sizeBytes } = preparation;
+    const result = await submitAction({
+        vault,
+        walletId,
+        password,
+        signer,
+        bip39Passphrase,
+        chainRegistry,
+        sdkRegistry,
+        chainId,
+        actionData,
+        encoderOpts: { pubkey: from.publicKey, ...encoderOpts },
+        signingPaths: [from.derivationPath
+            ? { inputIndex: 0, path: from.derivationPath }
+            : { inputIndex: 0, addressId: from.id }],
+        prebuiltPsbt,
     });
 
     return {
@@ -436,8 +485,31 @@ export async function publishLabelsNow({
         chainId,
         discoveryName,
         sizeBytes,
-        fromAddress: fromAddress.address,
+        fromAddress: from.address,
     };
+}
+
+/**
+ * §19.5.2 manual publish: builds the encrypted labels payload from
+ * the wallet's seed and broadcasts it as a FILE action on the chosen
+ * chain. The from-address is the wallet's active address on that chain,
+ * falling back to the newest external HD address when none resolves
+ * (callers can override either input via `pickFromAddress` / `activeEntry`).
+ *
+ * This flow powers the auto-sync path: `createLabelSyncScheduler` decides
+ * WHEN a publish is due, the shell prompts for the password, and the write
+ * lands here. The manual settings path calls the preparation and submission
+ * halves separately so shared confirmation sits between them.
+ * `fetchAndDecryptLabelSync` reads the result back on restore. HW
+ * wallets are not supported here because the commitment key is derived
+ * from the seed, which only exists for software wallets.
+ *
+ * @param {PublishLabelsNowOpts} opts
+ * @returns {Promise<PublishLabelsNowResult>}
+ */
+export async function publishLabelsNow(opts) {
+    const preparation = await prepareLabelsPublication(opts);
+    return submitLabelsPublication({ ...opts, preparation });
 }
 
 /**
@@ -727,22 +799,36 @@ function withTimeout(promise, ms, message) {
 }
 
 /**
- * Default source-address picker: newest external HD address on the
- * chain across any account in the wallet. Mirrors the host's
- * `addresses.newest` semantics so the publish flow lines up with what
- * the user sees in Receive.
+ * Default source-address picker: the chain's active (operating) address
+ * when `activeEntry` resolves to one of this wallet's eligible addresses,
+ * otherwise the newest external HD address on the chain across any account
+ * in the wallet.
+ *
+ * The active address comes first because every other spend-from-balance
+ * flow (Send, via `preferredSourceId` in `addressSelection.js`) funds from
+ * it. A wallet with several receive addresses on a chain keeps its balance
+ * on the active one, and the newest HD address is often empty, which the
+ * encoder reports as no spendable UTXOs. Funding from the active address
+ * lines this up with the chain balance Send and Home show.
  */
-async function defaultPickFromAddress({ vault, walletId, descriptor }) {
+async function defaultPickFromAddress({ vault, walletId, descriptor, activeEntry }) {
     const accounts = await vault.accounts.findBy('walletId', walletId);
     const accountIds = new Set(accounts.map((a) => a.id));
     if (accountIds.size === 0) return null;
     const all = await vault.addresses.list();
+    const eligible = all.filter(
+        (a) => accountIds.has(a.accountId)
+            && a.chain === descriptor.coin
+            && a.network === descriptor.networkKind,
+    );
+
+    const activeId = activeSourceId(eligible, activeEntry);
+    const active = activeId ? eligible.find((a) => a.id === activeId) : null;
+    if (active) return active;
+
     let winner = null;
     let winnerIdx = -1;
-    for (const a of all) {
-        if (!accountIds.has(a.accountId)) continue;
-        if (a.chain !== descriptor.coin) continue;
-        if (a.network !== descriptor.networkKind) continue;
+    for (const a of eligible) {
         if (a.source !== 'hd') continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');

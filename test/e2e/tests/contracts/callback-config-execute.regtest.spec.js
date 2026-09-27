@@ -176,7 +176,9 @@ async function mineToHeight(target, timeoutMs = 300_000) {
 
 test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
-    test.setTimeout(1_800_000);
+    // The ISSUE and the callback config each wait for the rail indexer, which
+    // can trail the tip by several blocks on a shared venue for most of a run.
+    test.setTimeout(3_600_000);
 
     test.beforeAll(async () => {
         await healVenueClock();

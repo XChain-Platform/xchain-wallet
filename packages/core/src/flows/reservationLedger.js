@@ -171,14 +171,17 @@ export function createReservationLedger({ store } = {}) {
             // small reservations and rounded large ones. The netted total is what the
             // concurrent window subtracts from its balance, so an understated sum is a
             // silently weakened double-spend guard.
-            /** @type {Record<string, string[]>} */
-            const byTick = {};
+            /** @type {Map<string, string[]>} */
+            const byTick = new Map();
             for (const r of mem) {
                 if (r.chainId !== chainId || r.id === excludeId) continue;
                 const amount = toPlainDecimal(r.amount);
-                (byTick[r.tick] ||= []).push(amount === null ? UNREADABLE_RESERVATION : amount);
+                const tick = String(r.tick).toUpperCase();
+                const amounts = byTick.get(tick) || [];
+                amounts.push(amount === null ? UNREADABLE_RESERVATION : amount);
+                byTick.set(tick, amounts);
             }
-            return Object.entries(byTick).map(([tick, amounts]) => ({
+            return Array.from(byTick, ([tick, amounts]) => ({
                 tick, amount: sumDecimalStrings(amounts),
             }));
         },

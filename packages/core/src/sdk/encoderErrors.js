@@ -72,6 +72,9 @@ const WALLET_BUG_CODES = new Set([
     'MISSING_TX_HEX', 'MISSING_P2SH_HASH', 'MISSING_P2SH_HEX',
 ]);
 
+const UNKNOWN_ENCODER_FAILURE = 'This transaction could not be built. Nothing was signed or sent, so nothing was spent.';
+const UNINFORMATIVE_RPC_REASON = /^(?:internal encoder error|(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal))\.?$/i;
+
 /**
  * The SDK encoder error code, however the error reached us.
  *
@@ -145,40 +148,7 @@ export function annotateEncoderFeeRequirement(err, quote) {
     return err;
 }
 
-/**
- * The sentence to show a user when an SDK encoder call failed.
- *
- * @param {unknown} err
- * @param {object} [opts]
- * @param {string} [opts.coinTicker]      native coin of the chain being built on (BTC/LTC/DOGE)
- * @param {string|number} [opts.requiredNative]  native-coin protocol fee for this action, when known
- * @returns {string|null}   null when this is not an encoder error (caller keeps its own copy)
- */
-export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
-    const code = encoderErrorCode(err);
-    if (!code) return null;
-    const coin = coinTicker || 'native coin';
-    const needed = trimAmount(requiredNative) || requiredFeeFromError(err);
-
-    if (code === 'NO_UTXOS') {
-        const need = needed
-            ? `It needs about ${needed} ${coin} to cover the protocol fee, plus a little more for the network fee.`
-            : `It needs ${coin} to cover the protocol fee and the network fee.`;
-        return `This address has no ${coin} to spend. ${need} Add ${coin} to this address and try again.`;
-    }
-
-    if (code === 'UTXO_TRACKER_STALE') {
-        return 'The service that tracks your spendable balance is still catching up with the chain, so the '
-            + 'wallet will not build a transaction from what it can currently see. This is a delay on our '
-            + 'side, not a problem with your wallet or your address. Nothing was signed or sent. Wait a '
-            + 'moment and try again.';
-    }
-
-    if (WALLET_BUG_CODES.has(code)) {
-        return 'This transaction request was incomplete, which is a fault in the wallet rather than anything '
-            + `you did. Nothing was signed or sent. Please report it, quoting "${code}".`;
-    }
-
+function encoderServiceMessage(code, err) {
     if (code === 'ENCODER_TIMEOUT') {
         return 'The transaction service did not answer in time. Nothing was signed or sent, so nothing was '
             + 'spent. Try again in a moment.';
@@ -212,14 +182,65 @@ export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
 
     if (code === 'ENCODER_RPC_ERROR') {
         const reason = rpcReasonFromError(err);
-        return 'This transaction could not be built. Nothing was signed or sent, so nothing was spent.'
-            + (reason ? ` The service reported: ${reason}` : '');
+        if (reason && !UNINFORMATIVE_RPC_REASON.test(reason)) {
+            return `This transaction could not be built. Nothing was signed or sent, so nothing was spent. `
+                + `The service reported: ${reason}`;
+        }
+        return UNKNOWN_ENCODER_FAILURE;
     }
 
     // An ENCODER_* code minted after this mapper was written. Say the safe,
     // true thing rather than fall through to the wire wording.
     return 'The transaction service could not complete this request. Nothing was signed or sent, so nothing '
         + 'was spent. Try again in a moment.';
+}
+
+/**
+ * The sentence to show a user when an SDK encoder call failed.
+ *
+ * @param {unknown} err
+ * @param {object} [opts]
+ * @param {string} [opts.coinTicker]      native coin of the chain being built on (BTC/LTC/DOGE)
+ * @param {string|number} [opts.requiredNative]  native-coin protocol fee for this action, when known
+ * @returns {string|null}   null when this is not an encoder error (caller keeps its own copy)
+ */
+export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
+    const code = encoderErrorCode(err);
+    if (!code) {
+        return isEncoderError(err)
+            ? 'The transaction service could not complete this request. Nothing was signed or sent, so nothing was spent.'
+            : null;
+    }
+    const coin = coinTicker || 'native coin';
+    const needed = trimAmount(requiredNative) || requiredFeeFromError(err);
+
+    if (code === 'NO_UTXOS') {
+        const need = needed
+            ? `It needs about ${needed} ${coin} to cover the protocol fee, plus a little more for the network fee.`
+            : `It needs ${coin} to cover the protocol fee and the network fee.`;
+        return `This address has no ${coin} to spend. ${need} Add ${coin} to this address and try again.`;
+    }
+
+    if (code === 'UTXO_TRACKER_STALE') {
+        return 'The service that tracks your spendable balance is still catching up with the chain, so the '
+            + 'wallet will not build a transaction from what it can currently see. This is a delay on our '
+            + 'side, not a problem with your wallet or your address. Nothing was signed or sent. Wait a '
+            + 'moment and try again.';
+    }
+
+    if (WALLET_BUG_CODES.has(code)) {
+        return 'This transaction request was incomplete, which is a fault in the wallet rather than anything '
+            + `you did. Nothing was signed or sent. Please report it, quoting "${code}".`;
+    }
+
+    return encoderServiceMessage(code, err);
+}
+
+/** The original encoder wording for a collapsed technical-details control. */
+export function encoderErrorDetails(err) {
+    return isEncoderError(err)
+        ? String((err && /** @type {any} */ (err).message) || '').trim()
+        : '';
 }
 
 /** The amount `annotateEncoderFeeRequirement` wrote into the message, if any. */

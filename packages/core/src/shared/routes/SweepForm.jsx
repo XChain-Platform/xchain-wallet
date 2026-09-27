@@ -233,7 +233,9 @@ export function SweepForm({
     // vault. Verified keys are re-scoped (copied) to the new wallet in
     // the same pass; missing ones can be recovered by the PC-26 scan
     // (software signers) or acknowledged (HW / watch-only, degraded gate).
-    const [gateRows, setGateRows] = useState(/** @type {Array<{ tick: string, packCount: number, missingCount: number }> | null} */ (null));
+    const [gateRows, setGateRows] = useState(
+        /** @type {Array<{ tick: string, packCount: number, missingCount: number, missingKeyHashes: string[], checkError?: string }> | null} */ (null),
+    );
     const [gateLoading, setGateLoading] = useState(false);
     const [gateCopied, setGateCopied] = useState(0);
     const [gateCheckSeq, setGateCheckSeq] = useState(0);
@@ -258,13 +260,23 @@ export function SweepForm({
                     const held = await messaging.listGatedKeys({ walletId, chainId, gateTicker: tick });
                     const have = new Set((Array.isArray(held) ? held : [])
                         .map((r) => String(r.keyHash).toLowerCase()));
-                    let missing = 0;
-                    for (const hash of wanted) if (!have.has(hash)) missing += 1;
-                    rows.push({ tick, packCount: wanted.size, missingCount: missing });
+                    const missingKeyHashes = [...wanted].filter((hash) => !have.has(hash));
+                    rows.push({
+                        tick,
+                        packCount: wanted.size,
+                        missingCount: missingKeyHashes.length,
+                        missingKeyHashes,
+                    });
                 } catch {
                     // Unknown state fails toward "missing" so the gate warns
                     // rather than green-lighting an unverified tick.
-                    rows.push({ tick, packCount: 1, missingCount: 1 });
+                    rows.push({
+                        tick,
+                        packCount: 1,
+                        missingCount: 1,
+                        missingKeyHashes: [],
+                        checkError: 'Could not determine which unlock key is missing.',
+                    });
                 }
             }
             if (cancelled) return;
@@ -929,11 +941,22 @@ export function SweepForm({
                     </p>
                     {gateLoading ? <p className={styles.hint}>Checking vault keys…</p> : null}
                     {(gateRows || []).map((r) => (
-                        <p key={r.tick} className={r.missingCount > 0 ? styles.warning : styles.hint}>
-                            {r.tick}: {r.packCount - r.missingCount}/{r.packCount} unlock
-                            key{r.packCount === 1 ? '' : 's'} in the vault
-                            {r.missingCount > 0 ? ' - missing' : ''}
-                        </p>
+                        <div key={r.tick}>
+                            <p className={r.missingCount > 0 ? styles.warning : styles.hint}>
+                                {r.tick}: {r.packCount - r.missingCount}/{r.packCount} unlock
+                                key{r.packCount === 1 ? '' : 's'} in the vault
+                                {r.missingCount > 0 ? ' - missing' : ''}
+                            </p>
+                            {r.missingKeyHashes.length > 0 ? (
+                                <ul className={styles.detailsList}>
+                                    {r.missingKeyHashes.map((hash) => (
+                                        <li key={hash}><code>{hash}</code></li>
+                                    ))}
+                                </ul>
+                            ) : r.checkError ? (
+                                <p className={styles.hint}>{r.checkError}</p>
+                            ) : null}
+                        </div>
                     ))}
                     {gateCopied > 0 ? (
                         <p className={styles.hint}>

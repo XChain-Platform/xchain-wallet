@@ -141,7 +141,7 @@ export function isAuthorableTicker(value, options) {
 }
 
 /** The `^<ACTION_INDEX>` form a referencing field may take instead of a name. */
-const TICK_ID_RE = /^\^\d+$/;
+const TICK_ID_RE = /^\^[1-9][0-9]*$/;
 
 /**
  * The reason `value` cannot name an EXISTING ticker, or null when it can.

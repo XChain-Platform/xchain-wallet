@@ -58,7 +58,21 @@ assert.match(form, /CHANGED/, 'review marks changed rows');
 assert.match(form, /unchanged/, 'review shows unchanged rows being re-written too');
 assert.match(form, /<NativeFeeToggle/, 'PC-51 toggle mounted');
 assert.match(form, /WatcherResultPanel/, 'watcher encode-only lane');
-assert.match(form, /SignCredentials/, 'software/HW signing lane');
+assert.match(
+    form,
+    /useOwnerActionLane\(\{[\s\S]*?software: 'addressPreferencesAction',[\s\S]*?hardware: 'addressPreferencesActionHw',[\s\S]*?\}\)/,
+    'form sends software and hardware signing through the owner confirm lane',
+);
+assert.match(
+    form,
+    /ownerLane\.run\(\{[\s\S]*?actionData: \{ action: 'ADDRESS', params: actionParams \}/,
+    'form confirms the exact ADDRESS action data before signing',
+);
+assert.match(
+    form,
+    /if \(ownerLane\.open\)[\s\S]*?<ActionConfirmScreen[\s\S]*?\{\.\.\.ownerLane\.confirmProps\}/,
+    'form renders the shared dry-run confirmation screen',
+);
 
 // ---- AddressList panel + shells ----
 const list = core('shared', 'routes', 'AddressList.jsx');

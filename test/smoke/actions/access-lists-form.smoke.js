@@ -31,8 +31,14 @@ assert.match(admin, /form\.allowListIdx && form\.allowListIdx !== form\.currentA
 assert.match(admin, /form\.blockListIdx && form\.blockListIdx !== form\.currentBlockList/,
     'BLOCK_LIST emitted only when changed');
 assert.match(admin, /listsChanged/, 'submission gated on an actual change');
-assert.match(admin, /A list can be replaced but not removed/,
-    'honest no-null-clear copy present');
+assert.match(admin, /networkKind === 'regtest'/,
+    'list removal is offered only on the network where activation is known live');
+assert.match(admin, /setAllowListIdx\('0'\)/,
+    'allow-list removal sends the zero sentinel');
+assert.match(admin, /setBlockListIdx\('0'\)/,
+    'block-list removal sends the zero sentinel');
+assert.match(admin, /Remove list/,
+    'list removal choice is visible');
 assert.match(admin, /<ListPickerScreen/, 'uses the shared list picker');
 assert.match(admin, /filterType="2"/, 'picker restricted to TYPE=2 address lists');
 assert.match(admin, /getListByActionIndex/, 'member counts read for current bindings');

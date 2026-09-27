@@ -15,6 +15,12 @@ import { EmptyStateNudge } from './EmptyStateNudge.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
+import {
+    compareDecimalStrings,
+    decimalFromBaseUnits,
+    multiplyDecimalStrings,
+    sumDecimalStrings,
+} from '../utils/amountFormat.js';
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -316,7 +322,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                 </div>
                 {row.escrowed ? (
                     <div className={styles.fiat} data-testid="balance-escrowed">
-                        {balancesHidden ? '•••' : `+ ${row.escrowed} in escrow`}
+                        {balancesHidden ? '•••' : escrowLine(row)}
                     </div>
                 ) : null}
                 <div className={styles.fiat}>
@@ -667,7 +673,17 @@ function addEscrowRows(tokenAcc, escrow, { chainId, descriptor }) {
             tokenAcc.set(e.tick, acc);
         }
         acc.escrowed = addPlainDecimals(acc.escrowed || '0', e.amount);
+        // The part of it held by dispensers in their close window.
+        if (e.closing) acc.escrowClosing = addPlainDecimals(acc.escrowClosing || '0', e.closing);
     }
+}
+
+// The escrow line under a token's amount. Escrow in a closing dispenser is
+// named as such, since it leaves escrow when the close lands.
+export function escrowLine(row) {
+    if (!row.escrowClosing) return `+ ${row.escrowed} in escrow`;
+    if (row.escrowClosing === row.escrowed) return `+ ${row.escrowed} in a closing dispenser`;
+    return `+ ${row.escrowed} in escrow (${row.escrowClosing} in a closing dispenser)`;
 }
 
 function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fiatRate, imageUrl }) {
@@ -735,13 +751,8 @@ function groupThousands(s) {
 
 export function fiatValue(quantityStr, divisibility, fiatRate) {
     if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
-    const q = safeBigInt(quantityStr);
-    if (q === 0n) return 0;
-    if (!divisibility || divisibility <= 0) return Number(q) * fiatRate;
-    const div = 10n ** BigInt(divisibility);
-    const whole = Number(q / div);
-    const frac = Number(q % div) / Number(div);
-    return (whole + frac) * fiatRate;
+    const amount = decimalFromBaseUnits(safeBigInt(quantityStr), divisibility || 0);
+    return multiplyDecimalStrings(amount, String(fiatRate));
 }
 
 /**
@@ -754,25 +765,29 @@ export function fiatValue(quantityStr, divisibility, fiatRate) {
  * @returns {{ total: number, priced: number, unpriced: number }}
  */
 export function sumFiatValue(rows) {
-    let total = 0;
+    let total = '0';
     let priced = 0;
     let unpriced = 0;
     for (const r of rows || []) {
         const v = fiatValue(r.quantity, r.divisibility, r.fiatRate);
         if (v === null) unpriced += 1;
-        else { total += v; priced += 1; }
+        else { total = sumDecimalStrings([total, v]); priced += 1; }
     }
     return { total, priced, unpriced };
 }
 
 export function formatFiat(usd) {
     if (usd === null || usd === undefined) return '';
-    if (usd === 0) return '$0.00';
-    if (usd > 0 && usd < 0.01) return '<$0.01';
-    return '$' + usd.toLocaleString('en-US', {
+    if (compareDecimalStrings(usd, '0') === 0) return '$0.00';
+    if (compareDecimalStrings(usd, '0') === 1 && compareDecimalStrings(usd, '0.01') === -1) {
+        return '<$0.01';
+    }
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-    });
+    }).format(String(usd));
 }
 
 const PALETTE = [

@@ -38,8 +38,9 @@ assert.match(view, /exp <= nowSec/, 'expiry derived from EXPIRATION vs wall cloc
 assert.match(view, /type: 'cancel'/, 'offers cancel');
 assert.match(view, /type: 'edit'/, 'offers edit');
 assert.match(view, /status === 'open' \?/, 'cancel/edit gated on open');
-assert.match(view, /messaging\.cancelOrderHw|messaging\.cancelOrder\b/, 'cancel routes through cancelOrder');
-assert.match(view, /messaging\.editOrderHw|messaging\.editOrder\b/, 'edit routes through editOrder');
+assert.match(view, /'cancelOrder' : 'editOrder'/, 'cancel/edit route through cancelOrder / editOrder');
+assert.match(view, /'cancelOrderHw' : 'editOrderHw'/, 'cancel/edit route through the device lanes');
+assert.match(view, /<ActionConfirmScreen/, 'cancel/edit sign on the shared confirm page');
 assert.match(view, /VERSION|EXPIRATION|ALLOW_LIST/, 'edit builds v2 params');
 // PC-16 autopay toggle absorbed.
 assert.match(view, /listAutopayOrders/, 'reads autopay consents');

@@ -14,15 +14,13 @@
 // own and silently leaves an unknown TICK out of the list, so the form has to
 // say so before the user pays for it.
 
-// Same shape rule the list forms have always applied: letters, digits, the
-// subasset dot, and the `^` prefix of a TICK_ID reference.
-const TICK_ITEM_RE = /^[A-Z0-9.^]+$/;
+import { tickerReferenceError } from './tickerGrammar.js';
 
 /**
  * Split pasted token-list text (newline or comma separated) into items.
- * Items are trimmed and uppercased; a repeat of an earlier item is counted
- * as a duplicate and dropped, and an item that fails the shape rule lands
- * in `invalid` instead of `valid`.
+ * Items are trimmed and retain their spelling; a case-insensitive repeat of
+ * an earlier item is counted as a duplicate and dropped. An item that fails
+ * the chain ticker grammar lands in `invalid` instead of `valid`.
  *
  * @param {string} text
  * @returns {{ valid: string[], invalid: string[], duplicates: number }}
@@ -33,12 +31,14 @@ export function classifyTickItems(text) {
     const invalid = [];
     let duplicates = 0;
     for (const raw of String(text || '').split(/[\n,]+/)) {
-        const t = raw.trim().toUpperCase();
+        const t = raw.trim();
         if (!t) continue;
+        const identity = t.toLowerCase();
         // Count a repeat once and keep only the first occurrence.
-        if (seen.has(t)) { duplicates += 1; continue; }
-        seen.add(t);
-        if (TICK_ITEM_RE.test(t)) valid.push(t); else invalid.push(t);
+        if (seen.has(identity)) { duplicates += 1; continue; }
+        seen.add(identity);
+        if (tickerReferenceError(t, { allowRef: true }) === null) valid.push(t);
+        else invalid.push(t);
     }
     return { valid, invalid, duplicates };
 }

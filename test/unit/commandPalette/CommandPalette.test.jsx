@@ -8,9 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { Fragment, useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
+import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
+import { useCommandPalette } from '../../../packages/core/src/shared/commandPalette/useCommandPalette.js';
 
 afterEach(() => cleanup());
 
@@ -23,6 +26,32 @@ function makeCommands() {
 }
 
 const getInput = () => screen.getByRole('combobox');
+
+function IssueForm() {
+    const [done, setDone] = useState(false);
+    if (done) return <h1>Token issued</h1>;
+    return <button type="button" onClick={() => setDone(true)}>Issue token</button>;
+}
+
+function PaletteRouteHarness() {
+    const [view, setView] = useState('actions');
+    const palette = useCommandPalette({ navigate: setView });
+    const commands = buildCommands({ navigate: palette.navigate || setView });
+    return (
+        <>
+            <button type="button" onClick={() => setView('issue')}>Open issue form</button>
+            <button type="button" onClick={palette.openPalette}>Open command palette</button>
+            <Fragment key={palette.navigationKey}>
+                {view === 'issue' ? <IssueForm /> : null}
+            </Fragment>
+            <CommandPalette
+                open={palette.open}
+                onClose={palette.closePalette}
+                commands={commands}
+            />
+        </>
+    );
+}
 
 describe('CommandPalette', () => {
     it('renders nothing when closed', () => {
@@ -89,6 +118,20 @@ describe('CommandPalette', () => {
         fireEvent.click(screen.getByRole('option', { name: /Settings/ }));
         expect(commands[2].run).toHaveBeenCalledOnce();
         expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('re-opens the current action from the palette with a fresh form', () => {
+        render(<PaletteRouteHarness />);
+        fireEvent.click(screen.getByRole('button', { name: 'Open issue form' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        expect(screen.getByRole('heading', { name: 'Token issued' })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open command palette' }));
+        fireEvent.change(getInput(), { target: { value: 'Issue token' } });
+        fireEvent.click(screen.getByRole('option', { name: /Issue token/ }));
+
+        expect(screen.queryByRole('heading', { name: 'Token issued' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Issue token' })).toBeTruthy();
     });
 
     it('Escape closes without running anything', () => {

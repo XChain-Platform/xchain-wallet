@@ -89,7 +89,7 @@ describe('humanizeDeployDiagnostic', () => {
         expect(out.message).toMatch(/line 12/);
     });
 
-    it('passes lint-core advisories through untouched', () => {
+    it('passes actionable lint guidance through without classifying it', () => {
         // Each already names the line, the symbol and the prescribed fix.
         const passthrough = [
             "state.get(...) result dereferenced at line 40 without a null guard; an absent key returns null and will throw. Default it (e.g. `|| '0'`) or require() it first",
@@ -100,6 +100,7 @@ describe('humanizeDeployDiagnostic', () => {
         for (const raw of passthrough) {
             const out = humanizeDeployDiagnostic(raw);
             expect(out.matched).toBe(false);
+            expect(out.rule).toBe(null);
             expect(out.message).toBe(raw);
         }
     });
@@ -124,7 +125,7 @@ describe('humanizeDeployDiagnostic', () => {
         expect(out.message).toMatch(/Uint8Array/);
     });
 
-    it('returns unrecognized text unchanged so a rephrasing degrades, not mistranslates', () => {
+    it('passes unrecognized diagnostics through unchanged', () => {
         const out = humanizeDeployDiagnostic('some future SDK wording nobody mapped');
         expect(out.matched).toBe(false);
         expect(out.message).toBe('some future SDK wording nobody mapped');
@@ -154,7 +155,7 @@ describe('humanizeGasRationale', () => {
             + '0 event emits, 1 state write');
     });
 
-    it('returns null on an unrecognized shape so the caller keeps the raw string', () => {
+    it('lets the caller keep an unrecognized rationale', () => {
         expect(humanizeGasRationale('1240 bytes and some new phrasing')).toBe(null);
         expect(humanizeGasRationale(null)).toBe(null);
         expect(humanizeGasRationale('')).toBe(null);

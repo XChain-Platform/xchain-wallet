@@ -845,9 +845,11 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !action || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
-                    {singleEncode ? 'Sign action' : 'Preview'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Sign action' : 'Preview'}
                 </Button>
             </div>
         </form>,

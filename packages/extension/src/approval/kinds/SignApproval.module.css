@@ -105,6 +105,13 @@
     margin: var(--xc-space-1) 0 0 0;
 }
 
+.textWarning {
+    margin: var(--xc-space-1) 0 0;
+    color: var(--xc-warning-text);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+}
+
 /* §21.3 collapsible Details disclosure - closed by default (power
    users expand, casual users ignore). The disclosure triangle is the
    browser default; the toggle row reads as a small label. */

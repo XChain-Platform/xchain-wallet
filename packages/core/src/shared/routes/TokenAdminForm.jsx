@@ -48,6 +48,8 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { currentListMemberCount } from '../../flows/listMembership.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -298,6 +300,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    // The wallet has no synchronized activation entry for this change yet.
+    // Regtest runs the live protocol head, so removal stays hidden elsewhere.
+    const listDetachActive = descriptor?.networkKind === 'regtest';
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -400,20 +405,20 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // Member counts for whichever allow/block lists are currently set
     // (display only; one detail read each, tolerant of failure).
     useEffect(() => {
-        if (mode !== 'access-lists' || !chainId || !allowListIdx) { setAllowListCount(null); return undefined; }
+        if (mode !== 'access-lists' || !chainId || !allowListIdx || allowListIdx === '0') { setAllowListCount(null); return undefined; }
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: allowListIdx })
-            .then((d) => { if (!cancelled) setAllowListCount(listMemberCount(d)); })
+            .then((d) => { if (!cancelled) setAllowListCount(currentListMemberCount(d)); })
             .catch(() => { if (!cancelled) setAllowListCount(null); });
         return () => { cancelled = true; };
     }, [mode, chainId, allowListIdx, messaging]);
     useEffect(() => {
-        if (mode !== 'access-lists' || !chainId || !blockListIdx) { setBlockListCount(null); return undefined; }
+        if (mode !== 'access-lists' || !chainId || !blockListIdx || blockListIdx === '0') { setBlockListCount(null); return undefined; }
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: blockListIdx })
-            .then((d) => { if (!cancelled) setBlockListCount(listMemberCount(d)); })
+            .then((d) => { if (!cancelled) setBlockListCount(currentListMemberCount(d)); })
             .catch(() => { if (!cancelled) setBlockListCount(null); });
         return () => { cancelled = true; };
     }, [mode, chainId, blockListIdx, messaging]);
@@ -443,9 +448,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     );
     const bridgeFrozen = !!(assetInfo?.lockBridge ?? assetInfo?.lock_bridge);
     // Milestone 1 keeps policy and bridging mutually exclusive in both
-    // directions (token-bridge section 8): a token that has ever bound a list
-    // cannot opt in, and a list can never be cleared, so this is permanent
-    // until the policy-inheritance milestone lands.
+    // directions (token-bridge section 8): a token with a currently bound list
+    // cannot opt in. The issuer must detach the policy before opening a bridge.
     const bridgePolicyBound = !!(assetInfo?.allowList || assetInfo?.blockList);
     useEffect(() => {
         if (mode !== 'bridge-settings' || !assetInfo || bridgePrefilled) return;
@@ -626,7 +630,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Enter at least one field to update.');
                 return;
             }
-            if (mintAddressMax && maxMint && Number(mintAddressMax) < Number(maxMint)) {
+            if (mintAddressMax && maxMint
+                && compareDecimalStrings(mintAddressMax, maxMint) === -1) {
                 setFormError('Max mint per address must be at least the max mint per transaction.');
                 return;
             }
@@ -687,7 +692,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 return;
             }
             if (bridgePolicyBound && pickedBridgeChains.length > 0) {
-                setFormError('A token bound to an allow-list or block-list cannot be opened to the bridge yet: the copy on the other chain would carry none of that policy. A list can never be cleared, so this token stays off the bridge until policy inheritance ships.');
+                setFormError('A token bound to an allow-list or block-list cannot be opened to the bridge: the copy on the other chain would carry none of that policy. Detach the policy list first.');
                 return;
             }
             const depth = String(bridgeMinDepth).trim();
@@ -1389,32 +1394,42 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         <div className={styles.fromLine}>
                             <span className={styles.detailsLabel}>Allow-list</span>
                             <span className={styles.detailsValue}>
-                                {allowListIdx
+                                {allowListIdx && allowListIdx !== '0'
                                     ? `List #${allowListIdx}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
-                                    : 'None (anyone may interact)'}
+                                    : (allowListIdx === '0' ? 'None after this update' : 'None (anyone may interact)')}
                             </span>
                         </div>
                         <Button type="button" variant="ghost" onClick={() => setListPickerFor('allow')}>
-                            {allowListIdx ? 'Change allow-list' : 'Choose allow-list'}
+                            {allowListIdx && allowListIdx !== '0' ? 'Change allow-list' : 'Choose allow-list'}
                         </Button>
+                        {listDetachActive && allowListIdx && allowListIdx !== '0' ? (
+                            <Button type="button" variant="ghost" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); }}>
+                                Remove list
+                            </Button>
+                        ) : null}
                     </div>
                     <div className={styles.detailsList}>
                         <div className={styles.fromLine}>
                             <span className={styles.detailsLabel}>Block-list</span>
                             <span className={styles.detailsValue}>
-                                {blockListIdx
+                                {blockListIdx && blockListIdx !== '0'
                                     ? `List #${blockListIdx}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
-                                    : 'None'}
+                                    : (blockListIdx === '0' ? 'None after this update' : 'None')}
                             </span>
                         </div>
                         <Button type="button" variant="ghost" onClick={() => setListPickerFor('block')}>
-                            {blockListIdx ? 'Change block-list' : 'Choose block-list'}
+                            {blockListIdx && blockListIdx !== '0' ? 'Change block-list' : 'Choose block-list'}
                         </Button>
+                        {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
+                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { setBlockListIdx('0'); setBlockListCount(null); }}>
+                                Remove list
+                            </Button>
+                        ) : null}
                     </div>
                     <p className={styles.hint}>
-                        A list can be replaced but not removed: the protocol has no
-                        "clear" for a bound list. To lift a restriction, point it at an
-                        empty address list. Blank entries keep the current binding.
+                        {listDetachActive
+                            ? 'Choose Remove list to detach a bound policy. Fields you do not change keep their current binding.'
+                            : 'A list can be replaced here. Fields you do not change keep their current binding.'}
                     </p>
                 </>
             ) : null}
@@ -1437,8 +1452,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         <StatusMessage variant="status">
                             {`${ticker || 'This token'} is bound to an address list, and a bridged copy `
                                 + 'would carry none of that policy on the other chain. It cannot be '
-                                + 'opened to the bridge yet, and because a bound list can never be '
-                                + 'cleared, that holds until policy inheritance ships.'}
+                                + 'opened to the bridge. Detach the policy list first.'}
                         </StatusMessage>
                     ) : null}
                     {currentBridgeChains === null && assetInfo ? (
@@ -1626,8 +1640,8 @@ function composeAdminParams(mode, form) {
         // the token's current binding. An omitted field is "leave
         // unchanged" (issue.js isNull), so re-sending an unchanged index
         // is a harmless no-op we skip to keep the decoded summary clean.
-        // There is no null-clear in the protocol (0 fails isValidList), so
-        // the picker never produces an empty value here.
+        // The 0 sentinel detaches a policy list after activation; blank still
+        // means keep the current binding.
         const p = { VERSION: '5', TICK };
         if (form.allowListIdx && form.allowListIdx !== form.currentAllowList) p.ALLOW_LIST = String(form.allowListIdx).trim();
         if (form.blockListIdx && form.blockListIdx !== form.currentBlockList) p.BLOCK_LIST = String(form.blockListIdx).trim();
@@ -1688,13 +1702,6 @@ const MODE_DONE_TITLE = {
     'access-lists': 'Access lists updated',
     'bridge-settings': 'Bridge settings updated',
 };
-
-// PC-04: current-member count of a LIST detail row (getListByActionIndex).
-// The explorer exposes members as `list`; tolerate a couple of aliases.
-function listMemberCount(detail) {
-    const members = detail?.list ?? detail?.items ?? detail?.members;
-    return Array.isArray(members) ? members.length : null;
-}
 
 function DetailRow({ label, value }) {
     return (

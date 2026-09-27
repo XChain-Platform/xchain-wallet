@@ -29,19 +29,20 @@ const REWARD_ROWS = [
     { id: 2, source: 'A', signing_pubkey: 'pk', reward_type: 'block', round_reference: 2, amount: '5', block_index: 2, timestamp: 2 },
 ];
 
-function mountForm() {
+function mountForm(extra = {}, mode = 'claim-rewards') {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getRewardsForAddress: vi.fn().mockResolvedValue(REWARD_ROWS),
         getRewardClaimsForAddress: vi.fn().mockResolvedValue([]),
         composeForConfirm: vi.fn(() => new Promise(() => {})),
+        ...extra,
     };
     render(
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
             React.createElement(StakingActionForm, {
-                mode: 'claim-rewards', walletId: 'w', chainId: 'bitcoin-mainnet', onBack() {},
+                mode, walletId: 'w', chainId: 'bitcoin-mainnet', onBack() {},
             }),
         ),
     );
@@ -66,5 +67,30 @@ describe('StakingActionForm partial COLLECT', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({ VERSION: '0' });
+    });
+});
+
+describe('StakingActionForm partial UNSTAKE', () => {
+    it('keeps an amount one atomic unit below the available stake', async () => {
+        const signingPubkey = 'a'.repeat(64);
+        const composeForConfirm = vi.fn(() => new Promise(() => {}));
+        const messaging = mountForm({
+            getStakesForAddress: vi.fn().mockResolvedValue([{
+                signing_pubkey: signingPubkey,
+                amount: '90071992.54740902',
+            }]),
+            composeForConfirm,
+        }, 'unstake');
+
+        expect(await screen.findByText('90,071,992.54740902 XCHAIN available'))
+            .toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/^Amount/), {
+            target: { value: '90071992.54740901' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params.AMOUNT)
+            .toBe('90071992.54740901');
     });
 });

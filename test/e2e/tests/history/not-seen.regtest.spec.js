@@ -115,7 +115,7 @@ async function reloadToHome(page) {
 test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regtest`, () => {
     // Fund + mint (mined), then a 180s window held deliberately still, then a
     // decoder poll (60s) and a confirmation. The long pole is the window.
-    test.setTimeout(900_000);
+    test.setTimeout(1_800_000);
     test.use({ actionTimeout: 30_000 });
 
     // The most important lines in the file: a frozen decoder or a parked

@@ -150,6 +150,10 @@ describe('flows/betActions native-coin fee mode', () => {
         });
         expect(submitCalls).toHaveLength(2);
         for (const call of submitCalls) {
+            expect(call.encoderOpts).toMatchObject({
+                sourceAddress: FROM.address,
+                change: FROM.address,
+            });
             expect(call.encoderOpts.payFeeInNativeCoin).toBe(true);
             // The flag is the flow's own, never a wire field: it must not reach
             // the BET params the SDK builder produced.

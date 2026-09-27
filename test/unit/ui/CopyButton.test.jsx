@@ -53,15 +53,14 @@ describe('<CopyButton>', () => {
         }
     });
 
-    it('swallows a clipboard rejection without throwing (silent no-op path)', async () => {
+    it('names clipboard unavailability when every copy path is refused', async () => {
         clipboard.writeText = vi.fn().mockRejectedValue(new Error('blocked'));
         render(<CopyButton value="x" />);
         fireEvent.click(screen.getByRole('button'));
-        // No error thrown; label never flipped to Copied.
         await waitFor(() => {
-            expect(clipboard.writeText).toHaveBeenCalled();
+            expect(screen.getByRole('button')).toHaveTextContent('Copy failed: the clipboard is unavailable.');
         });
-        expect(screen.getByRole('button')).toHaveTextContent('Copy');
+        expect(clipboard.writeText).toHaveBeenCalled();
     });
 
     it('uses ariaLabel when provided, otherwise falls back to the visible label', () => {

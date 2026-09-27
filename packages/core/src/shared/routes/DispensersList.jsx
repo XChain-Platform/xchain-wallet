@@ -15,6 +15,11 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
+import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { dispenserRateLabel } from '../utils/dispenserPricing.js';
+import {
+    CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
+} from '../utils/dispenserCloseWindow.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
@@ -63,6 +68,14 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     // contacts / messaging toolbars.
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
+    // Cancel block times of closing dispensers, keyed `chainId:actionIndex`.
+    const [cancelTimes, setCancelTimes] = useState(/** @type {Record<string, number>} */ ({}));
+    const [nowMs, setNowMs] = useState(() => Date.now());
+    // Each chain's protocol time, the clock the close window is judged by,
+    // keyed by chainId: one read per chain with a closing row, never per row.
+    const [chainClocks, setChainClocks] = useState(
+        /** @type {Record<string, null | { chainTime: number, chainTimeReadAtMs: number }>} */ ({}),
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -163,11 +176,64 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
                 }));
+                // The list lane carries no cancel time, so a closing row's
+                // countdown needs the cancels feed. It is keyed by the cancelling
+                // address (the creator or the dispenser address), so it is read
+                // once per distinct address of a closing row, never per row, and
+                // not at all when nothing is closing.
+                const closing = uniq.filter((row) => flowsLib.dispenserLiveState(row).status === 'cancelling');
+                if (closing.length === 0 || typeof messaging.getDispenserLifecycle !== 'function') return;
+                const cancelAddrs = [...new Set(closing.flatMap((row) => [row.source, row.address]).filter(Boolean))];
+                Promise.all(cancelAddrs.map((addr) => messaging
+                    .getDispenserLifecycle({ chainId: cid, kind: 'cancels', query: addr, type: 'address' })
+                    .then((r) => extractRows(r))
+                    .catch(() => [])))
+                    .then((lists) => {
+                        if (cancelled) return;
+                        const cancelRows = lists.flat();
+                        const found = {};
+                        for (const row of closing) {
+                            const ts = dispenserCancelTimestamp(cancelRows, row.action_index);
+                            if (ts != null) found[`${cid}:${row.action_index}`] = ts;
+                        }
+                        if (Object.keys(found).length > 0) setCancelTimes((prev) => ({ ...prev, ...found }));
+                    });
             });
         }
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, walletId]);
-
+    // Re-render once a minute while any closing row shows a countdown, and
+    // re-read the protocol time of each chain with one, at most once per
+    // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
+    // the set of chains does.
+    const countdownChains = [...new Set(Object.keys(cancelTimes)
+        .map((key) => key.slice(0, key.lastIndexOf(':'))))].sort().join(',');
+    useEffect(() => {
+        if (!countdownChains) return undefined;
+        let stopped = false;
+        let lastReadMs = -Infinity;
+        const chains = countdownChains.split(',');
+        const tick = () => {
+            const now = Date.now();
+            setNowMs(now);
+            if (now - lastReadMs < CHAIN_TIME_REFRESH_MS) return;
+            if (typeof messaging.getChainTipBlockTime !== 'function') return;
+            lastReadMs = now;
+            for (const chainId of chains) {
+                // A failed read keeps the chain's last reading.
+                messaging.getChainTipBlockTime({ chainId, withProtocolTime: true })
+                    .then((r) => {
+                        if (stopped) return;
+                        const clock = chainClockFromTipRead(r, Date.now());
+                        setChainClocks((prev) => ({ ...prev, [chainId]: clock }));
+                    })
+                    .catch(() => {});
+            }
+        };
+        tick();
+        const timer = setInterval(tick, 60000);
+        return () => { stopped = true; clearInterval(timer); };
+    }, [countdownChains, messaging]);
     // Flatten every chain's rows into one list, newest first. Each row is
     // annotated with its chainId for the network overlay + detail link.
     const allRows = useMemo(() => {
@@ -179,6 +245,11 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         out.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
         return out;
     }, [dispensersByChain]);
+
+    // This list lane serves ORACLE_ADDRESS but no price for a Mode B row, so
+    // its price comes from the oracle's own feeds.
+    const oracleEntries = useMemo(() => allRows.map((row) => ({ chainId: row.chainId, row })), [allRows]);
+    const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
     const anyLoading = useMemo(() => {
         const states = Object.values(dispensersByChain);
@@ -283,6 +354,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             key={`${row.chainId}:${row.action_index}`}
                             row={row}
                             label={row.address ? dispenserLabels[row.address] : undefined}
+                            oracleFeeds={oracleFeedsFor(row.chainId, row)}
+                            cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
+                            nowMs={nowMs}
+                            chainClock={chainClocks[row.chainId] || null}
                             onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
                         />
                     ))}
@@ -292,7 +367,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
 }
 
-function DispenserRow({ row, label, onSelect }) {
+function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
@@ -305,6 +380,14 @@ function DispenserRow({ row, label, onSelect }) {
     // action; saying "in escrow" on such a row misstates where the tokens
     // are, so the line only renders while the figure still means something.
     const isTerminal = ['cancelled', 'expired', 'complete', 'closed'].includes(status);
+    // A cancelling dispenser is in its close window: say "Closing", with the
+    // countdown when the cancel time is known.
+    const closeEta = status === 'cancelling' && cancelTimestamp != null
+        ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
+        : null;
+    const badge = status === 'cancelling'
+        ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
+        : status;
     return (
         <button
             type="button"
@@ -345,7 +428,7 @@ function DispenserRow({ row, label, onSelect }) {
                 <div className={local.name}>
                     {label ? `${label}: ` : ''}{row.give_tick || '?'}
                 </div>
-                <div className={local.subtitle}>{rateLabel(row)}</div>
+                <div className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</div>
                 {/* Escrow is only stated when it is known. The explorer's
                     dispenser LIST lane carries no escrow column (remaining is
                     derived per action, in the detail read path), so on real
@@ -360,11 +443,11 @@ function DispenserRow({ row, label, onSelect }) {
                 ) : null}
             </div>
             <div className={local.trailing}>
-                <span className={`${local.status} ${local[`status_${status}`] || ''}`}>{status}</span>
-                <span className={local.dispenseCount}>
-                    {row.dispense_count != null
-                        ? `${formatNum(row.dispense_count)} dispense${Number(row.dispense_count) === 1 ? '' : 's'}`
-                        : ''}
+                <span
+                    className={`${local.status} ${local[`status_${status}`] || ''}`}
+                    title={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
+                >
+                    {badge}
                 </span>
             </div>
         </button>
@@ -380,15 +463,6 @@ function formatNum(v) {
     if (!/^\d+$/.test(int)) return s;
     const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return frac != null ? `${grouped}.${frac}` : grouped;
-}
-
-function rateLabel(row) {
-    const give = `${formatNum(row.give_amount)} ${row.give_tick || '?'}`;
-    const coin = row.get_coin || '';
-    const tick = row.get_tick || '';
-    const amt = formatNum(row.get_amount);
-    const payAsset = tick || coin || '?';
-    return `${give} per ${amt} ${payAsset}`;
 }
 
 function extractRows(resp) {

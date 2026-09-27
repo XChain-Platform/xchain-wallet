@@ -95,6 +95,12 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-error').textContent).toMatch(/Something broke/);
     });
 
+    it('explains when a failed request carries no diagnostic message', () => {
+        render(<ConfirmActionModal {...base({ error: {} })} />);
+        expect(screen.getByTestId('confirm-error').textContent)
+            .toMatch(/wallet service returned no explanation/i);
+    });
+
     // Page form (operator direction 2026-07-22): the confirm surface
     // renders as a full page with a "Confirm" header whose back arrow is
     // Reject, in place of the old overlay modal.

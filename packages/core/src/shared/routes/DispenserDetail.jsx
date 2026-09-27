@@ -16,7 +16,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { isHwSource } from '../components/SignCredentials.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { PreflightPanel } from '../components/PreflightPanel.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
@@ -39,6 +39,10 @@ import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
+import { isTerminalDispenserStatus, reopenTermsFrom, terminalDispenserNotice } from '../utils/dispenserReopen.js';
+import {
+    CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta, shortAddress,
+} from '../utils/dispenserCloseWindow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { dispenserPriceFloor } from '../../flows/dispenserDustFloor.js';
 import {
@@ -47,7 +51,20 @@ import {
     dispenserRefusesEveryoneMessage,
     listMembers,
     ownerOffAllowList,
+    ownerOffAllowListMessage,
 } from '../../flows/allowListSelfCheck.js';
+import { boundListIndex, editListConflict } from '../../flows/accessListSlots.js';
+import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import {
+    DISPENSER_PRICE_STALE_MESSAGE,
+    isDispenserPriceStale,
+} from '../utils/dispenserPricing.js';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
+import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
+import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -75,12 +92,15 @@ const ADDRESS_CELL_STYLE = {
  *     type='source' scoped to the dispenser's source address (the
  *     explorer doesn't yet have a by-dispenser-action-index dispense
  *     query).
- *   - For owners (source address is one of the wallet's addresses),
- *     owner actions via `messaging.dispenserAction` with a password
- *     re-prompt (HW via `dispenserActionHw`): Close (v1 cancel),
- *     Refill (v2 edit topping up GIVE_ESCROW), and Edit (v2 edit of
- *     EXPIRATION / ALLOW_LIST / BLOCK_LIST, PC-19). All owner actions
- *     gate on the live status (open only).
+ *   - For owners (the wallet holds the creator address or the dispenser
+ *     address; the creator signs when both are held), owner actions signed through the shared confirm page and its
+ *     network pre-flight, via `messaging.dispenserAction` (HW via
+ *     `dispenserActionHw`; watcher mode builds an unsigned transaction):
+ *     Close (v1 cancel), Refill (v2 edit topping up GIVE_ESCROW), and
+ *     Edit (v2 edit of EXPIRATION / ALLOW_LIST / BLOCK_LIST, PC-19). All
+ *     owner actions gate on the live status (open only). On a status that
+ *     can never be open again (sold out, closed, expired) they are hidden
+ *     instead, and the creator is offered Open again.
  *   - State display: current expiration + allow/block lists, dispenses
  *     this fill against the 1,000 cap, and a close-window banner while
  *     the dispenser sits in its 1-hour "cancelling" state.
@@ -97,8 +117,10 @@ const ADDRESS_CELL_STYLE = {
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
  * @param {() => void} [props.onCanceled]           called after a successful cancel broadcast
+ * @param {(terms: object) => void} [props.onOpenAgain]  opens DispenserForm prefilled with these
+ *   terms; a shell that does not pass it gets no Open again button
  */
-export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled }) {
+export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -114,6 +136,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [dispenser, setDispenser] = useState(/** @type {any | null} */ (null));
     const [action, setAction] = useState(/** @type {any | null} */ (null));
     const [dispenses, setDispenses] = useState(/** @type {any[]} */ ([]));
+    const [dispensesLoaded, setDispensesLoaded] = useState(false);
     // The live quote of the ORACLE a Mode B dispenser is priced by. Its price is
     // not on the dispenser row - it lives on the oracle's own published feed -
     // so a panel that does not fetch it cannot state a price at all, and told
@@ -125,9 +148,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // expirations) merged with dispenses into one timeline under a tab.
     const [lifecycle, setLifecycle] = useState(/** @type {any[]} */ ([]));
     const [tab, setTab] = useState(/** @type {'dispenses' | 'lifecycle'} */ ('dispenses'));
+    // The wallet address that signs close / refill / edit: the creator when
+    // this wallet holds it, otherwise the dispenser's own address.
     const [ownerAddress, setOwnerAddress] = useState(
         /** @type {any | null} */ (null),
     );
+    // True only when the wallet holds the creator (SOURCE): origin standing to
+    // open a new dispenser on the same address belongs to the creator alone.
+    const [creatorHeld, setCreatorHeld] = useState(false);
+    // Every address this wallet holds on the chain, so the close banner can
+    // tell whether the escrow returns here or to someone else.
+    const [heldAddresses, setHeldAddresses] = useState(/** @type {string[]} */ ([]));
     const [buyerAddresses, setBuyerAddresses] = useState(/** @type {any[]} */ ([]));
     const [buyerAddressId, setBuyerAddressId] = useState(
         /** @type {string | null} */ (null),
@@ -146,10 +177,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         /** @type {string | null} */ (null),
     );
     // D-147: how many of the five refills are gone, derived from the lifecycle
-    // events this page already loads. Nothing else can answer it: this lane has
-    // no confirm screen and owes no protocol fee, so no network dry run runs on
-    // it, and a sixth refill used to be signed and broadcast against a rule that
-    // rejects it every time.
+    // events this page already loads. The refill now reaches the confirm page's
+    // network dry run too, but this count is what says so on the form itself,
+    // before a sixth refill is composed against a rule that rejects it every
+    // time.
     const refillCount = useMemo(() => refillsUsed(lifecycle), [lifecycle]);
 
     // Edit (DISPENSER v2: reschedule EXPIRATION / update ALLOW_LIST /
@@ -206,20 +237,19 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [cancelStage, setCancelStage] = useState(
         /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
     );
-    const [password, setPassword] = useState('');
     const [cancelError, setCancelError] = useState(/** @type {string | null} */ (null));
     const [cancelResult, setCancelResult] = useState(/** @type {any | null} */ (null));
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Buy state, shared by the token-paid and coin-paid lanes.
     const [fills, setFills] = useState('1');
     const [buyStage, setBuyStage] = useState(
-        /** @type {'idle' | 'confirm' | 'submitting' | 'done'} */ ('idle'),
+        /** @type {'idle' | 'submitting' | 'done'} */ ('idle'),
     );
     const [buyPassword, setBuyPassword] = useState('');
     const [buyError, setBuyError] = useState(/** @type {string | null} */ (null));
     const [buyResult, setBuyResult] = useState(/** @type {any | null} */ (null));
-    const buyPasswordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const buyPasswordRef = useRef('');
+    buyPasswordRef.current = buyPassword;
     const [copied, setCopied] = useState(/** @type {string | null} */ (null));
 
     const descriptor = chainRegistry.get(chainId);
@@ -298,6 +328,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         let cancelled = false;
         setLoading(true);
         setLoadError(null);
+        setDispenses([]);
+        setDispensesLoaded(false);
         // Demo wallet: resolve the fixture row (owned by the first address
         // on this chain) instead of querying an explorer.
         const isDemo = flowsLib.isDemoWallet(walletId);
@@ -332,12 +364,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setDispenser(disp);
 
             const source = disp?.source || act?.source;
+            const hostAddr = disp?.address || disp?.get_address || '';
             if (addrsByChain) {
                 const onChain = (addrsByChain[chainId] || []);
-                if (source) {
-                    const matches = onChain.find((a) => a.address === source);
-                    if (matches) setOwnerAddress(matches);
-                }
+                // The protocol lets either the creator or the dispenser address
+                // close, refill or edit, so holding either makes this wallet an
+                // owner. The creator signs when held: its close returns escrow to it.
+                const creator = source ? onChain.find((a) => a.address === source) : null;
+                const host = !creator && hostAddr ? onChain.find((a) => a.address === hostAddr) : null;
+                if (creator || host) setOwnerAddress(creator || host);
+                setCreatorHeld(Boolean(creator));
+                setHeldAddresses(onChain.map((a) => a.address).filter(Boolean));
                 // Pre-populate the buyer-address picker with this wallet's
                 // HD addresses on the dispenser's chain. Non-HD (watch-
                 // only) addresses are filtered out because they can't
@@ -356,6 +393,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
             if (isDemo) {
                 setDispenses(flowsLib.synthesizeDemoDispenses(actionIndex));
+                setDispensesLoaded(true);
             } else if (source) {
                 // Fills of THIS dispenser, keyed by its action index. The source
                 // lane answers "fills on this address", which over-reports as soon
@@ -364,9 +402,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 // no dispenser lane, so fall back to the source lane and let
                 // matchingDispenses() filter what it can (D-38).
                 messaging.getDispenses({ chainId, query: actionIndex, type: 'dispenser' })
-                    .then((d) => { if (!cancelled) setDispenses(extractRows(d)); })
+                    .then((d) => {
+                        if (cancelled) return;
+                        setDispenses(extractRows(d));
+                        setDispensesLoaded(true);
+                    })
                     .catch(() => messaging.getDispenses({ chainId, query: source, type: 'source' })
-                        .then((d) => { if (!cancelled) setDispenses(extractRows(d)); }))
+                        .then((d) => {
+                            if (cancelled) return;
+                            setDispenses(extractRows(d));
+                            setDispensesLoaded(true);
+                        }))
                     .catch(() => { /* best-effort; detail still usable without dispenses */ });
                 // PC-21: the rest of the lifecycle (refills/edits, closes,
                 // expirations). Best-effort; scoped to this dispenser by its
@@ -376,17 +422,28 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     // the 1-hour close window - while 'closes' is the completion the chain
                     // writes when the window ends. Omitting it left the cancel invisible on
                     // the timeline for that whole hour, right after the owner took it (D-45).
-                    Promise.all(['edits', 'cancels', 'closes', 'expires'].map((kind) => messaging
-                        .getDispenserLifecycle({ chainId, kind, query: source, type: 'address' })
+                    const lanes = ['edits', 'cancels', 'closes', 'expires'].map((kind) => ({ kind, query: source }));
+                    // The cancels feed is keyed by the cancelling address, and the
+                    // dispenser address may close too, so its cancel (which dates the
+                    // close window) is read from that address as well.
+                    const canceller = disp?.cancelled_by;
+                    if (canceller && canceller !== source) lanes.push({ kind: 'cancels', query: canceller });
+                    Promise.all(lanes.map(({ kind, query }) => messaging
+                        .getDispenserLifecycle({ chainId, kind, query, type: 'address' })
                         .then((r) => ({ kind, rows: extractRows(r) }))
                         .catch(() => ({ kind, rows: [] }))))
                         .then((results) => {
                             if (cancelled) return;
                             const evs = [];
+                            const seenEvents = new Set();
                             for (const { kind, rows } of results) {
                                 for (const row of rows) {
                                     const dai = row.dispenser_action_index;
                                     if (dai != null && String(dai) !== String(actionIndex)) continue;
+                                    // Two lanes can return the same row when both addresses are read.
+                                    const eventKey = row.action_index != null ? `${kind}:${row.action_index}` : null;
+                                    if (eventKey && seenEvents.has(eventKey)) continue;
+                                    if (eventKey) seenEvents.add(eventKey);
                                     evs.push({ kind, row });
                                 }
                             }
@@ -403,18 +460,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         });
         return () => { cancelled = true; };
     }, [walletId, chainId, actionIndex, messaging, reloadKey]);
-
-    useEffect(() => {
-        if (cancelStage === 'confirm') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
-    }, [cancelStage]);
-
-    useEffect(() => {
-        if (buyStage === 'confirm') {
-            setTimeout(() => buyPasswordRef.current?.focus(), 0);
-        }
-    }, [buyStage]);
 
     const cancelParams = useMemo(() => ({
         VERSION: '1',
@@ -517,9 +562,58 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const liveStatus = liveState.status;
     const isOpen = liveStatus === 'open';
     const isClosing = liveStatus === 'cancelling';
+    // The dispenser record names who closed it but not when, so the close
+    // window is dated from the cancel row the Lifecycle tab already loads.
+    const cancelTimestamp = useMemo(
+        () => (isClosing
+            ? dispenserCancelTimestamp(lifecycle.filter((e) => e.kind === 'cancels').map((e) => e.row), actionIndex)
+            : null),
+        [isClosing, lifecycle, actionIndex],
+    );
+    // Re-render once a minute while a countdown is on screen. The close is
+    // judged by the chain's protocol time, not the wall clock, so the same
+    // timer re-reads that time, at most once per CHAIN_TIME_REFRESH_MS.
+    const [nowMs, setNowMs] = useState(() => Date.now());
+    const [chainClock, setChainClock] = useState(
+        /** @type {null | { chainTime: number, chainTimeReadAtMs: number }} */ (null),
+    );
+    useEffect(() => {
+        if (cancelTimestamp == null) return undefined;
+        let stopped = false;
+        let lastReadMs = -Infinity;
+        const tick = () => {
+            const now = Date.now();
+            setNowMs(now);
+            if (now - lastReadMs < CHAIN_TIME_REFRESH_MS) return;
+            if (typeof messaging?.getChainTipBlockTime !== 'function') return;
+            lastReadMs = now;
+            // A failed read keeps the last chain time, which the countdown
+            // keeps advancing by local elapsed time.
+            messaging.getChainTipBlockTime({ chainId, withProtocolTime: true })
+                .then((r) => { if (!stopped) setChainClock(chainClockFromTipRead(r, Date.now())); })
+                .catch(() => {});
+        };
+        tick();
+        const timer = setInterval(tick, 60000);
+        return () => { stopped = true; clearInterval(timer); };
+    }, [cancelTimestamp, chainId, messaging]);
+    const closeEta = cancelTimestamp != null
+        ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
+        : null;
+    const isTerminal = isTerminalDispenserStatus(liveStatus);
+    // An ownership dispenser's form lane does not exist (DispenserForm has no
+    // GIVE_OWNERSHIP), and a sold one no longer has the ownership to offer.
+    const canOpenAgain = isTerminal && creatorHeld && typeof onOpenAgain === 'function'
+        && Number(dispenser?.give_ownership || 0) !== 1;
+    // Holding only the dispenser address grants close / refill / edit but no
+    // origin standing, so such a wallet may not open a new dispenser there.
+    const ownsOnlyDispenserAddress = Boolean(ownerAddress) && !creatorHeld;
+    const creatorSource = dispenser?.source || action?.source || '';
+    const priceStale = isDispenserPriceStale(dispenser);
     const currentExpiration = liveState.expiration;
-    const currentAllowList = liveState.allowList;
-    const currentBlockList = liveState.blockList;
+    const currentAllowList = boundListIndex(liveState.allowList);
+    const currentBlockList = boundListIndex(liveState.blockList);
+    const canRemoveList = isListEditRemoveActive({ chainId });
     // Fills this dispenser can still pay out, shown as a bubble next to the
     // dispense count and used to cap the buy panel's Max. Needs the LIVE
     // escrow: `escrow_remaining` is the demo fixtures' spelling and the real
@@ -556,9 +650,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     );
     const minFills = priceFloor ? priceFloor.minFills : 1;
 
-    const fillsNum = useMemo(() => {
-        const n = Number(String(fills).trim());
-        return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    const fillsCount = useMemo(() => {
+        const value = String(fills).trim();
+        if (!/^\d+$/.test(value)) return null;
+        const count = BigInt(value);
+        return count > 0n ? count : null;
     }, [fills]);
 
     // Default Fills to the floor the first time a dispenser needing one loads,
@@ -592,13 +688,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 + `still pay out prices below the ${priceFloor.floor} ${feeCoinTicker} minimum `
                 + 'the network will relay.';
         }
-        if (fillsNum > 0 && fillsNum < minFills) {
+        if (fillsCount != null && fillsCount < BigInt(minFills)) {
             return `Buying fewer than ${minFills} fills builds a payment under `
                 + `${priceFloor.floor} ${feeCoinTicker}, which every node refuses. Enter at `
                 + `least ${minFills} fills to buy from this dispenser.`;
         }
         return null;
-    }, [priceFloor, minFills, dispenserPricedBelowFloor, fillsNum, feeCoinTicker]);
+    }, [priceFloor, minFills, dispenserPricedBelowFloor, fillsCount, feeCoinTicker]);
 
     // Retract the refusal once Fills clears it, identity-matched against what
     // this guard itself pushed (mirrors Send.jsx's dustErrorRef) so an
@@ -620,20 +716,20 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         : null;
 
     const totalPayAmount = useMemo(() => {
-        if (!getAmount || fillsNum <= 0) return null;
-        // `handleBuy` sends this exact value on the wire as the SEND amount,
+        if (!getAmount || fillsCount == null) return null;
+        // `buyRequest` sends this exact value on the wire as the SEND amount,
         // so it must be computed in exact decimal space. Float multiplication
         // drifts ('0.1' x 3 -> '0.30000000000000004') and collapses tiny
         // amounts to scientific notation ('0.00000001' x 3 -> '3e-8'), either
         // of which the encoder rejects or mis-prices. The display string is
         // derived from this same exact value.
-        return multiplyAmounts(getAmount, String(fillsNum));
-    }, [getAmount, fillsNum]);
+        return multiplyAmounts(getAmount, fillsCount.toString());
+    }, [getAmount, fillsCount]);
 
     const totalReceive = useMemo(() => {
-        if (!giveAmount || fillsNum <= 0) return null;
-        return multiplyAmounts(giveAmount, String(fillsNum));
-    }, [giveAmount, fillsNum]);
+        if (!giveAmount || fillsCount == null) return null;
+        return multiplyAmounts(giveAmount, fillsCount.toString());
+    }, [giveAmount, fillsCount]);
 
     // What ONE fill of a Mode B (oracle-priced) dispenser costs in its fiat
     // currency. The oracle publishes the price of one TOKEN - its own publishing
@@ -673,51 +769,114 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return buyerAddresses.find((a) => a.id === buyerAddressId) || null;
     }, [buyerAddressId, buyerAddresses]);
 
-    // D-162: the panel already tells a buyer this dispenser is restricted and
-    // names the list, then tells them to "check you are on the right side of
-    // the list before sending" - which is a read the wallet can just do. Both
-    // list details, fetched once per dispenser; best-effort, since a failed
-    // read must leave the existing generic warning standing rather than
-    // replace it with a specific claim that is not backed by anything.
-    const [allowMembers, setAllowMembers] = useState(/** @type {string[]|null} */ (null));
-    const [blockMembers, setBlockMembers] = useState(/** @type {string[]|null} */ (null));
-    useEffect(() => {
-        setAllowMembers(null);
-        setBlockMembers(null);
-        if (!chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
-        let live = true;
-        const read = (idx, set) => {
-            if (!idx) return;
-            messaging.getListByActionIndex({ chainId, actionIndex: String(idx) })
-                .then((detail) => { if (live) set(listMembers(detail)); })
-                .catch(() => { /* best-effort */ });
-        };
-        read(currentAllowList, setAllowMembers);
-        read(currentBlockList, setBlockMembers);
-        return () => { live = false; };
-    }, [chainId, currentAllowList, currentBlockList, messaging]);
+    // Apply the same three policy pairs as settlement: the dispenser, the
+    // payment token, and the dispensed token. Each list read uses its resolved
+    // current membership through listMembers().
 
-    // The verdict that does NOT depend on who pays: a dispenser whose own
-    // pay-to address is off its own allow-list sells to nobody, so checking
-    // your own membership cannot help (D-161, from the buyer's side).
-    const dispenserSelfBarred = ownerOffAllowList({
-        members: allowMembers, getAddress: dispAddr,
-    });
-    // And the one that does: whether any address THIS wallet holds on this
-    // chain would be accepted. A coin-paid dispenser takes a bare payment from
-    // anywhere, so the wallet cannot know the payer - it can only answer for
-    // the addresses it has.
+    // Fetch current token-policy pointers on every assessment so token edits
+    // cannot leave the detail page using metadata from an earlier render.
+    // Deduplicate shared list references before reading their memberships.
+
+    // Keep failed reads unknown; only a resolved membership answer drives a
+    // refusal verdict.
+    const readBuyerPolicies = useCallback(async () => {
+        const readToken = async (tick) => {
+            if (!tick || typeof messaging.getTokenInfo !== 'function') return null;
+            try {
+                return await messaging.getTokenInfo({ chainId, tick });
+            } catch {
+                return null;
+            }
+        };
+        const [paymentInfo, giveInfo] = await Promise.all([
+            readToken(getTick),
+            readToken(giveTick),
+        ]);
+        const refs = [
+            { scope: 'dispenser', allowList: currentAllowList, blockList: currentBlockList },
+            { scope: 'payment token', allowList: paymentInfo?.allowList, blockList: paymentInfo?.blockList },
+            { scope: 'dispensed token', allowList: giveInfo?.allowList, blockList: giveInfo?.blockList },
+        ];
+        const indexes = [...new Set(refs
+            .flatMap((policy) => [policy.allowList, policy.blockList])
+            .filter((index) => index != null && String(index) !== '')
+            .map(String))];
+        const members = new Map();
+        if (typeof messaging.getListByActionIndex === 'function') {
+            await Promise.all(indexes.map(async (index) => {
+                try {
+                    const detail = await messaging.getListByActionIndex({ chainId, actionIndex: index });
+                    members.set(index, listMembers(detail));
+                } catch {
+                    members.set(index, null);
+                }
+            }));
+        }
+        return refs.map((policy) => ({
+            ...policy,
+            allowMembers: policy.allowList != null
+                ? members.get(String(policy.allowList)) ?? null : null,
+            blockMembers: policy.blockList != null
+                ? members.get(String(policy.blockList)) ?? null : null,
+        }));
+    }, [chainId, currentAllowList, currentBlockList, getTick, giveTick, messaging]);
+
+    const [buyerPolicies, setBuyerPolicies] = useState(/** @type {any[]} */ ([]));
+    const [eligibilityChecking, setEligibilityChecking] = useState(true);
+    useEffect(() => {
+        let live = true;
+        setEligibilityChecking(true);
+        readBuyerPolicies()
+            .then((policies) => {
+                if (!live) return;
+                setBuyerPolicies(policies);
+                setEligibilityChecking(false);
+            })
+            .catch(() => { if (live) setEligibilityChecking(false); });
+        return () => { live = false; };
+    }, [readBuyerPolicies]);
+
+    // Judge only the address the purchase flow will actually put in `from`.
     const buyerVerdict = useMemo(() => buyerListVerdict({
-        addresses: buyerAddresses
-            .filter((a) => !chainId || a.chainId === chainId || a.chain_id === chainId)
-            .map((a) => a.address)
-            .filter(Boolean),
-        allowMembers,
-        blockMembers,
-    }), [buyerAddresses, chainId, allowMembers, blockMembers]);
+        addresses: buyerAddress?.address ? [buyerAddress.address] : [],
+        policies: buyerPolicies,
+    }), [buyerAddress, buyerPolicies]);
+    const dispenserVerdict = useMemo(() => buyerListVerdict({
+        addresses: dispAddr ? [dispAddr] : [],
+        policies: buyerPolicies,
+    }), [dispAddr, buyerPolicies]);
+    const dispenserSelfBarred = dispenserVerdict.verdict === 'refused';
+    const buyerEligibilityBarred = buyerVerdict.verdict === 'refused';
     const buyerListNotice = dispenserSelfBarred
         ? dispenserRefusesEveryoneMessage()
         : buyerListMessage(buyerVerdict);
+    const tokenPolicyDescriptions = buyerPolicies.flatMap((policy) => {
+        if (policy.scope === 'dispenser') return [];
+        const descriptions = [];
+        if (policy.allowList != null && String(policy.allowList) !== '') {
+            descriptions.push(`${policy.scope} allow-list #${policy.allowList}`);
+        }
+        if (policy.blockList != null && String(policy.blockList) !== '') {
+            descriptions.push(`${policy.scope} block-list #${policy.blockList}`);
+        }
+        return descriptions;
+    });
+
+    const refreshBuyerEligibility = useCallback(async () => {
+        setEligibilityChecking(true);
+        const policies = await readBuyerPolicies();
+        setBuyerPolicies(policies);
+        setEligibilityChecking(false);
+        const payerVerdict = buyerListVerdict({
+            addresses: buyerAddress?.address ? [buyerAddress.address] : [],
+            policies,
+        });
+        const payToVerdict = buyerListVerdict({
+            addresses: dispAddr ? [dispAddr] : [],
+            policies,
+        });
+        return payerVerdict.verdict === 'refused' || payToVerdict.verdict === 'refused';
+    }, [buyerAddress, dispAddr, readBuyerPolicies]);
 
     // D-37: what the paying address actually holds of the payment
     // token, through the same hook that backs every other form's Max +
@@ -807,11 +966,131 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const buyUnderfunded = buyPreflight?.verdict === 'fail';
 
     const buyHw = isHwSource(buyerAddress);
-    const cancelHw = isHwSource(ownerAddress);
     const [buyHwStatus, setBuyHwStatus] = useState('idle');
-    const [cancelHwStatus, setCancelHwStatus] = useState('idle');
     const onBuyHwStatusChange = useCallback(({ status }) => setBuyHwStatus(status), []);
-    const onCancelHwStatusChange = useCallback(({ status }) => setCancelHwStatus(status), []);
+    const buyConfirm = useActionConfirmFlow({ messaging, walletId, slice: 'send' });
+    const buyFrom = useMemo(() => (buyerAddress ? {
+        address: buyerAddress.address,
+        publicKey: buyerAddress.publicKey,
+        derivationPath: buyerAddress.derivationPath,
+        addressId: buyerAddress.id,
+        source: buyerAddress.source,
+        signerId: buyerAddress.signerId,
+    } : null), [buyerAddress]);
+    const submitConfirmedBuy = useConfirmSubmit({
+        messaging,
+        isHw: buyHw,
+        signerId: buyerAddress?.signerId,
+        passwordRef: buyPasswordRef,
+        software: 'sendToken',
+        hardware: 'sendAssetHw',
+    });
+    const buyRequest = useMemo(() => {
+        if (!buyFrom || !payTick || !dispAddr || !totalPayAmount) return null;
+        return {
+            walletId,
+            chainId,
+            from: buyFrom,
+            to: dispAddr,
+            tick: payTick,
+            amount: totalPayAmount,
+            ...(feePerKb != null ? { feePerKb } : {}),
+            // Label the pending payment as a buy instead of a plain send.
+            actionSummary: `Buy ${fillsCount} fill${fillsCount === 1n ? '' : 's'} from dispenser #${actionIndex}:`
+                + ` ${totalPayAmount} ${payTick}`
+                + (totalReceive ? ` for ${totalReceive} ${giveTick || ''}`.trimEnd() : ''),
+        };
+    }, [buyFrom, payTick, dispAddr, totalPayAmount, walletId, chainId, feePerKb,
+        fillsCount, actionIndex, totalReceive, giveTick]);
+    const dispensersAtBuyDestination = useDispenserDestination({
+        messaging,
+        chainId,
+        to: dispAddr || '',
+        paymentTick: payTick,
+        isNativePayment: coinBuyable,
+        enabled: canBuyWithSend,
+    });
+    const buyDestinationNotice = useMemo(() => dispenserDestinationNotice({
+        dispensers: dispensersAtBuyDestination,
+        payer: buyerAddress?.address,
+        amount: totalPayAmount || '',
+    }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
+    const buyConfirmNotes = (
+        <>
+            {buyDestinationNotice ? (
+                <div data-testid="buy-dispenser-notice">
+                    <StatusMessage variant="status">{buyDestinationNotice.summary}</StatusMessage>
+                    {buyDestinationNotice.warnings.length > 0 ? (
+                        <div role="alert" className={styles.warnings}>
+                            {buyDestinationNotice.warnings.map((warning) => (
+                                <p key={warning} className={styles.warning}>{warning}</p>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+            <p className={styles.hint}>
+                The dispenser triggers when your payment confirms. If the dispenser
+                closes or runs out before then, the payment reaches the creator but
+                no {giveTick} is released. This is a normal risk when buying on
+                these chains.
+            </p>
+        </>
+    );
+    // Close, refill and edit all sign through the shared confirm page, which
+    // runs the network dry run and signs the bytes it previewed.
+    const ownerLane = useOwnerActionLane({
+        messaging,
+        walletId,
+        chainId,
+        owner: ownerAddress,
+        software: 'dispenserAction',
+        hardware: 'dispenserActionHw',
+    });
+
+    // A close returns escrow to whichever address signs it, so the close
+    // screens name that address. Closing someone else's dispenser from the
+    // dispenser address keeps the escrow here, which the creator may not expect.
+    const closeEscrowNote = ownerAddress ? (
+        <p className={styles.hint} data-testid="close-escrow-destination">
+            Escrow returns to <AddressText address={ownerAddress.address} /> (this wallet).
+            {ownsOnlyDispenserAddress && creatorSource && creatorSource !== ownerAddress.address
+                ? ' Another address opened this dispenser; closing it from the dispenser address'
+                    + ' returns the remaining escrow to this wallet, not to the creator.'
+                : null}
+        </p>
+    ) : null;
+
+    // The NEW allow-list's members, read as soon as the owner types a list
+    // number, so the edit form can say before signing when the dispenser's
+    // own address is missing from it. Keyed by index so a stale read for a
+    // list the owner has since retyped never produces the warning.
+    const editAllowIdx = boundListIndex(editAllowList) || '';
+    const [editAllowRead, setEditAllowRead] = useState(
+        /** @type {{ idx: string, members: string[] | null } | null} */ (null),
+    );
+    useEffect(() => {
+        if (!editAllowIdx || !chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
+        let live = true;
+        const timer = setTimeout(() => {
+            messaging.getListByActionIndex({ chainId, actionIndex: editAllowIdx })
+                .then((detail) => { if (live) setEditAllowRead({ idx: editAllowIdx, members: listMembers(detail) }); })
+                .catch(() => { /* best-effort: no warning beats a wrong one */ });
+        }, 400);
+        return () => { live = false; clearTimeout(timer); };
+    }, [editAllowIdx, chainId, messaging]);
+    const editAllowSelfWarning = editAllowIdx && editAllowRead?.idx === editAllowIdx
+        && ownerOffAllowList({ members: editAllowRead.members, getAddress: dispAddr })
+        ? ownerOffAllowListMessage(dispAddr)
+        : null;
+    // One list in both slots admits nobody; checked against the pair the
+    // dispenser will hold after the edit, so the edit is refused.
+    const editListConflictText = editListConflict({
+        allowList: editAllowList.trim(),
+        blockList: editBlockList.trim(),
+        currentAllowList,
+        currentBlockList,
+    });
 
     // Turn a failed sign into house copy; the thrown text survives only as the fallback.
     const submitFailureText = (err, fallback) => (err?.name === 'InvalidPasswordError'
@@ -821,68 +1100,79 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             fallback: err?.message || fallback,
         }));
 
-    async function handleBuy(event) {
-        event.preventDefault();
-        if (buyStage === 'submitting' || !buyerAddress) return;
-        if (!buyHw && (!signerReady && buyPassword.length === 0)) return;
-        if (buyHw && buyHwStatus !== 'available') return;
-        if (!payTick || !dispAddr || !totalPayAmount) return;
-        // D-37: last gate before signing. The balance can also resolve (or
-        // drop) while the review screen is open, so the check is repeated
-        // here rather than trusted from the panel's disabled button.
-        if (buyUnderfunded) {
-            setBuyError(isTokenPaid
-                ? 'Not enough of the payment token at this address.'
-                : `Not enough ${payTick} at this address.`);
+    const beginBuy = useCallback(async () => {
+        if (buyStage === 'submitting' || !buyRequest) return;
+        if (priceStale) {
+            setBuyError(DISPENSER_PRICE_STALE_MESSAGE);
             return;
         }
-        // Same D-37 reasoning: the Buy button is already disabled on this, but
-        // the review screen can sit open while Fills or the escrow change.
-        if (buyDustBlock) {
-            buyDustErrorRef.current = buyDustBlock;
-            setBuyError(buyDustBlock);
-            return;
-        }
+        // Resolve every buyer and pay-to list before any transaction reaches Confirm.
+        if (await refreshBuyerEligibility()) return;
+        if (buyUnderfunded || buyDustBlock) return;
         setBuyStage('submitting');
         setBuyError(null);
         try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: buyerAddress.address,
-                    publicKey: buyerAddress.publicKey,
-                    derivationPath: buyerAddress.derivationPath,
-                    addressId: buyerAddress.id,
-                    source: buyerAddress.source,
-                    signerId: buyerAddress.signerId,
-                },
-                to: dispAddr,
-                // The coin lane sends the native ticker: that is what makes
-                // the flow build a real payment output (see the lane note).
-                tick: payTick,
-                // Coin-scale, exact; the flow scales it to base units.
-                amount: totalPayAmount,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // History labels the pending record from this, so the buy
-                // reads as a buy and not as a plain send to a stranger.
-                actionSummary: `Buy ${fillsNum} fill${fillsNum === 1 ? '' : 's'} from dispenser #${actionIndex}:`
-                    + ` ${totalPayAmount} ${payTick}`
-                    + (totalReceive ? ` for ${totalReceive} ${giveTick || ''}`.trimEnd() : ''),
-            };
-            const res = buyHw
-                ? await messaging.sendAssetHw({ ...base, signerId: buyerAddress.signerId })
-                : await messaging.sendToken({ ...base, password: buyPassword });
+            const res = ownerLane.isWatcherMode
+                ? await messaging.buildSendPsbtRequest(buyRequest)
+                : await buyConfirm.run({
+                    chainId,
+                    from: buyRequest.from,
+                    compose: () => messaging.composeForConfirm(buyRequest),
+                    onApprove: async (prebuiltPsbt) => {
+                        // Recheck at approval because list edits can land while Confirm is open.
+                        if (await refreshBuyerEligibility()) {
+                            throw new Error(
+                                'The selected paying address or dispenser address is refused by a current access list.',
+                            );
+                        }
+                        return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
+                    },
+                });
             setBuyResult(res);
-            setBuyPassword('');
             setBuyStage('done');
         } catch (err) {
-            setBuyError(submitFailureText(err, 'Buy failed.'));
-            setBuyStage('confirm');
-            if (!buyHw) {
-                buyPasswordRef.current?.focus();
-                buyPasswordRef.current?.select();
-            }
+            setBuyStage('idle');
+            if (!isUserRejection(err)) setBuyError(submitFailureText(err, 'Buy failed.'));
+        } finally {
+            setBuyPassword('');
+        }
+    }, [buyStage, buyRequest, priceStale, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
+        ownerLane.isWatcherMode, buyConfirm, chainId, messaging, submitConfirmedBuy]);
+
+    /**
+     * Sign one owner action (close, refill or edit) and settle its stage.
+     * A full wallet opens the shared confirm page, so the network dry run
+     * runs and Approve signs the exact bytes previewed; Reject returns to
+     * the form quietly. Watcher mode builds an unsigned transaction instead.
+     */
+    async function runOwnerAction({ params, setStage, setError, setResult, fallback, onSigned }) {
+        setStage('submitting');
+        setError(null);
+        // Demo wallet: fabricated dispensers can't broadcast; simulate.
+        if (flowsLib.isDemoWallet(walletId)) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            setResult({ txid: null });
+            setStage('done');
+            onSigned?.({ txid: null });
+            return;
+        }
+        try {
+            const res = await ownerLane.run({
+                actionData: { action: 'DISPENSER', params },
+                encoderOpts: {
+                    // `flag` is true or undefined, never false, so on Bitcoin
+                    // (where the fee is opt-in) this leaves the payload untouched.
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                },
+                submitExtra: { params },
+            });
+            setResult(res || {});
+            setStage('done');
+            onSigned?.(res || {});
+        } catch (err) {
+            setStage('confirm');
+            if (!isUserRejection(err)) setError(submitFailureText(err, fallback));
         }
     }
 
@@ -891,61 +1181,24 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         if (refillStage === 'submitting' || !ownerAddress) return;
         const amt = refillAmount.trim();
         if (!amt || !(Number(amt) > 0)) { setRefillError('Enter a refill amount.'); return; }
-        if (!cancelHw && (!signerReady && password.length === 0)) return;
-        if (cancelHw && cancelHwStatus !== 'available') return;
-        setRefillStage('submitting');
-        setRefillError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setRefillResult({ txid: null });
-            setPassword('');
-            setRefillStage('done');
-            return;
-        }
-        try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: ownerAddress.address,
-                    publicKey: ownerAddress.publicKey,
-                    derivationPath: ownerAddress.derivationPath,
-                    addressId: ownerAddress.id,
-                    source: ownerAddress.source,
-                    signerId: ownerAddress.signerId,
-                },
-                params: {
-                    VERSION: '2',
-                    DISPENSER_ACTION_INDEX: String(actionIndex),
-                    GIVE_ESCROW: amt,
-                },
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // `flag` is true or undefined, never false, so on Bitcoin
-                // (where the fee is opt-in) this leaves the payload untouched.
-                payFeeInNativeCoin: nativeFee.flag,
-            };
-            const res = cancelHw
-                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
-                : await messaging.dispenserAction({ ...base, password });
-            setRefillResult(res);
-            setPassword('');
-            setRefillStage('done');
-        } catch (err) {
-            setRefillError(submitFailureText(err, 'Refill failed.'));
-            setRefillStage('confirm');
-            if (!cancelHw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        }
+        // D-147: a spent ceiling is refused here as well as on the button.
+        if (refillCount.remaining <= 0 && refillCount.exact) return;
+        await runOwnerAction({
+            params: {
+                VERSION: '2',
+                DISPENSER_ACTION_INDEX: String(actionIndex),
+                GIVE_ESCROW: amt,
+            },
+            setStage: setRefillStage,
+            setError: setRefillError,
+            setResult: setRefillResult,
+            fallback: 'Refill failed.',
+        });
     }
 
     async function handleEdit(event) {
         event.preventDefault();
         if (editStage === 'submitting' || !ownerAddress) return;
-        if (!cancelHw && (!signerReady && password.length === 0)) return;
-        if (cancelHw && cancelHwStatus !== 'available') return;
 
         // Assemble only the fields the owner filled in; a blank field is
         // left unchanged (indexer null = keep current). Refill lives in its
@@ -979,101 +1232,32 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setEditError('Change at least one field to submit an edit.');
             return;
         }
+        // The same list as both allow-list and block-list admits nobody, so
+        // this edit is refused unless one slot carries the removal sentinel.
+        if (editListConflictText) { setEditError(editListConflictText); return; }
 
-        setEditStage('submitting');
-        setEditError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setEditResult({ txid: null });
-            setEditedLists(changedLists);
-            setPassword('');
-            setEditStage('done');
-            return;
-        }
-        try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: ownerAddress.address,
-                    publicKey: ownerAddress.publicKey,
-                    derivationPath: ownerAddress.derivationPath,
-                    addressId: ownerAddress.id,
-                    source: ownerAddress.source,
-                    signerId: ownerAddress.signerId,
-                },
-                params,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // `flag` is true or undefined, never false, so on Bitcoin
-                // (where the fee is opt-in) this leaves the payload untouched.
-                payFeeInNativeCoin: nativeFee.flag,
-            };
-            const res = cancelHw
-                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
-                : await messaging.dispenserAction({ ...base, password });
-            setEditResult(res);
-            setEditedLists(changedLists);
-            setPassword('');
-            setEditStage('done');
-        } catch (err) {
-            setEditError(submitFailureText(err, 'Edit failed.'));
-            setEditStage('confirm');
-            if (!cancelHw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        }
+        await runOwnerAction({
+            params,
+            setStage: setEditStage,
+            setError: setEditError,
+            setResult: setEditResult,
+            fallback: 'Edit failed.',
+            onSigned: () => setEditedLists(changedLists),
+        });
     }
 
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
-        if (!cancelHw && (!signerReady && password.length === 0)) return;
-        if (cancelHw && cancelHwStatus !== 'available') return;
-        setCancelStage('submitting');
-        setCancelError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setCancelResult({ txid: null });
-            setPassword('');
-            setCancelStage('done');
-            return;
-        }
-        try {
-            const base = {
-                walletId,
-                chainId,
-                from: {
-                    address: ownerAddress.address,
-                    publicKey: ownerAddress.publicKey,
-                    derivationPath: ownerAddress.derivationPath,
-                    addressId: ownerAddress.id,
-                    source: ownerAddress.source,
-                    signerId: ownerAddress.signerId,
-                },
-                params: cancelParams,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                // `flag` is true or undefined, never false, so on Bitcoin
-                // (where the fee is opt-in) this leaves the payload untouched.
-                payFeeInNativeCoin: nativeFee.flag,
-            };
-            const res = cancelHw
-                ? await messaging.dispenserActionHw({ ...base, signerId: ownerAddress.signerId })
-                : await messaging.dispenserAction({ ...base, password });
-            setCancelResult(res);
-            setPassword('');
-            setCancelStage('done');
-            onCanceled?.();
-        } catch (err) {
-            setCancelError(submitFailureText(err, 'Cancel failed.'));
-            setCancelStage('confirm');
-            if (!cancelHw) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
-        }
+        await runOwnerAction({
+            params: cancelParams,
+            setStage: setCancelStage,
+            setError: setCancelError,
+            setResult: setCancelResult,
+            fallback: 'Cancel failed.',
+            // Only a broadcast cancel has started the close window.
+            onSigned: (res) => { if (res.txid || res.broadcast?.txid) onCanceled?.(); },
+        });
     }
 
         const header = (
@@ -1086,8 +1270,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ? 'Refill dispenser'
                         : editStage === 'confirm' || editStage === 'submitting'
                             ? 'Edit dispenser'
-                            : buyStage === 'confirm' || buyStage === 'submitting'
-                                ? 'Review buy'
+                            : buyStage === 'submitting'
+                                ? 'Confirm buy'
                                 : 'Dispenser detail'}
         />
     );
@@ -1100,7 +1284,67 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
 
+    // The confirm page stands in for whichever owner form opened it; that
+    // form's state stays intact behind it, so Reject lands back on it.
+    if (ownerLane.open) {
+        return (
+            <ActionConfirmScreen
+                {...ownerLane.confirmProps}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                coinTicker={feeCoinTicker}
+                signerReady={signerReady}
+                hintClassName={styles.hint}
+                extraCredentials={(
+                    <OwnerConfirmNotes
+                        kind={editStage === 'submitting' ? 'edit' : refillStage === 'submitting' ? 'refill' : 'close'}
+                        allowListWarning={editAllowSelfWarning}
+                        listsChanged={Boolean(editAllowList.trim() || editBlockList.trim())}
+                        refillNote={refillCeilingMessage(refillCount)}
+                        closeNote={closeEscrowNote}
+                    />
+                )}
+            />
+        );
+    }
+
+    if (buyConfirm.open) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={buyConfirm.confirmAction}
+                screenVariant={variant}
+                chainLabel={descriptor?.displayName || chainId}
+                coinTicker={feeCoinTicker}
+                signerReady={signerReady}
+                password={buyPassword}
+                onPasswordChange={(value) => {
+                    setBuyPassword(value);
+                    if (buyError) setBuyError(null);
+                }}
+                hintClassName={styles.hint}
+                hwSource={buyHw ? buyerAddress : null}
+                hwStatus={buyHwStatus}
+                onHwStatusChange={onBuyHwStatusChange}
+                chainId={chainId}
+                getSignerStatus={messaging.getSignerStatus}
+                extraCredentials={buyConfirmNotes}
+            />
+        );
+    }
+
+    // A watcher build or a signed-but-queued broadcast is not a success:
+    // nothing reached the chain yet, so neither gets the "submitted" copy.
+    const ownerPendingPanel = (res, onDone) => {
+        if (res?.queued) return wrap(<QueuedResultPanel onDone={onDone} what="dispenser update" />);
+        if (res?.psbtHex && !(res.txid || res.broadcast?.txid)) {
+            return wrap(<WatcherResultPanel result={res} onDone={onDone} />);
+        }
+        return null;
+    };
+
     if (cancelStage === 'done') {
+        const pending = ownerPendingPanel(cancelResult, onBack);
+        if (pending) return pending;
         const txid = cancelResult?.txid || cancelResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1122,6 +1366,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }
 
     if (refillStage === 'done') {
+        const pending = ownerPendingPanel(refillResult, () => { setRefillStage('idle'); setRefillAmount(''); });
+        if (pending) return pending;
         const txid = refillResult?.txid || refillResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1152,8 +1398,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </p>
                 {/*
                   * D-147: this used to be policy copy alone ("a dispenser allows
-                  * up to 5 refills … a 6th is rejected") with no count, on the one
-                  * lane the wallet cannot dry-run. It now says where THIS dispenser
+                  * up to 5 refills … a 6th is rejected") with no count, on a
+                  * lane that had no dry run then. It now says where THIS dispenser
                   * stands, and when the ceiling is spent it says so as an alert and
                   * the sign button goes away, because the alternative is a signed
                   * transaction the chain always rejects.
@@ -1191,42 +1437,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <SignCredentials
-                    unlocked={signerReady}
-                    fromAddress={ownerAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (refillError) setRefillError(null);
-                    }}
-                    onStatusChange={onCancelHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={refillError}
-                    disabled={refillStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
+                <OwnerLaneFooter
+                    isWatcherMode={ownerLane.isWatcherMode}
+                    error={refillError}
+                    submitting={refillStage === 'submitting'}
+                    disabled={refillCount.remaining <= 0 && refillCount.exact}
+                    label="Refill dispenser"
                 />
-                {cancelHw && refillError ? (
-                    <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={refillStage === 'submitting'}
-                        disabled={(refillCount.remaining <= 0 && refillCount.exact)
-                            || (cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0))}
-                    >
-                        {cancelHw
-                            ? `Sign refill on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign refill'}
-                    </Button>
-                </div>
             </form>,
         );
     }
 
     if (editStage === 'done') {
+        const pending = ownerPendingPanel(editResult, () => {
+            setEditStage('idle');
+            setEditExpiration('');
+            setEditAllowList('');
+            setEditBlockList('');
+        });
+        if (pending) return pending;
         const txid = editResult?.txid || editResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1286,6 +1515,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
                 />
+                {canRemoveList && currentAllowList ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setEditAllowList('0')}>
+                        Remove allow list
+                    </Button>
+                ) : null}
                 <Input
                     label="Block list"
                     inputMode="numeric"
@@ -1294,52 +1528,48 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
                 />
+                {canRemoveList && currentBlockList ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setEditBlockList('0')}>
+                        Remove block list
+                    </Button>
+                ) : null}
                 {anyListFilled ? (
                     <p className={styles.hint}>
                         Allow/block list changes take effect about 1 hour after this
                         transaction confirms, per the dispenser list-edit delay.
                     </p>
                 ) : null}
+                {/* D-161 on the edit lane: the NEW allow-list gates the
+                    dispenser's own address too, so a list without it refuses
+                    every buyer. Same check and copy as the create form. */}
+                {editAllowSelfWarning ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{editAllowSelfWarning}</p>
+                    </div>
+                ) : null}
+                {editListConflictText && editListConflictText !== editError ? (
+                    <StatusMessage variant="error" className={styles.error}>{editListConflictText}</StatusMessage>
+                ) : null}
                 {feeSelector}
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <SignCredentials
-                    unlocked={signerReady}
-                    fromAddress={ownerAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (editError) setEditError(null);
-                    }}
-                    onStatusChange={onCancelHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={editError}
-                    disabled={editStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
+                <OwnerLaneFooter
+                    isWatcherMode={ownerLane.isWatcherMode}
+                    error={editError}
+                    submitting={editStage === 'submitting'}
+                    disabled={Boolean(editListConflictText)}
+                    label="Edit dispenser"
                 />
-                {cancelHw && editError ? (
-                    <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={editStage === 'submitting'}
-                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {cancelHw
-                            ? `Sign edit on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign edit'}
-                    </Button>
-                </div>
             </form>,
         );
     }
 
     if (buyStage === 'done') {
+        if (buyResult?.psbtHex && !(buyResult.txid || buyResult.broadcast?.txid)) {
+            return wrap(<WatcherResultPanel result={buyResult} onDone={onBack} />);
+        }
         const txid = buyResult?.txid || buyResult?.broadcast?.txid;
         return wrap(
             <>
@@ -1358,86 +1588,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
             </>,
-        );
-    }
-
-    if (buyStage === 'confirm' || buyStage === 'submitting') {
-        return wrap(
-            <form onSubmit={handleBuy} noValidate>
-                <p className={styles.summary}>
-                    Buy {fillsNum} fill{fillsNum === 1 ? '' : 's'}: pay {totalPayAmount} {payTick}
-                    {' '}→ receive ~{totalReceive} {giveTick}
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={buyerAddress?.address || ''} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Dispenser</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={dispAddr || ''} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Per-fill price</dt>
-                    <dd className={styles.detailsValue}>{getAmount} {payTick}</dd>
-                    <dt className={styles.detailsLabel}>Per-fill give</dt>
-                    <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
-                    <dt className={styles.detailsLabel}>Your balance</dt>
-                    <dd className={styles.detailsValue}>
-                        {buyBalance == null
-                            ? 'Checking…'
-                            : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()}`}
-                    </dd>
-                </dl>
-                {buyPreflight ? (
-                    <PreflightPanel
-                        report={buyPreflight}
-                        acknowledged={NO_ACKNOWLEDGMENTS}
-                        onAcknowledge={() => {}}
-                    />
-                ) : null}
-                <p className={styles.hint}>
-                    The dispenser triggers when your payment confirms. If the dispenser
-                    closes or runs out before then, the payment reaches the creator but
-                    no {giveTick} is released. This is a normal risk when buying on
-                    these chains.
-                </p>
-                {feeSelector}
-                <SignCredentials
-                        unlocked={signerReady}
-                    fromAddress={buyerAddress}
-                    chainId={chainId}
-                    password={buyPassword}
-                    onPasswordChange={(v) => {
-                        setBuyPassword(v);
-                        if (buyError) setBuyError(null);
-                    }}
-                    onStatusChange={onBuyHwStatusChange}
-                    passwordRef={buyPasswordRef}
-                    submitError={buyError}
-                    disabled={buyStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-                {buyHw && buyError ? (
-                    <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={buyStage === 'submitting'}
-                        disabled={buyUnderfunded || Boolean(buyDustBlock)
-                            || (buyHw ? buyHwStatus !== 'available' : (!signerReady && buyPassword.length === 0))}
-                    >
-                        {buyHw
-                            ? `Sign buy on ${buyerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign buy on ${descriptor.displayName}` : 'Sign buy')}
-                    </Button>
-                </div>
-            </form>,
         );
     }
 
@@ -1465,41 +1615,19 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         ))}
                     </div>
                 ) : null}
+                {closeEscrowNote}
                 {feeSelector}
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <SignCredentials
-                        unlocked={signerReady}
-                    fromAddress={ownerAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (cancelError) setCancelError(null);
-                    }}
-                    onStatusChange={onCancelHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={cancelError}
-                    disabled={cancelStage === 'submitting'}
-                    getSignerStatus={messaging.getSignerStatus}
+                <OwnerLaneFooter
+                    isWatcherMode={ownerLane.isWatcherMode}
+                    error={cancelError}
+                    submitting={cancelStage === 'submitting'}
+                    label="Close dispenser"
+                    danger
                 />
-                {cancelHw && cancelError ? (
-                    <StatusMessage variant="error" className={styles.error}>{cancelError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="danger"
-                        loading={cancelStage === 'submitting'}
-                        disabled={cancelHw ? cancelHwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {cancelHw
-                            ? `Sign cancel on ${ownerAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Sign cancel'}
-                    </Button>
-                </div>
             </form>,
         );
     }
@@ -1549,7 +1677,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
               * fee and receives nothing. Measured on Litecoin regtest:
               * 5,005,460 sats for a refused fill, unrecoverable.
               */}
-            {currentAllowList || currentBlockList ? (
+            {currentAllowList || currentBlockList || tokenPolicyDescriptions.length > 0 ? (
                 <p role="alert" className={styles.warning}>
                     <strong>This dispenser is restricted.</strong>{' '}
                     {currentAllowList
@@ -1559,22 +1687,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     {currentBlockList
                         ? `Addresses on list #${currentBlockList} are barred from triggering it.`
                         : ''}
+                    {tokenPolicyDescriptions.length > 0
+                        ? ` Settlement also checks the ${tokenPolicyDescriptions.join(' and ')}.`
+                        : ''}
                     {' '}A payment from an address it refuses is <strong>not returned</strong>:
                     the {payTick || getCoin} is spent, the dispense is recorded invalid, and nothing
                     comes back.
                 </p>
             ) : null}
             {/*
-              * D-162: the line above used to end "Check you are on the
-              * right side of the list before sending", which hands the
-              * buyer a lookup the wallet can do itself off the read the
-              * list picker already makes. Two verdicts, and the first
-              * does not depend on who pays: a dispenser whose own
-              * pay-to address is off its allow-list sells to nobody
-              * (D-161 from the other side), so no amount of checking
-              * your own membership helps. Silent when the read failed
-              * or the answer is "you are fine" - the generic warning
-              * above still stands on its own.
+              * Show the specific eligibility verdict the wallet can resolve
+              * from current list membership.
+              */}
+            {/*
+              * Treat the pay-to verdict as payer-independent: a dispenser
+              * address refused by any settlement policy sells to nobody.
+              */}
+            {/*
+              * Keep this silent when a read failed or both addresses pass,
+              * since the generic restriction warning still stands on its own.
               */}
             {buyerListNotice ? (
                 <p role="alert" className={styles.warning}>{buyerListNotice}</p>
@@ -1585,10 +1716,30 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     return wrap(
         <>
             {isClosing ? (
+                <p className={local.closeWindowNote} role="status" data-testid="close-window-banner">
+                    {closeWindowNotice({
+                        eta: closeEta,
+                        escrowRemaining,
+                        giveTick,
+                        cancelledBy: dispenser?.cancelled_by ?? dispenser?.state?.cancelled_by ?? null,
+                        heldAddresses,
+                    })}
+                </p>
+            ) : null}
+            {isTerminal ? (
                 <p className={local.closeWindowNote} role="status">
-                    Closing: this dispenser is in its 1-hour close window. Remaining escrow
-                    returns to the owner when the window ends; dispenses that confirm before
-                    then are still honored.
+                    {terminalDispenserNotice(liveStatus, { canReopen: canOpenAgain })}
+                </p>
+            ) : null}
+            {isTerminal && ownsOnlyDispenserAddress ? (
+                <p className={styles.hint} data-testid="reopen-origin-note">
+                    Only the address that opened this dispenser can open it again.
+                </p>
+            ) : null}
+            {priceStale ? (
+                <p role="alert" className={styles.warning}>
+                    <strong>{DISPENSER_PRICE_STALE_MESSAGE}</strong>
+                    <span>. A payment made now would be refused and kept.</span>
                 </p>
             ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
@@ -1601,8 +1752,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </dd>
                 <dt className={styles.detailsLabel}>Payment</dt>
                 <dd className={styles.detailsValue}>
-                    {formatNum(getAmount)} {getTick || getCoin || '?'}
-                    {getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}
+                    {/* A fiat-priced dispenser stores GET_AMOUNT 0, which printed as a
+                        price would read "0 DOGE", as if free. Same branches as the
+                        pay-here panel's price line below, so the two agree. */}
+                    {isFiatPriced
+                        ? (oracleAddress && fiatAmount == null
+                            ? (oracleFillPrice != null
+                                ? `${oracleFillPrice} ${fiatCode} (oracle ${oracleAddress})`
+                                : (oracleQuoteChecked
+                                    ? `${fiatCode} via oracle ${oracleAddress}: no current price (stale)`
+                                    : `${fiatCode} via oracle ${oracleAddress}…`))
+                            : `${fiatAmount} ${fiatCode}`)
+                        : `${formatNum(getAmount)} ${getTick || getCoin || '?'}${getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}`}
                 </dd>
                 {escrowRemaining != null ? (
                     <>
@@ -1612,11 +1773,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         </dd>
                     </>
                 ) : null}
-                {dispenser?.dispense_count != null ? (
+                {dispensesLoaded ? (
                     <>
                         <dt className={styles.detailsLabel}>Dispenses</dt>
                         <dd className={styles.detailsValue}>
-                            {formatNum(dispenser.dispense_count)} of 1,000 this fill
+                            {formatNum(validDispenseCount)} of 1,000 this fill
                             {remainingFills != null ? (
                                 <span
                                     className={`${local.remainingPill} ${remainingFills > 0n ? local.remainingOk : local.remainingEmpty}`}
@@ -1641,7 +1802,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dt className={styles.detailsLabel}>Source</dt>
                         <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
                             <AddressText address={source} truncate={false} />
-                            {ownerAddress ? ' (you)' : ''}
+                            {creatorHeld ? ' (you)' : ''}
                         </dd>
                     </>
                 ) : null}
@@ -1650,6 +1811,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dt className={styles.detailsLabel}>Address</dt>
                         <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
                             <AddressText address={dispAddress || source} truncate={false} />
+                            {ownsOnlyDispenserAddress ? ' (you)' : ''}
                         </dd>
                     </>
                 ) : null}
@@ -1663,18 +1825,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dd className={styles.detailsValue}>{formatUnixDate(currentExpiration)}</dd>
                     </>
                 ) : null}
-                {currentAllowList ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Allow list</dt>
-                        <dd className={styles.detailsValue}>#{currentAllowList}</dd>
-                    </>
-                ) : null}
-                {currentBlockList ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Block list</dt>
-                        <dd className={styles.detailsValue}>#{currentBlockList}</dd>
-                    </>
-                ) : null}
+                <dt className={styles.detailsLabel}>Allow list</dt>
+                <dd className={styles.detailsValue}>{currentAllowList ? `#${currentAllowList}` : 'none'}</dd>
+                <dt className={styles.detailsLabel}>Block list</dt>
+                <dd className={styles.detailsValue}>{currentBlockList ? `#${currentBlockList}` : 'none'}</dd>
                 {dispenser?.memo ? (
                     <>
                         <dt className={styles.detailsLabel}>Memo</dt>
@@ -1684,42 +1838,59 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             </dl>
 
             <div className={local.quickActions} role="group" aria-label="Dispenser actions">
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => setCancelStage('confirm')}
-                    disabled={!ownerAddress || !isOpen}
-                    title={!ownerAddress ? 'Only the owner can close'
-                        : !isOpen ? 'Dispenser is not open'
-                        : 'Close this dispenser'}
-                >
-                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
-                    <span>Close</span>
-                </button>
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => setRefillStage('confirm')}
-                    disabled={!ownerAddress || !isOpen}
-                    title={!ownerAddress ? 'Only the owner can refill'
-                        : !isOpen ? 'Dispenser is not open'
-                        : 'Add escrow to this dispenser'}
-                >
-                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                    <span>Refill</span>
-                </button>
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => setEditStage('confirm')}
-                    disabled={!ownerAddress || !isOpen}
-                    title={!ownerAddress ? 'Only the owner can edit'
-                        : !isOpen ? 'Dispenser is not open'
-                        : 'Change expiration or allow/block lists'}
-                >
-                    <span className={local.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
-                    <span>Edit</span>
-                </button>
+                {/* Terminal statuses drop Close / Refill / Edit outright: the
+                    chain refuses all three unless the status is open, and a
+                    disabled button's tooltip never shows on a phone. */}
+                {isTerminal ? (canOpenAgain ? (
+                    <button
+                        type="button"
+                        className={local.quickAction}
+                        onClick={() => onOpenAgain(reopenTermsFrom(dispenser, liveState, { chainId }))}
+                        title="Open a new dispenser on this address with the same terms"
+                    >
+                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.RefreshIcon /></span>
+                        <span>Open again</span>
+                    </button>
+                ) : null) : (
+                    <>
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => setCancelStage('confirm')}
+                            disabled={!ownerAddress || !isOpen}
+                            title={!ownerAddress ? 'Only the owner can close'
+                                : !isOpen ? 'Dispenser is not open'
+                                : 'Close this dispenser'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
+                            <span>Close</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => setRefillStage('confirm')}
+                            disabled={!ownerAddress || !isOpen}
+                            title={!ownerAddress ? 'Only the owner can refill'
+                                : !isOpen ? 'Dispenser is not open'
+                                : 'Add escrow to this dispenser'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
+                            <span>Refill</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => setEditStage('confirm')}
+                            disabled={!ownerAddress || !isOpen}
+                            title={!ownerAddress ? 'Only the owner can edit'
+                                : !isOpen ? 'Dispenser is not open'
+                                : 'Change expiration or allow/block lists'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
+                            <span>Edit</span>
+                        </button>
+                    </>
+                )}
                 <button
                     type="button"
                     className={local.quickAction}
@@ -1909,13 +2080,27 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             onAcknowledge={() => {}}
                         />
                     ) : null}
+                    {buyError ? (
+                        <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
+                    ) : null}
+                    {ownerLane.isWatcherMode ? (
+                        <p className={styles.hint}>
+                            Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                            Signer-mode wallet, then broadcast from a Full-mode wallet.
+                        </p>
+                    ) : null}
                     <Button
                         variant="primary"
-                        onClick={() => setBuyStage('confirm')}
-                        disabled={fillsNum <= 0 || !totalPayAmount || !buyerAddress || !dispAddr
-                            || buyUnderfunded || Boolean(buyDustBlock)}
+                        onClick={beginBuy}
+                        loading={buyStage === 'submitting' || buyConfirm.composing}
+                        disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
+                            || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
+                            || buyerEligibilityBarred || dispenserSelfBarred || priceStale
+                            || buyStage === 'submitting' || buyConfirm.composing}
                     >
-                        Buy {fillsNum > 0 ? `${fillsNum} ` : ''}fill{fillsNum === 1 ? '' : 's'}
+                        {ownerLane.isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : `Buy ${fillsCount != null ? `${fillsCount} ` : ''}fill${fillsCount === 1n ? '' : 's'}`}
                     </Button>
                 </section>
             ) : null}
@@ -2091,12 +2276,115 @@ function formatUnixDate(ts) {
     }
 }
 
+// The close-window banner copy. Escrow returns to whichever address closed
+// the dispenser (creator or dispenser address), so the destination comes from
+// `cancelled_by`, never from who created it. Without a readable cancel time
+// the copy states the window without a clock.
+function closeWindowNotice({ eta, escrowRemaining, giveTick, cancelledBy, heldAddresses }) {
+    const escrow = escrowRemaining != null
+        ? `the remaining ${formatNum(escrowRemaining)} ${giveTick || ''}`.trim() + ' in escrow'
+        : 'the remaining escrow';
+    const destination = cancelledBy && heldAddresses.includes(cancelledBy)
+        ? 'this wallet'
+        : (cancelledBy ? shortAddress(cancelledBy) : 'the address that closed it');
+    const honored = 'Dispenses that confirm before the close are still honored.';
+    if (!eta) {
+        return `Closing: this dispenser is in its 1-hour close window. ${capitalize(escrow)} returns to ${destination} when the window ends. ${honored}`;
+    }
+    // Past the window, the close waits for a block whose protocol time is
+    // later than the window's end, so no clock time is promised. Only a chain
+    // time reading can say the next block is that block; the device clock
+    // alone cannot, since the chain's time can trail it.
+    if (eta.pastDue && eta.basis === 'chain') {
+        return `Closing at the next block: the chain has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+    }
+    if (eta.pastDue) {
+        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the chain's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+    }
+    return `Closing in ${eta.countdown} (around ${formatLocalClock(eta.closeAtMs)}). This dispenser is in its 1-hour close window; ${escrow} returns to ${destination} with the first block after it ends. ${honored}`;
+}
+
+function capitalize(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+// Hour and minute in the viewer's own zone and clock style.
+function formatLocalClock(ms) {
+    try {
+        return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    } catch {
+        return new Date(ms).toISOString().slice(11, 16);
+    }
+}
+
 // Convert a datetime-local input value ('2026-07-24T15:30', interpreted in
 // the user's local zone) to Unix seconds. null on unparseable input.
 function localInputToUnix(localStr) {
     const ms = Date.parse(String(localStr));
     if (!Number.isFinite(ms)) return null;
     return Math.floor(ms / 1000);
+}
+
+/**
+ * The bottom of an owner form: the watcher-mode note, the error, and the one
+ * button. Credentials live on the confirm page, not here, because nothing is
+ * signed until the dry run has been seen there.
+ */
+function OwnerLaneFooter({ isWatcherMode, error, submitting, disabled = false, label, danger = false }) {
+    return (
+        <>
+            {isWatcherMode ? (
+                <p className={styles.hint}>
+                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                    Signer-mode wallet, then broadcast from a Full-mode wallet.
+                </p>
+            ) : null}
+            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            <div className={styles.actions}>
+                <Button
+                    type="submit"
+                    variant={danger ? 'danger' : 'primary'}
+                    loading={submitting}
+                    disabled={submitting || disabled}
+                >
+                    {isWatcherMode ? 'Create unsigned transaction' : label}
+                </Button>
+            </div>
+        </>
+    );
+}
+
+/**
+ * The dispenser-only facts that must still sit in front of Approve on the
+ * confirm page, which shows the decoded action but knows nothing of these.
+ */
+function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote, closeNote }) {
+    if (kind === 'refill') return <p className={styles.hint}>{refillNote}</p>;
+    if (kind === 'close') {
+        return (
+            <>
+                <p className={styles.hint}>
+                    The dispenser enters a 1-hour close window before remaining escrow is released.
+                </p>
+                {closeNote}
+            </>
+        );
+    }
+    return (
+        <>
+            {allowListWarning ? (
+                <div role="alert" className={styles.warnings}>
+                    <p className={styles.warning}>{allowListWarning}</p>
+                </div>
+            ) : null}
+            {listsChanged ? (
+                <p className={styles.hint}>
+                    Allow/block list changes take effect about 1 hour after this
+                    transaction confirms.
+                </p>
+            ) : null}
+        </>
+    );
 }
 
 function DetailRow({ label, value }) {
@@ -2119,16 +2407,6 @@ function InvalidMarker({ row }) {
             {reason ? <span className={local.dispenseInvalidReason}>{reason}</span> : null}
         </span>
     );
-}
-
-function rateLabel(row) {
-    if (!row) return 'unknown';
-    const give = `${row.give_amount ?? '?'} ${row.give_tick || '?'}`;
-    const coin = row.get_coin || '';
-    const tick = row.get_tick || '';
-    const amt = row.get_amount ?? '?';
-    const payAsset = tick || coin || '?';
-    return `${give} per ${amt} ${payAsset}`;
 }
 
 function pickAction(resp) {

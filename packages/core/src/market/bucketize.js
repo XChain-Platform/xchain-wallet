@@ -16,15 +16,17 @@
 // flip between periods (1m / 5m / 15m / 1h / 4h / 1d / 1w) without
 // a round-trip per period change.
 //
-// Price orientation: a match row carries `give_amount`, `get_amount`,
-// `give_tick`, `get_tick`. For the pair (tick1 / tick2) we want the
-// price of tick1 denominated in tick2. When the match's `give_tick`
-// equals tick1, price = get_amount / give_amount. When reversed,
-// price = give_amount / get_amount. Amounts that can't be parsed are
-// skipped.
+// Market history rows carry projected `price`, `amount`, and `type`
+// fields. Raw give/get rows remain accepted for older explorers.
 //
 // Bucket timestamps: seconds since epoch, floored to the period
 // boundary. Matches missing a parsable timestamp are skipped.
+
+import { normalizeMarketHistoryRowExact } from './history_rows.js';
+import {
+    compareDecimalStrings,
+    sumDecimalStrings,
+} from '../shared/utils/amountFormat.js';
 
 export const PERIODS = /** @type {const} */ ([
     { id: '1m', label: '1m', seconds: 60 },
@@ -66,9 +68,9 @@ export function bucketizeMatches(rows, { tick1, tick2, periodSeconds }) {
     /** @type {Map<number, { open: number, high: number, low: number, close: number, volume: number, firstTs: number, lastTs: number }>} */
     const buckets = new Map();
     for (const row of rows) {
-        const parsed = parseRow(row, tick1, tick2);
+        const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
         if (!parsed) continue;
-        const { price, volume, timestamp } = parsed;
+        const { price, amount: volume, timestamp } = parsed;
         const bucketStart = Math.floor(timestamp / periodSeconds) * periodSeconds;
         const existing = buckets.get(bucketStart);
         if (!existing) {
@@ -82,8 +84,8 @@ export function bucketizeMatches(rows, { tick1, tick2, periodSeconds }) {
                 lastTs: timestamp,
             });
         } else {
-            if (price > existing.high) existing.high = price;
-            if (price < existing.low) existing.low = price;
+            if (compareDecimalStrings(price, existing.high) === 1) existing.high = price;
+            if (compareDecimalStrings(price, existing.low) === -1) existing.low = price;
             if (timestamp < existing.firstTs) {
                 existing.firstTs = timestamp;
                 existing.open = price;
@@ -92,54 +94,21 @@ export function bucketizeMatches(rows, { tick1, tick2, periodSeconds }) {
                 existing.lastTs = timestamp;
                 existing.close = price;
             }
-            existing.volume += volume;
+            existing.volume = sumDecimalStrings([existing.volume, volume]);
         }
     }
     const out = [];
     for (const [time, b] of buckets) {
         out.push({
             time,
-            open: b.open,
-            high: b.high,
-            low: b.low,
-            close: b.close,
-            volume: b.volume,
+            open: Number(b.open),
+            high: Number(b.high),
+            low: Number(b.low),
+            close: Number(b.close),
+            volume: Number(b.volume),
+            exactVolume: b.volume,
         });
     }
     out.sort((a, b) => a.time - b.time);
     return out;
-}
-
-function parseRow(row, tick1, tick2) {
-    if (!row || typeof row !== 'object') return null;
-    const giveTick = row.give_tick || row.giveTick;
-    const getTick = row.get_tick || row.getTick;
-    if (!giveTick || !getTick) return null;
-    const giveAmt = Number(row.give_amount ?? row.giveAmount);
-    const getAmt = Number(row.get_amount ?? row.getAmount);
-    if (!Number.isFinite(giveAmt) || giveAmt <= 0) return null;
-    if (!Number.isFinite(getAmt) || getAmt <= 0) return null;
-    // Extract timestamp. Explorer serialises as `timestamp` (unix
-    // seconds) or `block_time`; fall back to `created_at` ISO strings.
-    let ts = null;
-    if (Number.isFinite(Number(row.timestamp))) ts = Number(row.timestamp);
-    else if (Number.isFinite(Number(row.block_time))) ts = Number(row.block_time);
-    else if (row.created_at) {
-        const ms = Date.parse(row.created_at);
-        if (Number.isFinite(ms)) ts = Math.floor(ms / 1000);
-    }
-    if (!Number.isFinite(ts)) return null;
-    // Price orientation.
-    let price; let volume;
-    if (giveTick === tick1 && getTick === tick2) {
-        price = getAmt / giveAmt;
-        volume = giveAmt;
-    } else if (giveTick === tick2 && getTick === tick1) {
-        price = giveAmt / getAmt;
-        volume = getAmt;
-    } else {
-        return null;
-    }
-    if (!Number.isFinite(price) || price <= 0) return null;
-    return { price, volume, timestamp: ts };
 }

@@ -250,10 +250,11 @@ export function fakeDispensersFor(tick, chainId) {
     const ageSec = [1800, 14400, 172800]; // 30m, 4h, 2d ago
     return [0, 1, 2].map((i) => {
         const { blockIndex, actionIndex } = fakeBlockFor(chainId, 'DISPENSER', tick, i);
-        const giveQty = 1000 * 10 ** 8;
-        const escrowQty = giveQty;
-        const remaining = Math.floor(giveQty * (1 - 0.2 * i));
-        const priceSats = [25000, 31000, 42000][i];
+        // The explorer list lane's own fields: decimal strings, the string
+        // create status and the lifecycle beside it, a coin-paid price in
+        // GET_COIN (GET_TICK is null on a coin-paid dispenser).
+        const remaining = ['1000', '800', '600'][i];
+        const price = ['0.00025', '0.00031', '0.00042'][i];
         return {
             action_index: actionIndex,
             tx_hash: actionIndex,
@@ -262,14 +263,14 @@ export function fakeDispensersFor(tick, chainId) {
             block_time: now - ageSec[i],
             source: fakeAddress(chainId, tick, 100 + i),
             give_tick: tick,
-            give_quantity: String(giveQty),
-            give_remaining: String(remaining),
-            escrow_quantity: String(escrowQty),
-            get_tick: native,
-            get_quantity: String(priceSats),
-            mainchainrate: String(priceSats),
-            mainchainrate_tick: native,
-            status: 0,
+            give_amount: '10',
+            give_escrow: '1000',
+            escrow_remaining: remaining,
+            get_coin: native,
+            get_tick: null,
+            get_amount: price,
+            status: 'valid',
+            current_status: 'open',
         };
     });
 }
@@ -289,14 +290,14 @@ export function fakeOrdersFor(tick, chainId) {
     // every branch of OrdersPanel's renderer.
     const orders = [
         // Selling tick for native coin
-        { give: tick, giveQ: 5000 * 10 ** 8, get: native, getQ: 12500000, ago: 3600 },
-        { give: tick, giveQ: 10000 * 10 ** 8, get: native, getQ: 28000000, ago: 18000 },
+        { give: tick, giveQ: '5000', get: native, getQ: '0.125', ago: 3600 },
+        { give: tick, giveQ: '10000', get: native, getQ: '0.28', ago: 18000 },
         // Buying tick with native coin
-        { give: native, giveQ: 8000000, get: tick, getQ: 3200 * 10 ** 8, ago: 43200 },
-        { give: native, giveQ: 50000000, get: tick, getQ: 22000 * 10 ** 8, ago: 129600 },
+        { give: native, giveQ: '0.08', get: tick, getQ: '3200', ago: 43200 },
+        { give: native, giveQ: '0.5', get: tick, getQ: '22000', ago: 129600 },
         // Token-for-token pair
-        { give: tick, giveQ: 2500 * 10 ** 8, get: counterpart, getQ: 4500 * 10 ** 8, ago: 259200 },
-        { give: counterpart, giveQ: 1750 * 10 ** 8, get: tick, getQ: 1100 * 10 ** 8, ago: 432000 },
+        { give: tick, giveQ: '2500', get: counterpart, getQ: '4500', ago: 259200 },
+        { give: counterpart, giveQ: '1750', get: tick, getQ: '1100', ago: 432000 },
     ];
     return orders.map((o, i) => {
         const { blockIndex, actionIndex } = fakeBlockFor(chainId, 'ORDER', tick, i);
@@ -307,13 +308,13 @@ export function fakeOrdersFor(tick, chainId) {
             timestamp: now - o.ago,
             block_time: now - o.ago,
             source: fakeAddress(chainId, tick, 200 + i),
-            give_tick: o.give,
-            give_quantity: String(o.giveQ),
-            give_remaining: String(Math.floor(o.giveQ * 0.85)),
-            get_tick: o.get,
-            get_quantity: String(o.getQ),
-            get_remaining: String(Math.floor(o.getQ * 0.85)),
-            status: 0,
+            give_tick: o.give === native ? null : o.give,
+            give_coin: native,
+            give_amount: o.giveQ,
+            get_tick: o.get === native ? null : o.get,
+            get_coin: native,
+            get_amount: o.getQ,
+            status: 'valid',
         };
     });
 }
@@ -330,13 +331,13 @@ export function fakeSwapsFor(tick, chainId) {
     const counterpart = (chainId.includes('bitcoin')) ? 'XCP' : 'WAGMI';
     const now = Math.floor(Date.now() / 1000);
     const swaps = [
-        { give: tick, giveQ: 1500 * 10 ** 8, get: native, getQ: 4250000, ago: 3600 },
-        { give: native, giveQ: 12000000, get: tick, getQ: 4900 * 10 ** 8, ago: 7200 },
-        { give: tick, giveQ: 800 * 10 ** 8, get: counterpart, getQ: 1450 * 10 ** 8, ago: 10800 },
-        { give: counterpart, giveQ: 2200 * 10 ** 8, get: tick, getQ: 1300 * 10 ** 8, ago: 21600 },
-        { give: tick, giveQ: 3300 * 10 ** 8, get: native, getQ: 9400000, ago: 43200 },
-        { give: native, giveQ: 25000000, get: tick, getQ: 10400 * 10 ** 8, ago: 86400 },
-        { give: tick, giveQ: 7500 * 10 ** 8, get: native, getQ: 21000000, ago: 172800 },
+        { give: tick, giveQ: '1500', get: native, getQ: '0.0425', ago: 3600 },
+        { give: native, giveQ: '0.12', get: tick, getQ: '4900', ago: 7200 },
+        { give: tick, giveQ: '800', get: counterpart, getQ: '1450', ago: 10800 },
+        { give: counterpart, giveQ: '2200', get: tick, getQ: '1300', ago: 21600 },
+        { give: tick, giveQ: '3300', get: native, getQ: '0.094', ago: 43200 },
+        { give: native, giveQ: '0.25', get: tick, getQ: '10400', ago: 86400 },
+        { give: tick, giveQ: '7500', get: native, getQ: '0.21', ago: 172800 },
     ];
     return swaps.map((s, i) => {
         const { blockIndex, actionIndex } = fakeBlockFor(chainId, 'SWAP', tick, i);
@@ -345,12 +346,16 @@ export function fakeSwapsFor(tick, chainId) {
             tx_hash: actionIndex,
             block_index: blockIndex,
             source: fakeAddress(chainId, tick, 400 + i),
-            give_tick: s.give,
-            give_quantity: String(s.giveQ),
-            get_tick: s.get,
-            get_quantity: String(s.getQ),
+            give_tick: s.give === native ? null : s.give,
+            give_coin: native,
+            give_amount: s.giveQ,
+            get_tick: s.get === native ? null : s.get,
+            get_coin: native,
+            get_amount: s.getQ,
             timestamp: now - s.ago,
             block_time: now - s.ago,
+            status: 'valid',
+            swap_status: 'complete',
         };
     });
 }
