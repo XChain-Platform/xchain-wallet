@@ -43,11 +43,11 @@ export default defineConfig({
     workers: 1,
     timeout: 8 * 60 * 60_000,
     expect: { timeout: 120_000 },
-    globalSetup: process.argv.includes('--list') ? undefined : './global-setup.testnet.js',
+    globalSetup: './global-setup.testnet.js',
     reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
     use: {
         baseURL: `http://localhost:${PREVIEW_PORT}`,
-        trace: 'off',
+        trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
     },
