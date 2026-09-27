@@ -52,7 +52,9 @@ async function readRunInput() {
         process.stdin.on('end', () => resolve(text));
         process.stdin.on('error', reject);
     });
-    if (!raw.trim()) return null;
+    if (!raw.trim()) {
+        throw new Error('testnet run requires treasury JSON on stdin; refusing to skip live writes');
+    }
     let parsed;
     try {
         parsed = JSON.parse(raw);
@@ -165,7 +167,6 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
 
     test.beforeAll(async () => {
         treasury = await sharedRunInput();
-        test.skip(!treasury, 'pipe the stdin-only testnet run JSON to run live writes');
         await checkTestnetVenue(venue);
     });
 
