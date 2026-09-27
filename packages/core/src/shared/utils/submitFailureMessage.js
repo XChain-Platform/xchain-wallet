@@ -199,3 +199,19 @@ export function submitFailureMessage(
         || humanized.details) return humanized.message;
     return raw || 'The request stopped because the wallet service returned no explanation.';
 }
+
+/**
+ * The collapsed technical text to pair with a message from submitFailureMessage.
+ * Empty when the message already carries that text, so the same failure is
+ * never drawn twice.
+ *
+ * @param {unknown} err
+ * @param {string} message  what submitFailureMessage returned for `err`
+ * @returns {string}
+ */
+export function submitFailureDetails(err, message) {
+    const details = String(humanizeError(err).details || '').trim();
+    if (!details) return '';
+    const fold = (text) => String(text || '').toLowerCase().replace(/[\s.!?]+$/, '');
+    return fold(message).includes(fold(details)) ? '' : details;
+}
