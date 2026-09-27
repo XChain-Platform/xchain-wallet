@@ -56,13 +56,22 @@ function errorIdentity(err) {
 // HTTP failures can contain request paths that do not belong in display copy,
 // and service timeouts describe the explorer rather than the user's connection.
 
+// The request path and stack frames are stripped from explorer details; the
+// remaining technical text is kept as is.
+function sanitizeExplorerDetail(raw) {
+    return String(raw)
+        .replace(/\n\s+at [^\n]*/g, '')
+        .replace(/\s*\/[A-Za-z0-9_-]+\/api\/[^\s]*/g, '')
+        .trim();
+}
+
 // Preserve the typed mapper's recovery cause before the general network
 // classifier can claim the message and give the user the wrong next step.
 // Keep the original text available only for a collapsed details control.
 function explorerResult(err, verb, raw) {
     const explorerRead = explorerReadFailure(err, verb);
     if (!explorerRead) return null;
-    const out = { message: explorerRead.message, cause: explorerRead.cause, raw, details: raw };
+    const out = { message: explorerRead.message, cause: explorerRead.cause, raw, details: sanitizeExplorerDetail(raw) };
     // Only the rate-limit branch carries a number, and a caller that wants
     // to count it down (Home) must not have to re-parse the sentence it was
     // just handed. Absent on every other branch, so nothing else grows a
