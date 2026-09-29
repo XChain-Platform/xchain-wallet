@@ -203,3 +203,37 @@ export function contractDisplayLabel(row, { chainId, actionIndex } = {}) {
     if (!identity) return label;
     return address ? `${label} (${address})` : `${label} ${identity}`;
 }
+
+// ---------------------------------------------------------------------------
+// Owner withdraw (OWNER_WITHDRAW_OPT_IN)
+//
+// The explorer derives `owner_withdraw` on every contract response: true when
+// the deployer can still pull the contract's tokens out with WITHDRAW, false
+// when consensus refuses it (a contract deployed after the activation that did
+// not declare `ownerWithdraw: true` in its meta). The wallet does not restate
+// the rule; it reads the explorer's answer so the two cannot drift.
+// ---------------------------------------------------------------------------
+
+/** One line shown where WITHDRAW would be offered on a contract that refuses it. */
+export const OWNER_WITHDRAW_DISABLED_REASON =
+    'This contract does not allow owner withdrawals. Tokens leave it only through its own logic.';
+
+/** The warning shown wherever a user views or funds a contract whose deployer can withdraw. */
+export const OWNER_WITHDRAW_WARNING =
+    'The deployer of this contract can withdraw the tokens it holds at any time.';
+
+/**
+ * A contract row's owner-withdraw answer: true, false, or null when the row
+ * does not carry one. Only a real boolean counts, so an older explorer that
+ * omits the field (or a proxy that stringifies it) reads as unknown, and every
+ * caller keeps its behaviour from before the field existed rather than
+ * guessing either way.
+ *
+ * @param {any} row   an explorer contract row
+ * @returns {boolean | null}
+ */
+export function contractOwnerWithdraw(row) {
+    if (!row || typeof row !== 'object') return null;
+    const value = row.owner_withdraw ?? row.OWNER_WITHDRAW;
+    return typeof value === 'boolean' ? value : null;
+}

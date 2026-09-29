@@ -35,7 +35,8 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
-import { extractSingle, sanitizeAbi } from './contractResponseShape.js';
+import { extractSingle, sanitizeAbi, contractOwnerWithdraw } from './contractResponseShape.js';
+import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
@@ -96,6 +97,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const [contractAbi, setContractAbi] = useState(/** @type {{version: number, methods: Record<string, any>} | null} */ (null));
     const [manualMode, setManualMode] = useState(false);
     const [abiParamValues, setAbiParamValues] = useState(/** @type {string[]} */ ([]));
+    // OWNER_WITHDRAW_OPT_IN off the same contract row: a swap or add-liquidity
+    // call hands tokens to a contract whose deployer may be able to pull them
+    // out, so true carries the warning. Null (no field, no row) shows nothing.
+    const [ownerWithdraw, setOwnerWithdraw] = useState(/** @type {boolean | null} */ (null));
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
@@ -149,6 +154,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             .then((resp) => {
                 if (cancelled) return;
                 const row = extractSingle(resp);
+                setOwnerWithdraw(contractOwnerWithdraw(row));
                 // sanitizeAbi guarantees every kept method has an array `params`,
                 // so the .map sites below (and at render) can never throw on a
                 // malformed/hostile abi. Null => fall back to the manual lane.
@@ -659,6 +665,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
+            <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
             {/* The target contract pins the network, so the field is single-option. */}
             <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
