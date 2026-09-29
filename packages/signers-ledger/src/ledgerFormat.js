@@ -36,6 +36,26 @@
 const SIGHASH_ALL = 1;
 
 /**
+ * The refusal for bitcoin-testnet and bitcoin-regtest, worded like Trezor's
+ * (trezorFormat.js chainIdToTrezorCoin) so both vendors say the same thing.
+ *
+ * The chain descriptors pin SLIP-44 coin-type 0' on every Bitcoin network for
+ * software-signer parity, but the Bitcoin Test app forces 1', so a device
+ * derivation there yields addresses the rest of the wallet cannot see. Do not
+ * "fix" this by mapping either network to the Test app.
+ *
+ * @param {string} chainId
+ * @returns {Error}
+ */
+export function unsupportedBitcoinNetworkError(chainId) {
+    return new Error(
+        `This hardware device can't be used on ${chainId} - use a software wallet for this network. `
+        + '(On this network the device would derive a different set of addresses than the '
+        + 'rest of the wallet, so any funds would appear missing.)',
+    );
+}
+
+/**
  * Map an XChain chainId to the Ledger Bitcoin app currency string used
  * for `additionals`. Matches the `format` / `additionals` conventions
  * of `@ledgerhq/hw-app-btc`.
@@ -49,22 +69,15 @@ export function chainIdToLedgerCurrency(chainId) {
     // Dogecoin-testnet, or regtest apps. Those chainIds fall through to the
     // throw, and the wallet uses a software signer for them.
     //
-    // bitcoin-testnet is excluded even though the Bitcoin Test app exists: that
-    // app forces SLIP-44 coin-type 1', while the wallet's descriptor anchor
-    // deliberately pins 0' on every Bitcoin network (software-signer/backend
-    // parity). A 1' hardware derivation silently yields addresses the rest of
-    // the wallet cannot see, so the network is hardware-unsupported instead.
+    // Refuse bitcoin-testnet and bitcoin-regtest for derivation parity, not for
+    // a missing app (see unsupportedBitcoinNetworkError above).
     switch (chainId) {
         case 'bitcoin-mainnet': return 'bitcoin';
         case 'litecoin-mainnet': return 'litecoin';
         case 'dogecoin-mainnet': return 'dogecoin';
         case 'bitcoin-testnet':
-            throw new Error(
-                'ledgerFormat: bitcoin-testnet is not supported on this hardware '
-                + 'signer; use a software wallet for this network. (On this network '
-                + 'the device would derive a different set of addresses than the rest '
-                + 'of the wallet, so any funds would appear missing.)',
-            );
+        case 'bitcoin-regtest':
+            throw unsupportedBitcoinNetworkError(chainId);
         default:
             throw new Error(
                 `ledgerFormat: unsupported chainId "${chainId}". No Ledger app `

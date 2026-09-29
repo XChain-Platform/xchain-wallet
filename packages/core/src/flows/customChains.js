@@ -39,6 +39,13 @@
 // `sdkRegistry` is optional so callers that hold none still work; the host
 // routes pass it.
 //
+// Endpoints come from two sources, the descriptor and the chain's
+// `settings.sdkEndpoints` override, so both are reset. A removal prunes the
+// override in the same write, a fresh add prunes any residue an earlier
+// removal left, and both mutators re-apply the live override map from the
+// record just persisted (a stale override otherwise came back on the next
+// boot or settings.get and redirected the re-added chain to the old node).
+//
 // Per-descriptor validation re-runs at write time so a user can paste a
 // JSON descriptor without trusting that the source verified the shape.
 // The settings-schema validator only enforces "array of plain objects"
@@ -100,26 +107,62 @@ export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegi
         // registry seed step failed or was skipped.
         try { chainRegistry?.addCustom?.(descriptor); } catch { /* idempotent */ }
         dropCachedSdk(sdkRegistry, descriptor.id);
+        // Restore path: the persisted override belongs to this descriptor, so adopt it now.
+        refreshEndpointOverrides(sdkRegistry, settings);
         return { descriptor };
     }
     // Persist first; if the addCustom call throws (race against another
     // handler that just registered the same id), the persisted record
-    // is rolled back below.
-    const next = { ...settings, customChains: [...list, descriptor] };
+    // is rolled back below. A fresh add drops any override residue for
+    // this id, since no persisted descriptor owns it.
+    const next = withoutEndpointOverride(
+        { ...settings, customChains: [...list, descriptor] },
+        descriptor.id,
+    );
     await writeSettings(vault, next);
     try {
         chainRegistry.addCustom(descriptor);
     } catch (err) {
         // Roll back the persisted record so the next boot doesn't try
         // to seed an already-rejected descriptor.
-        const rolled = { ...next, customChains: list };
+        const rolled = { ...settings, customChains: list };
         await writeSettings(vault, rolled);
         throw err;
     }
     // Only after the registration stands: the rollback path above leaves
     // the descriptor unregistered, so there is nothing to rebuild from.
     dropCachedSdk(sdkRegistry, descriptor.id);
+    refreshEndpointOverrides(sdkRegistry, next);
     return { descriptor };
+}
+
+/**
+ * Return `settings` without its `sdkEndpoints[chainId]` override, leaving
+ * every other chain's entry untouched. Returns the input when there is none.
+ *
+ * @param {Record<string, any>} settings
+ * @param {string} chainId
+ * @returns {Record<string, any>}
+ */
+function withoutEndpointOverride(settings, chainId) {
+    const endpoints = settings?.sdkEndpoints;
+    if (!endpoints || typeof endpoints !== 'object' || !Object.hasOwn(endpoints, chainId)) {
+        return settings;
+    }
+    const { [chainId]: _dropped, ...rest } = endpoints;
+    return { ...settings, sdkEndpoints: rest };
+}
+
+/**
+ * Re-derive the live endpoint override map from a persisted Settings record,
+ * so the running session matches what the next boot computes.
+ *
+ * @param {any} sdkRegistry
+ * @param {Record<string, any>} settings
+ */
+function refreshEndpointOverrides(sdkRegistry, settings) {
+    if (typeof sdkRegistry?.applyEndpointOverridesFromSettings !== 'function') return;
+    try { sdkRegistry.applyEndpointOverridesFromSettings(settings); } catch { /* never fail the mutation on a refresh */ }
 }
 
 /**
@@ -151,8 +194,10 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
     const list = asList(settings);
     const next = list.filter((d) => d?.id !== chainId);
     const persistedRemoved = next.length !== list.length;
+    let persisted = settings;
     if (persistedRemoved) {
-        await writeSettings(vault, { ...settings, customChains: next });
+        persisted = withoutEndpointOverride({ ...settings, customChains: next }, chainId);
+        await writeSettings(vault, persisted);
     }
     let registryRemoved = false;
     try {
@@ -167,6 +212,10 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
         }
         throw _err;
     }
-    if (persistedRemoved || registryRemoved) dropCachedSdk(sdkRegistry, chainId);
+    if (persistedRemoved || registryRemoved) {
+        dropCachedSdk(sdkRegistry, chainId);
+        // The chain is unregistered now, so this also drops its live override.
+        refreshEndpointOverrides(sdkRegistry, persisted);
+    }
     return { removed: persistedRemoved || registryRemoved };
 }

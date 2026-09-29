@@ -29,10 +29,10 @@
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 
 import {
@@ -451,6 +451,9 @@ function assertRecordAgainst(lane, over) {
         '--from', PREVIOUS, '--by', 'nobody');
     assert.equal(attest.status, 1);
     assert.match(attest.stderr, /no named smoke device/);
+    // The direct lane's open question is DD-A; DD4 is the desktop one.
+    assert.match(attest.stderr, /DD-A/);
+    assert.doesNotMatch(attest.stderr, /DD4/);
 
     // And the CI refusal itself, which the clearing above would otherwise hide.
     // A runner attesting its own install-over deletes the human witness rather
@@ -517,6 +520,59 @@ function assertRecordAgainst(lane, over) {
     assert.equal(matrix.status, 0);
     assert.match(matrix.stdout, /android-direct/);
     assert.match(matrix.stdout, /direct lane/);
+}
+
+{
+    // The day DD-A names a device, `attest` is the only supported way to
+    // record the install-over assertRecord then demands, so it has to find
+    // the passing probe `run` filed under `direct-lanes`. Driven through the
+    // real CLI with the device set by an --import preload that mutates the
+    // same module instance rehearse.mjs loads, never by a setter on the tool
+    // (see assertRecordAgainst above for why). A preload that missed the
+    // instance would fail case (a) on the no-device refusal, not pass it.
+    const BENCH = 'Pixel 7a (bench)';
+    const matrixUrl = pathToFileURL(realpathSync(join(root, 'tools/release/rehearsal-matrix.mjs'))).href;
+    const preload = join(work, 'stand-in-device.mjs');
+    writeFileSync(preload, `import { DIRECT_LANES } from ${JSON.stringify(matrixUrl)};\n`
+        + `DIRECT_LANES.find((l) => l.id === 'android-direct').device = ${JSON.stringify(BENCH)};\n`);
+    const attestWithDevice = (file) => spawnSync(
+        process.execPath, ['--import', pathToFileURL(preload).href,
+            join(root, 'tools/release/rehearse.mjs'), 'attest', '--record', file,
+            '--lane', 'android-direct', '--from', PREVIOUS, '--by', 'bench tester'],
+        { encoding: 'utf8',
+          env: { ...process.env, CI: '', GITHUB_ACTIONS: '', BUILDKITE: '', GITLAB_CI: '' } },
+    );
+    const directRecord = join(work, 'record-direct-attest.json');
+    const writeDirect = (over) => writeFileSync(directRecord,
+        `${JSON.stringify({ ...baseRecord, lanes: [], swaps: [], ...over }, null, 2)}\n`);
+
+    // (a) A passing direct-lane probe is attestable, and the swap it writes
+    // satisfies the install-over requirement end to end.
+    writeDirect({});
+    const ok = attestWithDevice(directRecord);
+    assert.equal(ok.status, 0, `attest on a passing direct lane must succeed:\n${ok.stderr}`);
+    assert.match(ok.stdout, /swap attested on android-direct/);
+    const written = JSON.parse(readFileSync(directRecord, 'utf8'));
+    assert.equal(written.swaps.length, 1);
+    assert.equal(written.swaps[0].lane, 'android-direct');
+    assert.equal(written.swaps[0].device, BENCH);
+    const endToEnd = assertRecordAgainst({ ...LANE, device: BENCH },
+        { lanes: [], swaps: written.swaps });
+    assert.ok(endToEnd.ok, endToEnd.problems.join(' '));
+
+    // (b) A failed direct-lane probe is still refused, and writes nothing.
+    writeDirect({ 'direct-lanes': [{ id: 'android-direct', ok: false, failed: 'feed', reason: 'HTTP 404' }] });
+    const failedProbe = attestWithDevice(directRecord);
+    assert.equal(failedProbe.status, 1);
+    assert.match(failedProbe.stderr, /did not pass its feed-side probe/);
+    assert.equal(JSON.parse(readFileSync(directRecord, 'utf8')).swaps.length, 0);
+
+    // (c) A passing entry filed under the DESKTOP array does not count: the
+    // lookup reads the array `run` writes direct results to, and no other.
+    writeDirect({ 'direct-lanes': [], lanes: [{ id: 'android-direct', ok: true }] });
+    const wrongArray = attestWithDevice(directRecord);
+    assert.equal(wrongArray.status, 1);
+    assert.match(wrongArray.stderr, /did not pass its feed-side probe/);
 }
 
 // --------------------------------------------------------- the module seam

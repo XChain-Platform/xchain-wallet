@@ -46,11 +46,12 @@ const DRYRUN_ORACLE_FEES_OWED    = 'DRYRUN_ORACLE_FEES_OWED';
 //
 // Only codes this panel keys on BY NAME belong here. DRYRUN_INVALID and
 // DRYRUN_SUBCOMMAND_INVALID arrive at severity 'error' and render generically
-// in the errors list, so a rename of either cannot break this surface, and
-// pinning them would register a name with no consumer - the
-// second-list-with-no-owner the SDK's own registry header forbids. The parity
-// test names those two explicitly instead, so a code ADDED to the Tier-1 family
-// still fails there and reaches a human.
+// in the errors list, so a rename of either cannot break this surface (the
+// Sign anyway decision, isHardPreflightFinding, keys on data.commandIndex and
+// never on either name), and pinning them would register a name with no
+// consumer - the second-list-with-no-owner the SDK's own registry header
+// forbids. The parity test names those two explicitly instead, so a code
+// ADDED to the Tier-1 family still fails there and reaches a human.
 export const TIER1_NOTICE_CODES = Object.freeze({
     DRYRUN_VALID,
     DRYRUN_UNAVAILABLE,

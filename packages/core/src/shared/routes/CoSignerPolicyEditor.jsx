@@ -19,7 +19,7 @@
 // Reused by both CoSignerProvision (author) and CoSignerAccountDetail (edit),
 // so all policy-shape knowledge lives in one place.
 
-import { Input, Button, Textarea } from '@xchain-wallet/core/ui';
+import { Input, Button, Textarea, Select } from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
@@ -148,6 +148,11 @@ export function buildPolicyDraft(draft) {
         if (!action && !cap) continue;
         if (!action) return { error: 'A per-action limit is missing its action name.' };
         if (!cap) return { error: `Per-action limit for ${action} is missing an amount.` };
+        // Refuse a limit on an action the agent may not sign, such as a typo like SENDD
+        // (the co-signer matches caps by exact name, so that limit would never apply).
+        if (!allowedActions.includes(action)) {
+            return { error: `The limit for ${action} doesn't match any allowed action, so it would never be enforced. Choose one of the allowed actions or remove the limit.` };
+        }
         maxPerAction = maxPerAction || Object.create(null);
         maxPerAction[action] = maxPerAction[action] || Object.create(null);
         maxPerAction[action][tick] = cap;
@@ -320,39 +325,57 @@ export function CoSignerPolicyEditor({ value, onChange }) {
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Per-action amount limits</legend>
                 <p style={helpStyle}>
-                    Cap how much the agent may move in a single action, per token. Use
-                    the same protocol names as the allowed-action list above, and * as
-                    the token to cover every token. Optional.
+                    Cap how much the agent may move in a single action, per token. Pick
+                    the action from the ones allowed above, and use * as the token to
+                    cover every token. Optional.
                 </p>
-                {draft.maxPerAction.map((row, i) => (
-                    <div key={i} style={rowStyle}>
-                        <Input
-                            label="Action"
-                            value={row.action}
-                            onChange={(e) => patchRow('maxPerAction', i, { action: e.target.value.toUpperCase() })}
-                            placeholder="SEND"
-                        />
-                        <Input
-                            label="Token"
-                            value={row.tick}
-                            onChange={(e) => patchRow('maxPerAction', i, { tick: e.target.value })}
-                            placeholder="*"
-                        />
-                        {/* Policy limit, not a spend: AmountField without Max /
-                            balance (there is no wallet balance to cap against here). */}
-                        <AmountField
-                            label="Max amount"
-                            amount={row.cap}
-                            tick={row.tick}
-                            onAmountFieldChange={(rawValue) => {
-                                const stripped = String(rawValue).replace(/,/g, '');
-                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                                patchRow('maxPerAction', i, { cap: stripped });
-                            }}
-                        />
-                        <Button type="button" variant="ghost" onClick={() => removeRow('maxPerAction', i)}>Remove</Button>
-                    </div>
-                ))}
+                {draft.maxPerAction.map((row, i) => {
+                    const rowAction = String(row.action || '').trim().toUpperCase();
+                    const stray = rowAction !== '' && !actionPreview.some((a) => a.key === rowAction);
+                    return (
+                        <div key={i} style={rowStyle}>
+                            {/* Offer only the allowed actions, labelled in words (the value
+                                stays the exact protocol name the co-signer matches on). */}
+                            <Select
+                                label="Action"
+                                value={rowAction}
+                                onChange={(e) => patchRow('maxPerAction', i, { action: e.target.value })}
+                                error={stray ? "This limit won't apply until you pick one of the allowed actions." : undefined}
+                            >
+                                <option value="">
+                                    {actionPreview.length > 0 ? 'Choose an action' : 'Add allowed actions above first'}
+                                </option>
+                                {actionPreview.map((a) => (
+                                    <option key={a.key} value={a.key}>
+                                        {a.known ? a.label : `${a.key} (not a known action)`}
+                                    </option>
+                                ))}
+                                {stray ? (
+                                    <option value={rowAction}>{`${rowAction} (not in the allowed actions above)`}</option>
+                                ) : null}
+                            </Select>
+                            <Input
+                                label="Token"
+                                value={row.tick}
+                                onChange={(e) => patchRow('maxPerAction', i, { tick: e.target.value })}
+                                placeholder="*"
+                            />
+                            {/* Policy limit, not a spend: AmountField without Max /
+                                balance (there is no wallet balance to cap against here). */}
+                            <AmountField
+                                label="Max amount"
+                                amount={row.cap}
+                                tick={row.tick}
+                                onAmountFieldChange={(rawValue) => {
+                                    const stripped = String(rawValue).replace(/,/g, '');
+                                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                                    patchRow('maxPerAction', i, { cap: stripped });
+                                }}
+                            />
+                            <Button type="button" variant="ghost" onClick={() => removeRow('maxPerAction', i)}>Remove</Button>
+                        </div>
+                    );
+                })}
                 <Button type="button" variant="secondary" onClick={() => addRow('maxPerAction', { action: '', tick: '*', cap: '' })}>
                     + Add limit
                 </Button>

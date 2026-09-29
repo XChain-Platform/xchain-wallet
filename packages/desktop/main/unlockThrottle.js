@@ -48,11 +48,13 @@ export class FileUnlockThrottleStore {
         let raw;
         try {
             raw = await fs.readFile(this._filePath, 'utf8');
-        } catch (err) {
-            if (err && err.code === 'ENOENT') return null;
-            // A transient read fault must not silently disable the gate;
-            // treat it as "no state" (fail toward prompting) rather than
-            // throwing into the unlock path.
+        } catch {
+            // Treat a missing file or any read fault as "no state". This
+            // FAILS OPEN for the attempt (checkUnlockAllowed(null) allows it
+            // and the KDF runs), deliberately: the throttle is defence-in-depth
+            // behind the KDF cost, anyone able to fault this file can delete
+            // it for the same result, and failing closed would lock a user out
+            // of their own wallet on a persistent permission or IO error.
             return null;
         }
         let v;

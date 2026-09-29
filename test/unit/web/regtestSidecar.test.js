@@ -30,7 +30,7 @@
 // why the plugin scans the emitted `store` bundle and fails the build shut on
 // any surviving marker (`generateBundle` in packages/web/regtestSidecar.js).
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -50,11 +50,16 @@ const require = createRequire(import.meta.url);
 
 /** The SDK's coin registry as it sits in node_modules, i.e. what gets bundled. */
 const sdkCoins = dirname(require.resolve('xchain-sdk/src/coins/index.js'));
-const SDK_COIN_FILES = ['index.js', 'BTC.js', 'LTC.js', 'DOGE.js', 'consensus_pin.js'];
+// Read the list from disk to mirror the build transform, which strips ANY module
+// carrying the key (a coin the SDK adds must not fall out of coverage here).
+const SDK_COIN_FILES = readdirSync(sdkCoins).filter((file) => file.endsWith('.js')).sort();
 // Cache the installed source once so every assertion and fixture uses the same bytes.
 const SDK_SOURCES = new Map(SDK_COIN_FILES.map((file) => [
     file, readFileSync(join(sdkCoins, file), 'utf8'),
 ]));
+// Coin data files (not the registry) carrying the sidecar config literal.
+const SIDECAR_CARRIERS = SDK_COIN_FILES.filter((file) => file !== 'index.js'
+    && SDK_SOURCES.get(file).includes(SIDECAR_KEY));
 const SDK_FIXTURE_TIMEOUT = 60_000;
 
 /** Two working copies: one untouched, one with the transform applied. */
@@ -109,16 +114,23 @@ describe('the transform, run against the SDK source that ships', { timeout: SDK_
         // Guards the tests below from passing vacuously: if the SDK ever stops
         // carrying this, the cleanup is done and the plugin can go - but that
         // has to be noticed, not assumed.
-        expect(SDK_SOURCES.get('BTC.js')).toContain(SIDECAR_KEY);
+        expect(SIDECAR_CARRIERS.length).toBeGreaterThan(0);
         expect(SDK_SOURCES.get('index.js'))
             .toContain('FULLNODE regtest sidecar ignored');
     });
 
-    it('removes the config literal from the coin data', () => {
-        const { removed } = stripRegtestSidecar(SDK_SOURCES.get('BTC.js'));
-        expect(removed).toContain('config');
-        expect(findRegtestSidecarMarkers(readFileSync(join(stripped, 'BTC.js'), 'utf8')))
-            .toEqual([]);
+    it('removes the config literal from every coin file that carries it', () => {
+        for (const file of SIDECAR_CARRIERS) {
+            const { removed } = stripRegtestSidecar(SDK_SOURCES.get(file));
+            expect(removed, file).toContain('config');
+        }
+    });
+
+    it('leaves no marker in any stripped SDK file', () => {
+        for (const file of SDK_COIN_FILES) {
+            expect(findRegtestSidecarMarkers(readFileSync(join(stripped, file), 'utf8')), file)
+                .toEqual([]);
+        }
     });
 
     it('removes the loader block from the registry', () => {
@@ -188,14 +200,21 @@ describe('the deletion is real, not a mute', { timeout: SDK_FIXTURE_TIMEOUT }, (
         // must now disagree, and only here.
         const before = require(join(pristine, 'index.js'));
         const after = require(join(stripped, 'index.js'));
+        // Select by the sidecar key, not by FULLNODE: a coin with FULLNODE but
+        // no key never reads the file, so the `before` side would not see 7.
+        const ticks = before.ALLOWED_COINS.filter((tick) =>
+            require(join(pristine, `${tick}.js`)).FULLNODE?.[SIDECAR_KEY]);
+        expect(ticks.length).toBeGreaterThan(0);
         const cwd = process.cwd();
         writeFileSync(join(workDir, 'fullnode.regtest.json'), JSON.stringify({
             CONFIRM_DEPTH: 7,
         }));
         try {
             process.chdir(workDir);
-            expect(before.getCoinConfig('BTC', 'regtest').FULLNODE.CONFIRM_DEPTH).toBe(7);
-            expect(after.getCoinConfig('BTC', 'regtest').FULLNODE.CONFIRM_DEPTH).not.toBe(7);
+            for (const tick of ticks) {
+                expect(before.getCoinConfig(tick, 'regtest').FULLNODE.CONFIRM_DEPTH, tick).toBe(7);
+                expect(after.getCoinConfig(tick, 'regtest').FULLNODE.CONFIRM_DEPTH, tick).not.toBe(7);
+            }
         } finally {
             process.chdir(cwd);
         }

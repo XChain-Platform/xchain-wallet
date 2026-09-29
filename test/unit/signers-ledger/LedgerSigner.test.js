@@ -387,6 +387,82 @@ describe('LedgerSigner.signPsbt', () => {
         const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
         await expect(signIt(s)).rejects.toThrow(/output 0 pays 901 sat, the PSBT paid 900 sat/);
     });
+
+    // Trezor refuses these networks before decomposing; Ledger must match it,
+    // wording included, instead of failing later on an input.
+    it.each(['bitcoin-testnet', 'bitcoin-regtest'])('refuses %s before touching the PSBT, in the Trezor wording', async (chainId) => {
+        const mockSdk = signPsbtSdk();
+        const get = vi.fn(() => mockSdk);
+        const s = makeSigner({}, { sdkRegistry: { get } });
+        const err = await s.signPsbt({ psbtHex: 'cafe', chainId, signingPaths: [] }).catch((e) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect(err.message).toMatch(/funds would appear missing/);
+        expect(err.message).toContain(chainId);
+        expect(err.message).not.toMatch(/Litecoin|Dogecoin/);
+        expect(get).not.toHaveBeenCalled();
+        expect(mockSdk.wallet.decomposePsbt).not.toHaveBeenCalled();
+    });
+
+    it('refuses to sign while another coin app is open, before the device call', async () => {
+        const mockSdk = signPsbtSdk();
+        const app = makeApp();
+        const s = makeSigner(app, {
+            sdkRegistry: { get: () => mockSdk },
+            transport: makeTransport({ name: 'Litecoin', version: '2.4.2' }),
+        });
+        await expect(signIt(s)).rejects.toMatchObject({ name: 'SignerStatusError', status: 'wrong-app' });
+        expect(app.createPaymentTransaction).not.toHaveBeenCalled();
+    });
+
+    it('signs with a fresh client for the chain currency when getApp is given', async () => {
+        const mockSdk = signPsbtSdk();
+        const clients = [];
+        const getApp = vi.fn(() => { const c = makeApp(); clients.push(c); return c; });
+        const s = makeSigner({}, { app: undefined, getApp, sdkRegistry: { get: () => mockSdk } });
+        await signIt(s);
+        await signIt(s);
+        expect(getApp.mock.calls).toEqual([['bitcoin'], ['bitcoin']]);
+        expect(clients[0]).not.toBe(clients[1]);
+        expect(clients[0].createPaymentTransaction).toHaveBeenCalledTimes(1);
+        expect(clients[1].createPaymentTransaction).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('LedgerSigner per-chain app binding', () => {
+    it('asks getApp for each chain\'s own currency on derivation', async () => {
+        const getApp = vi.fn(() => makeApp());
+        const s = makeSigner({}, { app: undefined, getApp });
+        const range = { accountIndex: 0, change: 0, startIndex: 0, count: 2, addressType: 'p2pkh' };
+        await s.getAddresses({ chainId: 'litecoin-mainnet', ...range });
+        await s.getAddresses({ chainId: 'dogecoin-mainnet', ...range });
+        await s.getPublicKey({ chainId: 'bitcoin-mainnet', path: "m/84'/0'/0'/0/0" });
+        await s.getPublicKey({ path: "m/84'/0'/0'/0/0" });
+        expect(getApp.mock.calls).toEqual([['litecoin'], ['dogecoin'], ['bitcoin'], ['bitcoin']]);
+    });
+
+    it('refuses a chain-bound message while another coin app is open', async () => {
+        const app = makeApp();
+        const s = makeSigner(app, { transport: makeTransport({ name: 'Bitcoin', version: '2.2.1' }) });
+        await expect(s.signMessage({ message: 'hi', path: "m/44'/2'/0'/0/0", chainId: 'litecoin-mainnet' }))
+            .rejects.toMatchObject({ name: 'SignerStatusError', status: 'wrong-app' });
+        expect(app.signMessage).not.toHaveBeenCalled();
+    });
+
+    it('signs a chain-bound message when the right app is open', async () => {
+        const getApp = vi.fn(() => makeApp());
+        const s = makeSigner({}, {
+            app: undefined,
+            getApp,
+            transport: makeTransport({ name: 'Litecoin', version: '2.4.2' }),
+        });
+        const out = await s.signMessage({ message: 'hi', path: "m/44'/2'/0'/0/0", chainId: 'litecoin-mainnet' });
+        expect(Buffer.from(out.signature, 'base64')).toHaveLength(65);
+        expect(getApp).toHaveBeenCalledWith('litecoin');
+    });
+
+    it('rejects a getApp that is not a function', () => {
+        expect(() => makeSigner({}, { app: undefined, getApp: 'nope' })).toThrow(/getApp must be a function/);
+    });
 });
 
 describe('LedgerSigner multisig stubs', () => {

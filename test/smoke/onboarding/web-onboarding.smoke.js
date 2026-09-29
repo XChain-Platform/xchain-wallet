@@ -98,7 +98,7 @@ assert.ok(
 );
 assert.ok(
     /DEFAULT_ACTIVE_CHAIN_IDS/.test(host),
-    'hostBridge defines DEFAULT_ACTIVE_CHAIN_IDS',
+    'hostBridge uses the shared DEFAULT_ACTIVE_CHAIN_IDS',
 );
 
 // --- 2. In-page onboarding round-trip -------------------------------

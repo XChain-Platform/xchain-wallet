@@ -18,7 +18,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { populate } = vi.hoisted(() => ({ populate: vi.fn() }));
+const { populate, vaultClose } = vi.hoisted(() => ({ populate: vi.fn(), vaultClose: vi.fn() }));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
@@ -42,7 +42,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
             ...actual.storage,
             Vault: class FakeVault {
                 async open() { /* password accepted */ }
-                close() { /* nothing to zero */ }
+                close() { vaultClose(); }
             },
         },
         signers: { ...actual.signers, SignerPool: FakeSignerPool },
@@ -65,7 +65,7 @@ vi.mock('../../../packages/web/src/storage/backends.js', () => ({
     installNativeScreenGuard: () => {},
 }));
 
-const { unlockWalletLocal, lockWalletLocal } = await import('../../../packages/web/src/hostBridge.js');
+const { unlockWalletLocal, lockWalletLocal, sendMessage } = await import('../../../packages/web/src/hostBridge.js');
 
 /** The zero-work summary a populate over plain wallets returns. */
 function emptySummary(over = {}) {
@@ -80,6 +80,7 @@ beforeEach(async () => {
     populate.mockReset();
     populate.mockResolvedValue(emptySummary());
     await lockWalletLocal();
+    vaultClose.mockReset();
 });
 
 describe('unlockWalletLocal: passphraseCaptureNeeded (§3.4)', () => {
@@ -133,5 +134,52 @@ describe('unlockWalletLocal: the mismatch throw stays scoped to a typed passphra
             passphraseMismatch: ['w1'], passphraseMismatchNames: ['Cold'],
         }));
         await expect(unlockWalletLocal({ password: 'pw' })).resolves.toMatchObject({ unlocked: true });
+    });
+});
+
+/** The rejection a call to the in-page host raises, or null when it resolved. */
+async function hostError() {
+    try { await sendMessage('wallet.list'); return null; } catch (err) { return err; }
+}
+
+// Twins of the extension's populate-failed cases
+// (test/unit/background/unlockPassphraseCaptureList.test.js): same reply shape,
+// and the session stands.
+describe('unlockWalletLocal: a signer-pool failure does not block the unlock', () => {
+    it('marks poolUnavailable when populate threw, and the session is live', async () => {
+        populate.mockRejectedValue(new Error('wallets.list failed'));
+        const res = await unlockWalletLocal({ password: 'pw' });
+        expect(res).toEqual({ unlocked: true, passphraseCaptureNeeded: [], poolUnavailable: true });
+        expect((await hostError())?.name).not.toBe('VaultClosedError');
+        expect(vaultClose).not.toHaveBeenCalled();
+    });
+
+    it('leaves poolUnavailable off when populate succeeded', async () => {
+        const res = await unlockWalletLocal({ password: 'pw' });
+        expect(res.poolUnavailable).toBeUndefined();
+    });
+});
+
+describe('unlockWalletLocal: a failure after the vault opened closes it', () => {
+    it('closes the vault, stays locked, and a following unlock succeeds', async () => {
+        // A malformed summary throws after v.open() and outside the populate guard.
+        populate.mockResolvedValue(emptySummary({ passphraseCaptureNeeded: null }));
+        await expect(unlockWalletLocal({ password: 'pw' })).rejects.toThrow(TypeError);
+        expect(vaultClose).toHaveBeenCalledTimes(1);
+        expect((await hostError())?.name).toBe('VaultClosedError');
+
+        populate.mockResolvedValue(emptySummary());
+        await expect(unlockWalletLocal({ password: 'pw' }))
+            .resolves.toEqual({ unlocked: true, passphraseCaptureNeeded: [] });
+    });
+
+    it('closes the vault on a passphrase mismatch too', async () => {
+        populate.mockResolvedValue(emptySummary({
+            passphraseMismatch: ['w1'], passphraseMismatchNames: ['Cold'],
+        }));
+        await expect(unlockWalletLocal({ password: 'pw', bip39Passphrase: 'wrong' }))
+            .rejects.toMatchObject({ name: 'PassphraseMismatchError' });
+        expect(vaultClose).toHaveBeenCalledTimes(1);
+        expect((await hostError())?.name).toBe('VaultClosedError');
     });
 });

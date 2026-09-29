@@ -64,12 +64,17 @@ const COMPOSED = {
     decoded: { summary: 'Send payment', details: [], warnings: [] },
 };
 const PASS = { verdict: 'pass', findings: [] };
+const REFUSED = {
+    verdict: 'fail',
+    findings: [{ severity: 'error', overridable: false, code: 'INVALID_FIELD_VALUE', message: 'The network would refuse this action.' }],
+};
 
 function mount(dispenser, {
     addresses = [buyerAddress],
     dogeSats = '1000000000',
     destinationRows = [],
     settings = {},
+    preflight = PASS,
 } = {}) {
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
@@ -92,7 +97,7 @@ function mount(dispenser, {
             actionString: `SEND|1|${tick}`,
             bareNativePayment: tick === 'DOGE',
         })),
-        preflight: vi.fn().mockResolvedValue(PASS),
+        preflight: vi.fn().mockResolvedValue(preflight),
         reserve: vi.fn().mockResolvedValue(null),
         releaseReservation: vi.fn().mockResolvedValue(null),
         checkInputLiveness: vi.fn().mockResolvedValue({ verdict: 'live', spent: [] }),
@@ -292,5 +297,44 @@ describe('dispenser owned by the viewer', () => {
         mount(TOKEN_PAID, { addresses: [buyerAddress, ownerAddress] });
         await screen.findByText(/\(you\)/);
         expect(noBuyButton()).toBeNull();
+    });
+});
+
+// The Buy lane's failure branches, pinned at the route: the shared Confirm
+// hook is tested on its own, but only these prove beginBuy is wired through it.
+describe('Buy through the shared Confirm screen: failure paths', () => {
+    // Token-paid only: a coin-paid buy is a bare native payment, which carries
+    // no XChain action and so skips the dry run (useConfirmAction.js).
+    it('blocks a token-paid buy the dry run says the network would refuse', async () => {
+        const messaging = mount(TOKEN_PAID, { preflight: REFUSED });
+        await screen.findByText(/250 MEMEVALID available/);
+        const buy = await buyButton();
+        await waitFor(() => expect(buy).toBeEnabled());
+        fireEvent.click(buy);
+
+        await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));
+        fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
+        expect(await screen.findByText(/The network would refuse this action/)).toBeInTheDocument();
+        const approve = screen.getByTestId('confirm-approve');
+        expect(approve).toBeDisabled();
+        fireEvent.click(approve);
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+        expect(messaging.sendAssetHw).not.toHaveBeenCalled();
+        expect(screen.queryByText(/Buy submitted/)).toBeNull();
+    });
+
+    it('returns quietly to the form when the buyer rejects at Confirm', async () => {
+        const messaging = mount(TOKEN_PAID);
+        await screen.findByText(/250 MEMEVALID available/);
+        fireEvent.click(await buyButton());
+        await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));
+        fireEvent.click(await screen.findByTestId('confirm-reject'));
+
+        const buy = await buyButton();
+        await waitFor(() => expect(buy).toBeEnabled());
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/Buy failed/);
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+        expect(messaging.sendAssetHw).not.toHaveBeenCalled();
     });
 });

@@ -482,6 +482,78 @@ describe('signer-bridge register batch cap', () => {
     });
 });
 
+// A newer page may take over a signerId; the superseded port's later
+// unregister or disconnect must not clear the transport it no longer holds.
+describe('signer-bridge takeover ownership', () => {
+    // Record every listener: createBackgroundTransport adds its own to the port.
+    function connect(runtime) {
+        const messageListeners = [];
+        const disconnectListeners = [];
+        const port = {
+            name: 'signer-bridge',
+            sender: EXT_SENDER_TAB,
+            postMessage: () => {},
+            disconnect: () => {},
+            onMessage: { addListener: (fn) => messageListeners.push(fn), removeListener: () => {} },
+            onDisconnect: { addListener: (fn) => disconnectListeners.push(fn), removeListener: () => {} },
+        };
+        runtime.emit(port);
+        return {
+            send: (msg) => { for (const fn of messageListeners) fn(msg); },
+            disconnect: () => { for (const fn of disconnectListeners) fn(); },
+        };
+    }
+
+    function twoPorts() {
+        signerBridge.clearAll();
+        const runtime = fakeRuntime();
+        attachSignerBridgeListener(runtime);
+        const a = connect(runtime);
+        a.send({ kind: 'register', signerIds: ['sig-x'] });
+        const held = signerBridge.getTransport('sig-x');
+        const b = connect(runtime);
+        b.send({ kind: 'register', signerIds: ['sig-x'] });
+        const taken = signerBridge.getTransport('sig-x');
+        expect(taken).not.toBeNull();
+        expect(taken).not.toBe(held);
+        return { a, b, taken };
+    }
+
+    it('keeps the newer page\'s transport when the older port disconnects', () => {
+        const { a, taken } = twoPorts();
+        a.disconnect();
+        expect(signerBridge.getTransport('sig-x')).toBe(taken);
+        signerBridge.clearAll();
+    });
+
+    it('keeps the newer page\'s transport when the older port unregisters', () => {
+        const { a, taken } = twoPorts();
+        a.send({ kind: 'unregister', signerIds: ['sig-x'] });
+        expect(signerBridge.getTransport('sig-x')).toBe(taken);
+        signerBridge.clearAll();
+    });
+
+    it('lets the current holder still clear the id on disconnect', () => {
+        const { a, b } = twoPorts();
+        a.disconnect();
+        b.disconnect();
+        expect(signerBridge.getTransport('sig-x')).toBeNull();
+    });
+
+    it('clears a sole owner\'s id on unregister and on disconnect', () => {
+        signerBridge.clearAll();
+        const runtime = fakeRuntime();
+        attachSignerBridgeListener(runtime);
+        const a = connect(runtime);
+        a.send({ kind: 'register', signerIds: ['sig-x', 'sig-y'] });
+        a.send({ kind: 'unregister', signerIds: ['sig-x'] });
+        expect(signerBridge.getTransport('sig-x')).toBeNull();
+        expect(signerBridge.getTransport('sig-y')).not.toBeNull();
+        a.disconnect();
+        expect(signerBridge.getTransport('sig-y')).toBeNull();
+    });
+});
+
 describe('content script relay allowlist', () => {
     it('only relays bridge.* types (source pins the guard)', () => {
         // The content script is an IIFE that runs on import against a live

@@ -174,6 +174,43 @@ describe('desktop launch auto-lock gate', { timeout: FILESYSTEM_FIXTURE_TIMEOUT 
         expect(existsSync(sessionFile())).toBe(false);
     });
 
+    // An armed record whose window cannot be enforced must not read as
+    // "within window": the shared idle check answers "never lock" there.
+    it.each([
+        ['a zero idleMs', { armed: true, idleMs: 0, lastActivity: 'NOW' }],
+        ['a missing idleMs', { armed: true, lastActivity: 'NOW' }],
+        ['a non-numeric idleMs', { armed: true, idleMs: 'abc', lastActivity: 'NOW' }],
+        ['a negative idleMs', { armed: true, idleMs: -1, lastActivity: 'NOW' }],
+        ['a zero lastActivity', { armed: true, idleMs: 15 * MINUTE, lastActivity: 0 }],
+        ['a missing lastActivity', { armed: true, idleMs: 15 * MINUTE }],
+    ])('fails CLOSED on an armed record with %s', async (_label, record) => {
+        const runtime = await runtimeWithCachedKey();
+        const now = Date.now();
+        const onDisk = { ...record };
+        if (onDisk.lastActivity === 'NOW') onDisk.lastActivity = now;
+        writeFileSync(autoLockStatePathFor(dir), JSON.stringify(onDisk), 'utf8');
+
+        const res = await enforceLaunchAutoLock(runtime, now);
+
+        expect(res).toEqual({ locked: true, reason: 'no-record' });
+        expect(existsSync(sessionFile())).toBe(false);
+        expect(await runtime.autoLockStore.load()).toBe(null);
+    });
+
+    it('fails CLOSED on an armed zero-window state from any injected store', async () => {
+        const runtime = await runtimeWithCachedKey();
+        runtime.autoLockStore = {
+            load: async () => ({ armed: true, idleMs: 0, lastActivity: Date.now() }),
+            save: async () => {},
+            clear: async () => {},
+        };
+
+        const res = await enforceLaunchAutoLock(runtime, Date.now());
+
+        expect(res).toEqual({ locked: true, reason: 'no-record' });
+        expect(existsSync(sessionFile())).toBe(false);
+    });
+
     it('does nothing when no key was cached in the first place', async () => {
         const runtime = await runtimeWithCachedKey();
         await runtime.sessionBackend.clear();
@@ -247,6 +284,23 @@ describe('desktop autolock.report IPC', { timeout: FILESYSTEM_FIXTURE_TIMEOUT },
         const state = await runtime.autoLockStore.load();
         expect(state.armed).toBe(true);
         expect(state.idleMs).toBe(15 * MINUTE);
+    });
+
+    it.each([
+        ['a zero idleMs', 0],
+        ['a non-numeric idleMs', 'nope'],
+    ])('an armed report with %s leaves no record, so the next launch locks', async (_label, idleMs) => {
+        const runtime = await runtimeWithCachedKey();
+        await handleIpcMessage(runtime, {
+            type: AUTO_LOCK_REPORT_TYPE,
+            request: { armed: true, idleMs },
+        });
+        expect(existsSync(autoLockStatePathFor(dir))).toBe(false);
+
+        const res = await enforceLaunchAutoLock(runtime, Date.now());
+
+        expect(res).toEqual({ locked: true, reason: 'no-record' });
+        expect(existsSync(sessionFile())).toBe(false);
     });
 
     it('an armed session that keeps talking is not locked by the next launch', async () => {

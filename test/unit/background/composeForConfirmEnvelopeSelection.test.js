@@ -74,6 +74,9 @@ function makeSdk(createTx) {
                 actionString: `${action}|0|${Object.values(params || {}).join('|')}`, action, version: 0,
             })),
         },
+        // Pass-through builders, so a long question makes a long payload.
+        voting: { createPollParams: vi.fn((p) => ({ VERSION: '0', QUESTION: p?.question })) },
+        betting: { createMarketParams: vi.fn((p) => ({ VERSION: '0', QUESTION: p?.question })) },
         wallet: { decomposePsbt: vi.fn(() => ({ inputs: [{ value: 5000 }], outputs: [] })) },
         decoder: {
             decodeActionStringFromPsbt: vi.fn(() => ({ ok: false, reason: 'stub' })),
@@ -158,6 +161,46 @@ describe('the confirm lane requests the Taproot envelope for any oversized actio
         expect(opts.encoding).toBe('AUTO');
         expect(opts.options).toEqual({ signerSupportsTapscript: true });
         expect(opts.compressedPubKey).toBe(PUBKEY);
+    });
+
+    // The per-action clones of the compose preamble each have to hand over the
+    // signer too; without it an oversized poll or market is refused outright.
+    const PER_ACTION = [
+        ['action.vote.composeForConfirm', 'createPollParams'],
+        ['action.bet.composeForConfirm', 'createMarketParams'],
+    ];
+
+    it.each(PER_ACTION)('%s asks for AUTO when the payload is over 8 KB', async (type, builder) => {
+        const opts = await encoderRequestFor(type, {
+            walletId: 'w1', chainId: TAPROOT_CHAIN.id, from: from('addr-hd', 'hd'),
+            builder, params: { question: 'q'.repeat(9000) },
+        });
+        expect(opts.encoding).toBe('AUTO');
+        expect(opts.options).toEqual({ signerSupportsTapscript: true });
+        expect(opts.compressedPubKey).toBe(PUBKEY);
+    });
+
+    it.each(PER_ACTION)('%s leaves a short payload as before', async (type, builder) => {
+        const opts = await encoderRequestFor(type, {
+            walletId: 'w1', chainId: TAPROOT_CHAIN.id, from: from('addr-hd', 'hd'),
+            builder, params: { question: 'gm?' },
+        });
+        expect(opts.encoding).toBeUndefined();
+        expect(opts.options).toBeUndefined();
+    });
+
+    it.each(PER_ACTION)('%s still refuses an oversized payload from a device address', async (type, builder) => {
+        const { host, createTx } = makeHost();
+        const result = await host.handle({
+            type,
+            request: {
+                walletId: 'w1', chainId: TAPROOT_CHAIN.id, from: from('addr-trezor', 'hd'),
+                builder, params: { question: 'q'.repeat(9000) },
+            },
+        });
+        expect(result).toMatchObject({ ok: false });
+        expect(result.error.message).toMatch(/over 8 KB.*software-key address/);
+        expect(createTx).not.toHaveBeenCalled();
     });
 
     it('a short BROADCAST is requested exactly as before', async () => {

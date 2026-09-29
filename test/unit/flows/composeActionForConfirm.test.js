@@ -173,9 +173,9 @@ describe('composeActionForConfirm', () => {
     });
 
     it('leaves the intent null when the composed action cannot be described', async () => {
-        // Null, so the caller's own `decoded` still renders: a confirm page
-        // with no intent line is worse than one described from the params that
-        // built the bytes.
+        // Null, and nothing substitutes for it: the confirm screen renders
+        // intent only from composed.decoded, so an undescribable action shows
+        // no intent line rather than one rebuilt from form params.
         const h = makeHarness({ inputs: [{ value: 5000 }] });
         h.sdk.decoder.parse = vi.fn(() => ({ ok: false, code: 'UNKNOWN_ACTION' }));
         const composed = await composeActionForConfirm(ARGS(h));

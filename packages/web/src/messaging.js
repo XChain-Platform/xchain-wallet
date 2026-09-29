@@ -1580,7 +1580,13 @@ export function gatedPublishActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.hw', opts));
 }
 
-/** @param {object} opts gated publish compose for the shared confirm page */
+/**
+ * Gated publish compose for the shared confirm page. Resolves with the same
+ * envelope as composeForConfirm plus the prepared action approval signs.
+ *
+ * @param {object} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { gatedPublish: { actionData: object, keyHash: string, ciphertextLength: number } }>}
+ */
 export function composeGatedPublishForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.composeForConfirm', opts));
 }

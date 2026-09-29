@@ -84,9 +84,18 @@ assert.ok(
     /broadcastQueueStorage = createBroadcastQueueStorage\(\)/.test(bg),
     'createBackgroundHost destructures broadcastQueueStorage with the picker as default',
 );
+// The load latch lives on the queue store every host of a shell shares, so a
+// host built after a lock sees the load (and the map) its predecessor made.
+const storePath = join(ext, 'src', 'background', 'broadcastQueueStore.js');
+assert.ok(existsSync(storePath), 'broadcastQueueStore.js exists');
+const queueStoreSrc = readFileSync(storePath, 'utf8');
 assert.ok(
-    /let queueLoaded = false/.test(bg),
-    'createBackgroundHost tracks queueLoaded state',
+    /loaded: false,/.test(queueStoreSrc) && /loadPromise: null,/.test(queueStoreSrc),
+    'the queue store starts unloaded with no rehydrate in flight',
+);
+assert.ok(
+    /const queueStore = broadcastQueueStore \?\? createBroadcastQueueStore\(\{ storage: broadcastQueueStorage \}\)/.test(bg),
+    'createBackgroundHost serves a shared queue store, or a private one over its storage dep',
 );
 assert.ok(
     /async function ensureQueueLoaded\(\)/.test(bg),
@@ -97,7 +106,7 @@ assert.ok(
     'createBackgroundHost defines persistQueue',
 );
 assert.ok(
-    /let queueLoadPromise = /.test(bg) && /if \(!queueLoadPromise\)/.test(bg),
+    /if \(!queueStore\.loadPromise\)/.test(bg) && /queueStore\.loadPromise = \(async \(\) => \{/.test(bg),
     'ensureQueueLoaded uses a single-flight queueLoadPromise so concurrent callers share one rehydrate',
 );
 

@@ -103,13 +103,16 @@ export function consensusRefusalDetail(f) {
  * sub-command refusals are also scoped to one command rather than the whole
  * action, so they stay eligible for per-command acknowledgement.
  *
+ * A sub-command finding is recognised by its integer `data.commandIndex`, the
+ * discriminator the SDK stamps and `preflightFindingKey` above already reads,
+ * never by its code name, so an SDK code rename cannot change this decision.
+ *
  * @param {{ severity?: string, overridable?: boolean, data?: object }} f
  * @returns {boolean}
  */
 export function isHardPreflightFinding(f) {
     if (f?.severity !== 'error') return false;
     if (f.overridable !== undefined) return f.overridable === false;
-    const isSubCommand = f.code === 'DRYRUN_SUBCOMMAND_INVALID'
-        || Number.isInteger(f?.data?.commandIndex);
+    const isSubCommand = Number.isInteger(f?.data?.commandIndex);
     return !isSubCommand && consensusRefusalReason(f) !== null;
 }

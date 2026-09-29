@@ -25,10 +25,14 @@
 // "Open queue" action so the user knows to retry (Cluster G FOLLOWUP 3).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChainBadge } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useToast } from './ToastHost.jsx';
 import styles from './QueuedBroadcastBanner.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * @param {object} props
@@ -145,7 +149,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                         <div className={styles.summary}>
                             <span className={styles.summaryText}>{entry.summary}</span>
                             <span className={styles.meta}>
-                                {entry.chainId} · signed {ageString(entry.signedAt)}
+                                {chainLabel(entry.chainId)} · signed {ageString(entry.signedAt)}
                             </span>
                             {/* A resumed claim is a send the wallet had already handed to
                                 the network when it was interrupted, so it may have landed.
@@ -188,6 +192,13 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             ) : null}
         </div>
     );
+}
+
+// Name the chain the way every other screen does (the raw id shows only
+// when the registry has no entry for it).
+function chainLabel(chainId) {
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    return descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId;
 }
 
 function ageString(signedAt) {

@@ -10,7 +10,7 @@
 
 // Dogecoin chain descriptors. P2PKH only (no segwit on Dogecoin at launch).
 // Fee unit is sats-per-kbyte (koinu/kB) per §44.1. RBF is not standard on
-// Dogecoin's fork, but per-chain Settings still drive behavior.
+// Dogecoin's fork, so rbfSupported:false caps every stored or per-send RBF flag.
 
 import { DOGECOIN_ACTIONS } from '../actions.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';

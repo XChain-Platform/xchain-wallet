@@ -34,11 +34,14 @@
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { assess, assessOne, expandHome, readActualExpiry } from '../../../tools/release/credential-expiry.mjs';
+import {
+    assess, assessOne, expandHome, readActualExpiry, readOpenPgpExpiry, resolveVerifyFrom,
+} from '../../../tools/release/credential-expiry.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -77,7 +80,7 @@ for (const c of declared.credentials) {
         `credential ${c.id} declares an unparseable date`);
     // A row that names no artifact can never be measured, only believed, which
     // is the state this whole tool exists to leave behind.
-    assert.match(c.verifyFrom, /^[~/]/, `credential ${c.id} must name a real path to verify from`);
+    assert.match(c.verifyFrom, /^(~\/|\/|\.\/)/, `credential ${c.id} must name a real path to verify from`);
 }
 
 // K3 is the one with a hard external deadline, so it is pinned by name: it
@@ -86,6 +89,16 @@ const k3 = declared.credentials.find((c) => c.id === 'K3');
 assert.ok(k3, 'K3, the Developer ID certificate, must stay declared');
 assert.equal(k3.expires, '2027-02-01T22:12:15Z',
     'K3 expires at the exact second its issuing CA does; changing this line means a reissue happened');
+
+// K1 signs every release manifest, so it is pinned by name too, and to the
+// fingerprints the observed key pin records, so the row cannot name another key.
+const k1 = declared.credentials.find((c) => c.id === 'K1');
+assert.ok(k1, 'K1, the release-signing key, must stay on the clock');
+const keyPin = JSON.parse(readFileSync(join(root, 'docs/release-key-pin.json'), 'utf8'));
+assert.equal(k1.fingerprint, keyPin.fingerprint, 'the K1 row names the pinned primary fingerprint');
+assert.equal(k1.signingSubkey, keyPin.signingSubkey, 'the K1 row names the pinned signing subkey');
+assert.ok(existsSync(resolveVerifyFrom(k1.verifyFrom)),
+    `K1's verifyFrom (${k1.verifyFrom}) resolves to the committed public key`);
 
 // --- the calendar branches -------------------------------------------------
 
@@ -173,6 +186,31 @@ assert.equal(k3.expires, '2027-02-01T22:12:15Z',
     assert.equal(f.measured, true);
 }
 
+// --- --require-measured: where the credentials live, a guess is a failure --
+
+{
+    // Without the flag an unreadable artifact still trusts the declared date,
+    // which is what lets the weekly hosted-runner job stay green by design.
+    const loose = assess(synthetic('2027-02-01T00:00:00Z'), at('2026-08-08T00:00:00Z'));
+    assert.equal(loose.findings[0].state, 'current');
+    assert.equal(loose.code, 0);
+
+    const strict = assess(synthetic('2027-02-01T00:00:00Z'), at('2026-08-08T00:00:00Z'),
+        { requireMeasured: true });
+    assert.equal(strict.findings[0].state, 'unmeasured',
+        'with --require-measured a missing artifact is UNMEASURED, not current on the declared date');
+    assert.match(strict.findings[0].reason, /not present/);
+    assert.equal(strict.code, 1, 'and an unmeasured row is actionable, exit 1');
+
+    // A readable artifact that agrees is still current under the flag.
+    const io = { run: () => 'notAfter=Feb  1 22:12:15 2027 GMT\n', home: '/', requireMeasured: true };
+    const f = assessOne(
+        { id: 'OK', what: 'x', expires: '2027-02-01T22:12:15Z', verifyFrom: DECL, breaks: 'x' },
+        at('2026-08-08T00:00:00Z'), 60, io);
+    assert.equal(f.state, 'current');
+    assert.equal(f.measured, true);
+}
+
 // --- the two artifact shapes are read differently --------------------------
 
 {
@@ -197,6 +235,76 @@ assert.equal(assess({ policy: { renewalLeadDays: 60 }, credentials: [] }, at('20
 
 assert.equal(expandHome('~/a/b', '/home/x'), '/home/x/a/b');
 assert.equal(expandHome('/a/b', '/home/x'), '/a/b');
+// `./` is the repository root, never the cwd, so the clock reads the same file from anywhere.
+assert.equal(resolveVerifyFrom('./tools/x.asc', '/home/x', '/repo'), '/repo/tools/x.asc');
+assert.equal(resolveVerifyFrom('~/a', '/home/x', '/repo'), '/home/x/a');
+assert.equal(resolveVerifyFrom('/a/b', '/home/x', '/repo'), '/a/b');
+
+// --- a per-row lead time overrides the policy --------------------------------
+
+{
+    const d = synthetic('2027-02-01T00:00:00Z');
+    d.credentials[0].renewalLeadDays = 180;
+    // 170 days out: current under the policy's 60, due under the row's 180.
+    const r = assess(d, at('2026-08-15T00:00:00Z'));
+    assert.equal(r.findings[0].days, 170);
+    assert.equal(r.findings[0].state, 'due', 'a row\'s own renewalLeadDays wins over the policy');
+}
+
+// --- OpenPGP keys: the earliest of the named primary and signing subkey -----
+
+{
+    const P = 'A'.repeat(40);
+    const SUB = 'B'.repeat(40);
+    const colons = (pubExp, subExp, fpr = P) => [
+        `pub:u:255:22:0000000000000001:1785990546:${pubExp}::u:::cSC`,
+        `fpr:::::::::${fpr}:`,
+        `sub:u:255:22:0000000000000002:1785990555:${subExp}:::::s`,
+        `fpr:::::::::${SUB}:`,
+        '',
+    ].join('\n');
+    const opts = (out) => ({ run: () => out, fingerprint: P, signingSubkey: SUB });
+    const iso = (r) => r.date && r.date.toISOString();
+
+    assert.equal(iso(readOpenPgpExpiry(DECL, opts(colons(1849062546, 1849062555)))),
+        '2028-08-05T04:29:06.000Z', 'the primary expiring first wins');
+    assert.equal(iso(readOpenPgpExpiry(DECL, opts(colons(1849062555, 1849062546)))),
+        '2028-08-05T04:29:06.000Z', 'the subkey expiring first wins');
+    assert.equal(iso(readOpenPgpExpiry(DECL, opts(colons('', 1849062555)))),
+        '2028-08-05T04:29:15.000Z', 'a never-expiring primary leaves the subkey date');
+
+    const absent = readOpenPgpExpiry(DECL, opts(colons(1849062546, 1849062555, 'C'.repeat(40))));
+    assert.equal(absent.date, null, 'a key file without the declared primary yields no date');
+    assert.match(absent.reason, new RegExp(P), 'and says which fingerprint it looked for');
+
+    const undated = readOpenPgpExpiry(DECL, opts(colons('', '')));
+    assert.equal(undated.date, null);
+    assert.match(undated.reason, /carries an expiry/);
+
+    const broken = readOpenPgpExpiry(DECL, { run: () => { throw new Error('ENOENT'); },
+        fingerprint: P, signingSubkey: SUB });
+    assert.equal(broken.date, null, 'a gpg that cannot run is unmeasured, never a guessed date');
+    assert.match(broken.reason, /gpg/);
+
+    // Routed by extension through readActualExpiry, and a declared date the key does not
+    // carry is DRIFT, the same as a certificate's.
+    const key = resolveVerifyFrom(k1.verifyFrom);
+    const drift = assessOne({ ...k1, expires: '2028-08-06T04:29:06Z' }, at('2026-09-29T00:00:00Z'), 60,
+        { run: () => colons(1849062546, 1849062555, k1.fingerprint).replace(SUB, k1.signingSubkey) });
+    assert.equal(drift.state, 'drift', `a K1 date one day off the key is drift (read ${key})`);
+}
+
+// A real read of the committed key, where gpg exists, so the parser meets gpg's actual output.
+if (spawnSync('gpg', ['--version'], { encoding: 'utf8' }).status === 0) {
+    const real = readActualExpiry(resolveVerifyFrom(k1.verifyFrom),
+        { fingerprint: k1.fingerprint, signingSubkey: k1.signingSubkey });
+    assert.ok(real.date, `gpg could not read the committed K1 key: ${real.reason}`);
+    assert.ok(Math.abs(real.date.getTime() - Date.parse(k1.expires)) <= 1000,
+        `the committed K1 key carries ${real.date.toISOString()}, the row declares ${k1.expires}`);
+} else {
+    console.log('credential-expiry smoke: gpg is not installed, so the real read of the committed K1 key '
+        + 'did not run (the fake-gpg cases above still did).');
+}
 
 // --- the tool runs end to end ----------------------------------------------
 
@@ -207,9 +315,31 @@ assert.equal(expandHome('/a/b', '/home/x'), '/a/b');
     assert.equal(parsed.findings.length, declared.credentials.length);
     // Whatever today's verdict, every row must carry a state a reader can act
     // on rather than an empty object.
+    // DRIFT is never accepted: it can only arise where an artifact is readable,
+    // and there it means the declared date is wrong. due/expired stay calendar.
     for (const f of parsed.findings) {
-        assert.ok(['current', 'due', 'expired', 'drift', 'config'].includes(f.state), `bad state ${f.state}`);
+        assert.ok(['current', 'due', 'expired'].includes(f.state),
+            `credential ${f.id} is ${f.state}: ${f.detail || f.reason || ''}`);
     }
+}
+
+// --- on the release machine, every row is MEASURED --------------------------
+//
+// The deliberate exception to "no verdict depends on the machine": where the
+// credential store exists, the declared dates are checked against the artifacts
+// themselves, which is the half the weekly hosted-runner job relies on.
+if (existsSync(join(homedir(), '.xchain-release'))) {
+    const run = spawnSync(process.execPath, [TOOL, '--json', '--require-measured'], { encoding: 'utf8' });
+    assert.ok([0, 1].includes(run.status), `tool exited ${run.status}: ${run.stderr}`);
+    for (const f of JSON.parse(run.stdout).findings) {
+        assert.equal(f.measured, true,
+            `credential ${f.id} was not measured on the release machine: ${f.reason || f.state}`);
+        assert.ok(!['drift', 'unmeasured', 'config'].includes(f.state),
+            `credential ${f.id} is ${f.state} on the release machine: ${f.detail || f.reason || ''}`);
+    }
+} else {
+    console.log('credential-expiry smoke: no ~/.xchain-release here, so the measured-on-the-release-machine '
+        + 'block did not run (declared dates only).');
 }
 
 console.log('credential-expiry smoke: ok');

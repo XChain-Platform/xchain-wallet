@@ -1468,14 +1468,23 @@ async function main(argv) {
 
         const lane = laneById(laneId);
         if (!lane) fail(`unknown lane "${laneId}"`);
+        // A direct lane's open device question is DD-A, not DD4 (a
+        // different blocker with a different owner), and `run` files its
+        // probe result under `direct-lanes`, never under the desktop `lanes`.
+        const direct = DIRECT_LANES.includes(lane);
         if (!lane.device) {
-            fail(`lane ${laneId} has no named smoke device (DD4 is unanswered for it).\n`
-                + '  Attesting a swap without saying what it ran on is the thing DD4\n'
-                + '  exists to prevent: "no named device for a lane = that lane does not\n'
-                + '  ship". Name the device in tools/release/rehearsal-matrix.mjs first.');
+            fail(`lane ${laneId} has no named smoke device (${direct ? 'DD-A' : 'DD4'} is unanswered for it).\n`
+                + (direct
+                    ? '  Recording an install-over without saying which device watched it is\n'
+                        + '  the unlocated claim DD-A exists to refuse.'
+                    : '  Attesting a swap without saying what it ran on is the thing DD4\n'
+                        + '  exists to prevent: "no named device for a lane = that lane does not\n'
+                        + '  ship".')
+                + ' Name the device in tools/release/rehearsal-matrix.mjs first.');
         }
         const record = JSON.parse(readFileSync(file, 'utf8'));
-        const laneResult = (record.lanes || []).find((l) => l.id === laneId);
+        const results = direct ? record['direct-lanes'] : record.lanes;
+        const laneResult = (Array.isArray(results) ? results : []).find((l) => l.id === laneId);
         if (!laneResult?.ok) {
             fail(`lane ${laneId} did not pass its feed-side probe, so there is nothing\n`
                 + '  a swap on it would prove. Fix the probe failure and re-run.');

@@ -35,7 +35,8 @@ import { strict as assert } from 'node:assert';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-    copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+    copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,
+    writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -74,7 +75,7 @@ function buildTarball(dir, marker) {
  * A manifest in the shape verify.sh requires: header, artifact count, a build
  * profile for every hashed row, and the sha256 of the file beside it.
  */
-function writeManifest(dir, tarball, { hash = null, tag = TAG } = {}) {
+function writeManifest(dir, tarball, { hash = null, tag = TAG, gate = 'enforced' } = {}) {
     const sha = hash || createHash('sha256').update(readFileSync(tarball)).digest('hex');
     const manifest = join(dir, 'RELEASE_HASHES.txt');
     writeFileSync(manifest, [
@@ -83,7 +84,7 @@ function writeManifest(dir, tarball, { hash = null, tag = TAG } = {}) {
         `# tag: ${tag}`,
         '# tag-commit: 0000000000000000000000000000000000000000',
         '# built: 2026-01-01T00:00:00Z',
-        '# dev-mock-gate: enforced',
+        ...(gate === null ? [] : [`# dev-mock-gate: ${gate}`]),
         '# artifacts: 1',
         `# profile default: ./${TARBALL_NAME}`,
         `${sha}  ./${TARBALL_NAME}`,
@@ -205,6 +206,23 @@ try {
         nothingDeployed('UNLISTED ARTIFACT', webroot, r);
     }
 
+    // --- 5a. A manifest signed with the dev-mock gate off is refused -----
+    //
+    // The desktop updater refuses these; the live web root must too, since the
+    // gate is what keeps a fabricated-address SDK out of a shipped bundle.
+    for (const [label, gate] of [['GATE SKIPPED', 'SKIPPED'], ['GATE NOT RUN', 'not-run'],
+        ['GATE UNRECORDED', null]]) {
+        const gateDir = join(work, `gate-${String(gate)}`);
+        mkdirSync(gateDir);
+        const t = buildTarball(gateDir, GENUINE_MARKER);
+        const m = writeManifest(gateDir, t, { gate });
+        const webroot = freshWebroot();
+        const r = deploy({ tarball: t, manifest: m, webroot, extra: ['--no-sig'] });
+        nothingDeployed(label, webroot, r);
+        check(`${label}: the refusal names the gate state it read`,
+            new RegExp(`dev-mock gate as '${gate || 'unrecorded'}'`).test(r.stderr), r.stderr);
+    }
+
     // --- 5b. A headerless manifest cannot answer for a release ----------
     //
     // Held back with the verify.sh change it exercises, not dropped. Strip
@@ -309,6 +327,70 @@ try {
         const hits = spawnSync('grep', ['-rl', 'ATTACKER REBUILD', webroot], { encoding: 'utf8' });
         check('RACE: the replacement marker reached nothing under the webroot',
             !(hits.stdout || '').trim(), hits.stdout || '');
+    }
+
+    // --- 6c. An interrupted unpack leaves no releases/<tag> behind -------
+    //
+    // A tar that dies partway must not leave a half-written releases/<tag>,
+    // which the next run would refuse to overwrite and offer as a rollback target.
+    // Driven with a tar shim that writes one file and fails, like a full disk.
+    {
+        const shimBin = join(work, 'bin-failing-tar');
+        mkdirSync(shimBin, { recursive: true });
+        const realTar = execFileSync('bash', ['-c', 'command -v tar'], { encoding: 'utf8' }).trim();
+        writeFileSync(join(shimBin, 'tar'), [
+            '#!/usr/bin/env bash',
+            '# Stub tar: extracts die after one file; everything else runs the real tar.',
+            'case "$1" in -*x*) ;; *) exec "$REAL_TAR" "$@" ;; esac',
+            'while [ $# -gt 0 ]; do [ "$1" = -C ] && dest="$2"; shift; done',
+            'echo "<html>HALF WRITTEN</html>" > "$dest/index.html"',
+            'exit 1',
+            '',
+        ].join('\n'), { mode: 0o755 });
+
+        const webroot = freshWebroot();
+        const r = deploy({ tarball: genuine, manifest: genuineManifest, webroot, extra: ['--no-sig'],
+            env: { PATH: `${shimBin}:${process.env.PATH}`, REAL_TAR: realTar } });
+        nothingDeployed('INTERRUPTED UNPACK', webroot, r);
+        const releases = join(webroot, 'releases');
+        const leftovers = existsSync(releases) ? readdirSync(releases) : [];
+        check('INTERRUPTED UNPACK: no hidden partial dir is left behind either',
+            leftovers.length === 0, `releases/ holds: ${leftovers.join(', ')}`);
+
+        const again = deploy({ tarball: genuine, manifest: genuineManifest, webroot, extra: ['--no-sig'] });
+        check('INTERRUPTED UNPACK: a redeploy of the same tag is not blocked', again.status === 0,
+            `status=${again.status}\n${again.stderr}`);
+        const served = join(webroot, 'current', 'index.html');
+        check('INTERRUPTED UNPACK: and the redeploy serves the whole release',
+            existsSync(served) && readFileSync(served, 'utf8').includes(GENUINE_MARKER),
+            existsSync(served) ? readFileSync(served, 'utf8') : 'current/index.html absent');
+    }
+
+    // --- 6d. The renamed release keeps an ordinary mode; prune skips partials
+    //
+    // A mode check, because a 0700 temp dir renamed into place is unreadable
+    // to a web server running as another user. Compared to a plain mkdir here.
+    {
+        const webroot = freshWebroot();
+        const stale = join(webroot, 'releases', '.v0.0.1.partial.stale');
+        mkdirSync(stale, { recursive: true });
+        writeFileSync(join(stale, 'keep-me'), 'x');
+        const r = deploy({ tarball: genuine, manifest: genuineManifest, webroot,
+            extra: ['--no-sig', '--keep', '1'] });
+        check('PRUNE: the deploy succeeds', r.status === 0, `status=${r.status}\n${r.stderr}`);
+        check('PRUNE: a hidden partial dir is never a prune candidate',
+            existsSync(join(stale, 'keep-me')), 'the stale .partial dir was deleted');
+        const ownPartials = readdirSync(join(webroot, 'releases'))
+            .filter((n) => n.startsWith(`.${TAG}.partial.`));
+        check('PRUNE: the successful run leaves no partial of its own', ownPartials.length === 0,
+            ownPartials.join(', '));
+        const reference = join(work, `mode-reference-${webrootSeq}`);
+        mkdirSync(reference);
+        const mode = (p) => statSync(p).mode & 0o777;
+        check('MODE: releases/<tag> has the mode a plain mkdir gives, not a temp dir\'s 0700',
+            mode(join(webroot, 'releases', TAG)) === mode(reference),
+            `releases/${TAG} is ${mode(join(webroot, 'releases', TAG)).toString(8)}, `
+            + `a plain mkdir is ${mode(reference).toString(8)}`);
     }
 
     // --- 7. The signature path, where gpg is available ------------------

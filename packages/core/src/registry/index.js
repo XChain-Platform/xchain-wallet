@@ -253,6 +253,23 @@ export class ChainRegistry {
 let _defaultRegistry = null;
 export const defaultRegistry = () => (_defaultRegistry ??= new ChainRegistry());
 
+/**
+ * Chain ids a newly created or imported wallet starts with: every bundled
+ * mainnet descriptor, in bundle order (the import flow opens on the first).
+ * Users change the set later in Settings. Derived from the static bundle,
+ * never the live instance: hub-synced descriptors install as non-user-added
+ * and may have no SDK adapter, and a module-scope read would race the sync.
+ *
+ * @param {import('./validate.js').ChainDescriptor[]} [descriptors]
+ * @returns {string[]}
+ */
+export function defaultOnboardingChainIds(descriptors = BUNDLED_DESCRIPTORS) {
+    return descriptors.filter((d) => d.networkKind === 'mainnet').map((d) => d.id);
+}
+
+/** The one onboarding default every shell imports (web, mobile, extension, desktop). */
+export const DEFAULT_ONBOARDING_CHAIN_IDS = defaultOnboardingChainIds();
+
 export { BUNDLED_DESCRIPTORS } from './descriptors/index.js';
 export {
     validateChainDescriptor,

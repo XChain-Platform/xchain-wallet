@@ -132,7 +132,7 @@ assert.ok(
     'sdk.preflight runs host-side via messaging.preflight',
 );
 assert.ok(
-    /prebuiltPsbt:\s*\{\s*psbtHex: composed\.psbt/.test(src),
+    /prebuiltPsbt: prebuiltPsbtFromComposed\(composed\)/.test(src),
     'Approve signs the byte-identical composed PSBT (prebuiltPsbt)',
 );
 assert.ok(

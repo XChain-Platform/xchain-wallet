@@ -19,6 +19,7 @@ import {
     addressTypeFromPath,
     composeBitcoinCompactSignature,
 } from '../../../packages/signers-ledger/src/ledgerFormat.js';
+import { chainIdToTrezorCoin } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
 describe('chainIdToLedgerCurrency', () => {
     it('maps bitcoin-mainnet to bitcoin', () => {
@@ -56,8 +57,16 @@ describe('chainIdToLedgerCurrency', () => {
         expect(() => chainIdToLedgerCurrency('dogecoin-testnet')).toThrow(/software wallet/);
     });
 
-    it('throws for bitcoin-regtest (no Ledger regtest app)', () => {
-        expect(() => chainIdToLedgerCurrency('bitcoin-regtest')).toThrow(/software wallet/);
+    // Same parity refusal as testnet, in the wording Trezor uses for both, and
+    // never the Litecoin/Dogecoin missing-app text meant for other coins.
+    it.each(['bitcoin-testnet', 'bitcoin-regtest'])('throws the Trezor parity message for %s', (chainId) => {
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/software wallet/);
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/funds would appear missing/);
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(`can't be used on ${chainId}`);
+        expect(() => chainIdToLedgerCurrency(chainId)).not.toThrow(/Litecoin|Dogecoin/);
+        const messageOf = (fn) => { try { fn(); } catch (e) { return e.message; } return null; };
+        expect(messageOf(() => chainIdToLedgerCurrency(chainId)))
+            .toBe(messageOf(() => chainIdToTrezorCoin(chainId)));
     });
 });
 

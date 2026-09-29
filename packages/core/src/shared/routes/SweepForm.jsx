@@ -17,6 +17,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
     resolvePreflightPrivacy,
@@ -439,24 +440,8 @@ export function SweepForm({
                     password: passwordValueRef.current,
                     extraBase: {
                         ...flowOpts,
-                        prebuiltPsbt: {
-                            psbtHex: composed.psbt,
-                            encoding: composed.encoding,
-                            actionString: composed.actionString,
-                            version: composed.version,
-                            // On the chunk lane compose deliberately left these outputs
-                            // OFF the previewed PSBT because they ride the reveal the
-                            // submit path builds, so dropping them here burns the value
-                            // the commit reserved for them (see useActionConfirmFlow).
-                            deferredFeeOutput: composed.deferredFeeOutput || null,
-                            deferredOutputs: composed.deferredOutputs || [],
-                            // ...and the change the reveal must be built with, or its
-                            // surplus sweep lands on the un-rotated spending address.
-                            revealOpts: composed.revealOpts || null,
-                            // The donation verdict these bytes actually carry, so the submit
-                            // path books from compose time rather than a fresh snapshot.
-                            adsDonation: { included: !!composed.adsPlan?.canSubmit },
-                        },
+                        // The shared mapping, envelope and deferred outputs included.
+                        prebuiltPsbt: prebuiltPsbtFromComposed(composed),
                     },
                 }),
             });

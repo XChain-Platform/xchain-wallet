@@ -972,20 +972,28 @@ for (const cap of RATED_CAPABILITIES) {
 const hostBridgeSrc = readFileSync(
     join(wsRoot, 'packages', 'web', 'src', 'hostBridge.js'), 'utf8',
 );
-const defaultChainsBlock = /export const DEFAULT_ACTIVE_CHAIN_IDS = \[([\s\S]*?)\]/
-    .exec(hostBridgeSrc);
+// The default is one registry-derived value now (core registry
+// DEFAULT_ONBOARDING_CHAIN_IDS, which web reaches through walletCreate.js), so
+// it is imported: a regex over a literal can no longer see it. The literal
+// must not come back beside the import.
 assert.ok(
-    defaultChainsBlock,
-    'DEFAULT_ACTIVE_CHAIN_IDS is gone from hostBridge.js, so this guard can no longer tell which network a'
-    + ' fresh wallet opens on - re-derive it against whatever replaced it rather than deleting the assertion',
+    !/export const DEFAULT_ACTIVE_CHAIN_IDS = \[/.test(hostBridgeSrc),
+    'hostBridge.js redefines DEFAULT_ACTIVE_CHAIN_IDS as a literal; import the shared registry-derived default instead',
 );
-const defaultChainIds = [...defaultChainsBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-assert.ok(defaultChainIds.length > 0, 'DEFAULT_ACTIVE_CHAIN_IDS parsed as empty');
+assert.ok(
+    /import \{[^}]*\bDEFAULT_ACTIVE_CHAIN_IDS\b[^}]*\} from '\.\.\/\.\.\/extension\/src\/background\/walletCreate\.js'/
+        .test(hostBridgeSrc),
+    'hostBridge.js no longer takes DEFAULT_ACTIVE_CHAIN_IDS from walletCreate.js, so this guard can no longer tell'
+    + ' which network a fresh wallet opens on - re-derive it against whatever replaced it rather than deleting it',
+);
+const { DEFAULT_ONBOARDING_CHAIN_IDS } = await import(
+    pathToFileURL(join(wsRoot, 'packages', 'core', 'src', 'registry', 'index.js')).href
+);
+const defaultChainIds = [...DEFAULT_ONBOARDING_CHAIN_IDS];
+assert.ok(defaultChainIds.length > 0, 'DEFAULT_ONBOARDING_CHAIN_IDS is empty');
 
 // The chain id carries its own network kind as its suffix, which is the same
-// thing chainRegistry.descriptorFor(id).networkKind reports; parsed rather than
-// imported because a smoke that checks shipped configuration should not need
-// the app's dependency tree to be trustworthy (see the plist reader above).
+// thing chainRegistry.descriptorFor(id).networkKind reports.
 const startsOnMainnet = defaultChainIds.every((id) => id.endsWith('-mainnet'));
 
 if (startsOnMainnet) {
