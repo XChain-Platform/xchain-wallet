@@ -29,7 +29,9 @@ import { useContractManifest } from '../hooks/useContractManifest.js';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { contractBalanceRows, contractBalanceOf } from './contractResponseShape.js';
+import { contractBalanceRows, contractBalanceOf, OWNER_WITHDRAW_DISABLED_REASON } from './contractResponseShape.js';
+import { useContractOwnerWithdraw } from '../hooks/useContractOwnerWithdraw.js';
+import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -166,6 +168,14 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     // What the Max button and the "available" line speak for in this mode.
     const spendableBalance = isDeposit ? tickAmtBalance : heldByContract;
 
+    // OWNER_WITHDRAW_OPT_IN: a WITHDRAW from a contract whose meta did not opt
+    // in is refused by consensus after the fee is paid, so the form stops at a
+    // one-line reason instead. A DEPOSIT into a contract whose deployer CAN
+    // withdraw carries the warning. Null (loading, lookup failed, older
+    // explorer) keeps the form exactly as it was.
+    const ownerWithdraw = useContractOwnerWithdraw({ messaging, chainId, contractActionIndex });
+    const withdrawRefused = !isDeposit && ownerWithdraw === false;
+
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
@@ -271,6 +281,8 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     function handleReview(event) {
         event.preventDefault();
+        // The refusal line is already on screen above the fields.
+        if (withdrawRefused) return;
         if (!fromAddress) {
             setFormError('No source address available.');
             return;
@@ -605,6 +617,12 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     return wrap(
         <form onSubmit={handleReview} noValidate>
+            {withdrawRefused ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    {OWNER_WITHDRAW_DISABLED_REASON}
+                </StatusMessage>
+            ) : null}
+            {isDeposit ? <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} /> : null}
             {/* The target contract pins the network, so the field is single-option. */}
             <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
@@ -668,7 +686,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick.trim() || !quantity || actionConfirm.composing}
+                    disabled={withdrawRefused || !fromAddress || !tick.trim() || !quantity || actionConfirm.composing}
                 >
                     {singleEncode ? verb : 'Preview'}
                 </Button>
