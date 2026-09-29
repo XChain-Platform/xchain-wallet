@@ -115,7 +115,7 @@ function classifiedResult(raw, hay, verb) {
         cause = 'inputs_on_hold';
         message = `Couldn't ${verb}. Coins at this address are still on hold for a transaction `
             + 'prepared in the last 5 minutes. Broadcast that transaction, or wait 5 minutes and try again.';
-    } else if (/\binsufficient funds\b|\binsufficient balance\b|\bnot enough\b|\bbalance too low\b|\binadequate funds\b|\btoo low\b/.test(hay)) {
+    } else if (/\binsufficient funds\b|\binsufficient balance\b|\b(?:not|no) (?:have )?enough (?:funds|balance|coins?|xcp)\b|\bbalance (?:is )?too low\b|\binadequate funds\b/.test(hay)) {
         cause = 'insufficient_funds';
         message = `Couldn't ${verb}. You don't have enough funds for this transaction.`;
         if (/\d/.test(raw)) details = raw;
