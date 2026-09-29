@@ -18,7 +18,10 @@ import {
     contractAddressFor,
     contractDisplayLabel,
     contractMetaOf,
+    contractOwnerWithdraw,
+    OWNER_WITHDRAW_DISABLED_REASON,
 } from './contractResponseShape.js';
+import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,6 +55,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * printed with the derived address because names are not unique. The
  * description is 512 bytes and shows here only, never on a list row. A contract
  * deployed before the flag day exports none and reads "Unnamed contract".
+ *
+ * Owner withdraw (OWNER_WITHDRAW_OPT_IN) comes off the explorer's derived
+ * `owner_withdraw`: false hides Withdraw behind a one-line reason, because
+ * consensus refuses the action; true shows the deployer-can-withdraw warning;
+ * an explorer that omits the field leaves the page as it was, with no warning.
  *
  * EXECUTE / DEPOSIT / WITHDRAW buttons are rendered but are no-ops
  * until Steps 5 + 6 land the authoring forms. The `onExecute /
@@ -168,6 +176,7 @@ export function ContractDetail({
     const slashDestinationAddr = contract?.slash_destination ?? contract?.SLASH_DESTINATION
         ?? contract?.slash_destination_address ?? null;
     const isStakeable = cooldownBlocks !== null && cooldownBlocks !== undefined;
+    const ownerWithdraw = contractOwnerWithdraw(contract);
 
         const header = (
         <PageHeader
@@ -227,7 +236,11 @@ export function ContractDetail({
                                 </div>
                             </>
                         ) : null}
+                        {ownerWithdraw !== null ? (
+                            <div><strong>Owner withdraw:</strong> {ownerWithdraw ? 'Allowed' : 'Not allowed'}</div>
+                        ) : null}
                     </dl>
+                    <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
                     {deployError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
                             Couldn't load deploy details: {deployError}
@@ -326,13 +339,15 @@ export function ContractDetail({
                     >
                         Deposit
                     </Button>
-                    <Button
-                        variant="secondary"
-                        onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
-                        disabled={!onWithdraw}
-                    >
-                        Withdraw
-                    </Button>
+                    {ownerWithdraw === false ? null : (
+                        <Button
+                            variant="secondary"
+                            onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
+                            disabled={!onWithdraw}
+                        >
+                            Withdraw
+                        </Button>
+                    )}
                     {isStakeable ? (
                         <Button
                             variant="secondary"
@@ -343,6 +358,11 @@ export function ContractDetail({
                         </Button>
                     ) : null}
                 </div>
+                {ownerWithdraw === false ? (
+                    <p className={styles.entryDescription} data-testid="owner-withdraw-disabled">
+                        {OWNER_WITHDRAW_DISABLED_REASON}
+                    </p>
+                ) : null}
                 {!onExecute && !onDeposit && !onWithdraw ? (
                     <p className={styles.entryDescription}>
                         Contract call, deposit, and withdraw forms are coming in

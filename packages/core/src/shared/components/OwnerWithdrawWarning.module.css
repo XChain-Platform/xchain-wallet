@@ -1,0 +1,26 @@
+.warningBanner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    margin: 0 0 var(--xc-space-3);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    line-height: 1.4;
+    background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
+}
+
+.headline {
+    font-weight: 700;
+    font-size: var(--xc-text-sm);
+    color: inherit;
+}
+
+.detail {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    line-height: 1.4;
+}
