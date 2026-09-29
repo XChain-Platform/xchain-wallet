@@ -8,11 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Scaffold for a future TESTNET Playwright venue. No `*.testnet.spec.js`
-// files are checked in, so this config currently collects zero tests and
-// must not be cited as testnet coverage.
-//
-// Once matching specs exist, they run the production build against the public
+// TESTNET specs run the production build against the public
 // Bitcoin testnet through the configured explorer and encoder. `vite build`
 // runs on every launch because the development server uses a mock SDK that
 // cannot sign and broadcast.
@@ -24,8 +20,8 @@
 // real service under real browser origin rules; relaxing them would test a
 // browser nobody ships.
 //
-// The timeouts are reserved for specs that wait for public-chain blocks. A
-// spec that needs an activation delay must set its own budget on top.
+// Inclusion waits are measured in blocks, not regtest minutes. Each staking
+// spec sets an explicit budget for its full chain sequence.
 
 import { defineConfig, devices } from '@playwright/test';
 
@@ -45,8 +41,8 @@ export default defineConfig({
     // One worker: the specs share one treasury and one chain, and two of them
     // racing for the same UTXO set is a double spend, not parallelism.
     workers: 1,
-    timeout: 3_600_000,
-    expect: { timeout: 60_000 },
+    timeout: 8 * 60 * 60_000,
+    expect: { timeout: 120_000 },
     globalSetup: './global-setup.testnet.js',
     reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
     use: {
