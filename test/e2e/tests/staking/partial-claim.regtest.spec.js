@@ -32,24 +32,6 @@
 // address (xchain-indexer/src/coins/BTC.js, network 'regtest', a fixed
 // constant with no env override) does that.
 //
-// TWO PRODUCT-SIDE SEAMS THIS SPEC HAD TO WORK AROUND, OUT OF THIS LANE'S
-// jail (tests-only; StakingActionForm.jsx is not a listed file):
-//
-//   1. StakingActionForm.jsx's claim-rewards `availableAmt` (~line 217-236)
-//      still filters raw `getRewardsForAddress` accrual rows by a `status`
-//      field that endpoint never returns - the same dead filter PC-47
-//      already diagnosed and fixed in StakeDetail.jsx's `splitRewards` via
-//      `unclaimedRewards({rewards, claims})`, but that fix was never
-//      propagated here. Against a real reward this computes 0, and
-//      `handleReview` (~line 452) then rejects any partial amount with
-//      "Amount exceeds the 0 XCHAIN available." before a confirm ever opens.
-//   2. The bespoke "...the rest stays pending." review copy (~line 588)
-//      lives only in the `stage === 'review'` JSX block, which the
-//      non-watcher (singleEncode) software-wallet path never renders -
-//      `handleReview` calls `openConfirmScreen()` directly. The real confirm
-//      surface shows the host's generic decode of the composed action
-//      instead, which is what this spec asserts against.
-
 import { randomBytes } from 'node:crypto';
 import { createWallet, expect, gotoSection, mainButton, test } from '../../fixtures/wallet.js';
 import {
@@ -57,7 +39,6 @@ import {
     EXPLORER_URL,
     REGTEST_COIN,
     explorerJson,
-    failBroadcast,
     fundAddress,
     healVenueClock,
     mintXchain,
@@ -84,6 +65,38 @@ const REWARD_REMAINDER = '25.00000000'; // REWARD_AMOUNT - PARTIAL_CLAIM
 // Fixed regtest constant (xchain-indexer/src/coins/BTC.js network.regtest.addresses.REWARD);
 // not a secret, not env-overridable on regtest.
 const REWARD_POOL_ADDRESS = 'mrewardshQqD1ptkEBZGjPDF77L5uKJQmk';
+const LOCAL_JSON_RPC_ROOT_RE = /^http:\/\/localhost:\d+\/$/;
+const ENCODER_METHODS = new Set(['get_utxos', 'create_tx', 'broadcast_tx']);
+
+async function useRailEncoder(page) {
+    const state = { composedData: null, rejectNextBroadcast: false };
+    await page.route(LOCAL_JSON_RPC_ROOT_RE, async (route) => {
+        let body = null;
+        try {
+            body = route.request().postDataJSON();
+        } catch {
+            return route.fallback();
+        }
+        if (!ENCODER_METHODS.has(body?.method)) return route.fallback();
+        if (body.method === 'create_tx') state.composedData = body.params?.data ?? null;
+        if (body.method === 'broadcast_tx' && state.rejectNextBroadcast) {
+            state.rejectNextBroadcast = false;
+            const reason = 'bad-txns-inputs-missingorspent';
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: body.id ?? 1,
+                    error: { code: -32010, message: reason, data: { reason } },
+                }),
+            });
+            return;
+        }
+        await route.fallback({ url: `${ENCODER_URL}/` });
+    });
+    return state;
+}
 
 /** A fresh, syntactically-valid 64-hex signing key, same shape the indexer
  * regexes and the stake/unstake spec already relies on. */
@@ -129,10 +142,10 @@ async function gotoPalette(page, title) {
     await page.keyboard.press('Enter');
 }
 
-/** The txid off a form's done screen: every action form ends on one summary
- * line and a single Txid `<dl>` row. */
+/** Reads the full txid from either action or SEND completion markup. */
 async function readDoneTxid(page) {
-    const value = page.getByRole('main').locator('dl dd').first();
+    const value = page.getByRole('main').locator('code, dd')
+        .filter({ hasText: /^[0-9a-f]{64}$/ }).first();
     await expect(value).toBeVisible({ timeout: 30_000 });
     const txid = (await value.innerText()).trim();
     expect(txid, 'the done screen names a real txid').toMatch(/^[0-9a-f]{64}$/);
@@ -275,6 +288,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
     });
 
     test('a seeded validator reward claims partially, leaves the remainder pending, and the wire carries AMOUNT', async ({ page }) => {
+        const encoder = await useRailEncoder(page);
         let staker;
         let pubkey;
         let stakeAction;
@@ -344,21 +358,17 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await claimBtn.click();
 
             const main = page.getByRole('main');
-            await failBroadcast(page, 'permanent');
+            await expect(main.getByText(`${Number(REWARD_AMOUNT)} XCHAIN available`))
+                .toBeVisible({ timeout: 30_000 });
+            encoder.composedData = null;
+            encoder.rejectNextBroadcast = true;
             await amountField(main).fill(PARTIAL_CLAIM);
             await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
 
-            // The singleEncode path (every non-watcher software wallet) composes
-            // host-side and opens the shared confirm surface directly - it never
-            // renders StakingActionForm's own `stage === 'review'` block, so the
-            // review copy this spec can assert on lives on the CONFIRM MODAL
-            // (the host's decode of what it actually composed), not on the form.
-            // The remainder-stays-pending review copy is checked on the confirm
-            // page's own intent line for that reason.
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });
-            await expect(confirm).toContainText(PARTIAL_CLAIM);
-            await expect(confirm).toContainText('XCHAIN');
+            expect(encoder.composedData, 'the rejected partial claim carries AMOUNT on the wire')
+                .toBe(`COLLECT|0|${PARTIAL_CLAIM}`);
             await approveConfirm(page);
 
             await expect(confirm).toHaveCount(0, { timeout: 120_000 });
@@ -367,14 +377,33 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await expect(page.getByText(/Claim broadcast\./)).toHaveCount(0);
             expect(await unclaimedTotal(staker), 'a rejected broadcast must not move the unclaimed total')
                 .toBeCloseTo(unclaimedBefore, 8);
-
-            await page.unroute(`${ENCODER_URL}/**`);
         });
 
         await test.step('the real partial claim broadcasts, indexes valid, and leaves the remainder pending', async () => {
+            await fundAddress(staker, FUNDING_BTC);
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
+
+            await gotoPalette(page, 'Staking');
+            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            await expect(row).toBeVisible({ timeout: 60_000 });
+            await row.click();
+            const claimBtn = page.getByRole('group', { name: 'Stake actions' })
+                .getByRole('button', { name: 'Claim', exact: true });
+            await expect(claimBtn).toBeEnabled({ timeout: 30_000 });
+            await claimBtn.click();
+
             const main = page.getByRole('main');
-            await expect(amountField(main)).toHaveValue(PARTIAL_CLAIM);
+            await expect(main.getByText(`${Number(REWARD_AMOUNT)} XCHAIN available`))
+                .toBeVisible({ timeout: 30_000 });
+            encoder.composedData = null;
+            await amountField(main).fill(PARTIAL_CLAIM);
             await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+
+            const confirm = page.getByTestId('confirm-modal');
+            await expect(confirm).toBeVisible({ timeout: 60_000 });
+            expect(encoder.composedData, 'the successful partial claim carries AMOUNT on the wire')
+                .toBe(`COLLECT|0|${PARTIAL_CLAIM}`);
             await approveConfirm(page);
             await expect(main.getByText(/Claim broadcast\./)).toBeVisible({ timeout: 120_000 });
 
