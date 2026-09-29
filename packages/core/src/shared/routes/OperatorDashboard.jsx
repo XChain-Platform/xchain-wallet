@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AddressText, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
     unclaimedRewards,
@@ -70,7 +71,11 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 setter({ loading: false, rows: [], error: err?.message || String(err) });
             });
         }
-        bind(setStakes, messaging.getStakesForAddress({ chainId, address }));
+        if (isDemoWallet(walletId)) {
+            setStakes({ loading: false, rows: synthesizeDemoStaking(chainId).stakes, error: null });
+        } else {
+            bind(setStakes, messaging.getStakesForAddress({ chainId, address }));
+        }
         bind(setDelegations, messaging.getDelegationsForAddress({ chainId, address }));
         bind(setRewards, messaging.getRewardsForAddress({ chainId, address }));
         bind(setRewardClaims, messaging.getRewardClaimsForAddress({ chainId, address }));
