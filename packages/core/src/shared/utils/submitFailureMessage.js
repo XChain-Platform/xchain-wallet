@@ -141,10 +141,11 @@ export const SIGNED_NOT_BROADCAST_MESSAGE =
  * @param {string|number} [opts.requiredNative]  native-coin protocol fee, when the caller holds
  * the quote; otherwise read off the error
  * @param {string} [opts.fallback]     the form's own copy for everything else
+ * @param {string} [opts.verb]         action named in the generic opener ("Couldn't <verb>.")
  * @returns {string}
  */
 export function submitFailureMessage(
-    err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '' } = {},
+    err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '', verb = 'complete this' } = {},
 ) {
     if (isNativeFeeForfeit(err)) {
         return nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
@@ -180,7 +181,7 @@ export function submitFailureMessage(
         : (typeof err === 'string' ? err : '');
     const fallbackText = String(fallback || '');
     if (fallbackText && fallbackText !== raw) return fallbackText;
-    const humanized = humanizeError(err);
+    const humanized = humanizeError(err, verb);
     if ((fallbackText && fallbackText === raw)
         || humanized.cause !== 'unknown'
         || humanized.details) return humanized.message;
