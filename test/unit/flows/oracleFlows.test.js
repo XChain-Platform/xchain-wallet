@@ -160,7 +160,7 @@ describe('myOracleFeeds', () => {
     // settlement uses.
     it('picks the newest by effective_at regardless of API row order', async () => {
         const older = row({ action_index: 500, value: '0.01', block_time: NOW - 5 * ORACLE_ACTIVATION_DELAY_S, effective_at: NOW - 4 * ORACLE_ACTIVATION_DELAY_S });
-        const newer = row({ action_index: 1, value: '0.07', block_time: NOW - 3 * ORACLE_ACTIVATION_DELAY_S, effective_at: NOW - 2 * ORACLE_ACTIVATION_DELAY_S });
+        const newer = row({ action_index: 1, value: '0.07', block_time: NOW - ORACLE_ACTIVATION_DELAY_S - 60, effective_at: NOW - 60 });
         const sdk = { getOraclePrices: vi.fn(async () => ({ data: [older, newer] })) };
         const feeds = await myOracleFeeds({ sdkRegistry: registryWith(sdk), chainId: 'bitcoin-regtest', address: 'oracle-addr', nowSec: NOW });
         expect(feeds[0].live.value).toBe('0.07');
