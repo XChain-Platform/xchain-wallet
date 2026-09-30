@@ -81,6 +81,13 @@ export function useConfirmAction() {
     const composedStampRef = useRef(0);
     const sessionIdRef = useRef(null);
     const releasedEncoderInputsRef = useRef(new Set());
+    // Once Approve is pressed the PSBT may be signed or broadcast, so the
+    // encoder reservation must stay held whatever happens to this component.
+    const approvalBeganRef = useRef(false);
+    const releaseUnlessApproving = useCallback((built) => {
+        if (approvalBeganRef.current) return;
+        releaseEncoderInputs(built, releasedEncoderInputsRef.current);
+    }, []);
 
     const [phase, setPhase] = useState(/** @type {ConfirmPhase} */('idle'));
     const [composing, setComposing] = useState(false);
@@ -100,9 +107,9 @@ export function useConfirmAction() {
         if (activeInstanceId === instanceId) {
             activeInstanceId = null;
             if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
-            releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
+            releaseUnlessApproving(composedRef.current);
         }
-    }, [instanceId]);
+    }, [instanceId, releaseUnlessApproving]);
 
     const teardown = useCallback(() => {
         activeInstanceId = null;
@@ -198,6 +205,7 @@ export function useConfirmAction() {
         abortRef.current = controller;
         optsRef.current = { ...args, reservationId: null };
         composedRef.current = null;
+        approvalBeganRef.current = false;
         setSource(args.source ?? null);
         setError(null);
         setReport(null);
@@ -223,7 +231,7 @@ export function useConfirmAction() {
                     return;
                 }
                 if (controller.signal.aborted) {
-                    releaseEncoderInputs(built, releasedEncoderInputsRef.current);
+                    releaseUnlessApproving(built);
                     settleReject(new UserRejectedError());
                     return;
                 }
@@ -294,7 +302,7 @@ export function useConfirmAction() {
                 if (rejectRef.current) settleReject(err);
             });
         });
-    }, [instanceId, settleReject]);
+    }, [instanceId, settleReject, releaseUnlessApproving]);
 
     // Approve handler the modal wires to the primary button. Disables
     // synchronously (the caller sets a local disabled flag in the same tick).
@@ -303,6 +311,7 @@ export function useConfirmAction() {
         const built = composedRef.current;
         if (!args || !built) return;
 
+        approvalBeganRef.current = true;
         setPhase('signing');
 
         // §4.6 input liveness. Runs off the PSBT's OWN age, not the report's,
@@ -474,10 +483,10 @@ export function useConfirmAction() {
     }, [report, acknowledged, instanceId, settleResolve, settleReject]);
 
     const reject = useCallback(() => {
-        releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
+        releaseUnlessApproving(composedRef.current);
         settleReject(new UserRejectedError());
         setPhase('idle');
-    }, [settleReject]);
+    }, [settleReject, releaseUnlessApproving]);
 
     const acknowledge = useCallback((code) => {
         setAcknowledged((prev) => toggleAcknowledged(prev, code));

@@ -55,13 +55,13 @@ function makeCompose({ releaseInputs, reservationId = RESERVATION_ID } = {}) {
     return { compose, encoder };
 }
 
-async function readyConfirm(result, compose) {
+async function readyConfirm(result, compose, onApprove = async () => ({ txid: 'tx1' })) {
     const composed = await compose();
     let confirmation;
     await act(async () => {
         confirmation = settle(result.current.confirm({
             compose: async () => composed,
-            onApprove: async () => ({ txid: 'tx1' }),
+            onApprove,
             chainId: 'btc',
         }));
     });
@@ -109,6 +109,27 @@ describe('useConfirmAction encoder reservation release', () => {
             await confirmation;
         });
         hook.unmount();
+
+        expect(releaseInputs).not.toHaveBeenCalled();
+    });
+
+    it('never releases when unmounted while a broadcast is pending', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        let finish;
+        const onApprove = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+        await readyConfirm(hook.result, compose, onApprove);
+
+        let approving;
+        await act(async () => {
+            approving = hook.result.current.approve({});
+        });
+        await waitFor(() => expect(onApprove).toHaveBeenCalledOnce());
+
+        hook.unmount();
+        finish({ txid: 'tx1' });
+        await approving;
 
         expect(releaseInputs).not.toHaveBeenCalled();
     });
