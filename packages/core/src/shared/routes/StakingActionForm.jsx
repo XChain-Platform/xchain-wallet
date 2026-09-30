@@ -46,12 +46,20 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { compareAmounts } from '../../market/orderMath.js';
+import { stakingActionParams } from '../../flows/unstakeClaimActions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
 // Staking is denominated in XCHAIN on every chain, so the amount field and
 // its fiat preview are always pricing this tick, never the chain's coin.
 const STAKING_TICK = 'XCHAIN';
+
+// Shown when submit is attempted before the total the amount is judged
+// against has loaded; until then a partial cannot be told from "everything".
+const TOTAL_LOADING_MESSAGE = {
+    claim: 'The pending reward total is still loading. Wait for it before claiming.',
+    unstake: 'The staked balance is still loading. Wait for it before unstaking.',
+};
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -386,6 +394,10 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        if (!actionParams) {
+            setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
+            return;
+        }
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -406,6 +418,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     chainId,
                     from,
                     params: actionParams,
+                    full: isWholeAmount,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -446,23 +459,20 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Emit AMOUNT only for a strict partial; a full-balance (or
-    // unknown-balance) submit keeps the legacy absent-AMOUNT bytes
-    // (see the header note on the wire policy).
-    const isPartial = useMemo(() => {
-        const normalized = String(amount).replace(/,/g, '');
-        return compareAmounts(normalized, '0') === 1
-            && availableAmt != null
-            && compareAmounts(normalized, availableAmt) === -1;
-    }, [amount, availableAmt]);
-
-    const actionParams = useMemo(() => {
-        const base = isUnstake
-            ? { VERSION: '0', SIGNING_PUBKEY: signingPubkey.trim().toLowerCase() }
-            : { VERSION: '0' };
-        if (isPartial) return { ...base, AMOUNT: String(amount).replace(/,/g, '').trim() };
-        return base;
-    }, [isUnstake, signingPubkey, isPartial, amount]);
+    // The legacy absent-AMOUNT bytes mean "everything", so they are sent only
+    // when the entered amount EQUALS a known total. Any other valid amount is
+    // sent as AMOUNT, even if the total is unknown, and an amount that does
+    // not parse yields no params at all: an entered amount must never become
+    // a claim or unstake of everything (2026-09-30 on testnet: 1 typed while
+    // the total read "Loading…", COLLECT|0 paid 130).
+    const totalKnown = availableAmt != null;
+    const {
+        params: actionParams, amountValid, isWholeAmount, normalizedAmount,
+    } = useMemo(
+        () => stakingActionParams({ isUnstake, signingPubkey, amount, availableAmt }),
+        [isUnstake, signingPubkey, amount, availableAmt],
+    );
+    const isPartial = amountValid && !isWholeAmount;
 
     function handleReview(event) {
         event.preventDefault();
@@ -477,9 +487,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 return;
             }
         }
-        const normalized = String(amount).replace(/,/g, '');
-        if (!amount || compareAmounts(normalized, '0') !== 1) {
-            setFormError('Amount must be greater than zero.');
+        if (!totalKnown) {
+            setFormError(TOTAL_LOADING_MESSAGE[isUnstake ? 'unstake' : 'claim']);
+            return;
+        }
+        const normalized = normalizedAmount;
+        if (!amountValid) {
+            setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
             return;
         }
         if (availableAmt != null && compareAmounts(normalized, availableAmt) === 1) {
@@ -494,6 +508,10 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
+        if (!actionParams) {
+            setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
+            return;
+        }
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
         setStage('submitting');
@@ -511,6 +529,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
+                full: isWholeAmount,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -615,17 +634,17 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 <p className={styles.summary}>
                     {isUnstake
                         ? (isPartial
-                            ? `Unstake ${formatWithThousands(actionParams.AMOUNT)} XCHAIN from signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}. The rest stays staked; the unstaked amount is returned after the cooldown.`
-                            : `Unstake signing pubkey ${actionParams.SIGNING_PUBKEY.slice(0, 12)}. The full active balance for this pubkey is returned after the cooldown.`)
+                            ? `Unstake ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN from signing pubkey ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The rest stays staked; the unstaked amount is returned after the cooldown.`
+                            : `Unstake signing pubkey ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The full active balance for this pubkey is returned after the cooldown.`)
                         : (isPartial
-                            ? `Claim ${formatWithThousands(actionParams.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
+                            ? `Claim ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
                             : 'Claim all pending staking rewards for this address.')}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Amount</dt>
                     <dd className={styles.detailsValue}>
                         {isPartial
-                            ? `${formatWithThousands(actionParams.AMOUNT)} XCHAIN`
+                            ? `${formatWithThousands(actionParams?.AMOUNT)} XCHAIN`
                             : `${availableAmt != null ? formatWithThousands(String(availableAmt)) : 'All'} XCHAIN (full ${isUnstake ? 'balance' : 'pending rewards'})`}
                     </dd>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -640,7 +659,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         <>
                             <dt className={styles.detailsLabel}>Signing pubkey</dt>
                             <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                                {actionParams.SIGNING_PUBKEY}
+                                {actionParams?.SIGNING_PUBKEY}
                             </dd>
                         </>
                     ) : null}
@@ -833,7 +852,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing || !totalKnown}
                 >
                     {singleEncode ? verb : 'Preview'}
                 </Button>

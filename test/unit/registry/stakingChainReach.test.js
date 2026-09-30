@@ -109,8 +109,9 @@ describe('validator lane chain gate', () => {
     const PK = 'a'.repeat(64);
     const VALIDATOR_COMPOSERS = [
         ['stakeAction', stakeAction, { VERSION: '1', AMOUNT: '1', SIGNING_PUBKEY: PK }],
-        ['unstakeAction', unstakeAction, { VERSION: '0', SIGNING_PUBKEY: PK }],
-        ['collectAction', collectAction, { VERSION: '0' }],
+        // A partial AMOUNT: an absent one now needs an explicit full request.
+        ['unstakeAction', unstakeAction, { VERSION: '0', SIGNING_PUBKEY: PK, AMOUNT: '1' }],
+        ['collectAction', collectAction, { VERSION: '0', AMOUNT: '1' }],
         ['delegateAction', delegateAction, { VERSION: '0', NEW_SIGNING_PUBKEY: PK }],
         ['revokeDelegationAction', revokeDelegationAction, { VERSION: '2', SIGNING_PUBKEY: PK }],
     ];
