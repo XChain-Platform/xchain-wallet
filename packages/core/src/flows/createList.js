@@ -13,16 +13,16 @@
 // dividendAction / broadcastAction: takes vault + registries + chain +
 // source address + LIST params, forwards to submitAction.
 //
-// LIST has two format versions. The wallet's §40.9 two-transaction
-// airdrop flow emits v0 (create) with TYPE=2 (ADDRESS list); v1
-// (edit-existing) is exposed here for future LIST-management surfaces
-// but has no authoring form yet.
+// LIST v0 creates token, address, and union lists; v1 edits an existing
+// list; v2 shares a list; and v3 transfers a list to a new owner. The
+// wallet's §40.9 two-transaction airdrop flow emits v0 with TYPE=2.
 //
 // The wire shape for LIST uses a rest-field: `params.ITEM` is an array
-// of strings (addresses for TYPE=2, tickers for TYPE=1). The SDK
-// format serializer expands the array into repeating `|ITEM` slots.
+// of strings (tickers for TYPE=1, addresses for TYPE=2, and action
+// indexes for TYPE=3). The SDK format serializer expands the array into
+// repeating `|ITEM` slots.
 //
-// MEMO is optional and sits BEFORE that tail on both versions
+// MEMO is optional and sits BEFORE that tail on v0 and v1
 // (`VERSION|TYPE|MEMO|...ITEM`), unlike every other action, where it
 // trails: after a variadic field a memo is indistinguishable from one
 // more item. Callers pass it as `params.MEMO`; omitting it serializes an
@@ -41,7 +41,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {Record<string, string | string[]>} params   LIST field map (VERSION, TYPE, ITEM[], optional MEMO, and v1's EDIT + LIST_ACTION_INDEX)
+ * @property {Record<string, string | string[]>} params   LIST field map
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -62,18 +62,30 @@ export async function createList(opts) {
         throw new Error('createList: params is required');
     }
     const version = opts.params.VERSION;
-    if (version !== '0' && version !== '1') {
-        throw new Error('createList: params.VERSION must be "0" or "1"');
+    if (!['0', '1', '2', '3'].includes(version)) {
+        throw new Error('createList: params.VERSION must be "0", "1", "2", or "3"');
     }
     const items = opts.params.ITEM;
-    if (!Array.isArray(items) || items.length === 0) {
-        throw new Error('createList: params.ITEM must be a non-empty array');
+    if (version === '0' || version === '1') {
+        if (!Array.isArray(items) || items.length === 0) {
+            throw new Error('createList: params.ITEM must be a non-empty array');
+        }
+    } else if (items !== undefined) {
+        throw new Error(`createList: params.ITEM is not valid for v${version}`);
     }
     if (version === '0') {
-        if (opts.params.TYPE !== '1' && opts.params.TYPE !== '2') {
-            throw new Error('createList: params.TYPE must be "1" (TICK) or "2" (ADDRESS)');
+        if (!['1', '2', '3'].includes(opts.params.TYPE)) {
+            throw new Error('createList: params.TYPE must be "1" (TICK), "2" (ADDRESS), or "3" (UNION)');
         }
-    } else {
+        if (opts.params.TYPE === '3') {
+            if (items.length > 16) {
+                throw new Error('createList: union params.ITEM must contain at most 16 action indexes');
+            }
+            if (!items.every((item) => typeof item === 'string' && /^[1-9][0-9]*$/.test(item))) {
+                throw new Error('createList: union params.ITEM values must be positive-integer action indexes');
+            }
+        }
+    } else if (version === '1') {
         if (opts.params.EDIT !== '1' && opts.params.EDIT !== '2') {
             throw new Error('createList: params.EDIT must be "1" (ADD) or "2" (REMOVE)');
         }
@@ -81,15 +93,33 @@ export async function createList(opts) {
             || opts.params.LIST_ACTION_INDEX.length === 0) {
             throw new Error('createList: params.LIST_ACTION_INDEX is required for v1');
         }
+    } else {
+        if (typeof opts.params.LIST_ACTION_INDEX !== 'string'
+            || opts.params.LIST_ACTION_INDEX.length === 0) {
+            throw new Error(`createList: params.LIST_ACTION_INDEX is required for v${version}`);
+        }
+        if (version === '3'
+            && (typeof opts.params.DESTINATION !== 'string'
+                || opts.params.DESTINATION.length === 0)) {
+            throw new Error('createList: params.DESTINATION is required for v3');
+        }
     }
     const source = normalizeSource(opts.from, 'createList');
 
-    const kind = version === '0'
-        ? (opts.params.TYPE === '2' ? 'address' : 'token')
-        : (opts.params.EDIT === '2' ? 'remove' : 'add');
-    const summary = version === '0'
-        ? `Create ${kind} list of ${items.length} item${items.length === 1 ? '' : 's'}`
-        : `${kind === 'remove' ? 'Remove' : 'Add'} ${items.length} item${items.length === 1 ? '' : 's'} ${kind === 'remove' ? 'from' : 'to'} list #${opts.params.LIST_ACTION_INDEX}`;
+    let summary;
+    if (version === '0' && opts.params.TYPE === '3') {
+        summary = `Create union of ${items.length} lists`;
+    } else if (version === '0') {
+        const kind = opts.params.TYPE === '2' ? 'address' : 'token';
+        summary = `Create ${kind} list of ${items.length} item${items.length === 1 ? '' : 's'}`;
+    } else if (version === '1') {
+        const removing = opts.params.EDIT === '2';
+        summary = `${removing ? 'Remove' : 'Add'} ${items.length} item${items.length === 1 ? '' : 's'} ${removing ? 'from' : 'to'} list #${opts.params.LIST_ACTION_INDEX}`;
+    } else if (version === '2') {
+        summary = `Share list #${opts.params.LIST_ACTION_INDEX}`;
+    } else {
+        summary = `Transfer list #${opts.params.LIST_ACTION_INDEX} to ${opts.params.DESTINATION}`;
+    }
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
