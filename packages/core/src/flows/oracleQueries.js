@@ -37,6 +37,12 @@ import { isOpenDispenserSelling } from '../shared/utils/dispenserPricing.js';
 // unconditionally, so the wallet only ever displays it.
 export const ORACLE_ACTIVATION_DELAY_S = 86400;
 
+// Mode B settlement only considers effective PRICE v1 rows in the inclusive
+// `[blockTime - FIAT_DISPENSER_PRICE_WINDOW, blockTime]` range. The window is
+// 86400 seconds by default in xchain-indexer/src/config.js, and is applied by
+// reverseOraclePriceMatch in src/utility/dispenser_prices.js.
+export const ORACLE_SETTLEMENT_WINDOW_S = 86400;
+
 function rowsOf(resp) {
     if (!resp) return [];
     if (Array.isArray(resp)) return resp;
@@ -79,6 +85,7 @@ export function pairKey(row) {
  * @property {number | null} effectiveAt    when it starts (or started) pricing
  * @property {boolean} effective            effective_at has passed
  * @property {number | null} secondsUntilEffective  null once effective
+ * @property {number | null} secondsSinceEffective  null until effective
  * @property {string | null} memo
  * @property {number | null} actionIndex
  */
@@ -89,7 +96,8 @@ export function pairKey(row) {
  * @property {string} coin
  * @property {string} tick
  * @property {string} fiat
- * @property {OracleQuote | null} live      newest quote already in effect; null while the first publish matures
+ * @property {OracleQuote | null} live      newest effective quote inside the settlement window
+ * @property {OracleQuote | null} stale     newest effective quote after it leaves the settlement window
  * @property {OracleQuote | null} pending   newest quote not yet in effect; null when nothing is maturing
  * @property {OracleQuote[]} history        every quote for this pair, newest first
  */
@@ -115,14 +123,15 @@ export function toQuote(row, nowSec) {
         effectiveAt,
         effective,
         secondsUntilEffective: effective || effectiveAt == null ? null : effectiveAt - nowSec,
+        secondsSinceEffective: effective ? nowSec - effectiveAt : null,
         memo: row?.memo ?? null,
         actionIndex: num(row?.action_index ?? row?.actionIndex),
     };
 }
 
 /**
- * Every feed this address publishes, each resolved into its live quote and
- * its pending (still-maturing) quote.
+ * Every feed this address publishes, each resolved into its live, stale and
+ * pending (still-maturing) quote.
  *
  * Ordering matters and is not the API's: rows come back id-ordered, which
  * is mirror-insertion order, not publish order. Sort on effective_at with
@@ -164,12 +173,17 @@ export async function myOracleFeeds({ sdkRegistry, chainId, address, nowSec }) {
             if (ae !== be) return be - ae;
             return (b.actionIndex ?? 0) - (a.actionIndex ?? 0);
         });
+        const newestEffective = list.find((q) => q.effective) || null;
+        const live = newestEffective?.secondsSinceEffective <= ORACLE_SETTLEMENT_WINDOW_S
+            ? newestEffective
+            : null;
         feeds.push({
             key,
             coin: list[0].coin,
             tick: list[0].tick,
             fiat: list[0].fiat,
-            live: list.find((q) => q.effective) || null,
+            live,
+            stale: newestEffective && !live ? newestEffective : null,
             pending: list.find((q) => !q.effective) || null,
             history: list,
         });
