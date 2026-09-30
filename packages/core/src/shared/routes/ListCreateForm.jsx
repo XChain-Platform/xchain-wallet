@@ -24,6 +24,7 @@ import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
+import { TickItemsEditor } from '../components/TickItemsEditor.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -33,17 +34,12 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
-import { classifyTickItems, tickLookupVerdict } from '../utils/listTickItems.js';
+import { classifyTickItems } from '../utils/listTickItems.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-// Most token lookups one form run fires; a longer list reports the rest as
-// not checked rather than flooding the explorer.
-const MAX_TICK_LOOKUPS = 50;
 
 /**
  * PC-10 "My Lists": LIST v0 create form. One transaction, so (unlike
@@ -109,7 +105,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [tickStatus, setTickStatus] = useState(
         /** @type {Record<string, 'found' | 'missing' | null>} */ ({}),
     );
-    const [tickChecking, setTickChecking] = useState(false);
     const [memo, setMemo] = useState('');
 
     const [password, setPassword] = useState('');
@@ -220,48 +215,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
     const memberTicks = tickItems.valid;
     const invalidTicks = tickItems.invalid;
-    const tickKey = memberTicks.join('|');
-
-    // Look each well-formed tick up on the chain the list is published to.
-    // The network leaves an unknown TICK out of the list, so the form says
-    // which ones it could not find before the user pays for them. A `^`
-    // TICK_ID reference is not a name the lookup takes, so it stays unchecked.
-    useEffect(() => {
-        if (listType !== '1' || !chainId || memberTicks.length === 0) {
-            setTickStatus({});
-            setTickChecking(false);
-            return undefined;
-        }
-        let cancelled = false;
-        setTickChecking(true);
-        const timer = setTimeout(() => {
-            const toCheck = memberTicks.filter((t) => !t.startsWith('^')).slice(0, MAX_TICK_LOOKUPS);
-            Promise.all(toCheck.map((t) => fetchTokenInfo(messaging, chainId, t)
-                .then((info) => [t, tickLookupVerdict(info)])))
-                .then((pairs) => {
-                    if (cancelled) return;
-                    setTickStatus(Object.fromEntries(pairs));
-                    setTickChecking(false);
-                });
-        }, 350);
-        return () => { cancelled = true; clearTimeout(timer); };
-        // tickKey stands in for memberTicks, which is a new array every parse.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [listType, chainId, tickKey, messaging]);
 
     const missingTicks = useMemo(
         () => memberTicks.filter((t) => tickStatus[t] === 'missing'),
         [memberTicks, tickStatus],
     );
-    const foundTicks = useMemo(
-        () => memberTicks.filter((t) => tickStatus[t] === 'found'),
-        [memberTicks, tickStatus],
-    );
-    const uncheckedTickItems = useMemo(
-        () => memberTicks.filter((tick) => tickStatus[tick] !== 'missing' && tickStatus[tick] !== 'found'),
-        [memberTicks, tickStatus],
-    );
-    const uncheckedTicks = uncheckedTickItems.length;
 
     const items = listType === '2' ? recipients.valid : memberTicks;
     const trimmedMemo = memo.trim();
@@ -768,52 +726,17 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     </p>
                 </>
             ) : (
-                <>
-                    <label className={styles.pickerLabel} htmlFor="list-tokens">Tokens (one per line)</label>
-                    <textarea
-                        id="list-tokens"
-                        className={styles.picker}
-                        value={ticksText}
-                        onChange={(e) => setTicksText(e.target.value)}
-                        rows={6}
-                        spellCheck={false}
-                        autoCapitalize="none"
-                        placeholder="TICK1&#10;TICK2"
-                    />
-                    <div className={styles.fromLine}>
-                        <Button type="button" variant="ghost" onClick={() => setTokenPickerOpen(true)}>
-                            Add from token picker
-                        </Button>
-                    </div>
-                    {ticksText.trim() ? (
-                        <p className={styles.hint}>
-                            {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
-                            {tickItems.duplicates > 0 ? ` · ${tickItems.duplicates} duplicate${tickItems.duplicates === 1 ? '' : 's'} removed` : ''}
-                            {invalidTicks.length > 0 ? ` · ${invalidTicks.length} invalid` : ''}
-                            {tickChecking ? ' · checking…' : ''}
-                            {!tickChecking && foundTicks.length > 0 ? ` · ${foundTicks.length} found` : ''}
-                            {!tickChecking && missingTicks.length > 0 ? ` · ${missingTicks.length} not found` : ''}
-                            {!tickChecking && uncheckedTicks > 0 && (foundTicks.length + missingTicks.length) > 0 ? ` · ${uncheckedTicks} not checked` : ''}
-                        </p>
-                    ) : null}
-                    {invalidTicks.length > 0 ? (
-                        <p className={styles.hint}>Not a token name: {invalidTicks.join(', ')}</p>
-                    ) : null}
-                    {/* The protocol records an unknown TICK as invalid and
-                        leaves it out of the list without failing the LIST. */}
-                    {!tickChecking && missingTicks.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
-                                Not found on {descriptor?.displayName || chainId}: {missingTicks.join(', ')}.
-                                The network leaves an unknown token out of the list, so {missingTicks.length === 1 ? 'it' : 'they'} will
-                                not be a member.
-                            </p>
-                        </div>
-                    ) : null}
-                    {!tickChecking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
-                        <p className={styles.hint}>Not checked: {uncheckedTickItems.join(', ')}.</p>
-                    ) : null}
-                </>
+                <TickItemsEditor
+                    value={ticksText}
+                    onChange={setTicksText}
+                    items={tickItems}
+                    chainId={chainId}
+                    chainLabel={descriptor?.displayName || chainId}
+                    messaging={messaging}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
+                    status={tickStatus}
+                    onStatusChange={setTickStatus}
+                />
             )}
 
             <Input
