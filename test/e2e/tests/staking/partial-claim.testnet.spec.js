@@ -187,7 +187,10 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
             await gotoPalette(page, 'Staking');
-            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true });
+            // A live validator can hold several stake rows (its first STAKE and
+            // any top-up), and every row shows the same reward because COLLECT
+            // is claimed per source address, so any of them opens the same claim.
+            const row = page.getByRole('listitem', { name: 'Open Validator stake', exact: true }).first();
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
             const claim = page.getByRole('group', { name: 'Stake actions' })
