@@ -167,7 +167,7 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @property {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string, internalPubkey?: string, tapleafHash: string }|null} envelope  TAPROOT recovery record; NULL off the envelope lane
  * @property {object|null} oracleFeeQuote      Mode B dispenser oracle usage fee quote, when one was priced
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
- * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
+ * @property {ReturnType<typeof buildExpectedOutputs> & { encoderReservationId: string|null }} expectedOutputs
  * @property {object} encoderOpts              the FINAL encoderOpts used to build the PSBT (fee + ADS folded in)
  * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not compress
  */
@@ -463,6 +463,7 @@ export async function composeForConfirm({
                 carried.rawData ?? builtEncoderOpts.rawData,
                 encoded.compression),
     });
+    expectedOutputs.encoderReservationId = encoded.reservation?.id ?? null;
 
     return {
         // Null on the bare-payment path: there is no action, and callers must

@@ -80,6 +80,7 @@ export function useConfirmAction() {
     // PSBT whose coins someone else can spend.
     const composedStampRef = useRef(0);
     const sessionIdRef = useRef(null);
+    const releasedEncoderReservationsRef = useRef(new Set());
 
     const [phase, setPhase] = useState(/** @type {ConfirmPhase} */('idle'));
     const [composing, setComposing] = useState(false);
@@ -99,6 +100,11 @@ export function useConfirmAction() {
         if (activeInstanceId === instanceId) {
             activeInstanceId = null;
             if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
+            releaseEncoderReservation(
+                optsRef.current?.encoderClient,
+                encoderReservationIdOf(composedRef.current),
+                releasedEncoderReservationsRef.current,
+            );
         }
     }, [instanceId]);
 
@@ -172,6 +178,7 @@ export function useConfirmAction() {
      *   instead of signing.
      * @param {boolean} [args.alwaysCheckInputs]    force the liveness probe regardless of PSBT age (the resume path)
      * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session] §5.4 confirm-session store
+     * @param {{ releaseInputs?: (reservationId: string) => Promise<any> }} [args.encoderClient] encoder client that built the composed transaction
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
      *   How to finish this confirm WITHOUT its originating form. Supplying it is
      *   what opts the surface into persistence: `software`/`hardware` are
@@ -195,6 +202,7 @@ export function useConfirmAction() {
         const controller = new AbortController();
         abortRef.current = controller;
         optsRef.current = { ...args, reservationId: null };
+        composedRef.current = null;
         setSource(args.source ?? null);
         setError(null);
         setReport(null);
@@ -219,7 +227,15 @@ export function useConfirmAction() {
                     settleReject(err);
                     return;
                 }
-                if (controller.signal.aborted) { settleReject(new UserRejectedError()); return; }
+                if (controller.signal.aborted) {
+                    releaseEncoderReservation(
+                        args.encoderClient,
+                        encoderReservationIdOf(built),
+                        releasedEncoderReservationsRef.current,
+                    );
+                    settleReject(new UserRejectedError());
+                    return;
+                }
 
                 // compose() already ran the tamper check HOST-side; reaching
                 // here means the built PSBT is verified. A tamper (or any
@@ -467,6 +483,11 @@ export function useConfirmAction() {
     }, [report, acknowledged, instanceId, settleResolve, settleReject]);
 
     const reject = useCallback(() => {
+        releaseEncoderReservation(
+            optsRef.current?.encoderClient,
+            encoderReservationIdOf(composedRef.current),
+            releasedEncoderReservationsRef.current,
+        );
         settleReject(new UserRejectedError());
         setPhase('idle');
     }, [settleReject]);
@@ -482,6 +503,18 @@ export function useConfirmAction() {
         // overridable error has been acknowledged.
         canApprove: canApproveWithReport(report, acknowledged),
     };
+}
+
+function releaseEncoderReservation(client, reservationId, released) {
+    if (!reservationId || typeof client?.releaseInputs !== 'function' || released.has(reservationId)) return;
+    released.add(reservationId);
+    try {
+        Promise.resolve(client.releaseInputs(reservationId)).catch(() => {});
+    } catch { /* best-effort */ }
+}
+
+function encoderReservationIdOf(composed) {
+    return composed?.expectedOutputs?.encoderReservationId ?? null;
 }
 
 // Only the caller's explicit pending deltas are gathered here. In-flight
