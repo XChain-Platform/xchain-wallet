@@ -54,6 +54,8 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-mainnet',
         networkKind: 'mainnet',
+        // Display-only, never consensus. The operator fills in the documented platform list-owner addresses.
+        platformListOwners: [],
         icon: 'bitcoin-mainnet-icon-20.png',
         wifVersionByte: 0x80,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
@@ -64,6 +66,8 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-testnet',
         networkKind: 'testnet',
+        // Display-only, never consensus. The operator fills in the documented platform list-owner addresses.
+        platformListOwners: [],
         icon: 'bitcoin-testnet-icon-20.png',
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
@@ -74,6 +78,8 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-regtest',
         networkKind: 'regtest',
+        // Display-only, never consensus. The operator fills in the documented platform list-owner addresses.
+        platformListOwners: [],
         icon: 'bitcoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },

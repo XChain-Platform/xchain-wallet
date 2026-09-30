@@ -90,6 +90,7 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {EndpointConfig} hub
  * @property {string} adsDonationAddress          §36.3 destination for Automatic Donation System output; `ADS_DONATION_ADDRESS_PLACEHOLDER` disables submission
  * @property {{ perTxAmountSats: number, triggerAmountSats: number }} [adsDefaults]  §36.1 per-coin ADS seed values in the chain's base unit; absent = generic ADS_DEFAULT_* fallback
+ * @property {string[]} [platformListOwners]      display-only owner addresses for the platform-maintained shared-list badge; never consensus
  * @property {boolean} [isUserAdded]              set by registry for Developer Mode entries
  */
 
@@ -312,6 +313,15 @@ export function validateChainDescriptor(record) {
                 isNonNegativeInteger(r.adsDefaults.perTxAmountSats) &&
                 isNonNegativeInteger(r.adsDefaults.triggerAmountSats),
             'must be { perTxAmountSats, triggerAmountSats } with non-negative integers',
+        );
+    }
+    if (r.platformListOwners !== undefined) {
+        checkEach(
+            errors,
+            'platformListOwners',
+            r.platformListOwners,
+            isNonEmptyString,
+            'must be a non-empty string',
         );
     }
 
