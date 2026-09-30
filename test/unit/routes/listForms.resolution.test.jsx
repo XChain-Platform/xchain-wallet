@@ -191,13 +191,16 @@ describe('ListForkForm copy follows list-edit resolution', () => {
         expect(summary.textContent).not.toMatch(/never changes/);
     });
 
-    it('under resolution the repoint step is optional and the "stays live" warning is gone', async () => {
+    it('under resolution omits the repoint rail and the "stays live" warning', async () => {
         mountFork(true, WATCHER);
         await forkToRepoint();
-        expect(screen.getByText('Repoint (optional)')).toBeTruthy();
+        expect(screen.queryByText('Repoint (optional)')).toBeNull();
+        expect(screen.queryByText('Now referenced by')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Token allow/block lists' })).toBeNull();
         expect(screen.queryByText(/stays live everywhere/)).toBeNull();
         expect(screen.queryByText(/is unchanged and keeps working/)).toBeNull();
         expect(screen.getByText(/this edit is list #2700.s current/)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy();
     });
 
     it('before activation keeps the unchanged-original copy and the stays-live warning', async () => {
