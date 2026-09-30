@@ -11,9 +11,11 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     TESTNET_COIN,
+    addressTypeOf,
     assertTreasuryKey,
     checkTestnetVenue,
     liveVenue,
+    readRunInput,
     switchToTestnet,
     testnetEndpoints,
     unlockAfterReload,
@@ -23,39 +25,9 @@ import {
 const WALLET_UNLOCK = 'testnetpassword123';
 const INCLUSION_TIMEOUT = 90 * 60_000;
 const MIN_CLAIM_UTXO_SATS = 20_000;
-const TREASURY_SLOT = Symbol.for('xchain-wallet.testnet-treasury');
 
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
-
-async function readRunInput() {
-    const raw = await new Promise((resolve, reject) => {
-        let text = '';
-        process.stdin.setEncoding('utf8');
-        process.stdin.on('data', (chunk) => { text += chunk; });
-        process.stdin.on('end', () => resolve(text));
-        process.stdin.on('error', reject);
-    });
-    if (!raw.trim()) {
-        throw new Error('testnet run requires treasury and claimant JSON on stdin; refusing to skip live writes');
-    }
-    let parsed;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        throw new Error('testnet stdin is not a JSON object');
-    }
-    if (typeof parsed?.wif !== 'string'
-        || typeof (parsed?.address ?? parsed?.segwitAddress) !== 'string') {
-        throw new Error('testnet stdin must carry treasury fields wif and address');
-    }
-    return { ...parsed, address: parsed.address ?? parsed.segwitAddress };
-}
-
-async function sharedRunInput() {
-    if (!globalThis[TREASURY_SLOT]) globalThis[TREASURY_SLOT] = readRunInput();
-    return globalThis[TREASURY_SLOT];
-}
 
 async function approve(page) {
     const confirm = page.getByTestId('confirm-modal');
@@ -75,7 +47,10 @@ async function gotoPalette(page, title) {
 }
 
 async function importClaimant(page, claimant) {
-    assertTreasuryKey(claimant);
+    // The live validators stake from P2PKH addresses, so the key is proven
+    // against, and imported as, the type its declared address carries.
+    const type = addressTypeOf(claimant.address);
+    assertTreasuryKey(claimant, undefined, { type });
     await gotoPalette(page, 'Addresses');
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Import address' }).click();
@@ -87,7 +62,7 @@ async function importClaimant(page, claimant) {
         await page.getByRole('option', { name: /^Bitcoin\b/ }).first().click();
     }
 
-    await page.getByLabel('Address type').selectOption('p2wpkh');
+    await page.getByLabel('Address type').selectOption(type);
     await page.getByLabel('WIF private key').fill(claimant.wif);
     await page.getByLabel('Label (optional)').fill('Testnet validator claimant');
     const password = page.getByLabel('Wallet password', { exact: true });
@@ -142,6 +117,17 @@ async function unclaimed(address) {
     return rewardTotal(rewards, claims);
 }
 
+// A caller may name a smaller claim (claimant.amount) so a live validator's
+// reward is barely touched; it must still leave part of the reward pending.
+function claimAmount(total, requested) {
+    if (requested === undefined) return partialAmount(total);
+    const amount = String(requested);
+    if (!/^\d+(\.\d{1,8})?$/.test(amount) || !(Number(amount) > 0) || !(Number(amount) < total)) {
+        throw new Error('claimant.amount must be a positive decimal below the unclaimed reward');
+    }
+    return amount;
+}
+
 function partialAmount(total) {
     const units = BigInt(Math.floor(total * 100_000_000));
     const partial = units > 1n ? units / 2n : 1n;
@@ -157,7 +143,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
     let input;
 
     test.beforeAll(async () => {
-        input = await sharedRunInput();
+        input = readRunInput();
         await checkTestnetVenue(venue);
     });
 
@@ -170,6 +156,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
         const claimant = {
             wif: claimantInput.wif,
             address: claimantInput.address ?? claimantInput.segwitAddress,
+            amount: claimantInput.amount,
         };
 
         const before = await unclaimed(claimant.address);
@@ -193,7 +180,7 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
         });
 
         await test.step('claim only part of the pending amount', async () => {
-            const amount = partialAmount(before);
+            const amount = claimAmount(before, claimant.amount);
             expect(Number(amount)).toBeGreaterThan(0);
             expect(Number(amount)).toBeLessThan(before);
 

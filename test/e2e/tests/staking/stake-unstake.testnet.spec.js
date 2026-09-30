@@ -18,6 +18,7 @@ import {
     checkTestnetVenue,
     liveVenue,
     mintXchain,
+    readRunInput,
     readTestnetReceiveAddress,
     switchToTestnet,
     testnetEndpoints,
@@ -35,44 +36,12 @@ const UNSTAKE_AMOUNT = '30';
 const MINT_AMOUNT = 200;
 const INCLUSION_TIMEOUT = 90 * 60_000;
 const ACTIVATION_TIMEOUT = 2 * 60 * 60_000;
-const TREASURY_SLOT = Symbol.for('xchain-wallet.testnet-treasury');
 
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
 
 function signingPubkey() {
     return randomBytes(32).toString('hex');
-}
-
-async function readRunInput() {
-    const raw = await new Promise((resolve, reject) => {
-        let text = '';
-        process.stdin.setEncoding('utf8');
-        process.stdin.on('data', (chunk) => { text += chunk; });
-        process.stdin.on('end', () => resolve(text));
-        process.stdin.on('error', reject);
-    });
-    if (!raw.trim()) {
-        throw new Error('testnet run requires treasury JSON on stdin; refusing to skip live writes');
-    }
-    let parsed;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        throw new Error('testnet stdin is not a JSON object');
-    }
-    if (typeof parsed?.wif !== 'string'
-        || typeof (parsed?.address ?? parsed?.segwitAddress) !== 'string') {
-        throw new Error('testnet stdin must carry treasury fields wif and address');
-    }
-    return { ...parsed, address: parsed.address ?? parsed.segwitAddress };
-}
-
-async function sharedRunInput() {
-    if (!globalThis[TREASURY_SLOT]) {
-        globalThis[TREASURY_SLOT] = readRunInput();
-    }
-    return globalThis[TREASURY_SLOT];
 }
 
 async function fundAddress(treasury, destination) {
@@ -146,7 +115,7 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
     let treasury;
 
     test.beforeAll(async () => {
-        treasury = await sharedRunInput();
+        treasury = readRunInput();
         await checkTestnetVenue(venue);
     });
 

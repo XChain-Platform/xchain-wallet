@@ -24,17 +24,28 @@
 // from a public label, and the proof of "never" is a venue whose forbidden
 // members throw the moment they are touched.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import { describe, it, expect, vi } from 'vitest';
 import bitcoin from 'bitcoinjs-lib';
+import xchainSdk from 'xchain-sdk';
 import {
+    RUN_INPUT_ENV,
+    TESTNET_CHAIN_ID,
     TESTNET_COIN,
     TESTNET_NETWORK,
+    addressTypeOf,
+    assertTreasuryKey,
     buildTreasuryFunding,
     checkTestnetVenue,
     fundFromTreasury,
     outputScriptHex,
+    parseRunInput,
+    readRunInput,
     selectTreasuryInputs,
+    stageRunInput,
     testnetVerdict,
     waitForActivationHeight,
     waitForTokenBalance,
@@ -295,5 +306,84 @@ describe('testnet harness: the whole healthy path never mines, moves a clock, sh
 
         for (const name of FORBIDDEN) expect(target[name], name).not.toHaveBeenCalled();
         expect([...touched].sort()).toEqual(['action', 'actions', 'balances', 'broadcast', 'feeQuote', 'status', 'utxos']);
+    });
+});
+
+describe('testnet harness: run input reaches the workers', () => {
+    // Playwright forks workers with stdin ignored, so the runner stages the
+    // piped object and a spec reads the staged file. These pin both halves.
+    function tmpRoot() {
+        return fs.mkdtempSync(path.join(os.tmpdir(), 'xc-harness-unit-'));
+    }
+
+    it('stages piped input in a 0600 file inside a 0700 directory, and cleanup removes it', async () => {
+        const root = tmpRoot();
+        try {
+            const input = { ...TREASURY, claimant: { wif: TREASURY.wif, address: STRANGER_ADDRESS, amount: '1' } };
+            const staged = await stageRunInput(stdinOf(input), { tmpRoot: root });
+            expect(fs.statSync(staged.file).mode & 0o777).toBe(0o600);
+            expect(fs.statSync(path.dirname(staged.file)).mode & 0o777).toBe(0o700);
+            const read = readRunInput(staged.file);
+            expect(read).toMatchObject({ address: TREASURY.address, claimant: { address: STRANGER_ADDRESS, amount: '1' } });
+            staged.cleanup();
+            staged.cleanup();
+            expect(fs.existsSync(path.dirname(staged.file))).toBe(false);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it('refuses a TTY, empty or malformed stdin before writing anything, and never echoes the key', async () => {
+        const root = tmpRoot();
+        try {
+            const tty = Object.assign(stdinOf(TREASURY), { isTTY: true });
+            await expect(stageRunInput(tty, { tmpRoot: root })).rejects.toThrow(/piped on stdin/);
+            await expect(stageRunInput(Readable.from(['']), { tmpRoot: root })).rejects.toThrow(/refusing to skip live writes/);
+            await expect(stageRunInput(Readable.from(['{not json']), { tmpRoot: root })).rejects.toThrow(/not a JSON object/);
+            const noAddress = stageRunInput(stdinOf({ wif: TREASURY.wif }), { tmpRoot: root });
+            await expect(noAddress).rejects.toThrow(/wif and address/);
+            await noAddress.catch((err) => expect(err.message).not.toContain(TREASURY.wif));
+            expect(fs.readdirSync(root)).toEqual([]);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it('accepts the segwitAddress alias the treasury file spells', () => {
+        const parsed = parseRunInput(JSON.stringify({ wif: TREASURY.wif, segwitAddress: TREASURY.address }));
+        expect(parsed.address).toBe(TREASURY.address);
+    });
+
+    it('throws, never skips, when a spec runs without staged input', () => {
+        const saved = process.env[RUN_INPUT_ENV];
+        delete process.env[RUN_INPUT_ENV];
+        try {
+            expect(() => readRunInput()).toThrow(new RegExp(RUN_INPUT_ENV));
+        } finally {
+            if (saved !== undefined) process.env[RUN_INPUT_ENV] = saved;
+        }
+    });
+});
+
+describe('testnet harness: claimant address types', () => {
+    // The live validators stake from P2PKH addresses; the treasury is p2wpkh.
+    const wallet = new xchainSdk.WalletUtils(TESTNET_CHAIN_ID);
+    const legacy = wallet.deriveAddress(wallet.importWIF(TREASURY.wif).publicKey, { type: 'p2pkh' });
+
+    it('names the type each declared address carries and refuses the rest', () => {
+        expect(legacy).toMatch(/^[mn]/);
+        expect(addressTypeOf(legacy)).toBe('p2pkh');
+        expect(addressTypeOf(TREASURY.address)).toBe('p2wpkh');
+        expect(addressTypeOf('mverify5szar1XwwAjqAnPUHbA814kfHh4')).toBe('p2pkh');
+        for (const bad of ['', 'bc1qz2qzsfp5g3g2ez6k4z4x56vuzs3uh3hehhq469', '1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+            'tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c']) {
+            expect(() => addressTypeOf(bad), bad).toThrow(/neither/);
+        }
+    });
+
+    it('proves a key against a p2pkh address only when asked for that type', () => {
+        expect(() => assertTreasuryKey({ wif: TREASURY.wif, address: legacy }, undefined, { type: 'p2pkh' })).not.toThrow();
+        expect(() => assertTreasuryKey({ wif: TREASURY.wif, address: legacy })).toThrow(/KEY\/ADDRESS MISMATCH/);
+        expect(() => assertTreasuryKey(TREASURY, undefined, { type: 'p2pkh' })).toThrow(/KEY\/ADDRESS MISMATCH/);
     });
 });
