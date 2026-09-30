@@ -90,8 +90,8 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 // form level rather than here, through validatorLaneChainIds and
 // assertValidatorLaneChain below.
 //
-// DEPLOY and EXECUTE used to sit here too, and were the reason this list
-// outlived the staking split. Not because the chain refused them: LTC/DOGE
+// DEPLOY and EXECUTE stay out of this list. The case for listing them was
+// never that the chain refused them: LTC/DOGE
 // settle the protocol fee in NATIVE COIN, the indexer denylists a dry-run
 // feequote for exactly these two (they run caller-supplied code in the VM, so
 // dry-running them on a shared node would be a block-loop stall primitive),
