@@ -19,10 +19,10 @@ import { classifyTickItems } from '../../../packages/core/src/shared/utils/listT
 const FOUND = { creator: 'bc1qcreator', totalSupply: '100', canonicalTick: 'GOODTOK' };
 const EMPTY = { creator: null, totalSupply: null, canonicalTick: null };
 
-function Harness({ initial, messaging, onOpenPicker = () => {}, onStatus }) {
+function Harness({ initial, messaging, onOpenPicker = () => {}, onStatus, active = true }) {
     const [text, setText] = useState(initial);
     const [status, setStatus] = useState({});
-    return (
+    return active ? (
         <TickItemsEditor
             value={text}
             onChange={setText}
@@ -34,7 +34,7 @@ function Harness({ initial, messaging, onOpenPicker = () => {}, onStatus }) {
             status={status}
             onStatusChange={(s) => { setStatus(s); onStatus?.(s); }}
         />
-    );
+    ) : null;
 }
 
 function fakeMessaging(records) {
@@ -84,5 +84,15 @@ describe('TickItemsEditor', () => {
         render(<Harness initial="" messaging={fakeMessaging({})} onOpenPicker={onOpenPicker} />);
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
         expect(onOpenPicker).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears lookup verdicts when the editor unmounts', async () => {
+        const messaging = fakeMessaging({ NOSUCH: EMPTY });
+        const onStatus = vi.fn();
+        const view = render(<Harness initial="NOSUCH" messaging={messaging} onStatus={onStatus} />);
+        await settle();
+        expect(onStatus).toHaveBeenLastCalledWith({ NOSUCH: 'missing' });
+        view.rerender(<Harness initial="NOSUCH" messaging={messaging} onStatus={onStatus} active={false} />);
+        expect(onStatus).toHaveBeenLastCalledWith({});
     });
 });

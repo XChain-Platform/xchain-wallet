@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -44,6 +44,10 @@ export function TickItemsEditor({
     const invalidTicks = items.invalid;
     const tickKey = memberTicks.join('|');
     const [checking, setChecking] = useState(false);
+    const onStatusChangeRef = useRef(onStatusChange);
+    onStatusChangeRef.current = onStatusChange;
+
+    useEffect(() => () => onStatusChangeRef.current({}), []);
 
     useEffect(() => {
         if (!chainId || memberTicks.length === 0) {
