@@ -32,6 +32,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const UNLOCK_VALUE = 'regtestpassword123';
 const FUNDING = 3;
@@ -168,7 +169,7 @@ async function displayedBalance(page, tick) {
 
 async function expectHomeBalance(page, tick, expected) {
     await gotoSection(page, 'Home');
-    await expect(unlockedShell(page)).toBeVisible({ timeout: 30_000 });
+    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
     await expect.poll(() => displayedBalance(page, tick), {
         timeout: 90_000,
         message: `Home did not show ${expected} ${tick}`,
