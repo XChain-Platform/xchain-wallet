@@ -149,6 +149,25 @@ async function pickManageMore(main, label) {
     await item.click();
 }
 
+async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const main = await openManageToken(page, tick);
+        const more = main.getByRole('button', { name: 'More', exact: true });
+        await expect(more, 'Manage Token has no "More" overflow menu').toBeVisible({ timeout: 30_000 });
+        await more.click();
+        const execute = main.getByRole('menuitem', { name: 'Execute callback', exact: true });
+        if (await execute.isVisible()) {
+            await execute.click();
+            return main;
+        }
+        await page.keyboard.press('Escape');
+        await nudgeChain();
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+    throw new Error(`Manage Token did not offer "Execute callback" within ${timeoutMs} ms`);
+}
+
 /** The block height printed on the Callback settings form ("Current block on X: N."). */
 async function readCurrentHeightFromForm(main) {
     const hint = main.getByText(/^Current block on /);
@@ -269,10 +288,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             // Fresh mount: ManageToken and CallbackForm both read live state
             // (assetInfo, the indexer watermark), so re-opening from My Tokens
             // is what proves the BLOCK GATE lifted rather than assuming it did.
-            let main = await openManageToken(page, TICK);
-            await pickManageMore(main, 'Execute callback');
-
-            main = page.getByRole('main');
+            const main = await openExecuteCallbackWhenConfigured(page, TICK);
             const execute = main.getByRole('button', { name: 'Execute callback', exact: true });
             await expect(execute, 'Execute callback never became available (block gate or missing config)')
                 .toBeEnabled({ timeout: 60_000 });

@@ -123,6 +123,25 @@ async function pickManageMore(main, label) {
     await item.click();
 }
 
+async function openExecuteCallbackWhenConfigured(page, timeoutMs = 180_000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const main = await openManageToken(page);
+        const more = main.getByRole('button', { name: 'More', exact: true });
+        await expect(more).toBeVisible({ timeout: 30_000 });
+        await more.click();
+        const execute = main.getByRole('menuitem', { name: 'Execute callback', exact: true });
+        if (await execute.isVisible()) {
+            await execute.click();
+            return main;
+        }
+        await page.keyboard.press('Escape');
+        await nudgeChain();
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+    throw new Error(`Manage Token did not offer "Execute callback" within ${timeoutMs} ms`);
+}
+
 async function readCurrentHeight(main) {
     const hint = main.getByText(/^Current block on /);
     await expect(hint, 'Callback settings did not show the current block')
@@ -280,9 +299,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await mineToHeight(callbackBlock);
             await ownerPage.reload();
             await unlockAfterReload(ownerPage, UNLOCK_VALUE);
-            let main = await openManageToken(ownerPage);
-            await pickManageMore(main, 'Execute callback');
-            main = ownerPage.getByRole('main');
+            const main = await openExecuteCallbackWhenConfigured(ownerPage);
 
             const holdersToPay = main.getByText('Holders to pay', { exact: true })
                 .locator('xpath=following-sibling::dd[1]');
