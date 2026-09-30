@@ -3451,10 +3451,10 @@ export function createBackgroundHost(deps) {
     // network". They are narrow on purpose: every other rejection the shared
     // classifier calls permanent describes bytes that can never confirm, while
     // these two describe bytes that already did reach a node, which is the
-    // opposite outcome. Matched on the reject text because that is all the
-    // encoder hands back.
-    function saysAlreadyOnNetwork(reason) {
-        return /txn-already-known|txn-already-in-mempool/i.test(String(reason));
+    // opposite outcome. Matched on the same reject text the classifier reads,
+    // nested causes included, because that is all the encoder hands back.
+    function saysAlreadyOnNetwork(err) {
+        return flows.isAlreadyOnNetworkRejection(err);
     }
     // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
     // `broadcastTx` is an irreversible effector, so a second call for the same
@@ -3543,17 +3543,10 @@ export function createBackgroundHost(deps) {
                 // another attempt at these bytes. Transient failures stay queued,
                 // which is what the surface is for.
                 const failure = err && err.message ? String(err.message) : String(err);
-                // A RESUMED CLAIM READS "ALREADY KNOWN" AS DELIVERY, NOT DEATH.
-                // These bytes were claimed by a worker that died mid-broadcast,
-                // so whether they reached a node is the open question, and the
-                // node's own answer settles it: it holds this txid, therefore
-                // the transaction was delivered. The shared classifier calls
-                // those two reject reasons permanent, which on the ordinary lane
-                // is right (nothing else is going to confirm) but here would
-                // retire a LANDED transaction as 'failed' and invite a
-                // re-compose, the one action on this path that can double spend.
-                // The never-claimed lane below keeps its behaviour untouched.
-                if (entry.resumedClaim === true && saysAlreadyOnNetwork(failure)) {
+                // Settle "already known" as DELIVERY for every entry: each one exists only
+                // because an earlier attempt ended ambiguously, and retiring it as
+                // 'failed' invites a re-compose, the one action here that can double spend.
+                if (saysAlreadyOnNetwork(err)) {
                     const landed = q.findIndex((e) => e.id === id);
                     if (landed >= 0) q.splice(landed, 1);
                     await persistQueue();
@@ -3567,8 +3560,20 @@ export function createBackgroundHost(deps) {
                         recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
                     }
                     await flushOwedSettlements(vault);
-                    // No ADS commit: a resumed entry carries no verdict to book,
-                    // and the interrupted attempt may already have booked one.
+                    // Book ADS only for a never-claimed entry: its failed first attempt booked
+                    // nothing, while an interrupted claim may already have booked its verdict.
+                    if (entry.resumedClaim !== true && entry.adsCommit) {
+                        try {
+                            await flows.commitAdsStep({
+                                vault,
+                                chainId: entry.adsCommit.chainId || entry.chainId,
+                                donationIncluded: entry.adsCommit.donationIncluded,
+                                chainRegistry,
+                            });
+                        } catch (e) {
+                            console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
+                        }
+                    }
                     return { txid: entry.txid ?? null, alreadyOnNetwork: true };
                 }
                 // Release the claim either way, the two transitions core's drain

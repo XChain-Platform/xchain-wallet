@@ -686,8 +686,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </label>
                     {autopayArm && exposure && Number.isFinite(Number(exposure.total)) ? (
                         <p className={styles.hint}>
-                            Under full indexer compromise, the most auto-pay could send across all your armed
-                            orders is bounded by their combined GIVE amounts.
+                            Even if the service that reports matches were fully compromised, auto-pay could send
+                            at most the combined amounts you give across all your orders with auto-pay on.
                         </p>
                     ) : null}
                     {ackRequired ? (

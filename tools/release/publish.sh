@@ -564,24 +564,30 @@ for rel in "${BINARIES[@]}"; do
 done
 
 # THE DIRECT FEED POINTER, staging only. It names this version to every
-# install that reads it, so it goes up LAST and only beside exactly one APK:
-# a feed naming a version nobody can download is an alarm with no exit.
+# install that reads it, so it goes up LAST and only beside exactly one APK
+# per direct lane: a feed naming a version nobody can download is an alarm
+# with no exit.
 DIRECT_POINTERS=()
 if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
     apk_count=0
     for rel in "${BINARIES[@]}"; do
         if [[ "${rel#./}" == *.apk ]]; then apk_count=$((apk_count + 1)); fi
     done
-    if [[ "$apk_count" -ne 1 || ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "publish.sh: refusing to stage a direct feed for $TAG over $apk_count .apk file(s)." >&2
-        echo "  The direct lane is exactly one universal APK, and its feed names a" >&2
+    direct_count=0
+    while read -r _lane feed; do
+        [[ -n "$feed" ]] || continue
+        direct_count=$((direct_count + 1))
+        # Store and full APK lanes share one feed; write each pointer once.
+        [[ " ${DIRECT_POINTERS[*]-} " == *" $feed "* ]] || DIRECT_POINTERS+=("$feed")
+    done <<< "$DIRECT_FEEDS"
+    if [[ "$apk_count" -ne "$direct_count" || ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "publish.sh: refusing to stage a direct feed for $TAG over $apk_count .apk file(s)" \
+             "for $direct_count direct lane(s)." >&2
+        echo "  Each direct lane is exactly one universal APK, and its feed names a" >&2
         echo "  plain vMAJOR.MINOR.PATCH; anything else stages a notice for a" >&2
         echo "  download that is not there." >&2
         exit 1
     fi
-    while read -r _lane feed; do
-        if [[ -n "$feed" ]]; then DIRECT_POINTERS+=("$feed"); fi
-    done <<< "$DIRECT_FEEDS"
 fi
 
 # A desktop release with no channel pointer installs nobody. Nothing

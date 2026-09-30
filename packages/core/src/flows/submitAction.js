@@ -35,6 +35,7 @@ import {
 } from './broadcastPermanence.js';
 import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js';
 import { resolveChangeAddress } from './changeAddress.js';
+import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -357,7 +358,7 @@ export async function submitAction({
                                 chainId: err.chainId,
                                 signedAt: err.signedAt,
                                 summary: pendingTxMeta?.actionSummary
-                                    || `${actionData.action} on ${chainId}`,
+                                    || actionDisplayLabel(actionData.action),
                                 error: err.message,
                                 // Name the PendingTx stamped 'queued' above so
                                 // the queue's broadcast and discard handlers

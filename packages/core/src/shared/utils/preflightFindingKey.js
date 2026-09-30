@@ -13,7 +13,7 @@
  *
  * The override gate cannot key on `f.code` alone. That holds only while a
  * report could carry at most one error per code. It cannot: the SDK's
- * `pushSubCommandFindings` (xchain-sdk/src/preflight/index.js) pushes one
+ * `pushSubCommandFindings` (xchain-sdk/src/preflight/index/tier1_findings.js) pushes one
  * `DRYRUN_SUBCOMMAND_INVALID` error PER invalid batch sub-command, and the
  * batch check pushes one `PARSE_INVALID` per unparseable command, each tagged
  * with its own `data.commandIndex`. Under a code-scoped set, ticking

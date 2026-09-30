@@ -203,6 +203,8 @@ export const LANES = [
  * @property {string} feed      the feed path, relative to the feed base
  * @property {string} client    the shipped module that reads that feed
  * @property {string|null} device  named smoke hardware (DD-A), or null
+ * @property {string} shippedLane  its lane name in shipped-lanes.txt and a manifest's `# lanes:`
+ * @property {string} artifact  its APK glob, spelled as shipped-lanes.txt and expected-artifacts.txt spell it
  * @property {string} [note]
  */
 
@@ -273,11 +275,52 @@ export const DIRECT_LANES = [
         feed: 'android/latest.json',
         client: 'packages/web/src/update/directUpdateCheck.js',
         device: null,
+        shippedLane: 'android',
+        artifact: 'xchain-wallet-v*[0-9].apk',
         note: 'The sideloaded APK from downloads.xchain.io. A Play install of the same '
             + 'bytes updates itself and is deliberately NOT a lane: it is told nothing, '
             + 'which is what test/unit/mobile/directUpdateLane.test.js holds in place.',
     },
+    {
+        id: 'android-full',
+        os: 'android',
+        arch: 'universal',
+        format: 'apk',
+        feed: 'android/latest.json',
+        client: 'packages/web/src/update/directUpdateCheck.js',
+        device: null,
+        shippedLane: 'android-full',
+        artifact: 'xchain-wallet-v*-full.apk',
+        note: 'The same tag built at the default profile and signed by K10, so it and the '
+            + 'store APK install over each other in either direction; it reads the same feed.',
+    },
 ];
+
+/**
+ * Match an artifact basename against a lane glob, case-insensitively.
+ *
+ * Supports `*`, `?` and `[...]` classes, since the store APK glob is anchored by `[0-9]`.
+ */
+export function basenameGlobMatch(glob, name) {
+    let re = '';
+    for (let i = 0; i < glob.length; i += 1) {
+        const c = glob[i];
+        const close = c === '[' ? glob.indexOf(']', i + 1) : -1;
+        if (c === '*') re += '.*';
+        else if (c === '?') re += '.';
+        else if (close > i + 1) {
+            re += `[${glob.slice(i + 1, close).replace(/\\/g, '\\\\').replace(/^!/, '^')}]`;
+            i = close;
+        } else re += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    return new RegExp(`^${re}$`, 'i').test(String(name).split('/').pop());
+}
+
+/** The direct lanes whose own glob names one of these artifact basenames. */
+export function directLanesForArtifacts(names) {
+    const list = Array.isArray(names) ? names : [];
+    return DIRECT_LANES.filter((l) => list.some((n) => basenameGlobMatch(l.artifact, n)));
+}
 
 /** Every lane that receives updates, in either shape. */
 export const ALL_LANES = [...LANES, ...DIRECT_LANES];
@@ -354,10 +397,11 @@ export function lanesByOs() {
 /**
  * The direct lanes a set of shipped-lanes.txt lanes distributes artifacts for.
  *
- * Matched by FORMAT, the test `rehearse.mjs assert` applies to a release
- * directory, so publish.sh and the gate it runs answer "does this release
- * ship a direct lane" by one rule. Throws on an unknown lane name or an
- * empty set, so a caller cannot read "could not tell" as "none".
+ * Matched by each direct lane's own artifact glob, the rule `rehearse.mjs
+ * assert` applies to a release directory, so publish.sh and the gate it
+ * runs answer "does this release ship a direct lane" alike. Throws on an
+ * unknown lane name, a named row with no valid feed column, or an empty
+ * set, so a caller cannot read "could not tell" as "none".
  *
  * @param {string} lanesText   the contents of shipped-lanes.txt
  * @param {string[]} names     lane names, as a manifest's `# lanes:` header lists them
@@ -365,21 +409,30 @@ export function lanesByOs() {
  */
 export function directLanesForShipped(lanesText, names) {
     if (!Array.isArray(names) || names.length === 0) throw new Error('no lane names given');
-    const globs = new Map();
+    const rows = new Map();
     for (const line of String(lanesText).split('\n')) {
-        const [lane, , , ...rest] = line.trim().split(/\s+/);
+        const [lane, , feed, ...rest] = line.trim().split(/\s+/);
         if (!lane || lane.startsWith('#')) continue;
-        globs.set(lane, rest.map((g) => g.toLowerCase()));
+        rows.set(lane, { feed, globs: rest.map((g) => g.toLowerCase()) });
     }
     const wanted = [];
     for (const name of names) {
-        if (!globs.has(name)) throw new Error(`'${name}' is not a lane declared in shipped-lanes.txt`);
-        wanted.push(...globs.get(name));
+        const row = rows.get(name);
+        if (!row) throw new Error(`'${name}' is not a lane declared in shipped-lanes.txt`);
+        if (!LANE_FEEDS.includes(row.feed)) {
+            throw new Error(`lane '${name}' declares feed '${row.feed ?? ''}', not one of ${LANE_FEEDS.join(', ')}`);
+        }
+        wanted.push(...row.globs);
     }
-    return DIRECT_LANES.filter(
-        (l) => wanted.some((g) => g.endsWith(`.${l.format.toLowerCase()}`)),
-    );
+    // A direct-format glob no direct lane declares is "cannot tell", never "none".
+    const stray = wanted.find((g) => DIRECT_LANES.some((l) => g.endsWith(`.${l.format.toLowerCase()}`))
+        && !DIRECT_LANES.some((l) => l.artifact.toLowerCase() === g));
+    if (stray) throw new Error(`glob '${stray}' ships a direct-lane format and no direct lane declares it`);
+    return DIRECT_LANES.filter((l) => wanted.includes(l.artifact.toLowerCase()));
 }
+
+/** The feed words a shipped-lanes.txt row may declare, as lib.sh's XR_LANE_FEEDS lists them. */
+const LANE_FEEDS = ['store-only', 'updater'];
 
 // Answer `--direct-lanes-for` for publish.sh: exit 0 some, 1 none, 2 cannot tell.
 function printDirectLanesFor(argv) {
@@ -429,12 +482,14 @@ Two kinds of lane, and they are rehearsed by different probes:
                 path, so they are not lanes.
 
   DIRECT_LANES  an install channel that receives update INFORMATION and no
-                installer: the sideloaded Android APK, whose latest.json
-                feed the shipped client reads and whose install-over the
-                user performs by hand.
+                installer: the sideloaded Android APKs (the store build and
+                the full build, one lane each, selected by their own globs),
+                whose latest.json feed the shipped client reads and whose
+                install-over the user performs by hand.
 
 Exports: LANES, DIRECT_LANES, ALL_LANES, LINUX_FORMAT_UPDATE_SUPPORT,
 ALL_OS_TRIGGER_PATHS, laneById(id), isDirectLane(id), lanesByOs(),
+basenameGlobMatch(glob, name), directLanesForArtifacts(names),
 directLanesForShipped(lanesText, names).
 `;
 

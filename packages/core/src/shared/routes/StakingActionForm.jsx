@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
@@ -99,8 +100,8 @@ function extractRows(resp) {
  */
 export function StakingActionForm({ mode, walletId, chainId: initialChainId, onBack }) {
     // The launching position seeds the network; the standard Network
-    // picker lets the user retarget the action at any chain the wallet
-    // holds addresses on (the address + fee sections follow along).
+    // picker lets the user retarget the action at any Bitcoin chain the
+    // wallet holds addresses on (the address + fee sections follow along).
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
     // Only for the fiat preview: the display currency, and whether the user
@@ -744,7 +745,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             <NetworkField
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
-                chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
                 chainRegistry={chainRegistry}
             />
             {fromAddress ? (

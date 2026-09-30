@@ -20,7 +20,8 @@
 // AMOUNT = partial unstake; absent sweeps the full stake)
 //   - 'delegate' → DELEGATE v1 (NEW SIGNING_PUBKEY + TARGET_CONTRACT_INDEX + TICK)
 //
-// BTC-only (same gate as capability staking); the indexer rejects other chains.
+// Accepted on every chain: the indexer routes these contract-targeted versions
+// ahead of the Bitcoin-only check that capability staking hits.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';

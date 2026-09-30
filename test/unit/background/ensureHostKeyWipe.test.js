@@ -74,7 +74,7 @@ describe('ensureHost master-key hygiene', () => {
 
     it('wipes the loaded key inside ensureHost', () => {
         const bg = readFileSync(join(wsRoot, 'packages', 'extension', 'src', 'background.js'), 'utf8');
-        const start = bg.indexOf('async function ensureHost()');
+        const start = bg.indexOf('async function buildHost()');
         expect(start).toBeGreaterThan(-1);
         // Up to the guarded vault.open(), which is the next thing ensureHost
         // does after building the Vault.

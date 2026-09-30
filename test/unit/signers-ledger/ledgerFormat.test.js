@@ -412,6 +412,32 @@ describe('toLedgerCreatePayment', () => {
         expect(typeof payload.outputScriptHex).toBe('string');
     });
 
+    function makeTwoInputs(firstType, secondType) {
+        const d = makeDecomposed(firstType);
+        d.inputs.push({ ...makeDecomposed(secondType).inputs[0], prevTxIndex: 1 });
+        return d;
+    }
+    const twoPaths = [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }, { inputIndex: 1, path: "m/84'/0'/0'/0/1" }];
+
+    it('refuses a PSBT whose inputs mix script types, before the device is engaged', () => {
+        for (const [a, b] of [['p2wpkh', 'p2sh-p2wpkh'], ['p2pkh', 'p2wpkh']]) {
+            expect(() => toLedgerCreatePayment({
+                decomposed: makeTwoInputs(a, b), chainId: 'bitcoin-mainnet', signingPaths: twoPaths,
+            })).toThrow(new RegExp(`input 1 is "${b}" but input 0 is "${a}"`));
+        }
+    });
+
+    it('keeps the tx-wide flags for multi-input PSBTs of a single script type', () => {
+        const native = toLedgerCreatePayment({
+            decomposed: makeTwoInputs('p2wpkh', 'p2wpkh'), chainId: 'bitcoin-mainnet', signingPaths: twoPaths,
+        });
+        expect(native).toMatchObject({ segwit: true, additionals: ['bech32'] });
+        const nested = toLedgerCreatePayment({
+            decomposed: makeTwoInputs('p2sh-p2wpkh', 'p2sh-p2wpkh'), chainId: 'bitcoin-mainnet', signingPaths: twoPaths,
+        });
+        expect(nested).toMatchObject({ segwit: true, additionals: [] });
+    });
+
     it('segwit=false for p2pkh inputs', () => {
         const d = makeDecomposed('p2pkh');
         d.inputs[0].nonWitnessUtxoHex = '0100000001' + 'aa'.repeat(41) + '00000000';

@@ -26,6 +26,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { assertValidatorLaneChain } from '../registry/actions.js';
 
 /**
  * @typedef {Object} DelegateActionOpts
@@ -60,6 +61,8 @@ export async function delegateAction(opts) {
     if (!/^[0-9a-fA-F]{64}$/.test(opts.params.NEW_SIGNING_PUBKEY)) {
         throw new Error('delegateAction: NEW_SIGNING_PUBKEY must be 64 hex chars');
     }
+    // Refuse a chain whose indexer rejects this validator-lane action.
+    assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'delegateAction');
     const source = normalizeSource(opts.from, 'delegateAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -128,6 +131,8 @@ export async function revokeDelegationAction(opts) {
     if (!/^[0-9a-fA-F]{64}$/.test(opts.params.SIGNING_PUBKEY)) {
         throw new Error('revokeDelegationAction: SIGNING_PUBKEY must be 64 hex chars');
     }
+    // Refuse a chain whose indexer rejects this validator-lane action.
+    assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'revokeDelegationAction');
     const source = normalizeSource(opts.from, 'revokeDelegationAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,

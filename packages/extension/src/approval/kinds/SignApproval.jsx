@@ -30,7 +30,7 @@ import { ActionIntentSummary } from '@xchain-wallet/core/shared/components/Actio
 import { psbtRefusalReason } from '@xchain-wallet/core/shared/components/PsbtConfirmScreen.jsx';
 import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
-import { actionDisplayLabel } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
+import { actionDisplayLabel, psbtActionSummary } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import {
     listWallets,
@@ -995,17 +995,6 @@ function CoSignIntentSummary({ loading, error, preview }) {
             ) : null}
         </div>
     );
-}
-
-// One-line intent for an action decoded OUT of a PSBT (§5.5). Mirrors
-// PsbtSignForm's wording: on this variant the output set is what gets verified,
-// so a decoded action is context and is not dressed up as more than that.
-function psbtActionSummary(parsed) {
-    const label = parsed?.action || 'Unknown action';
-    const version = parsed?.version ?? null;
-    return version != null
-        ? `Carries an XChain ${label} action (v${version})`
-        : `Carries an XChain ${label} action`;
 }
 
 function formatSats(value) {

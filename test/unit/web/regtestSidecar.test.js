@@ -232,6 +232,44 @@ describe('the transform when it does not recognize the shape', { timeout: SDK_FI
         expect(removeSidecarLoader(code)).toEqual({ code, removed: false });
     });
 
+    it('leaves a loader in an else-if arm alone, source and minified', () => {
+        for (const code of [
+            'if (a) { x(); } else if (fullnode.$regtestSidecar) { y(); }\nreturn out;\n',
+            'if(a){x()}else if(fullnode.$regtestSidecar&&h()){y()}return out;',
+        ]) {
+            expect(removeSidecarLoader(code)).toEqual({ code, removed: false });
+        }
+    });
+
+    it('still strips a standalone loader that follows a complete if/else', () => {
+        const code = 'if (a) { x(); } else { z(); }\nif (fullnode.$regtestSidecar) { y(); }\nreturn out;\n';
+        const { code: out, removed } = removeSidecarLoader(code);
+        expect(removed).toBe(true);
+        expect(out).toContain('else { z(); }');
+        expect(out).toContain('return out;');
+        expect(out).not.toContain('y();');
+    });
+
+    it('leaves a same-line neighbour key in place rather than deleting it', () => {
+        for (const q of ["'", '"']) {
+            const code = `    $regtestSidecar: ${q}fullnode.regtest.json${q}, $other: ${q}x${q},\n    NEXT: 1,\n`;
+            expect(stripRegtestSidecar(code)).toEqual({ code, removed: [] });
+            expect(findRegtestSidecarMarkers(code)).toContain(SIDECAR_KEY);
+        }
+    });
+
+    it('removes the property alone on its line in every supported form', () => {
+        for (const line of [
+            "    $regtestSidecar: 'fullnode.regtest.json',\n",
+            '    $regtestSidecar: "fullnode.regtest.json",\n',
+            "    $regtestSidecar: 'fullnode.regtest.json'\n",
+            "    $regtestSidecar: 'fullnode.regtest.json',\r\n",
+        ]) {
+            const out = stripRegtestSidecar(`    A: 1,\n${line}    B: 2,\n`);
+            expect(out).toEqual({ code: '    A: 1,\n    B: 2,\n', removed: ['config'] });
+        }
+    });
+
     it('leaves an unclosed condition alone', () => {
         const code = 'if (fullnode.$regtestSidecar && ok() {\n';
         expect(removeSidecarLoader(code)).toEqual({ code, removed: false });

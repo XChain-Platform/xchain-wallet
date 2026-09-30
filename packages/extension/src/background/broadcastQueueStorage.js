@@ -29,7 +29,9 @@
 // `createBroadcastQueueStorage` returns null and createBackgroundHost
 // falls back to in-memory only (the prior v0.292.0 behavior).
 
-const STORAGE_KEY = 'xchain.broadcastQueue';
+import { BROADCAST_QUEUE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
+
+const STORAGE_KEY = BROADCAST_QUEUE_STORAGE_KEY;
 
 /**
  * Internal entry shape (mirrors what createBackgroundHost pushes).

@@ -27,6 +27,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { assertValidatorLaneChain } from '../registry/actions.js';
 
 /**
  * @typedef {Object} UnstakeActionOpts
@@ -66,6 +67,8 @@ export async function unstakeAction(opts) {
             throw new Error('unstakeAction: AMOUNT must be a positive decimal when present');
         }
     }
+    // Refuse a chain whose indexer rejects this validator-lane action.
+    assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'unstakeAction');
     const source = normalizeSource(opts.from, 'unstakeAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -135,6 +138,8 @@ export async function collectAction(opts) {
             throw new Error('collectAction: AMOUNT must be a positive decimal when present');
         }
     }
+    // Refuse a chain whose indexer rejects this validator-lane action.
+    assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'collectAction');
     const source = normalizeSource(opts.from, 'collectAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,

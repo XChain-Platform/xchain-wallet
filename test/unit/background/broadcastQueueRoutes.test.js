@@ -239,6 +239,26 @@ describe('broadcast.queue.broadcast books the ADS verdict the entry carries', ()
         expect(h.vault.settings.put).not.toHaveBeenCalled();
     });
 
+    it('books the verdict once when the node answers the retry as already known', async () => {
+        const h = makeHost({
+            entries: [entry('A', { adsCommit: { chainId: CHAIN, donationIncluded: true } })],
+            broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
+        });
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
+        expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 5000, lifetimeTxCount: 1 });
+    });
+
+    it('books nothing for a resumed claim the node already knows', async () => {
+        const h = makeHost({
+            entries: [entry('A', { resumedClaim: true, adsCommit: { chainId: CHAIN, donationIncluded: true } })],
+            broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
+        });
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        expect(h.vault.settings.put).not.toHaveBeenCalled();
+    });
+
     it('a settings write failure never turns a landed broadcast into an error', async () => {
         const h = makeHost({
             entries: [entry('A', { adsCommit: { chainId: CHAIN, donationIncluded: true } })],
@@ -831,17 +851,42 @@ describe('a reload rebuilds the queue from the durable PendingTx half', () => {
         expect(await reopened.list()).toEqual([]);
     });
 
-    it('keeps the never-claimed lane retiring an already-known rejection as failed', async () => {
-        // The same node answer on a record that was never claimed still means
-        // these bytes cannot be sent by this entry, so the ordinary lane is
-        // untouched by the resumed-claim path.
-        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
-        const broadcastTx = vi.fn(async () => { throw new Error('txn-already-known'); });
-        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
-        const listed = await h.list();
-        expect(listed[0].resumedClaim).toBeUndefined();
+    it('settles a never-claimed entry the node already holds as broadcast, not failed', async () => {
+        // A queued entry exists only because an earlier attempt ended ambiguously,
+        // so "already known" on these same bytes means they were delivered.
+        for (const reject of ['txn-already-known', 'txn-already-in-mempool']) {
+            const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+            const broadcastTx = vi.fn(async () => { throw new Error(reject); });
+            const h = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
+            const listed = await h.list();
+            expect(listed[0].resumedClaim).toBeUndefined();
 
-        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: listed[0].id });
+            const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: listed[0].id });
+            expect(res.ok, reject).toBe(true);
+            expect(res.result.alreadyOnNetwork).toBe(true);
+            expect((await records.get('p1')).status).toBe('broadcast');
+            expect(await h.list()).toEqual([]);
+        }
+    });
+
+    it('reads the already-known reject from a nested cause as the classifier does', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const nested = Object.assign(new Error('Encoder RPC error'), {
+            cause: { response: { data: { error: 'txn-already-in-mempool' } } },
+        });
+        const h = makeHost({
+            entries: [], pendingTxs: records, broadcastTx: vi.fn(async () => { throw nested; }), ...tables(),
+        });
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: (await h.list())[0].id });
+        expect(res.ok).toBe(true);
+        expect((await records.get('p1')).status).toBe('broadcast');
+    });
+
+    it('still retires a never-claimed entry whose inputs are gone as failed', async () => {
+        const records = await withRecords([queuedRecord('p1', A_ADDR)]);
+        const broadcastTx = vi.fn(async () => { throw new Error('bad-txns-inputs-missingorspent'); });
+        const h = makeHost({ entries: [], pendingTxs: records, broadcastTx, ...tables() });
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: (await h.list())[0].id });
         expect(res.ok).toBe(false);
         expect((await records.get('p1')).status).toBe('failed');
     });

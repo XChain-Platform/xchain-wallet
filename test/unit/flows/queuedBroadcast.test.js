@@ -243,6 +243,20 @@ describe('drainQueuedBroadcast: in-flight / idempotency guard', () => {
         })).rejects.toThrow(/is not queued/);
     });
 
+    it('settles a retry the node already holds as broadcast, from queued or an interrupted claim', async () => {
+        for (const status of ['queued', 'broadcasting']) {
+            const pendingTxs = memCollection([{ ...queuedPendingTx(), status }]);
+            const sdkRegistry = {
+                get: () => ({ encoder: { broadcastTx: async () => { throw new Error('txn-already-known'); } } }),
+            };
+            const result = await drainQueuedBroadcast({
+                vault: { pendingTxs }, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+            });
+            expect(result).toMatchObject({ broadcast: true, error: null, alreadyOnNetwork: true });
+            expect((await pendingTxs.get('ptx-1')).status, status).toBe('broadcast');
+        }
+    });
+
     it('keeps an ambiguous failure queued, because a still-valid signed tx must stay recoverable', async () => {
         const pendingTxs = memCollection([queuedPendingTx()]);
         const vault = { pendingTxs };

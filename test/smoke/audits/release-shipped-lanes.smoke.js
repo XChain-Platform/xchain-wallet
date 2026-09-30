@@ -285,7 +285,7 @@ try {
             .replace(/\*/g, V);
         const shippedArtifacts = text.split('\n')
             .filter((l) => /^\S+\s+SHIPPED\s/.test(l))
-            .flatMap((l) => l.trim().split(/\s+/).slice(2))
+            .flatMap((l) => l.trim().split(/\s+/).slice(3))
             .map(sampleName);
         check('every optional artifact in expected-artifacts.txt is claimed by a lane',
             gate(stage(shippedArtifacts)).ok, 'the committed pair does not agree');

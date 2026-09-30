@@ -398,6 +398,31 @@ const passing = makeSwapCheck({
     assert.match(coverage.stdout, /NOT an attestation/,
         'on the same line as the box, where it cannot be read as the box being ticked');
     assert.doesNotMatch(coverage.stdout, /✅ win-x64/);
+
+    // Every SHIPPED lane swapped and Windows not: NOT-SHIPPED Windows is listed, never demanded.
+    const shippedSwaps = [...LANES.filter((l) => l.os !== 'win32').map((l) => l.id), 'android-direct']
+        .map((lane) => ({ lane, device: 'bench', at: '2026-09-30T00:00:00Z' }));
+    writeFileSync(join(records, 'REHEARSAL-v0.337.2.json'), `${JSON.stringify({
+        ...baseRecord, tag: 'v0.337.2', swaps: shippedSwaps,
+    }, null, 2)}\n`);
+    const scoped = cli(['coverage', '--records', records]);
+    assert.equal(scoped.status, 0, `only NOT-SHIPPED lanes are unswapped:\n${scoped.stdout}`);
+    assert.match(scoped.stdout, /⬜ win-x64 .*not demanded: windows is NOT-SHIPPED/);
+
+    // The release in hand demands its own OS before the row flips, and an unreadable list demands all.
+    const winRelease = join(work, 'win-release');
+    mkdirSync(winRelease, { recursive: true });
+    writeFileSync(join(winRelease, 'xchain-wallet-setup-0.337.2-x64.exe'), 'exe');
+    const inHand = cli(['coverage', '--records', records, '--prod-input', winRelease]);
+    assert.equal(inHand.status, 1);
+    assert.match(inHand.stdout, /never had an observed swap: win-x64/);
+    const maybe = join(work, 'lanes-maybe.txt');
+    writeFileSync(maybe, 'windows   MAYBE   updater   *.exe\n');
+    for (const lanesFile of [maybe, join(work, 'no-such-lanes.txt')]) {
+        const strict = cli(['coverage', '--records', records, '--lanes-file', lanesFile]);
+        assert.equal(strict.status, 1, `${lanesFile} must demand every lane`);
+        assert.match(strict.stdout, /every lane is demanded/);
+    }
 }
 
 // ---------------------------------------------------- 7. the workflow itself

@@ -375,6 +375,19 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
         }
     });
 
+    // Refuse mixed script types: createPaymentTransaction signs every input
+    // under the ONE account type the segwit/bech32 flags below select.
+    const firstType = decomposed.inputs[0]?.scriptType;
+    decomposed.inputs.forEach((inp, idx) => {
+        if (inp.scriptType !== firstType) {
+            throw new Error(
+                `toLedgerCreatePayment: PSBT input ${idx} is "${inp.scriptType}" but input 0 is "${firstType}"; `
+                + "Ledger's createPaymentTransaction signs every input under one script type. "
+                + 'Sign the inputs of each script type in a separate transaction.',
+            );
+        }
+    });
+
     const segwit = decomposed.inputs.every((i) => isSegwitScriptType(i.scriptType));
     const anyNative = decomposed.inputs.some((i) => i.scriptType === 'p2wpkh');
     const additionals = anyNative ? ['bech32'] : [];

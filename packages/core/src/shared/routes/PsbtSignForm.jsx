@@ -83,6 +83,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
+import { psbtActionSummary } from '../utils/actionDisplayLabel.js';
 
 function arrayBufferToHex(buf) {
     const view = new Uint8Array(buf);
@@ -1160,16 +1161,4 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
         </Screen>
     );
-}
-
-// One-line intent for an action decoded OUT of a PSBT. Deliberately terse:
-// on this variant the output set is the thing being verified, and a decoded
-// action is context, so this states what the action IS without dressing up
-// params the wallet did not compose and cannot cross-check.
-function psbtActionSummary(parsed) {
-    const label = parsed?.action || 'Unknown action';
-    const version = parsed?.version ?? null;
-    return version != null
-        ? `Carries an XChain ${label} action (v${version})`
-        : `Carries an XChain ${label} action`;
 }

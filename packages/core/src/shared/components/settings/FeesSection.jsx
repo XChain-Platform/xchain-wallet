@@ -18,11 +18,18 @@
 // Per chain we surface:
 //   - Strategy picker: low / normal / fast / custom (see schema's
 //     FEE_STRATEGIES tuple).
-//   - Custom rate input (sats per KB), visible when strategy='custom'.
+//   - Custom rate input in the chain's display fee unit (sat/vB or
+//     DOGE/kB), stored as smallest-unit per KB, visible when strategy='custom'.
 //   - RBF-by-default toggle.
 
 import { registry as registryLib } from '@xchain-wallet/core';
 import { resolveFeeConfig } from '../../../schemas/settings.js';
+import {
+    defaultCustomSettingsRate,
+    displayRateToSettingsCustom,
+    resolveFeeUnit,
+    settingsCustomToDisplayRate,
+} from '../../../flows/feeEstimate.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { INPUT, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
@@ -95,6 +102,9 @@ export function FeesSection() {
                 const networkSuffix = descriptor && descriptor.networkKind !== 'mainnet'
                     ? ` · ${descriptor.networkKind}`
                     : '';
+                // Derive the unit and seed from the descriptor (a fixed 1000 is 1 sat/vB but 0.00001 DOGE/kB).
+                const unit = resolveFeeUnit(descriptor);
+                const seedRate = defaultCustomSettingsRate(unit);
                 return (
                     <div key={chainId} style={CHAIN_BLOCK}>
                         <div style={CHAIN_HEADER}>{displayName}{networkSuffix}</div>
@@ -105,7 +115,7 @@ export function FeesSection() {
                                 value={fees.strategy}
                                 onChange={(e) => onPatch(chainId, {
                                     strategy: e.target.value,
-                                    customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? 1000) : null,
+                                    customSatsPerKb: e.target.value === 'custom' ? (fees.customSatsPerKb ?? seedRate) : null,
                                     rbfByDefault: fees.rbfByDefault,
                                 })}
                                 aria-label={`${displayName} fee strategy`}
@@ -120,16 +130,17 @@ export function FeesSection() {
                         {fees.strategy === 'custom' ? (
                             <div style={FIELD_ROW}>
                                 <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                                    sats / KB
+                                    {unit}
                                 </span>
                                 <input
                                     type="number"
-                                    inputMode="numeric"
+                                    inputMode="decimal"
                                     min={0}
-                                    step={1}
-                                    defaultValue={fees.customSatsPerKb ?? 1000}
+                                    step="any"
+                                    defaultValue={settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate)}
                                     onBlur={(e) => {
-                                        const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                                        // Store the typed display rate as the integer smallest-unit per KB the schema requires.
+                                        const n = displayRateToSettingsCustom(unit, Number(e.target.value));
                                         onPatch(chainId, {
                                             strategy: 'custom',
                                             customSatsPerKb: n,

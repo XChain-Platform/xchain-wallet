@@ -71,7 +71,7 @@ describe('deep xchain-sdk paths resolve against the installed SDK', () => {
     if (!sdkInstalled()) {
         // House convention (test/integration/hd/wallet-sdk-derivation-parity.test.js,
         // test/unit/ActionManifestConformance.test.js): a checkout without the
-        // SDK skips, unless XCHAIN_REQUIRE_SIBLINGS=1 says a job checked it out.
+        // SDK skips, unless XCHAIN_REQUIRE_SIBLINGS=1 says the SDK must be present.
         it('path guard requires the xchain-sdk package', (ctx) => {
             if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') {
                 throw new Error(

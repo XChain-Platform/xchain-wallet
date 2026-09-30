@@ -65,7 +65,7 @@ import {
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { createLockBackstop } from './background/walletLock.js';
+import { createLockBackstop, createHostBuildFlight } from './background/walletLock.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -227,7 +227,10 @@ function chromeNotify({ kind, title, body }) {
 // `wallet.lock` or any teardown path.
 let signerPool = new signersLib.SignerPool();
 
-async function ensureHost() {
+// Share one build among overlapping callers; two concurrent builds orphan a Vault and a listener.
+const ensureHost = createHostBuildFlight(buildHost);
+
+async function buildHost() {
     if (host) return host;
     const sessionBackend = new ChromeSessionBackend();
     const masterKey = await sessionBackend.load();

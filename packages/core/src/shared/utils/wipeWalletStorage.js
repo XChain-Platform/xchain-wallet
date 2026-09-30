@@ -8,6 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+/** Key a renderer-hosted broadcast queue persists under; core owns it so the wipe and the store agree. */
+export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
+
 /**
  * Nuke every store that answers "a wallet already exists on this
  * device", across all three shells.
@@ -27,6 +30,8 @@
  *     bridge's "a wallet already exists" check reads. Without this
  *     clear, a fresh `wallet.import` call after the IDB wipe still
  *     trips the existence check and the demo flow can't restart.
+ *   - localStorage `xchain.broadcastQueue` (BROADCAST_QUEUE_STORAGE_KEY): the
+ *     queued signed txs and settlement journal of a web or native-mobile host.
  *
  * Shell-side stores (desktop, extension, native mobile): the Electron
  * shell keeps its vault blob, kdfParams meta, cached session key and
@@ -55,6 +60,10 @@ export async function wipeWalletStorage() {
     } catch { /* ignore */ }
     await deleteVaultDatabase();
     await wipeShellStorage();
+    // Drop the queue only after the shell wipe succeeds, so a failed wipe keeps a live wallet's signed txs.
+    try {
+        globalThis.localStorage?.removeItem(BROADCAST_QUEUE_STORAGE_KEY);
+    } catch { /* ignore */ }
 }
 
 /**

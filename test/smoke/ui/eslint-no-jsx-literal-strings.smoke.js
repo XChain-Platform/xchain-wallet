@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last twenty-four are component props: copy shipped through them
+// The last twenty-five are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -69,7 +69,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
-    'what', 'prefix', 'noun',
+    'what', 'prefix', 'noun', 'summary',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -171,6 +171,12 @@ assert.strictEqual(v.length, 1, 'flags a backLabel literal');
 assert.match(v[0].message, /backLabel/);
 v = findViolations(jsxAttr('aria-valuetext', literal('Fast: 3 min')));
 assert.strictEqual(v.length, 1, 'flags an aria-valuetext literal');
+// DiagnosticDetails renders `summary` verbatim, in literal and template form alike.
+v = findViolations(jsxAttr('summary', literal('Technical details')));
+assert.strictEqual(v.length, 1, 'flags a summary literal');
+assert.match(v[0].message, /summary/);
+v = findViolations(jsxAttr('summary', jsxExpr(template('Skipped addresses (', ')'))));
+assert.strictEqual(v.length, 1, 'flags a summary template');
 
 // 14. Template copy is reported ONCE, not doubled by the generic
 // content branch that also walks JSXExpressionContainer nodes.

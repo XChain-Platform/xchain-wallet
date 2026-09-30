@@ -35,7 +35,13 @@ import {
     BITCOIN_ACTIONS,
     LITECOIN_ACTIONS,
     DOGECOIN_ACTIONS,
+    validatorLaneChainIds,
+    assertValidatorLaneChain,
 } from '../../../packages/core/src/registry/actions.js';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { stakeAction } from '../../../packages/core/src/flows/stakeAction.js';
+import { unstakeAction, collectAction } from '../../../packages/core/src/flows/unstakeClaimActions.js';
+import { delegateAction, revokeDelegationAction } from '../../../packages/core/src/flows/delegateRevokeActions.js';
 
 // Actions whose contract-lane versions the indexer accepts on any chain, and
 // which a wallet can now also PAY for there. DEPLOY/EXECUTE joined this list in
@@ -95,5 +101,40 @@ describe('staking + contract chain reach', () => {
         const dogeExtra = BITCOIN_ACTIONS.filter((a) => !DOGECOIN_ACTIONS.includes(a));
         expect(ltcExtra).toEqual(['COLLECT']);
         expect(dogeExtra).toEqual(['COLLECT']);
+    });
+});
+
+describe('validator lane chain gate', () => {
+    const registry = defaultRegistry();
+    const PK = 'a'.repeat(64);
+    const VALIDATOR_COMPOSERS = [
+        ['stakeAction', stakeAction, { VERSION: '1', AMOUNT: '1', SIGNING_PUBKEY: PK }],
+        ['unstakeAction', unstakeAction, { VERSION: '0', SIGNING_PUBKEY: PK }],
+        ['collectAction', collectAction, { VERSION: '0' }],
+        ['delegateAction', delegateAction, { VERSION: '0', NEW_SIGNING_PUBKEY: PK }],
+        ['revokeDelegationAction', revokeDelegationAction, { VERSION: '2', SIGNING_PUBKEY: PK }],
+    ];
+
+    it('offers only Bitcoin chains on the validator-lane forms', () => {
+        const held = ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-regtest', 'bitcoin-regtest'];
+        expect(validatorLaneChainIds(held, registry)).toEqual(['bitcoin-mainnet', 'bitcoin-regtest']);
+        expect(validatorLaneChainIds(['litecoin-mainnet', 'unknown-chain'], registry)).toEqual([]);
+    });
+
+    it('refuses every validator-lane composer on Litecoin and Dogecoin before signing', async () => {
+        for (const [name, compose, params] of VALIDATOR_COMPOSERS) {
+            for (const chainId of ['litecoin-mainnet', 'dogecoin-testnet']) {
+                await expect(compose({ chainRegistry: registry, chainId, params }), `${name} on ${chainId}`)
+                    .rejects.toThrow(`${name}: validator staking actions are accepted on Bitcoin only`);
+            }
+        }
+    });
+
+    it('lets every validator-lane composer past the gate on Bitcoin', async () => {
+        for (const [name, compose, params] of VALIDATOR_COMPOSERS) {
+            const run = compose({ chainRegistry: registry, chainId: 'bitcoin-regtest', params });
+            await expect(run, name).rejects.not.toThrow(/accepted on Bitcoin only/);
+        }
+        expect(() => assertValidatorLaneChain(registry, 'bitcoin-mainnet', 'x')).not.toThrow();
     });
 });

@@ -85,17 +85,23 @@ function createFakeWebContents(id) {
         id,
         isDestroyed() { return destroyed; },
         send(channel, msg) { sent.push({ channel, msg }); },
-        once(event, fn) {
+        on(event, fn) {
             if (!eventListeners.has(event)) eventListeners.set(event, new Set());
             eventListeners.get(event).add(fn);
         },
+        once(event, fn) { wc.on(event, fn); },
+        removeListener(event, fn) { eventListeners.get(event)?.delete(fn); },
         _sent: sent,
+        _count(event) { return eventListeners.get(event)?.size ?? 0; },
+        _emit(event) {
+            for (const fn of [...(eventListeners.get(event) || [])]) {
+                try { fn(); } catch { /* swallow */ }
+            }
+        },
         _destroy() {
             if (destroyed) return;
             destroyed = true;
-            for (const fn of eventListeners.get('destroyed') || []) {
-                try { fn(); } catch { /* swallow */ }
-            }
+            wc._emit('destroyed');
         },
     };
     return wc;
@@ -173,6 +179,29 @@ assert.equal(
 );
 
 detach2();
+
+// --- 4b. Reload and crash end the document too; the next message rebuilds ---
+
+resetRegistry();
+const ipc4 = createFakeIpcMain();
+const detach4 = attachSignerBridgeListener({ ipcMain: ipc4 });
+const wc4 = createFakeWebContents(404);
+const register4 = () => ipc4._emit('xchain-wallet:signer-bridge', { sender: wc4 }, {
+    kind: 'register', signerIds: ['sig-reload'],
+});
+for (const ev of ['did-navigate', 'render-process-gone']) {
+    register4();
+    const hung = bgSignerBridge.getTransport('sig-reload')({ op: 'signPsbt', payload: { signerId: 'sig-reload' } });
+    wc4._emit('did-navigate-in-page');
+    assert.ok(bgSignerBridge.getTransport('sig-reload'), 'an in-page navigation keeps the bridge');
+    wc4._emit(ev);
+    await assert.rejects(hung, /signer bridge disconnected/, `${ev} rejects in-flight requests`);
+    assert.equal(bgSignerBridge.getTransport('sig-reload'), null, `${ev} drops owned signerIds`);
+}
+register4();
+assert.equal(typeof bgSignerBridge.getTransport('sig-reload'), 'function', 'the new document re-registers');
+assert.equal(wc4._count('destroyed'), 1, 'each teardown removes its hooks, so they never pile up');
+detach4();
 
 // --- 5. detach() clears residual state --------------------------
 
