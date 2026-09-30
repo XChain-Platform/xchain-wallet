@@ -141,7 +141,9 @@ describe('testnet harness: venue fitness', () => {
         expect(report.price).toMatchObject({ usable: true, xchainUsdPrice: '2.00000000', oracleRound: 41 });
         // The probe's source is a fresh testnet address, not a literal.
         const quoted = venue.feeQuote.mock.calls[0][0];
-        expect(quoted).toMatchObject({ action: 'MINT', params: '0|XCHAIN|1' });
+        // A fee-bearing probe: a gas-tick MINT owes no fee and quotes no price.
+        expect(quoted.action).toBe('ISSUE');
+        expect(quoted.params).toMatch(/^0\|XCW[0-9A-F]{8}$/);
         expect(quoted.source).toMatch(/^tb1q/);
         expect([...touched]).toEqual(['status', 'feeQuote']);
     });
@@ -156,6 +158,21 @@ describe('testnet harness: venue fitness', () => {
             .toMatch(/7 blocks behind/);
         expect(testnetVerdict(healthyStatus({ last_block: { [TESTNET_COIN]: 2_900_000 } }), TESTNET_COIN, { now }))
             .toMatch(/WEDGED/);
+        // The explorer's declared future-block wait is a wait while its clear
+        // time is within the bound; beyond it, or without the state, the gap is a wedge.
+        const waiting = (clearsInSeconds, state = 'future_block_wait') => healthyStatus({
+            last_block: { [TESTNET_COIN]: 2_900_095 },
+            indexer_state: { [TESTNET_COIN]: state },
+            indexer_wait_clears_at: { [TESTNET_COIN]: new Date((NOW_SEC + clearsInSeconds) * 1000).toISOString() },
+        });
+        expect(testnetVerdict(waiting(40 * 60), TESTNET_COIN, { now })).toBeNull();
+        expect(testnetVerdict(waiting(5 * 3600), TESTNET_COIN, { now })).toMatch(/WEDGED/);
+        expect(testnetVerdict(waiting(40 * 60, 'live'), TESTNET_COIN, { now })).toMatch(/WEDGED/);
+        const noClear = waiting(40 * 60);
+        delete noClear.indexer_wait_clears_at;
+        expect(testnetVerdict(noClear, TESTNET_COIN, { now })).toMatch(/WEDGED/);
+        expect(testnetVerdict({ ...waiting(40 * 60), stale: { [TESTNET_COIN]: true } }, TESTNET_COIN, { now }))
+            .toMatch(/STALE/);
         // The explorer's own flag missing, the age ceiling still catches a tip four hours old.
         const old = healthyStatus({ last_block_time: { [TESTNET_COIN]: NOW_SEC - 4 * 3600 } });
         delete old.stale;

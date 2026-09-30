@@ -46,6 +46,7 @@
 // same "Bitcoin" the regtest fixture keys its page walks on, which is why the
 // UI helpers below are shared with it rather than copied.
 
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -95,6 +96,13 @@ export const DEFAULT_FEE_RATE = 2;
  * is honoured first and this is the ceiling behind it.
  */
 export const MAX_TIP_AGE_SECONDS = 3 * 60 * 60;
+
+/**
+ * The longest declared future-block wait accepted as a wait. Consensus lets a
+ * block's timestamp run up to two hours ahead, so a clear time past three is
+ * not a timestamp wait and is judged by the height checks instead.
+ */
+export const MAX_FUTURE_WAIT_SECONDS = 3 * 60 * 60;
 
 /** A public chain is polled, never mined, so the cadence is a block's order of magnitude. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -180,6 +188,19 @@ export function testnetVerdict(status, coin = TESTNET_COIN, opts = {}) {
     if (typeof lag !== 'number') {
         return `Explorer answered but reports no ${coin} chain.`;
     }
+    // A future_block_wait is the indexer declining a block stamped ahead of
+    // the wall clock until the clock passes it, which testnet4 miners produce
+    // for hours at a time; measured 2026-09-30, blocks arrived about 40 minutes
+    // ahead and indexed trailed the tip by 5 to 8 while lag read 0. The explorer
+    // publishes the state and when it clears, so a wait that clears within the
+    // bound is a wait the specs' own poll budgets absorb, not a wedge. A clear
+    // time that is missing or beyond the bound falls through to the checks below.
+    const waitClears = Date.parse(status?.indexer_wait_clears_at?.[coin]);
+    const nowMs = (opts.now ?? Date.now)();
+    if (status?.indexer_state?.[coin] === 'future_block_wait' && Number.isFinite(waitClears)
+        && waitClears - nowMs <= (opts.maxFutureWaitSeconds ?? MAX_FUTURE_WAIT_SECONDS) * 1000) {
+        return null;
+    }
     const tip = status?.chain_tip?.[coin];
     const indexed = status?.last_block?.[coin];
     if (typeof tip === 'number' && typeof indexed === 'number' && tip - indexed > 2) {
@@ -201,8 +222,14 @@ export function testnetVerdict(status, coin = TESTNET_COIN, opts = {}) {
 }
 
 /**
- * Read-only venue check: reachable, fit, and able to price a MINT of the gas
- * tick. Throws naming the cause; returns what the run is starting against.
+ * Read-only venue check: reachable, fit, and able to price a fee-bearing
+ * action. Throws naming the cause; returns what the run is starting against.
+ *
+ * The probe is an ISSUE of a fresh random tick, the regtest fixture's probe.
+ * A MINT of the gas tick owes no protocol fee, and a zero-fee quote returns
+ * before any oracle price is read, so it carries no price fields on a venue
+ * that prices perfectly well (measured 2026-09-30 on testnet: MINT xchainFee
+ * 0 with no prices, a fresh ISSUE priced off oracle round 4846).
  *
  * The price probe quotes from a key generated for the call and thrown away,
  * because the quote needs SOME source address and this file names none. It
@@ -228,13 +255,14 @@ export async function checkTestnetVenue(venue, opts = {}) {
 
     let body;
     try {
-        body = await venue.feeQuote({ action: 'MINT', params: `0|${GAS_TICK}|1`, source });
+        const tick = `XCW${randomBytes(4).toString('hex').toUpperCase()}`;
+        body = await venue.feeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
     } catch (err) {
         throw new Error(`Testnet venue cannot be priced: /feequote did not answer: ${err?.message || err}`);
     }
     const price = priceVerdict(body);
     if (!price.usable) {
-        throw new Error(`Testnet venue cannot price a ${GAS_TICK} MINT: ${price.reason}`);
+        throw new Error(`Testnet venue cannot price a fee-bearing action (ISSUE): ${price.reason}`);
     }
     return {
         tip: status?.chain_tip?.[TESTNET_COIN] ?? null,
