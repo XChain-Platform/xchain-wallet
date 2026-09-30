@@ -190,6 +190,7 @@ async function displayedBalance(page, tick) {
 async function expectHomeBalance(page, tick, expected) {
     await gotoSection(page, 'Home');
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
+    await page.getByRole('tab', { name: 'Tokens', exact: true }).click();
     await expect.poll(() => displayedBalance(page, tick), {
         timeout: 90_000,
         message: `Home did not show ${expected} ${tick}`,
