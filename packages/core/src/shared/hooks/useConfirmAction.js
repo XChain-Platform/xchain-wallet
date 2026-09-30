@@ -80,7 +80,7 @@ export function useConfirmAction() {
     // PSBT whose coins someone else can spend.
     const composedStampRef = useRef(0);
     const sessionIdRef = useRef(null);
-    const releasedEncoderReservationsRef = useRef(new Set());
+    const releasedEncoderInputsRef = useRef(new Set());
 
     const [phase, setPhase] = useState(/** @type {ConfirmPhase} */('idle'));
     const [composing, setComposing] = useState(false);
@@ -100,11 +100,7 @@ export function useConfirmAction() {
         if (activeInstanceId === instanceId) {
             activeInstanceId = null;
             if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
-            releaseEncoderReservation(
-                optsRef.current?.encoderClient,
-                encoderReservationIdOf(composedRef.current),
-                releasedEncoderReservationsRef.current,
-            );
+            releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
         }
     }, [instanceId]);
 
@@ -178,7 +174,6 @@ export function useConfirmAction() {
      *   instead of signing.
      * @param {boolean} [args.alwaysCheckInputs]    force the liveness probe regardless of PSBT age (the resume path)
      * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session] §5.4 confirm-session store
-     * @param {{ releaseInputs?: (reservationId: string) => Promise<any> }} [args.encoderClient] encoder client that built the composed transaction
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
      *   How to finish this confirm WITHOUT its originating form. Supplying it is
      *   what opts the surface into persistence: `software`/`hardware` are
@@ -228,11 +223,7 @@ export function useConfirmAction() {
                     return;
                 }
                 if (controller.signal.aborted) {
-                    releaseEncoderReservation(
-                        args.encoderClient,
-                        encoderReservationIdOf(built),
-                        releasedEncoderReservationsRef.current,
-                    );
+                    releaseEncoderInputs(built, releasedEncoderInputsRef.current);
                     settleReject(new UserRejectedError());
                     return;
                 }
@@ -483,11 +474,7 @@ export function useConfirmAction() {
     }, [report, acknowledged, instanceId, settleResolve, settleReject]);
 
     const reject = useCallback(() => {
-        releaseEncoderReservation(
-            optsRef.current?.encoderClient,
-            encoderReservationIdOf(composedRef.current),
-            releasedEncoderReservationsRef.current,
-        );
+        releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
         settleReject(new UserRejectedError());
         setPhase('idle');
     }, [settleReject]);
@@ -505,16 +492,13 @@ export function useConfirmAction() {
     };
 }
 
-function releaseEncoderReservation(client, reservationId, released) {
-    if (!reservationId || typeof client?.releaseInputs !== 'function' || released.has(reservationId)) return;
-    released.add(reservationId);
+function releaseEncoderInputs(composed, released) {
+    const release = composed?.releaseEncoderInputs;
+    if (typeof release !== 'function' || released.has(release)) return;
+    released.add(release);
     try {
-        Promise.resolve(client.releaseInputs(reservationId)).catch(() => {});
+        Promise.resolve(release()).catch(() => {});
     } catch { /* best-effort */ }
-}
-
-function encoderReservationIdOf(composed) {
-    return composed?.expectedOutputs?.encoderReservationId ?? null;
 }
 
 // Only the caller's explicit pending deltas are gathered here. In-flight
