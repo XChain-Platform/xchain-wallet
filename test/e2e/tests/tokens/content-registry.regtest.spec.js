@@ -375,11 +375,12 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             if (await listPassword.count() > 0 && await listPassword.isVisible()) await listPassword.fill(PASSWORD);
             await rosterMain.getByRole('button', { name: 'Publish list', exact: true }).click();
 
-            // ProjectRosterForm signs both of its legs from its own review screens;
-            // unlike the attach-content and Link forms it never opens the shared
-            // confirm modal, so there is no Approve to press here. It goes straight
-            // to "List is on its way", which the index poll can clear before a
-            // check for it would run, so the wait is on the next leg's button.
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            await page.getByTestId('confirm-approve').click();
+
+            // After Approve the form shows "List is on its way", which the index
+            // poll can clear before a check for it runs, so the wait is on the next
+            // leg's button.
             const officialButton = page.getByRole('button', { name: 'Make it official', exact: true });
             const deadline = Date.now() + 300_000;
             while (Date.now() < deadline) {
@@ -395,6 +396,8 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const linkPassword = page.getByRole('main').getByLabel('Password', { exact: true });
             if (await linkPassword.count() > 0 && await linkPassword.isVisible()) await linkPassword.fill(PASSWORD);
             await officialButton.click();
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            await page.getByTestId('confirm-approve').click();
 
             const rosterLinkTxid = await readLabelledTxid(page, 'Official list published');
             const listTxid = await readLabelledTxid(page, 'Official list published', 'List transaction');
