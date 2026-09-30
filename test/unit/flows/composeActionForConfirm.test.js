@@ -544,8 +544,9 @@ describe('composeActionForConfirm host envelope shape', () => {
     // from BOTH the typedef and the return passes it. This one reads the
     // producer's typedef and holds every field to "carried or dropped on purpose".
     const DROPPED = [
-        'encoderOpts',     // ADS-folded build opts; host-side only
-        'carrierScripts',  // consumed by the host tamper check
+        'encoderOpts',          // ADS-folded build opts; host-side only
+        'carrierScripts',       // consumed by the host tamper check
+        'releaseEncoderInputs', // function cannot cross the host messaging envelope
     ];
 
     function composedActionKeys() {
