@@ -323,6 +323,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const needsAdd = toAdd.length > 0;
     const needsRemove = toRemove.length > 0;
     const twoPhase = needsAdd && needsRemove;
+    const firstTransactionLabel = twoPhase
+        ? 'First transaction (add)'
+        : needsRemove ? 'Fork transaction (remove)' : 'Fork transaction';
 
     function toggleKeep(item) {
         setKeep((prev) => {
@@ -647,7 +650,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 <h2 className={styles.successTitle}>Fork submitted</h2>
                 {tx1Txid ? (
                     <>
-                        <p className={styles.successLabel}>{needsAdd && !twoPhase ? 'Fork transaction' : 'First transaction (add)'}</p>
+                        <p className={styles.successLabel}>{firstTransactionLabel}</p>
                         <code className={styles.txid}>{tx1Txid}</code>
                     </>
                 ) : null}
@@ -724,7 +727,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             <>
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>First transaction</dt>
+                    <dt className={styles.detailsLabel}>{firstTransactionLabel}</dt>
                     <dd className={styles.detailsValue}><code className={styles.txid}>{tx1Txid}</code></dd>
                     <dt className={styles.detailsLabel}>Elapsed</dt>
                     <dd className={styles.detailsValue}>{minutes > 0 ? `${minutes} min ${waitElapsed % 60}s` : `${waitElapsed}s`}</dd>
