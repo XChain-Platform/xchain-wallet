@@ -272,6 +272,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             const ownerXchainBefore = await tokenBalance(owner, PAYOUT_TICK);
             const holderXchainBefore = await tokenBalance(holder, PAYOUT_TICK);
             const expectedHolderPayout = HOLDER_UNITS * PAYOUT_AMOUNT;
+            const expectedOwnerXchainAfter = ownerXchainBefore - expectedHolderPayout;
             expect(holderXchainBefore).toBe(0);
 
             await mineToHeight(callbackBlock);
@@ -304,9 +305,12 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await waitForExactBalance(holder, PAYOUT_TICK, holderXchainBefore + expectedHolderPayout);
             await waitForExactBalance(holder, TICK, 0);
             await waitForExactBalance(owner, TICK, SUPPLY);
-            ownerXchainAfter = await tokenBalance(owner, PAYOUT_TICK);
-            expect(ownerXchainAfter).toBeGreaterThan(0);
-            expect(ownerXchainAfter).toBeLessThan(ownerXchainBefore);
+            ownerXchainAfter = await waitForExactBalance(
+                owner,
+                PAYOUT_TICK,
+                expectedOwnerXchainAfter,
+            );
+            expect(ownerXchainAfter).toBe(expectedOwnerXchainAfter);
         });
 
         await test.step('both wallet UIs agree with the indexed payout balances', async () => {
