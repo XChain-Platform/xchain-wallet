@@ -13,6 +13,7 @@ import {
 } from '../../fixtures/wallet.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
+    callbackBlockAhead,
     explorerJson,
     expectConfirmModal,
     fundAddress,
@@ -232,7 +233,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await pickManageMore(main, 'Callback settings');
             main = ownerPage.getByRole('main');
             await expect(main.getByLabel('Callback token')).toBeVisible({ timeout: 30_000 });
-            callbackBlock = (await readCurrentHeight(main)) + 2;
+            callbackBlock = await callbackBlockAhead(await readCurrentHeight(main));
             await main.getByLabel('Callback token').fill(PAYOUT_TICK);
             await main.getByLabel('Payout per unit').fill(String(PAYOUT_AMOUNT));
             await main.getByLabel('Callback allowed from block').fill(String(callbackBlock));
