@@ -25,6 +25,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { preferredSourceId } from '../addressSelection.js';
+import { listFormatSupport } from '../../flows/listFormatSupport.js';
 import { findListOwner } from '../../flows/listMembership.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -112,14 +113,14 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
 
     useEffect(() => {
         let cancelled = false;
-        Promise.resolve().then(() => messaging.getActionFormats({ chainId, action: 'LIST' }))
-            .then((formats) => {
-                if (!cancelled) setSdkSupported(Boolean(
-                    formats
-                    && typeof formats === 'object'
-                    && Object.hasOwn(formats, '2')
-                    && Object.hasOwn(formats, '3'),
-                ));
+        const sdkRegistry = {
+            get: () => ({
+                getActionFormats: (action) => messaging.getActionFormats({ chainId, action }),
+            }),
+        };
+        Promise.resolve().then(() => listFormatSupport({ sdkRegistry, chainId }))
+            .then((support) => {
+                if (!cancelled) setSdkSupported(support?.transfer === true);
             })
             .catch(() => { if (!cancelled) setSdkSupported(false); });
         return () => { cancelled = true; };

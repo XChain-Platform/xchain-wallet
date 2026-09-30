@@ -12,6 +12,12 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+const listFormatSupport = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../packages/core/src/flows/listFormatSupport.js', () => ({
+    listFormatSupport,
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListTransferForm } from '../../../packages/core/src/shared/routes/ListTransferForm.jsx';
 
@@ -41,7 +47,7 @@ const COMPOSED = Object.freeze({
     version: 1,
 });
 
-function makeMessaging({ supported = true, walletMode = 'full' } = {}) {
+function makeMessaging({ walletMode = 'full' } = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ACTIVE_RECORD, OWNER_RECORD] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ACTIVE_RECORD.id } }),
@@ -53,13 +59,11 @@ function makeMessaging({ supported = true, walletMode = 'full' } = {}) {
             source: OWNER,
             state: { owner: OWNER },
         }),
-        getActionFormats: vi.fn().mockResolvedValue(supported
-            ? {
-                0: 'VERSION|TYPE|MEMO|...ITEM',
-                2: 'VERSION|LIST_ACTION_INDEX|MEMO',
-                3: 'VERSION|LIST_ACTION_INDEX|DESTINATION|MEMO',
-            }
-            : { 0: 'VERSION|TYPE|MEMO|...ITEM' }),
+        getActionFormats: vi.fn().mockResolvedValue({
+            0: 'VERSION|TYPE|MEMO|...ITEM',
+            2: 'VERSION|LIST_ACTION_INDEX|MEMO',
+            3: 'VERSION|LIST_ACTION_INDEX|DESTINATION|MEMO',
+        }),
         composeForConfirm: vi.fn().mockResolvedValue(COMPOSED),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         createList: vi.fn().mockResolvedValue({ txid: 'transfer-txid' }),
@@ -73,7 +77,8 @@ function makeMessaging({ supported = true, walletMode = 'full' } = {}) {
     });
 }
 
-function mount(options) {
+function mount({ support = { share: true, transfer: true, union: true }, ...options } = {}) {
+    listFormatSupport.mockResolvedValue(support);
     const messaging = makeMessaging(options);
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -163,10 +168,18 @@ describe('ListTransferForm', () => {
         });
     });
 
-    it('renders disabled with the SDK reason when format 3 is unavailable', async () => {
-        mount({ supported: false });
+    it.each([
+        ['false', { share: true, transfer: false, union: true }],
+        ['absent', { share: true, union: true }],
+    ])('renders disabled with the SDK reason when transfer support is %s', async (_case, support) => {
+        const messaging = mount({ support });
 
         expect(await screen.findByText(/SDK cannot build a list transfer yet/)).toBeTruthy();
+        expect(listFormatSupport).toHaveBeenCalledWith({
+            sdkRegistry: expect.objectContaining({ get: expect.any(Function) }),
+            chainId: CHAIN,
+        });
+        expect(messaging.getActionFormats).not.toHaveBeenCalled();
         expect(screen.getByLabelText('Destination').disabled).toBe(true);
         expect(screen.getByLabelText('Type TRANSFER to confirm').disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
