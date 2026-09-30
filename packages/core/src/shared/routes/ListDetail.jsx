@@ -49,8 +49,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
  * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null, source: string | null, parentIndex: string | null }) => void} props.onFork
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onShare]     shows "Share list" when passed
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]  shows "Transfer list" when passed
  */
-export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
+export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -210,6 +212,16 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                 >
                     Fork &amp; edit
                 </Button>
+                {onShare ? (
+                    <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
+                        Share list
+                    </Button>
+                ) : null}
+                {onTransfer ? (
+                    <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
+                        Transfer list
+                    </Button>
+                ) : null}
             </div>
         </>,
     );
