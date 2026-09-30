@@ -74,6 +74,15 @@ function fmtPct(pct) {
     return `${pct > 0 ? '+' : ''}${rounded}%`;
 }
 
+function staleAgeText(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return 'age unknown';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours >= 1) return `${hours}h ${minutes}m old`;
+    if (minutes >= 1) return `${minutes}m old`;
+    return 'under a minute old';
+}
+
 /**
  * "My oracle" surface (PC-30): publish and manage PRICE v1 quotes.
  *
@@ -212,15 +221,22 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     }, [feeds, tick, fiat, priceCoin]);
 
     // "Prior published value" for the deviation check is the newest quote on
-    // this pair, pending included. A pending row is what the pair is about to
-    // be worth, so comparing against the older live one would understate a
-    // second correction made inside the same 24h window.
-    const priorQuote = currentFeed ? (currentFeed.pending || currentFeed.live) : null;
+    // this pair, whether pending, live or stale. A pending row is what the pair
+    // is about to be worth, so comparing against an older effective row would
+    // understate a second correction made inside the same 24h window.
+    const priorQuote = currentFeed
+        ? (currentFeed.pending || currentFeed.live || currentFeed.stale)
+        : null;
     const isFirstPublish = !currentFeed;
     // The deviation basis may be a quote still maturing, and nothing sells at
     // a pending price, so the wording must not call it current.
     const hasLiveQuote = !!currentFeed?.live;
-    const priorLabel = priorQuote && priorQuote === currentFeed?.pending ? 'Pending price' : 'Current price';
+    const hasStaleQuote = !!currentFeed?.stale;
+    const priorLabel = priorQuote === currentFeed?.pending
+        ? 'Pending price'
+        : priorQuote === currentFeed?.stale
+            ? 'Stale price'
+            : 'Current price';
     const deviationPct = quoteDeviationPct(priorQuote?.value, value.trim());
     const needsTypedConfirm = deviationPct != null
         && Math.abs(deviationPct) > DEVIATION_TYPED_CONFIRM_PCT;
@@ -279,7 +295,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         setCoinPick(feed.coin && feed.coin !== coinTicker ? feed.coin : '');
         setTicker(feed.tick);
         setFiat(feed.fiat);
-        const source = feed.pending || feed.live;
+        const source = feed.pending || feed.live || feed.stale;
         setValue(source?.value ? String(source.value) : '');
         setFee(source?.fee ? String(source.fee) : '');
         setFormError(null);
@@ -408,6 +424,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         <OraclePublishNotes
             isFirstPublish={isFirstPublish}
             hasLiveQuote={hasLiveQuote}
+            hasStaleQuote={hasStaleQuote}
             priorQuote={priorQuote}
             priorLabel={priorLabel}
             fiat={fiat}
@@ -597,6 +614,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 <ul>
                     {feeds.map((f) => {
                         const countdown = activationCountdownText(f.pending?.secondsUntilEffective);
+                        const staleAge = staleAgeText(f.stale?.secondsSinceEffective);
+                        const effectiveQuote = f.live || f.stale;
                         const count = consumerCountFor(f);
                         return (
                             <li key={f.key} className={styles.hint}>
@@ -606,11 +625,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                                 {': '}
                                 {f.live
                                     ? `${f.live.value} ${f.fiat} live`
-                                    : 'nothing live yet'}
+                                    : f.stale
+                                        ? `${f.stale.value} ${f.fiat} stale (${staleAge})`
+                                        : 'nothing live yet'}
                                 {f.pending
                                     ? `, ${f.pending.value} ${f.fiat} starts in ${countdown || 'moments'}`
                                     : ''}
-                                {f.live?.fee ? ` · fee ${f.live.fee}` : ''}
+                                {effectiveQuote?.fee ? ` · fee ${effectiveQuote.fee}` : ''}
                                 {count != null ? ` · ${count} dispenser${count === 1 ? '' : 's'}` : ''}
                             </li>
                         );
@@ -658,7 +679,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             {priorQuote ? (
                 <p className={styles.hint}>
                     Currently published: {priorQuote.value} {fiat}
-                    {priorQuote.effective ? '' : ` (not in effect yet${
+                    {priorQuote === currentFeed?.stale
+                        ? ` (stale, ${staleAgeText(priorQuote.secondsSinceEffective)})`
+                        : priorQuote.effective ? '' : ` (not in effect yet${
                         activationCountdownText(priorQuote.secondsUntilEffective)
                             ? `, starts in ${activationCountdownText(priorQuote.secondsUntilEffective)}`
                             : ''})`}
@@ -721,7 +744,7 @@ function DetailRow({ label, value }) {
  * reprice. Rendered on the confirm page and on the watcher review alike.
  */
 function OraclePublishNotes({
-    isFirstPublish, hasLiveQuote, priorQuote, priorLabel, fiat, tick, deviationPct,
+    isFirstPublish, hasLiveQuote, hasStaleQuote, priorQuote, priorLabel, fiat, tick, deviationPct,
     needsTypedConfirm, typedConfirm, onTypedConfirmChange,
     consumers, pairConsumers, crossChain, priceCoin,
 }) {
@@ -731,7 +754,11 @@ function OraclePublishNotes({
                 <dl className={styles.detailsList}>
                     <DetailRow
                         label={priorLabel}
-                        value={`${priorQuote.value} ${fiat}${deviationPct != null ? ` (${fmtPct(deviationPct)})` : ''}`}
+                        value={`${priorQuote.value} ${fiat}${
+                            priorLabel === 'Stale price'
+                                ? ` (${staleAgeText(priorQuote.secondsSinceEffective)})`
+                                : ''
+                        }${deviationPct != null ? ` (${fmtPct(deviationPct)})` : ''}`}
                     />
                 </dl>
             ) : null}
@@ -747,6 +774,8 @@ function OraclePublishNotes({
                         ? 'A dispenser pointed at this oracle before then cannot settle at all; every attempt is recorded invalid. Publish a day before you need buyers.'
                         : hasLiveQuote
                             ? 'The current price keeps selling until this one matures, and the only way to correct a mistake is another publish, which also takes 24 hours.'
+                            : hasStaleQuote
+                                ? 'The previous effective price is stale, so nothing sells on this pair until a pending price matures. The only way to correct a mistake is another publish, which also takes 24 hours.'
                             : 'Nothing sells on this pair yet: your earlier price is still pending and takes effect first, then this one replaces it. The only way to correct a mistake is another publish, which also takes 24 hours.'}
                 </p>
             </div>
