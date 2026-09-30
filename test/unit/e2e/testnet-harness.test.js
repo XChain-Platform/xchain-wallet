@@ -141,7 +141,9 @@ describe('testnet harness: venue fitness', () => {
         expect(report.price).toMatchObject({ usable: true, xchainUsdPrice: '2.00000000', oracleRound: 41 });
         // The probe's source is a fresh testnet address, not a literal.
         const quoted = venue.feeQuote.mock.calls[0][0];
-        expect(quoted).toMatchObject({ action: 'MINT', params: '0|XCHAIN|1' });
+        // A fee-bearing probe: a gas-tick MINT owes no fee and quotes no price.
+        expect(quoted.action).toBe('ISSUE');
+        expect(quoted.params).toMatch(/^0\|XCW[0-9A-F]{8}$/);
         expect(quoted.source).toMatch(/^tb1q/);
         expect([...touched]).toEqual(['status', 'feeQuote']);
     });

@@ -46,6 +46,7 @@
 // same "Bitcoin" the regtest fixture keys its page walks on, which is why the
 // UI helpers below are shared with it rather than copied.
 
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -221,8 +222,14 @@ export function testnetVerdict(status, coin = TESTNET_COIN, opts = {}) {
 }
 
 /**
- * Read-only venue check: reachable, fit, and able to price a MINT of the gas
- * tick. Throws naming the cause; returns what the run is starting against.
+ * Read-only venue check: reachable, fit, and able to price a fee-bearing
+ * action. Throws naming the cause; returns what the run is starting against.
+ *
+ * The probe is an ISSUE of a fresh random tick, the regtest fixture's probe.
+ * A MINT of the gas tick owes no protocol fee, and a zero-fee quote returns
+ * before any oracle price is read, so it carries no price fields on a venue
+ * that prices perfectly well (measured 2026-09-30 on testnet: MINT xchainFee
+ * 0 with no prices, a fresh ISSUE priced off oracle round 4846).
  *
  * The price probe quotes from a key generated for the call and thrown away,
  * because the quote needs SOME source address and this file names none. It
@@ -248,13 +255,14 @@ export async function checkTestnetVenue(venue, opts = {}) {
 
     let body;
     try {
-        body = await venue.feeQuote({ action: 'MINT', params: `0|${GAS_TICK}|1`, source });
+        const tick = `XCW${randomBytes(4).toString('hex').toUpperCase()}`;
+        body = await venue.feeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
     } catch (err) {
         throw new Error(`Testnet venue cannot be priced: /feequote did not answer: ${err?.message || err}`);
     }
     const price = priceVerdict(body);
     if (!price.usable) {
-        throw new Error(`Testnet venue cannot price a ${GAS_TICK} MINT: ${price.reason}`);
+        throw new Error(`Testnet venue cannot price a fee-bearing action (ISSUE): ${price.reason}`);
     }
     return {
         tip: status?.chain_tip?.[TESTNET_COIN] ?? null,
