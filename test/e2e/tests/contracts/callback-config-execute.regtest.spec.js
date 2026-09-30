@@ -36,12 +36,10 @@
 // arithmetic itself; that is a second token's holder ledger and belongs
 // to its own spec, not this one.
 //
-// THE BLOCK-HEIGHT GATE IS READ OFF THE FORM, NOT GUESSED. "Callback
-// settings" prints "Current block on <chain>: N." once the wallet's own
-// indexer watermark loads; CALLBACK_BLOCK is set to N + 2 from that
-// printed value; XCHAIN, N, and REGTEST_COIN change if this venue is
-// idle for a while, but N + 2 always reaches "reached" state within two
-// mined blocks. The confirm gate this spec is proving (§ CallbackForm
+// THE BLOCK-HEIGHT GATE USES BOTH FORM AND CHAIN HEIGHTS. "Callback
+// settings" prints the wallet indexer watermark; the callback block is
+// five blocks past the larger of that watermark and the explorer's chain
+// tip. The confirm gate this spec is proving (§ CallbackForm
 // `blockReached`) needs the WALLET's own watermark to have moved to it, so
 // this spec re-fetches the token detail (a fresh ManageToken mount) after
 // mining, rather than trusting the block was reached because two blocks
@@ -49,6 +47,7 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    callbackBlockAhead,
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -237,7 +236,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
 
             const currentHeight = await readCurrentHeightFromForm(main);
-            cbBlock = currentHeight + 2;
+            cbBlock = await callbackBlockAhead(currentHeight);
 
             await main.getByLabel('Callback token').fill(PAYOUT_TICK);
             await main.getByLabel('Payout per unit').fill(PAYOUT_AMOUNT);
