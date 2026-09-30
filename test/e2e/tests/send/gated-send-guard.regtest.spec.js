@@ -245,6 +245,9 @@ test.describe('the PC-26 gated SEND guard', () => {
                 await reviewPassword.fill(PASSWORD);
             }
             await main.getByRole('button', { name: 'Sign and publish' }).click();
+            await expectConfirmModal(issuer, 'the gated publish', 60_000);
+            await expect(issuer.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
+            await issuer.getByTestId('confirm-approve').click();
 
             await expect(main.getByText('Encrypted file published')).toBeVisible({ timeout: 120_000 });
             const txt = await main.innerText();
