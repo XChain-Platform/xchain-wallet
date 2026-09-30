@@ -58,18 +58,23 @@ export function currentListMemberCount(detail) {
 }
 
 /**
- * The address that created the root of a list's edit chain, which is the only
- * address whose edits count once owner-only list edits activate.
+ * The current owner of a list's edit chain, which is the only address whose
+ * edits count once owner-only list edits activate.
  *
- * Walks `list_action_index` parents from `detail` up to the create, reading each
- * parent with `readList`. Returns null when any step cannot be read, so a caller
- * shows no owner claim rather than a wrong one.
+ * Uses `state.owner` when the explorer reports it. Older explorers do not, so
+ * their rows fall back to walking `list_action_index` parents up to the create.
+ * Returns null when any step cannot be read, so a caller shows no owner claim
+ * rather than a wrong one.
  *
  * @param {{ detail: any, readList: (actionIndex: string) => Promise<any> }} args
  * @returns {Promise<string | null>}
  */
 export async function findListOwner({ detail, readList }) {
     let row = detail;
+    const state = row && typeof row === 'object' && row.state && typeof row.state === 'object'
+        ? row.state
+        : null;
+    if (state && typeof state.owner === 'string' && state.owner) return state.owner;
     const seen = new Set();
     for (let hop = 0; hop < MAX_PARENT_HOPS; hop += 1) {
         if (!row || typeof row !== 'object') return null;

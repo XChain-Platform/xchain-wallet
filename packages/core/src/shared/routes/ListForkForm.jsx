@@ -148,18 +148,19 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     // The list's owner: undefined while resolving, null when it cannot be read.
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
 
-    // Walk from the list being forked up to its root create, whose SOURCE owns
-    // every edit in the chain. ListDetail hands over the row it already read.
+    // Prefer the explorer's current owner, then walk to the root create for
+    // older explorers that do not report one.
     useEffect(() => {
         let cancelled = false;
-        // An older host build without the list read yields no owner claim
+        // An older host build without the list read falls back to the row data
+        // that ListDetail supplied.
         const readList = (idx) => (typeof messaging.getListByActionIndex === 'function'
             ? messaging.getListByActionIndex({ chainId, actionIndex: idx })
             : Promise.reject(new Error('list read unavailable')));
-        const known = listRef.source !== undefined || listRef.parentIndex !== undefined;
-        const start = known
-            ? Promise.resolve({ source: listRef.source, list_action_index: listRef.parentIndex })
-            : Promise.resolve().then(() => readList(String(oldIndex)));
+        const supplied = { source: listRef.source, list_action_index: listRef.parentIndex };
+        const start = typeof messaging.getListByActionIndex === 'function'
+            ? Promise.resolve().then(() => readList(String(oldIndex))).then((detail) => detail || supplied)
+            : Promise.resolve(supplied);
         start
             .then((detail) => findListOwner({ detail, readList }))
             .then((o) => { if (!cancelled) setOwner(o); })
@@ -599,8 +600,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             title={stage === 'review-1' ? 'Review add/remove'
                 : stage === 'wait-index' ? 'Waiting for fork to be indexed'
                     : stage === 'review-2' ? 'Review remove'
-                        : stage === 'repoint' ? 'Fork published'
-                            : 'Fork & edit list'}
+                        : stage === 'repoint' ? 'Edit published'
+                            : 'Edit list'}
         />
     );
     const wrap = (children) => (
@@ -683,34 +684,34 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     </p>
                 )}
 
-                <h3 className={styles.successLabel}>
-                    {resolution === true ? 'Repoint (optional)' : 'Now referenced by'}
-                </h3>
-                <p className={styles.hint}>
-                    {resolution === true
-                        ? `Gates, dispensers, and orders that reference list #${oldIndex} already follow this edit, so nothing needs repointing. Open one only to point it at a different list:`
-                        : `Every gate, dispenser, and order that references list #${oldIndex} keeps using its membership until someone repoints it at the new fork. Repoint from each consumer's own edit screen:`}
-                </p>
-                <ul className={styles.detailsList} style={{ display: 'block' }}>
-                    {REPOINT_TARGETS.map((t) => {
-                        const open = t.built ? repointHandlers[t.id] : undefined;
-                        return (
-                            <li key={t.id} style={{ padding: '4px 0' }}>
-                                <Button type="button" variant="ghost" disabled={!open} onClick={open}>
-                                    {t.label}
-                                </Button>
-                            </li>
-                        );
-                    })}
-                </ul>
                 {resolution === true ? null : (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
-                            {resolution === false
-                                ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
-                                : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                    <>
+                        <h3 className={styles.successLabel}>Now referenced by</h3>
+                        <p className={styles.hint}>
+                            Every gate, dispenser, and order that references list #{oldIndex} keeps using its
+                            membership until someone repoints it at the new fork. Repoint from each consumer&apos;s
+                            own edit screen:
                         </p>
-                    </div>
+                        <ul className={styles.detailsList} style={{ display: 'block' }}>
+                            {REPOINT_TARGETS.map((t) => {
+                                const open = t.built ? repointHandlers[t.id] : undefined;
+                                return (
+                                    <li key={t.id} style={{ padding: '4px 0' }}>
+                                        <Button type="button" variant="ghost" disabled={!open} onClick={open}>
+                                            {t.label}
+                                        </Button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                {resolution === false
+                                    ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
+                                    : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                            </p>
+                        </div>
+                    </>
                 )}
 
                 <div className={styles.actions}>
