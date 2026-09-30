@@ -201,6 +201,11 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             await claim.click();
 
             const main = page.getByRole('main');
+            // Type only once the form knows the pending total. Until then the
+            // field reads "Loading…" and a submit carries no AMOUNT, which the
+            // chain takes as a claim of everything (seen 2026-09-30: 1 typed,
+            // COLLECT|0 paid 130).
+            await expect(main.getByText(/XCHAIN available$/)).toBeVisible({ timeout: 120_000 });
             await main.getByRole('textbox', { name: /^Amount/ }).fill(amount);
             await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
             await approve(page);
