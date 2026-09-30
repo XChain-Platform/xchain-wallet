@@ -8,6 +8,21 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { listActions } from './sdkIntrospection.js';
+
+function tickCoinProbeRegistry(sdkRegistry) {
+    return {
+        get(chainId) {
+            const sdk = sdkRegistry.get(chainId);
+            return {
+                getActions: () => (typeof sdk?.isListTickCoinActive === 'function'
+                    ? sdk.isListTickCoinActive()
+                    : false),
+            };
+        },
+    };
+}
+
 /**
  * Whether the chain's SDK reports the list tick-coin activation. SDK builds
  * that predate the probe have no such method and answer false.
@@ -17,9 +32,11 @@
  */
 export async function listTickCoinSupport({ sdkRegistry, chainId }) {
     try {
-        const sdk = sdkRegistry.get(chainId);
-        if (typeof sdk?.isListTickCoinActive !== 'function') return false;
-        return (await sdk.isListTickCoinActive()) === true;
+        const active = await listActions({
+            sdkRegistry: tickCoinProbeRegistry(sdkRegistry),
+            chainId,
+        });
+        return active === true;
     } catch {
         return false;
     }
