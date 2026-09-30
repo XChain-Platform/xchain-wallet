@@ -96,6 +96,13 @@ export const DEFAULT_FEE_RATE = 2;
  */
 export const MAX_TIP_AGE_SECONDS = 3 * 60 * 60;
 
+/**
+ * The longest declared future-block wait accepted as a wait. Consensus lets a
+ * block's timestamp run up to two hours ahead, so a clear time past three is
+ * not a timestamp wait and is judged by the height checks instead.
+ */
+export const MAX_FUTURE_WAIT_SECONDS = 3 * 60 * 60;
+
 /** A public chain is polled, never mined, so the cadence is a block's order of magnitude. */
 export const POLL_INTERVAL_MS = 30_000;
 
@@ -179,6 +186,19 @@ export function testnetVerdict(status, coin = TESTNET_COIN, opts = {}) {
     const lag = status?.chain_lag_blocks?.[coin];
     if (typeof lag !== 'number') {
         return `Explorer answered but reports no ${coin} chain.`;
+    }
+    // A future_block_wait is the indexer declining a block stamped ahead of
+    // the wall clock until the clock passes it, which testnet4 miners produce
+    // for hours at a time; measured 2026-09-30, blocks arrived about 40 minutes
+    // ahead and indexed trailed the tip by 5 to 8 while lag read 0. The explorer
+    // publishes the state and when it clears, so a wait that clears within the
+    // bound is a wait the specs' own poll budgets absorb, not a wedge. A clear
+    // time that is missing or beyond the bound falls through to the checks below.
+    const waitClears = Date.parse(status?.indexer_wait_clears_at?.[coin]);
+    const nowMs = (opts.now ?? Date.now)();
+    if (status?.indexer_state?.[coin] === 'future_block_wait' && Number.isFinite(waitClears)
+        && waitClears - nowMs <= (opts.maxFutureWaitSeconds ?? MAX_FUTURE_WAIT_SECONDS) * 1000) {
+        return null;
     }
     const tip = status?.chain_tip?.[coin];
     const indexed = status?.last_block?.[coin];
