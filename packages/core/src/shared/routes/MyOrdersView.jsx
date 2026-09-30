@@ -43,6 +43,7 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
+import { explorerCoinCode } from '../../registry/coinTicker.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -145,6 +146,38 @@ function fmtDate(unixSec) {
     const n = Number(unixSec);
     if (!Number.isFinite(n) || n <= 0) return null;
     try { return new Date(n * 1000).toLocaleString(); } catch { return null; }
+}
+
+function withFormattedExpiration(confirmAction) {
+    const decoded = confirmAction?.composed?.decoded;
+    if (!decoded || !Array.isArray(decoded.details)) return confirmAction;
+    const replacements = [];
+    const details = decoded.details.map((detail) => {
+        if (!/expir/i.test(String(detail?.label || ''))) return detail;
+        const formatted = fmtDate(detail.value);
+        if (!formatted) return detail;
+        replacements.push([String(detail.value), formatted]);
+        return { ...detail, value: formatted };
+    });
+    if (replacements.length === 0) return confirmAction;
+    const summary = replacements.reduce(
+        (value, [raw, formatted]) => String(value).split(raw).join(formatted),
+        decoded.summary,
+    );
+    return {
+        ...confirmAction,
+        composed: {
+            ...confirmAction.composed,
+            decoded: { ...decoded, summary, details },
+        },
+    };
+}
+
+function explorerTxUrl(descriptor, txid) {
+    const base = descriptor?.explorer?.defaultUrl;
+    if (!base || !txid) return null;
+    const code = explorerCoinCode(descriptor);
+    return `${base.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`;
 }
 
 /**
@@ -498,6 +531,7 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
         return (
             <ActionConfirmScreen
                 {...lane.confirmProps}
+                confirmAction={withFormattedExpiration(lane.confirmProps.confirmAction)}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
@@ -507,9 +541,11 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
     }
 
     if (done) {
+        const txid = result.txid || result.broadcast?.txid;
+        const explorerUrl = explorerTxUrl(descriptor, txid);
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what={isCancel ? 'order cancel' : 'order edit'} />);
-        if (result.psbtHex && !(result.txid || result.broadcast?.txid)) {
+        if (result.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
         }
         return wrap(
@@ -520,6 +556,17 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                         ? 'The order will close and any escrow returns to you once the cancel confirms.'
                         : 'The order update will take effect once it confirms.'}
                 </p>
+                {txid ? (
+                    <>
+                        <p className={F.successLabel}>Transaction ID</p>
+                        <code className={F.txid}>{txid}</code>
+                        {explorerUrl ? (
+                            <p className={F.hint}>
+                                <a href={explorerUrl} target="_blank" rel="noopener noreferrer">View on explorer ↗</a>
+                            </p>
+                        ) : null}
+                    </>
+                ) : null}
                 <div className={F.actions}><Button variant="primary" onClick={onDone}>Done</Button></div>
             </>,
         );
@@ -551,7 +598,7 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                     <Input
                         label="New expiration (optional)"
                         type="datetime-local"
-                        hint="Unix wall-clock time. Leave blank to keep the current expiration."
+                        hint="Choose a date and time. Leave blank to keep the current expiration."
                         value={expInput}
                         onChange={(e) => setExpInput(e.target.value)}
                     />

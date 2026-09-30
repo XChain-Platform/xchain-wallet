@@ -45,7 +45,7 @@ const DESTRUCTIVE_BTN = {
  * @param {object} props
  * @param {{ id: string, name: string, format?: string } | null} [props.activeWallet]
  * @param {() => void} [props.onOpenWalletPicker]
- * @param {() => void} [props.onWalletRemoved]
+ * @param {(walletId: string) => void | Promise<void>} [props.onWalletRemoved]
  */
 export function ThisWalletSection({
     activeWallet,
@@ -56,6 +56,18 @@ export function ThisWalletSection({
     const [confirmingRemove, setConfirmingRemove] = useState(false);
     const [removeError, setRemoveError] = useState(/** @type {string | null} */ (null));
     const [removing, setRemoving] = useState(false);
+    const [removed, setRemoved] = useState(false);
+
+    if (removed) {
+        return (
+            <Status
+                text={removeError
+                    ? `Wallet removed, but the app could not finish switching wallets: ${removeError}`
+                    : 'Wallet removed.'}
+                tone={removeError ? 'error' : undefined}
+            />
+        );
+    }
 
     if (!activeWallet) {
         return <Status text="No active wallet." />;
@@ -68,8 +80,10 @@ export function ThisWalletSection({
         }
         setRemoving(true);
         setRemoveError(null);
+        let removalSucceeded = false;
         try {
             await messaging.removeWallet({ walletId: activeWallet.id });
+            removalSucceeded = true;
             // Cluster U FOLLOWUP 5: drop the resume-last-view memory
             // for this wallet so a future wallet that happens to reuse
             // the same id (vanishingly unlikely with cuids, but the
@@ -79,9 +93,13 @@ export function ThisWalletSection({
             // counts too, or they orphan in localStorage forever.
             sweepMsgMemoryForWallet(activeWallet.id);
             setConfirmingRemove(false);
-            if (typeof onWalletRemoved === 'function') onWalletRemoved();
+            setRemoved(true);
+            if (typeof onWalletRemoved === 'function') {
+                await onWalletRemoved(activeWallet.id);
+            }
         } catch (err) {
             setRemoveError(err instanceof Error ? err.message : String(err));
+            if (removalSucceeded) setRemoved(true);
         } finally {
             setRemoving(false);
         }
