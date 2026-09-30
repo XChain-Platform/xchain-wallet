@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     GAS_TICK,
+    INDEXED_WAIT_MS,
     TESTNET_COIN,
     assertTreasuryKey,
     buildTreasuryFunding,
@@ -34,8 +35,9 @@ const FUNDING_SATS = 500_000;
 const STAKE_AMOUNT = '100';
 const UNSTAKE_AMOUNT = '30';
 const MINT_AMOUNT = 200;
-const INCLUSION_TIMEOUT = 90 * 60_000;
-const ACTIVATION_TIMEOUT = 2 * 60 * 60_000;
+const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
+// Activation is several blocks past the stake, each of which can carry the same future wait.
+const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
 
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
@@ -110,7 +112,9 @@ async function waitForResidual(address, actionIndex) {
 
 test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
     test.use({ actionTimeout: 120_000 });
-    test.setTimeout(8 * 60 * 60_000);
+    // Five indexed waits (funding, mint balance, stake, unstake, residual) and
+    // the activation wait, plus an hour for the wallet walk: a ceiling, not an estimate.
+    test.setTimeout(5 * INCLUSION_TIMEOUT + ACTIVATION_TIMEOUT + 60 * 60_000);
 
     let treasury;
 

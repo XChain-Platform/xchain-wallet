@@ -10,6 +10,7 @@
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
+    INDEXED_WAIT_MS,
     TESTNET_COIN,
     addressTypeOf,
     assertTreasuryKey,
@@ -23,7 +24,7 @@ import {
 } from '../../fixtures/testnet.js';
 
 const WALLET_UNLOCK = 'testnetpassword123';
-const INCLUSION_TIMEOUT = 90 * 60_000;
+const INCLUSION_TIMEOUT = INDEXED_WAIT_MS;
 const MIN_CLAIM_UTXO_SATS = 20_000;
 
 const venue = liveVenue();
@@ -138,7 +139,8 @@ function partialAmount(total) {
 
 test.describe('partial validator reward claim on Bitcoin testnet', () => {
     test.use({ actionTimeout: 120_000 });
-    test.setTimeout(3 * 60 * 60_000);
+    // One indexed wait, plus an hour for the wallet walk and the reads around it.
+    test.setTimeout(INCLUSION_TIMEOUT + 60 * 60_000);
 
     let input;
 

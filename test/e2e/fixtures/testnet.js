@@ -104,6 +104,17 @@ export const MAX_TIP_AGE_SECONDS = 3 * 60 * 60;
  */
 export const MAX_FUTURE_WAIT_SECONDS = 3 * 60 * 60;
 
+/**
+ * How long a spec waits for one transaction to confirm AND index. The indexer
+ * processes blocks in order and holds each one stamped ahead of the wall clock
+ * until the clock passes it, which consensus allows up to two hours ahead; so a
+ * budget under that bound times out on a healthy chain. Measured 2026-09-30:
+ * a COLLECT confirmed in a block stamped about 17:44Z sat behind an empty block
+ * stamped 19:04Z and could not index for more than 90 minutes. The future-wait
+ * bound plus an hour for inclusion itself.
+ */
+export const INDEXED_WAIT_MS = (MAX_FUTURE_WAIT_SECONDS + 60 * 60) * 1000;
+
 /** A public chain is polled, never mined, so the cadence is a block's order of magnitude. */
 export const POLL_INTERVAL_MS = 30_000;
 

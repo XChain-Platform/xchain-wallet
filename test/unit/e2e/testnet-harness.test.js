@@ -32,6 +32,8 @@ import { describe, it, expect, vi } from 'vitest';
 import bitcoin from 'bitcoinjs-lib';
 import xchainSdk from 'xchain-sdk';
 import {
+    INDEXED_WAIT_MS,
+    MAX_FUTURE_WAIT_SECONDS,
     RUN_INPUT_ENV,
     TESTNET_CHAIN_ID,
     TESTNET_COIN,
@@ -402,5 +404,13 @@ describe('testnet harness: claimant address types', () => {
         expect(() => assertTreasuryKey({ wif: TREASURY.wif, address: legacy }, undefined, { type: 'p2pkh' })).not.toThrow();
         expect(() => assertTreasuryKey({ wif: TREASURY.wif, address: legacy })).toThrow(/KEY\/ADDRESS MISMATCH/);
         expect(() => assertTreasuryKey(TREASURY, undefined, { type: 'p2pkh' })).toThrow(/KEY\/ADDRESS MISMATCH/);
+    });
+});
+
+describe('testnet harness: indexed wait budget', () => {
+    it('outlasts the two-hour future-timestamp bound the indexer waits out, plus inclusion', () => {
+        const consensusFutureBoundMs = 2 * 60 * 60 * 1000;
+        expect(MAX_FUTURE_WAIT_SECONDS * 1000).toBeGreaterThan(consensusFutureBoundMs);
+        expect(INDEXED_WAIT_MS).toBeGreaterThanOrEqual(MAX_FUTURE_WAIT_SECONDS * 1000 + 60 * 60 * 1000);
     });
 });
