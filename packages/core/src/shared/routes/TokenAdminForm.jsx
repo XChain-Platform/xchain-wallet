@@ -204,6 +204,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     const [sharedBlockPickerOpen, setSharedBlockPickerOpen] = useState(initialPicker === 'shared-block');
     const [sharedBlockListLabel, setSharedBlockListLabel] = useState(/** @type {string | null} */ (null));
+    const blockListTouched = useRef(false);
     // Bridgeability (mode === 'bridge-settings', ISSUE v7,
     // xchain-token-bridge.md section 7). Three owner-set fields on the ORIGIN
     // row: which destination chains this token may be locked to (default none),
@@ -403,7 +404,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     useEffect(() => {
         if (mode !== 'access-lists' || !assetInfo || listsPrefilled) return;
         setAllowListIdx(assetInfo.allowList || null);
-        setBlockListIdx(assetInfo.blockList || null);
+        if (!blockListTouched.current) setBlockListIdx(assetInfo.blockList || null);
         setListsPrefilled(true);
     }, [mode, assetInfo, listsPrefilled]);
 
@@ -1090,6 +1091,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 onSelect={(pick) => {
                     const next = sharedBlockPickState(pick);
                     if (!next) return;
+                    blockListTouched.current = true;
                     setBlockListIdx(next.blockListIdx);
                     setBlockListCount(next.memberCount);
                     setSharedBlockListLabel(next.label);
@@ -1118,6 +1120,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         setAllowListIdx(row.actionIndex);
                         setAllowListCount(row.memberCount);
                     } else {
+                        blockListTouched.current = true;
                         setBlockListIdx(row.actionIndex);
                         setBlockListCount(row.memberCount);
                         setSharedBlockListLabel(null);
@@ -1451,7 +1454,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             Use a shared block list
                         </Button>
                         {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { setBlockListIdx('0'); setBlockListCount(null); setSharedBlockListLabel(null); }}>
+                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setSharedBlockListLabel(null); }}>
                                 Remove list
                             </Button>
                         ) : null}

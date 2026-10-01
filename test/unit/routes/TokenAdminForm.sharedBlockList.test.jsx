@@ -30,13 +30,13 @@ function proxyMessaging(target) {
     });
 }
 
-function mountAdmin({ initialPicker } = {}) {
+function mountAdmin({ initialPicker, getTokenInfo } = {}) {
     const composeForConfirm = vi.fn().mockRejectedValue(new Error('stop after capture'));
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
-        getTokenInfo: vi.fn().mockResolvedValue({ creator: SOURCE.address, allowList: null, blockList: null }),
+        getTokenInfo: getTokenInfo || vi.fn().mockResolvedValue({ creator: SOURCE.address, allowList: null, blockList: null }),
         getSharedLists: vi.fn().mockResolvedValue({
             lists: [{
                 home_chain: 'LTC',
@@ -127,6 +127,21 @@ describe('TokenAdminForm shared block lists', () => {
 
         expect(await screen.findByText('Choose a shared list')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Choose list' })).toBeTruthy();
+    });
+
+    it('preserves an initialPicker selection when token metadata finishes loading', async () => {
+        let resolveTokenInfo;
+        const getTokenInfo = vi.fn().mockReturnValue(new Promise((resolve) => { resolveTokenInfo = resolve; }));
+        mountAdmin({ initialPicker: 'shared-block', getTokenInfo });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+        expect(await screen.findByText(/List #204 \(shared from LTC list #9\)/)).toBeTruthy();
+
+        resolveTokenInfo({ creator: SOURCE.address, allowList: '88', blockList: '77' });
+
+        expect(await screen.findByText(/List #88/)).toBeTruthy();
+        expect(screen.getByText(/List #204 \(shared from LTC list #9\)/)).toBeTruthy();
+        expect(screen.queryByText(/List #77/)).toBeNull();
     });
 });
 
