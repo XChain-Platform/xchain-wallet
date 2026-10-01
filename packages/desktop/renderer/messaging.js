@@ -1395,6 +1395,11 @@ export function getListByActionIndex(req) {
     return /** @type {any} */ (sendMessage('lists.byActionIndex', req));
 }
 
+/** @param {{ chainId: string }} req */
+export function getSharedLists(req) {
+    return /** @type {any} */ (sendMessage('lists.shared', req));
+}
+
 /** @param {{ chainId: string, address: string }} req */
 export function getListsForSource(req) {
     return /** @type {any} */ (sendMessage('lists.forSource', req));

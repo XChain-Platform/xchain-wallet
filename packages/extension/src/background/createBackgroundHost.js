@@ -24,6 +24,7 @@
 
 import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
@@ -5003,6 +5004,10 @@ export function createBackgroundHost(deps) {
 
     host.register('lists.byActionIndex', async (req, { sdkRegistry }) => {
         return listByActionIndex({ ...req, sdkRegistry });
+    });
+
+    host.register('lists.shared', async (req, { sdkRegistry, chainRegistry }) => {
+        return sharedListDirectory({ ...req, sdkRegistry, chainRegistry });
     });
 
     // PC-10 "My Lists": which LIST actions has this address authored.
