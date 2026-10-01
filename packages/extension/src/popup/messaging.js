@@ -2177,6 +2177,15 @@ export function getListByActionIndex(req) {
 }
 
 /**
+ * Fetch the shared-list directory for all three chains on this network.
+ *
+ * @param {{ chainId: string }} req
+ */
+export function getSharedLists(req) {
+    return /** @type {any} */ (sendMessage('lists.shared', req));
+}
+
+/**
  * PC-10 "My Lists": find the LIST actions authored by an address.
  *
  * @param {{ chainId: string, address: string }} req
