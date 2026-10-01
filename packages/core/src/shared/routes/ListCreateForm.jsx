@@ -35,6 +35,8 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
+import { qualifyTickItem } from '../utils/listTickCoin.js';
+import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -105,6 +107,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [tickStatus, setTickStatus] = useState(
         /** @type {Record<string, 'found' | 'missing' | null>} */ ({}),
     );
+    const [tickCoinSupported, setTickCoinSupported] = useState(false);
     const [memo, setMemo] = useState('');
 
     const [password, setPassword] = useState('');
@@ -155,6 +158,23 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // the count the form shows is the count the chain will keep.
     const recipientCoin = descriptor?.coin || null;
     const recipientNetwork = descriptor?.networkKind || null;
+
+    useEffect(() => {
+        let cancelled = false;
+        setTickCoinSupported(false);
+        if (!chainId) return () => { cancelled = true; };
+        const sdkRegistry = {
+            get: () => ({
+                isListTickCoinActive: () => (typeof messaging.isListTickCoinActive === 'function'
+                    ? messaging.isListTickCoinActive({ chainId })
+                    : false),
+            }),
+        };
+        listTickCoinSupport({ sdkRegistry, chainId })
+            .then((supported) => { if (!cancelled) setTickCoinSupported(supported); })
+            .catch(() => { if (!cancelled) setTickCoinSupported(false); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
 
     useEffect(() => {
         if (listType !== '2') return;
@@ -212,7 +232,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     // Parse tickers with chain grammar while counting duplicates
     // and malformed names the way the address branch does.
-    const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
+    const tickItems = useMemo(
+        () => classifyTickItems(ticksText, { coinQualified: tickCoinSupported }),
+        [ticksText, tickCoinSupported],
+    );
     const memberTicks = tickItems.valid;
     const invalidTicks = tickItems.invalid;
 
@@ -569,7 +592,12 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 title="Add a token"
                 onSelect={(sel) => {
                     const t = String(sel.tick || '');
-                    if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
+                    const selectedDescriptor = sel.chainId ? chainRegistry.get(sel.chainId) : null;
+                    const selectedCoin = selectedDescriptor
+                        ? { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[selectedDescriptor.coin]
+                        : coinTicker;
+                    const item = tickCoinSupported ? qualifyTickItem(selectedCoin, t, coinTicker) : t;
+                    if (item) setTicksText((prev) => (prev.trim() ? `${prev}\n${item}` : item));
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -732,6 +760,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     items={tickItems}
                     chainId={chainId}
                     chainLabel={descriptor?.displayName || chainId}
+                    listCoin={coinTicker}
+                    coinQualified={tickCoinSupported}
                     messaging={messaging}
                     onOpenPicker={() => setTokenPickerOpen(true)}
                     status={tickStatus}
