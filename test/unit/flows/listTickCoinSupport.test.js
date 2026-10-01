@@ -8,39 +8,29 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { listActions } from '../../../packages/core/src/flows/sdkIntrospection.js';
+import { createRequire } from 'node:module';
+import { describe, expect, it, vi } from 'vitest';
 import { listTickCoinSupport } from '../../../packages/core/src/flows/listTickCoinSupport.js';
 
-vi.mock('../../../packages/core/src/flows/sdkIntrospection.js', async (importOriginal) => {
-    const actual = await importOriginal();
-    return { ...actual, listActions: vi.fn(actual.listActions) };
-});
+const require = createRequire(import.meta.url);
+const { version: sdkVersion } = require('xchain-sdk/package.json');
 
 const registryOf = (sdk) => ({ get: () => sdk });
 
 describe('listTickCoinSupport', () => {
-    beforeEach(() => {
-        vi.mocked(listActions).mockClear();
-    });
-
-    it('routes the probe through SDK introspection', async () => {
-        const sdkRegistry = { get: vi.fn(() => { throw new Error('direct registry access'); }) };
-        vi.mocked(listActions).mockResolvedValueOnce(true);
+    it('is true when the SDK answers true', async () => {
+        const sdk = {
+            enabled: true,
+            isListTickCoinActive: vi.fn(function isListTickCoinActive() {
+                return Promise.resolve(this.enabled);
+            }),
+        };
+        const sdkRegistry = { get: vi.fn(() => sdk) };
 
         await expect(listTickCoinSupport({ sdkRegistry, chainId: 'bitcoin-regtest' }))
             .resolves.toBe(true);
-        expect(listActions).toHaveBeenCalledOnce();
-        expect(listActions).toHaveBeenCalledWith(expect.objectContaining({
-            chainId: 'bitcoin-regtest',
-        }));
-        expect(sdkRegistry.get).not.toHaveBeenCalled();
-    });
-
-    it('is true when the SDK answers true', async () => {
-        const sdk = { isListTickCoinActive: async () => true };
-        await expect(listTickCoinSupport({ sdkRegistry: registryOf(sdk), chainId: 'bitcoin-regtest' }))
-            .resolves.toBe(true);
+        expect(sdkRegistry.get).toHaveBeenCalledWith('bitcoin-regtest');
+        expect(sdk.isListTickCoinActive).toHaveBeenCalledOnce();
     });
 
     it('is false when the SDK answers false', async () => {
@@ -49,9 +39,13 @@ describe('listTickCoinSupport', () => {
             .resolves.toBe(false);
     });
 
-    it('is false for an SDK surface without the method', async () => {
+    it('is false for the pinned 0.20.0 SDK surface', async () => {
         const sdk = { getActions: () => [], getActionFormats: () => ({}) };
-        await expect(listTickCoinSupport({ sdkRegistry: registryOf(sdk), chainId: 'bitcoin-regtest' }))
+        expect(sdkVersion).toBe('0.20.0');
+        await expect(listTickCoinSupport({
+            sdkRegistry: registryOf(sdk),
+            chainId: 'bitcoin-regtest',
+        }))
             .resolves.toBe(false);
     });
 

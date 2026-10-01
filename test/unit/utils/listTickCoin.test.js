@@ -41,6 +41,8 @@ describe('coin-qualified ticker items', () => {
         expect(chainIdForCoin('LTC', 'bitcoin-testnet')).toBe('litecoin-testnet');
         expect(chainIdForCoin('DOGE', 'litecoin-regtest')).toBe('dogecoin-regtest');
         expect(chainIdForCoin('XCH', 'bitcoin-mainnet')).toBeNull();
+        expect(chainIdForCoin('BTC', 'bitcoin-signet')).toBeNull();
+        expect(chainIdForCoin('BTC', 'custom-mainnet')).toBeNull();
     });
 
     it('validates qualified rests and folds duplicates by coin and rest', () => {
@@ -60,6 +62,15 @@ describe('coin-qualified ticker items', () => {
             valid: ['PEPE'],
             invalid: ['DOGE:^42'],
             duplicates: 1,
+        });
+    });
+
+    it('keeps a qualified member distinct from the same bare ticker', () => {
+        expect(classifyTickItems('BTC:PEPE\npepe', { coinQualified: true })).toEqual({
+            valid: ['BTC:PEPE', 'pepe'],
+            invalid: [],
+            duplicates: 0,
+            coinOf: ['BTC', null],
         });
     });
 });
