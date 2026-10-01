@@ -41,6 +41,12 @@ import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { AmountField } from '../components/AmountField.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -62,6 +68,14 @@ const chainRegistry = registryLib.defaultRegistry();
  * the wire (a top-level call runs at the protocol gas ceiling), so any
  * such field would either be silently discarded or, under the SDK's
  * leg-field guard, block the compose outright.
+ *
+ * An optional deposit turns the call into a two-step BATCH (DEPOSIT, then
+ * EXECUTE, same contract) signed through the advancedAction path. EXECUTE
+ * carries no amount, so a method that expects payment (a loan's fundLoan)
+ * only sees tokens deposited ahead of it in the same transaction; without
+ * this lane the form could not fund such a call at all, and a tester's bare
+ * fundLoan reverted. The token picker is locked to the contract's chain,
+ * because a contract only sees balances on its own chain.
  *
  * The initial* props prefill the form from an xchain:{COIN}/execute deep
  * link (explorer Write-tab handoff); all optional.
@@ -89,6 +103,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const [method, setMethod] = useState(initialMethod || '');
     const [paramsText, setParamsText] = useState(initialParamsText || '');
     const [password, setPassword] = useState('');
+    // Optional deposit sent ahead of the call; both blank means a plain EXECUTE.
+    const [depositTick, setDepositTick] = useState('');
+    const [depositQuantity, setDepositQuantity] = useState('');
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
 
     // ABI lane state: the contract's self-declared method metadata (null =
     // none published / not loaded), an explicit manual-mode escape hatch,
@@ -253,6 +271,44 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         software: 'executeAction',
         hardware: 'executeActionHw',
     });
+    // A call with a deposit is a BATCH, which signs through the generic path.
+    const submitBatchConfirmed = useConfirmSubmit({
+        messaging,
+        isHw: isHwSource,
+        signerId: fromAddress?.signerId,
+        passwordRef: passwordValueRef,
+        software: 'advancedAction',
+        hardware: 'advancedActionHw',
+    });
+
+    const hasDeposit = depositTick.trim() !== '' || depositQuantity.trim() !== '';
+    const depositBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: depositTick,
+    });
+
+    // DEPOSIT first: the contract checks its balance rose when the call runs.
+    async function composeBatchParams() {
+        const res = await messaging.buildBatchCommand({
+            chainId,
+            subActions: [
+                {
+                    action: 'DEPOSIT',
+                    params: {
+                        VERSION: '0',
+                        CONTRACT_ACTION_INDEX: String(contractActionIndex),
+                        TICK: depositTick.trim().toUpperCase(),
+                        QUANTITY: depositQuantity.trim(),
+                    },
+                },
+                { action: 'EXECUTE', params: actionParams },
+            ],
+        });
+        return { VERSION: '0', COMMAND: res.command };
+    }
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
@@ -267,6 +323,32 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         };
         setSubmitError(null);
         try {
+            if (hasDeposit) {
+                const batchParams = await composeBatchParams();
+                const res = await actionConfirm.run({
+                    chainId,
+                    from,
+                    actionData: { action: 'BATCH', params: batchParams },
+                    encoderOpts: {
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                    },
+                    onApprove: (prebuiltPsbt) => submitBatchConfirmed({
+                        walletId,
+                        chainId,
+                        from,
+                        action: 'BATCH',
+                        params: batchParams,
+                        payFeeInNativeCoin: nativeFee.flag,
+                        ...(feePerKb != null ? { feePerKb } : {}),
+                        prebuiltPsbt,
+                    }),
+                });
+                setResult(res);
+                setPassword('');
+                setStage('done');
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -387,6 +469,19 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 return;
             }
         }
+        // A half-filled deposit is a mistake either way: a token with no
+        // amount, or an amount with no token, has nothing it could send.
+        if (hasDeposit) {
+            if (!depositTick.trim()) {
+                setFormError('Choose the token to deposit, or clear the deposit amount.');
+                return;
+            }
+            const q = depositQuantity.trim();
+            if (!q || Number.isNaN(Number(q)) || Number(q) <= 0) {
+                setFormError('Deposit amount must be a positive number.');
+                return;
+            }
+        }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -416,7 +511,26 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
-            if (isWatcherMode) {
+            if (hasDeposit) {
+                const batchParams = await composeBatchParams();
+                const encoderOpts = {
+                    payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
+                };
+                const batch = { ...base, action: 'BATCH', params: batchParams };
+                if (isWatcherMode) {
+                    res = await messaging.buildActionPsbtRequest({
+                        chainId,
+                        from: base.from,
+                        actionData: { action: 'BATCH', params: batchParams },
+                        encoderOpts,
+                    });
+                } else if (isHwSource) {
+                    res = await messaging.advancedActionHw({ ...batch, signerId: fromAddress.signerId });
+                } else {
+                    res = await messaging.advancedAction({ ...batch, password });
+                }
+            } else if (isWatcherMode) {
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
@@ -518,7 +632,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Call {actionParams.METHOD}
+                    {hasDeposit ? `Deposit ${depositQuantity.trim()} ${depositTick.trim().toUpperCase()}, then call ` : 'Call '}{actionParams.METHOD}
                     {paramsArray.length > 0 ? ` with ${paramsArray.length} arg${paramsArray.length === 1 ? '' : 's'}` : ''}
                     {' '}on contract #{actionParams.CONTRACT_ACTION_INDEX}.
                 </p>
@@ -533,6 +647,14 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     </dd>
                     <dt className={styles.detailsLabel}>Contract</dt>
                     <dd className={styles.detailsValue}>#{actionParams.CONTRACT_ACTION_INDEX}</dd>
+                    {hasDeposit ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Deposit</dt>
+                            <dd className={styles.detailsValue}>
+                                {depositQuantity.trim()} {depositTick.trim().toUpperCase()}
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Method</dt>
                     <dd className={styles.detailsValue}>{actionParams.METHOD}</dd>
                     {paramsArray.length > 0 ? (
@@ -650,6 +772,24 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         );
     }
 
+    // Locked to the contract's chain: tokens held on another chain can't pay it.
+    if (tokenPickerOpen) {
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title="Token to deposit"
+                networkFilter={coinFromChainId(chainId)}
+                onSelect={(sel) => {
+                    setDepositTick(String(sel.tick || '').toUpperCase());
+                    setTokenPickerOpen(false);
+                    setFormError(null);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
     if (sourcePickerOpen) {
         return (
             <OwnAddressPickerScreen
@@ -748,6 +888,43 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     ) : null}
                 </>
             )}
+            <TokenField
+                label="Deposit (optional)"
+                value={depositTick && chainId ? { chainId, tick: depositTick } : null}
+                placeholder="No deposit"
+                onOpenPicker={() => setTokenPickerOpen(true)}
+            />
+            {depositTick ? (
+                <>
+                    <AmountField
+                        label="Deposit amount"
+                        hint={`Sent into contract #${contractActionIndex} in the same transaction, before the call. Only tokens on ${descriptor?.displayName || 'this chain'} can be deposited.`}
+                        amount={depositQuantity}
+                        tick={depositTick}
+                        onAmountFieldChange={(rawValue) => {
+                            const stripped = String(rawValue).replace(/,/g, '');
+                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                            setDepositQuantity(stripped);
+                            setFormError(null);
+                        }}
+                        onMax={depositBalance && Number(depositBalance) > 0
+                            ? () => setDepositQuantity(depositBalance)
+                            : undefined}
+                        maxDisabled={!depositBalance}
+                        balanceText={depositBalance != null
+                            ? `${formatWithThousands(depositBalance)} ${depositTick.toUpperCase()} available`
+                            : null}
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => { setDepositTick(''); setDepositQuantity(''); setFormError(null); }}
+                    >
+                        Remove deposit
+                    </Button>
+                </>
+            ) : null}
+
             {feeTiers ? (
                 <FeeSelector
                     label="Network fee"
