@@ -39,6 +39,7 @@ async function renderManage({ isOwner = true, ...handlers } = {}) {
                 onMint() {},
                 onCreateDispenser() {},
                 onAirdrop() {},
+                onDestroy() {},
                 ...handlers,
             }),
         ),
@@ -73,8 +74,9 @@ describe('ManageToken shared block list action', () => {
 
     it('is absent when neither handler is passed', async () => {
         await renderManage();
+        fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
-        expect(screen.queryByText('Use a shared block list')).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: 'Use a shared block list' })).toBeNull();
     });
 
     it('is absent for a non-owner', async () => {
@@ -82,6 +84,8 @@ describe('ManageToken shared block list action', () => {
         await waitFor(() => {
             expect(screen.getByText(/hold the token's issuer address/i)).toBeInTheDocument();
         });
+        const moreButton = screen.queryByRole('button', { name: 'More' });
+        if (moreButton) fireEvent.click(moreButton);
 
         expect(screen.queryByText('Use a shared block list')).toBeNull();
     });
