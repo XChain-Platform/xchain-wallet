@@ -10,9 +10,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
+import {
+    LIST_TICK_COINS,
+    chainIdForCoin,
+    qualifyTickItem,
+    splitTickCoinItem,
+} from '../utils/listTickCoin.js';
 import styles from '../routes/IssueTokenForm.module.css';
+
+const chainRegistry = registryLib.defaultRegistry();
 
 // Most token lookups one run fires; a longer list reports the rest as
 // not checked rather than flooding the explorer.
@@ -20,7 +29,7 @@ export const MAX_TICK_LOOKUPS = 50;
 
 /**
  * Token entry block of a TYPE=1 list: the textarea, the parse counts and
- * the per-token existence lookup on the chain the list is published to.
+ * the per-token existence lookup on the item's chain.
  *
  * The network leaves an unknown TICK out of the list, so the lookup says
  * which ones it could not find before the user pays for them. A `^` TICK_ID
@@ -32,13 +41,25 @@ export const MAX_TICK_LOOKUPS = 50;
  * @param {{ valid: string[], invalid: string[], duplicates: number }} props.items   classifyTickItems(value)
  * @param {string | null} props.chainId
  * @param {string} props.chainLabel
+ * @param {string} props.listCoin
+ * @param {boolean} props.coinQualified
  * @param {object | null} props.messaging
  * @param {() => void} props.onOpenPicker
  * @param {Record<string, 'found' | 'missing' | null>} props.status   lookup verdicts, keyed by tick
  * @param {(status: Record<string, 'found' | 'missing' | null>) => void} props.onStatusChange
  */
 export function TickItemsEditor({
-    value, onChange, items, chainId, chainLabel, messaging, onOpenPicker, status, onStatusChange,
+    value,
+    onChange,
+    items,
+    chainId,
+    chainLabel,
+    listCoin,
+    coinQualified = false,
+    messaging,
+    onOpenPicker,
+    status,
+    onStatusChange,
 }) {
     const memberTicks = items.valid;
     const invalidTicks = items.invalid;
@@ -58,9 +79,17 @@ export function TickItemsEditor({
         let cancelled = false;
         setChecking(true);
         const timer = setTimeout(() => {
-            const toCheck = memberTicks.filter((t) => !t.startsWith('^')).slice(0, MAX_TICK_LOOKUPS);
-            Promise.all(toCheck.map((t) => fetchTokenInfo(messaging, chainId, t)
-                .then((info) => [t, tickLookupVerdict(info)])))
+            const toCheck = memberTicks.map((item, index) => {
+                const split = coinQualified ? splitTickCoinItem(item) : null;
+                const coin = split?.coin || items.coinOf?.[index] || listCoin;
+                return {
+                    item,
+                    rest: split?.rest || item,
+                    chainId: coinQualified ? chainIdForCoin(coin, chainId) || chainId : chainId,
+                };
+            }).filter(({ rest }) => !rest.startsWith('^')).slice(0, MAX_TICK_LOOKUPS);
+            Promise.all(toCheck.map((entry) => fetchTokenInfo(messaging, entry.chainId, entry.rest)
+                .then((info) => [entry.item, tickLookupVerdict(info)])))
                 .then((pairs) => {
                     if (cancelled) return;
                     onStatusChange(Object.fromEntries(pairs));
@@ -70,7 +99,7 @@ export function TickItemsEditor({
         return () => { cancelled = true; clearTimeout(timer); };
         // tickKey stands in for memberTicks, which is a new array every parse.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chainId, tickKey, messaging]);
+    }, [chainId, tickKey, messaging, coinQualified, listCoin]);
 
     const missingTicks = useMemo(
         () => memberTicks.filter((t) => status[t] === 'missing'),
@@ -85,6 +114,34 @@ export function TickItemsEditor({
         [memberTicks, status],
     );
     const uncheckedTicks = uncheckedTickItems.length;
+
+    const missingByChain = useMemo(() => {
+        if (!coinQualified) return [];
+        const grouped = new Map();
+        memberTicks.forEach((item, index) => {
+            if (status[item] !== 'missing') return;
+            const split = splitTickCoinItem(item);
+            const coin = split?.coin || items.coinOf?.[index] || listCoin;
+            const itemChainId = chainIdForCoin(coin, chainId) || chainId;
+            let label = itemChainId;
+            try { label = chainRegistry.get(itemChainId)?.displayName || itemChainId; } catch { label = itemChainId; }
+            const entry = grouped.get(itemChainId) || { chainId: itemChainId, label, ticks: [] };
+            entry.ticks.push(split?.rest || item);
+            grouped.set(itemChainId, entry);
+        });
+        return [...grouped.values()];
+    }, [chainId, coinQualified, items.coinOf, listCoin, memberTicks, status]);
+
+    function setItemCoin(item, coin) {
+        const rest = splitTickCoinItem(item)?.rest || item;
+        const replacement = qualifyTickItem(coin, rest, listCoin);
+        let changed = false;
+        onChange(String(value).replace(/[^,\n]+/g, (part) => {
+            if (changed || part.trim() !== item) return part;
+            changed = true;
+            return part.replace(item, replacement);
+        }));
+    }
 
     return (
         <>
@@ -104,6 +161,32 @@ export function TickItemsEditor({
                     Add from token picker
                 </Button>
             </div>
+            {coinQualified && memberTicks.length > 0 ? (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-2) 0' }}>
+                    {memberTicks.map((item, index) => {
+                        const split = splitTickCoinItem(item);
+                        const coin = split?.coin || items.coinOf?.[index] || listCoin;
+                        const rest = split?.rest || item;
+                        return (
+                            <li
+                                key={item}
+                                style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}
+                            >
+                                <code style={{ flex: 1 }}>{rest}</code>
+                                <select
+                                    aria-label={`Coin for ${rest}`}
+                                    value={coin}
+                                    onChange={(event) => setItemCoin(item, event.target.value)}
+                                >
+                                    {LIST_TICK_COINS.map((option) => (
+                                        <option key={option} value={option}>{option}</option>
+                                    ))}
+                                </select>
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : null}
             {value.trim() ? (
                 <p className={styles.hint}>
                     {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
@@ -120,13 +203,24 @@ export function TickItemsEditor({
             ) : null}
             {/* The protocol records an unknown TICK as invalid and
                 leaves it out of the list without failing the LIST. */}
-            {!checking && missingTicks.length > 0 ? (
+            {!coinQualified && !checking && missingTicks.length > 0 ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
                         Not found on {chainLabel}: {missingTicks.join(', ')}.
                         The network leaves an unknown token out of the list, so {missingTicks.length === 1 ? 'it' : 'they'} will
                         not be a member.
                     </p>
+                </div>
+            ) : null}
+            {coinQualified && !checking && missingByChain.length > 0 ? (
+                <div role="alert" className={styles.warnings}>
+                    {missingByChain.map((entry) => (
+                        <p key={entry.chainId} className={styles.warning}>
+                            Not found on {entry.label}: {entry.ticks.join(', ')}.
+                            The network leaves an unknown token out of the list, so {entry.ticks.length === 1 ? 'it' : 'they'} will
+                            not be a member.
+                        </p>
+                    ))}
                 </div>
             ) : null}
             {!checking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
