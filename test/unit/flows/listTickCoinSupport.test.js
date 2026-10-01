@@ -8,12 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import { listTickCoinSupport } from '../../../packages/core/src/flows/listTickCoinSupport.js';
-
-const require = createRequire(import.meta.url);
-const { version: sdkVersion } = require('xchain-sdk/package.json');
 
 const registryOf = (sdk) => ({ get: () => sdk });
 
@@ -39,9 +35,8 @@ describe('listTickCoinSupport', () => {
             .resolves.toBe(false);
     });
 
-    it('is false for the pinned 0.20.0 SDK surface', async () => {
+    it('is false for an SDK without isListTickCoinActive', async () => {
         const sdk = { getActions: () => [], getActionFormats: () => ({}) };
-        expect(sdkVersion).toBe('0.20.0');
         await expect(listTickCoinSupport({
             sdkRegistry: registryOf(sdk),
             chainId: 'bitcoin-regtest',
