@@ -41,17 +41,14 @@ export function classifyTickItems(text, { coinQualified = false } = {}) {
     for (const raw of String(text || '').split(/[\n,]+/)) {
         const t = raw.trim();
         if (!t) continue;
-        const qualified = coinQualified ? splitTickCoinItem(t) : null;
-        const identity = qualified
-            ? `${qualified.coin}:${qualified.rest.toLowerCase()}`
-            : t.toLowerCase();
+        const split = coinQualified ? splitTickCoinItem(t) : null;
+        const identity = split ? `${split.coin}:${split.rest.toLowerCase()}` : t.toLowerCase();
         // Count a repeat once and keep only the first occurrence.
         if (seen.has(identity)) { duplicates += 1; continue; }
         seen.add(identity);
-        const candidate = qualified?.rest ?? t;
-        if (tickerReferenceError(candidate, { allowRef: true }) === null) {
+        if (tickerReferenceError(split ? split.rest : t, { allowRef: true }) === null) {
             valid.push(t);
-            if (coinQualified) coinOf.push(qualified?.coin ?? null);
+            coinOf.push(split ? split.coin : null);
         } else invalid.push(t);
     }
     return coinQualified ? { valid, invalid, duplicates, coinOf } : { valid, invalid, duplicates };
