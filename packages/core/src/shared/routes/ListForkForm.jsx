@@ -324,6 +324,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const needsAdd = toAdd.length > 0;
     const needsRemove = toRemove.length > 0;
     const twoPhase = needsAdd && needsRemove;
+    // A memo with no member change is one valid edit (the chain records a new
+    // version of the list with the same members); a tester was refused it.
+    const memoOnly = !needsAdd && !needsRemove && memo.trim() !== '';
     const firstTransactionLabel = twoPhase
         ? 'First transaction (add)'
         : needsRemove ? 'Fork transaction (remove)' : 'Fork transaction';
@@ -340,7 +343,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const trimmedMemo = memo.trim();
     const firstParams = useMemo(() => ({
         VERSION: '1',
-        EDIT: needsAdd ? '1' : '2',
+        EDIT: needsRemove && !needsAdd ? '2' : '1',
         LIST_ACTION_INDEX: String(oldIndex),
         ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: needsAdd ? toAdd : toRemove,
@@ -464,8 +467,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     async function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
-        if (!needsAdd && !needsRemove) {
-            setFormError('Nothing changed: add or remove at least one item.');
+        if (!needsAdd && !needsRemove && !memoOnly) {
+            setFormError('Nothing changed: add or remove an item, or write a memo.');
             return;
         }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
@@ -830,8 +833,17 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
                     <dd className={styles.detailsValue}>#{oldIndex}</dd>
-                    <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
-                    <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                    {memoOnly ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Members</dt>
+                            <dd className={styles.detailsValue}>Unchanged ({currentItems.length})</dd>
+                        </>
+                    ) : (
+                        <>
+                            <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
+                            <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                        </>
+                    )}
                     {trimmedMemo ? (
                         <>
                             <dt className={styles.detailsLabel}>Memo</dt>
@@ -844,6 +856,12 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     </dd>
                 </dl>
                 {notOwnerNotice}
+                {memoOnly ? (
+                    <p className={styles.hint}>
+                        Only the memo changes. The list keeps its {currentItems.length} member{currentItems.length === 1 ? '' : 's'};
+                        nothing is added or removed.
+                    </p>
+                ) : null}
                 {twoPhase ? (
                     <p className={styles.hint}>
                         This fork both adds and removes items, so it's two
@@ -878,7 +896,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         loading={submitting}
                         disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (needsAdd ? 'Publish add' : 'Publish remove')}
+                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (memoOnly ? 'Publish memo' : needsAdd ? 'Publish add' : 'Publish remove')}
                     </Button>
                 </div>
             </form>,

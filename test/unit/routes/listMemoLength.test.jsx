@@ -152,3 +152,41 @@ describe('Memo hint on Create list', () => {
         expect(screen.queryByText('Protocol rejects | or ;.')).toBeNull();
     });
 });
+
+// A tester opened a one-member list, wrote only a memo in Fork & edit, and
+// was refused "Nothing changed". A memo-only edit is valid on chain (a new
+// version of the list, same members), so the form now publishes it as one
+// LIST v1 edit with no items and says the members are unchanged.
+describe('ListForkForm memo-only edit', () => {
+    function openFork() {
+        return mount(ListForkForm, {
+            walletId: 'w',
+            listRef: { chainId: DOGE, actionIndex: '2700', type: '1', items: ['SWAPTEST'], editResolutionActive: true },
+            onBack() {},
+            onDone() {},
+        });
+    }
+
+    it('publishes a memo with no member change as one item-less edit', async () => {
+        const messaging = openFork();
+        await screen.findByText(/Forking token list #2700/);
+        fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: 'season two' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(await screen.findByText(/Only the memo changes\. The list keeps its 1 member/)).toBeTruthy();
+        expect(screen.getByText(/^Update the memo on list #2700/)).toBeTruthy();
+        const publish = screen.getByRole('button', { name: 'Publish memo' });
+        await waitFor(() => expect(publish.disabled).toBe(false));
+        fireEvent.click(publish);
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params)
+            .toEqual({ VERSION: '1', EDIT: '1', LIST_ACTION_INDEX: '2700', MEMO: 'season two', ITEM: [] });
+    });
+
+    it('still refuses an edit with no member change and no memo', async () => {
+        const messaging = openFork();
+        await screen.findByText(/Forking token list #2700/);
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(await screen.findByText('Nothing changed: add or remove an item, or write a memo.')).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+});
