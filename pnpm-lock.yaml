@@ -178,8 +178,8 @@ importers:
         specifier: ^8.10.2
         version: 8.11.2
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.20.0
-        version: '@dankest-llc/xchain-sdk@0.20.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.21.1
+        version: '@dankest-llc/xchain-sdk@0.21.1'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -224,8 +224,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.20.0
-        version: '@dankest-llc/xchain-sdk@0.20.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.21.1
+        version: '@dankest-llc/xchain-sdk@0.21.1'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -300,8 +300,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.20.0
-        version: '@dankest-llc/xchain-sdk@0.20.0'
+        specifier: npm:@dankest-llc/xchain-sdk@0.21.1
+        version: '@dankest-llc/xchain-sdk@0.21.1'
     devDependencies:
       '@vitejs/plugin-basic-ssl':
         specifier: ^1.1.0
@@ -604,8 +604,8 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@dankest-llc/xchain-sdk@0.20.0':
-    resolution: {integrity: sha512-yZya1XUZ29OELOeLL5gu5cSxbhWMt7so30PzLGs1eiUqZZV1bBLFNugWhn/7UteRYeT4bUGiF8C7/LJYIqpyTQ==}
+  '@dankest-llc/xchain-sdk@0.21.1':
+    resolution: {integrity: sha512-JI7nXnF5mFNZpbKSx8Qo1Q7miGe7D0wWRROZ6ZxrX11uH8DQlMtkFzV0BE9ET6HZtsVC80dj80dRRZ+DzfVzug==}
     engines: {node: '>=22.0.0'}
 
   '@electron-internal/extract-zip@1.0.5':
@@ -4589,7 +4589,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@dankest-llc/xchain-sdk@0.20.0':
+  '@dankest-llc/xchain-sdk@0.21.1':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       '@brandonblack/musig': 0.0.1-alpha.1
@@ -5192,8 +5192,8 @@ snapshots:
   '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
     dependencies:
       '@hono/node-server': 2.0.12(hono@4.13.7)
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
       cors: 2.8.6
       cross-spawn: 7.0.6
@@ -5639,9 +5639,9 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  ajv-formats@3.0.1(ajv@8.18.0):
+  ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
-      ajv: 8.18.0
+      ajv: 8.20.0
 
   ajv@8.18.0:
     dependencies:
