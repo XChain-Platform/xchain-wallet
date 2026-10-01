@@ -16,6 +16,7 @@ export const LIST_TICK_COIN_SEPARATOR = ':';
 export const LIST_TICK_COINS = ['BTC', 'LTC', 'DOGE'];
 
 const COIN_REGISTRY_ROOT = { BTC: 'bitcoin', LTC: 'litecoin', DOGE: 'dogecoin' };
+const CHAIN_ID_NETWORK = /^(?:bitcoin|litecoin|dogecoin)-(mainnet|testnet|regtest)$/;
 
 /**
  * Split an item at its first colon. Returns the upper-cased coin and the rest
@@ -58,8 +59,6 @@ export function qualifyTickItem(coin, rest, listCoin) {
  */
 export function chainIdForCoin(coin, chainId) {
     const root = COIN_REGISTRY_ROOT[String(coin ?? '').toUpperCase()];
-    const dash = String(chainId ?? '').indexOf('-');
-    if (!root || dash < 0) return null;
-    const network = chainId.slice(dash + 1);
-    return network ? `${root}-${network}` : null;
+    const network = CHAIN_ID_NETWORK.exec(String(chainId ?? ''))?.[1];
+    return root && network ? `${root}-${network}` : null;
 }
