@@ -47,7 +47,7 @@ export const SDK_DEEP_PATHS = {
     coins: ['src/coins/index.js'],
     derivation: ['src/protocol/derivation.js', 'src/derivation.js'],
     endpoints: ['src/utils/endpoints.js', 'src/endpoints.js'],
-    formats: ['src/formats.js'],
+    formats: ['src/protocol/formats.js', 'src/formats.js'],
     formatSelector: ['src/formatSelector.js'],
     gatedFile: ['src/gatedFile.js'],
     musig2: ['src/musig2.js'],
