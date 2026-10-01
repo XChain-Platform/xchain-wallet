@@ -48,6 +48,9 @@ export const litecoinDescriptors = [
         ...COMMON,
         id: 'litecoin-mainnet',
         networkKind: 'mainnet',
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
+        platformListOwners: [],
         icon: 'litecoin-mainnet-icon-20.png',
         wifVersionByte: 0xb0,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
@@ -58,6 +61,9 @@ export const litecoinDescriptors = [
         ...COMMON,
         id: 'litecoin-testnet',
         networkKind: 'testnet',
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
+        platformListOwners: [],
         icon: 'litecoin-testnet-icon-20.png',
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
@@ -68,6 +74,9 @@ export const litecoinDescriptors = [
         ...COMMON,
         id: 'litecoin-regtest',
         networkKind: 'regtest',
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
+        platformListOwners: [],
         icon: 'litecoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
         explorer: { defaultUrl: 'http://localhost', defaultPort: 18080 },
