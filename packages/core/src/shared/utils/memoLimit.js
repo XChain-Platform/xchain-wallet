@@ -22,6 +22,13 @@
 export const MAX_MEMO_LENGTH = 250;
 
 /**
+ * Hint under every optional Memo field. It replaced "Protocol rejects | or ;.",
+ * which a tester read as an error on the Create List page; it keeps both
+ * facts that line carried, plus the one a user most needs: anyone can read it.
+ */
+export const MEMO_HINT = 'A public note saved on the blockchain with this action. It cannot contain | or ;.';
+
+/**
  * The form error for a memo the chain would refuse as too long, or null when
  * it fits. Pass the memo exactly as it goes on the wire (the forms trim it),
  * since that is the string the indexer measures.

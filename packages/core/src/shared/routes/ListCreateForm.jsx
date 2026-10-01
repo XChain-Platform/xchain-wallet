@@ -38,7 +38,7 @@ import { classifyTickItems } from '../utils/listTickItems.js';
 import { qualifyTickItem } from '../utils/listTickCoin.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -771,7 +771,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"

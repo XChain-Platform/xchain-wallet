@@ -28,7 +28,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -341,7 +341,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
 
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"

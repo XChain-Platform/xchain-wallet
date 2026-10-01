@@ -33,7 +33,7 @@ import {
     listShareEligibility,
 } from '../../flows/listShareEligibility.js';
 import { currentListMemberCount, findListOwner } from '../../flows/listMembership.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -335,7 +335,7 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
 
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"

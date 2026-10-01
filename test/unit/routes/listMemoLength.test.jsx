@@ -141,3 +141,14 @@ describe('ListForkForm memo length', () => {
         expect(screen.queryByText(lengthErrorText)).toBeNull();
     });
 });
+
+// "Protocol rejects | or ;." under the Memo field read as an error to a
+// tester on Create list. The hint now says what the memo is and keeps the
+// character rule, and every memo form shares the one wording.
+describe('Memo hint on Create list', () => {
+    it('says the memo is public and names the forbidden characters', async () => {
+        mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} });
+        expect(await screen.findByText('A public note saved on the blockchain with this action. It cannot contain | or ;.')).toBeTruthy();
+        expect(screen.queryByText('Protocol rejects | or ;.')).toBeNull();
+    });
+});

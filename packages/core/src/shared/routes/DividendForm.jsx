@@ -56,6 +56,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { MEMO_HINT } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -949,7 +950,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             />
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
