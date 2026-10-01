@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
@@ -46,10 +46,10 @@ describe('ListDetail coin-qualified ticker members', () => {
 
         expect(await screen.findByText('DOGECOIN')).toBeTruthy();
         expect(screen.getByText('DOGE')).toBeTruthy();
-        expect(messaging.getTokenInfo).toHaveBeenCalledWith({
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith({
             chainId: 'dogecoin-testnet',
             tick: '^42',
-        });
+        }));
     });
 
     it('shows the id fallback when a qualified lookup fails', async () => {
@@ -65,10 +65,10 @@ describe('ListDetail coin-qualified ticker members', () => {
 
         expect(await screen.findByText('id 19')).toBeTruthy();
         expect(screen.getByText('LTC')).toBeTruthy();
-        expect(messaging.getTokenInfo).toHaveBeenCalledWith({
+        await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith({
             chainId: 'litecoin-mainnet',
             tick: '^19',
-        });
+        }));
         await act(async () => {
             rejectLookup(new Error('offline'));
             await Promise.resolve();
