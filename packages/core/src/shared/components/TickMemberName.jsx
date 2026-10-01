@@ -26,21 +26,29 @@ export function TickMemberName({ item, messaging, chainId }) {
     const id = idMatch ? idMatch[1] : null;
     const coin = split ? split.coin : null;
     const [name, setName] = useState(null);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         setName(null);
+        setLoading(id !== null);
         if (id === null) return undefined;
         let cancelled = false;
         fetchTokenInfo(messaging, chainIdForCoin(coin, chainId), '^' + id)
-            .then((info) => { if (!cancelled) setName(info?.canonicalTick ?? null); })
-            .catch(() => {});
+            .then((info) => {
+                if (cancelled) return;
+                setName(info?.canonicalTick ?? null);
+                setLoading(false);
+            })
+            .catch(() => {
+                if (!cancelled) setLoading(false);
+            });
         return () => { cancelled = true; };
     }, [messaging, coin, chainId, id]);
 
     if (!split) return <code>{item}</code>;
     const rest = id === null ? split.rest : (name ?? `id ${id}`);
     return (
-        <code>
+        <code aria-busy={loading || undefined}>
             <span data-testid="tick-member-coin">{split.coin}</span>
             {' '}
             {rest}

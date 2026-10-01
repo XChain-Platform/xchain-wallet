@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { TickMemberName } from '../../../packages/core/src/shared/components/TickMemberName.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -27,6 +27,16 @@ function fakeMessaging(impl) {
 
 function mount(item, messaging, chainId = 'bitcoin-testnet') {
     return render(React.createElement(TickMemberName, { item, messaging, chainId }));
+}
+
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
 }
 
 describe('TickMemberName', () => {
@@ -61,17 +71,37 @@ describe('TickMemberName', () => {
     });
 
     it('shows id <id> on a null answer', async () => {
-        const m = fakeMessaging(() => Promise.resolve(null));
+        const response = deferred();
+        const m = fakeMessaging(() => response.promise);
         const { container } = mount('DOGE:^42', m);
-        await waitFor(() => expect(m.calls.length).toBe(1));
-        expect(container.querySelector('code').textContent).toContain('id 42');
+        const code = container.querySelector('code');
+        expect(code).toHaveAttribute('aria-busy', 'true');
+        expect(code.textContent).toContain('id 42');
+
+        await act(async () => {
+            response.resolve(null);
+            await response.promise;
+        });
+
+        await waitFor(() => expect(code).not.toHaveAttribute('aria-busy'));
+        expect(code.textContent).toContain('id 42');
     });
 
     it('shows id <id> on a failure', async () => {
-        const m = fakeMessaging(() => Promise.reject(new Error('down')));
+        const response = deferred();
+        const m = fakeMessaging(() => response.promise);
         const { container } = mount('DOGE:^42', m);
-        await waitFor(() => expect(m.calls.length).toBe(1));
-        expect(container.querySelector('code').textContent).toContain('id 42');
+        const code = container.querySelector('code');
+        expect(code).toHaveAttribute('aria-busy', 'true');
+        expect(code.textContent).toContain('id 42');
+
+        await act(async () => {
+            response.reject(new Error('down'));
+            await response.promise.catch(() => {});
+        });
+
+        await waitFor(() => expect(code).not.toHaveAttribute('aria-busy'));
+        expect(code.textContent).toContain('id 42');
     });
 
     it('keeps a coin-qualified non-id rest as written beside the coin label', () => {
