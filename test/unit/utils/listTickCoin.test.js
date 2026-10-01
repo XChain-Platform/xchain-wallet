@@ -47,12 +47,12 @@ describe('coin-qualified ticker items', () => {
 
     it('validates qualified rests and folds duplicates by coin and rest', () => {
         expect(classifyTickItems(
-            'doge:^42\nDOGE:^42\nBTC:PEPE\nLTC:\nPEPE',
+            'doge:^42\nDOGE:^42\nBTC:PEPE:ONE\nbtc:pepe:one\nLTC:\nPEPE',
             { coinQualified: true },
         )).toEqual({
-            valid: ['doge:^42', 'BTC:PEPE', 'PEPE'],
+            valid: ['doge:^42', 'BTC:PEPE:ONE', 'PEPE'],
             invalid: ['LTC:'],
-            duplicates: 1,
+            duplicates: 2,
             coinOf: ['DOGE', 'BTC', null],
         });
     });
