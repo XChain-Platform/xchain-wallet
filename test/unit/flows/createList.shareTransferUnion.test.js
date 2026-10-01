@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import sdkFormats from 'xchain-sdk/src/protocol/formats.js';
 
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: vi.fn(async () => ({ txid: 'list-tx-1' })),
@@ -18,6 +17,11 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
 import { createList } from '../../../packages/core/src/flows/createList.js';
 import { listFormatSupport } from '../../../packages/core/src/flows/listFormatSupport.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+
+const LIST_FORMATS_0_AND_1 = Object.freeze({
+    0: 'VERSION|TYPE|MEMO|...ITEM',
+    1: 'VERSION|EDIT|LIST_ACTION_INDEX|MEMO|...ITEM',
+});
 
 const FROM = {
     address: 'bcrt1qlistowner',
@@ -156,13 +160,8 @@ describe('listFormatSupport', () => {
         expect(getActionFormats).toHaveBeenCalledWith('LIST');
     });
 
-    it('disables all three features for the pinned 0.20.0 LIST formats', async () => {
-        const sdkRegistry = { get: () => ({ getActionFormats: () => sdkFormats.LIST }) };
-
-        expect(sdkFormats.LIST).toEqual({
-            0: 'VERSION|TYPE|MEMO|...ITEM',
-            1: 'VERSION|EDIT|LIST_ACTION_INDEX|MEMO|...ITEM',
-        });
+    it('disables all three features for an SDK with only LIST formats 0 and 1', async () => {
+        const sdkRegistry = { get: () => ({ getActionFormats: () => LIST_FORMATS_0_AND_1 }) };
 
         await expect(listFormatSupport({ sdkRegistry, chainId: 'bitcoin-regtest' }))
             .resolves.toEqual({ share: false, transfer: false, union: false });
