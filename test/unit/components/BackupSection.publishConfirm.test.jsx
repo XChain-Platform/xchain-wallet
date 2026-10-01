@@ -116,6 +116,10 @@ describe('BackupSection label publication confirmation', () => {
         })));
         expect(messaging.publishLabelsRequest).not.toHaveBeenCalled();
         expect(screen.getByLabelText(FROM.address)).toBeTruthy();
+        // The generic FILE warning can't see this payload's encryption, so
+        // the backup confirm page must say it itself.
+        expect(screen.getByTestId('publish-labels-encrypted-note').textContent)
+            .toMatch(/unreadable\s+without your seed/);
 
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 

@@ -354,20 +354,30 @@ export function BackupSection({ activeWallet }) {
     }
 
     if (actionConfirm.open) {
+        // The decoder sees only FILE params, which carry no encryption flag
+        // for this payload, so its warning can't tell the user that this one
+        // is unreadable without the seed. The panel that built it can.
         return (
-            <ActionConfirmScreen
-                confirmAction={actionConfirm.confirmAction}
-                screenVariant={screenVariantFor(shell)}
-                chainLabel={publishPreparation?.chainId || ''}
-                signerReady={signerReady}
-                password={publishPassword}
-                onPasswordChange={(value) => {
-                    setPublishPassword(value);
-                    publishPasswordRef.current = value;
-                }}
-                chainId={publishPreparation?.chainId}
-                getSignerStatus={messaging.getSignerStatus}
-            />
+            <div style={STACK}>
+                <div style={ROW_HINT} data-testid="publish-labels-encrypted-note">
+                    Your labels and contacts are encrypted with a key from this wallet's
+                    seed before publishing. The file on the blockchain is unreadable
+                    without your seed.
+                </div>
+                <ActionConfirmScreen
+                    confirmAction={actionConfirm.confirmAction}
+                    screenVariant={screenVariantFor(shell)}
+                    chainLabel={publishPreparation?.chainId || ''}
+                    signerReady={signerReady}
+                    password={publishPassword}
+                    onPasswordChange={(value) => {
+                        setPublishPassword(value);
+                        publishPasswordRef.current = value;
+                    }}
+                    chainId={publishPreparation?.chainId}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+            </div>
         );
     }
 

@@ -96,6 +96,14 @@ describe('FILE confirm intent (issue #39)', () => {
         const out = decode({ NAME: 'a.txt', MEMO: 'hi' });
         expect(out.warnings.some((w) => /permanent and public/.test(w))).toBe(true);
     });
+
+    it('tells a gated publish who can read it instead of calling it public', () => {
+        const out = decode({ NAME: 'a.txt', GATE_TICKER: 'GOLD', ENCRYPTION_METHOD: '1' });
+        expect(out.warnings).toContain(
+            'File is stored on the blockchain permanently. Its contents are encrypted; only holders of GOLD can read them.',
+        );
+        expect(out.warnings.some((w) => /public|if gated/.test(w))).toBe(false);
+    });
 });
 
 describe('LINK confirm intent (same gap as #39)', () => {
