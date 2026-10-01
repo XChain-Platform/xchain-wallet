@@ -80,6 +80,7 @@ const LOCK_FLAG_KEYS = ['max_supply', 'max_mint', 'mint', 'mint_supply', 'descri
  * @param {() => void} [props.onCallbackSettings]     edit ISSUE v4 callback config: CALLBACK_BLOCK / CALLBACK_TICK / CALLBACK_AMOUNT (PC-03; editable only pre-distribution)
  * @param {() => void} [props.onExecuteCallback]      force-recall all supply via CALLBACK (PC-03; owner-only, after CALLBACK_BLOCK)
  * @param {() => void} [props.onAccessLists]          set ISSUE v5 ALLOW_LIST / BLOCK_LIST access lists (PC-04)
+ * @param {() => void} [props.onUseSharedBlockList]   select a shared block list, falling back to onAccessLists
  * @param {() => void} [props.onBridgeSettings]       set ISSUE v7 BRIDGE_CHAINS / MIN_DEPTH, or freeze both with LOCK_BRIDGE (P19)
  * @param {() => void} [props.onPauseToken]           pause/resume the token via SLEEP v1 (PC-05)
  * @param {() => void} [props.onUpdateDescription]
@@ -111,6 +112,7 @@ export function ManageToken({
     onCallbackSettings,
     onExecuteCallback,
     onAccessLists,
+    onUseSharedBlockList,
     onBridgeSettings,
     onPauseToken,
     onUpdateDescription,
@@ -486,6 +488,7 @@ export function ManageToken({
         // PC-04 access lists (ISSUE v5). Owner-only; sets ALLOW_LIST /
         // BLOCK_LIST to published address lists.
         { id: 'access-lists', label: 'Access lists', Icon: Icon.TokenListIcon, onSelect: blockIssuerActions ? undefined : onAccessLists },
+        { id: 'shared-block-list', label: 'Use a shared block list', Icon: Icon.TokenListIcon, onSelect: blockIssuerActions ? undefined : (onUseSharedBlockList ?? onAccessLists) },
         // P19 bridge settings (ISSUE v7). Owner-only, gated like the rows
         // above; the only entry point into the bridge-settings mode of
         // TokenAdminForm from the token itself, since the Actions catalogue

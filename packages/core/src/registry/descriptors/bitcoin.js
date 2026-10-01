@@ -54,7 +54,8 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-mainnet',
         networkKind: 'mainnet',
-        // Display-only, never consensus. The operator fills in the documented platform list-owner addresses.
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
         platformListOwners: [],
         icon: 'bitcoin-mainnet-icon-20.png',
         wifVersionByte: 0x80,
@@ -66,7 +67,8 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-testnet',
         networkKind: 'testnet',
-        // Display-only, never consensus. The operator fills in the documented platform list-owner addresses.
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
         platformListOwners: [],
         icon: 'bitcoin-testnet-icon-20.png',
         wifVersionByte: 0xef,
@@ -78,7 +80,8 @@ export const bitcoinDescriptors = [
         ...COMMON,
         id: 'bitcoin-regtest',
         networkKind: 'regtest',
-        // Display-only, never consensus. The operator fills in the documented platform list-owner addresses.
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
         platformListOwners: [],
         icon: 'bitcoin-regtest-icon-20.png',
         wifVersionByte: 0xef,
