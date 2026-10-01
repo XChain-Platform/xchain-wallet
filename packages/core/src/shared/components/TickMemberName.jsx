@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 import React, { useEffect, useState } from 'react';
-import { splitTickCoinItem, chainIdForCoin } from '../utils/listTickCoin.js';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
+import { chainIdForCoin, splitTickCoinItem } from '../utils/listTickCoin.js';
 
-const ID_REST = /^\^(\d+)$/;
+const ID_REST = /^\^([1-9]\d*)$/;
 
 /**
  * A tick-list member: the item as written, or for a coin-qualified id item
@@ -25,30 +25,35 @@ export function TickMemberName({ item, messaging, chainId }) {
     const idMatch = split ? ID_REST.exec(split.rest) : null;
     const id = idMatch ? idMatch[1] : null;
     const coin = split ? split.coin : null;
-    const [name, setName] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const lookupKey = coin && id ? `${chainId}:${coin}:^${id}` : null;
+    const [resolved, setResolved] = useState({ key: null, canonicalTick: null, loading: false });
 
     useEffect(() => {
-        setName(null);
-        setLoading(id !== null);
-        if (id === null) return undefined;
+        if (!lookupKey) return undefined;
+        setResolved({ key: lookupKey, canonicalTick: null, loading: true });
         let cancelled = false;
-        fetchTokenInfo(messaging, chainIdForCoin(coin, chainId), '^' + id)
+        fetchTokenInfo(messaging, chainIdForCoin(coin, chainId), `^${id}`)
             .then((info) => {
                 if (cancelled) return;
-                setName(info?.canonicalTick ?? null);
-                setLoading(false);
+                const canonicalTick = typeof info?.canonicalTick === 'string' && info.canonicalTick
+                    ? info.canonicalTick
+                    : null;
+                setResolved({ key: lookupKey, canonicalTick, loading: false });
             })
             .catch(() => {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                    setResolved({ key: lookupKey, canonicalTick: null, loading: false });
+                }
             });
         return () => { cancelled = true; };
-    }, [messaging, coin, chainId, id]);
+    }, [chainId, coin, id, lookupKey, messaging]);
 
     if (!split) return <code>{item}</code>;
-    const rest = id === null ? split.rest : (name ?? `id ${id}`);
+    const current = resolved.key === lookupKey ? resolved : null;
+    const rest = id === null ? split.rest : (current?.canonicalTick || `id ${id}`);
+
     return (
-        <code aria-busy={loading || undefined}>
+        <code aria-busy={current?.loading || undefined}>
             <span data-testid="tick-member-coin">{split.coin}</span>
             {' '}
             {rest}
