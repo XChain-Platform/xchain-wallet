@@ -42,16 +42,13 @@ export function classifyTickItems(text, { coinQualified = false } = {}) {
         const t = raw.trim();
         if (!t) continue;
         const split = coinQualified ? splitTickCoinItem(t) : null;
-        const identity = split
-            ? `${split.coin}:${split.rest.toLowerCase()}`
-            : t.toLowerCase();
+        const identity = split ? `${split.coin}:${split.rest.toLowerCase()}` : t.toLowerCase();
         // Count a repeat once and keep only the first occurrence.
         if (seen.has(identity)) { duplicates += 1; continue; }
         seen.add(identity);
-        const validationTarget = split?.rest ?? t;
-        if (tickerReferenceError(validationTarget, { allowRef: true }) === null) {
+        if (tickerReferenceError(split ? split.rest : t, { allowRef: true }) === null) {
             valid.push(t);
-            if (coinQualified) coinOf.push(split?.coin ?? null);
+            coinOf.push(split ? split.coin : null);
         } else invalid.push(t);
     }
     return coinQualified ? { valid, invalid, duplicates, coinOf } : { valid, invalid, duplicates };
