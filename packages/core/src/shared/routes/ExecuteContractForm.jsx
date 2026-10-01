@@ -513,17 +513,18 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             let res;
             if (hasDeposit) {
                 const batchParams = await composeBatchParams();
-                const encoderOpts = {
-                    payFeeInNativeCoin: nativeFee.flag,
-                    ...(feePerKb != null ? { feePerKb } : {}),
-                };
                 const batch = { ...base, action: 'BATCH', params: batchParams };
                 if (isWatcherMode) {
                     res = await messaging.buildActionPsbtRequest({
                         chainId,
                         from: base.from,
                         actionData: { action: 'BATCH', params: batchParams },
-                        encoderOpts,
+                        // Same fee output as the plain call: the signer wallet
+                        // signs this PSBT blind, so the flag has to be in it.
+                        encoderOpts: {
+                            payFeeInNativeCoin: nativeFee.flag,
+                            ...(feePerKb != null ? { feePerKb } : {}),
+                        },
                     });
                 } else if (isHwSource) {
                     res = await messaging.advancedActionHw({ ...batch, signerId: fromAddress.signerId });
