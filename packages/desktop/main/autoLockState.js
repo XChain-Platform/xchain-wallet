@@ -46,6 +46,22 @@ import { dirname, join } from 'node:path';
  */
 
 /**
+ * True when an armed record carries a window the launch gate can enforce:
+ * a positive finite `idleMs` and a positive finite `lastActivity`.
+ *
+ * The shared `shouldAutoLock` answers "never lock" for a zero window, which
+ * is the right fallback for the in-session backstop and the wrong one at
+ * launch, where "cannot tell" must mean "ask for the password".
+ *
+ * @param {unknown} v
+ * @returns {boolean}
+ */
+export function hasEnforceableWindow(v) {
+    const isPositive = (n) => typeof n === 'number' && Number.isFinite(n) && n > 0;
+    return !!v && isPositive(v.idleMs) && isPositive(v.lastActivity);
+}
+
+/**
  * File-backed auto-lock record. Same three-method contract
  * (load / save / clear) the runtime's other stores use, so
  * `wipeRuntimeStores` clears it with no special case.
@@ -68,7 +84,9 @@ export class FileAutoLockStore {
     /**
      * Read the record. Returns null for missing, unreadable and malformed
      * alike; the launch gate treats null as "refuse to auto-unlock", so a
-     * reader that swallowed a fault would be failing OPEN.
+     * reader that swallowed a fault would be failing OPEN. An armed record
+     * without an enforceable window (see `hasEnforceableWindow`) counts as
+     * malformed; a disarmed one legitimately carries `idleMs: 0`.
      *
      * @returns {Promise<AutoLockState | null>}
      */
@@ -87,6 +105,9 @@ export class FileAutoLockStore {
         }
         if (!v || typeof v !== 'object') return null;
         if (typeof v.armed !== 'boolean') return null;
+        // Reject an armed record whose window is zero, missing or not a
+        // number (coercing it to 0 would read as "never lock" at launch)
+        if (v.armed && !hasEnforceableWindow(v)) return null;
         return {
             armed: v.armed,
             idleMs: Number(v.idleMs) || 0,
@@ -152,11 +173,13 @@ export async function applyAutoLockReport(store, signal, now) {
         return;
     }
     const idleMs = Number(signal.idleMs);
-    await store.save({
-        armed: true,
-        idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 0,
-        lastActivity: now,
-    });
+    // Clear rather than save an armed record with no usable window, so
+    // the next launch finds no record and asks for the password
+    if (!(Number.isFinite(idleMs) && idleMs > 0)) {
+        await store.clear();
+        return;
+    }
+    await store.save({ armed: true, idleMs, lastActivity: now });
 }
 
 /**

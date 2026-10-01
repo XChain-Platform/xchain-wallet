@@ -94,6 +94,10 @@ ci_tier_deferred() {
   return 1
 }
 # <<< ci-tier <<<
+fast_defer() {
+  DEFERRED="$DEFERRED [$1]"
+  echo; echo "ci:full ===== $1 DEFERRED (CI_TIER=fast, runs in the full sweep) ====="
+}
 # >>> ci-tier timer (generated block; re-run the tier wirer to update) >>>
 run_tier() {
   ci_tier_deferred "$1" && return 0  # ci-tier guard (generated)
@@ -139,7 +143,24 @@ need_sib xchain-documentation
 # --- job: test -------------------------------------------------------------
 # `pnpm run ci` is unit + integration + security + fuzz + smoke, the same gate
 # the pre-push hook used to run on its own.
-run_tier "test (pnpm run ci)" pnpm run ci
+FAST_CI_PLAN=""
+if [ "${CI_TIER:-full}" = "fast" ]; then
+  if FAST_CI_PLAN="$(node bin/ci_fast_select.js --plan 2>&1)"; then
+    echo "$FAST_CI_PLAN"
+  else
+    echo "ci:full: fast selector unavailable ($FAST_CI_PLAN); running the full test tier"
+    FAST_CI_PLAN="consensus 1"
+  fi
+fi
+if [ "${CI_TIER:-full}" != "fast" ] || printf '%s\n' "$FAST_CI_PLAN" | grep -qx 'consensus 1'; then
+  run_tier "test (pnpm run ci)" pnpm run ci
+else
+  run_tier "test (changed tests)" node bin/ci_fast_select.js --run
+  fast_defer "test (pnpm run ci)"
+fi
+if [ "${CI_TIER:-full}" = "fast" ]; then
+  run_tier "fast-tier selector self-test" node --test bin/ci_fast_select.test.js
+fi
 
 # --- regression suite --------------------------------------------------
 # test:regression is not part of any ci.yml job's `pnpm run ci` bundle, so

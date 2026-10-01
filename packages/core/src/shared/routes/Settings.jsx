@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -32,6 +32,11 @@ import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import {
+    clearActiveWallet,
+    writeActiveWallet,
+} from '../utils/activeWalletMemory.js';
+import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import styles from './ActionsMenu.module.css';
 
 /**
@@ -60,6 +65,7 @@ import styles from './ActionsMenu.module.css';
  * @param {() => void} [props.onOpenAccountPicker]
  * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2: open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
  * @param {(sel: { chainId: string, tick: string }) => void} [props.onNavigateToMint]   Developer Mode's regtest faucet "Mint test XCHAIN" button
+ * @param {() => void} [props.reload]
  */
 export function Settings({
     onBack,
@@ -69,6 +75,7 @@ export function Settings({
     onOpenAccountPicker,
     initialSubpageId = null,
     onNavigateToMint,
+    reload = reloadPage,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -87,6 +94,28 @@ export function Settings({
         return () => { alive = false; };
     }, [messaging]);
 
+    const handleWalletRemoved = useCallback(async (removedWalletId) => {
+        clearActiveWallet();
+        if (typeof messaging?.listWallets !== 'function') {
+            throw new Error('Could not refresh the wallet list.');
+        }
+
+        const listed = await messaging.listWallets();
+        const wallets = Array.isArray(listed) ? listed : listed?.wallets;
+        if (!Array.isArray(wallets)) {
+            throw new Error('Could not refresh the wallet list.');
+        }
+
+        const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
+        if (nextWallet) {
+            writeActiveWallet(nextWallet.id);
+        } else {
+            await wipeWalletStorage();
+        }
+
+        reload();
+    }, [messaging, reload]);
+
     const walletLabel = activeWallet?.name || 'No wallet';
     const accountLabel = activeAccount?.name
         || (Number.isInteger(activeAccount?.index) ? `Account ${activeAccount.index + 1}` : 'Account 1');
@@ -99,7 +128,7 @@ export function Settings({
             keywords: 'wallet name remove rename migrate bip39 delete destroy',
             kind: 'internal-drill',
             Component: ThisWalletSection,
-            props: { activeWallet, onOpenWalletPicker },
+            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved },
             summary: walletLabel,
         },
         {
@@ -272,7 +301,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -396,6 +425,12 @@ export function Settings({
             </div>
         </Screen>
     );
+}
+
+function reloadPage() {
+    if (typeof globalThis.location?.reload === 'function') {
+        globalThis.location.reload();
+    }
 }
 
 /**

@@ -375,8 +375,8 @@ describe('desktop preload: signer-bridge duplex port', () => {
     // only the first two, and nothing here caught the drift: the surface tests
     // above assert every world's values are functions, never which keys a
     // world has. `onDisconnect` belongs to the SYNTHETIC port on the main side
-    // (main/signerBridgeListener.js), where `sender.once('destroyed')` is what
-    // observes the renderer going away; the renderer builds its PortLike from
+    // (main/signerBridgeListener.js), where the webContents document-end events
+    // observe the renderer going away; the renderer builds its PortLike from
     // the two methods below and has no consumer for it. This file defines the
     // sandbox boundary, so an `onDisconnect` appearing here later is a real
     // widening of that boundary and has to fail this assertion first.

@@ -17,8 +17,9 @@
 // Ports are many-per-renderer (each open popup tab maintains its
 // own port). If two renderers both register the same signerId, the
 // latest registration wins. Signing will route to whichever
-// renderer the user most recently interacted with. Disconnect
-// tears down only the transports this specific port registered.
+// renderer the user most recently interacted with. Disconnect or
+// unregister clears only the ids whose registered transport is still
+// this port's own, so a superseded port never clears a newer page's.
 
 import { signers } from '@xchain-wallet/core';
 import * as signerBridge from './signerBridge.js';
@@ -86,14 +87,20 @@ export function attachSignerBridgeListener(chromeRuntime) {
             } else if (msg.kind === 'unregister' && Array.isArray(msg.signerIds)) {
                 for (const id of msg.signerIds) {
                     if (!ownedIds.has(id)) continue;
-                    signerBridge.clearTransport(id);
+                    clearIfStillHeld(id);
                     ownedIds.delete(id);
                 }
             }
         };
 
+        // Clear an id only while the registry still points it at THIS port
+        // (a newer page may have taken it over, and its transport must survive).
+        const clearIfStillHeld = (id) => {
+            if (signerBridge.getTransport(id) === transport) signerBridge.clearTransport(id);
+        };
+
         const onDisconnect = () => {
-            for (const id of ownedIds) signerBridge.clearTransport(id);
+            for (const id of ownedIds) clearIfStillHeld(id);
             ownedIds.clear();
         };
 

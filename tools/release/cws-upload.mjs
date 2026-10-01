@@ -482,6 +482,26 @@ export async function checkProvenance({
             + ' anchors it. Pass --tag to bind this upload to a release.\n');
     }
 
+    // --- the dev-mock gate ----------------------------------------------
+    //
+    // Refuse any stated gate but `enforced`, and a signed manifest that states none, as the
+    // desktop updater does: the extension zip is the bundle the gate keeps the fake-address SDK out of.
+    const devMockGate = headerField(manifestText, 'dev-mock-gate');
+    if (devMockGate !== 'enforced' && (devMockGate || signed)) {
+        throw new Refusal(
+            `${basename(manifest)} records the dev-mock gate as '${devMockGate || 'unrecorded'}', `
+            + 'not \'enforced\'.\n'
+            + '  The gate is what keeps the fabricated-address dev SDK, which cannot sign or broadcast,\n'
+            + '  out of a shipped bundle, and this zip is the bundle it exists for. Re-sign the release\n'
+            + '  with the gate running (SIGN_SKIP_DEV_MOCK_CHECK unset). There is no override flag.', 1,
+        );
+    }
+    // Unsigned and unstated is the --allow-unsigned path, where no header is evidence anyway.
+    if (!devMockGate) {
+        process.stderr.write(`cws-upload.mjs: WARNING - ${basename(manifest)} records no dev-mock gate,`
+            + ' and it is unsigned, so nothing says the gate ran for this zip.\n');
+    }
+
     const lanes = headerField(manifestText, 'lanes');
 
     const expected = hashFromManifest(manifestText, zipPath);

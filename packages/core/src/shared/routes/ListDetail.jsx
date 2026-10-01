@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { TickMemberName } from '../components/TickMemberName.jsx';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -49,8 +50,10 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
  * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null, source: string | null, parentIndex: string | null }) => void} props.onFork
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onShare]     shows "Share list" when passed
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]  shows "Transfer list" when passed
  */
-export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
+export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -139,17 +142,17 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                             ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
                             : `No edits yet. Everything that references #${actionIndex} uses these members.`}
                     </p>
-                    <MemberList items={currentItems} isTick={isTick} />
+                    <MemberList items={currentItems} isTick={isTick} messaging={messaging} chainId={chainId} />
                     <h3 className={styles.successLabel}>As created ({items.length})</h3>
                     <p className={styles.hint}>The members this action was published with.</p>
-                    <MemberList items={items} isTick={isTick} />
+                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
                 </>
             ) : (
                 <>
                     <h3 className={styles.successLabel}>
                         {resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
                     </h3>
-                    <MemberList items={items} isTick={isTick} />
+                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
                 </>
             )}
 
@@ -210,6 +213,16 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                 >
                     Fork &amp; edit
                 </Button>
+                {onShare ? (
+                    <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
+                        Share list
+                    </Button>
+                ) : null}
+                {onTransfer ? (
+                    <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
+                        Transfer list
+                    </Button>
+                ) : null}
             </div>
         </>,
     );
@@ -218,9 +231,9 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
 /**
  * One membership block: ticks as code, addresses in full.
  *
- * @param {{ items: string[], isTick: boolean }} props
+ * @param {{ items: string[], isTick: boolean, messaging: object, chainId: string }} props
  */
-function MemberList({ items, isTick }) {
+function MemberList({ items, isTick, messaging, chainId }) {
     if (items.length === 0) {
         return <p className={styles.hint}>This list has no members.</p>;
     }
@@ -228,7 +241,9 @@ function MemberList({ items, isTick }) {
         <ul className={styles.detailsList} style={{ display: 'block' }}>
             {items.map((item, i) => (
                 <li key={i} style={{ padding: '2px 0' }}>
-                    {isTick ? <code>{item}</code> : <AddressText address={item} truncate={false} />}
+                    {isTick
+                        ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
+                        : <AddressText address={item} truncate={false} />}
                 </li>
             ))}
         </ul>

@@ -303,6 +303,20 @@ function run(args, env = {}) {
             }),
             (err) => /names no release/.test(err.message),
             'FAIL: a locally recomputed manifest passed as a release manifest.');
+
+        // (j) A manifest that SAYS the dev-mock gate was off is refused even under
+        // --allow-unsigned, because that flag is about the signature, not the gate.
+        for (const gate of ['SKIPPED', 'not-run']) {
+            writeFileSync(manifest, `# XChain Wallet release manifest\n# tag: v9.9.9\n`
+                + `# dev-mock-gate: ${gate}\n${good}  xchain-wallet-extension-v9.9.9.zip\n`);
+            await assert.rejects(
+                checkProvenance({
+                    zipPath: zip, manifestPath: manifest, tag: TAG, allowUnsigned: true,
+                }),
+                (err) => err instanceof Refusal
+                    && new RegExp(`dev-mock gate as '${gate}'`).test(err.message),
+                `FAIL: a manifest stamped dev-mock-gate: ${gate} was accepted for a CWS upload.`);
+        }
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

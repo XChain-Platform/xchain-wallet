@@ -496,6 +496,11 @@ MARKERS=(
     "The native coin of the Bitcoin network."
     "Iconic 2016 collectible card series."
     "The original meme cash on Counterparty."
+    # ./devMockEvents.js is imported the same ungated way and stays out only
+    # by the same tree-shaking, so its fixture seed and console handle get
+    # markers too (both strings exist nowhere else in the shipped source).
+    "__xchainDevMock"
+    "devmock-seed-tx-1"
 )
 
 # positive check: absence of the mock proves nothing if the REAL SDK

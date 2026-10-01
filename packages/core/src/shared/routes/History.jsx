@@ -52,6 +52,7 @@ import {
 import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
+import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -1738,14 +1739,16 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         }
         setContactSaveStage('saving');
         setContactSaveError(null);
+        const entry = { chain: contactPeerCoin, address: contactPeer, label: '' };
         try {
-            await messaging.saveContact({
-                input: {
-                    name: trimmed,
-                    notes: '',
-                    entries: [{ chain: contactPeerCoin, address: contactPeer, label: '' }],
-                },
-            });
+            // The same person seen on another chain: add this address to the
+            // contact that already carries the name, not a second contact.
+            const existing = findContactByName(contacts, trimmed);
+            if (existing) {
+                await messaging.saveContact({ record: withEntriesAdded(existing, [entry]) });
+            } else {
+                await messaging.saveContact({ input: { name: trimmed, notes: '', entries: [entry] } });
+            }
             setContactSaveStage('saved');
         } catch (err) {
             setContactSaveError(err?.message || 'Save failed.');

@@ -163,12 +163,15 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
         const model = modelFromLedgerTransport(transport?.deviceModel);
         const firmwareVersion = typeof appInfo.version === 'string' ? appInfo.version : null;
 
+        // Hand the signer a client builder, not the pairing client: hw-app-btc
+        // never leaves the legacy protocol once a call has used it, so each
+        // device call gets a fresh client for its own chain's currency.
         const signer = new LedgerSigner({
             id: `ledger-${deviceIdentifier}`,
             displayName: `Ledger (${model})`,
             model,
             deviceIdentifier,
-            app,
+            getApp: (currency) => new Btc({ transport, currency }),
             transport,
             sdkRegistry,
         });

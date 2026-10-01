@@ -14,7 +14,7 @@ overrides:
   protobufjs: ^7.5.8
   form-data: ^4.0.6
   '@tootallnate/once': ^2.0.1
-  axios: ^1.16.1
+  axios: ^1.20.0
   js-yaml@4: ^4.3.2
   fast-uri: ^3.1.6
   hono: ^4.12.34
@@ -175,8 +175,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       undici:
-        specifier: ^8.9.0
-        version: 8.9.0
+        specifier: ^8.10.2
+        version: 8.11.2
       xchain-sdk:
         specifier: npm:@dankest-llc/xchain-sdk@0.20.0
         version: '@dankest-llc/xchain-sdk@0.20.0'
@@ -1735,8 +1735,8 @@ packages:
     resolution: {integrity: sha512-zBQouZixDTbo3jMGqHKyePxYxr1e5W8UdTmBQ7sNtaA9M2bE32daxxPLS/jojhKOHxQ7LWwPjfiwf/fhaJWzlg==}
     engines: {node: '>=4'}
 
-  axios@1.19.0:
-    resolution: {integrity: sha512-ht/iuYZXEjFxLH/Hkezgd7m6JKlHHXEUSneaDz8uZe1Gj5QZtCnpyDsckvAiEnT89OEbCLmnte4R4sn7P0EKFw==}
+  axios@1.20.0:
+    resolution: {integrity: sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -3926,8 +3926,8 @@ packages:
     resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.9.0:
-    resolution: {integrity: sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA==}
+  undici@8.11.2:
+    resolution: {integrity: sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ==}
     engines: {node: '>=22.19.0'}
 
   unicorn-magic@0.3.0:
@@ -4599,7 +4599,7 @@ snapshots:
       acorn: 8.16.0
       acorn-walk: 8.3.5
       astring: 1.9.0
-      axios: 1.19.0
+      axios: 1.20.0
       bip174: 2.1.1
       bitcoinjs-lib: 6.1.7
       bitcoinjs-message: 2.2.0
@@ -5771,7 +5771,7 @@ snapshots:
 
   axe-core@4.11.3: {}
 
-  axios@1.19.0:
+  axios@1.20.0:
     dependencies:
       follow-redirects: 1.16.0
       form-data: 4.0.6
@@ -8202,7 +8202,7 @@ snapshots:
   undici@7.29.0:
     optional: true
 
-  undici@8.9.0: {}
+  undici@8.11.2: {}
 
   unicorn-magic@0.3.0: {}
 

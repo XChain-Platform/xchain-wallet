@@ -37,7 +37,7 @@ assert.match(sendSrc, /const \[rbfEnabled, setRbfEnabled\] = useState\(true\)/, 
 // the entry through resolveFeeConfig instead of reading the raw field.
 assert.match(
     sendSrc,
-    /resolveFeeConfig\(settings\.fees\[chainId\]/,
+    /resolveFeeConfig\(settings\?\.fees\?\.\[chainId\]/,
     'resolves settings.fees[chainId] against the chain descriptor',
 );
 assert.match(
@@ -48,16 +48,40 @@ assert.match(
 
 // --- payload --------------------------------------------------------
 
+// The payload carries the flag clamped to the descriptor's rbfSupported,
+// so a chain without RBF (Dogecoin) never sends rbf:true.
 assert.match(
     sendSrc,
-    /rbf:\s*rbfEnabled,/,
-    'rbf flag flows into the send payload',
+    /const rbfSupported = descriptor\?\.feeStrategy\?\.rbfSupported !== false;/,
+    'reads the chain RBF capability from the descriptor',
+);
+assert.match(
+    sendSrc,
+    /const rbfForSend = rbfSupported && rbfEnabled;/,
+    'clamps the per-send flag to the chain capability',
+);
+assert.match(
+    sendSrc,
+    /rbf:\s*rbfForSend,/,
+    'clamped rbf flag flows into the send payload',
+);
+assert.doesNotMatch(sendSrc, /rbf:\s*rbfEnabled,/, 'no payload carries the unclamped flag');
+const rbfSeed = sendSrc.slice(
+    sendSrc.indexOf('const [rbfEnabled, setRbfEnabled]'),
+    sendSrc.indexOf('setRbfEnabled(rbfByDefault)'),
+);
+assert.ok(rbfSeed.length > 0, 'RBF seeding effect located');
+assert.doesNotMatch(
+    rbfSeed,
+    /settings\.fees\[chainId\]\) return;/,
+    'a chain with no stored fee entry still reseeds from the descriptor',
 );
 
 // --- toggle UI ------------------------------------------------------
 
 assert.match(sendSrc, /role="switch"/, 'toggle uses switch role');
-assert.match(sendSrc, /checked=\{rbfEnabled\}/);
+assert.match(sendSrc, /checked=\{rbfForSend\}/);
+assert.match(sendSrc, /disabled=\{!rbfSupported\}/, 'toggle disabled where the chain has no RBF');
 assert.match(sendSrc, /aria-label="Replace-by-fee enabled"/);
 assert.match(sendSrc, /Replace-by-fee/, 'visible label');
 assert.match(

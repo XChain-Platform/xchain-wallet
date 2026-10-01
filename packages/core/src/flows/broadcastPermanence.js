@@ -60,8 +60,10 @@ const PERMANENT_PATTERNS = [
     /bad-txns-inputs-missingorspent/i,
     /bad-txns-inputs-spent/i,
     /missing\s+inputs/i,
-    /txn-already-known/i,           // already confirmed under a different path
-    /txn-already-in-mempool/i,      // an identical tx is already queued (not a re-sign case)
+    // These two mean THIS txid reached a node (outputs already in the UTXO set, or
+    // in its mempool); queue lanes check isAlreadyOnNetworkRejection first.
+    /txn-already-known/i,
+    /txn-already-in-mempool/i,
     orderedSubstringMatcher('conflict', 'confirmed'),
     /already\s+spent/i,
     // A dust output is a property of the signed BYTES, not of the node's mood: every node
@@ -115,6 +117,19 @@ export function classifyBroadcastFailure(err) {
     for (const re of TRANSIENT_PATTERNS) if (re.test(reason)) return 'transient';
     // Ambiguous: keep the signed tx recoverable (see header rationale).
     return 'transient';
+}
+
+/**
+ * Report whether a re-send of the SAME signed bytes was refused because the node
+ * already holds this txid, which means the transaction was delivered.
+ *
+ * Reads the same reject text the classifier reads, nested causes included.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isAlreadyOnNetworkRejection(err) {
+    return /txn-already-known|txn-already-in-mempool/i.test(extractReason(err));
 }
 
 // Pull the most specific reject string out of the error shape. A

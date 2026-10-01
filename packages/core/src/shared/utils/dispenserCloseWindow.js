@@ -9,14 +9,20 @@
 // contact legal@dankest.llc.
 
 // When a cancelling dispenser closes. A DISPENSER v1 cancel opens a close
-// window, and the indexer closes the dispenser at the first block whose block
-// time is strictly later than the cancel's block time plus the window. Off
-// mainnet that block time is the median-time-past, which trails the wall
-// clock, and nothing closes until a block arrives, so the time computed here
-// is the EARLIEST the close can land, never a promise.
+// window, and the indexer closes the dispenser at the first block whose
+// protocol time is strictly later than the cancel's block time plus the
+// window. On testnet that protocol time is the median of the previous eleven
+// block stamps, which can trail the wall clock by half an hour or more, so the
+// countdown runs on the chain's own time whenever the wallet can read it and
+// falls back to the wall clock only when it cannot. Nothing closes until a
+// block arrives, so the time computed here is the EARLIEST the close can land.
 
 // Close window length in seconds; mirrors the indexer's DISPENSER_CLOSE_DELAY.
 export const DISPENSER_CLOSE_DELAY_SECONDS = 3600;
+
+// How often a page showing a countdown re-reads the chain's protocol time.
+// Between reads the countdown advances it by local elapsed time.
+export const CHAIN_TIME_REFRESH_MS = 5 * 60 * 1000;
 
 // Under this many seconds left, a minute count reads as false precision.
 const FEW_MINUTES_SECONDS = 5 * 60;
@@ -24,49 +30,92 @@ const FEW_MINUTES_SECONDS = 5 * 60;
 /**
  * The earliest close time of a cancelling dispenser and a plain countdown.
  *
+ * With `chainTime` (the protocol time the next block will carry) and
+ * `chainTimeReadAtMs` (the local clock when it was read), the remainder is
+ * `closeAt - chainNow`, where chainNow is chainTime advanced by the local time
+ * elapsed since the read. The local clock label is then now plus that
+ * remainder. Without a usable chain time the remainder is measured against
+ * the wall clock instead.
+ *
  * @param {number|string|null|undefined} cancelTimestamp  the cancel action's block time, UNIX seconds
- * @param {{ nowMs?: number, delaySeconds?: number }} [opts]
+ * @param {{ nowMs?: number, delaySeconds?: number,
+ *           chainTime?: number|null, chainTimeReadAtMs?: number|null }} [opts]
  * @returns {null | {
- *   closeAt: number,        earliest close, UNIX seconds
- *   closeAtMs: number,      the same in milliseconds, for a local clock label
+ *   closeAt: number,        earliest close in chain time, UNIX seconds
+ *   closeAtMs: number,      local clock estimate of the close, milliseconds
  *   secondsLeft: number,    0 once the window has passed
  *   pastDue: boolean,       the window has passed and the close waits on a block
- *   countdown: string,      'about 23 minutes' | 'a few minutes' | 'any block now'
- *   shortCountdown: string, '~23 min' | 'a few min' | 'any block now'
+ *   basis: 'chain'|'clock', which clock the remainder was measured against
+ *   countdown: string,      'about 23 minutes' | 'a few minutes' | 'at the next block' | 'any block now'
+ *   shortCountdown: string, '~23 min' | 'a few min' | 'next block' | 'any block now'
  * }} null when the timestamp is missing or unreadable
  */
 export function dispenserCloseEta(cancelTimestamp, opts = {}) {
-    const { nowMs = Date.now(), delaySeconds = DISPENSER_CLOSE_DELAY_SECONDS } = opts;
+    const {
+        nowMs = Date.now(), delaySeconds = DISPENSER_CLOSE_DELAY_SECONDS,
+        chainTime = null, chainTimeReadAtMs = null,
+    } = opts;
     // Reject blank, zero and non-numeric stamps: a zero block time is a row
     // with no block behind it, and would read as a close fifty years overdue.
     if (cancelTimestamp == null || cancelTimestamp === '') return null;
     const cancelAt = Number(cancelTimestamp);
     if (!Number.isFinite(cancelAt) || cancelAt <= 0) return null;
     const closeAt = cancelAt + delaySeconds;
-    const secondsLeft = Math.max(0, Math.ceil(closeAt - nowMs / 1000));
+    const chainNow = chainNowSeconds(chainTime, chainTimeReadAtMs, nowMs);
+    const basis = chainNow == null ? 'clock' : 'chain';
+    const measuredFrom = chainNow == null ? nowMs / 1000 : chainNow;
+    const secondsLeft = Math.max(0, Math.ceil(closeAt - measuredFrom));
     const pastDue = secondsLeft === 0;
     return {
         closeAt,
-        closeAtMs: closeAt * 1000,
+        closeAtMs: basis === 'chain' ? nowMs + secondsLeft * 1000 : closeAt * 1000,
         secondsLeft,
         pastDue,
-        countdown: countdownPhrase(secondsLeft),
-        shortCountdown: shortCountdownPhrase(secondsLeft),
+        basis,
+        countdown: countdownPhrase(secondsLeft, basis),
+        shortCountdown: shortCountdownPhrase(secondsLeft, basis),
     };
 }
 
-function countdownPhrase(secondsLeft) {
-    // Past the window the close needs a block with a later median time, so
-    // there is no clock time left to count down to.
-    if (secondsLeft <= 0) return 'any block now';
+// The chain's protocol time now: the last read, advanced by the local time
+// since it. Elapsed time never counts backwards, so a local clock stepping
+// back cannot push the close further out than the read itself did. Null when
+// either input is unusable, which sends the caller to the wall clock.
+function chainNowSeconds(chainTime, readAtMs, nowMs) {
+    if (chainTime == null || readAtMs == null) return null;
+    const base = Number(chainTime);
+    const readAt = Number(readAtMs);
+    if (!Number.isFinite(base) || base <= 0 || !Number.isFinite(readAt)) return null;
+    return base + Math.max(0, nowMs - readAt) / 1000;
+}
+
+/**
+ * The chain-time pair a countdown needs, from a `getChainTipBlockTime` result
+ * read with `withProtocolTime`.
+ *
+ * @param {any} tipRead  `{ protocolTime }` from the chain tip read
+ * @param {number} readAtMs  local clock when the read answered
+ * @returns {null | { chainTime: number, chainTimeReadAtMs: number }}
+ */
+export function chainClockFromTipRead(tipRead, readAtMs) {
+    const t = Number(tipRead?.protocolTime);
+    if (tipRead?.protocolTime == null || !Number.isFinite(t) || t <= 0) return null;
+    return { chainTime: t, chainTimeReadAtMs: readAtMs };
+}
+
+function countdownPhrase(secondsLeft, basis) {
+    // Past the window there is no clock time left to count down to: by chain
+    // time the next block closes it; by the wall clock alone the chain may
+    // still be short of the window's end, so no single block is promised.
+    if (secondsLeft <= 0) return basis === 'chain' ? 'at the next block' : 'any block now';
     if (secondsLeft < FEW_MINUTES_SECONDS) return 'a few minutes';
     const minutes = Math.round(secondsLeft / 60);
     if (minutes < 90) return `about ${minutes} minutes`;
     return `about ${Math.round(minutes / 60)} hours`;
 }
 
-function shortCountdownPhrase(secondsLeft) {
-    if (secondsLeft <= 0) return 'any block now';
+function shortCountdownPhrase(secondsLeft, basis) {
+    if (secondsLeft <= 0) return basis === 'chain' ? 'next block' : 'any block now';
     if (secondsLeft < FEW_MINUTES_SECONDS) return 'a few min';
     const minutes = Math.round(secondsLeft / 60);
     if (minutes < 90) return `~${minutes} min`;

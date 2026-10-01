@@ -92,6 +92,45 @@ describe('makeLedgerFactory', () => {
             expect(result.pairingInfo.firmwareVersion).toBe('2.2.1');
         });
 
+        // Models hw-app-btc's one-way switch: a client that served a call while a
+        // non-Bitcoin app was open stays on the legacy protocol for good. A
+        // shared client would carry a Litecoin call's protocol into Bitcoin.
+        it('serves a Bitcoin call after a Litecoin call from a fresh, non-legacy client', async () => {
+            let openApp = 'Bitcoin';
+            const transport = makeValidTransport({ send: vi.fn(async () => appInfoBytes(openApp)) });
+            const built = [];
+            function Btc({ currency }) {
+                const client = makeValidApp();
+                client.currency = currency;
+                client.legacy = currency !== 'bitcoin';
+                const derive = client.getWalletPublicKey;
+                client.getWalletPublicKey = vi.fn(async (...args) => {
+                    if (openApp !== 'Bitcoin') client.legacy = true;
+                    return derive(...args);
+                });
+                built.push(client);
+                return client;
+            }
+            const pair = makeLedgerFactory({
+                getTransport: vi.fn().mockResolvedValue(transport),
+                getAppClass: vi.fn().mockResolvedValue(Btc),
+            });
+            const { signer } = await pair();
+            const range = { accountIndex: 0, change: 0, startIndex: 0, count: 1 };
+            openApp = 'Litecoin';
+            await signer.getAddresses({ chainId: 'litecoin-mainnet', addressType: 'p2pkh', ...range });
+            openApp = 'Bitcoin';
+            await signer.getAddresses({ chainId: 'bitcoin-mainnet', addressType: 'p2wpkh', ...range });
+
+            expect(built).toHaveLength(3);
+            const [pairing, ltc, btc] = built;
+            expect(pairing.currency).toBe('bitcoin');
+            expect(ltc.currency).toBe('litecoin');
+            expect(btc.currency).toBe('bitcoin');
+            expect(btc.legacy).toBe(false);
+            expect(btc.getWalletPublicKey).toHaveBeenCalledTimes(1);
+        });
+
         it('maps nanoS model id correctly', async () => {
             const result = await pairWithMocks({ modelId: 'nanoS' });
             expect(result.pairingInfo.model).toBe('nanoS');

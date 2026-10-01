@@ -50,10 +50,13 @@ import {
 } from '../../flows/feeEstimate.js';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { tickLookupVerdict } from '../utils/listTickItems.js';
+import { isNativeCoinTick, nativeCoinTickMessage, unknownTickMessage } from '../utils/dividendTickChecks.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { MEMO_HINT } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -239,9 +242,94 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
-    // PC-51: native-coin protocol fee (DIVIDEND is quotable); the
+    // Native-coin protocol fee (DIVIDEND is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
     const nativeFee = useNativeFee(coinTicker);
+
+    // DIVIDEND pays holders of an XChain token: the chain's own coin has no
+    // such holder set, so typing it (BTC/LTC/DOGE, or a testnet/regtest
+    // explorer form like TDOGE) is refused here instead of at the
+    // confirm-time dry run. A `^ID` reference never names the coin.
+    const trimmedTick = tick.trim().toUpperCase();
+    const tickIsNativeCoin = useMemo(
+        () => !trimmedTick.startsWith('^') && isNativeCoinTick(trimmedTick, { coinTicker, descriptor }),
+        [trimmedTick, coinTicker, descriptor],
+    );
+
+    // TICK / DIVIDEND_TICK existence: the indexer refuses the whole action
+    // when either names no XChain token on this chain (validateDividend:
+    // "TICK (unknown)" / "DIVIDEND_TICK (unknown)"). Checked the same way
+    // ListCreateForm checks a token-list member - debounced, `^ID`
+    // references left unchecked (the indexer resolves those, not a name
+    // lookup) - so the form says which ticker is wrong before the dry run's
+    // one generic sentence. `verdict` stays null on a network failure so an
+    // explorer hiccup shows the same non-blocking style as the holders
+    // count above, rather than refusing every dividend.
+    const [tickCheck, setTickCheck] = useState(
+        /** @type {{ verdict: 'found' | 'missing' | null, error: string | null }} */
+        ({ verdict: null, error: null }),
+    );
+    const [dividendTickCheck, setDividendTickCheck] = useState(
+        /** @type {{ verdict: 'found' | 'missing' | null, error: string | null }} */
+        ({ verdict: null, error: null }),
+    );
+
+    useEffect(() => {
+        setTickCheck({ verdict: null, error: null });
+        // A locked TICK arrived from a real token context (Token Detail's
+        // pre-fill), never hand-typed, so the existence check - built for
+        // the manual-entry field this component also renders - stays off;
+        // the field it would annotate isn't even on screen in this mode.
+        if (lockedToken) return undefined;
+        if (!chainId || !trimmedTick || trimmedTick.startsWith('^') || tickIsNativeCoin) return undefined;
+        if (typeof messaging?.getTokenInfo !== 'function') return undefined;
+        let cancelled = false;
+        const handle = setTimeout(() => {
+            messaging.getTokenInfo({ chainId, tick: trimmedTick })
+                .then((info) => {
+                    if (cancelled) return;
+                    setTickCheck({ verdict: tickLookupVerdict(info), error: null });
+                })
+                .catch((err) => {
+                    if (cancelled) return;
+                    setTickCheck({ verdict: null, error: err?.message || 'Failed to verify this token.' });
+                });
+        }, 400);
+        return () => { cancelled = true; clearTimeout(handle); };
+    }, [trimmedTick, chainId, messaging, tickIsNativeCoin, lockedToken]);
+
+    const trimmedDividendTick = dividendTick.trim().toUpperCase();
+    useEffect(() => {
+        setDividendTickCheck({ verdict: null, error: null });
+        if (!chainId || !trimmedDividendTick || trimmedDividendTick.startsWith('^')) return undefined;
+        if (typeof messaging?.getTokenInfo !== 'function') return undefined;
+        let cancelled = false;
+        const handle = setTimeout(() => {
+            messaging.getTokenInfo({ chainId, tick: trimmedDividendTick })
+                .then((info) => {
+                    if (cancelled) return;
+                    setDividendTickCheck({ verdict: tickLookupVerdict(info), error: null });
+                })
+                .catch((err) => {
+                    if (cancelled) return;
+                    setDividendTickCheck({ verdict: null, error: err?.message || 'Failed to verify this token.' });
+                });
+        }, 400);
+        return () => { cancelled = true; clearTimeout(handle); };
+    }, [trimmedDividendTick, chainId, messaging]);
+
+    const tickFieldError = tickIsNativeCoin
+        ? nativeCoinTickMessage(coinTicker, descriptor?.displayName || '')
+        : tickCheck.verdict === 'missing'
+            ? unknownTickMessage(trimmedTick, descriptor?.displayName || chainId)
+            : tickCheck.error
+                ? `Couldn't verify this token: ${tickCheck.error}`
+                : undefined;
+    const dividendTickFieldError = dividendTickCheck.verdict === 'missing'
+        ? unknownTickMessage(trimmedDividendTick, descriptor?.displayName || chainId)
+        : dividendTickCheck.error
+            ? `Couldn't verify this token: ${dividendTickCheck.error}`
+            : undefined;
 
     // Source balance of the dividend ticker, backing the per-unit
     // AmountField's "available" footer. It is NOT the Max: see
@@ -368,6 +456,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(tickError);
             return;
         }
+        if (tickIsNativeCoin) {
+            setFormError(nativeCoinTickMessage(coinTicker, descriptor?.displayName || ''));
+            return;
+        }
+        if (tickCheck.verdict === 'missing') {
+            setFormError(unknownTickMessage(trimmedTick, descriptor?.displayName || chainId));
+            return;
+        }
         if (!dividendTick.trim()) {
             setFormError('Dividend ticker is required.');
             return;
@@ -375,6 +471,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         const dividendTickError = tickerReferenceError(dividendTick, { noun: 'Dividend ticker', allowRef: true });
         if (dividendTickError) {
             setFormError(dividendTickError);
+            return;
+        }
+        if (dividendTickCheck.verdict === 'missing') {
+            setFormError(unknownTickMessage(trimmedDividendTick, descriptor?.displayName || chainId));
             return;
         }
         const amt = String(amount).trim();
@@ -822,12 +922,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     label="Holder-of token"
                     value={tick && chainId ? { chainId, tick } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
+                    error={tickFieldError}
                 />
             )}
             <TokenField
                 label="Dividend token"
                 value={dividendTick && chainId ? { chainId, tick: dividendTick } : null}
                 onOpenPicker={() => setDividendPickerOpen(true)}
+                error={dividendTickFieldError}
             />
             <AmountField
                 label="Per-unit amount"
@@ -848,7 +950,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             />
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
@@ -894,7 +996,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick || !dividendTick || !amount || actionConfirm.composing}
+                    disabled={!fromAddress || !tick || !dividendTick || !amount || actionConfirm.composing
+                        || tickIsNativeCoin || tickCheck.verdict === 'missing'
+                        || dividendTickCheck.verdict === 'missing'}
                 >
                     {singleEncode ? 'Pay dividend' : 'Preview'}
                 </Button>

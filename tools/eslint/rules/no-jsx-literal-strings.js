@@ -34,9 +34,9 @@
 //     emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
-//     copyLabel, balanceText, submitLabel, what, prefix, noun
+//     copyLabel, balanceText, submitLabel, what, prefix, noun, summary
 //     (the USER_FACING_ATTRS set below is the authority; keep this list
-//     in step with it). The last twenty-four are component props rather
+//     in step with it). The last twenty-five are component props rather
 //     than DOM attributes: shipping components render copy through them,
 //     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -77,8 +77,8 @@
 //     consumed as hint={RESTORE_PASSWORD_HINTS.file}.
 //   - Copy returned by a helper call, or built inside a component (a
 //     descriptor array that is filtered and mapped before it renders).
-//   - Descriptor keys outside USER_FACING_ATTRS, such as `summary` or
-//     `description`, wherever the copy is written.
+//   - Descriptor keys outside USER_FACING_ATTRS, such as `description`,
+//     wherever the copy is written.
 //
 // What the rule allows:
 //
@@ -225,6 +225,9 @@ const USER_FACING_ATTRS = new Set([
     'what',
     'prefix',
     'noun',
+    // DiagnosticDetails renders `summary` verbatim as its disclosure label,
+    // and no JSX attribute or prop key in packages/*/src uses it technically.
+    'summary',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

@@ -20,8 +20,8 @@
 // `popup/signerBridge.js`, which opens the port and announces its
 // signer ids. Treat that listener as a trust boundary: it disconnects
 // any port failing `isTrustedExtensionSender`, drops an over-cap id
-// batch whole, and lets a port unregister only the ids it registered
-// itself.
+// batch whole, and lets a port clear only the ids whose registered
+// transport is still its own.
 //
 // This registry is one process-wide singleton shared by all three
 // shells: desktop main reaches it through

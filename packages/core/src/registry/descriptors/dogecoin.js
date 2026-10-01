@@ -10,7 +10,7 @@
 
 // Dogecoin chain descriptors. P2PKH only (no segwit on Dogecoin at launch).
 // Fee unit is sats-per-kbyte (koinu/kB) per §44.1. RBF is not standard on
-// Dogecoin's fork, but per-chain Settings still drive behavior.
+// Dogecoin's fork, so rbfSupported:false caps every stored or per-send RBF flag.
 
 import { DOGECOIN_ACTIONS } from '../actions.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../validate.js';
@@ -47,6 +47,9 @@ export const dogecoinDescriptors = [
         ...COMMON,
         id: 'dogecoin-mainnet',
         networkKind: 'mainnet',
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
+        platformListOwners: [],
         icon: 'dogecoin-mainnet-icon-20.png',
         wifVersionByte: 0x9e,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
@@ -57,6 +60,9 @@ export const dogecoinDescriptors = [
         ...COMMON,
         id: 'dogecoin-testnet',
         networkKind: 'testnet',
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
+        platformListOwners: [],
         icon: 'dogecoin-testnet-icon-20.png',
         wifVersionByte: 0xf1,
         explorer: { defaultUrl: 'https://explorer.xchain.io', defaultPort: 443 },
@@ -67,6 +73,9 @@ export const dogecoinDescriptors = [
         ...COMMON,
         id: 'dogecoin-regtest',
         networkKind: 'regtest',
+        // Display-only, never consensus. The operator fills this with the
+        // platform's documented list-owner addresses.
+        platformListOwners: [],
         icon: 'dogecoin-regtest-icon-20.png',
         // Dogecoin Core in regtest uses Bitcoin-testnet base58 prefixes (0xef
         // for WIF), not Dogecoin-testnet (0xf1). Matches xchain-sdk

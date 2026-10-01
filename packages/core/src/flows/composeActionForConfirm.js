@@ -282,9 +282,9 @@ export async function composeActionForConfirm({
             decoded = withListRemovalDescriptions(decoded, parsed);
         }
     } catch {
-        // Leave it null and the caller's own `decoded` still renders: a
-        // confirm page with no intent line would be worse than one described
-        // from the params that built it.
+        // Leave it null: the confirm screen takes no caller-supplied `decoded`,
+        // so an undescribable action shows no intent line, a visible absence
+        // rather than intent rebuilt from form params (which §1.1 forbids).
         decoded = null;
     }
 
@@ -414,7 +414,7 @@ export async function composeActionForConfirm({
         simulation,
         // §1.1 / §5.2.2: the intent, described from the composed action
         // string. Null when it could not be described, in which case the
-        // caller's own `decoded` renders.
+        // confirm screen shows no intent line (there is no caller fallback).
         decoded,
         tamperVerified: true,
     };

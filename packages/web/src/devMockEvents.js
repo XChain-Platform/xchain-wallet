@@ -12,7 +12,9 @@
 // () => {}; }`, hostBridge.js) and had never delivered a single frame
 // (I-36). This module is the emitter that fixes that, kept separate from
 // hostBridge.js so it is independently unit-testable without dragging in
-// the whole mock SDK proxy.
+// the whole mock SDK proxy. Keep it free of top-level side effects:
+// hostBridge.js imports it above its PROD gate, so only tree-shaking keeps
+// it out of production (check-no-dev-mock.sh scans for its fixture strings).
 //
 // Frame contract is spec-fixed (I-5/I-10/I-43), not invented here:
 //   MEMPOOL_ACTION data: { tx_hash, source, action, data, first_seen, destinations }

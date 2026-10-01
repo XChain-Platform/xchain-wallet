@@ -271,6 +271,19 @@ export function displayRateToSettingsCustom(unit, displayRate) {
 }
 
 /**
+ * Seed a Settings custom rate at one DISPLAY unit, stored as smallest-unit per KB.
+ *
+ * One unit is 1 sat/vB (1000) on a per-vbyte chain and 1 DOGE/kB (1e8) on a
+ * per-kB chain, which is Dogecoin's relay floor; a fixed 1000 is 0.00001 there.
+ *
+ * @param {string} unit   display unit from resolveFeeUnit
+ * @returns {number}
+ */
+export function defaultCustomSettingsRate(unit) {
+    return displayRateToSettingsCustom(unit, 1);
+}
+
+/**
  * Convert a per-byte rate (the table's internal granularity) to the
  * user-displayed value in the chain's natural unit. Inverse of
  * `displayRateToPerByte`. Useful when porting tier defaults into the

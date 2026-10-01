@@ -224,6 +224,31 @@ try {
             out.signature.includes(K1_PRIMARY), out.signature);
     }
 
+    // A GOOD signature over a manifest whose gate is not `enforced` is still refused,
+    // including one that records no gate at all, as the desktop updater refuses both.
+    for (const [label, gate] of [['stamped SKIPPED', 'SKIPPED'], ['with no gate line', null]]) {
+        const gated = stagedRelease(join(work, `gated-${String(gate)}`));
+        const text = readFileSync(gated.manifest, 'utf8').split('\n')
+            .flatMap((l) => (l.startsWith('# dev-mock-gate:')
+                ? (gate === null ? [] : [`# dev-mock-gate: ${gate}`]) : [l]))
+            .join('\n');
+        writeFileSync(gated.manifest, text);
+        writeFileSync(`${gated.manifest}.asc`, '');
+        let refused = null;
+        try {
+            await checkProvenance({
+                zipPath: gated.zip, manifestPath: gated.manifest, tag: 'v9.9.9', allowUnsigned: false,
+                runImpl: gpgSaying(`[GNUPG:] VALIDSIG ${K1_SUBKEY} 2026-01-01 0 4 0 22 8 00 ${K1_PRIMARY}\n`),
+            });
+        } catch (err) {
+            refused = err;
+        }
+        check(`checkProvenance refuses a correctly signed manifest ${label}`,
+            refused instanceof Refusal
+            && new RegExp(`dev-mock gate as '${gate || 'unrecorded'}'`).test(refused.message),
+            String(refused));
+    }
+
     // --- 3. --allow-unsigned stays the ONE named escape ------------------
     //
     // The flag has to keep working: a refusal with no way past it is what

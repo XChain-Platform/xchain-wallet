@@ -118,3 +118,17 @@ describe('StakingActionForm claim-rewards availableAmt (PC-47 propagation)', () 
         expect(screen.getByLabelText(/Signing public key/)).toHaveValue(activeKey);
     });
 });
+
+describe('StakingActionForm network picker', () => {
+    it('offers only Bitcoin chains for UNSTAKE and COLLECT', async () => {
+        const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
+        for (const mode of ['unstake', 'claim-rewards']) {
+            mountForm({ getAddressesByChain: vi.fn().mockResolvedValue(held) }, mode);
+            fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
+            const offered = screen.getAllByRole('option').map((o) => o.textContent);
+            expect(offered.some((t) => /Litecoin|Dogecoin/.test(t)), mode).toBe(false);
+            expect(offered.some((t) => /Bitcoin/.test(t)), mode).toBe(true);
+            cleanup();
+        }
+    });
+});

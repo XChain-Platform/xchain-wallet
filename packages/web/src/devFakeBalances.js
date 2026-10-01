@@ -10,9 +10,11 @@
 
 // Dev-only fake balance dataset used by `createDevMockSdk` so the
 // wallet UI has realistic data to render even when no real explorer
-// is configured. Strictly non-production: shipped to the bundle only
-// because it lives next to the dev-mock SDK; the real SDK overrides
-// the dev-mock at boot when `xchain-sdk` resolves cleanly.
+// is configured. Strictly non-production: hostBridge.js imports it
+// unconditionally, above its `import.meta.env?.PROD` gate, so it stays
+// out of a production bundle only by tree-shaking. Keep this file free
+// of top-level side effects (tools/build-reproduce/check-no-dev-mock.sh
+// scans built bundles for its fixture strings).
 //
 // Native balances per chain (the user-requested totals):
 //   BTC  → 50.00000000     ( 5_000_000_000 sats)

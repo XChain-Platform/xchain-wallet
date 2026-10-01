@@ -19,11 +19,12 @@
 // singleton ipcMain event stream with no connection concept; every
 // message arrives with an `event.sender` (the BrowserWindow's
 // webContents) that we key a synthetic "port" off of. First message
-// from a given webContents creates the entry; when the webContents
-// is destroyed (window closed, navigation, renderer crash) we tear
-// down the transport + clear its owned signerIds so pending sign
-// requests reject with "signer bridge disconnected" instead of
-// hanging forever.
+// from a given webContents creates the entry; when its document goes
+// away (window destroyed, main-frame navigation or reload committed,
+// renderer process gone) we tear down the transport + clear its owned
+// signerIds so pending sign requests reject with "signer bridge
+// disconnected" instead of hanging forever. The next message from the
+// same webContents builds a fresh entry for the new document.
 //
 // Trust boundary (parallels the extension's isTrustedExtensionSender
 // gate): the process-wide signerBridge registry is a plain Map keyed by
@@ -67,6 +68,10 @@ export const MAX_SIGNER_IDS_PER_MESSAGE = 64;
 // costs nothing, and `unregister` (or window teardown) returns capacity,
 // so a real renderer with a handful of paired devices never meets it.
 export const MAX_SIGNER_IDS_PER_SENDER = 64;
+
+// End an entry when its document ends; 'destroyed' alone misses a reload and a crash.
+// 'did-navigate' is main-frame only, fires on commit, and skips in-page navigations.
+const DOCUMENT_END_EVENTS = Object.freeze(['destroyed', 'did-navigate', 'render-process-gone']);
 
 /**
  * Attach the main-process signer-bridge listener. Returns a detach
@@ -183,7 +188,13 @@ export function attachSignerBridgeListener({
             }
         });
 
+        let torn = false;
         const tearDown = () => {
+            if (torn) return;
+            torn = true;
+            for (const ev of DOCUMENT_END_EVENTS) {
+                try { sender.removeListener?.(ev, tearDown); } catch { /* non-Electron shim */ }
+            }
             for (const fn of disconnectListeners) {
                 try { fn(); } catch { /* swallow */ }
             }
@@ -192,13 +203,13 @@ export function attachSignerBridgeListener({
                 if (ownerBySignerId.get(sid) === sender.id) ownerBySignerId.delete(sid);
             }
             ownedIds.clear();
-            bySender.delete(sender.id);
+            // Delete only this entry: a later document on the same webContents owns its own.
+            if (bySender.get(sender.id) === entry) bySender.delete(sender.id);
         };
-        try {
-            sender.once?.('destroyed', tearDown);
-        } catch { /* non-Electron shim (test fake) */ }
-
         const entry = { port, ownedIds, listeners, disconnectListeners };
+        for (const ev of DOCUMENT_END_EVENTS) {
+            try { sender.on?.(ev, tearDown); } catch { /* non-Electron shim (test fake) */ }
+        }
         bySender.set(sender.id, entry);
         return entry;
     }

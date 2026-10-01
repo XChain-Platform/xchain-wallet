@@ -121,7 +121,17 @@ done
 # lives. An operator whose default TMPDIR is too small for the artifact
 # points TMPDIR at somewhere with room.
 STAGE="$(mktemp -d)" || { echo "deploy-web.sh: could not create a staging dir." >&2; exit 1; }
-trap 'rm -rf "$STAGE"' EXIT
+# Remove the half-unpacked release too (PARTIAL, set at the unpack below),
+# and route signals through EXIT so an interrupted extract is cleaned as well.
+PARTIAL=""
+cleanup() {
+    rm -rf "$STAGE"
+    [[ -z "$PARTIAL" ]] || rm -rf "$PARTIAL"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 STAGED_TARBALL="$STAGE/$(basename "$TARBALL")"
 cp "$TARBALL" "$STAGED_TARBALL" || {
     echo "deploy-web.sh: could not stage a private copy of '$TARBALL'." >&2
@@ -152,6 +162,18 @@ bash "$HERE/verify.sh" "${VERIFY_ARGS[@]}" >&2 || {
     exit 1
 }
 
+# Refuse unless the manifest records the dev-mock gate as `enforced`, the rule
+# the desktop updater applies. verify.sh only warns, and this step puts the
+# bytes live. Read from the same manifest the check above just verified.
+M_GATE="$(sed -n 's/^# dev-mock-gate: //p' "$MANIFEST" | head -1)"
+if [[ "$M_GATE" != "enforced" ]]; then
+    echo "deploy-web.sh: $MANIFEST records the dev-mock gate as '${M_GATE:-unrecorded}', not 'enforced'; refusing to deploy." >&2
+    echo "  The gate keeps the fabricated-address dev SDK, which cannot sign or" >&2
+    echo "  broadcast, out of a shipped bundle. Nothing was unpacked and the live" >&2
+    echo "  symlink was not touched. Re-sign the release with the gate running." >&2
+    exit 1
+fi
+
 RELEASES="$WEBROOT/releases"
 TARGET="$RELEASES/$TAG"
 CURRENT="$WEBROOT/current"
@@ -161,6 +183,9 @@ if [[ -e "$TARGET" ]]; then
     echo "  A published version is never rebuilt in place (§3). To roll" >&2
     echo "  BACK to it, flip the symlink; do not redeploy over it:" >&2
     echo "    ln -sfn '$TARGET' '$CURRENT.tmp' && mv -Tf '$CURRENT.tmp' '$CURRENT'" >&2
+    echo "  If an earlier deploy of $TAG failed, a copy of this script older than" >&2
+    echo "  the hidden-sibling unpack may have left it half-written: remove it and" >&2
+    echo "  deploy again rather than flipping to it." >&2
     exit 1
 fi
 
@@ -176,16 +201,43 @@ fi
 
 # Unpack beside the live tree, not into it, and from the staged copy the
 # gate hashed rather than a fresh read of the caller's path.
-mkdir -p "$TARGET"
-tar -xzf "$STAGED_TARBALL" -C "$TARGET"
+#
+# Into a hidden sibling first, renamed into place only once complete, so
+# releases/<tag> never exists half-written for the check above to offer as a
+# rollback target. Plain mkdir, not mktemp -d: the dir keeps the umask mode
+# the web server reads it with, where mktemp's 0700 survives a BSD tar.
+mkdir -p "$RELEASES"
+PARTIAL="$RELEASES/.$TAG.partial.$$"
+mkdir "$PARTIAL" || { PARTIAL=""; echo "deploy-web.sh: could not create an unpack dir under $RELEASES." >&2; exit 1; }
+tar -xzf "$STAGED_TARBALL" -C "$PARTIAL"
 
-if [[ ! -f "$TARGET/index.html" ]]; then
+if [[ ! -f "$PARTIAL/index.html" ]]; then
     echo "deploy-web.sh: no index.html in the unpacked release; refusing to flip." >&2
     echo "  Serving a directory with no entry point would take the site down" >&2
     echo "  as completely as deleting it, and the symlink would look healthy." >&2
-    rm -rf "$TARGET"
     exit 1
 fi
+
+# Detect `mv -T` once; the rename below and the flip after it both use it.
+HAVE_MV_T=0
+if mv --help 2>&1 | grep -q -- '-T'; then HAVE_MV_T=1; fi
+
+# Rename, never nest: a plain mv onto a $TARGET that appeared since the check
+# above (a concurrent run) would move the release INSIDE it. `mv -T` refuses.
+if [[ "$HAVE_MV_T" -eq 1 ]]; then
+    mv -T "$PARTIAL" "$TARGET" || {
+        echo "deploy-web.sh: could not rename the unpacked release to $TARGET; refusing to flip." >&2
+        exit 1
+    }
+else
+    # BSD has no -T, so re-check just before the rename (not atomic, as below).
+    [[ ! -e "$TARGET" ]] || {
+        echo "deploy-web.sh: $TARGET appeared during the unpack; refusing to flip." >&2
+        exit 1
+    }
+    mv "$PARTIAL" "$TARGET"
+fi
+PARTIAL=""
 
 # The flip. `mv -T` replaces the symlink itself atomically. Without -T,
 # mv would move the new link INSIDE the directory the old one points at,
@@ -197,7 +249,7 @@ if [[ -L "$CURRENT" ]]; then
     PREVIOUS="$(readlink "$CURRENT")"
 fi
 
-if mv --help 2>&1 | grep -q -- '-T'; then
+if [[ "$HAVE_MV_T" -eq 1 ]]; then
     ln -sfn "$TARGET" "$CURRENT.tmp"
     mv -Tf "$CURRENT.tmp" "$CURRENT"
 else
@@ -224,6 +276,8 @@ echo "deploy-web.sh: live on $TAG" >&2
 # PREVIOUS holds the symlink target, so its basename is the directory name
 # `ls -1t` reports; empty on a first-ever deploy, where the guard is a no-op.
 PREVIOUS_NAME="${PREVIOUS##*/}"
+# `ls -1t` with no -a/-A on purpose: it never lists a dot-prefixed
+# `.<tag>.partial.*` dir, so a concurrent run's unpack is never pruned.
 if [[ "$KEEP" -gt 0 ]]; then
     PRUNED=0
     while IFS= read -r old; do

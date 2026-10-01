@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
     consensusRefusalDetail,
     consensusRefusalMessage,
+    isHardPreflightFinding,
 } from '../../../packages/core/src/shared/utils/preflightFindingKey.js';
 
 function refusal(status) {
@@ -41,5 +42,38 @@ describe('consensusRefusalMessage', () => {
         const reason = 'address tb1qexample is not on allow-list #42';
         expect(consensusRefusalMessage(refusal(`invalid: ${reason}`)))
             .toBe('The network refused this action: Address tb1qexample is not on allow-list #42.');
+    });
+});
+
+describe('isHardPreflightFinding', () => {
+    const invalid = (extra) => ({ severity: 'error', ...extra });
+
+    it('honours an explicit producer override policy either way', () => {
+        expect(isHardPreflightFinding(invalid({ overridable: false }))).toBe(true);
+        expect(isHardPreflightFinding(invalid({ overridable: true, data: { status: 'invalid: x' } })))
+            .toBe(false);
+    });
+
+    // Sub-commands are recognised by commandIndex, never by an SDK code name,
+    // so a renamed code on a per-command refusal stays acknowledgeable.
+    it('keeps an unmarked per-command refusal soft whatever its code is named', () => {
+        const f = invalid({ code: 'SOME_RENAMED_CODE', data: { commandIndex: 2, status: 'invalid: TICK (unknown)' } });
+        expect(isHardPreflightFinding(f)).toBe(false);
+    });
+
+    it('counts batch position 0 as a sub-command', () => {
+        expect(isHardPreflightFinding(invalid({ data: { commandIndex: 0, status: 'invalid: x' } }))).toBe(false);
+    });
+
+    // With no commandIndex the refusal is of the whole action, so it blocks.
+    it('hard-blocks an unmarked whole-action consensus refusal', () => {
+        expect(isHardPreflightFinding(invalid({ data: { status: 'invalid: x' } }))).toBe(true);
+        expect(isHardPreflightFinding(invalid({
+            code: 'DRYRUN_SUBCOMMAND_INVALID', data: { status: 'invalid: x' },
+        }))).toBe(true);
+    });
+
+    it('never hard-blocks a non-error finding', () => {
+        expect(isHardPreflightFinding({ severity: 'warning', overridable: false })).toBe(false);
     });
 });

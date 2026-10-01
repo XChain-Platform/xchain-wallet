@@ -50,7 +50,11 @@ for (const s of schemaStrategies) {
 
 // Custom rate input visible only when strategy='custom'
 assert.match(src, /fees\.strategy === 'custom'/, 'custom-rate input gated on custom strategy');
-assert.match(src, /sats \/ KB/, 'custom rate is sats/KB');
+// The custom rate follows the chain's fee unit: a fixed 1000 seed is 0.00001 DOGE/kB.
+assert.match(src, /resolveFeeUnit\(descriptor\)/, 'custom rate unit comes from the descriptor');
+assert.match(src, /defaultCustomSettingsRate\(unit\)/, 'custom rate seed follows the unit');
+assert.doesNotMatch(src, /\?\? 1000/, 'no fixed per-vbyte seed');
+assert.doesNotMatch(src, /sats \/ KB/, 'no fixed sats/KB label');
 
 // RBF toggle present and disabled when descriptor doesn't support RBF
 // Anchor on the state the toggle is bound to, not its display copy: the wording

@@ -201,3 +201,24 @@ export function createLockBackstop(deps) {
         get cleanupPending() { return cleanupPending; },
     };
 }
+
+/**
+ * Share one in-flight host build among overlapping callers, so none orphans a Vault or listener.
+ * A caller that joined a build which found no session builds once more (it may be the unlock).
+ * @template T
+ * @param {() => Promise<T | null>} build
+ * @returns {() => Promise<T | null>}
+ */
+export function createHostBuildFlight(build) {
+    /** @type {Promise<T | null> | null} */
+    let inFlight = null;
+    const start = () => {
+        if (!inFlight) inFlight = build().finally(() => { inFlight = null; });
+        return inFlight;
+    };
+    return async function ensure() {
+        const joined = inFlight !== null;
+        const result = await start();
+        return result == null && joined ? start() : result;
+    };
+}

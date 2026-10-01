@@ -87,10 +87,11 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 //
 // Because this split is per-VERSION for STAKE/UNSTAKE/DELEGATE and this
 // list is per-ACTION, the validator-only SURFACES gate themselves at the
-// form level rather than here; see StakingList / StakeForm.
+// form level rather than here, through validatorLaneChainIds and
+// assertValidatorLaneChain below.
 //
-// DEPLOY and EXECUTE used to sit here too, and were the reason this list
-// outlived the staking split. Not because the chain refused them: LTC/DOGE
+// DEPLOY and EXECUTE stay out of this list. The case for listing them was
+// never that the chain refused them: LTC/DOGE
 // settle the protocol fee in NATIVE COIN, the indexer denylists a dry-run
 // feequote for exactly these two (they run caller-supplied code in the VM, so
 // dry-running them on a shared node would be a block-loop stall primitive),
@@ -127,6 +128,35 @@ export const COMMON_ACTIONS = /** @type {const} */ ([
 export const BTC_EXCLUSIVE_ACTIONS = /** @type {const} */ ([
     'COLLECT',
 ]);
+
+// Name the one coin whose indexer accepts the validator-lane versions above.
+export const VALIDATOR_LANE_COIN = 'bitcoin';
+
+/**
+ * Keep only the chains a validator-lane form may offer, so a user cannot
+ * pick Litecoin or Dogecoin and pay a fee for an action refused there.
+ *
+ * @param {string[]} chainIds
+ * @param {{ get(chainId: string): ({ coin?: string } | undefined) }} chainRegistry
+ * @returns {string[]}
+ */
+export function validatorLaneChainIds(chainIds, chainRegistry) {
+    return (chainIds || []).filter((id) => chainRegistry?.get?.(id)?.coin === VALIDATOR_LANE_COIN);
+}
+
+/**
+ * Refuse a validator-lane composer aimed at a chain other than Bitcoin,
+ * before anything is signed or broadcast.
+ *
+ * @param {{ get(chainId: string): ({ coin?: string } | undefined) }} chainRegistry
+ * @param {string} chainId
+ * @param {string} who  composer name for the error prefix
+ */
+export function assertValidatorLaneChain(chainRegistry, chainId, who) {
+    if (chainRegistry?.get?.(chainId)?.coin !== VALIDATOR_LANE_COIN) {
+        throw new Error(`${who}: validator staking actions are accepted on Bitcoin only, not on ${chainId}`);
+    }
+}
 
 // Protocol-accepted on every chain, form-less by design (see header note 2).
 // ADDRESS moved OUT of this list in PC-32: v0 preferences got a real form

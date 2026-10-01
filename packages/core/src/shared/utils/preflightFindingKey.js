@@ -13,7 +13,7 @@
  *
  * The override gate cannot key on `f.code` alone. That holds only while a
  * report could carry at most one error per code. It cannot: the SDK's
- * `pushSubCommandFindings` (xchain-sdk/src/preflight/index.js) pushes one
+ * `pushSubCommandFindings` (xchain-sdk/src/preflight/index/tier1_findings.js) pushes one
  * `DRYRUN_SUBCOMMAND_INVALID` error PER invalid batch sub-command, and the
  * batch check pushes one `PARSE_INVALID` per unparseable command, each tagged
  * with its own `data.commandIndex`. Under a code-scoped set, ticking
@@ -103,13 +103,16 @@ export function consensusRefusalDetail(f) {
  * sub-command refusals are also scoped to one command rather than the whole
  * action, so they stay eligible for per-command acknowledgement.
  *
+ * A sub-command finding is recognised by its integer `data.commandIndex`, the
+ * discriminator the SDK stamps and `preflightFindingKey` above already reads,
+ * never by its code name, so an SDK code rename cannot change this decision.
+ *
  * @param {{ severity?: string, overridable?: boolean, data?: object }} f
  * @returns {boolean}
  */
 export function isHardPreflightFinding(f) {
     if (f?.severity !== 'error') return false;
     if (f.overridable !== undefined) return f.overridable === false;
-    const isSubCommand = f.code === 'DRYRUN_SUBCOMMAND_INVALID'
-        || Number.isInteger(f?.data?.commandIndex);
+    const isSubCommand = Number.isInteger(f?.data?.commandIndex);
     return !isSubCommand && consensusRefusalReason(f) !== null;
 }

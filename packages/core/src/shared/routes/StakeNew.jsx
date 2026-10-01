@@ -22,8 +22,8 @@ import local from './StakeNew.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Staking is BTC-only at launch per §10.3; both arms stake from a
-// Bitcoin-family chain the wallet already has an address on.
+// Gate both arms on a Bitcoin address as a wallet launch policy; the indexer
+// refuses only the validator arm off Bitcoin, and contract staking is chain-open.
 const STAKING_COIN = 'bitcoin';
 
 /**

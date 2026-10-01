@@ -28,6 +28,7 @@ import {
     customFeeEstimate,
     settingsCustomToDisplayRate,
     displayRateToSettingsCustom,
+    defaultCustomSettingsRate,
 } from '../../../packages/core/src/flows/feeEstimate.js';
 
 describe('resolveFeeUnit', () => {
@@ -72,6 +73,17 @@ describe('resolveFeeUnit', () => {
         expect(custom.unit).toBe('LTC/kB');
         // 1 LTC/kB over a 250-byte tx = 0.25 LTC = 25_000_000 sats.
         expect(custom.sats).toBe(25_000_000);
+    });
+
+    it('seeds the Settings custom rate at one display unit, never below Dogecoin Low', () => {
+        const reg = new ChainRegistry();
+        expect(defaultCustomSettingsRate(resolveFeeUnit(reg.get('bitcoin-mainnet')))).toBe(1000);
+        const dogeUnit = resolveFeeUnit(reg.get('dogecoin-mainnet'));
+        const seed = defaultCustomSettingsRate(dogeUnit);
+        expect(seed).toBe(100_000_000);
+        expect(settingsCustomToDisplayRate(dogeUnit, seed)).toBe(1);
+        const low = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: reg, speed: 'low' });
+        expect(seed).toBeGreaterThanOrEqual(displayRateToSettingsCustom(low.unit, low.rateValue));
     });
 
     it('Dogecoin is unchanged: DOGE/kB display, per-kB conversion', () => {

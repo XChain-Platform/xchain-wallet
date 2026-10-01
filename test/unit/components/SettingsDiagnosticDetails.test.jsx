@@ -46,15 +46,28 @@ describe('settings diagnostic disclosures', () => {
         mount(<BackupSection activeWallet={{ id: 'wallet-1', name: 'Wallet' }} />, messaging);
 
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
-        fireEvent.change(screen.getByLabelText('Candidate mnemonic'), {
+        fireEvent.change(screen.getByLabelText('Recovery phrase to test'), {
             target: { value: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
 
-        expect(await screen.findByText(/Index 1.*m\/84'\/0'\/0'\/0\/1/)).toBeTruthy();
-        expect(screen.getByText(/expected bc1qexpected.*derived bc1qderivedmismatch/i)).toBeTruthy();
-        expect(screen.getByText(/Index 2.*m\/84'\/0'\/0'\/0\/2/)).toBeTruthy();
-        expect(screen.getByText(/no saved wallet address.*derived bc1qderivednew/i)).toBeTruthy();
+        const mismatch = await screen.findByText(/Address #2: your wallet has bc1qexpected, but this recovery phrase gives bc1qderivedmismatch/);
+        const missing = screen.getByText(/Address #3: not in your wallet yet; this recovery phrase gives bc1qderivednew/);
+        expect(mismatch.tagName).toBe('LI');
+        expect(missing.tagName).toBe('LI');
+
+        // Paths stay reachable, but only inside the technical-details disclosure.
+        const details = screen.getByText('Technical details').closest('details');
+        expect(details).toBeTruthy();
+        expect(details.textContent).toContain("m/84'/0'/0'/0/1");
+        expect(details.textContent).toContain("m/84'/0'/0'/0/2");
+        expect(mismatch.textContent).not.toMatch(/m\/84|\bderived\b/);
+        expect(missing.textContent).not.toMatch(/m\/84|\bderived\b/);
+
+        // The heading names the chain and address type in words, not by code.
+        expect(screen.queryByText(/bitcoin-mainnet/)).toBeNull();
+        expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(screen.getByText('SegWit')).toBeTruthy();
     });
 
     it('lists every contact that an import skips with its rejection message', async () => {

@@ -93,7 +93,7 @@ async function openDryRunForm(page) {
     const open = main.getByRole('button', { name: 'Test…', exact: true });
     await expect(open, 'the Backup section offers no "Test…" action').toBeVisible({ timeout: 30_000 });
     await open.click();
-    await expect(page.getByLabel('Candidate mnemonic')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByLabel('Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -104,7 +104,7 @@ async function openDryRunForm(page) {
  * a phrase.
  */
 async function runDryRun(page, { mnemonic, passphrase = '' }) {
-    await page.getByLabel('Candidate mnemonic').fill(mnemonic);
+    await page.getByLabel('Recovery phrase to test').fill(mnemonic);
     if (passphrase) await page.getByLabel('BIP39 passphrase').fill(passphrase);
     await page.getByRole('button', { name: 'Run test', exact: true }).click();
 
@@ -120,7 +120,7 @@ async function resetToForm(page) {
     const open = page.getByRole('main').getByRole('button', { name: 'Test…', exact: true });
     await expect(open).toBeVisible({ timeout: 30_000 });
     await open.click();
-    await expect(page.getByLabel('Candidate mnemonic')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByLabel('Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
 }
 
 test.describe('backup dry-run restore (§19.6)', () => {

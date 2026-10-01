@@ -137,6 +137,41 @@ describe('a renderer enqueue replies after its only durable copy is written', ()
         const res = await pending;
         expect(res.ok).toBe(true);
         expect(res.result.signedTxHex).toBe('hex-R');
+        expect(res.result.persisted).toBe(true);
+    });
+
+    it('says persisted: false when the store refused the write, and still queues the entry', async () => {
+        const storage = {
+            load: async () => ({}),
+            save: async () => { throw new Error('broadcast queue write refused: QUOTA_BYTES quota exceeded'); },
+            clear: async () => {},
+        };
+        const h = makeHost({ storage });
+        await settle();
+
+        const res = await h.call('broadcast.queue.enqueue', {
+            walletId: W, chainId: CHAIN, signedTxHex: 'hex-R', summary: 'R',
+        });
+        expect(res.ok).toBe(true);
+        expect(res.result.persisted).toBe(false);
+        expect((await h.list()).map((e) => e.signedTxHex)).toEqual(['hex-R']);
+    });
+
+    it('never writes the persisted flag into the stored entry', async () => {
+        const saves = [];
+        const storage = {
+            load: async () => ({}),
+            save: async (snapshot) => { saves.push(JSON.parse(JSON.stringify(snapshot))); },
+            clear: async () => {},
+        };
+        const h = makeHost({ storage });
+        await settle();
+
+        await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-R', summary: 'R' });
+        await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-S', summary: 'S' });
+        expect(saves.length).toBeGreaterThan(0);
+        for (const entry of saves.at(-1)[W]) expect(entry).not.toHaveProperty('persisted');
+        for (const entry of await h.list()) expect(entry).not.toHaveProperty('persisted');
     });
 });
 

@@ -11,8 +11,9 @@
 // broadcastQueueStorage (§49.5 / Cluster G FOLLOWUP 2).
 //
 // Persistence layer for the queued-broadcast surface. The queue itself
-// lives as an in-memory `Map<walletId, entry[]>` inside createBackground-
-// Host; this module rehydrates that map at boot and writes it back on
+// lives as an in-memory `Map<walletId, entry[]>` in the queue store
+// (broadcastQueueStore.js) that createBackgroundHost serves from; this
+// module rehydrates that map at boot and writes it back on
 // every mutation so a service-worker restart (extension), a tab refresh
 // (web), or an Electron app relaunch (desktop) doesn't lose the user's
 // signed-but-unbroadcast txs.
@@ -28,7 +29,9 @@
 // `createBroadcastQueueStorage` returns null and createBackgroundHost
 // falls back to in-memory only (the prior v0.292.0 behavior).
 
-const STORAGE_KEY = 'xchain.broadcastQueue';
+import { BROADCAST_QUEUE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
+
+const STORAGE_KEY = BROADCAST_QUEUE_STORAGE_KEY;
 
 /**
  * Internal entry shape (mirrors what createBackgroundHost pushes).
@@ -61,7 +64,8 @@ const STORAGE_KEY = 'xchain.broadcastQueue';
  * and would otherwise outlive the wallet holding records that name its
  * transactions. `loadSettlements` reports the journal the last successful
  * `load` read, and either save writes the pair, so neither half can erase the
- * other.
+ * other. `save`, `saveSettlements` and `clear` reject when the store refused
+ * the write, so the caller can tell a landed save from a refused one.
  *
  * @typedef {Object} BroadcastQueueStorage
  * @property {() => Promise<QueueSnapshot | null>} load
@@ -100,7 +104,8 @@ export function createBroadcastQueueStorage() {
  *
  * `read` reports `{ ok: false }` for a store it could not reach and
  * `{ ok: true, blob }` otherwise, which is what keeps "unreadable" and "empty"
- * apart all the way up to the host.
+ * apart all the way up to the host. `write` and `remove` reject on a refused
+ * write.
  *
  * @param {{ read: () => Promise<{ ok: boolean, blob?: unknown }>,
  *           write: (blob: unknown) => Promise<void>,
@@ -109,8 +114,10 @@ export function createBroadcastQueueStorage() {
  */
 function envelopeAdapter(io) {
     // Last successfully read state of the key. This adapter is its process's
-    // only writer, so saving one half alongside the cached other half keeps
-    // the pair consistent with no read-modify-write race between them.
+    // only writer (a shell hands one queue store, and so one adapter, to every
+    // host it builds; see broadcastQueueStore.js), so saving one half alongside
+    // the cached other half keeps the pair consistent with no read-modify-write
+    // race between them.
     let cached = { queues: /** @type {QueueSnapshot} */ ({}), settlements: /** @type {OwedSettlement[]} */ ([]) };
     async function persist() {
         await io.write({ queues: cached.queues, settlements: cached.settlements });
@@ -162,25 +169,44 @@ function chromeLocalAdapter() {
                 }
             });
         },
+        // Reject a refused write or remove (MV3 reports it through `lastError`,
+        // as on read); the host decides what a refusal means, not this adapter.
         write(blob) {
-            return new Promise((resolve) => {
+            return new Promise((resolve, reject) => {
                 try {
-                    chrome.storage.local.set({ [STORAGE_KEY]: blob }, () => resolve());
-                } catch (_e) {
-                    resolve();
+                    chrome.storage.local.set({ [STORAGE_KEY]: blob }, () => settleChromeWrite('write', resolve, reject));
+                } catch (err) {
+                    reject(err);
                 }
             });
         },
         remove() {
-            return new Promise((resolve) => {
+            return new Promise((resolve, reject) => {
                 try {
-                    chrome.storage.local.remove(STORAGE_KEY, () => resolve());
-                } catch (_e) {
-                    resolve();
+                    chrome.storage.local.remove(STORAGE_KEY, () => settleChromeWrite('remove', resolve, reject));
+                } catch (err) {
+                    reject(err);
                 }
             });
         },
     });
+}
+
+/**
+ * Settle a chrome.storage write callback on `lastError`. Reading it here also
+ * stops Chrome logging an "Unchecked runtime.lastError" for the refusal.
+ *
+ * @param {'write' | 'remove'} op
+ * @param {() => void} resolve
+ * @param {(err: Error) => void} reject
+ */
+function settleChromeWrite(op, resolve, reject) {
+    const err = chrome.runtime?.lastError;
+    if (err) {
+        reject(new Error(`broadcast queue ${op} refused: ${err.message || 'unknown storage error'}`));
+        return;
+    }
+    resolve();
 }
 
 function localStorageAdapter() {
@@ -204,16 +230,13 @@ function localStorageAdapter() {
                 return { ok: true, blob: {} };
             }
         },
+        // Let a quota or privacy-mode throw reject: the host tolerates the
+        // failure so the queue mutation still succeeds, and this adapter reports it.
         async write(blob) {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-            } catch (_e) {
-                // Quota errors / privacy modes: tolerate so the queue
-                // mutation itself still succeeds.
-            }
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
         },
         async remove() {
-            try { localStorage.removeItem(STORAGE_KEY); } catch (_e) { /* ignore */ }
+            localStorage.removeItem(STORAGE_KEY);
         },
     });
 }

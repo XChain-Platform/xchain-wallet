@@ -55,8 +55,12 @@ const DUST_PRICED_SPARSE = { ...DUST_PRICED, action_index: '3049', escrow_remain
 // Priced comfortably above the floor: the check must stay silent here.
 const NORMAL_PRICED = { ...DUST_PRICED, action_index: '3050', get_amount: '2.00000000' };
 
-function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000' } = {}) {
+function mount(dispenser, { addresses = [buyerAddress], dogeSats = '1000000000', settings = {} } = {}) {
     const messaging = {
+        getSettings: vi.fn().mockResolvedValue(settings),
+        buildSendPsbtRequest: vi.fn().mockResolvedValue({
+            psbtHex: '70736274ff', encoding: 'P2SH', fromAddress: BUYER, chainId: CHAIN,
+        }),
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: addresses }),
         getDispenses: vi.fn().mockResolvedValue({ data: [] }),
@@ -140,5 +144,20 @@ describe('coin-paid dispenser priced below the dust floor', () => {
         expect(screen.queryByTestId('min-fills-notice')).toBeNull();
         expect(screen.queryByTestId('buy-dust-block')).toBeNull();
         expect(await buyButton()).toBeEnabled();
+    });
+
+    it('holds the watch-only unsigned build to the same floor', async () => {
+        const messaging = mount(DUST_PRICED, { settings: { walletMode: 'watcher' } });
+        await fillsInput();
+        fireEvent.change(await fillsInput(), { target: { value: '10' } });
+        await screen.findByTestId('buy-dust-block');
+        const build = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        expect(build).toBeDisabled();
+        fireEvent.click(build);
+        expect(messaging.buildSendPsbtRequest).not.toHaveBeenCalled();
+
+        fireEvent.change(await fillsInput(), { target: { value: '51' } });
+        await waitFor(() => expect(screen.queryByTestId('buy-dust-block')).toBeNull());
+        await waitFor(() => expect(build).toBeEnabled());
     });
 });

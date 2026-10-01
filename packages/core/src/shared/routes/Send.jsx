@@ -45,6 +45,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import {
@@ -1129,19 +1130,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         }
     }, [chainId, settings]);
 
-    // §44.3 RBF toggle. Default reads from settings.fees[chainId]
-    // .rbfByDefault when present; falls back to true (BIP125 RBF is the
-    // §29 / §44 expectation for all native sends). The current value
-    // flows into the send payload as `rbf: bool`; the encoder uses
-    // it to set the input sequence numbers (RBF requires sequence <
-    // 0xfffffffe per BIP125).
+    // §44.3 RBF toggle. The per-send preference seeds from the chain's
+    // resolved fee config; the encoder turns `rbf` into BIP125 input
+    // sequence numbers (sequence < 0xfffffffe).
     const [rbfEnabled, setRbfEnabled] = useState(true);
+    // Clamp the flag to the descriptor's capability (DOGE declares rbfSupported:false)
+    const rbfSupported = descriptor?.feeStrategy?.rbfSupported !== false;
+    const rbfForSend = rbfSupported && rbfEnabled;
     useEffect(() => {
-        if (!chainId || !settings?.fees) return;
-        if (!settings.fees[chainId]) return;
-        // §35.10: stored null follows the descriptor default (true on
-        // BTC/LTC, false on DOGE where RBF isn't standard).
-        const { rbfByDefault } = resolveFeeConfig(settings.fees[chainId], chainRegistry.get(chainId));
+        if (!chainId) return;
+        // §35.10: resolve even with no stored entry, so a chain switch always reseeds
+        const { rbfByDefault } = resolveFeeConfig(settings?.fees?.[chainId], chainRegistry.get(chainId));
         setRbfEnabled(rbfByDefault);
     }, [chainId, settings]);
 
@@ -1266,7 +1265,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     signerId: fromAddress.signerId,
                 },
                 to,
-                rbf: rbfEnabled,
+                rbf: rbfForSend,
                 ...(feePerKb != null ? { feePerKb } : {}),
             });
             if (!quote || typeof quote.maxSats !== 'string') return null;
@@ -1279,7 +1278,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         } finally {
             setMaxBusy(false);
         }
-    }, [isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfEnabled, feePerKb]);
+    }, [isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfForSend, feePerKb]);
 
     const onMax = useCallback(async () => {
         if (maxBusy) return; // a quote is already in flight; a second one would race it into the field
@@ -1546,7 +1545,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             tick: tick.trim(),
             amount: String(amount).trim(),
             memo: isNativeSend ? undefined : (memo.trim() || undefined),
-            rbf: rbfEnabled,
+            rbf: rbfForSend,
             ...(feePerKb != null ? { feePerKb } : {}),
             // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
             // real multi-recipient send so a single send composes the identical
@@ -1615,21 +1614,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 // The HW route runs the SAME send flow with a remote
                 // signer, so it signs the prebuilt PSBT byte-identically.
                 onApprove: (_creds, composed) => {
-                    const prebuiltPsbt = {
-                        psbtHex: composed.psbt,
-                        encoding: composed.encoding,
-                        actionString: composed.actionString,
-                        version: composed.version,
-                        // See useActionConfirmFlow. A multi-recipient
-                        // send is past one OP_RETURN, so it takes the chunk
-                        // lane and its fee rides the reveal.
-                        deferredFeeOutput: composed.deferredFeeOutput || null,
-                        deferredOutputs: composed.deferredOutputs || [],
-                        // See useActionConfirmFlow for both: the reveal's change
-                        // and the donation verdict these bytes actually carry.
-                        revealOpts: composed.revealOpts || null,
-                        adsDonation: { included: !!composed.adsPlan?.canSubmit },
-                    };
+                    // The shared mapping: a multi-recipient send takes the chunk
+                    // lane, so its deferred outputs and any envelope must ride along.
+                    const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
                     return isHwSource
                         ? messaging.sendAssetHw({
                             ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
@@ -1661,7 +1648,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             haptic.error();
         }
     }, [
-        chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfEnabled,
+        chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
         feePerKb, password, settings, messaging, confirmAction, draft, haptic,
         isHwSource, isMultiSend, sendLegs, sendTotals,
     ]);
@@ -1697,7 +1684,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 tick: tick.trim(),
                 amount: String(amount).trim(),
                 memo: isNativeSend ? undefined : (memo.trim() || undefined),
-                rbf: rbfEnabled,
+                rbf: rbfForSend,
                 ...(feePerKb != null ? { feePerKb } : {}),
                 // PC-52: multi-recipient legs, on the watcher and HW paths too
                 // (buildSendPsbt and the HW send handler take the same shape).
@@ -2637,7 +2624,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 {/* §44.3 per-send RBF toggle. Default seeds from
                     settings.fees[chainId].rbfByDefault (see the effect
                     above); the live value flows into the send payload as
-                    `rbf: rbfEnabled`. */}
+                    `rbf: rbfForSend`, off and disabled where the chain has no RBF. */}
                 <label className={styles.rbfRow}>
                     <span className={styles.rbfLabel}>
                         <span>
@@ -2648,14 +2635,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                             />
                         </span>
                         <span className={styles.rbfHint}>
-                            Keep this on to allow speeding up or cancelling the transaction before it confirms.
+                            {rbfSupported
+                                ? 'Keep this on to allow speeding up or cancelling the transaction before it confirms.'
+                                : `Fee bumping is not supported on ${descriptor?.displayName ?? 'this chain'}.`}
                         </span>
                     </span>
                     <input
                         type="checkbox"
                         role="switch"
                         aria-label="Replace-by-fee enabled"
-                        checked={rbfEnabled}
+                        checked={rbfForSend}
+                        disabled={!rbfSupported}
                         onChange={(e) => setRbfEnabled(e.target.checked)}
                     />
                 </label>

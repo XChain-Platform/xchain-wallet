@@ -75,9 +75,9 @@ const MAINNET_SLOT = FAMILY_MAINNET_COIN_TYPE_SLOT;
 describe('wallet descriptors vs xchain-sdk network params', () => {
     if (!haveSdk) {
         // House convention (see test/unit/ActionManifestConformance.test.js and
-        // xchain-sync/.github/workflows/ci.yml): SKIP when the sibling is absent
-        // unless XCHAIN_REQUIRE_SIBLINGS=1, which only the drift-guards CI job
-        // (which actually checks out the sibling) sets. That job fails loud;
+        // xchain-sync/.github/workflows/ci.yml): SKIP when the SDK is absent
+        // unless XCHAIN_REQUIRE_SIBLINGS=1, which only the drift-guards lane
+        // (installing the published xchain-sdk) sets. That lane fails loud;
         // ordinary single-repo checkouts skip instead of reddening every push.
         it('parity guard requires the xchain-sdk package', (ctx) => {
             if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') {

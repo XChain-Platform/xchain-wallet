@@ -497,6 +497,71 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         expect(compose.args.actionData.params.GAS_LIMIT).toBeUndefined();
     });
 
+    // EXECUTE carries no amount, so a paid method (a loan's fundLoan) only
+    // sees tokens deposited ahead of it in the same transaction. A tester's
+    // bare fundLoan reverted because the form had no way to attach one.
+    it('ExecuteContractForm with a deposit composes DEPOSIT then EXECUTE as one BATCH', async () => {
+        let built = null;
+        const { calls } = await driveThroughConfirm({
+            Form: ExecuteContractForm,
+            props: {
+                contractActionIndex: '9',
+                messagingOverrides: {
+                    buildBatchCommand: (args) => {
+                        built = args;
+                        return Promise.resolve({
+                            command: 'DEPOSIT|0|9|XCHAIN|10;EXECUTE|0|9|fundLoan',
+                            subStrings: ['DEPOSIT|0|9|XCHAIN|10', 'EXECUTE|0|9|fundLoan'],
+                        });
+                    },
+                },
+            },
+            actionLabel: 'Execute',
+            steps: [
+                (utils) => setValue(utils, 'Method', 'fundLoan'),
+                openTokenField('Deposit'),
+                pickToken('XCHAIN'),
+            ],
+            fill: (utils) => setValue(utils, /^Deposit amount/, '10'),
+        });
+        expect(built.subActions.map((x) => x.action)).toEqual(['DEPOSIT', 'EXECUTE']);
+        expect(built.subActions[0].params).toMatchObject({
+            CONTRACT_ACTION_INDEX: '9', TICK: 'XCHAIN', QUANTITY: '10',
+        });
+        expect(built.subActions[1].params).toMatchObject({ CONTRACT_ACTION_INDEX: '9', METHOD: 'fundLoan' });
+        expectSingleEncode(calls, {
+            action: 'BATCH',
+            params: { VERSION: '0', COMMAND: 'DEPOSIT|0|9|XCHAIN|10;EXECUTE|0|9|fundLoan' },
+            submitMethod: 'advancedAction',
+        });
+        const submit = calls.find((c) => c.method === 'advancedAction');
+        expect(submit.args.action).toBe('BATCH');
+        expect(calls.some((c) => c.method === 'executeAction'), 'no bare EXECUTE submit').toBe(false);
+    });
+
+    it('ExecuteContractForm refuses a deposit token with no amount instead of composing', async () => {
+        const { messaging, calls } = recordingMessaging({});
+        let utils;
+        await domAct(async () => {
+            utils = render(React.createElement(MessagingProvider, { shell: 'web', messaging },
+                React.createElement(ExecuteContractForm, {
+                    walletId: 'w', chainId: CHAIN, contractActionIndex: '9', onBack() {},
+                })));
+            await drainMicrotasks();
+        });
+        for (const step of [
+            (u) => setValue(u, 'Method', 'fundLoan'),
+            openTokenField('Deposit'),
+            pickToken('XCHAIN'),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Execute' })),
+        ]) {
+            // eslint-disable-next-line no-await-in-loop
+            await domAct(async () => { step(utils); await drainMicrotasks(); });
+        }
+        expect(utils.getByText('Deposit amount must be a positive number.')).toBeTruthy();
+        expect(calls.some((c) => c.method === 'composeForConfirm' || c.method === 'buildBatchCommand')).toBe(false);
+    });
+
     it('ContractStakeForm composes STAKE v3 and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: ContractStakeForm,

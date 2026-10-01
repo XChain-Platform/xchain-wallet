@@ -334,11 +334,19 @@ cp "$RAW_AAB" "$WORK_DIR/$AAB_NAME"
 # the cheapest moment to refuse is before it exists. The same script runs in
 # CI, so a defect surfaces on a dispatch rather than at the ceremony, and both
 # read one copy of the rules rather than two that drift.
+#
+# One helper for both legs, so the store bundle and the full bundle are held
+# to the same pins; returns non-zero and lets each caller say what was spared.
+verify_bundle_manifest() {
+    java -jar "$BUNDLETOOL" dump manifest --bundle="$1" > "$2" || {
+        echo "android-ceremony.sh: bundletool could not dump the manifest of $1" >&2
+        return 1
+    }
+    node "$REPO_ROOT/tools/release/verify-android-manifest.mjs" \
+        "$2" --version-code "$VERSION_CODE"
+}
 echo "==> verifying the built bundle's manifest (§5, §7)"
-java -jar "$BUNDLETOOL" dump manifest --bundle="$WORK_DIR/$AAB_NAME" \
-    > "$WORK_DIR/merged-manifest.xml" || die "bundletool could not dump the manifest"
-node "$REPO_ROOT/tools/release/verify-android-manifest.mjs" \
-    "$WORK_DIR/merged-manifest.xml" --version-code "$VERSION_CODE" \
+verify_bundle_manifest "$WORK_DIR/$AAB_NAME" "$WORK_DIR/merged-manifest.xml" \
     || die "the built bundle does not match what §5 and §7 pin; nothing was signed"
 
 # ---------------------------------------------------------------------
@@ -400,96 +408,14 @@ mv "$WORK_DIR/$APK_NAME.signed" "$WORK_DIR/$APK_NAME"
 apksigner verify --verbose "$WORK_DIR/$APK_NAME" >/dev/null || die "K10 signature did not verify"
 
 # ---------------------------------------------------------------------
-# 3b. OPTIONAL: the second, FULL-feature direct APK
+# 3a. Publish the signed store pair into the staging directory
 # ---------------------------------------------------------------------
 #
-# Everything above builds ONCE and derives the APK from the AAB, because the
-# store lane's two artifacts must be the same bytes (§6 step 2). This leg is
-# the deliberate exception, and it is a second build by necessity rather
-# than by sloppiness: the `default` profile compiles DIFFERENT CODE in (the
-# DEX lane's eight modules, the Trezor connect CSP origin), so there is no
-# bundle to derive it from. Operator answer, 2026-08-07: build
-# it, rather than document the coupling and leave the self-custody audience
-# with Play's restrictions they went out of their way to avoid.
-#
-# OPT-IN, like XCHAIN_BUILD_APPX and XCHAIN_BUILD_SNAP, and for the same
-# reason those are: `android-full` is NOT-SHIPPED in shipped-lanes.txt, so
-# no release demands this file yet. An unset variable leaves the ceremony
-# behaving exactly as it did before this block existed.
-#
-# ORDERED AFTER the store artifacts are signed and verified in WORK_DIR, so
-# a failure here cannot cost the ones Play is waiting on. It also leaves the
-# tree holding a `default` web build; that is build output, and the next
-# ceremony rebuilds from the tag regardless.
-if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
-    FULL_APK_NAME="xchain-wallet-v${ARTIFACT_VERSION}-full.apk"
-
-    # The `-full` suffix is load-bearing, not descriptive. The store APK's
-    # glob is anchored to a trailing DIGIT precisely so these two names
-    # cannot collide; a differently-suffixed name would match NEITHER row
-    # and fail shut as undeclared. See expected-artifacts.txt, which carries
-    # the measurement that produced the rule.
-    echo "==> [full] staging the web build into the shell (default profile)"
-    ( cd "$REPO_ROOT" \
-        && XCHAIN_RELEASE_TAG="$TAG" \
-           XCHAIN_BUILD_PROFILE=default \
-           XCHAIN_MOBILE_RELEASE_PROFILE=default \
-           pnpm --filter "@xchain-wallet/mobile..." build )
-    ( cd "$REPO_ROOT" && pnpm --filter @xchain-wallet/mobile exec cap sync android )
-
-    echo "==> [full] gradle bundleRelease (default profile)"
-    if ! ( cd "$ANDROID_DIR" && ./gradlew --no-daemon clean bundleRelease ); then
-        die "the full-profile release build failed. The store artifacts above are
-  already signed and intact in the work directory, but nothing has been staged.
-  Re-run without XCHAIN_BUILD_ANDROID_FULL to ship the store lane alone."
-    fi
-    [ -f "$RAW_AAB" ] || die "gradle did not produce $RAW_AAB for the full build"
-
-    # This AAB is NEVER staged and never uploaded: Play gets the store build,
-    # and a `default`-profile bundle in the staging directory would match the
-    # .aab row, which declares `store`, and be signed as a claim that is
-    # false. It exists only as the thing bundletool derives the APK from.
-    cp "$RAW_AAB" "$WORK_DIR/full.aab"
-    java -jar "$BUNDLETOOL" build-apks \
-        --bundle="$WORK_DIR/full.aab" \
-        --output="$WORK_DIR/full-universal.apks" \
-        --mode=universal
-    unzip -p "$WORK_DIR/full-universal.apks" universal.apk > "$WORK_DIR/$FULL_APK_NAME"
-
-    # K10, the same key as the store-derived APK above. That is deliberate:
-    # both are direct downloads, Android will not install an update signed by
-    # a different key, and a user moving between the two must not hit a trust
-    # break that costs them their vault.
-    if [ -n "${XCHAIN_K10_PASSFILE:-}" ]; then
-        echo "==> [full] signing with K10 (password read from its 0600 file)"
-        apksigner sign \
-            --ks "$XCHAIN_K10_KEYSTORE" \
-            --ks-key-alias "$XCHAIN_K10_ALIAS" \
-            --ks-pass "file:$XCHAIN_K10_PASSFILE" \
-            --out "$WORK_DIR/$FULL_APK_NAME.signed" \
-            "$WORK_DIR/$FULL_APK_NAME"
-    else
-        echo "==> [full] signing with K10 (you will be prompted for the keystore password)"
-        apksigner sign \
-            --ks "$XCHAIN_K10_KEYSTORE" \
-            --ks-key-alias "$XCHAIN_K10_ALIAS" \
-            --out "$WORK_DIR/$FULL_APK_NAME.signed" \
-            "$WORK_DIR/$FULL_APK_NAME"
-    fi
-    mv "$WORK_DIR/$FULL_APK_NAME.signed" "$WORK_DIR/$FULL_APK_NAME"
-    apksigner verify --verbose "$WORK_DIR/$FULL_APK_NAME" >/dev/null \
-        || die "K10 signature did not verify on the full APK"
-fi
-
-# ---------------------------------------------------------------------
-# 4. Publish into the staging directory + print what humans need
-# ---------------------------------------------------------------------
-
+# Staged BEFORE the optional full leg below, not after it. WORK_DIR is removed
+# on every exit, so a full-leg failure used to delete a signed pair that no
+# re-run can reproduce byte for byte; staged here, a failure there costs nothing.
 mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"
 mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"
-if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
-    mv "$WORK_DIR/$FULL_APK_NAME" "$OUTPUT_DIR/$FULL_APK_NAME"
-fi
 
 # Say, next to the bytes, exactly what they were built from. Without this a
 # rehearsal artifact and a release artifact are indistinguishable on disk, and
@@ -509,22 +435,145 @@ fi
 # record keeps travelling with the bytes without pretending to be one.
 RECORDS_DIR="$OUTPUT_DIR/records"
 mkdir -p "$RECORDS_DIR"
-{
-    echo "tag:        $TAG"
-    echo "head:       $HEAD_SHA"
-    echo "tag_commit: $TAG_SHA"
-    echo "dirty_paths: $DIRTY_COUNT"
-    echo "rehearsal:  $([ "$REHEARSAL" -eq 1 ] && echo yes || echo no)"
-    # Which profiles this ceremony actually produced. Without it, a staging
-    # directory holding two APKs and one holding one are distinguishable only
-    # by filename, and the record is the thing that outlives the directory.
-    echo "profiles:   store$([ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ] && echo ",default" || true)"
-    echo "built_at:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} > "$RECORDS_DIR/PROVENANCE.txt"
+BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Write the record through a temp file and a rename, so a rewrite for the full
+# leg never leaves a half-written PROVENANCE.txt behind.
+write_provenance() {
+    {
+        echo "tag:        $TAG"
+        echo "head:       $HEAD_SHA"
+        echo "tag_commit: $TAG_SHA"
+        echo "dirty_paths: $DIRTY_COUNT"
+        echo "rehearsal:  $([ "$REHEARSAL" -eq 1 ] && echo yes || echo no)"
+        # Which profiles this ceremony actually produced. Without it, a staging
+        # directory holding two APKs and one holding one are distinguishable only
+        # by filename, and the record is the thing that outlives the directory.
+        echo "profiles:   $1"
+        echo "built_at:   $BUILT_AT"
+    } > "$RECORDS_DIR/.PROVENANCE.txt.tmp"
+    mv "$RECORDS_DIR/.PROVENANCE.txt.tmp" "$RECORDS_DIR/PROVENANCE.txt"
+}
+write_provenance store
+# Marked in the same step as the pair, so a rehearsal whose full leg fails
+# never leaves signed bytes on disk without their do-not-publish note.
 if [ "$REHEARSAL" -eq 1 ]; then
     echo "REHEARSAL ARTIFACTS. Do not upload to Play, do not publish, delete when done." \
         > "$RECORDS_DIR/DO-NOT-PUBLISH.txt"
 fi
+
+# ---------------------------------------------------------------------
+# 3b. OPTIONAL: the second, FULL-feature direct APK
+# ---------------------------------------------------------------------
+#
+# Everything above builds ONCE and derives the APK from the AAB, because the
+# store lane's two artifacts must be the same bytes (§6 step 2). This leg is
+# the deliberate exception, and it is a second build by necessity rather
+# than by sloppiness: the `default` profile compiles DIFFERENT CODE in (the
+# DEX lane's eight modules, the Trezor connect CSP origin), so there is no
+# bundle to derive it from. Operator answer, 2026-08-07: build
+# it, rather than document the coupling and leave the self-custody audience
+# with Play's restrictions they went out of their way to avoid.
+#
+# OPT-IN, like XCHAIN_BUILD_APPX and XCHAIN_BUILD_SNAP, and for the same
+# reason those are: `android-full` is NOT-SHIPPED in shipped-lanes.txt, so
+# no release demands this file yet. An unset variable leaves the ceremony
+# behaving exactly as it did before this block existed.
+#
+# ORDERED AFTER the store artifacts are signed, verified AND staged in
+# OUTPUT_DIR (3a), so a failure here cannot cost the ones Play is waiting on.
+# It also leaves the tree holding a `default` web build; that is build output,
+# and the next ceremony rebuilds from the tag regardless.
+#
+# Every step routes its failure through full_leg_failed, because a bare
+# `set -e` exit here would say nothing about the pair already staged.
+full_leg_failed() {
+    die "the full-profile leg failed at: $1.
+  The store AAB and APK are already signed and STAGED in $OUTPUT_DIR, and
+  records/PROVENANCE.txt there says profiles: store. No full APK was produced.
+  The store lane signs as it stands (the -full.apk row is optional):
+    bash tools/release/sign.sh --tag $TAG --lane android --input $OUTPUT_DIR
+  A full APK needs a fresh ceremony into a new --output; this one now holds artifacts."
+}
+if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
+    FULL_APK_NAME="xchain-wallet-v${ARTIFACT_VERSION}-full.apk"
+
+    # The `-full` suffix is load-bearing, not descriptive. The store APK's
+    # glob is anchored to a trailing DIGIT precisely so these two names
+    # cannot collide; a differently-suffixed name would match NEITHER row
+    # and fail shut as undeclared. See expected-artifacts.txt, which carries
+    # the measurement that produced the rule.
+    echo "==> [full] staging the web build into the shell (default profile)"
+    ( cd "$REPO_ROOT" \
+        && XCHAIN_RELEASE_TAG="$TAG" \
+           XCHAIN_BUILD_PROFILE=default \
+           XCHAIN_MOBILE_RELEASE_PROFILE=default \
+           pnpm --filter "@xchain-wallet/mobile..." build ) \
+        || full_leg_failed "the default-profile web build"
+    ( cd "$REPO_ROOT" && pnpm --filter @xchain-wallet/mobile exec cap sync android ) \
+        || full_leg_failed "cap sync android"
+
+    echo "==> [full] gradle bundleRelease (default profile)"
+    ( cd "$ANDROID_DIR" && ./gradlew --no-daemon clean bundleRelease ) \
+        || full_leg_failed "the full-profile gradle bundleRelease"
+    [ -f "$RAW_AAB" ] || full_leg_failed "gradle did not produce $RAW_AAB for the full build"
+
+    # This AAB is NEVER staged and never uploaded: Play gets the store build,
+    # and a `default`-profile bundle in the staging directory would match the
+    # .aab row, which declares `store`, and be signed as a claim that is
+    # false. It exists only as the thing bundletool derives the APK from.
+    cp "$RAW_AAB" "$WORK_DIR/full.aab" || full_leg_failed "copying the full bundle"
+
+    # The same manifest check as 1b, BEFORE K10 touches anything derived from
+    # this bundle: it is a different build with different code compiled in,
+    # never derived from the verified store bundle, and K10 cannot be rotated.
+    echo "==> [full] verifying the full bundle's manifest (§5, §7)"
+    verify_bundle_manifest "$WORK_DIR/full.aab" "$WORK_DIR/full-merged-manifest.xml" \
+        || full_leg_failed "the manifest check (it does not match what §5 and §7 pin; K10 was not used on it)"
+
+    java -jar "$BUNDLETOOL" build-apks \
+        --bundle="$WORK_DIR/full.aab" \
+        --output="$WORK_DIR/full-universal.apks" \
+        --mode=universal \
+        || full_leg_failed "bundletool build-apks on the full bundle"
+    unzip -p "$WORK_DIR/full-universal.apks" universal.apk > "$WORK_DIR/$FULL_APK_NAME" \
+        || full_leg_failed "extracting the full universal APK"
+
+    # K10, the same key as the store-derived APK above. That is deliberate:
+    # both are direct downloads, Android will not install an update signed by
+    # a different key, and a user moving between the two must not hit a trust
+    # break that costs them their vault.
+    if [ -n "${XCHAIN_K10_PASSFILE:-}" ]; then
+        echo "==> [full] signing with K10 (password read from its 0600 file)"
+        apksigner sign \
+            --ks "$XCHAIN_K10_KEYSTORE" \
+            --ks-key-alias "$XCHAIN_K10_ALIAS" \
+            --ks-pass "file:$XCHAIN_K10_PASSFILE" \
+            --out "$WORK_DIR/$FULL_APK_NAME.signed" \
+            "$WORK_DIR/$FULL_APK_NAME" \
+            || full_leg_failed "the K10 signature on the full APK"
+    else
+        echo "==> [full] signing with K10 (you will be prompted for the keystore password)"
+        apksigner sign \
+            --ks "$XCHAIN_K10_KEYSTORE" \
+            --ks-key-alias "$XCHAIN_K10_ALIAS" \
+            --out "$WORK_DIR/$FULL_APK_NAME.signed" \
+            "$WORK_DIR/$FULL_APK_NAME" \
+            || full_leg_failed "the K10 signature on the full APK"
+    fi
+    mv "$WORK_DIR/$FULL_APK_NAME.signed" "$WORK_DIR/$FULL_APK_NAME" \
+        || full_leg_failed "renaming the signed full APK"
+    apksigner verify --verbose "$WORK_DIR/$FULL_APK_NAME" >/dev/null \
+        || full_leg_failed "verifying the K10 signature on the full APK"
+
+    # Only a full leg that got this far adds its APK and widens the record.
+    mv "$WORK_DIR/$FULL_APK_NAME" "$OUTPUT_DIR/$FULL_APK_NAME" \
+        || full_leg_failed "staging the full APK"
+    write_provenance store,default
+fi
+
+# ---------------------------------------------------------------------
+# 4. Print what humans need (the bytes were staged in 3a and 3b)
+# ---------------------------------------------------------------------
 
 echo
 echo "==> staged in $OUTPUT_DIR:"

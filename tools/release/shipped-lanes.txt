@@ -49,9 +49,10 @@
 # records the release, and say in the comment which tag it first shipped
 # in. From then on a release that omits it fails here, by name.
 #
-# Format:  <lane>  <SHIPPED|NOT-SHIPPED>  <glob> [<glob> ...]
-#          globs are matched against artifact basenames, exactly as in
-#          expected-artifacts.txt, and must be declared there too.
+# Format:  <lane>  <SHIPPED|NOT-SHIPPED>  <store-only|updater>  <glob> [<glob> ...]
+#          the third column is the lane's feed, explained at THE FEED
+#          COLUMN below; globs are matched against artifact basenames,
+#          exactly as in expected-artifacts.txt, and must be declared there too.
 
 # Android. The pair is ONE build: the ceremony signs the AAB with
 # K9 and derives the universal APK from that same bundle with K10, so a

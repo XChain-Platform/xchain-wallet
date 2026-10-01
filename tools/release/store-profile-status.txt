@@ -16,8 +16,9 @@ IMPLEMENTED store-profile-build-lane
 #   review-hidden surfaces of §2.3, the DEX lane first, are compiled
 #   OUT of a store build. `packages/web/src/surfaces/registry.js` holds the
 #   surface list as data; vite swaps `surfaces/dex.jsx` for a twin that imports
-#   nothing, so MarketsList, MarketView, MarketActivity, CreateOrderForm,
-#   MyOrdersView, MySwapsView, SwapForm and CrossChainSwapForm are not in the
+#   nothing, so the DEX route modules listed in `SURFACE_MODULES.dex` there
+#   (the authoritative list, nine modules including CrossChainOrderForm at the
+#   time of writing; not copied here, so it cannot drift) are not in the
 #   bundle at all, and every entry point that pointed at them (both navs, the
 #   menu, the actions catalogue, the command palette, Home, TokenDetail) is
 #   unwired with them. The build FAILS SHUT if any of those modules is imported
@@ -29,6 +30,19 @@ IMPLEMENTED store-profile-build-lane
 # all eight; shared modules (ReceivePicker, ManageToken) are in both, which is
 # the control; the store index.html has no connect.trezor.io and the default
 # one does; main chunk 3,585 kB store vs 3,716 kB default.
+#
+# Noted 2026-09-29: that measurement covered the eight modules the registry
+# held on that date (CrossChainOrderForm was added later), and it read store
+# sourcemaps, which a store build no longer emits (`packages/web/vite.config.js`,
+# `sourcemap: BUILD_PROFILE !== 'store'`). It cannot be repeated as written.
+#
+# Current evidence, all of it rerunnable: the `xchain-hidden-surface-guard`
+# plugin in `packages/web/vite.config.js` (enforce 'pre') fails a store build
+# if any `SURFACE_MODULES` entry is imported from outside `surfaces/dex.jsx`;
+# `test/smoke/audits/release-build-profiles.smoke.js` pins that plugin and the
+# store build's sourcemap setting; `test/unit/mobile/storeSurfaces.test.js`
+# checks no other web-shell file imports a listed module and ties the list to
+# what `surfaces/dex.jsx` imports and routes.
 #
 # The gate above stays live and still fails shut on anything but a line
 # beginning IMPLEMENTED. It now means something narrower but just as real: if

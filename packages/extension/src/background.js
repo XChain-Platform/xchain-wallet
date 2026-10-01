@@ -57,13 +57,15 @@ import {
     loadSigningCredentials,
 } from './background/signingSecretSession.js';
 import { initPanicModePersistence } from './background/panicModeStorage.js';
+import { createBroadcastQueueStorage } from './background/broadcastQueueStorage.js';
+import { createBroadcastQueueStore, sealBroadcastQueueStore } from './background/broadcastQueueStore.js';
 import {
     readAutoLockState,
     stampAutoLockActivity,
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { createLockBackstop } from './background/walletLock.js';
+import { createLockBackstop, createHostBuildFlight } from './background/walletLock.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -180,6 +182,10 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 let host = null;
 let vault = null;
 let detachHost = null;
+// One broadcast-queue store for every host this worker builds. A lock keeps
+// it (a broadcast still on the network owes its persist), and only a wipe
+// seals it, after which `renewBroadcastQueueStore` starts a fresh one.
+let broadcastQueueStore = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
 // §46: live notification watcher. Module-scoped so it survives across the
 // keepalive's repeated ensureHost() calls; recreated from scratch when the MV3
 // worker is evicted and cold-restarts.
@@ -221,7 +227,10 @@ function chromeNotify({ kind, title, body }) {
 // `wallet.lock` or any teardown path.
 let signerPool = new signersLib.SignerPool();
 
-async function ensureHost() {
+// Share one build among overlapping callers; two concurrent builds orphan a Vault and a listener.
+const ensureHost = createHostBuildFlight(buildHost);
+
+async function buildHost() {
     if (host) return host;
     const sessionBackend = new ChromeSessionBackend();
     const masterKey = await sessionBackend.load();
@@ -301,6 +310,7 @@ async function ensureHost() {
         chainRegistry,
         sdkRegistry,
         signerPool,
+        broadcastQueueStore,
         approvals: approvalBroker,
         // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
@@ -537,41 +547,32 @@ function tearDownHost() {
     // reference at construction time. Swapping in a fresh empty pool
     // keeps that reference stable for the next unlock.
     signerPool = new signersLib.SignerPool();
-    if (host && typeof host.sealBroadcastQueue === 'function') {
-        retireQueueSeal(host.sealBroadcastQueue);
-    }
+    // The queue store stays: a lock drops the host, not the queue it served.
     host = null;
-}
-
-// Queue seals of hosts torn down recently. A lock drops the host without
-// sealing (a locked wallet still owes its persists), but a broadcast that
-// resolves after the lock writes through that host's adapter; the wipe
-// escapes run locked, so they must reach those seals, not only the live host's.
-const RETIRED_SEAL_WINDOW_MS = 120_000;
-const retiredQueueSeals = new Set();
-
-function retireQueueSeal(seal) {
-    retiredQueueSeals.add(seal);
-    setTimeout(() => retiredQueueSeals.delete(seal), RETIRED_SEAL_WINDOW_MS);
 }
 
 /**
  * Seal every broadcast-queue writer this worker still holds, before a wipe
- * removes the key. Never throws: a failed seal must not stop the erase.
+ * removes the key. The live host and every host a lock tore down share one
+ * store, so sealing it stops them all with no time window. Never throws: a
+ * failed seal must not stop the erase.
  *
  * @returns {Promise<void>}
  */
 async function sealBroadcastQueues() {
-    const seals = [...retiredQueueSeals];
-    retiredQueueSeals.clear();
-    if (host && typeof host.sealBroadcastQueue === 'function') seals.push(host.sealBroadcastQueue);
-    await Promise.all(seals.map(async (seal) => {
-        try {
-            await seal();
-        } catch (err) {
-            console.error('[xchain] broadcast-queue seal failed:', err);
-        }
-    }));
+    try {
+        await sealBroadcastQueueStore(broadcastQueueStore);
+    } catch (err) {
+        console.error('[xchain] broadcast-queue seal failed:', err);
+    }
+}
+
+/**
+ * Give the next unlock a fresh queue store once a wipe has removed the key.
+ * A torn-down host still holding the sealed store keeps writing nothing.
+ */
+function renewBroadcastQueueStore() {
+    broadcastQueueStore = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
 }
 
 // --- Auto-lock backstop (§26) ------------------------------------------
@@ -652,7 +653,10 @@ attachSignerBridgeListener();
 // wiped wallet serving.
 attachWipeStorageListener({
     beforeWipe: () => sealBroadcastQueues(),
-    onWiped: () => tearDownHost(),
+    onWiped: () => {
+        tearDownHost();
+        renewBroadcastQueueStore();
+    },
 });
 
 // §46: MV3 keepalive. Chrome evicts an idle service worker after ~30s, which

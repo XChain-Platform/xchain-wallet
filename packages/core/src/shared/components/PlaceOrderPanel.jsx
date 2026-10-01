@@ -865,8 +865,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                                         <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
                                             Outstanding auto-pay exposure on this chain:{' '}
                                             {baseUnitsToCoinText(exposure[chainId]) ?? exposure[chainId]} {coinTicker}
-                                            {thisOrderGive ? ` (+ ${thisOrderGive} ${coinTicker} from this order)` : ''}. Under full
-                                            indexer compromise this bound is the most auto-pay could send.
+                                            {thisOrderGive ? ` (+ ${thisOrderGive} ${coinTicker} from this order)` : ''}. Even if the
+                                            service that reports matches were fully compromised, auto-pay could send no more than this.
                                         </p>
                                     );
                                 }

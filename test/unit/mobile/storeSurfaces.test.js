@@ -166,4 +166,52 @@ describe('the DEX route components', () => {
             expect(src).toContain(mod);
         }
     });
+
+    it('are every import of the surface module, bar the allowlisted shared ones', () => {
+        // The reverse direction: a route imported here but missing from
+        // SURFACE_MODULES.dex is watched by no guard, so a later second
+        // importer would put it back in the store bundle with the build green.
+        const specifiers = importSpecifiers(dexCode());
+        expect(specifiers.length).toBeGreaterThan(0);
+        const listed = [...SURFACE_MODULES.dex, ...DEX_SHARED_IMPORTS];
+        const unlisted = specifiers.filter((s) => !listed.some((m) => s.endsWith(`/${m}`)));
+        expect(unlisted, 'add each to SURFACE_MODULES.dex in surfaces/registry.js').toEqual([]);
+
+        // And the allowlist may neither rot nor overlap the registry.
+        for (const shared of DEX_SHARED_IMPORTS) {
+            expect(specifiers.some((s) => s.endsWith(`/${shared}`))).toBe(true);
+            expect(SURFACE_MODULES.dex).not.toContain(shared);
+        }
+    });
 });
+
+describe('the DEX views', () => {
+    it('are exactly the views the surface module routes', () => {
+        // A view branch missing from SURFACE_VIEWS.dex is never checked
+        // against the twin, so the registry must match the routing exactly.
+        const code = dexCode();
+        const routed = [...code.matchAll(/\bunlockedView\s*===\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+        expect([...new Set(routed)].sort()).toEqual([...SURFACE_VIEWS.dex].sort());
+
+        // Fail closed on any other routing shape (a switch, an includes()):
+        // every use of the name is the parameter or a `=== '<view>'` test.
+        const uses = code.match(/\bunlockedView\b/g) ?? [];
+        expect(uses.length, "route DEX views as `unlockedView === '<name>'`").toBe(routed.length + 1);
+    });
+});
+
+// Shared components the surface merely USES, which registry.js deliberately
+// leaves out of SURFACE_MODULES (ReceivePicker also serves `receive-picker`).
+const DEX_SHARED_IMPORTS = ['shared/routes/ReceivePicker.jsx'];
+
+/** dex.jsx with comments stripped, so prose naming a view or module is not counted. */
+function dexCode() {
+    return readFileSync(join(surfacesDir, 'dex.jsx'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:'"])\/\/.*$/gm, '$1');
+}
+
+/** Every static and dynamic import specifier in `code`. */
+function importSpecifiers(code) {
+    return [...code.matchAll(/(?:\bfrom|\bimport\s*\(|^\s*import)\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+}

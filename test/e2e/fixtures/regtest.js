@@ -1269,6 +1269,11 @@ export async function explorerJson(path, { coin = REGTEST_COIN, timeoutMs = 15_0
     return body;
 }
 
+export async function callbackBlockAhead(formHeight) {
+    const status = await explorerJson('status');
+    return Math.max(Number(formHeight), Number(status?.chain_tip?.[REGTEST_COIN])) + 5;
+}
+
 /**
  * `null` when this venue serves the oracle-price family, else the venue's own
  * refusal, for a `test.skip(...)` that heals itself the day the venue is fixed.

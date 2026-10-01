@@ -30,6 +30,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { SharedListDirectory } from './SharedListDirectory.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -50,6 +51,7 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -149,8 +151,9 @@ function newOwnerAddressError(address, descriptor) {
  * @param {string} props.walletId
  * @param {AdminMode} props.mode
  * @param {() => void} props.onBack
+ * @param {'shared-block'} [props.initialPicker]
  */
-export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick, initialFromAddress }) {
+export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick, initialFromAddress, initialPicker }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -199,6 +202,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
     const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
+    const [sharedBlockPickerOpen, setSharedBlockPickerOpen] = useState(initialPicker === 'shared-block');
+    const [sharedBlockListLabel, setSharedBlockListLabel] = useState(/** @type {string | null} */ (null));
+    const blockListTouched = useRef(false);
     // Bridgeability (mode === 'bridge-settings', ISSUE v7,
     // xchain-token-bridge.md section 7). Three owner-set fields on the ORIGIN
     // row: which destination chains this token may be locked to (default none),
@@ -398,7 +404,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     useEffect(() => {
         if (mode !== 'access-lists' || !assetInfo || listsPrefilled) return;
         setAllowListIdx(assetInfo.allowList || null);
-        setBlockListIdx(assetInfo.blockList || null);
+        if (!blockListTouched.current) setBlockListIdx(assetInfo.blockList || null);
         setListsPrefilled(true);
     }, [mode, assetInfo, listsPrefilled]);
 
@@ -1075,6 +1081,27 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
+    if (sharedBlockPickerOpen) {
+        return (
+            <SharedListDirectory
+                walletId={walletId}
+                chainId={chainId}
+                mode="pick"
+                filterType="2"
+                onSelect={(pick) => {
+                    const next = sharedBlockPickState(pick);
+                    if (!next) return;
+                    blockListTouched.current = true;
+                    setBlockListIdx(next.blockListIdx);
+                    setBlockListCount(next.memberCount);
+                    setSharedBlockListLabel(next.label);
+                    setSharedBlockPickerOpen(false);
+                }}
+                onBack={() => setSharedBlockPickerOpen(false)}
+            />
+        );
+    }
+
     // PC-04: address-list picker for the allow/block-list fields. Only
     // TYPE=2 (address) lists are valid ALLOW_LIST/BLOCK_LIST targets
     // (issue.js isValidList(x, 2)), so filter to them.
@@ -1086,14 +1113,17 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 chainId={chainId}
                 addresses={addressesByChain?.[chainId] || []}
                 filterType="2"
+                includeUnions
                 title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
                 onSelect={(row) => {
                     if (listPickerFor === 'allow') {
                         setAllowListIdx(row.actionIndex);
                         setAllowListCount(row.memberCount);
                     } else {
+                        blockListTouched.current = true;
                         setBlockListIdx(row.actionIndex);
                         setBlockListCount(row.memberCount);
+                        setSharedBlockListLabel(null);
                     }
                     setListPickerFor(null);
                 }}
@@ -1413,15 +1443,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             <span className={styles.detailsLabel}>Block-list</span>
                             <span className={styles.detailsValue}>
                                 {blockListIdx && blockListIdx !== '0'
-                                    ? `List #${blockListIdx}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${sharedBlockListLabel || `List #${blockListIdx}`}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
                                     : (blockListIdx === '0' ? 'None after this update' : 'None')}
                             </span>
                         </div>
                         <Button type="button" variant="ghost" onClick={() => setListPickerFor('block')}>
                             {blockListIdx && blockListIdx !== '0' ? 'Change block-list' : 'Choose block-list'}
                         </Button>
+                        <Button type="button" variant="ghost" onClick={() => setSharedBlockPickerOpen(true)}>
+                            Use a shared block list
+                        </Button>
                         {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { setBlockListIdx('0'); setBlockListCount(null); }}>
+                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setSharedBlockListLabel(null); }}>
                                 Remove list
                             </Button>
                         ) : null}

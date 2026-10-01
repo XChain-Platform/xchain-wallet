@@ -40,11 +40,14 @@
 //     contact or label the chain copy doesn't know about.
 
 import { useEffect, useRef, useState } from 'react';
-import { flows as flowsLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { ChainBadge } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
+import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -227,7 +230,10 @@ export function BackupSection({ activeWallet }) {
             setDryRunResult(r);
             setDryRunStage('result');
         } catch (err) {
-            setDryRunError(err?.message || 'Dry-run restore failed.');
+            // Say what to fix for a mistyped phrase; filter any other flow error to plain copy.
+            setDryRunError(err?.name === 'InvalidMnemonicError'
+                ? "That recovery phrase isn't valid. Check each word and its order against your backup, and that the format selected matches it."
+                : userFacingMessage(err, 'Dry-run restore failed.'));
             setDryRunStage('form');
         }
     }
@@ -348,20 +354,30 @@ export function BackupSection({ activeWallet }) {
     }
 
     if (actionConfirm.open) {
+        // The decoder sees only FILE params, which carry no encryption flag
+        // for this payload, so its warning can't tell the user that this one
+        // is unreadable without the seed. The panel that built it can.
         return (
-            <ActionConfirmScreen
-                confirmAction={actionConfirm.confirmAction}
-                screenVariant={screenVariantFor(shell)}
-                chainLabel={publishPreparation?.chainId || ''}
-                signerReady={signerReady}
-                password={publishPassword}
-                onPasswordChange={(value) => {
-                    setPublishPassword(value);
-                    publishPasswordRef.current = value;
-                }}
-                chainId={publishPreparation?.chainId}
-                getSignerStatus={messaging.getSignerStatus}
-            />
+            <div style={STACK}>
+                <div style={ROW_HINT} data-testid="publish-labels-encrypted-note">
+                    Your labels and contacts are encrypted with a key from this wallet's
+                    seed before publishing. The file on the blockchain is unreadable
+                    without your seed.
+                </div>
+                <ActionConfirmScreen
+                    confirmAction={actionConfirm.confirmAction}
+                    screenVariant={screenVariantFor(shell)}
+                    chainLabel={publishPreparation?.chainId || ''}
+                    signerReady={signerReady}
+                    password={publishPassword}
+                    onPasswordChange={(value) => {
+                        setPublishPassword(value);
+                        publishPasswordRef.current = value;
+                    }}
+                    chainId={publishPreparation?.chainId}
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+            </div>
         );
     }
 
@@ -763,16 +779,16 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
         }}>
             <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Test backup</div>
             <div style={ROW_HINT}>
-                Paste the mnemonic from your paper backup (or password manager). The
-                wallet derives the first {gapLimit} addresses on every active chain and
-                reports any mismatches without writing anything.
+                Enter the recovery phrase from your paper backup (or password manager).
+                The wallet rebuilds the first {gapLimit} addresses on every active chain
+                from it and lists any that don't match. Nothing is saved.
             </div>
             <textarea
                 value={mn}
                 onChange={(e) => setMn(e.target.value)}
-                placeholder="Paste mnemonic, separated by spaces"
+                placeholder="Recovery phrase, words separated by spaces"
                 rows={3}
-                aria-label="Candidate mnemonic"
+                aria-label="Recovery phrase to test"
                 style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
             />
             <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -781,22 +797,22 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     <select
                         value={format}
                         onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
-                        aria-label="Mnemonic format"
+                        aria-label="Phrase format"
                         style={passwordStyle}
                     >
-                        <option value="bip39">BIP39</option>
+                        <option value="bip39">Standard (BIP39)</option>
                         <option value="counterwallet-legacy">Counterwallet legacy</option>
                     </select>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
-                    <span>Gap:</span>
+                    <span>Addresses to check:</span>
                     <input
                         type="number"
                         min={1}
                         max={100}
                         value={gapLimit}
                         onChange={(e) => setGapLimit(Math.max(1, Math.min(100, Number(e.target.value) || 10)))}
-                        aria-label="Gap limit"
+                        aria-label="Addresses to check"
                         style={{ ...passwordStyle, width: 70 }}
                     />
                 </label>
@@ -875,25 +891,46 @@ function DryRunReport({ result, onDone }) {
     );
 }
 
+const chainRegistry = registryLib.defaultRegistry();
+
+// Name each single-key address type by its family word, as MultisigBadge does for multisig.
+const ADDRESS_TYPE_LABEL = {
+    p2pkh: 'Classic',
+    'p2sh-p2wpkh': 'SegWit (compatible)',
+    p2wpkh: 'SegWit',
+    p2tr: 'Taproot',
+};
+
 function DryRunChainReport({ chain }) {
+    const descriptor = chain.chainId ? chainRegistry.get(chain.chainId) : null;
+    const typeLabel = ADDRESS_TYPE_LABEL[chain.addressType] || chain.addressType;
     const derivedByIndex = new Map(
         (Array.isArray(chain.derived) ? chain.derived : []).map((item) => [item.index, item]),
     );
+    // List every address that differs in plain words, both addresses in full
+    // so the user can reconcile them; the derivation path goes to the details.
     const differences = (Array.isArray(chain.comparisons) ? chain.comparisons : [])
         .filter((comparison) => comparison.match !== true)
         .map((comparison) => {
             const derived = derivedByIndex.get(comparison.index);
-            const location = `Index ${comparison.index}${derived?.path ? `, ${derived.path}` : ''}`;
+            const label = `Address #${comparison.index + 1}`;
             const address = comparison.derived || derived?.address || 'unknown';
             const reason = comparison.expected === null
-                ? `no saved wallet address; derived ${address}`
-                : `saved address does not match: expected ${comparison.expected}; derived ${address}`;
-            return { key: `${comparison.index}-${comparison.expected || 'new'}`, text: `${location}: ${reason}` };
+                ? `not in your wallet yet; this recovery phrase gives ${address}`
+                : `your wallet has ${comparison.expected}, but this recovery phrase gives ${address}`;
+            return {
+                key: `${comparison.index}-${comparison.expected || 'new'}`,
+                text: `${label}: ${reason}`,
+                detail: { subject: label, message: derived?.path || `index ${comparison.index}` },
+            };
         });
     return (
         <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <span>{chain.chainId} <span style={{ color: 'var(--xc-text-muted)' }}>({chain.addressType})</span></span>
+                <span>
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chain.chainId}{' '}
+                    <span style={{ color: 'var(--xc-text-muted)' }} title={chain.addressType}>{typeLabel}</span>
+                </span>
                 <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
                     <span style={{ color: 'var(--xc-accent-primary)' }}>{chain.matchedCount} ✓</span>
                     {chain.divergentCount > 0
@@ -913,6 +950,10 @@ function DryRunChainReport({ chain }) {
                     ))}
                 </ul>
             ) : null}
+            <DiagnosticDetails
+                summary="Technical details"
+                items={differences.map((difference) => difference.detail)}
+            />
         </div>
     );
 }

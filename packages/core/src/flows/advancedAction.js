@@ -21,6 +21,7 @@
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
 /**
  * @typedef {Object} AdvancedActionOpts
@@ -42,6 +43,7 @@ import { normalizeSource } from './sendToken.js';
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [trackPendingTx]
+ * @property {string} [actionSummary]                    PendingTx label in place of the action's plain-language name (a controller bind is an ADDRESS or ISSUE on the wire)
  */
 
 /**
@@ -58,11 +60,15 @@ export async function advancedAction(opts) {
     }
     const source = normalizeSource(opts.from, 'advancedAction');
     const actionName = String(opts.action).toUpperCase();
+    // Name the pending record in plain language; the wire name stays in actionData.
+    const summary = typeof opts.actionSummary === 'string' && opts.actionSummary.trim()
+        ? opts.actionSummary.trim()
+        : actionDisplayLabel(actionName);
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,
-        actionSummary: `Submit ${actionName}`,
+        actionSummary: summary,
     };
 
     return submitAction({

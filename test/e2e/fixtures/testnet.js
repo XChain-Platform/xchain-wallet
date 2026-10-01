@@ -22,14 +22,20 @@
 // harness a venue whose miner, clock, ssh, docker and DB methods all throw.
 //
 // FUNDING IS THE ONE WRITE THAT NEEDS A KEY, and the boundary is stdin. A
-// treasury wallet JSON object (`{ wif, address }`) is read from stdin, once,
-// only after the destination is known, and the WIF lives in memory for the
-// length of one signing call: never printed, never written, never in argv or
-// an environment variable. The key buffer the SDK exposes is zeroed as soon
-// as the address has been derived from it. Before anything is signed the
-// derived address must match the declared one and every selected input must
-// pay it, so a wrong key or a wrong UTXO set refuses rather than probes a
-// live chain by trial and error.
+// treasury wallet JSON object (`{ wif, address }`) is piped to the Playwright
+// runner, never printed and never in argv or an environment variable. The key
+// buffer the SDK exposes is zeroed as soon as the address has been derived
+// from it. Before anything is signed the derived address must match the
+// declared one and every selected input must pay it, so a wrong key or a wrong
+// UTXO set refuses rather than probes a live chain by trial and error.
+//
+// STDIN DOES NOT REACH A SPEC. Playwright forks its workers with stdin set to
+// "ignore" (playwright 1.59.1 lib/runner/processHost.js), so a spec that reads
+// process.stdin sees an empty stream; measured 2026-09-30, a worker read 0
+// bytes of a piped object. Global setup runs in the runner, which does hold
+// the pipe, so it stages the object into one 0600 file inside a fresh 0700
+// temp directory and names that PATH (never the key) in RUN_INPUT_ENV for the
+// workers. Teardown and a process-exit hook both remove the directory.
 //
 // Service URLs come from the bundled chain descriptor through the same
 // `joinEndpoint` the wallet itself uses, so this file names no host: the
@@ -40,6 +46,10 @@
 // same "Bitcoin" the regtest fixture keys its page walks on, which is why the
 // UI helpers below are shared with it rather than copied.
 
+import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { expect } from '@playwright/test';
 import bitcoin from 'bitcoinjs-lib';
 import xchainSdk from 'xchain-sdk';
@@ -86,6 +96,24 @@ export const DEFAULT_FEE_RATE = 2;
  * is honoured first and this is the ceiling behind it.
  */
 export const MAX_TIP_AGE_SECONDS = 3 * 60 * 60;
+
+/**
+ * The longest declared future-block wait accepted as a wait. Consensus lets a
+ * block's timestamp run up to two hours ahead, so a clear time past three is
+ * not a timestamp wait and is judged by the height checks instead.
+ */
+export const MAX_FUTURE_WAIT_SECONDS = 3 * 60 * 60;
+
+/**
+ * How long a spec waits for one transaction to confirm AND index. The indexer
+ * processes blocks in order and holds each one stamped ahead of the wall clock
+ * until the clock passes it, which consensus allows up to two hours ahead; so a
+ * budget under that bound times out on a healthy chain. Measured 2026-09-30:
+ * a COLLECT confirmed in a block stamped about 17:44Z sat behind an empty block
+ * stamped 19:04Z and could not index for more than 90 minutes. The future-wait
+ * bound plus an hour for inclusion itself.
+ */
+export const INDEXED_WAIT_MS = (MAX_FUTURE_WAIT_SECONDS + 60 * 60) * 1000;
 
 /** A public chain is polled, never mined, so the cadence is a block's order of magnitude. */
 export const POLL_INTERVAL_MS = 30_000;
@@ -171,6 +199,19 @@ export function testnetVerdict(status, coin = TESTNET_COIN, opts = {}) {
     if (typeof lag !== 'number') {
         return `Explorer answered but reports no ${coin} chain.`;
     }
+    // A future_block_wait is the indexer declining a block stamped ahead of
+    // the wall clock until the clock passes it, which testnet4 miners produce
+    // for hours at a time; measured 2026-09-30, blocks arrived about 40 minutes
+    // ahead and indexed trailed the tip by 5 to 8 while lag read 0. The explorer
+    // publishes the state and when it clears, so a wait that clears within the
+    // bound is a wait the specs' own poll budgets absorb, not a wedge. A clear
+    // time that is missing or beyond the bound falls through to the checks below.
+    const waitClears = Date.parse(status?.indexer_wait_clears_at?.[coin]);
+    const nowMs = (opts.now ?? Date.now)();
+    if (status?.indexer_state?.[coin] === 'future_block_wait' && Number.isFinite(waitClears)
+        && waitClears - nowMs <= (opts.maxFutureWaitSeconds ?? MAX_FUTURE_WAIT_SECONDS) * 1000) {
+        return null;
+    }
     const tip = status?.chain_tip?.[coin];
     const indexed = status?.last_block?.[coin];
     if (typeof tip === 'number' && typeof indexed === 'number' && tip - indexed > 2) {
@@ -192,8 +233,14 @@ export function testnetVerdict(status, coin = TESTNET_COIN, opts = {}) {
 }
 
 /**
- * Read-only venue check: reachable, fit, and able to price a MINT of the gas
- * tick. Throws naming the cause; returns what the run is starting against.
+ * Read-only venue check: reachable, fit, and able to price a fee-bearing
+ * action. Throws naming the cause; returns what the run is starting against.
+ *
+ * The probe is an ISSUE of a fresh random tick, the regtest fixture's probe.
+ * A MINT of the gas tick owes no protocol fee, and a zero-fee quote returns
+ * before any oracle price is read, so it carries no price fields on a venue
+ * that prices perfectly well (measured 2026-09-30 on testnet: MINT xchainFee
+ * 0 with no prices, a fresh ISSUE priced off oracle round 4846).
  *
  * The price probe quotes from a key generated for the call and thrown away,
  * because the quote needs SOME source address and this file names none. It
@@ -219,13 +266,14 @@ export async function checkTestnetVenue(venue, opts = {}) {
 
     let body;
     try {
-        body = await venue.feeQuote({ action: 'MINT', params: `0|${GAS_TICK}|1`, source });
+        const tick = `XCW${randomBytes(4).toString('hex').toUpperCase()}`;
+        body = await venue.feeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
     } catch (err) {
         throw new Error(`Testnet venue cannot be priced: /feequote did not answer: ${err?.message || err}`);
     }
     const price = priceVerdict(body);
     if (!price.usable) {
-        throw new Error(`Testnet venue cannot price a ${GAS_TICK} MINT: ${price.reason}`);
+        throw new Error(`Testnet venue cannot price a fee-bearing action (ISSUE): ${price.reason}`);
     }
     return {
         tip: status?.chain_tip?.[TESTNET_COIN] ?? null,
@@ -268,6 +316,94 @@ export async function readTreasuryFromStdin(stdin = process.stdin) {
         throw new Error('treasury address is not a Bitcoin testnet address');
     }
     return { wif: parsed.wif, address };
+}
+
+/** Names the staged run-input FILE for the workers; the value is a path, never key material. */
+export const RUN_INPUT_ENV = 'XC_TESTNET_RUN_INPUT';
+
+/**
+ * Validates the text piped to a testnet run and returns the parsed object.
+ * Errors name the field, never its value, because the value is a key.
+ *
+ * @param {string} raw
+ * @returns {{ wif: string, address: string, claimant?: object }}
+ */
+export function parseRunInput(raw) {
+    if (!String(raw || '').trim()) {
+        throw new Error('testnet run requires treasury JSON on stdin; refusing to skip live writes');
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        throw new Error('testnet stdin is not a JSON object');
+    }
+    const address = parsed?.address ?? parsed?.segwitAddress;
+    if (typeof parsed?.wif !== 'string' || typeof address !== 'string') {
+        throw new Error('testnet stdin must carry treasury fields wif and address');
+    }
+    return { ...parsed, address };
+}
+
+/**
+ * Global setup's half: reads the runner's stdin once and stages it for the
+ * workers in a 0600 file inside a fresh 0700 directory. Returns the path and
+ * an idempotent cleanup; the caller exports the path under RUN_INPUT_ENV.
+ *
+ * @param {NodeJS.ReadableStream & { isTTY?: boolean }} [stdin]
+ * @param {{ tmpRoot?: string }} [opts]
+ * @returns {Promise<{ file: string, cleanup: () => void }>}
+ */
+export async function stageRunInput(stdin = process.stdin, { tmpRoot = os.tmpdir() } = {}) {
+    if (stdin.isTTY) {
+        throw new Error('testnet run requires treasury JSON piped on stdin; refusing to skip live writes');
+    }
+    const raw = await new Promise((resolve, reject) => {
+        let text = '';
+        stdin.setEncoding('utf8');
+        stdin.on('data', (chunk) => { text += chunk; });
+        stdin.on('end', () => resolve(text));
+        stdin.on('error', reject);
+    });
+    parseRunInput(raw);
+    const dir = fs.mkdtempSync(path.join(tmpRoot, 'xc-testnet-run-'));
+    fs.chmodSync(dir, 0o700);
+    const file = path.join(dir, 'input.json');
+    const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
+    try {
+        fs.writeFileSync(file, raw, { mode: 0o600, flag: 'wx' });
+    } catch (err) {
+        cleanup();
+        throw err;
+    }
+    return { file, cleanup };
+}
+
+/**
+ * A spec's half: reads the object global setup staged. Throws, never skips,
+ * when there is none, because a testnet run without its key is not a pass.
+ *
+ * @param {string} [file]
+ */
+export function readRunInput(file = process.env[RUN_INPUT_ENV]) {
+    if (!file) {
+        throw new Error(`no staged testnet run input (${RUN_INPUT_ENV} unset); pipe the treasury JSON to the runner`);
+    }
+    return parseRunInput(fs.readFileSync(file, 'utf8'));
+}
+
+/**
+ * The single-key address type a declared Bitcoin testnet address carries, so
+ * a key can be proven against the exact address it was declared for. The
+ * live validators stake from legacy P2PKH addresses (their vanity word
+ * "verify" cannot be spelled in bech32), the treasury is p2wpkh; anything
+ * else is refused rather than guessed.
+ */
+export function addressTypeOf(address) {
+    const text = String(address || '');
+    if (/^tb1q[02-9ac-hj-np-z]{38}$/.test(text)) return 'p2wpkh';
+    if (/^[mn][1-9A-HJ-NP-Za-km-z]{25,34}$/.test(text)) return 'p2pkh';
+    throw new Error('declared address is neither a testnet p2wpkh nor a p2pkh address');
 }
 
 /** The scriptPubKey hex an address pays, for comparing against a UTXO row. */
@@ -336,10 +472,13 @@ export function selectTreasuryInputs({ utxos, treasuryScript, sendSats, feeRate 
  * transaction the network rejects, and doing that silently on a live chain
  * is how a treasury gets probed by trial and error, so this runs BEFORE the
  * tracker is even asked for the address's coins.
+ *
+ * `type` stays p2wpkh for the treasury, whose funding PSBT spends p2wpkh
+ * inputs; the partial-claim claimant passes the type its address carries.
  */
-export function assertTreasuryKey(treasury, wallet = new WalletUtils(TESTNET_CHAIN_ID)) {
+export function assertTreasuryKey(treasury, wallet = new WalletUtils(TESTNET_CHAIN_ID), { type = 'p2wpkh' } = {}) {
     const keys = wallet.importWIF(treasury.wif);
-    const derived = wallet.deriveAddress(keys.publicKey, { type: 'p2wpkh' });
+    const derived = wallet.deriveAddress(keys.publicKey, { type });
     if (Buffer.isBuffer(keys.privateKey)) keys.privateKey.fill(0);
     if (derived !== treasury.address) {
         throw new Error('KEY/ADDRESS MISMATCH: the treasury WIF does not derive the declared address; refusing to sign');

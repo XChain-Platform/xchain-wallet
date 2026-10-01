@@ -92,7 +92,7 @@ describe('SignApproval signPsbt intent', () => {
 
         const panel = await screen.findByTestId('psbt-intent-panel');
         expect(screen.getByTestId('psbt-action-intent').textContent)
-            .toBe('Carries an XChain MINT action (v1)');
+            .toBe('Carries an XChain Mint action (v1)');
         expect(panel.textContent).toContain('Recipient');
         expect(panel.textContent).toContain('100,000 sats');
         expect(panel.textContent).toContain('Change (back to you)');

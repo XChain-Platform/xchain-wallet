@@ -24,12 +24,14 @@
 
 import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import { applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
+import { createBroadcastQueueStore, sealBroadcastQueueStore } from './broadcastQueueStore.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
@@ -795,6 +797,8 @@ export function createBackgroundHost(deps) {
         // localStorage (web/desktop renderers); pass `null` explicitly
         // to opt out (in-memory only, the v0.292.0 behaviour).
         broadcastQueueStorage = createBroadcastQueueStorage(),
+        // Shell-wide queue store, so a locked host cannot clobber its successor's.
+        broadcastQueueStore,
         // Cluster S FOLLOWUP 2: pluggable sign-throttle persistence.
         // Same shape as the broadcast-queue adapter; pass null to opt
         // out (in-memory only, the v0.219.0 behavior).
@@ -2363,6 +2367,8 @@ export function createBackgroundHost(deps) {
             }),
             source: source.address,
             ownAddresses,
+            // Decides whether an oversized poll may ride the Taproot envelope.
+            signer: await envelopeSignerOf(vault, req),
         });
         // The built wire params ride back so the confirm page decodes its
         // intent from what the HOST composed, not from the editor state
@@ -2690,29 +2696,34 @@ export function createBackgroundHost(deps) {
     // + messaging + in-memory queue; v0.292.0 auto-enqueue from broadcast
     // failure (Cluster G FOLLOWUP 1); v0.293.0 persistence across reload
     // (Cluster G FOLLOWUP 2). The in-memory map remains the live source
-    // of truth for the running process; storage rehydrates at first
+    // of truth for the running process; storage rehydrates on the first
     // queue access and writes back on every mutation.
+    //
+    // All of that state lives in `queueStore`, which the shell shares across
+    // the hosts it builds: a host torn down by a lock keeps running a
+    // broadcast already on the network, and its late splice, persist and
+    // journal record then land in the same map, journal and cached blob the
+    // next host serves, instead of in a private copy written over that host's.
+    const queueStore = broadcastQueueStore ?? createBroadcastQueueStore({ storage: broadcastQueueStorage });
     /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }>>} */
-    const queuedBroadcasts = new Map();
-    let queueLoaded = false;
-    // Set by the wallet wipe, and only by it. Every writer below checks it, so
-    // a continuation that resumes after the wipe removed the storage key cannot
-    // put the wiped wallet's signed transactions back. Deliberately NOT tied to
-    // the host teardown: a lock tears the host down too, and sealing there
-    // would drop persists a locked-but-not-wiped wallet still owes.
-    let queueSealed = false;
-    let queueLoadPromise = /** @type {Promise<boolean> | null} */ (null);
+    const queuedBroadcasts = queueStore.queues;
+    // `queueStore.sealed` is set by the wallet wipe, and only by it. Every
+    // writer below checks it, so a continuation that resumes after the wipe
+    // removed the storage key cannot put the wiped wallet's signed
+    // transactions back. Deliberately NOT tied to the host teardown: a lock
+    // tears the host down too, and sealing there would drop persists a
+    // locked-but-not-wiped wallet still owes.
     // Fold a persisted snapshot into the live map instead of replacing it. A
     // retried rehydrate can land after this process already queued entries of
     // its own, and `getQueue` hands the routes the live array they splice, so
     // the array identity has to survive the merge.
     //
     // No tombstone set is needed to stop the merge resurrecting a removed
-    // entry: a merge only runs while `queueLoaded` is false, and in that window
+    // entry: a merge only runs while `queueStore.loaded` is false, and in that window
     // the map holds nothing but entries `pushQueueEntry` added, which
     // persistQueue has refused to write. An entry that is both in memory and in
     // the snapshot implies a load that already succeeded, and that latches
-    // `queueLoaded` so no further merge happens.
+    // `queueStore.loaded` so no further merge happens.
     //
     // One exception: `restoreQueueFromVault` also runs in that window, and it
     // rebuilds a PendingTx the blob may already hold under a different entry
@@ -2758,12 +2769,14 @@ export function createBackgroundHost(deps) {
         live.adsCommit = { chainId: verdict.chainId, donationIncluded: verdict.donationIncluded };
     }
     async function ensureQueueLoaded() {
-        if (queueLoaded || !broadcastQueueStorage) {
-            queueLoaded = true;
+        // A sealed store serves nothing: a host built on it during a wipe must
+        // not read the pre-wipe blob back into the map it shares.
+        if (queueStore.loaded || queueStore.sealed || !queueStore.storage) {
+            queueStore.loaded = true;
             return;
         }
-        if (!queueLoadPromise) {
-            queueLoadPromise = (async () => {
+        if (!queueStore.loadPromise) {
+            queueStore.loadPromise = (async () => {
                 // Whatever this process already holds was queued or journaled
                 // while the persist helpers were refusing to write, so the blob
                 // does not carry it. Both write-backs below are conditional on
@@ -2773,31 +2786,31 @@ export function createBackgroundHost(deps) {
                 for (const entries of queuedBroadcasts.values()) {
                     if (entries.length > 0) { heldEntries = true; break; }
                 }
-                const heldOwed = owedSettlements.length > 0;
+                const heldOwed = queueStore.owed.length > 0;
                 let journalRead = false;
                 let snapshot = null;
                 try {
-                    snapshot = await broadcastQueueStorage.load();
+                    snapshot = await queueStore.storage.load();
                 } catch (_e) {
                     snapshot = null;
                 }
                 // Fail closed. `load` resolves null only for a read that did
                 // not reach the store; an empty queue is still an object.
-                // Latching `queueLoaded` on a failed read lets the next persist
+                // Latching `queueStore.loaded` on a failed read lets the next persist
                 // write the half-empty map over every wallet's persisted
                 // entries.
                 if (!snapshot || typeof snapshot !== 'object') return false;
                 mergeQueueSnapshot(snapshot);
-                if (typeof broadcastQueueStorage.loadSettlements === 'function') {
+                if (typeof queueStore.storage.loadSettlements === 'function') {
                     try {
-                        mergeOwedSettlements(await broadcastQueueStorage.loadSettlements());
+                        mergeOwedSettlements(await queueStore.storage.loadSettlements());
                         journalRead = true;
                     } catch (_e) {
                         // An unreadable journal costs the replay of writes owed
                         // before this boot, never the queue itself.
                     }
                 }
-                queueLoaded = true;
+                queueStore.loaded = true;
                 // The recovery of the read is also the repair of the blob.
                 // The write-back lands here rather than at the next mutation:
                 // an MV3 worker evicted before one (~30s idle) loses every
@@ -2811,24 +2824,26 @@ export function createBackgroundHost(deps) {
                 // one storage key, so writing the journal back after a
                 // `loadSettlements` that threw would save a known-incomplete
                 // journal over the owed writes recorded before this boot: the
-                // same erasure the `queueLoaded` gate exists to prevent.
+                // same erasure the `queueStore.loaded` gate exists to prevent.
                 if (heldOwed && journalRead) await persistOwedSettlements();
                 return true;
             })();
         }
-        const loaded = await queueLoadPromise;
+        const loaded = await queueStore.loadPromise;
         // Drop the single-flight latch on failure so the next access retries
         // rather than resolving forever against the same dead read.
-        if (!loaded) queueLoadPromise = null;
+        if (!loaded) queueStore.loadPromise = null;
     }
+    // Resolve true only when the snapshot reached storage; every skip or refusal is false.
+    /** @returns {Promise<boolean>} */
     async function persistQueue() {
-        if (queueSealed || !broadcastQueueStorage) return;
-        if (!queueLoaded) {
+        if (queueStore.sealed || !queueStore.storage) return false;
+        if (!queueStore.loaded) {
             await ensureQueueLoaded();
             // Storage is still unreadable, so the map is known-incomplete.
             // Keep it as the live truth for this process and leave what is on
             // disk alone; writing it back is the erasure this guards against.
-            if (!queueLoaded) return;
+            if (!queueStore.loaded) return false;
         }
         /** @type {Record<string, any[]>} */
         const snapshot = {};
@@ -2836,28 +2851,30 @@ export function createBackgroundHost(deps) {
             if (entries.length > 0) snapshot[walletId] = [...entries];
         }
         try {
-            await broadcastQueueStorage.save(snapshot);
+            await queueStore.storage.save(snapshot);
+            return true;
         } catch (_e) {
             // Same tolerance as load: never block a queue mutation on
             // a storage failure.
+            return false;
         }
     }
     // Hold a PendingTx write the vault refused until a vault takes it. Leaving
     // the queue is what makes an entry unretriable, and a record left 'queued'
     // after its bytes landed keeps netting the spend out of the balance.
+    // The journal is `queueStore.owed`, shared like the map, so a record a
+    // torn-down host writes is the one the next host's open vault drains.
     const OWED_SETTLEMENT_LIMIT = 50;
-    /** @type {Array<{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt: number }>} */
-    let owedSettlements = [];
     // Cap the journal so a vault that never reopens cannot grow the stored blob
     // without bound. Positional: the array is kept oldest-first, so the front goes.
     function capOwedSettlements() {
-        if (owedSettlements.length > OWED_SETTLEMENT_LIMIT) {
-            owedSettlements = owedSettlements.slice(-OWED_SETTLEMENT_LIMIT);
+        if (queueStore.owed.length > OWED_SETTLEMENT_LIMIT) {
+            queueStore.owed = queueStore.owed.slice(-OWED_SETTLEMENT_LIMIT);
         }
     }
     function mergeOwedSettlements(persisted) {
         if (!Array.isArray(persisted) || persisted.length === 0) return;
-        const held = new Set(owedSettlements.map((s) => s.pendingTxId));
+        const held = new Set(queueStore.owed.map((s) => s.pendingTxId));
         const restored = [];
         for (const owed of persisted) {
             if (!owed || typeof owed !== 'object') continue;
@@ -2867,18 +2884,18 @@ export function createBackgroundHost(deps) {
             restored.push({ ...owed });
         }
         // Persisted records go in front: persistOwedSettlements refuses while
-        // `queueLoaded` is false, so the blob predates everything this process holds.
-        owedSettlements = [...restored, ...owedSettlements];
+        // `queueStore.loaded` is false, so the blob predates everything this process holds.
+        queueStore.owed = [...restored, ...queueStore.owed];
         capOwedSettlements();
     }
     // Write the journal to the queue's own storage key. The wallet wipe clears
     // the local store by enumerated key, so a key of its own would outlive the
     // wallet whose transactions the journal names.
     async function persistOwedSettlements() {
-        if (queueSealed || !queueLoaded) return;
-        if (typeof broadcastQueueStorage?.saveSettlements !== 'function') return;
+        if (queueStore.sealed || !queueStore.loaded) return;
+        if (typeof queueStore.storage?.saveSettlements !== 'function') return;
         try {
-            await broadcastQueueStorage.saveSettlements(owedSettlements.map((s) => ({ ...s })));
+            await queueStore.storage.saveSettlements(queueStore.owed.map((s) => ({ ...s })));
         } catch (_e) {
             // Same tolerance the queue save takes: a storage failure never
             // blocks the route that recorded the write.
@@ -2890,8 +2907,8 @@ export function createBackgroundHost(deps) {
     function recordOwedSettlement(walletId, pendingTxId, op, patch) {
         if (typeof pendingTxId !== 'string' || !pendingTxId) return;
         // One record per PendingTx, holding the latest write owed to it.
-        owedSettlements = owedSettlements.filter((s) => s.pendingTxId !== pendingTxId);
-        owedSettlements.push({
+        queueStore.owed = queueStore.owed.filter((s) => s.pendingTxId !== pendingTxId);
+        queueStore.owed.push({
             id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             ...(typeof walletId === 'string' && walletId ? { walletId } : {}),
             pendingTxId,
@@ -2911,11 +2928,14 @@ export function createBackgroundHost(deps) {
      * @param {any} vault
      */
     async function flushOwedSettlements(vault) {
-        if (owedSettlements.length === 0) return;
+        if (queueStore.owed.length === 0) return;
         try {
-            const kept = [];
-            let changed = false;
-            for (const owed of owedSettlements) {
+            // Track what this pass settled rather than what it kept: another
+            // host sharing the journal can record a write while the awaits below
+            // run, and replacing the journal with this pass's leftovers would drop it.
+            /** @type {Set<object>} */
+            const settled = new Set();
+            for (const owed of [...queueStore.owed]) {
                 let verdict;
                 if (owed.op === 'discard') {
                     try {
@@ -2927,10 +2947,9 @@ export function createBackgroundHost(deps) {
                 } else {
                     verdict = await applyPendingTxPatch(vault, owed.pendingTxId, owed.patch);
                 }
-                if (verdict === 'unreachable') kept.push(owed);
-                else changed = true;
+                if (verdict !== 'unreachable') settled.add(owed);
             }
-            if (!changed) return;
+            if (settled.size === 0) return;
             // A retire has to be backed by a write that reached disk. Vault's
             // collection put/delete mutate the in-memory document BEFORE the
             // autosave and never restore it when that save rejects, so a
@@ -2955,7 +2974,7 @@ export function createBackgroundHost(deps) {
                     return;
                 }
             }
-            owedSettlements = kept;
+            queueStore.owed = queueStore.owed.filter((s) => !settled.has(s));
             await persistOwedSettlements();
         } catch (_e) {
             // A journal that cannot drain stays as it is for the next route.
@@ -2963,6 +2982,8 @@ export function createBackgroundHost(deps) {
     }
     /**
      * Stop this host writing the queue key, for the life of the process.
+     * The seal lands on the shared store, so it also stops every host a lock
+     * already tore down that shares it; the shell then builds a fresh store.
      *
      * The wallet wipe removes `xchain.broadcastQueue` and then drops the host,
      * but dropping a reference cancels nothing: `pushQueueEntry` fires its
@@ -2985,17 +3006,7 @@ export function createBackgroundHost(deps) {
      * @returns {Promise<void>}
      */
     async function sealBroadcastQueue() {
-        queueSealed = true;
-        queuedBroadcasts.clear();
-        owedSettlements = [];
-        if (typeof broadcastQueueStorage?.clear === 'function') {
-            try {
-                await broadcastQueueStorage.clear();
-            } catch (_e) {
-                // The wipe removes the key itself; this only empties the
-                // adapter's cache, and a failure here must not fail the wipe.
-            }
-        }
+        await sealBroadcastQueueStore(queueStore);
     }
     /**
      * Drop one wallet's half of the queue surface when that wallet is removed.
@@ -3017,10 +3028,10 @@ export function createBackgroundHost(deps) {
         const hadEntries = queuedBroadcasts.delete(walletId);
         recoveredWallets.delete(walletId);
         reconciledWallets.delete(walletId);
-        const owedBefore = owedSettlements.length;
-        owedSettlements = owedSettlements.filter((s) => s.walletId !== walletId);
+        const owedBefore = queueStore.owed.length;
+        queueStore.owed = queueStore.owed.filter((s) => s.walletId !== walletId);
         if (hadEntries) await persistQueue();
-        if (owedSettlements.length !== owedBefore) await persistOwedSettlements();
+        if (queueStore.owed.length !== owedBefore) await persistOwedSettlements();
     }
     function getQueue(walletId) {
         if (typeof walletId !== 'string' || !walletId) {
@@ -3083,7 +3094,7 @@ export function createBackgroundHost(deps) {
      *
      * It runs while the blob is unreadable too, which is when the blob is worth
      * least. Nothing is written back in that window (persistQueue stays gated
-     * on `queueLoaded`); the merge collapses a rebuilt entry into its blob twin
+     * on `queueStore.loaded`); the merge collapses a rebuilt entry into its blob twin
      * by `pendingTxId` once the read recovers. The settlement journal is unread
      * in that window as well, so a record it owes a write to can come back
      * until the read recovers, the replay lands, and the reconcile drops it.
@@ -3115,10 +3126,10 @@ export function createBackgroundHost(deps) {
      *     table or an empty address set restores nothing rather than guessing,
      *     because a wrong join would list one wallet's signed bytes under
      *     another.
-     *   - no live queue entry names it. The extension has a single background
-     *     worker, so a broadcast genuinely in flight is held by that worker's
-     *     own in-memory queue; the records this read can reach are exactly the
-     *     ones no live call owns.
+     *   - no live queue entry names it. Every host a shell builds shares one
+     *     queue store, so a broadcast genuinely in flight, even on a host a
+     *     lock tore down, is held in that store's map; the records this read
+     *     can reach are exactly the ones no live call owns.
      *   - no owed settlement names it. A journaled write belongs to an entry
      *     whose broadcast or discard already happened.
      *
@@ -3156,7 +3167,7 @@ export function createBackgroundHost(deps) {
         if (candidates.length === 0) return;
         const live = getQueue(walletId);
         const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
-        for (const owed of owedSettlements) held.add(owed.pendingTxId);
+        for (const owed of queueStore.owed) held.add(owed.pendingTxId);
         const restorable = candidates
             .filter(({ record: r }) => r
                 && typeof r.txHex === 'string' && r.txHex
@@ -3221,7 +3232,7 @@ export function createBackgroundHost(deps) {
      * @param {string} walletId
      */
     async function reconcileRestoredEntries(vault, walletId) {
-        if (!queueLoaded || reconciledWallets.has(walletId)) return;
+        if (!queueStore.loaded || reconciledWallets.has(walletId)) return;
         // A vault with no pendingTxs collection cannot answer, and an absent
         // reader must read as "cannot judge", never as "no record exists".
         if (typeof vault?.pendingTxs?.get !== 'function') return;
@@ -3365,9 +3376,11 @@ export function createBackgroundHost(deps) {
             txid: req?.txid,
         });
         // This lane names no PendingTx, so the blob is its only durable copy:
-        // the write lands before the renderer is told the bytes are queued.
-        await persistQueue();
-        return stored;
+        // reply after the write settles, saying whether it landed (a caller
+        // seeing `persisted: false` warns the bytes will not survive a restart).
+        const persisted = await persistQueue();
+        // Copy: `stored` is the live entry, and a flag on it would ride the next save.
+        return { ...stored, persisted };
     });
     /**
      * Settle the PendingTx half of a queued broadcast once the host queue has
@@ -3439,10 +3452,10 @@ export function createBackgroundHost(deps) {
     // network". They are narrow on purpose: every other rejection the shared
     // classifier calls permanent describes bytes that can never confirm, while
     // these two describe bytes that already did reach a node, which is the
-    // opposite outcome. Matched on the reject text because that is all the
-    // encoder hands back.
-    function saysAlreadyOnNetwork(reason) {
-        return /txn-already-known|txn-already-in-mempool/i.test(String(reason));
+    // opposite outcome. Matched on the same reject text the classifier reads,
+    // nested causes included, because that is all the encoder hands back.
+    function saysAlreadyOnNetwork(err) {
+        return flows.isAlreadyOnNetworkRejection(err);
     }
     // In-flight claims for broadcast.queue.broadcast, keyed walletId:id.
     // `broadcastTx` is an irreversible effector, so a second call for the same
@@ -3450,7 +3463,9 @@ export function createBackgroundHost(deps) {
     // reaches the network. The claim is taken synchronously, before the
     // handler's first await, so two calls in the same tick cannot both pass
     // the check; core drainQueuedBroadcast keeps the same guard for its lane.
-    const inFlightQueueBroadcasts = new Set();
+    // Held on the shared store, so a host built after a lock sees the claim a
+    // torn-down host's broadcast still holds and neither re-sends nor discards it.
+    const inFlightQueueBroadcasts = queueStore.inFlight;
     host.register('broadcast.queue.broadcast', async (req, { sdkRegistry, vault, chainRegistry }) => {
         const walletId = req?.walletId;
         const id = req?.id;
@@ -3529,17 +3544,10 @@ export function createBackgroundHost(deps) {
                 // another attempt at these bytes. Transient failures stay queued,
                 // which is what the surface is for.
                 const failure = err && err.message ? String(err.message) : String(err);
-                // A RESUMED CLAIM READS "ALREADY KNOWN" AS DELIVERY, NOT DEATH.
-                // These bytes were claimed by a worker that died mid-broadcast,
-                // so whether they reached a node is the open question, and the
-                // node's own answer settles it: it holds this txid, therefore
-                // the transaction was delivered. The shared classifier calls
-                // those two reject reasons permanent, which on the ordinary lane
-                // is right (nothing else is going to confirm) but here would
-                // retire a LANDED transaction as 'failed' and invite a
-                // re-compose, the one action on this path that can double spend.
-                // The never-claimed lane below keeps its behaviour untouched.
-                if (entry.resumedClaim === true && saysAlreadyOnNetwork(failure)) {
+                // Settle "already known" as DELIVERY for every entry: each one exists only
+                // because an earlier attempt ended ambiguously, and retiring it as
+                // 'failed' invites a re-compose, the one action here that can double spend.
+                if (saysAlreadyOnNetwork(err)) {
                     const landed = q.findIndex((e) => e.id === id);
                     if (landed >= 0) q.splice(landed, 1);
                     await persistQueue();
@@ -3553,8 +3561,20 @@ export function createBackgroundHost(deps) {
                         recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
                     }
                     await flushOwedSettlements(vault);
-                    // No ADS commit: a resumed entry carries no verdict to book,
-                    // and the interrupted attempt may already have booked one.
+                    // Book ADS only for a never-claimed entry: its failed first attempt booked
+                    // nothing, while an interrupted claim may already have booked its verdict.
+                    if (entry.resumedClaim !== true && entry.adsCommit) {
+                        try {
+                            await flows.commitAdsStep({
+                                vault,
+                                chainId: entry.adsCommit.chainId || entry.chainId,
+                                donationIncluded: entry.adsCommit.donationIncluded,
+                                chainRegistry,
+                            });
+                        } catch (e) {
+                            console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
+                        }
+                    }
                     return { txid: entry.txid ?? null, alreadyOnNetwork: true };
                 }
                 // Release the claim either way, the two transitions core's drain
@@ -4709,6 +4729,8 @@ export function createBackgroundHost(deps) {
             }),
             source: source.address,
             ownAddresses,
+            // Decides whether an oversized market may ride the Taproot envelope.
+            signer: await envelopeSignerOf(vault, req),
         });
         // The built wire params ride back so the confirm page decodes its intent
         // from what the HOST composed, not from the editor state.
@@ -4982,6 +5004,10 @@ export function createBackgroundHost(deps) {
 
     host.register('lists.byActionIndex', async (req, { sdkRegistry }) => {
         return listByActionIndex({ ...req, sdkRegistry });
+    });
+
+    host.register('lists.shared', async (req, { sdkRegistry, chainRegistry }) => {
+        return sharedListDirectory({ ...req, sdkRegistry, chainRegistry });
     });
 
     // PC-10 "My Lists": which LIST actions has this address authored.

@@ -24,6 +24,7 @@ vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
 
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
 import { sendToken } from '../../../packages/core/src/flows/sendToken.js';
+import { advancedAction } from '../../../packages/core/src/flows/advancedAction.js';
 
 const FROM = { address: 'bcrt1qsender', publicKey: '03dd4688', derivationPath: "m/84'/1'/0'/0/0" };
 const DISPENSER = 'bcrt1qdispenser';
@@ -69,5 +70,24 @@ describe('sendToken actionSummary', () => {
         await sendToken(opts({ actionSummary: 'Buy 1 fill from dispenser #816' }));
         const { encoderOpts } = vi.mocked(submitAction).mock.calls[0][0];
         expect(encoderOpts.customOutputs).toEqual([{ address: DISPENSER, value: '600000' }]);
+    });
+});
+
+// The generic lane labels bridge, batch and controller-bind sends; the wire name stays raw.
+describe('advancedAction actionSummary', () => {
+    beforeEach(() => vi.mocked(submitAction).mockClear());
+    const advanced = (extra) => advancedAction({ ...opts(), action: 'xbridge', params: {}, ...extra });
+
+    it('labels the pending record in plain language', async () => {
+        await advanced({});
+        expect(pendingMeta().actionSummary).toBe('Bridge transfer');
+        expect(vi.mocked(submitAction).mock.calls[0][0].actionData.action).toBe('XBRIDGE');
+    });
+
+    it('prefers the caller\'s summary and ignores a blank one', async () => {
+        await advanced({ action: 'ADDRESS', actionSummary: ' Bind address controller ' });
+        await advanced({ action: 'BATCH', actionSummary: '   ' });
+        const labels = vi.mocked(submitAction).mock.calls.map((c) => c[0].pendingTxMeta.actionSummary);
+        expect(labels).toEqual(['Bind address controller', 'Batch']);
     });
 });

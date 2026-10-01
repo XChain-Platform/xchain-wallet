@@ -31,6 +31,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { MEMO_HINT } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -808,7 +809,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     />
                     <Input
                         label="Memo (optional)"
-                        hint="Protocol rejects | or ;."
+                        hint={MEMO_HINT}
                         value={memo}
                         onChange={(e) => setMemo(e.target.value)}
                         autoComplete="off"

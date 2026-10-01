@@ -37,6 +37,7 @@ import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { isHwSource } from '../components/SignCredentials.jsx';
+import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -102,19 +103,9 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 // mid-resume deliberately leaves it stored - the user has not
                 // finished with it, and it is still resumable.
                 onApprove: (_creds, built) => {
-                    const prebuiltPsbt = {
-                        psbtHex: built.psbt,
-                        encoding: built.encoding,
-                        actionString: built.actionString,
-                        version: built.version,
-                        deferredFeeOutput: built.deferredFeeOutput || null,
-                        deferredOutputs: built.deferredOutputs || [],
-                        // See useActionConfirmFlow. A resumed confirm is the
-                        // stalest envelope in the wallet, so it is the likeliest
-                        // of all to disagree with a submit-time re-resolution.
-                        revealOpts: built.revealOpts || null,
-                        adsDonation: { included: !!built.adsPlan?.canSubmit },
-                    };
+                    // The shared mapping, so a stored TAPROOT pair keeps its
+                    // reveal and recovery record and is not refused unsigned.
+                    const prebuiltPsbt = prebuiltPsbtFromComposed(built);
                     return messaging[method]({
                         ...base,
                         prebuiltPsbt,

@@ -22,6 +22,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+import { prebuiltPsbtFromComposed } from '../../../packages/core/src/flows/prebuiltPsbtFromComposed.js';
 
 const CHAIN = 'bitcoin-regtest';
 const DONATE = 'bcrt1qdonate';
@@ -115,49 +116,25 @@ describe('the donation verdict booked is the one the signed bytes carry', () => 
 });
 
 // The cases above hand submitAction an envelope directly, so none of them can
-// see a ROUTE that never puts the verdict on one. ADS keys only on chain and
-// settings (applyAdsPlanToEncoderOpts), never on the action, so every prebuilt
-// envelope is exposed and the census is the assertion.
+// see a ROUTE that never puts the verdict on one. Every route builds it through
+// prebuiltPsbtFromComposed (prebuiltEnvelopeDeferredCarry pins that), so the
+// helper carrying the verdict is the assertion.
 describe('every prebuilt-PSBT builder carries the compose-time verdict', () => {
-    const ROUTES = resolve(dirname(fileURLToPath(import.meta.url)),
-        '../../../packages/core/src/shared/routes');
-    const files = () => readdirSync(ROUTES).filter((f) => f.endsWith('.jsx'));
-
-    // Slice each envelope literal by brace depth, so a nested field cannot be
-    // read as the end of the object.
-    function envelopes() {
-        const out = [];
-        for (const file of files()) {
-            const src = readFileSync(join(ROUTES, file), 'utf8');
-            const re = /prebuiltPsbt:\s*\{/g;
-            let m;
-            while ((m = re.exec(src)) !== null) {
-                const start = src.indexOf('{', m.index);
-                let depth = 0;
-                let i = start;
-                for (; i < src.length; i++) {
-                    if (src[i] === '{') depth++;
-                    else if (src[i] === '}' && --depth === 0) break;
-                }
-                out.push({
-                    at: `${file}:${src.slice(0, start).split('\n').length}`,
-                    body: src.slice(start, i),
-                });
-            }
-        }
-        return out;
-    }
-
-    it('finds envelopes to check', () => {
-        // Guards the guard: a regex that matched nothing would pass the
-        // assertion below over an empty set and prove nothing at all.
-        expect(envelopes().length).toBeGreaterThan(5);
+    it('books the verdict compose resolved, either way', () => {
+        const base = { psbt: 'PSBT', encoding: 'OP_RETURN', actionString: 'ISSUE|0|JDOG', version: 0 };
+        expect(prebuiltPsbtFromComposed({ ...base, adsPlan: { canSubmit: true } }).adsDonation)
+            .toEqual({ included: true });
+        expect(prebuiltPsbtFromComposed({ ...base, adsPlan: { canSubmit: false } }).adsDonation)
+            .toEqual({ included: false });
+        expect(prebuiltPsbtFromComposed(base).adsDonation).toEqual({ included: false });
     });
 
-    it('leaves no builder emitting a bare envelope', () => {
-        const missing = envelopes()
-            .filter((e) => !/adsDonation/.test(e.body))
-            .map((e) => e.at);
-        expect(missing).toEqual([]);
+    it('leaves no route emitting a bare envelope', () => {
+        const ROUTES = resolve(dirname(fileURLToPath(import.meta.url)),
+            '../../../packages/core/src/shared/routes');
+        const bare = readdirSync(ROUTES)
+            .filter((f) => f.endsWith('.jsx'))
+            .filter((f) => /prebuiltPsbt(:|\s*=)\s*\{/.test(readFileSync(join(ROUTES, f), 'utf8')));
+        expect(bare).toEqual([]);
     });
 });
