@@ -19,6 +19,14 @@ import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
 import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
 import { ScanRoute } from './ScanRoute.jsx';
+import {
+    compareContactsByName,
+    compareContactsByNewest,
+    duplicateNameGroups,
+    findContactByName,
+    mergeContactGroup,
+    withEntriesAdded,
+} from '../utils/contactMerge.js';
 import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
 
@@ -103,6 +111,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // hold at least one address on that chain.
     const [query, setQuery] = useState('');
     const [networkFilter, setNetworkFilter] = useState(/** @type {'all' | string} */ ('all'));
+    // A long address book was unsorted (storage order); name is the default.
+    const [sortBy, setSortBy] = useState(/** @type {'name' | 'newest'} */ ('name'));
+    // One-line "Added to <name>" shown on the detail view after a save that
+    // joined an existing contact instead of creating a second one.
+    const [notice, setNotice] = useState(/** @type {string | null} */ (null));
+    const [merging, setMerging] = useState(false);
 
     const [formName, setFormName] = useState('');
     const [formNotes, setFormNotes] = useState('');
@@ -161,8 +175,37 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             return entries.some((e) =>
                 e.address?.toLowerCase().includes(q) || e.label?.toLowerCase().includes(q),
             );
-        });
-    }, [contacts, query, networkFilter]);
+        }).sort(sortBy === 'newest' ? compareContactsByNewest : compareContactsByName);
+    }, [contacts, query, networkFilter, sortBy]);
+
+    const duplicateGroups = useMemo(() => duplicateNameGroups(contacts), [contacts]);
+
+    useEffect(() => { if (mode !== 'detail') setNotice(null); }, [mode]);
+
+    // Fold contacts that share a name into the oldest of each group. Not
+    // atomic: each group saves, then deletes the rest, so a failure partway
+    // leaves the earlier groups merged and the later ones untouched, and a
+    // retry picks up where it stopped (nothing is lost, only not yet folded).
+    async function handleMergeDuplicates() {
+        if (merging || duplicateGroups.length === 0) return;
+        setMerging(true);
+        try {
+            for (const group of duplicateGroups) {
+                const { keep, dropIds } = mergeContactGroup(group);
+                // eslint-disable-next-line no-await-in-loop
+                await messaging.saveContact({ record: keep });
+                for (const id of dropIds) {
+                    // eslint-disable-next-line no-await-in-loop
+                    await messaging.deleteContact({ id });
+                }
+            }
+            await loadContacts();
+        } catch (err) {
+            setLoadError(err?.message || 'Merge failed.');
+        } finally {
+            setMerging(false);
+        }
+    }
 
     // When the global AppHeader QR scanner produces an address while this
     // route is active, App.jsx sets scanPrefill. If the address already
@@ -306,6 +349,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     record: { ...active, name: formName.trim(), notes: formNotes, entries: cleanedEntries },
                 });
             } else {
+                // A name the book already holds is the same person: add the
+                // address to that contact rather than start a second one.
+                const existing = findContactByName(contacts, formName);
+                if (existing) {
+                    await messaging.saveContact({ record: withEntriesAdded(existing, cleanedEntries) });
+                    await loadContacts();
+                    setActiveId(existing.id);
+                    setMode('detail');
+                    setNotice(`Added to ${existing.name}.`);
+                    return;
+                }
                 await messaging.saveContact({
                     input: { name: formName.trim(), notes: formNotes, entries: cleanedEntries },
                 });
@@ -565,6 +619,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         };
         return wrap(
             <>
+                {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
                     <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
                     <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600 }}>{active.name}</div>
@@ -734,7 +789,27 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     aria-label="Search contacts"
                 />
                 <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
+                <select
+                    className={picker.sort}
+                    value={sortBy}
+                    onChange={(e) => setSortBy(/** @type {'name' | 'newest'} */ (e.target.value))}
+                    aria-label="Sort contacts"
+                >
+                    <option value="name">A to Z</option>
+                    <option value="newest">Newest</option>
+                </select>
             </div>
+            {duplicateGroups.length > 0 ? (
+                <StatusMessage
+                    id="contacts-duplicate-names"
+                    recovery={{ label: merging ? 'Merging…' : 'Merge', onAction: handleMergeDuplicates }}
+                >
+                    {duplicateGroups.length === 1
+                        ? `${duplicateGroups[0].length} contacts are named ${duplicateGroups[0][0].name}.`
+                        : `${duplicateGroups.length} names are used by more than one contact.`}
+                    {' '}Merge them into one contact per person, with all of their addresses.
+                </StatusMessage>
+            ) : null}
             {unpublished > 0 && !nudgeDismissed && contacts.length > 0 ? (
                 <StatusMessage
                     id="contacts-publish-nudge"

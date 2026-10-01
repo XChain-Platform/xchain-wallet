@@ -27,7 +27,7 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { listFormatSupport } from '../../flows/listFormatSupport.js';
 import { findListOwner } from '../../flows/listMembership.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -296,7 +296,7 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
             />
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(event) => { setMemo(event.target.value); setFormError(null); }}
                 autoComplete="off"

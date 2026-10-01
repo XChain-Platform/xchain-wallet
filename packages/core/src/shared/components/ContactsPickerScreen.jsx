@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
 import { contactEntryChain } from '../utils/contactChain.js';
+import { compareContactsByName } from '../utils/contactMerge.js';
 import styles from './ContactsPickerScreen.module.css';
 
 export { styles as contactsPickerStyles };
@@ -41,7 +42,9 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
     const rows = useMemo(() => {
         const q = query.trim().toLowerCase();
         const out = [];
-        for (const c of contacts || []) {
+        // Name order, matching the Contacts screen, so a person's addresses
+        // sit together however the vault happened to store them.
+        for (const c of [...(contacts || [])].sort(compareContactsByName)) {
             for (const e of c?.entries || []) {
                 if (!e?.address) continue;
                 // Resolved, not read raw: an entry the old detector stored as

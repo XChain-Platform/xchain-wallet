@@ -55,6 +55,7 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/sub
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
+import { MEMO_HINT } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -1854,7 +1855,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
