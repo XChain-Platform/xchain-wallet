@@ -44,6 +44,11 @@ import {
     multiplyDecimalStrings,
     roundDecimalString,
 } from '../shared/utils/amountFormat.js';
+import {
+    decodeListShare,
+    decodeListTransfer,
+    decodeUnionListCreate,
+} from './list_share_description.js';
 import { listEditValue } from './list_removal_description.js';
 
 /**
@@ -947,7 +952,7 @@ function decodeBet(p, chainSuffix) {
 }
 
 /**
- * LIST decoder. §40.9 / LIST.md. Two format versions:
+ * LIST decoder. §40.9 / LIST.md.
  *
  *   - v0 Create: VERSION|TYPE|MEMO|ITEM (ITEM repeats). TYPE 1 = TICK
  *     list, TYPE 2 = ADDRESS list. The wallet's AIRDROP authoring flow
@@ -966,6 +971,9 @@ function decodeList(p, chainSuffix) {
     const items = toArray(p.ITEM);
     const count = items.length;
     const memo = str(p.MEMO);
+
+    if (version === '2') return decodeListShare(p);
+    if (version === '3') return decodeListTransfer(p);
 
     if (version === '1') {
         const edit = str(p.EDIT);
@@ -994,6 +1002,8 @@ function decodeList(p, chainSuffix) {
 
     // Version 0: create.
     const type = str(p.TYPE);
+    if (type === '3') return decodeUnionListCreate(items, memo, chainSuffix);
+
     const kind = type === '1' ? 'token' : type === '2' ? 'address' : 'item';
     const summary = `Create ${kind} list of ${count || '?'} item${count === 1 ? '' : 's'}${chainSuffix}`;
     return {
