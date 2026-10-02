@@ -188,7 +188,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // "address list" (deterministic count) vs "token list" (holder-
     // snapshot preview) branch in the review-airdrop stage.
     const [existingListDetail, setExistingListDetail] = useState(
-        /** @type {{ loading: boolean, kind: 'address' | 'tick' | null, items: string[], error: string | null } | null} */
+        /** @type {{ loading: boolean, kind: 'address' | 'tick' | null, items: string[], name: string | null, error: string | null } | null} */
         (null),
     );
     // Best-effort holder-count preview for whichever tick set is in play
@@ -369,19 +369,20 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return undefined;
         }
         let cancelled = false;
-        setExistingListDetail({ loading: true, kind: null, items: [], error: null });
+        setExistingListDetail({ loading: true, kind: null, items: [], name: null, error: null });
         messaging.getListByActionIndex({ chainId, actionIndex: listActionIndex })
             .then((row) => {
                 if (cancelled) return;
                 const kind = String(row?.type) === '1' ? 'tick' : 'address';
                 // The airdrop pays the list's newest valid edit, not its created members
                 const items = currentListItems(row) || [];
-                setExistingListDetail({ loading: false, kind, items, error: null });
+                const name = typeof row?.name === 'string' && row.name.length > 0 ? row.name : null;
+                setExistingListDetail({ loading: false, kind, items, name, error: null });
             })
             .catch((err) => {
                 if (cancelled) return;
                 setExistingListDetail({
-                    loading: false, kind: null, items: [],
+                    loading: false, kind: null, items: [], name: null,
                     error: err?.message || 'Failed to load list.',
                 });
             });
@@ -1816,7 +1817,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     <div className={styles.fromLine}>
                         <span className={styles.hint}>
                             {listActionIndex
-                                ? `${listLabel(listActionIndex)}${existingListDetail?.kind === 'tick' ? ' (token list)' : existingListDetail?.kind === 'address' ? ' (address list)' : ''}`
+                                ? `${listLabel(listActionIndex, existingListDetail?.name)}${existingListDetail?.kind === 'tick' ? ' (token list)' : existingListDetail?.kind === 'address' ? ' (address list)' : ''}`
                                 : 'No list chosen yet.'}
                         </span>
                         <Button type="button" variant="ghost" onClick={() => setListPickerOpen(true)}>
