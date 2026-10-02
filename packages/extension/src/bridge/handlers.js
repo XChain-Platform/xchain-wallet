@@ -722,19 +722,33 @@ export function registerBridgeHandlers(host, opts = {}) {
                 throw bridgeError('INVALID_PARAMS', `${field} contains the reserved separator`);
             }
         }
+        // Offer only addresses this site's grant covers; with none, refuse before prompting.
+        const candidates = await signInCandidates(deps, site, req);
+        if (candidates.length === 0) {
+            throw bridgeError('ADDRESS_NOT_PERMITTED', 'no address this site may sign in with');
+        }
         const decision = await approvals.signIn({
             origin: req.origin,
             kind: 'signIn',
+            ...(req.chainId ? { chainId: req.chainId } : {}),
             payload: {
                 appId: req.appId,
                 nonce: req.nonce,
                 expiresInMs: req.expiresInMs,
+                addresses: candidates,
             },
         });
         if (!decision?.approved) throw new UserRejectedError('signIn');
         if (!decision.password || !decision.address) {
             throw bridgeError('NO_CREDENTIALS', 'approvals must return { password, address }');
         }
+        // The window's answer is untrusted: it must name one of the offered
+        // addresses, and that address must still pass the per-site grant.
+        const chosen = candidates.find((c) => c.address === decision.address
+            && (!decision.chainId || c.chainId === decision.chainId));
+        if (!chosen) throw bridgeError('ADDRESS_NOT_PERMITTED', decision.address);
+        assertChainPermitted(site, chosen.chainId);
+        await assertAddressPermitted(deps, site, chosen.chainId, decision.address);
         // Compose challenge per §43.6 format.
         const now = Date.now();
         const expiresInMs = Math.min(
@@ -774,10 +788,11 @@ export function registerBridgeHandlers(host, opts = {}) {
             throw bridgeError('INVALID_PARAMS', err?.message ?? 'malformed sign-in challenge');
         }
 
-        const addr = await findAddressByString(deps.vault, decision.address, req.chainId, deps.chainRegistry);
+        const chainId = chosen.chainId;
+        const addr = await findAddressByString(deps.vault, decision.address, chainId, deps.chainRegistry);
         if (!addr) throw bridgeError('ADDRESS_NOT_FOUND', decision.address);
-        const walletId = decision.walletId ?? await walletIdForAddress(deps.vault, decision.address);
-        const chainId = req.chainId ?? chainIdForAddr(deps.chainRegistry, addr);
+        // Sign with the chosen address's own wallet; the window defaults walletId to the first one.
+        const walletId = await walletIdForAddress(deps.vault, decision.address);
         const { signature } = await signMessageFlow({
             vault: deps.vault,
             walletId,
@@ -1508,8 +1523,30 @@ async function findAddressByString(vault, address, chainId, chainRegistry) {
     ) ?? null;
 }
 
-function chainIdForAddr(chainRegistry, addr) {
-    return chainRegistry.chainIdFor(addr.chain, addr.network);
+// List the addresses a site may sign in with, each with the chain it resolves
+// to: inside the site's account and chain grants (an empty list is "all", per
+// §43.3), narrowed by the request's optional `chains` coin list and `chainId`.
+async function signInCandidates(deps, site, req) {
+    const accountIds = new Set(site.permissions?.accounts ?? []);
+    const grantedChains = site.permissions?.chains ?? [];
+    const coins = Array.isArray(req.chains) && req.chains.length > 0 ? new Set(req.chains) : null;
+    /** @type {{ address: string, chainId: string }[]} */
+    const out = [];
+    for (const a of await deps.vault.addresses.list()) {
+        if (typeof a?.address !== 'string' || !a.address) continue;
+        const chainId = deps.chainRegistry.chainIdFor(a.chain, a.network);
+        if (!chainId) continue;
+        // Skip an address outside the site's account grant
+        if (accountIds.size > 0 && !(a.accountId && accountIds.has(a.accountId))) continue;
+        // Skip a chain the site was not granted
+        if (grantedChains.length > 0 && !grantedChains.includes(chainId)) continue;
+        // Skip a coin the site did not ask for, and any chain but the one it named
+        if (coins && !coins.has(a.chain)) continue;
+        if (req.chainId && chainId !== req.chainId) continue;
+        if (out.some((c) => c.address === a.address && c.chainId === chainId)) continue;
+        out.push({ address: a.address, chainId });
+    }
+    return out;
 }
 
 // The published bridge-spec `PsbtSigningPath` is `{ inputIndex, address? |
@@ -1548,7 +1585,7 @@ function assertBridgeSigningPathsShape(entries) {
 // record for this chain. A `derivationPath` is NOT forwarded verbatim: it must
 // name a path the wallet already holds, or a page could steer the signer at an
 // arbitrary BIP32 path behind the approval modal. Unowned -> ADDRESS_NOT_FOUND,
-// the same verdict sign-in and signMessage give an unknown address.
+// the same verdict signMessage gives an unknown address.
 //
 // Wallet ownership is the WEAKER of the two invariants: it lets a site sign for
 // an account its connect grant never named. So the resolved record is judged

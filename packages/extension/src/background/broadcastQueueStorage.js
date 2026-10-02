@@ -34,8 +34,10 @@ import { BROADCAST_QUEUE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/wi
 const STORAGE_KEY = BROADCAST_QUEUE_STORAGE_KEY;
 
 /**
- * Internal entry shape (mirrors what createBackgroundHost pushes).
- * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string }} QueueEntry
+ * Internal entry shape (mirrors what createBackgroundHost pushes). The optional
+ * `pendingTxId`, `resumedClaim` and `adsCommit` tie an entry to its vault record and
+ * its ADS verdict, so `coerceSnapshot` must keep them.
+ * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
  */
 
 /**
@@ -119,13 +121,17 @@ function envelopeAdapter(io) {
     // the cached other half keeps the pair consistent with no read-modify-write
     // race between them.
     let cached = { queues: /** @type {QueueSnapshot} */ ({}), settlements: /** @type {OwedSettlement[]} */ ([]) };
+    // Count clears, so a read that started before one cannot refill the cache it emptied.
+    let generation = 0;
     async function persist() {
         await io.write({ queues: cached.queues, settlements: cached.settlements });
     }
     return {
         async load() {
+            const started = generation;
             const read = await io.read();
-            if (!read.ok) return null;
+            // A read that straddled `clear()` holds the pre-wipe blob; report it unreadable.
+            if (!read.ok || started !== generation) return null;
             cached = splitBlob(read.blob);
             return cached.queues;
         },
@@ -141,6 +147,7 @@ function envelopeAdapter(io) {
             await persist();
         },
         async clear() {
+            generation += 1;
             cached = { queues: {}, settlements: [] };
             await io.remove();
         },

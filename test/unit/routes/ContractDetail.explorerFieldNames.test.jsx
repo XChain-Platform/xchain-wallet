@@ -205,14 +205,30 @@ describe('Execution history reads the explorer\'s real field names', () => {
         expect(utils.container.textContent).not.toContain('(method)');
     });
 
-    it('falls back to action for a row with no method_name, reading "DEPLOY"', async () => {
+    it('falls back to the action\'s display label for a row with no method_name', async () => {
         const { messaging } = harness({ getExecutionsForContract: executionsFixture });
         let utils;
         await domAct(async () => {
             utils = mount(messaging);
             await drain();
         });
-        expect(utils.container.textContent).toContain('DEPLOY');
+        expect(utils.container.textContent).toContain('Publish contract #190');
+        expect(utils.container.textContent).not.toContain('DEPLOY');
+    });
+
+    it('still reads "(method)" for a row with neither a method name nor an action', async () => {
+        const { messaging } = harness({
+            getExecutionsForContract: () => Promise.resolve({
+                data: [{ action_index: '201', status: 'valid' }],
+                total: 1,
+            }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('(method) #201');
     });
 
     it('marks a reverted row distinguishably from a valid one', async () => {
@@ -251,5 +267,50 @@ describe('Execution history reads the explorer\'s real field names', () => {
             await drain();
         });
         expect(utils.container.textContent).not.toContain('(method)');
+    });
+});
+
+describe('A failed contract read is shown in plain words', () => {
+    /** An SDK explorer failure as it arrives after the messaging boundary. */
+    function explorer502(path) {
+        const err = new Error(`Explorer returned HTTP 502 for /RBTC/api/${path}`);
+        err.name = 'SDKExplorerError';
+        return err;
+    }
+
+    it('drops the request URL when the contract itself cannot load', async () => {
+        const { messaging } = harness({
+            getContractByActionIndex: () => Promise.reject(explorer502('contract/49')),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        const shown = utils.container.textContent;
+        expect(shown).toContain("Couldn't load this contract.");
+        expect(shown).toContain('temporarily unavailable (error 502)');
+        expect(shown).not.toContain('/RBTC/api');
+        expect(shown).not.toContain('Explorer returned');
+    });
+
+    it('gives each failed section its own sentence, opened once', async () => {
+        const { messaging } = harness({
+            getActionByIndex: () => Promise.reject(explorer502('actions/49')),
+            getContractState: () => Promise.reject(explorer502('contract/49/state')),
+            getContractBalance: () => Promise.reject(explorer502('contract/49/balances')),
+            getExecutionsForContract: () => Promise.reject(explorer502('executions/49/contract')),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(messaging);
+            await drain();
+        });
+        const shown = utils.container.textContent;
+        for (const verb of ['load the deploy details', 'load the contract state', 'load the contract balances', 'load the execution history']) {
+            expect(shown).toContain(`Couldn't ${verb}.`);
+        }
+        expect(shown).not.toContain('/RBTC/api');
+        expect(shown).not.toMatch(/Couldn't load [a-z ]+: Couldn't/);
     });
 });

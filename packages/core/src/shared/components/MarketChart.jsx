@@ -33,6 +33,7 @@ import { Button } from '@xchain-wallet/core/ui';
 import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucketize.js';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 /**
  * @param {object} props
@@ -124,7 +125,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             .catch((err) => {
                 if (cancelled) return;
                 setRawRows(demo ? sampleMatchesFor(tick1, tick2) : []);
-                setLoadError(err?.message || String(err));
+                setLoadError(readFailureMessage(err, 'load the price chart'));
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo]);

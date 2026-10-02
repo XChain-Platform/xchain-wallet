@@ -21,6 +21,7 @@ import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import {
     compareDecimalStrings,
     divideDecimalStrings,
@@ -85,7 +86,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         messaging.getMarket({ chainId, tick1, tick2 })
             .then((resp) => { if (!cancelled) setSummary(resp); })
             .catch((err) => {
-                if (!cancelled) setSummaryError(err?.message || String(err));
+                if (!cancelled) setSummaryError(readFailureMessage(err, 'load this market'));
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2]);

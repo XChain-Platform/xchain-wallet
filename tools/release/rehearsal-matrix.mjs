@@ -81,7 +81,9 @@
 // an un-rehearsed lane as ⬜ and still exits non-zero; naming changes only
 // the REASON it gives, from "DD4 unanswered" to "never rehearsed". Those
 // are different blockers with different owners and the output must not
-// conflate them. What actually blocks a rehearsal now is K1.
+// conflate them. What blocks a named lane now is the swap itself, watched
+// on its device and recorded with `rehearse.mjs attest --by <who>`;
+// `rehearse.mjs coverage` is the live list of lanes that still owe one.
 //
 // WHY A HOSTED RUNNER DOES NOT TAKE THE WINDOWS LANES, since it is the
 // obvious idea and it was measured rather than dismissed. A

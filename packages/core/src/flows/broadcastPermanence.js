@@ -61,7 +61,7 @@ const PERMANENT_PATTERNS = [
     /bad-txns-inputs-spent/i,
     /missing\s+inputs/i,
     // These two mean THIS txid reached a node (outputs already in the UTXO set, or
-    // in its mempool); queue lanes check isAlreadyOnNetworkRejection first.
+    // in its mempool); submitWithSigner and the queue lanes check isAlreadyOnNetworkRejection first.
     /txn-already-known/i,
     /txn-already-in-mempool/i,
     orderedSubstringMatcher('conflict', 'confirmed'),

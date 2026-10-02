@@ -10,8 +10,9 @@
 
 // English string dictionary (§54 / G173 ICU format).
 //
-// Keys live in a flat object so collisions are lint-time errors, not
-// runtime surprises. Dotted keys (`home.lock`) express scope.
+// Keys live in one flat object; dotted keys (`home.lock`) express scope.
+// JavaScript silently keeps the last of two identical keys, so
+// test/smoke/core/i18n.smoke.js scans this source and fails on a repeat.
 //
 // Plural / select handling uses ICU MessageFormat-compatible syntax:
 //

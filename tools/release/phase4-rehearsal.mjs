@@ -33,8 +33,13 @@
 //
 //   the SCRIPT side  - sign.sh, verify.sh and lib.sh come from the checkout
 //                      the operator invokes.
-//   the REPO side    - shipped-lanes.txt and the dev-mock gate come from the
-//                      tree passed to --repo, which is the TAG's copy.
+//   the REPO side    - shipped-lanes.txt comes from the tree passed to
+//                      --repo, which is the TAG's copy.
+//
+// The two signing controls (expected-artifacts.txt and the dev-mock gate)
+// follow sign.sh's one control root per release set: the tag tree for a
+// release run, the invoking checkout for a --staging rehearsal, where they are
+// hashed and gated with the scripts. signingPathFiles() mirrors that mapping.
 //
 // A pin naming one ref would therefore be a lie by omission half the time,
 // which is precisely how "rehearsed end to end" survived three stages while
@@ -49,9 +54,9 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WALLET_ROOT = resolve(HERE, '..', '..');
@@ -62,15 +67,41 @@ export const PIN_PATH = join(WALLET_ROOT, 'docs', 'phase4-rehearsal-pin.json');
 // is gated against the pin. The repo side is the tag's copy, which sign.sh
 // binds to the tag commit, so only a rehearsal at a newer tag can re-pin it:
 // `check` reports its divergence from this checkout and does not fail on it.
-export const SCRIPT_PATH_FILES = [
+const SIGNING_SCRIPTS = [
     'tools/release/sign.sh',
     'tools/release/verify.sh',
     'tools/release/lib.sh',
 ];
-export const REPO_PATH_FILES = [
-    'tools/release/shipped-lanes.txt',
-    'tools/build-reproduce/check-no-dev-mock.sh',
-];
+const LANE_ROSTER = 'tools/release/shipped-lanes.txt';
+const DEV_MOCK_GATE = 'tools/build-reproduce/check-no-dev-mock.sh';
+const SIGNING_CONTROLS = ['tools/release/expected-artifacts.txt', DEV_MOCK_GATE];
+
+// Read a pin with no pinFormat with the fixed legacy split, which is what recorded it.
+export const PIN_FORMAT = 2;
+
+/**
+ * The script-side and repo-side files for a release set, mirroring lib.sh's
+ * xr_signing_control_root: staging reads both signing controls from the
+ * invoking checkout, release reads them from the tag tree.
+ *
+ * @param {string} releaseSet  'release' or 'staging'
+ * @param {number} [pinFormat] the pin format to read; below 2 is the fixed legacy split
+ * @returns {{ script: string[], repo: string[] }}
+ */
+export function signingPathFiles(releaseSet, pinFormat = PIN_FORMAT) {
+    if (releaseSet !== 'release' && releaseSet !== 'staging') {
+        throw new Error(`phase4-rehearsal: unknown release set '${releaseSet}'`);
+    }
+    if (pinFormat < 2) return { script: SIGNING_SCRIPTS, repo: [LANE_ROSTER, DEV_MOCK_GATE] };
+    return releaseSet === 'staging'
+        ? { script: [...SIGNING_SCRIPTS, ...SIGNING_CONTROLS], repo: [LANE_ROSTER] }
+        : { script: SIGNING_SCRIPTS, repo: [LANE_ROSTER, ...SIGNING_CONTROLS] };
+}
+
+/** The file lists a written pin was recorded with; an absent releaseSet is a release run. */
+export function pinPathFiles(pin) {
+    return signingPathFiles(pin.releaseSet ?? 'release', pin.pinFormat ?? 1);
+}
 
 // The steps a signing run passes through, deepest last. `reached` is the last
 // one that succeeded, so it orders and a check can ask "did it get at least
@@ -124,10 +155,10 @@ export function contentHashes(root, paths) {
  * from a dirty tree describes bytes nobody else can ever reproduce. `pin`
  * refuses rather than recording an observation that cannot be checked again.
  */
-export function dirtySigningPath(root = WALLET_ROOT) {
-    const head = blobHashes(root, 'HEAD', SCRIPT_PATH_FILES);
+export function dirtySigningPath(root = WALLET_ROOT, files = SIGNING_SCRIPTS) {
+    const head = blobHashes(root, 'HEAD', files);
     const dirty = [];
-    for (const p of SCRIPT_PATH_FILES) {
+    for (const p of files) {
         const onDisk = git(root, ['hash-object', join(root, p)]);
         if (onDisk !== head[p]) dirty.push(p);
     }
@@ -251,8 +282,9 @@ function cmdPin(argv) {
     const lane = arg(argv, '--lane');
     const staging = argv.includes('--staging');
     if (!repo || !tag || !input) { usage(); process.exit(2); }
+    const files = signingPathFiles(staging ? 'staging' : 'release');
 
-    const dirty = dirtySigningPath();
+    const dirty = dirtySigningPath(WALLET_ROOT, files.script);
     if (dirty.length) {
         console.error('[phase4-rehearsal] refusing to pin: the signing path is dirty:');
         for (const p of dirty) console.error(`  ${p}`);
@@ -263,6 +295,15 @@ function cmdPin(argv) {
     }
 
     const result = probe({ repo, tag, input, lane, staging });
+    // Refuse when sign.sh announces a control tree this mapping does not expect, so a pin never hashes the wrong copy.
+    const announced = /signing controls come from the (tag|tool) tree/.exec(result.output)?.[1];
+    const expectedTree = staging ? 'tool' : 'tag';
+    if (announced && announced !== expectedTree) {
+        console.error(`[phase4-rehearsal] refusing to pin: sign.sh read its signing controls from the ${announced} `
+            + `tree, but this tool hashes them from the ${expectedTree} tree for this release set. `
+            + 'Bring signingPathFiles() back in line with lib.sh xr_signing_control_root first.');
+        return 1;
+    }
     // The commit that last touched the SIGNING PATH, not bare HEAD.
     //
     // HEAD moves on every unrelated commit, so pinning it would make the ref
@@ -270,7 +311,7 @@ function cmdPin(argv) {
     // stale on correct work is one people stop reading. The content hashes
     // below are the authority for drift; this ref is the human-readable answer
     // to "where did these bytes come from", so it should move only when they do.
-    const scriptRef = git(WALLET_ROOT, ['log', '-1', '--format=%H', '--', ...SCRIPT_PATH_FILES])
+    const scriptRef = git(WALLET_ROOT, ['log', '-1', '--format=%H', '--', ...files.script])
         || git(WALLET_ROOT, ['rev-parse', 'HEAD']);
     const repoRef = git(repo, ['rev-parse', 'HEAD']);
 
@@ -290,6 +331,7 @@ function cmdPin(argv) {
             + 'Do not hand-edit: the value of this file is that only an observation can set it. '
             + 'A `reached` short of "signature" is the NORMAL case, not a defect - the signature '
             + 'needs K1 at a pinentry and no automated run can supply it.',
+        pinFormat: PIN_FORMAT,
         tag,
         lane: lane || null,
         // Recorded because it changes WHICH copy of the dev-mock gate read the
@@ -301,8 +343,8 @@ function cmdPin(argv) {
         blocker: portable(result.blocker),
         scriptRef,
         repoRef,
-        scriptPath: contentHashes(WALLET_ROOT, SCRIPT_PATH_FILES),
-        repoPath: contentHashes(repo, REPO_PATH_FILES),
+        scriptPath: contentHashes(WALLET_ROOT, files.script),
+        repoPath: contentHashes(repo, files.repo),
         observedAt: new Date().toISOString(),
     };
     writeFileSync(PIN_PATH, `${JSON.stringify(pin, null, 4)}\n`);
@@ -337,9 +379,10 @@ function isAncestor(root, a, b) {
 export function drift({ pinFile = PIN_PATH, against = 'HEAD' } = {}) {
     if (!existsSync(pinFile)) return { ok: false, missing: true, moved: [] };
     const pin = JSON.parse(readFileSync(pinFile, 'utf8'));
-    const now = contentHashes(WALLET_ROOT, SCRIPT_PATH_FILES);
+    const files = pinPathFiles(pin);
+    const now = contentHashes(WALLET_ROOT, files.script);
     const moved = [];
-    for (const p of SCRIPT_PATH_FILES) {
+    for (const p of files.script) {
         const then = pin.scriptPath?.[p] ?? null;
         if (then !== now[p]) moved.push({ path: p, pinned: then, now: now[p] });
     }
@@ -359,14 +402,15 @@ export function drift({ pinFile = PIN_PATH, against = 'HEAD' } = {}) {
 
     return {
         ok: moved.length === 0 || behind, missing: false, moved, behind,
-        repoDiverged: repoDivergence(pin), pin,
+        repoDiverged: repoDivergence(pin), pin, files,
     };
 }
 
 /** Repo-side files whose copy in this checkout differs from the tag tree the rehearsal read. */
 export function repoDivergence(pin) {
-    const now = contentHashes(WALLET_ROOT, REPO_PATH_FILES);
-    return REPO_PATH_FILES
+    const { repo } = pinPathFiles(pin);
+    const now = contentHashes(WALLET_ROOT, repo);
+    return repo
         .map((p) => ({ path: p, pinned: pin.repoPath?.[p] ?? null, now: now[p] }))
         .filter((m) => m.pinned !== m.now);
 }
@@ -374,11 +418,11 @@ export function repoDivergence(pin) {
 // Say what the gate did not compare, so a green line never claims the repo side.
 function reportRepoSide(d) {
     if (!d.repoDiverged.length) {
-        console.log(`[phase4-rehearsal] repo side: ${REPO_PATH_FILES.length} files match the tag tree `
+        console.log(`[phase4-rehearsal] repo side: ${d.files.repo.length} files match the tag tree `
             + `the rehearsal read (${String(d.pin.repoRef).slice(0, 8)}).`);
         return;
     }
-    console.log(`[phase4-rehearsal] NOTE, not gated: ${d.repoDiverged.length} of ${REPO_PATH_FILES.length} `
+    console.log(`[phase4-rehearsal] NOTE, not gated: ${d.repoDiverged.length} of ${d.files.repo.length} `
         + `repo-side files differ from the tag tree the rehearsal read (${String(d.pin.repoRef).slice(0, 8)}, `
         + `tag ${d.pin.tag}): ${d.repoDiverged.map((m) => m.path).join(', ')}.`
         + '\n  The next tag\'s ceremony reads this checkout\'s copies, which no rehearsal has run against.'
@@ -402,7 +446,7 @@ function cmdCheck(argv) {
         return 0;
     }
     if (d.ok) {
-        console.log(`[phase4-rehearsal] OK: the ${SCRIPT_PATH_FILES.length} script-side signing-path files `
+        console.log(`[phase4-rehearsal] OK: the ${d.files.script.length} script-side signing-path files `
             + `at ${against} are byte-identical to the rehearsal pinned at ${String(d.pin.scriptRef).slice(0, 8)} `
             + `(reached '${d.pin.reached}', observed ${d.pin.observedAt}).`);
         reportRepoSide(d);
@@ -440,6 +484,16 @@ function main() {
     return 2;
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// Compare against the realpath as a URL, so a symlinked or spaced checkout still runs the CLI.
+const invokedDirectly = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
+
+if (invokedDirectly) {
     process.exit(main());
 }

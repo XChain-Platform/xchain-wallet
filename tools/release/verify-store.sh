@@ -257,7 +257,14 @@ while IFS= read -r rel; do
     store_file="$STORE_DIR/$rel"
 
     if [[ "$rel" == "manifest.json" ]]; then
-        if ! node "$HERE/manifest-diff.mjs" "$REF_DIR/manifest.json" "$store_file" --ignore "$IGNORE_KEYS" >&2; then
+        # Require the tool's own ok line as well as exit 0, so a run that compared nothing never passes.
+        md_status=0
+        md_out="$(node "$HERE/manifest-diff.mjs" "$REF_DIR/manifest.json" "$store_file" --ignore "$IGNORE_KEYS")" || md_status=$?
+        if [[ -n "$md_out" ]]; then printf '%s\n' "$md_out" >&2; fi
+        if (( md_status != 0 )); then
+            FAILURES=$((FAILURES + 1))
+        elif [[ "$md_out" != *"manifest-diff: ok"* ]]; then
+            echo "FAIL     manifest.json: manifest-diff exited 0 without confirming a comparison" >&2
             FAILURES=$((FAILURES + 1))
         fi
         continue

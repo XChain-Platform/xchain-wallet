@@ -197,3 +197,30 @@ describe('deleteAddressMessage', () => {
         expect(wo).not.toMatch(/re-derives/);
     });
 });
+
+describe('Address details name the format in plain words', () => {
+    async function formatFor(address, addresses = ADDRESSES) {
+        render(
+            <MessagingProvider shell="web" messaging={messagingWith({ getAddressesByChain: vi.fn().mockResolvedValue(addresses) })}>
+                <AddressList walletId={WALLET.id} accountId={ACCOUNT.id} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        fireEvent.click(await screen.findByRole('button', { name: `View address ${address}` }));
+        return (await screen.findByTestId('address-detail-address-format')).textContent;
+    }
+
+    it('a native SegWit address reads as SegWit with its prefix, not P2WPKH', async () => {
+        const text = await formatFor(PLAIN);
+        expect(text).toBe('SegWit (starts with bcrt1q...)');
+        expect(screen.getByLabelText('Address format help')).toBeTruthy();
+    });
+
+    it('an imported legacy address reads as Classic', async () => {
+        expect(await formatFor(IMPORTED)).toBe('Classic (starts with m.../n...)');
+    });
+
+    it('a type with no family word falls back to its code', async () => {
+        const odd = { ...hd('addr-odd', PLAIN, 2), addressType: 'p2wsh' };
+        expect(await formatFor(PLAIN, { [CHAIN]: [odd] })).toBe('P2WSH');
+    });
+});

@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 // Unit: §28.3. TxStatusTimeline renders the full five-stage
-// ladder (Signed, Broadcast, mempool, Confirmed, Indexed), computing each
+// ladder (Signed, Broadcast, mempool, Confirmed, Processed), computing each
 // stage's done/pending state from the entry fields plus the optional
 // chainTip / indexerWatermark props.
 
@@ -25,11 +25,11 @@ function markerFor(container, labelText) {
 }
 
 describe('<TxStatusTimeline>', () => {
-    it('renders all five stages including Signed and Indexed', () => {
+    it('renders all five stages including Signed and Processed', () => {
         render(<TxStatusTimeline entry={{ txHash: 'abc', blockIndex: 100, timestamp: 0 }} />);
         expect(screen.getByText('Signed')).toBeInTheDocument();
         expect(screen.getByText('Broadcast')).toBeInTheDocument();
-        expect(screen.getByText('Indexed')).toBeInTheDocument();
+        expect(screen.getByText('Processed')).toBeInTheDocument();
         // Confirmed stage labels its block.
         expect(screen.getByText(/Confirmed at block 100/)).toBeInTheDocument();
     });
@@ -57,25 +57,25 @@ describe('<TxStatusTimeline>', () => {
         expect(markerFor(container, 'Signed')).toBe('○');
     });
 
-    it('marks Indexed done when the watermark reaches the entry block', () => {
+    it('marks Processed done when the watermark reaches the entry block', () => {
         const { container } = render(
             <TxStatusTimeline
                 entry={{ txHash: 'abc', blockIndex: 100, timestamp: 0 }}
                 indexerWatermark={150}
             />,
         );
-        expect(markerFor(container, 'Indexed')).toBe('●');
+        expect(markerFor(container, 'Processed')).toBe('●');
         expect(screen.getByText(/the service has reached block 150/)).toBeInTheDocument();
     });
 
-    it('leaves Indexed pending when the watermark trails the entry block', () => {
+    it('leaves Processed pending when the watermark trails the entry block', () => {
         const { container } = render(
             <TxStatusTimeline
                 entry={{ txHash: 'abc', blockIndex: 100, timestamp: 0 }}
                 indexerWatermark={90}
             />,
         );
-        expect(markerFor(container, 'Indexed')).toBe('○');
+        expect(markerFor(container, 'Processed')).toBe('○');
         expect(screen.getByText(/still catching up/)).toBeInTheDocument();
     });
 
@@ -83,14 +83,14 @@ describe('<TxStatusTimeline>', () => {
         const { container } = render(
             <TxStatusTimeline entry={{ txHash: 'abc', blockIndex: 100, timestamp: 0 }} />,
         );
-        expect(markerFor(container, 'Indexed')).toBe('●');
+        expect(markerFor(container, 'Processed')).toBe('●');
     });
 
-    it('leaves Indexed pending for an unconfirmed (mempool) entry', () => {
+    it('leaves Processed pending for an unconfirmed (mempool) entry', () => {
         const { container } = render(
             <TxStatusTimeline entry={{ txHash: 'abc', blockIndex: 0, timestamp: 0 }} />,
         );
-        expect(markerFor(container, 'Indexed')).toBe('○');
+        expect(markerFor(container, 'Processed')).toBe('○');
     });
 
     it('still renders a confirmation count on the confirmed row (chainTip preserved)', () => {

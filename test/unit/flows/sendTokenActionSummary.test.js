@@ -35,7 +35,8 @@ function opts(extra = {}) {
         walletId: 'w1',
         password: 'pw',
         chainRegistry: { get: () => ({ coin: 'bitcoin' }) },
-        sdkRegistry: { get: () => ({}) },
+        // advancedAction resolves a chain-gated action's version before its gate (XBRIDGE v4 is open everywhere).
+        sdkRegistry: { get: () => ({ actions: { composeActionString: () => ({ version: 4 }) } }) },
         chainId: 'bitcoin-regtest',
         from: FROM,
         to: DISPENSER,

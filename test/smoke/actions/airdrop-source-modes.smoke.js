@@ -101,7 +101,9 @@ assert.match(src, /\blistType,/, 'createPendingAirdrop call sites forward listTy
 // --- 4. Holder-snapshot honesty + no min-balance field -----------------
 
 assert.match(src, /current, not final/i, 'review stage labels the holder count as current, not final');
-assert.match(src, /only (?:fixed|locked in) when the AIRDROP transaction executes/, 'binding time is stated explicitly');
+assert.match(src, /only (?:fixed|locked in) when the airdrop transaction confirms/, 'binding time is stated explicitly');
+assert.doesNotMatch(src, /AIRDROP\s+transaction\s+executes|database hits|fee tick|execute time/,
+    'airdrop copy uses plain words, not protocol jargon');
 assert.match(src, /preview, not a (?:guarantee|promise)/i, 'holder count is explicitly framed as a preview, not a promise');
 assert.doesNotMatch(src, /MIN_BALANCE/i, 'no min-balance threshold param (AIRDROP.md defines none)');
 assert.doesNotMatch(src, /minimum balance/i, 'no min-balance threshold copy anywhere in the form');

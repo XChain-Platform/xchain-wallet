@@ -122,3 +122,78 @@ describe('sealBroadcastQueue fences writes that resolve after the wipe', () => {
         expect(JSON.stringify(store[KEY])).toContain('hex-B');
     });
 });
+
+describe('a rehydrate still reading when the seal lands takes nothing back', () => {
+    /** chrome.storage whose first get fails and whose later gets wait on `release`. */
+    function heldReadChrome() {
+        const base = fakeChrome();
+        const release = deferred();
+        let gets = 0;
+        base.api.storage.local.get = (key, cb) => {
+            gets += 1;
+            if (gets === 1) { cb(undefined); return; }
+            const copy = JSON.parse(JSON.stringify({ [key]: base.store[key] }));
+            release.promise.then(() => cb(copy));
+        };
+        const set = base.api.storage.local.set;
+        base.api.storage.local.set = vi.fn(set);
+        return { ...base, release };
+    }
+
+    it('neither refills the sealed map nor writes the wiped key back', async () => {
+        const fake = heldReadChrome();
+        const prior = globalThis.chrome;
+        globalThis.chrome = fake.api;
+        try {
+            fake.store[KEY] = {
+                queues: { [W]: [entry('A'), entry('B')] },
+                settlements: [{ id: 's1', pendingTxId: 'p1', op: 'discard' }],
+            };
+            // No settle before the enqueue: it joins the host's eager load, whose
+            // read fails, so its own persist starts the held second read.
+            const h = makeHost(vi.fn());
+            const enqueued = h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-new' });
+            await settle();
+
+            await h.host.sealBroadcastQueue();
+            delete fake.store[KEY];
+            fake.api.storage.local.set.mockClear();
+            fake.release.resolve();
+            await enqueued;
+            await settle();
+
+            expect(fake.store[KEY]).toBeUndefined();
+            expect(fake.api.storage.local.set).not.toHaveBeenCalled();
+            expect((await h.call('broadcast.queue.list', { walletId: W })).result).toEqual([]);
+        } finally {
+            if (prior === undefined) delete globalThis.chrome;
+            else globalThis.chrome = prior;
+        }
+    });
+
+    it('drops an adapter read that straddled clear() instead of caching it', async () => {
+        const fake = heldReadChrome();
+        const prior = globalThis.chrome;
+        globalThis.chrome = fake.api;
+        try {
+            fake.store[KEY] = {
+                queues: { [W]: [entry('A')] },
+                settlements: [{ id: 's1', pendingTxId: 'p1', op: 'discard' }],
+            };
+            const storage = createBroadcastQueueStorage();
+            expect(await storage.load()).toBeNull();
+            const reading = storage.load();
+            await settle();
+            await storage.clear();
+            fake.release.resolve();
+
+            expect(await reading).toBeNull();
+            expect(await storage.loadSettlements()).toEqual([]);
+            await storage.save({});
+            expect(fake.store[KEY]).toEqual({ queues: {}, settlements: [] });
+        } finally {
+            if (prior === undefined) delete globalThis.chrome;
+            else globalThis.chrome = prior;
+        }
+    });
+});

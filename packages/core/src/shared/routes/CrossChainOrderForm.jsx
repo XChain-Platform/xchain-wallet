@@ -215,7 +215,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             return 'Give and get chains must differ. For a same-chain order use Create order.';
         }
         if (giveTick && giveTick.trim().toUpperCase() === giveCoinTicker) {
-            return `A cross-chain order cannot give native ${giveCoinTicker}; only a token can be escrowed for the federation to settle.`;
+            return `A cross-chain order cannot give native ${giveCoinTicker}. Pick a token to offer.`;
         }
         if (getTick && getTick.trim().toUpperCase() === getCoinTicker) {
             return `A cross-chain order cannot get native ${getCoinTicker}; ask for a token on ${getDescriptor?.displayName || getChainId}.`;

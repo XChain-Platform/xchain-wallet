@@ -2705,7 +2705,7 @@ export function createBackgroundHost(deps) {
     // journal record then land in the same map, journal and cached blob the
     // next host serves, instead of in a private copy written over that host's.
     const queueStore = broadcastQueueStore ?? createBroadcastQueueStore({ storage: broadcastQueueStorage });
-    /** @type {Map<string, Array<{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }>>} */
+    /** @type {Map<string, import('./broadcastQueueStorage.js').QueueEntry[]>} */
     const queuedBroadcasts = queueStore.queues;
     // `queueStore.sealed` is set by the wallet wipe, and only by it. Every
     // writer below checks it, so a continuation that resumes after the wipe
@@ -2718,12 +2718,16 @@ export function createBackgroundHost(deps) {
     // its own, and `getQueue` hands the routes the live array they splice, so
     // the array identity has to survive the merge.
     //
-    // No tombstone set is needed to stop the merge resurrecting a removed
+    // No per-entry tombstone is needed to stop the merge resurrecting a removed
     // entry: a merge only runs while `queueStore.loaded` is false, and in that window
     // the map holds nothing but entries `pushQueueEntry` added, which
     // persistQueue has refused to write. An entry that is both in memory and in
     // the snapshot implies a load that already succeeded, and that latches
     // `queueStore.loaded` so no further merge happens.
+    //
+    // The one removal that can run in that window is `pruneWalletFromQueue`,
+    // so it records the walletId in `queueStore.prunedWallets`; the merge skips
+    // those wallets, and the load's write-back drops them from the blob.
     //
     // One exception: `restoreQueueFromVault` also runs in that window, and it
     // rebuilds a PendingTx the blob may already hold under a different entry
@@ -2736,6 +2740,7 @@ export function createBackgroundHost(deps) {
     // below is what judges those entries against the durable half.
     function mergeQueueSnapshot(snapshot) {
         for (const walletId of Object.keys(snapshot)) {
+            if (queueStore.prunedWallets?.has(walletId)) continue;
             const arr = snapshot[walletId];
             if (!Array.isArray(arr) || arr.length === 0) continue;
             const restorable = arr.filter((e) => e && typeof e === 'object');
@@ -2794,16 +2799,25 @@ export function createBackgroundHost(deps) {
                 } catch (_e) {
                     snapshot = null;
                 }
+                // The wipe can seal the store during either read below, and a
+                // read that started before it returns the pre-wipe blob; merging
+                // that refills the map and journal the seal just emptied.
+                if (queueStore.sealed) return false;
                 // Fail closed. `load` resolves null only for a read that did
                 // not reach the store; an empty queue is still an object.
                 // Latching `queueStore.loaded` on a failed read lets the next persist
                 // write the half-empty map over every wallet's persisted
                 // entries.
                 if (!snapshot || typeof snapshot !== 'object') return false;
+                // A wallet removed while the read was failing is still in the
+                // blob, so the write-back below has to run to drop it.
+                const replayedPrune = queueStore.prunedWallets?.size > 0;
                 mergeQueueSnapshot(snapshot);
                 if (typeof queueStore.storage.loadSettlements === 'function') {
                     try {
-                        mergeOwedSettlements(await queueStore.storage.loadSettlements());
+                        const persistedOwed = await queueStore.storage.loadSettlements();
+                        if (queueStore.sealed) return false;
+                        mergeOwedSettlements(persistedOwed);
                         journalRead = true;
                     } catch (_e) {
                         // An unreadable journal costs the replay of writes owed
@@ -2811,6 +2825,9 @@ export function createBackgroundHost(deps) {
                     }
                 }
                 queueStore.loaded = true;
+                // Once `loaded` latches no merge runs again, so the live map is
+                // the whole truth and the pending prunes have nothing left to skip.
+                queueStore.prunedWallets?.clear();
                 // The recovery of the read is also the repair of the blob.
                 // The write-back lands here rather than at the next mutation:
                 // an MV3 worker evicted before one (~30s idle) loses every
@@ -2819,13 +2836,13 @@ export function createBackgroundHost(deps) {
                 // it and the loss of signed bytes is total. Awaited inside the
                 // single-flight promise so a save a later mutation issues
                 // cannot be overtaken by this one.
-                if (heldEntries) await persistQueue();
+                if (heldEntries || replayedPrune) await persistQueue();
                 // The journal half is asymmetric on purpose. Both halves ride
                 // one storage key, so writing the journal back after a
                 // `loadSettlements` that threw would save a known-incomplete
                 // journal over the owed writes recorded before this boot: the
                 // same erasure the `queueStore.loaded` gate exists to prevent.
-                if (heldOwed && journalRead) await persistOwedSettlements();
+                if ((heldOwed || replayedPrune) && journalRead) await persistOwedSettlements();
                 return true;
             })();
         }
@@ -2843,7 +2860,9 @@ export function createBackgroundHost(deps) {
             // Storage is still unreadable, so the map is known-incomplete.
             // Keep it as the live truth for this process and leave what is on
             // disk alone; writing it back is the erasure this guards against.
-            if (!queueStore.loaded) return false;
+            // A seal that landed during the wait also latches `loaded`, so it
+            // is checked on its own: this save would recreate the wiped key.
+            if (queueStore.sealed || !queueStore.loaded) return false;
         }
         /** @type {Record<string, any[]>} */
         const snapshot = {};
@@ -2880,6 +2899,7 @@ export function createBackgroundHost(deps) {
             if (!owed || typeof owed !== 'object') continue;
             if (typeof owed.pendingTxId !== 'string' || !owed.pendingTxId) continue;
             if (held.has(owed.pendingTxId)) continue;
+            if (owed.walletId && queueStore.prunedWallets?.has(owed.walletId)) continue;
             held.add(owed.pendingTxId);
             restored.push({ ...owed });
         }
@@ -3025,6 +3045,9 @@ export function createBackgroundHost(deps) {
         // a prune over a map that never loaded would drop this wallet on disk
         // and leave every other wallet's entries to the fail-closed gate.
         await ensureQueueLoaded();
+        // The read is still failing, so neither persist below can write and
+        // the blob keeps this wallet; the recovering load drops it instead.
+        if (!queueStore.loaded && !queueStore.sealed) queueStore.prunedWallets?.add(walletId);
         const hadEntries = queuedBroadcasts.delete(walletId);
         recoveredWallets.delete(walletId);
         reconciledWallets.delete(walletId);
@@ -3302,7 +3325,7 @@ export function createBackgroundHost(deps) {
      * and the broadcast route can read an "already known" reply as delivery.
      *
      * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
-     * @returns {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, adsCommit?: { chainId: string, donationIncluded: boolean } }}
+     * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -3465,6 +3488,7 @@ export function createBackgroundHost(deps) {
     // the check; core drainQueuedBroadcast keeps the same guard for its lane.
     // Held on the shared store, so a host built after a lock sees the claim a
     // torn-down host's broadcast still holds and neither re-sends nor discards it.
+    // broadcast.queue.discard takes the same claim, so the two routes refuse each other.
     const inFlightQueueBroadcasts = queueStore.inFlight;
     host.register('broadcast.queue.broadcast', async (req, { sdkRegistry, vault, chainRegistry }) => {
         const walletId = req?.walletId;
@@ -3654,28 +3678,37 @@ export function createBackgroundHost(deps) {
         }
     });
     host.register('broadcast.queue.discard', async (req, { vault }) => {
-        await ensureQueueLoaded();
-        const q = getQueue(req?.walletId);
-        const idx = q.findIndex((entry) => entry.id === req?.id);
-        const entry = idx >= 0 ? q[idx] : null;
-        if (idx >= 0) q.splice(idx, 1);
-        await persistQueue();
-        // Retire the PendingTx half too, through the same idempotent helper the
-        // core lane's Discard uses (it deletes a record still 'queued', or one
-        // an interrupted claim left at 'broadcasting'). A broadcast of this
-        // entry still in flight owns its record, so the discard leaves it be.
-        const inFlight = inFlightQueueBroadcasts.has(`${req?.walletId}:${req?.id}`);
-        if (!inFlight && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
-            try {
-                await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
-            } catch (_e) {
-                // The vault refused the delete. The queue half is already gone,
-                // so the journal is the only route left back to the record.
-                recordOwedSettlement(req?.walletId, entry.pendingTxId, 'discard');
-            }
+        // Refuse while a broadcast holds this entry, and hold the claim ourselves so
+        // none starts mid-discard: a half-applied discard orphans a 'queued' record.
+        const claim = `${req?.walletId}:${req?.id}`;
+        if (inFlightQueueBroadcasts.has(claim)) {
+            throw new Error(`broadcast.queue: entry "${req?.id}" is already being broadcast; discard it after that attempt settles`);
         }
-        await flushOwedSettlements(vault);
-        return { discarded: idx >= 0 };
+        inFlightQueueBroadcasts.add(claim);
+        try {
+            await ensureQueueLoaded();
+            const q = getQueue(req?.walletId);
+            const idx = q.findIndex((entry) => entry.id === req?.id);
+            const entry = idx >= 0 ? q[idx] : null;
+            if (idx >= 0) q.splice(idx, 1);
+            await persistQueue();
+            // Retire the PendingTx half too, through the same idempotent helper the
+            // core lane's Discard uses (it deletes a record still 'queued', or one
+            // an interrupted claim left at 'broadcasting').
+            if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+                try {
+                    await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
+                } catch (_e) {
+                    // The vault refused the delete. The queue half is already gone,
+                    // so the journal is the only route left back to the record.
+                    recordOwedSettlement(req?.walletId, entry.pendingTxId, 'discard');
+                }
+            }
+            await flushOwedSettlements(vault);
+            return { discarded: idx >= 0 };
+        } finally {
+            inFlightQueueBroadcasts.delete(claim);
+        }
     });
 
     // §49.1 / G153: reachability probe across the supplied chains.

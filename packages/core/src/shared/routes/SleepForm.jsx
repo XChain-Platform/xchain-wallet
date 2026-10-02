@@ -227,7 +227,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     function guardBeforeSign() {
         if (!chainId || !fromAddress) { setFormError('Pick a source address first.'); return false; }
         if (isTick && !ticker) { setFormError('No token selected.'); return false; }
-        if (isTick && sleepLocked) { setFormError(`Pausing is permanently locked for ${ticker} (LOCK_SLEEP).`); return false; }
+        if (isTick && sleepLocked) { setFormError(`Pausing is permanently locked for ${ticker}.`); return false; }
         if (resumeMode === 'until') {
             const rb = String(resumeBlockInput).trim();
             if (!/^\d+$/.test(rb)) { setFormError('Enter a whole block height to pause until.'); return false; }
@@ -535,7 +535,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     </p>
                     {sleepLocked ? (
                         <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>Pausing is permanently locked for {ticker} (LOCK_SLEEP).</p>
+                            <p className={styles.warning}>Pausing is permanently locked for {ticker}.</p>
                         </div>
                     ) : null}
                 </>

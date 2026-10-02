@@ -43,6 +43,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+import { legNotIndexedError, legMayBeOnChain } from '../../../packages/core/src/flows/deployLegWait.js';
 
 const CHAIN = 'bitcoin-regtest';
 const W = 'w1';
@@ -313,6 +314,30 @@ describe('the host queue settles the PendingTx half it was handed', () => {
         await trans.vault.pendingTxs.put(queuedRecord('p1'));
         await trans.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
         expect((await trans.vault.pendingTxs.get('p1')).status).toBe('queued');
+    });
+
+    it('a broadcast of an entry a discard is still retiring is refused before it reaches the network', async () => {
+        const records = memCollection();
+        await records.put(queuedRecord('p1'));
+        const broadcastTx = vi.fn(async () => 'tx-A');
+        const h = makeHost({ entries: [entry('A', { pendingTxId: 'p1' })], broadcastTx, pendingTxs: records });
+        await h.list();
+        // Park the discard on its read of p1, after the load has finished reading it.
+        const hold = deferred();
+        const read = records.get;
+        records.get = async (id) => { if (id === 'p1') await hold.promise; return read(id); };
+
+        const discarding = h.call('broadcast.queue.discard', { walletId: W, id: 'A' });
+        const racingCall = h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0));
+        hold.resolve();
+        const racing = await racingCall;
+        expect(racing.ok).toBe(false);
+        expect(racing.error.message).toMatch(/already being broadcast/);
+        expect(broadcastTx).not.toHaveBeenCalled();
+        expect((await discarding).result).toEqual({ discarded: true });
+        expect(await read('p1')).toBeNull();
+        expect(await h.list()).toEqual([]);
     });
 
     it('discard retires the queued record', async () => {
@@ -700,6 +725,127 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
         expect(err?.name).toBe('BroadcastFailedPermanentError');
         // A permanent rejection has nothing to queue, and that must not change.
         expect(h.onBroadcastFailure).not.toHaveBeenCalled();
+    });
+});
+
+describe('submitAction never retires a transaction the network already holds as failed', () => {
+    // `answers` scripts broadcastTx per call; `phase1Sign` / `phase2Sign` replace the signer per PSBT.
+    function landedSubmit({
+        encoding = 'OP_RETURN', answers = [], spendP2sh, phase1Sign, phase2Sign, waitForTxid, putFails = () => false,
+    } = {}) {
+        const puts = [];
+        const pendingTxs = memCollection();
+        let settings = adsSettings();
+        const vault = {
+            pendingTxs: {
+                ...pendingTxs,
+                put: vi.fn(async (rec) => {
+                    puts.push(JSON.parse(JSON.stringify(rec)));
+                    if (putFails(rec)) throw new Error('VaultWriteError: disk full');
+                    await pendingTxs.put(rec);
+                }),
+            },
+            settings: {
+                get: vi.fn(async () => JSON.parse(JSON.stringify(settings))),
+                put: vi.fn(async (r) => { settings = JSON.parse(JSON.stringify(r)); }),
+            },
+        };
+        let n = 0;
+        const sdk = {
+            encoder: {
+                createTx: vi.fn(),
+                broadcastTx: vi.fn(async () => { const a = answers[n++]; if (a instanceof Error) throw a; return {}; }),
+                spendP2sh: spendP2sh ?? vi.fn(async () => ({ psbt: 'PHASE2' })),
+            },
+            actions: { createAction: vi.fn() },
+            wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+        };
+        const sign = async ({ psbtHex }) => ({ txHex: `TX(${psbtHex})`, txid: `txid-${psbtHex}` });
+        const signer = {
+            kind: 'software',
+            signPsbt: vi.fn(async (req) => {
+                const own = req.psbtHex === 'PHASE2' ? phase2Sign : phase1Sign;
+                return own ? own(req) : sign(req);
+            }),
+        };
+        const onBroadcastFailure = vi.fn(async () => {});
+        const run = () => submitAction({
+            vault,
+            walletId: W,
+            chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest', adsDonationAddress: 'bcrt1qdonate' }) },
+            sdkRegistry: { get: () => sdk },
+            chainId: CHAIN,
+            actionData: { action: 'ISSUE', params: { TICK: 'JDOG' } },
+            encoderOpts: { pubkey: 'pub' },
+            prebuiltPsbt: {
+                psbtHex: 'PHASE1', encoding, actionString: 'ISSUE|0|JDOG', version: 0,
+                deferredFeeOutput: null, deferredOutputs: [], adsDonation: { included: true },
+            },
+            pendingTxMeta: { fromAddress: 'from', toAddress: 'to', actionSummary: 'Issue JDOG' },
+            signer,
+            signingPaths: [{ inputIndex: 0, path: 'm/0' }],
+            waitForTxid,
+            onBroadcastFailure,
+        });
+        return { run, puts, sdk, vault, onBroadcastFailure, last: () => puts[puts.length - 1] };
+    }
+
+    it('settles a first broadcast the node already holds as broadcast and books ADS once', async () => {
+        const h = landedSubmit({ answers: [new Error('Encoder RPC error: txn-already-in-mempool')] });
+        const result = await h.run();
+        expect(result.txid).toBe('txid-PHASE1');
+        expect(h.puts.some((p) => p.status === 'failed')).toBe(false);
+        expect(h.last()).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE1' });
+        expect(h.last().broadcastAt).toBeTruthy();
+        expect(h.onBroadcastFailure).not.toHaveBeenCalled();
+        expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a broadcast record live when the indexer wait gives up, and rethrows the wait error untouched', async () => {
+        const waitErr = legNotIndexedError({ chainState: 'mempool', legLabel: 'leg 1', txid: 'txid-PHASE1', patienceMs: 1, isChunk: false });
+        const h = landedSubmit({ answers: ['ok'], waitForTxid: vi.fn(async () => { throw waitErr; }) });
+        const err = await h.run().then(() => null, (e) => e);
+        expect(err).toBe(waitErr);
+        expect(legMayBeOnChain(err)).toBe(true);
+        expect(h.last()).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE1' });
+        expect(h.last().error).toBeTruthy();
+    });
+
+    it('keeps the original wait error when the catch write is refused', async () => {
+        const waitErr = legNotIndexedError({ chainState: 'confirmed', legLabel: 'leg 1', txid: 'txid-PHASE1', patienceMs: 1, isChunk: false });
+        const h = landedSubmit({
+            answers: ['ok'],
+            waitForTxid: vi.fn(async () => { throw waitErr; }),
+            putFails: (rec) => typeof rec.error === 'string' && rec.error.length > 0,
+        });
+        const err = await h.run().then(() => null, (e) => e);
+        expect(err).toBe(waitErr);
+        expect(err.pendingTxWriteError).toMatch(/VaultWriteError/);
+    });
+
+    it.each([
+        ['spendP2sh rejects', { spendP2sh: vi.fn(async () => { throw new Error('encoder down'); }) }],
+        ['the phase-2 signature is refused', { phase2Sign: async () => { throw new Error('user rejected on device'); } }],
+    ])('keeps a P2SH phase 1 that went out live when %s', async (_label, opts) => {
+        const h = landedSubmit({ encoding: 'P2SH', answers: ['ok'], ...opts });
+        await expect(h.run()).rejects.toThrow();
+        expect(h.sdk.encoder.broadcastTx).toHaveBeenCalledTimes(1);
+        expect(h.puts.some((p) => p.status === 'failed')).toBe(false);
+        expect(h.last()).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE1' });
+    });
+
+    it('still marks a send failed when the phase-1 signature is refused', async () => {
+        const h = landedSubmit({ phase1Sign: async () => { throw new Error('user rejected on device'); } });
+        await expect(h.run()).rejects.toThrow(/user rejected/);
+        expect(h.sdk.encoder.broadcastTx).not.toHaveBeenCalled();
+        expect(h.last().status).toBe('failed');
+    });
+
+    it('still marks a send failed when the broadcasting claim cannot be written', async () => {
+        const h = landedSubmit({ putFails: (rec) => rec.status === 'broadcasting' });
+        await expect(h.run()).rejects.toThrow(/VaultWriteError/);
+        expect(h.sdk.encoder.broadcastTx).not.toHaveBeenCalled();
+        expect(h.last().status).toBe('failed');
     });
 });
 

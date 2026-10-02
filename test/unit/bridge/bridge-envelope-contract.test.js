@@ -624,3 +624,121 @@ describe('the page shim splits result-union methods from bare-array reads', () =
         }
     });
 });
+
+// Sign-in signs as an address the approval window picks from a list the
+// background built out of the site's grant. The window's answer is untrusted,
+// so the handler re-checks it; these cases drive the real handler with the
+// exact result shape SignApproval resolves.
+describe('bridge.signIn offers and enforces the site grant', () => {
+    const LTC = 'litecoin-regtest';
+    const SECOND = 'bcrt1qsecondwallet';
+    const OUTSIDE = 'bcrt1qoutsidegrant';
+    const LTC_ADDR = 'rltc1qlitecoinaddr';
+    const scopedRegistry = {
+        ...chainRegistry,
+        get: (id) => (id === LTC
+            ? { ...DESCRIPTORS[CHAIN], id: LTC, coin: 'litecoin', displayName: 'Litecoin Regtest' }
+            : DESCRIPTORS[id] ?? null),
+        chainIdFor: (coin, network) => (network !== 'regtest' ? null
+            : coin === 'bitcoin' ? CHAIN : coin === 'litecoin' ? LTC : null),
+    };
+    const ADDRS = [
+        { id: 'addr-1', address: FROM, chain: 'bitcoin', network: 'regtest', accountId: 'acct-primary', derivationPath: "m/84'/1'/0'/0/0" },
+        { id: 'addr-2', address: SECOND, chain: 'bitcoin', network: 'regtest', accountId: 'acct-other-wallet', derivationPath: "m/84'/1'/0'/0/1" },
+        { id: 'addr-3', address: OUTSIDE, chain: 'bitcoin', network: 'regtest', accountId: 'acct-second', derivationPath: "m/84'/1'/1'/0/0" },
+        { id: 'addr-4', address: LTC_ADDR, chain: 'litecoin', network: 'regtest', accountId: 'acct-primary', derivationPath: "m/84'/1'/0'/0/0" },
+    ];
+    const scopedVault = (permissions) => {
+        const vault = makeVault({ site: connectedSite(permissions) });
+        vault.addresses.list = async () => ADDRS.slice();
+        const accounts = [...ACCOUNTS, { id: 'acct-other-wallet', name: 'Other', walletId: 'wallet-2' }];
+        vault.accounts.get = async (id) => accounts.find((a) => a.id === id) ?? null;
+        vault.wallets.list = async () => [{ id: 'wallet-1' }, { id: 'wallet-2' }];
+        return vault;
+    };
+    // What SignApproval resolves: walletId defaults to the FIRST wallet, the
+    // picked candidate supplies address + chainId.
+    const pickFrom = (pick) => vi.fn(async (req) => {
+        const c = pick(req.payload.addresses);
+        return { approved: true, walletId: 'wallet-1', password: 'pw', ...(c ? { address: c.address, chainId: c.chainId } : {}) };
+    });
+    const signInHost = (vault, signIn) => {
+        const host = new MessageHost({ vault, chainRegistry: scopedRegistry, sdkRegistry: {} });
+        registerBridgeHandlers(host, { approvals: { ...approvals, signIn }, signThrottle: okThrottle });
+        return host;
+    };
+    const call = (host, request) => host.handle({
+        type: 'bridge.signIn', request: { origin: ORIGIN, appId: 'example.com', ...request },
+    });
+
+    it('a spec-shaped request (no chainId) signs as the picked, granted address', async () => {
+        const signIn = pickFrom((list) => list[0]);
+        const host = signInHost(scopedVault({ chains: [], accounts: ['acct-primary', 'acct-other-wallet'] }), signIn);
+        const { result } = await call(host, {});
+        expect(result.ok).toBe(true);
+        expect(result.address).toBe(FROM);
+        expect(result.chainId).toBe(CHAIN);
+        expect(result.challengeParts.address).toBe(FROM);
+        const offered = signIn.mock.calls[0][0].payload.addresses;
+        expect(offered).toEqual([
+            { address: FROM, chainId: CHAIN },
+            { address: SECOND, chainId: CHAIN },
+            { address: LTC_ADDR, chainId: LTC },
+        ]);
+    });
+
+    it('the result shape without an address, as the window resolved it before the picker, signs nothing', async () => {
+        const signIn = pickFrom(() => null);
+        const host = signInHost(scopedVault({ chains: [], accounts: [] }), signIn);
+        const resp = await call(host, {});
+        expect(resp.ok).toBe(false);
+        expect(resp.error.message).toMatch(/NO_CREDENTIALS/);
+        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+    });
+
+    it('an address outside the account grant is refused even when the window returns it', async () => {
+        const signIn = vi.fn(async () => ({ approved: true, walletId: 'wallet-1', password: 'pw', address: OUTSIDE, chainId: CHAIN }));
+        const host = signInHost(scopedVault({ chains: [], accounts: ['acct-primary'] }), signIn);
+        const resp = await call(host, {});
+        expect(resp.ok).toBe(false);
+        expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
+        expect(signIn.mock.calls[0][0].payload.addresses.map((c) => c.address)).not.toContain(OUTSIDE);
+        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+    });
+
+    it('a chain the site was not granted is never offered, and is refused if returned', async () => {
+        const signIn = vi.fn(async () => ({ approved: true, walletId: 'wallet-1', password: 'pw', address: LTC_ADDR, chainId: LTC }));
+        const host = signInHost(scopedVault({ chains: [CHAIN], accounts: [] }), signIn);
+        const resp = await call(host, {});
+        expect(resp.ok).toBe(false);
+        expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
+        expect(signIn.mock.calls[0][0].payload.addresses.map((c) => c.chainId)).toEqual([CHAIN, CHAIN, CHAIN]);
+        expect(flowMocks.signMessageFlow).not.toHaveBeenCalled();
+    });
+
+    it('an address from a second wallet signs with that wallet, not the window default', async () => {
+        const signIn = pickFrom((list) => list.find((c) => c.address === SECOND));
+        const host = signInHost(scopedVault({ chains: [], accounts: [] }), signIn);
+        const { result } = await call(host, {});
+        expect(result.ok).toBe(true);
+        expect(flowMocks.signMessageFlow.mock.calls[0][0].walletId).toBe('wallet-2');
+    });
+
+    it('a site with no address in its grant is refused before the user is prompted', async () => {
+        const signIn = pickFrom((list) => list[0]);
+        const host = signInHost(scopedVault({ chains: ['dogecoin-regtest'], accounts: [] }), signIn);
+        const resp = await call(host, {});
+        expect(resp.ok).toBe(false);
+        expect(resp.error.code).toBe('ADDRESS_NOT_AUTHORIZED');
+        expect(signIn).not.toHaveBeenCalled();
+    });
+
+    it('the request chains list narrows what is offered', async () => {
+        const signIn = pickFrom((list) => list[0]);
+        const host = signInHost(scopedVault({ chains: [], accounts: [] }), signIn);
+        const { result } = await call(host, { chains: ['litecoin'] });
+        expect(result.ok).toBe(true);
+        expect(signIn.mock.calls[0][0].payload.addresses).toEqual([{ address: LTC_ADDR, chainId: LTC }]);
+        expect(result.address).toBe(LTC_ADDR);
+    });
+});

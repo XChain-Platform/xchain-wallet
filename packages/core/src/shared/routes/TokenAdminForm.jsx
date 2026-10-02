@@ -648,7 +648,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'callback-settings') {
             if (callbackLocked) {
-                setFormError('Callback settings are permanently locked for this token (LOCK_CALLBACK).');
+                setFormError('Callback settings are permanently locked for this token.');
                 return;
             }
             if (callbackDistributed) {
@@ -694,7 +694,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'bridge-settings') {
             if (bridgeFrozen) {
-                setFormError('Bridge settings are permanently frozen for this token (LOCK_BRIDGE). Neither the chain list nor the depth can change again.');
+                setFormError('Bridge settings are permanently frozen for this token. Neither the chain list nor the depth can change again.');
                 return;
             }
             if (bridgePolicyBound && pickedBridgeChains.length > 0) {
@@ -1249,7 +1249,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             {mintDeadLocked ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Minting is permanently locked for {ticker} (LOCK_MINT).
+                                        Minting is permanently locked for {ticker}.
                                         The mint window, max mint per transaction, and per-address
                                         cap below can no longer take effect.
                                     </p>
@@ -1257,22 +1257,22 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             ) : maxMintLocked ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Max mint per transaction is permanently locked for {ticker} (LOCK_MAX_MINT).
+                                        Max mint per transaction is permanently locked for {ticker}.
                                     </p>
                                 </div>
                             ) : null}
                             {mintSupplyLocked ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Minting supply now is permanently locked for {ticker} (LOCK_MINT_SUPPLY).
+                                        Minting supply now is permanently locked for {ticker}.
                                     </p>
                                 </div>
                             ) : null}
                             {maxSupplyLockedInfo ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Max supply is also permanently locked for {ticker} (LOCK_MAX_SUPPLY).
-                                        That is a separate ISSUE field, not part of Mint settings.
+                                        Max supply is also permanently locked for {ticker}.
+                                        That is a separate token setting, not part of Mint settings.
                                     </p>
                                 </div>
                             ) : null}
@@ -1357,7 +1357,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {callbackLocked ? (
                         <div role="alert" className={styles.warnings}>
                             <p className={styles.warning}>
-                                Callback settings are permanently locked for {ticker} (LOCK_CALLBACK).
+                                Callback settings are permanently locked for {ticker}.
                                 They can no longer be changed.
                             </p>
                         </div>

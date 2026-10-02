@@ -85,7 +85,8 @@ const KIND_TITLE = {
  * password input, always-allow toggle, footer buttons) is shared.
  *
  * Result envelope matches SignApprovalResult:
- *   `{ approved: true, walletId, password, savePermanent? }`
+ *   `{ approved: true, walletId, password, savePermanent? }`, and for
+ *   signIn also the picked `address` and its `chainId`.
  *
  * The password is the whole secret this screen collects. It never asked for a
  * BIP39 passphrase, and a passphrase wallet now carries its own encrypted 25th
@@ -112,7 +113,17 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [savePermanent, setSavePermanent] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    const [signInChoice, setSignInChoice] = useState(0);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Sign-in signs as one address the user picks here, from the list the
+    // background built out of this site's grant; nothing else can be chosen.
+    const signInAddresses = kind === 'signIn' && Array.isArray(payload?.payload?.addresses)
+        ? payload.payload.addresses.filter(
+            (c) => typeof c?.address === 'string' && c.address && typeof c?.chainId === 'string',
+        )
+        : [];
+    const signInPick = signInAddresses[signInChoice] ?? null;
 
     useEffect(() => {
         listWallets()
@@ -553,8 +564,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
             || preflightState.loading
             || !canApproveWithReport(preflightState.report, acknowledged));
 
+    // Hold sign-in until an offered address is selected
+    const signInBlocked = kind === 'signIn' && !signInPick;
+
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
-        || !!psbtRefusal || preflightBlocked;
+        || !!psbtRefusal || preflightBlocked || signInBlocked;
 
     async function handleApprove(event) {
         event.preventDefault();
@@ -566,6 +580,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 approved: true,
                 walletId,
                 password,
+                ...(signInPick ? { address: signInPick.address, chainId: signInPick.chainId } : {}),
                 ...(savePermanent ? { savePermanent: true } : {}),
             });
             setPassword('');
@@ -643,6 +658,32 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 // approve.
                 sourceAddress={preflightSourceAddress}
             />
+
+            {kind === 'signIn' ? (
+                <fieldset className={shared.summary} aria-label="Sign in as">
+                    <legend className={shared.summaryLabel}>Sign in as</legend>
+                    {signInAddresses.length === 0 ? (
+                        <p className={shared.error} role="alert">
+                            This site has no address it may sign in with.
+                        </p>
+                    ) : signInAddresses.map((c, i) => {
+                        const d = chainRegistry.get(c.chainId);
+                        return (
+                            <label className={shared.toggleRow} key={`${c.chainId}:${c.address}`}>
+                                <input
+                                    type="radio"
+                                    name="sign-in-address"
+                                    checked={i === signInChoice}
+                                    onChange={() => setSignInChoice(i)}
+                                    disabled={busy}
+                                />
+                                {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                                <span>{neutralizeControlText(c.address, { maxLength: 120 })}</span>
+                            </label>
+                        );
+                    })}
+                </fieldset>
+            ) : null}
 
             {/* §5.6 slice 4: the shared PSBT panel enumerates every
                 input AND output (the local summary showed outputs + totals

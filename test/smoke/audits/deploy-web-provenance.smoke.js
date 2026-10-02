@@ -329,6 +329,89 @@ try {
             !(hits.stdout || '').trim(), hits.stdout || '');
     }
 
+    // --- 6b-2. The MANIFEST is read once too, from a private copy ---------
+    //
+    // verify.sh reads the manifest for the hash table, the header and the
+    // signature, and the gate below it reads it again. A writer who swaps the
+    // caller-named manifest between those reads gets a hash table nobody
+    // signed checked under a signature over different text. Two stand-ins put
+    // the swap at each end of the window: before verify.sh reads, and after.
+    {
+        const realVerify = join(root, 'tools', 'release', 'verify.sh');
+        const raceHarness = (name, script) => {
+            const dir = join(work, name);
+            mkdirSync(dir, { recursive: true });
+            copyFileSync(DEPLOY, join(dir, 'deploy-web.sh'));
+            writeFileSync(join(dir, 'verify.sh'), ['#!/usr/bin/env bash', ...script, ''].join('\n'));
+            return join(dir, 'deploy-web.sh');
+        };
+        const runHarness = (script, manifest, tarball, env) => {
+            const webroot = freshWebroot();
+            const r = spawnSync('bash', [script, '--tarball', tarball, '--manifest', manifest,
+                '--tag', TAG, '--webroot', webroot, '--no-sig'], {
+                encoding: 'utf8', env: { ...process.env, RACE_REAL_VERIFY: realVerify, ...env },
+            });
+            return { r, webroot };
+        };
+
+        // (a) Swapped BEFORE verify.sh reads it: the attacker's manifest
+        //     describes the attacker's tarball, and must never be what is read.
+        const genuineDirA = join(work, 'mswap-genuine');
+        mkdirSync(join(genuineDirA, 'm'), { recursive: true });
+        const genuineTarA = buildTarball(genuineDirA, GENUINE_MARKER);
+        const callerManifest = writeManifest(join(genuineDirA, 'm'), genuineTarA);
+        const attackerDirA = join(work, 'mswap-attacker');
+        mkdirSync(attackerDirA, { recursive: true });
+        const attackerManifest = writeManifest(attackerDirA, buildTarball(attackerDirA, ATTACKER_MARKER));
+        const argsSeen = join(work, 'mswap-args.txt');
+        const before = raceHarness('mswap-before', [
+            'cp "$RACE_ATTACKER_MANIFEST" "$RACE_VICTIM_MANIFEST"',
+            'printf "%s\\n" "$@" > "$RACE_ARGS"',
+            'exec bash "$RACE_REAL_VERIFY" "$@"',
+        ]);
+        const a = runHarness(before, callerManifest, genuineTarA, {
+            RACE_ATTACKER_MANIFEST: attackerManifest, RACE_VICTIM_MANIFEST: callerManifest,
+            RACE_ARGS: argsSeen,
+        });
+        check('MANIFEST SWAP BEFORE: the stand-in really did replace the caller manifest',
+            readFileSync(callerManifest).equals(readFileSync(attackerManifest)),
+            'the swap never happened, so this case proves nothing');
+        const seen = existsSync(argsSeen) ? readFileSync(argsSeen, 'utf8').split('\n') : [];
+        const seenManifest = seen[seen.indexOf('--manifest') + 1];
+        check('MANIFEST SWAP BEFORE: verify.sh is handed a private copy, not the caller path',
+            seen.includes('--manifest') && seenManifest !== callerManifest, seen.join(' '));
+        check('MANIFEST SWAP BEFORE: the release it staged still deploys', a.r.status === 0,
+            `status=${a.r.status}\n${a.r.stderr}`);
+        const servedA = join(a.webroot, 'current', 'index.html');
+        check('MANIFEST SWAP BEFORE: the GENUINE bytes are live',
+            existsSync(servedA) && readFileSync(servedA, 'utf8').includes(GENUINE_MARKER),
+            existsSync(servedA) ? readFileSync(servedA, 'utf8') : 'current/index.html absent');
+        const hitsA = spawnSync('grep', ['-rl', 'ATTACKER REBUILD', a.webroot], { encoding: 'utf8' });
+        check('MANIFEST SWAP BEFORE: the attacker marker reached nothing under the webroot',
+            !(hitsA.stdout || '').trim(), hitsA.stdout || '');
+
+        // (b) Swapped AFTER verify.sh returns: a manifest whose gate did not
+        //     run is replaced by one that says `enforced`, and must still refuse.
+        const gateDir = join(work, 'mswap-gate');
+        mkdirSync(join(gateDir, 'enforced'), { recursive: true });
+        const gateTar = buildTarball(gateDir, GENUINE_MARKER);
+        const notRun = writeManifest(gateDir, gateTar, { gate: 'not-run' });
+        const enforcedCopy = writeManifest(join(gateDir, 'enforced'), gateTar, { gate: 'enforced' });
+        const after = raceHarness('mswap-after', [
+            'bash "$RACE_REAL_VERIFY" "$@"',
+            'rc=$?',
+            'cp "$RACE_ENFORCED_MANIFEST" "$RACE_VICTIM_MANIFEST"',
+            'exit $rc',
+        ]);
+        const b = runHarness(after, notRun, gateTar, {
+            RACE_ENFORCED_MANIFEST: enforcedCopy, RACE_VICTIM_MANIFEST: notRun,
+        });
+        check('GATE SWAP AFTER: the stand-in really did rewrite the caller manifest',
+            readFileSync(notRun, 'utf8').includes('dev-mock-gate: enforced'),
+            'the swap never happened, so this case proves nothing');
+        nothingDeployed('GATE SWAP AFTER', b.webroot, b.r);
+    }
+
     // --- 6c. An interrupted unpack leaves no releases/<tag> behind -------
     //
     // A tar that dies partway must not leave a half-written releases/<tag>,

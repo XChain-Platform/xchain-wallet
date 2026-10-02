@@ -38,6 +38,7 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isActionOfferedOnChain } from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -211,7 +212,10 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         messaging.listActions({ chainId })
             .then((list) => {
                 if (!cancelled) {
-                    const sorted = [...(list || [])].sort();
+                    // The SDK lists every action; drop one this chain's indexer refuses at every version.
+                    const sorted = [...(list || [])]
+                        .filter((name) => isActionOfferedOnChain(chainRegistry, chainId, name))
+                        .sort();
                     setActions(sorted);
                 }
             })

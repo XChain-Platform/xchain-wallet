@@ -67,14 +67,20 @@ export class RbfInvalidEntryError extends Error {
  *   - action is a coin-moving kind (SEND / SWEEP / DISPENSE / DIVIDEND
  *     / AIRDROP / EXECUTE / DEPOSIT / WITHDRAW)
  *   - txHash is present
+ *   - the chain's descriptor declares `feeStrategy.rbfSupported: true`
+ *     (Dogecoin declares false, and the same cap governs Send and
+ *     Settings); a missing descriptor refuses, since nothing then says
+ *     the transaction could signal replaceability
  *
  * Phase 4 adds support for additional action kinds; the kind list is
  * deliberately conservative for now.
  *
- * @param {{ action?: string, blockIndex?: number, txHash?: string }} entry
+ * @param {{ action?: string, blockIndex?: number, txHash?: string, chainId?: string }} entry
+ * @param {{ descriptor?: { displayName?: string, feeStrategy?: { rbfSupported?: boolean } } | null }} [opts]
+ *   the registry descriptor of `entry.chainId`
  * @returns {{ ok: boolean, reason?: string }}
  */
-export function isEntryReplaceable(entry) {
+export function isEntryReplaceable(entry, { descriptor } = {}) {
     if (!entry || typeof entry !== 'object') {
         return { ok: false, reason: 'No entry to replace.' };
     }
@@ -97,6 +103,10 @@ export function isEntryReplaceable(entry) {
     ]);
     if (!REPLACEABLE_ACTIONS.has(action)) {
         return { ok: false, reason: `${action} actions are not RBF-replaceable.` };
+    }
+    if (descriptor?.feeStrategy?.rbfSupported !== true) {
+        const chain = descriptor?.displayName || entry.chainId || 'this chain';
+        return { ok: false, reason: `Fee bumping is not supported on ${chain}.` };
     }
     return { ok: true };
 }
@@ -152,11 +162,12 @@ export async function sendRbfRequest({ messaging, request } = {}) {
 /**
  * Convenience wrapper: validate the entry, build the request, send it.
  *
- * @param {{ messaging: any, entry: any, strategy: 'speedup' | 'cancel', walletId?: string, feeRate?: string }} opts
+ * @param {{ messaging: any, entry: any, strategy: 'speedup' | 'cancel', walletId?: string, feeRate?: string, descriptor?: object | null }} opts
+ *   `descriptor` is the registry descriptor of `entry.chainId`, as `isEntryReplaceable` takes it
  * @returns {Promise<RbfResult>}
  */
-export async function replaceFromHistoryEntry({ messaging, entry, strategy, walletId, feeRate } = {}) {
-    const check = isEntryReplaceable(entry);
+export async function replaceFromHistoryEntry({ messaging, entry, strategy, walletId, feeRate, descriptor } = {}) {
+    const check = isEntryReplaceable(entry, { descriptor });
     if (!check.ok) throw new RbfInvalidEntryError(check.reason);
     return sendRbfRequest({
         messaging,

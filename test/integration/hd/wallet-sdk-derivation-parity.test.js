@@ -116,6 +116,15 @@ describe('wallet descriptors vs xchain-sdk network params', () => {
         });
     }
 
+    // Bind the other direction too, so a wallet-only family fails as well.
+    it('wallet FAMILY_MAINNET_COIN_TYPE_SLOT covers exactly the xchain-sdk FAMILY_SLIP44 families', () => {
+        const sdkFamilies = Object.keys(FAMILY_SLIP44).map((tick) => COIN_FULL_NAME[tick]).sort();
+        expect(
+            Object.keys(MAINNET_SLOT).sort(),
+            'a family pinned on one side only is never value-checked against the other',
+        ).toEqual(sdkFamilies);
+    });
+
     for (const d of BUNDLED_DESCRIPTORS) {
         it(`${d.id}: wifVersionByte matches xchain-sdk net.wif`, () => {
             const net = NETWORKS[d.id];

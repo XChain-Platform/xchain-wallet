@@ -18,8 +18,14 @@
 // the SDK's validator runs inside createAction() before signing, so
 // malformed params fail at sign time with a structured error rather
 // than silently broadcasting bad data.
+//
+// The SDK validator has no notion of the chain, so the actions the indexer
+// accepts per chain (CHAIN_GATED_ACTIONS) are checked here first, at the
+// version the SDK will really encode: a missing VERSION resolves through the
+// same format selector createAction runs at sign time.
 
 import { submitAction } from './submitAction.js';
+import { CHAIN_GATED_ACTIONS, assertActionAllowedOnChain } from '../registry/actions.js';
 import { normalizeSource } from './sendToken.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
@@ -60,6 +66,11 @@ export async function advancedAction(opts) {
     }
     const source = normalizeSource(opts.from, 'advancedAction');
     const actionName = String(opts.action).toUpperCase();
+    if (CHAIN_GATED_ACTIONS.includes(actionName)) {
+        const sdk = opts.sdkRegistry.get(opts.chainId);
+        const { version } = sdk.actions.composeActionString({ action: actionName, params: opts.params }, { validate: false });
+        assertActionAllowedOnChain(opts.chainRegistry, opts.chainId, actionName, Number(version), 'advancedAction');
+    }
     // Name the pending record in plain language; the wire name stays in actionData.
     const summary = typeof opts.actionSummary === 'string' && opts.actionSummary.trim()
         ? opts.actionSummary.trim()

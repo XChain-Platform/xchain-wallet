@@ -115,4 +115,17 @@ describe('BackupSection: check chain for backed-up contacts', () => {
 
         expect(await screen.findByText('Invalid password')).toBeTruthy();
     });
+
+    it('says the password is wrong when the seed decrypt fails its tag check', async () => {
+        const restoreLabelsRequest = vi.fn(async () => {
+            throw Object.assign(new Error('aes/gcm: invalid ghash tag'), { name: 'AeadAuthError' });
+        });
+        mount(restoreLabelsRequest);
+
+        await openRestoreForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+
+        expect(await screen.findByText('Incorrect password.')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/aes\/gcm|ghash/);
+    });
 });

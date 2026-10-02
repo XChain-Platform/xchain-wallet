@@ -17,6 +17,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
+import { BROADCAST_QUEUE_STORAGE_KEY } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 
 const REFUSAL = { message: 'QUOTA_BYTES quota exceeded' };
 
@@ -85,5 +86,37 @@ describe('localStorage adapter reports a refused write', () => {
         const storage = createBroadcastQueueStorage();
         await expect(storage.save({ w1: [] })).resolves.toBeUndefined();
         await expect(storage.clear()).resolves.toBeUndefined();
+    });
+});
+
+// The fields that tie an entry to its vault record and its ADS verdict must
+// survive the real parse, on the envelope blob and on the pre-journal blob.
+describe('a stored entry keeps every field the host writes', () => {
+    const ENTRY = {
+        id: 'q-1', chainId: 'bitcoin-regtest', signedTxHex: 'hex-1', summary: 'Send 1', signedAt: 1, txid: 'txid-1',
+        pendingTxId: 'p-1', resumedClaim: true, adsCommit: { chainId: 'bitcoin-regtest', donationIncluded: true },
+    };
+
+    function statefulLocalStorage() {
+        vi.stubGlobal('chrome', undefined);
+        const items = new Map();
+        vi.stubGlobal('localStorage', {
+            getItem: (k) => (items.has(k) ? items.get(k) : null),
+            setItem: (k, v) => { items.set(k, String(v)); },
+            removeItem: (k) => { items.delete(k); },
+        });
+        return items;
+    }
+
+    it('round-trips through a save and a fresh adapter load', async () => {
+        statefulLocalStorage();
+        await createBroadcastQueueStorage().save({ w1: [ENTRY] });
+        expect(await createBroadcastQueueStorage().load()).toEqual({ w1: [ENTRY] });
+    });
+
+    it('reads them from a top-level blob written before the journal existed', async () => {
+        const items = statefulLocalStorage();
+        items.set(BROADCAST_QUEUE_STORAGE_KEY, JSON.stringify({ w1: [ENTRY] }));
+        expect(await createBroadcastQueueStorage().load()).toEqual({ w1: [ENTRY] });
     });
 });

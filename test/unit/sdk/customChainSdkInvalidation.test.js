@@ -26,6 +26,8 @@
 import { describe, it, expect } from 'vitest';
 import { SDKRegistry } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { ChainRegistry } from '../../../packages/core/src/registry/index.js';
+import { hydrateCustomChainsFromSettings } from '../../../packages/core/src/registry/hydrateCustomChains.js';
+import { validateChainDescriptor } from '../../../packages/core/src/registry/validate.js';
 import {
     addCustomChain,
     removeCustomChain,
@@ -165,7 +167,7 @@ async function reboot(vault) {
         sdkFactory: (opts) => ({ network: opts.network, explorerUrl: opts.explorerUrl, close() {} }),
     });
     const settings = await vault.settings.get();
-    for (const d of settings.customChains ?? []) chainRegistry.addCustom(d);
+    hydrateCustomChainsFromSettings(chainRegistry, settings);
     sdkRegistry.applyEndpointOverridesFromSettings(settings);
     return sdkRegistry;
 }
@@ -229,5 +231,70 @@ describe('custom chains reset the persisted endpoint override', () => {
         await removeCustomChain({ vault, chainRegistry, sdkRegistry, chainId: id });
         expect((await vault.settings.get()).sdkEndpoints).toEqual({ 'bitcoin-mainnet': btc });
         expect(sdkRegistry.get('bitcoin-mainnet').explorerUrl).toBe('https://my-btc-node.example');
+    });
+});
+
+// A same-id add while the id is persisted but not registered must leave the
+// vault and the live registry agreeing, or the session runs one chain and the
+// next boot another. Boot installs the first stored row this build accepts.
+describe('same-id add while the chain is saved but not registered', () => {
+    const id = DESCRIPTOR.id;
+    const DEAD = Object.freeze({ ...DESCRIPTOR, addressTypes: [] });
+    const OTHER = Object.freeze({ ...DESCRIPTOR, id: 'othercoin-regtest', coin: 'othercoin' });
+
+    it('the fixture row really is rejected by this build', () => {
+        expect(validateChainDescriptor(DEAD).ok).toBe(false);
+    });
+
+    it('a dead stored row is replaced in the vault, so the session matches a reboot', async () => {
+        const { vault, chainRegistry, sdkRegistry } = makeHarness();
+        await vault.settings.put({
+            schemaVersion: 2,
+            customChains: [OTHER, DEAD, DEAD],
+            sdkEndpoints: { [id]: OLD_OVERRIDE },
+        });
+
+        const r = await addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: RELOCATED });
+        expect(r.replaced).toBe(true);
+        expect(r.restored).toBeUndefined();
+        const stored = await vault.settings.get();
+        expect(stored.customChains).toEqual([OTHER, RELOCATED]);
+        expect(Object.hasOwn(stored.sdkEndpoints ?? {}, id)).toBe(false);
+        expect(sdkRegistry.get(id).explorerUrl).toBe('https://new-node.example');
+        expect((await reboot(vault)).get(id).explorerUrl).toBe('https://new-node.example');
+    });
+
+    it('a live stored row wins over a different paste, and nothing is written', async () => {
+        const { vault, chainRegistry, sdkRegistry } = makeHarness();
+        const record = {
+            schemaVersion: 2,
+            customChains: [DESCRIPTOR],
+            sdkEndpoints: { [id]: OLD_OVERRIDE },
+        };
+        await vault.settings.put(record);
+
+        const r = await addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: RELOCATED });
+        expect(r.restored).toBe(true);
+        expect(r.descriptor).toEqual(DESCRIPTOR);
+        expect(chainRegistry.get(id).explorer).toEqual(DESCRIPTOR.explorer);
+        expect(await vault.settings.get()).toEqual(record);
+        const rebooted = (await reboot(vault)).get(id).explorerUrl;
+        expect(sdkRegistry.get(id).explorerUrl).toBe(rebooted);
+    });
+
+    it('a refused registration over a dead row restores the original record exactly', async () => {
+        const { vault, sdkRegistry } = makeHarness();
+        const chainRegistry = new ChainRegistry();
+        chainRegistry.addCustom = () => { throw new Error('registry refused'); };
+        const record = {
+            schemaVersion: 2,
+            customChains: [DEAD],
+            sdkEndpoints: { [id]: OLD_OVERRIDE },
+        };
+        await vault.settings.put(record);
+
+        await expect(addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: RELOCATED }))
+            .rejects.toThrow(/registry refused/);
+        expect(await vault.settings.get()).toEqual(record);
     });
 });

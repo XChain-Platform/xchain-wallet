@@ -18,6 +18,10 @@ import {
     RbfNotSupportedError,
     RbfInvalidEntryError,
 } from '../../../packages/core/src/flows/rbfReplace.js';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+
+const registry = defaultRegistry();
+const btc = { descriptor: registry.get('bitcoin-mainnet') };
 
 // --- isEntryReplaceable -------------------------------------------------
 
@@ -40,13 +44,13 @@ assert.match(
     /not RBF-replaceable/,
 );
 
-const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' });
+const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }, btc);
 assert.equal(ok.ok, true);
 
 // All replaceable kinds
 for (const action of ['SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']) {
     assert.equal(
-        isEntryReplaceable({ blockIndex: 0, action, txHash: 'abc' }).ok,
+        isEntryReplaceable({ blockIndex: 0, action, txHash: 'abc' }, btc).ok,
         true,
         `${action} is replaceable`,
     );
@@ -54,7 +58,22 @@ for (const action of ['SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECU
 
 // Case-insensitive action
 assert.equal(
-    isEntryReplaceable({ blockIndex: 0, action: 'send', txHash: 'abc' }).ok,
+    isEntryReplaceable({ blockIndex: 0, action: 'send', txHash: 'abc' }, btc).ok,
+    true,
+);
+
+// The descriptor's rbfSupported cap: Dogecoin declares false, and a missing
+// descriptor refuses rather than assuming the chain can replace.
+assert.deepEqual(
+    isEntryReplaceable(
+        { blockIndex: 0, action: 'SEND', txHash: 'abc', chainId: 'dogecoin-mainnet' },
+        { descriptor: registry.get('dogecoin-mainnet') },
+    ),
+    { ok: false, reason: 'Fee bumping is not supported on Dogecoin.' },
+);
+assert.equal(isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }).ok, false);
+assert.equal(
+    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }, { descriptor: registry.get('litecoin-mainnet') }).ok,
     true,
 );
 
@@ -135,6 +154,7 @@ const goodResult = await replaceFromHistoryEntry({
     },
     strategy: 'cancel',
     walletId: 'w1',
+    descriptor: btc.descriptor,
 });
 assert.equal(goodResult.replacementTxHash, 'def');
 assert.equal(captured.originalTxHash, 'orig123');

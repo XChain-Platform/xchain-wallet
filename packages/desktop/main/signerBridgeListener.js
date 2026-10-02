@@ -98,7 +98,7 @@ export function attachSignerBridgeListener({
     if (!ipcMain || typeof ipcMain.on !== 'function') {
         throw new Error('attachSignerBridgeListener: ipcMain.on is required');
     }
-    /** @type {Map<number, { port: any, ownedIds: Set<string>, listeners: Set<(msg:any)=>void>, disconnectListeners: Set<()=>void> }>} */
+    /** @type {Map<number, { port: any, ownedIds: Set<string>, listeners: Set<(msg:any)=>void>, disconnectListeners: Set<()=>void>, tearDown: () => void }>} */
     const bySender = new Map();
     // signerId -> the sender.id that currently owns its transport. Guards
     // against a second webContents silently overwriting the mapping.
@@ -206,7 +206,7 @@ export function attachSignerBridgeListener({
             // Delete only this entry: a later document on the same webContents owns its own.
             if (bySender.get(sender.id) === entry) bySender.delete(sender.id);
         };
-        const entry = { port, ownedIds, listeners, disconnectListeners };
+        const entry = { port, ownedIds, listeners, disconnectListeners, tearDown };
         for (const ev of DOCUMENT_END_EVENTS) {
             try { sender.on?.(ev, tearDown); } catch { /* non-Electron shim (test fake) */ }
         }
@@ -217,12 +217,9 @@ export function attachSignerBridgeListener({
     ipcMain.on(channel, onIpc);
     return function detach() {
         try { ipcMain.off(channel, onIpc); } catch { /* ignore */ }
-        for (const entry of bySender.values()) {
-            for (const fn of entry.disconnectListeners) {
-                try { fn(); } catch { /* swallow */ }
-            }
-            for (const sid of entry.ownedIds) signerBridge.clearTransport(sid);
-        }
+        // Run each entry's own teardown so its document-end hooks unsubscribe too;
+        // a hook left live would later clear ids a re-attached listener registered.
+        for (const entry of [...bySender.values()]) entry.tearDown();
         bySender.clear();
         ownerBySignerId.clear();
     };

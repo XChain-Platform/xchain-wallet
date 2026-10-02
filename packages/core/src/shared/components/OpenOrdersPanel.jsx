@@ -31,6 +31,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { compareAmounts } from '../../market/orderMath.js';
 import {
     divideDecimalStrings,
@@ -98,7 +99,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             await messaging.setAutopayEnabled({ id: record.id, enabled: record.autopay !== true });
             await loadAutopay();
         } catch (err) {
-            setLoadError(err?.message || String(err));
+            setLoadError(readFailureMessage(err, 'change autopay for this order'));
         }
     }
 
@@ -124,7 +125,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 setOrders(flat);
                 setLoadError(null);
             } catch (err) {
-                if (!cancelled) setLoadError(err?.message || String(err));
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your open orders'));
             }
         };
         tick();

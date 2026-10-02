@@ -1592,7 +1592,8 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
         : null;
     const peer = peerKey ? peerCache[peerKey] : null;
-    const replaceable = isEntryReplaceable(entry);
+    const rbfDescriptor = chainRegistry.get(entry.chainId);
+    const replaceable = isEntryReplaceable(entry, { descriptor: rbfDescriptor });
     // §24.6 / Cluster Y FOLLOWUP 4: desktop-only "Open in new window"
     // affordance for pending (mempool-only) entries. The detached
     // window opens directly on this row via the History `initialFocus`
@@ -1641,7 +1642,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         setRbfError(null);
         setRbfDone(null);
         try {
-            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId });
+            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor: rbfDescriptor });
             setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
             // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
             // The undo is a THIRD transaction replacing the cancel and

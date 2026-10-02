@@ -46,6 +46,9 @@ import { IPC_CHANNEL } from '../../../packages/desktop/main/messageHost.js';
 import { SIGNER_BRIDGE_CHANNEL } from '../../../packages/desktop/main/signerBridgeListener.js';
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { sendMessage as rendererSendMessage } from '../../../packages/desktop/renderer/bridgeMessaging.js';
+import { createDeepLinkSlot } from '../../../packages/desktop/main/protocol.js';
+import { deepLinkRoute } from '../../../packages/desktop/renderer/deepLinkRoute.js';
+import { registry as registryLib } from '@xchain-wallet/core';
 
 // Path arithmetic goes through node:path, not `new URL(rel, import.meta.url)`:
 // under the jsdom environment the global URL resolves relative specifiers
@@ -160,6 +163,8 @@ const BRIDGE_WORLDS = [
     // privileged surface, so it is declared here deliberately rather than
     // discovered: this list existing is what made adding it a decision.
     'xchainWalletUpdater',
+    // OS deep links: main parks a link and nudges, the renderer claims it.
+    'xchainWalletDeepLink',
 ];
 
 beforeEach(() => {
@@ -252,6 +257,9 @@ describe('desktop preload: the renderer sandbox surface', () => {
         // channel main never registered would put the offer back out of
         // reach in a way that looks wired up from the renderer side.
         await updater.getState();
+        // The deep-link claim is walked for the same reason: a take on a
+        // channel main never answers would leave every parked link unclaimed.
+        await pre.worlds.get('xchainWalletDeepLink').takePending();
 
         const used = new Set([
             ...pre.invokes.map(([channel]) => channel),
@@ -259,7 +267,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // subset check below is vacuously true.
-        expect(used.size).toBe(7);
+        expect(used.size).toBe(8);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {
@@ -434,5 +442,130 @@ describe('desktop preload: signer-bridge duplex port', () => {
 
         expect(a).toEqual([]);
         expect(b).toEqual([{ kind: 'status' }]);
+    });
+});
+
+/**
+ * Every channel main pushes to a renderer on, read off main's own source:
+ * the quoted literal of each `webContents.send('...'` and
+ * `broadcastToWindows('...'`. The signer listener pushes from its own module
+ * on a constant, so that channel is added by identity.
+ */
+function mainPushedChannels() {
+    const src = readFileSync(MAIN_PATH, 'utf8');
+    const channels = new Set([SIGNER_BRIDGE_CHANNEL]);
+    for (const m of src.matchAll(/(?:webContents\.send|broadcastToWindows)\(\s*'([^']+)'/g)) {
+        channels.add(m[1]);
+    }
+    return channels;
+}
+
+describe('desktop preload: every main push has a renderer subscriber', () => {
+    // The mirror of "talks only on channels main answers on". A push with no
+    // preload subscriber is a dead feature under contextIsolation: the updater
+    // shipped that way once, and deep links shipped that way after it.
+    it('subscribes to every channel main sends or broadcasts on', () => {
+        const pushed = mainPushedChannels();
+        // Without these two the scan read nothing, and the loop below is vacuous.
+        expect(pushed.has('xchain:updater')).toBe(true);
+        expect(pushed.has('xchain:uri')).toBe(true);
+
+        const pre = runPreload();
+        for (const world of pre.worlds.values()) {
+            for (const [key, fn] of Object.entries(world)) {
+                if (/^on[A-Z]/.test(key)) fn(() => {});
+            }
+        }
+        for (const channel of pushed) {
+            expect(
+                pre.listenerCount(channel),
+                `main pushes on "${channel}" but no preload world subscribes to it`,
+            ).toBeGreaterThan(0);
+        }
+    });
+});
+
+describe('desktop preload: deep-link bridge', () => {
+    it('exposes exactly {onUri, takePending}', () => {
+        const pre = runPreload();
+        expect(Object.keys(pre.worlds.get('xchainWalletDeepLink')).sort())
+            .toEqual(['onUri', 'takePending']);
+    });
+
+    it('hands the listener the payload only, and the unsubscribe detaches it', () => {
+        const pre = runPreload();
+        const seen = [];
+        const off = pre.worlds.get('xchainWalletDeepLink').onUri((...args) => { seen.push(args); });
+        const event = { scheme: 'xchain', raw: 'xchain:receive', parsed: null };
+
+        pre.emit('xchain:uri', event);
+        off();
+        pre.emit('xchain:uri', event);
+
+        expect(seen).toEqual([[event]]);
+        expect(pre.listenerCount('xchain:uri')).toBe(0);
+    });
+
+    it('claims the parked link over the take channel with no arguments', async () => {
+        const pre = runPreload();
+        const parked = { scheme: 'xchain', raw: 'xchain:receive', parsed: null };
+        pre.setReply(async () => parked);
+
+        const res = await pre.worlds.get('xchainWalletDeepLink').takePending('ignored');
+
+        expect(pre.invokes).toEqual([['xchain:deep-link-take']]);
+        expect(res).toBe(parked);
+    });
+});
+
+describe('desktop main: the deep-link slot', () => {
+    it('holds a link until one claim takes it, and only once', () => {
+        const slot = createDeepLinkSlot();
+        expect(slot.take()).toBe(null);
+        const a = { raw: 'xchain:a' };
+        slot.offer(a);
+        expect(slot.take()).toBe(a);
+        expect(slot.take()).toBe(null);
+    });
+
+    it('lets a newer link replace an unclaimed older one', () => {
+        const slot = createDeepLinkSlot();
+        slot.offer({ raw: 'xchain:old' });
+        slot.offer({ raw: 'xchain:new' });
+        expect(slot.take()).toEqual({ raw: 'xchain:new' });
+        expect(slot.take()).toBe(null);
+    });
+});
+
+describe('desktop renderer: deep-link routing', () => {
+    const reg = registryLib.defaultRegistry();
+
+    it('routes nothing for absent, malformed or unknown input', () => {
+        expect(deepLinkRoute(undefined, reg)).toBe(null);
+        expect(deepLinkRoute('', reg)).toBe(null);
+        expect(deepLinkRoute('xchain:', reg)).toBe(null);
+        expect(deepLinkRoute('https://example.com', reg)).toBe(null);
+    });
+
+    it('routes a send link to a hardened Send prefill', () => {
+        expect(deepLinkRoute('xchain://bitcoin-mainnet/BTC?amount=1&to=bc1q123&memo=hi%E2%80%AEx', reg))
+            .toEqual({
+                view: 'send',
+                sendPrefill: {
+                    address: 'bc1q123', amount: '1', tick: 'BTC', chainId: 'bitcoin-mainnet', memo: 'hi␦x',
+                },
+            });
+    });
+
+    it('routes a receive link to Receive, with nothing to prefill', () => {
+        expect(deepLinkRoute('xchain:BTC/receive', reg)).toEqual({ view: 'receive' });
+    });
+
+    it('routes an execute link with a contract and a resolved chain, and refuses one without', () => {
+        expect(deepLinkRoute('xchain:BTC/execute?contract=12&method=foo', reg)).toEqual({
+            view: 'contract-execute',
+            contractRef: { chainId: 'bitcoin-mainnet', contractActionIndex: '12' },
+        });
+        expect(deepLinkRoute('xchain:BTC/execute?method=foo', reg)).toBe(null);
     });
 });

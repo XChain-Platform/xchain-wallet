@@ -27,6 +27,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
+import { isActionOfferedOnChain } from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -180,6 +181,10 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
             if (!r.chainId) return `Row ${i + 1}: pick a chain.`;
             if (!r.fromAddressId) return `Row ${i + 1}: pick a from-address.`;
             if (!r.action) return `Row ${i + 1}: pick an action.`;
+            if (!isActionOfferedOnChain(chainRegistry, r.chainId, r.action)) {
+                const chainName = chainRegistry.get(r.chainId)?.displayName || r.chainId;
+                return `Row ${i + 1}: ${r.action} is not available on ${chainName}.`;
+            }
             const parseErr = parseParamsJson(r.paramsJson);
             if (parseErr) return `Row ${i + 1}: ${parseErr}`;
         }
@@ -588,7 +593,8 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                     onChange={(e) => onChange({ action: e.target.value })}
                 >
                     <option value="">Select action</option>
-                    {actionsList.map((a) => (
+                    {/* One SDK list serves every row; drop what this row's chain refuses at every version. */}
+                    {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)).map((a) => (
                         <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
                     ))}
                 </select>

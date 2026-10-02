@@ -111,3 +111,34 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         expect(screen.getByText(/has not been stored on this device yet/)).toBeTruthy();
     });
 });
+
+describe('BackupSection reveal: a failed password check', () => {
+    /** Submits the password form; the reveal is expected to fail. */
+    async function submitWrongPassword() {
+        fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
+        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'typo' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+    }
+
+    it.each(['AeadAuthError', 'InvalidPasswordError'])('says the password is wrong for %s, not the cipher text', async (name) => {
+        const revealMnemonicRequest = vi.fn(async () => {
+            throw Object.assign(new Error('aes/gcm: invalid ghash tag'), { name });
+        });
+        mount(revealMnemonicRequest);
+        await submitWrongPassword();
+
+        expect(await screen.findByText('Incorrect password.')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/aes\/gcm|ghash/);
+    });
+
+    it('swaps a function-prefixed flow error for plain copy', async () => {
+        const revealMnemonicRequest = vi.fn(async () => {
+            throw new Error('revealMnemonic: password is required');
+        });
+        mount(revealMnemonicRequest);
+        await submitWrongPassword();
+
+        expect(await screen.findByText('Could not show the recovery phrase. Try again.')).toBeTruthy();
+        expect(document.body.textContent).not.toContain('revealMnemonic:');
+    });
+});

@@ -229,13 +229,32 @@ export async function dispatchPreHost(type, request, deps) {
 }
 
 /**
+ * Answer whether a cached session key exists, zeroing the copy read to find out.
+ *
+ * Means exactly `load() != null`, so a cached key that will not decrypt is no
+ * session; a file-exists check would report 'unlocked' for a host that cannot
+ * be built. The fill(0) follows the convention `ensureHost` and `buildHost` keep.
+ *
+ * @param {{ load: () => Promise<Uint8Array | null> }} sessionBackend
+ * @returns {Promise<boolean>}
+ */
+export async function hasSessionKey(sessionBackend) {
+    let bytes = null;
+    try {
+        bytes = await sessionBackend.load();
+        return bytes != null;
+    } finally {
+        if (bytes instanceof Uint8Array) bytes.fill(0);
+    }
+}
+
+/**
  * @param {{ storageBackend: PreHostBackends['storageBackend'], sessionBackend: PreHostBackends['sessionBackend'] }} deps
  */
 export async function handleSessionStatus({ storageBackend, sessionBackend }) {
     const blob = await storageBackend.load();
-    const sessionBytes = await sessionBackend.load();
     const hasWallet = blob !== null;
-    const hasSession = sessionBytes !== null;
+    const hasSession = await hasSessionKey(sessionBackend);
     return {
         hasWallet,
         hasSession,

@@ -177,6 +177,7 @@ import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { deepLinkRoute } from './deepLinkRoute.js';
 
 // Same default chain registry the web shell uses: buildBalanceRows needs it
 // to resolve divisibility / display names for the palette's token rows.
@@ -620,6 +621,35 @@ function AppInner() {
         onResume: setUnlockedView,
         skip: isDetachedWindow.current,
     });
+
+    // OS deep links. Claim the parked link on mount and on every nudge from
+    // main; only what takePending returns is applied, so each link lands once.
+    const [deepLink, setDeepLink] = useState(/** @type {ReturnType<typeof deepLinkRoute>} */ (null));
+    useEffect(() => {
+        const bridge = typeof window !== 'undefined' ? window.xchainWalletDeepLink : undefined;
+        if (!bridge) return undefined;
+        let live = true;
+        const claim = () => {
+            bridge.takePending()
+                .then((event) => {
+                    const route = live ? deepLinkRoute(event?.raw, APP_CHAIN_REGISTRY) : null;
+                    if (route) setDeepLink(route);
+                })
+                .catch(() => { /* a failed claim is dropped; the next nudge claims again */ });
+        };
+        claim();
+        const off = bridge.onUri(claim);
+        return () => { live = false; off(); };
+    }, []);
+    // Apply after unlock and after the last-view resume above, which runs
+    // first in the same pass, so the link's form is the view that sticks.
+    useEffect(() => {
+        if (!deepLink || status.state !== 'unlocked' || !activeWalletId) return;
+        if (deepLink.sendPrefill) setSendPrefill(deepLink.sendPrefill);
+        if (deepLink.contractRef) setContractRef(deepLink.contractRef);
+        setUnlockedView(deepLink.view);
+        setDeepLink(null);
+    }, [deepLink, status.state, activeWalletId]);
 
     // §26: idle auto-lock. Mounted HERE, above the view switch,
     // so one timer spans the whole unlocked session. It used to live in

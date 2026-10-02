@@ -158,6 +158,58 @@ export function assertValidatorLaneChain(chainRegistry, chainId, who) {
     }
 }
 
+// Versions the indexer accepts on Bitcoin only, per the split above; `null`
+// means every version. XBRIDGE v0 is the Bitcoin lock leg (bridgeLegFor).
+const BITCOIN_ONLY_VERSIONS = /** @type {Record<string, number[] | null>} */ ({
+    COLLECT: null,
+    STAKE: [1, 2],
+    UNSTAKE: [0],
+    DELEGATE: [0, 2],
+    XBRIDGE: [0],
+});
+// Versions the indexer refuses on Bitcoin: XBRIDGE v1 is the burn back to it.
+const NOT_ON_BITCOIN_VERSIONS = /** @type {Record<string, number[]>} */ ({ XBRIDGE: [1] });
+
+/** Actions whose acceptance depends on the chain, so a generic composer checks them. */
+export const CHAIN_GATED_ACTIONS = Object.freeze(Object.keys(BITCOIN_ONLY_VERSIONS));
+
+/**
+ * Refuse an action version the indexer always rejects on this chain, before a
+ * generic composer signs it and the user pays a fee for an invalid record.
+ *
+ * @param {{ get(chainId: string): ({ coin?: string } | undefined) }} chainRegistry
+ * @param {string} chainId
+ * @param {string} action
+ * @param {number} version  the version the SDK resolves for the params
+ * @param {string} who  composer name for the error prefix
+ */
+export function assertActionAllowedOnChain(chainRegistry, chainId, action, version, who) {
+    const name = String(action || '').toUpperCase();
+    const onBitcoin = chainRegistry?.get?.(chainId)?.coin === VALIDATOR_LANE_COIN;
+    const btcOnly = BITCOIN_ONLY_VERSIONS[name];
+    if (!onBitcoin && btcOnly !== undefined && (btcOnly === null || btcOnly.includes(version))) {
+        throw new Error(`${who}: ${name} version ${version} is accepted on Bitcoin only, not on ${chainId}`);
+    }
+    if (onBitcoin && NOT_ON_BITCOIN_VERSIONS[name]?.includes(version)) {
+        throw new Error(`${who}: ${name} version ${version} is not accepted on Bitcoin`);
+    }
+}
+
+/**
+ * Whether a composer picker should list `action` for this chain at all: false
+ * only for an action refused there at every version (COLLECT off Bitcoin).
+ *
+ * @param {{ get(chainId: string): ({ coin?: string } | undefined) }} chainRegistry
+ * @param {string} chainId
+ * @param {string} action
+ * @returns {boolean}
+ */
+export function isActionOfferedOnChain(chainRegistry, chainId, action) {
+    const name = String(action || '').toUpperCase();
+    if (BITCOIN_ONLY_VERSIONS[name] !== null) return true;
+    return chainRegistry?.get?.(chainId)?.coin === VALIDATOR_LANE_COIN;
+}
+
 // Protocol-accepted on every chain, form-less by design (see header note 2).
 // ADDRESS moved OUT of this list in PC-32: v0 preferences got a real form
 // (AddressPreferencesForm) and v1 controller-bind already had one

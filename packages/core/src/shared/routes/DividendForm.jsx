@@ -760,10 +760,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         ))}
                     </div>
                 ) : null}
-                <p className={styles.hint}>
-                    DIVIDEND charges an XChain fee based on the number of database
-                    hits (§DIVIDEND.md). Make sure the source address holds enough
-                    DIVIDEND ticker to cover the full payout.
+                <p className={styles.hint} data-testid="dividend-review-fee-hint">
+                    Paying a dividend has a protocol fee that grows with the number
+                    of holders paid, charged separately from the payout. Make sure
+                    this address holds enough {dividendTick.trim().toUpperCase() || 'of the token you are paying out'}
+                    {' '}to cover the full payout.
                 </p>
                 {isWatcherMode ? (
                     <p className={styles.hint}>

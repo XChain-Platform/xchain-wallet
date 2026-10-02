@@ -22,6 +22,8 @@ import {
     OWNER_WITHDRAW_DISABLED_REASON,
 } from './contractResponseShape.js';
 import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -118,18 +120,18 @@ export function ContractDetail({
                 if (deployIdx) {
                     messaging.getActionByIndex({ chainId, actionIndex: String(deployIdx) })
                         .then((a) => { if (!cancelled) setDeployAction(extractSingle(a)); })
-                        .catch((e) => { if (!cancelled) setDeployError(e?.message || String(e)); });
+                        .catch((e) => { if (!cancelled) setDeployError(readFailureMessage(e, 'load the deploy details')); });
                 }
             })
-            .catch((e) => { if (!cancelled) setContractError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setContractError(readFailureMessage(e, 'load this contract')); });
 
         messaging.getContractState({ chainId, contractActionIndex })
             .then((resp) => { if (!cancelled) setState(resp); })
-            .catch((e) => { if (!cancelled) setStateError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setStateError(readFailureMessage(e, 'load the contract state')); });
 
         messaging.getContractBalance({ chainId, contractActionIndex })
             .then((resp) => { if (!cancelled) setBalances(resp); })
-            .catch((e) => { if (!cancelled) setBalancesError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setBalancesError(readFailureMessage(e, 'load the contract balances')); });
 
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
@@ -150,7 +152,7 @@ export function ContractDetail({
                 setExecutions(extractRows(resp));
                 setExecutionsTotal(typeof resp?.total === 'number' ? resp.total : null);
             })
-            .catch((e) => { if (!cancelled) setExecutionsError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setExecutionsError(readFailureMessage(e, 'load the execution history')); });
         return () => { cancelled = true; };
     }, [chainId, contractActionIndex, executionsPage, messaging]);
 
@@ -243,7 +245,7 @@ export function ContractDetail({
                     <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
                     {deployError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load deploy details: {deployError}
+                            {deployError}
                         </StatusMessage>
                     ) : null}
                 </section>
@@ -264,7 +266,7 @@ export function ContractDetail({
                 >
                     {stateError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load contract state: {stateError}
+                            {stateError}
                         </StatusMessage>
                     ) : state === null ? (
                         <p className={styles.entryDescription}>Loading state…</p>
@@ -280,7 +282,7 @@ export function ContractDetail({
                 <Section title="Balances (tokens held by the contract)">
                     {balancesError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load balances: {balancesError}
+                            {balancesError}
                         </StatusMessage>
                     ) : balances === null ? (
                         <p className={styles.entryDescription}>Loading balances…</p>
@@ -292,7 +294,7 @@ export function ContractDetail({
                 <Section title="Execution history">
                     {executionsError && executions.length === 0 ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load executions: {executionsError}
+                            {executionsError}
                         </StatusMessage>
                     ) : executions.length === 0 ? (
                         <p className={styles.entryDescription}>
@@ -303,7 +305,7 @@ export function ContractDetail({
                             {executions.map((row, i) => (
                                 <div key={String(row.action_index ?? i) + ':' + i} className={styles.entry}>
                                     <span className={styles.entryLabel}>
-                                        {row.method || row.METHOD || row.method_name || row.action || '(method)'} #{row.action_index ?? '?'}
+                                        {row.method || row.METHOD || row.method_name || actionDisplayLabel(row.action) || '(method)'} #{row.action_index ?? '?'}
                                         {' '}<ExecutionStatusPill status={row.status} />
                                     </span>
                                     <span className={styles.entryDescription}>

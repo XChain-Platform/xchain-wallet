@@ -47,12 +47,12 @@ assert.ok(
 );
 // Phase-1 broadcast wrap.
 assert.ok(
-    /try \{\s*await encoder\.broadcastTx\(signed\.txHex\);\s*\} catch[\s\S]+?throw new BroadcastFailedError\(\{[\s\S]+?phase: 'phase1'/.test(sws),
+    /try \{\s*await broadcastSigned\(encoder, signed\.txHex\);\s*\} catch[\s\S]+?throw new BroadcastFailedError\(\{[\s\S]+?phase: 'phase1'/.test(sws),
     'submitWithSigner wraps phase-1 broadcastTx rejection in BroadcastFailedError',
 );
 // Phase-2 broadcast wrap.
 assert.ok(
-    /try \{\s*await encoder\.broadcastTx\(phase2Signed\.txHex\);\s*\} catch[\s\S]+?throw new BroadcastFailedError\(\{[\s\S]+?phase: 'phase2'/.test(sws),
+    /try \{\s*await broadcastSigned\(encoder, phase2Signed\.txHex\);\s*\} catch[\s\S]+?throw new BroadcastFailedError\(\{[\s\S]+?phase: 'phase2'/.test(sws),
     'submitWithSigner wraps phase-2 broadcastTx rejection in BroadcastFailedError',
 );
 // Each error carries signedTxHex + txid + chainId so the queue can
@@ -91,10 +91,10 @@ assert.ok(
     /onBroadcastFailure\(\{[\s\S]+?signedTxHex: err\.signedTxHex/.test(sa),
     'submitAction fires onBroadcastFailure with the queue-shaped entry',
 );
-// Non-BroadcastFailedError still goes to the failed branch.
+// A non-BroadcastFailedError fails the record only when nothing reached the network.
 assert.ok(
-    /\} else if \(pending\) \{\s*await writePending\(\{\s*status: 'failed'/.test(sa),
-    'submitAction still flips PendingTx to failed for non-broadcast errors',
+    /\} else if \(pending\) \{[\s\S]+?await stampPending\(phase1Landed[\s\S]+?: \{ status: 'failed', error \}\);/.test(sa),
+    'submitAction flips PendingTx to failed for non-broadcast errors before phase 1 lands',
 );
 
 // --- 3. Every flow passes onBroadcastFailure through ---------------------

@@ -27,13 +27,15 @@
  *
  * @typedef {Object} BroadcastQueueStore
  * @property {BroadcastQueueStorage | null} storage  the one writer of the stored key
- * @property {Map<string, any[]>} queues  walletId to its live entry array
+ * @property {Map<string, import('./broadcastQueueStorage.js').QueueEntry[]>} queues  walletId to its live entry array
  * @property {Array<{ id: string, walletId?: string, pendingTxId: string, op: 'patch' | 'discard', patch?: object, recordedAt: number }>} owed
  *   PendingTx writes a closed or refusing vault could not take yet
  * @property {boolean} loaded  the stored blob has been read into `queues`
  * @property {boolean} sealed  a wallet wipe ended this store; nothing writes again
  * @property {Promise<boolean> | null} loadPromise  the single-flight rehydrate
  * @property {Set<string>} inFlight  `walletId:entryId` claims of broadcasts on the network
+ * @property {Set<string>} prunedWallets  walletIds removed before `loaded` latched,
+ *   which the rehydrate merge skips and its write-back drops from the blob
  */
 
 /**
@@ -52,6 +54,7 @@ export function createBroadcastQueueStore({ storage = null } = {}) {
         sealed: false,
         loadPromise: null,
         inFlight: new Set(),
+        prunedWallets: new Set(),
     };
 }
 
@@ -70,6 +73,7 @@ export async function sealBroadcastQueueStore(store) {
     store.sealed = true;
     store.queues.clear();
     store.owed = [];
+    store.prunedWallets?.clear();
     if (typeof store.storage?.clear === 'function') {
         try {
             await store.storage.clear();

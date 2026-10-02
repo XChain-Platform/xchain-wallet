@@ -48,6 +48,7 @@ import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -62,6 +63,18 @@ const ACTION_BTN = {
     fontSize: 'var(--xc-text-sm)',
     cursor: 'pointer',
 };
+
+// Treat a seed-decrypt tag mismatch as a mistyped password (its message is the cipher library's).
+// Matched by name, since errors cross the shell messaging boundary as plain objects.
+function isWrongPasswordError(err) {
+    const name = err?.name;
+    return name === 'AeadAuthError' || name === 'InvalidPasswordError';
+}
+
+/** Plain copy for a password-gated backup step that failed. */
+function passwordStepFailure(err, fallback) {
+    return isWrongPasswordError(err) ? 'Incorrect password.' : userFacingMessage(err, fallback);
+}
 
 /**
  * @param {object} props
@@ -192,7 +205,7 @@ export function BackupSection({ activeWallet }) {
             const name = err?.name || '';
             const msg = name === 'NoMnemonicForWifOnlyError'
                 ? 'This wallet was imported from a private key only. There is no seed phrase to reveal.'
-                : (err?.message || 'Failed to reveal seed phrase.');
+                : passwordStepFailure(err, 'Could not show the recovery phrase. Try again.');
             setRevealError(msg);
         } finally {
             setRevealing(false);
@@ -294,7 +307,7 @@ export function BackupSection({ activeWallet }) {
             setAutoSync(null);
         } catch (err) {
             if (!isUserRejection(err)) {
-                setPublishError(err?.message || 'Failed to publish labels.');
+                setPublishError(passwordStepFailure(err, 'Failed to publish labels.'));
             }
             setPublishStage('form');
         } finally {
@@ -342,7 +355,7 @@ export function BackupSection({ activeWallet }) {
             setRestoreResult({ ...r, requestedChainId: chainId });
             setRestoreStage('result');
         } catch (err) {
-            setRestoreError(err?.message || 'Failed to check the chain for backed-up contacts.');
+            setRestoreError(passwordStepFailure(err, 'Failed to check the chain for backed-up contacts.'));
             setRestoreStage('form');
         }
     }
@@ -892,14 +905,6 @@ function DryRunReport({ result, onDone }) {
 }
 
 const chainRegistry = registryLib.defaultRegistry();
-
-// Name each single-key address type by its family word, as MultisigBadge does for multisig.
-const ADDRESS_TYPE_LABEL = {
-    p2pkh: 'Classic',
-    'p2sh-p2wpkh': 'SegWit (compatible)',
-    p2wpkh: 'SegWit',
-    p2tr: 'Taproot',
-};
 
 function DryRunChainReport({ chain }) {
     const descriptor = chain.chainId ? chainRegistry.get(chain.chainId) : null;

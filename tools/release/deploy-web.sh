@@ -137,6 +137,24 @@ cp "$TARBALL" "$STAGED_TARBALL" || {
     echo "deploy-web.sh: could not stage a private copy of '$TARBALL'." >&2
     exit 1
 }
+# Stage the manifest and its signature too, for the same reason: verify.sh
+# reads the manifest several times (hash table, header, signature) and the gate
+# below reads it again, so every read must see one private object. The
+# basename is kept because verify.sh takes the tag anchor from it, and the
+# subdirectory keeps the staged artifact alone in --input.
+mkdir "$STAGE/manifest" || { echo "deploy-web.sh: could not create a manifest staging dir." >&2; exit 1; }
+STAGED_MANIFEST="$STAGE/manifest/$(basename "$MANIFEST")"
+cp "$MANIFEST" "$STAGED_MANIFEST" || {
+    echo "deploy-web.sh: could not stage a private copy of '$MANIFEST'." >&2
+    exit 1
+}
+# A missing .asc is left for verify.sh to refuse when a signature is required.
+if [[ -f "$MANIFEST.asc" ]]; then
+    cp "$MANIFEST.asc" "$STAGED_MANIFEST.asc" || {
+        echo "deploy-web.sh: could not stage a private copy of '$MANIFEST.asc'." >&2
+        exit 1
+    }
+fi
 
 # PROVENANCE, BEFORE ANYTHING IS WRITTEN. A tarball that fails here has cost
 # nothing; one that fails after the flip is already being served. verify.sh
@@ -146,7 +164,7 @@ cp "$TARBALL" "$STAGED_TARBALL" || {
 # basename, which the staged copy keeps.
 VERIFY_ARGS=(
     --input "$STAGE"
-    --manifest "$MANIFEST"
+    --manifest "$STAGED_MANIFEST"
     --artifact "$(basename "$TARBALL")"
     --tag "$TAG"
 )
@@ -164,8 +182,8 @@ bash "$HERE/verify.sh" "${VERIFY_ARGS[@]}" >&2 || {
 
 # Refuse unless the manifest records the dev-mock gate as `enforced`, the rule
 # the desktop updater applies. verify.sh only warns, and this step puts the
-# bytes live. Read from the same manifest the check above just verified.
-M_GATE="$(sed -n 's/^# dev-mock-gate: //p' "$MANIFEST" | head -1)"
+# bytes live. Read from the staged copy the check above just verified.
+M_GATE="$(sed -n 's/^# dev-mock-gate: //p' "$STAGED_MANIFEST" | head -1)"
 if [[ "$M_GATE" != "enforced" ]]; then
     echo "deploy-web.sh: $MANIFEST records the dev-mock gate as '${M_GATE:-unrecorded}', not 'enforced'; refusing to deploy." >&2
     echo "  The gate keeps the fabricated-address dev SDK, which cannot sign or" >&2

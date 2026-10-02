@@ -28,7 +28,7 @@
 // validator-only SURFACES gate themselves at the form level. These tests hold
 // both halves of that arrangement.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     COMMON_ACTIONS,
     BTC_EXCLUSIVE_ACTIONS,
@@ -37,11 +37,14 @@ import {
     DOGECOIN_ACTIONS,
     validatorLaneChainIds,
     assertValidatorLaneChain,
+    assertActionAllowedOnChain,
+    isActionOfferedOnChain,
 } from '../../../packages/core/src/registry/actions.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { stakeAction } from '../../../packages/core/src/flows/stakeAction.js';
 import { unstakeAction, collectAction } from '../../../packages/core/src/flows/unstakeClaimActions.js';
 import { delegateAction, revokeDelegationAction } from '../../../packages/core/src/flows/delegateRevokeActions.js';
+import { advancedAction } from '../../../packages/core/src/flows/advancedAction.js';
 
 // Actions whose contract-lane versions the indexer accepts on any chain, and
 // which a wallet can now also PAY for there. DEPLOY/EXECUTE joined this list in
@@ -137,5 +140,76 @@ describe('validator lane chain gate', () => {
             await expect(run, name).rejects.not.toThrow(/accepted on Bitcoin only/);
         }
         expect(() => assertValidatorLaneChain(registry, 'bitcoin-mainnet', 'x')).not.toThrow();
+    });
+});
+
+describe('generic composer chain gate', () => {
+    const registry = defaultRegistry();
+    const refusedOffBitcoin = [['COLLECT', 0], ['STAKE', 1], ['STAKE', 2], ['UNSTAKE', 0], ['DELEGATE', 0], ['DELEGATE', 2], ['XBRIDGE', 0]];
+    const openEverywhere = [['STAKE', 3], ['UNSTAKE', 1], ['DELEGATE', 1], ['DELEGATE', 3], ['XBRIDGE', 3], ['XBRIDGE', 4], ['SEND', 0]];
+
+    it('refuses the validator versions and XBRIDGE v0 off Bitcoin, and XBRIDGE v1 on it', () => {
+        for (const chainId of ['litecoin-mainnet', 'dogecoin-regtest']) {
+            for (const [action, version] of refusedOffBitcoin) {
+                expect(() => assertActionAllowedOnChain(registry, chainId, action, version, 'x'), `${action} v${version} on ${chainId}`)
+                    .toThrow(`x: ${action} version ${version} is accepted on Bitcoin only, not on ${chainId}`);
+            }
+            expect(() => assertActionAllowedOnChain(registry, chainId, 'XBRIDGE', 1, 'x')).not.toThrow();
+        }
+        for (const [action, version] of refusedOffBitcoin) {
+            expect(() => assertActionAllowedOnChain(registry, 'bitcoin-regtest', action, version, 'x')).not.toThrow();
+        }
+        expect(() => assertActionAllowedOnChain(registry, 'bitcoin-mainnet', 'XBRIDGE', 1, 'x'))
+            .toThrow('x: XBRIDGE version 1 is not accepted on Bitcoin');
+    });
+
+    it('leaves the contract-targeted versions and ungated actions open on every chain', () => {
+        for (const chainId of ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-regtest']) {
+            for (const [action, version] of openEverywhere) {
+                expect(() => assertActionAllowedOnChain(registry, chainId, action, version, 'x'), `${action} v${version} on ${chainId}`)
+                    .not.toThrow();
+            }
+        }
+    });
+
+    it('hides COLLECT from the composer pickers off Bitcoin only', () => {
+        expect(isActionOfferedOnChain(registry, 'bitcoin-regtest', 'COLLECT')).toBe(true);
+        expect(isActionOfferedOnChain(registry, 'litecoin-mainnet', 'COLLECT')).toBe(false);
+        expect(isActionOfferedOnChain(registry, 'dogecoin-regtest', 'collect')).toBe(false);
+        expect(isActionOfferedOnChain(registry, 'litecoin-mainnet', 'STAKE')).toBe(true);
+    });
+
+    /** advancedAction over an SDK whose compose resolves `version`. */
+    function runAdvanced({ chainId, action, version }) {
+        const composeActionString = vi.fn(() => ({ action, version }));
+        const sdk = { actions: { composeActionString } };
+        const run = advancedAction({
+            chainRegistry: registry,
+            sdkRegistry: { get: () => sdk, for: () => sdk },
+            chainId,
+            from: { address: 'addr', publicKey: '02'.padEnd(66, '1'), addressId: 'a1' },
+            action,
+            params: { AMOUNT: '1' },
+        });
+        return { run, composeActionString };
+    }
+
+    it('refuses an auto-versioned validator STAKE on Litecoin before anything is signed', async () => {
+        const { run, composeActionString } = runAdvanced({ chainId: 'litecoin-regtest', action: 'STAKE', version: 1 });
+        await expect(run).rejects.toThrow('advancedAction: STAKE version 1 is accepted on Bitcoin only, not on litecoin-regtest');
+        expect(composeActionString).toHaveBeenCalledWith({ action: 'STAKE', params: { AMOUNT: '1' } }, { validate: false });
+    });
+
+    it('lets a contract STAKE on Litecoin and a validator STAKE on Bitcoin past the gate', async () => {
+        for (const [chainId, version] of [['litecoin-regtest', 3], ['bitcoin-regtest', 1]]) {
+            const { run } = runAdvanced({ chainId, action: 'STAKE', version });
+            await expect(run).rejects.not.toThrow(/accepted on Bitcoin only/);
+        }
+    });
+
+    it('never composes an ungated action twice', async () => {
+        const { run, composeActionString } = runAdvanced({ chainId: 'litecoin-regtest', action: 'SEND', version: 0 });
+        await expect(run).rejects.toBeTruthy();
+        expect(composeActionString).not.toHaveBeenCalled();
     });
 });

@@ -285,7 +285,8 @@ describe('a merged pending entry satisfies the contracts History already has', (
     });
 
     it('is offered for RBF replacement', () => {
-        expect(isEntryReplaceable(fromMempool()).ok).toBe(true);
+        const descriptor = { displayName: 'Bitcoin', feeStrategy: { rbfSupported: true } };
+        expect(isEntryReplaceable(fromMempool(), { descriptor }).ok).toBe(true);
     });
 
     it('is not offered for RBF when the action is not coin-moving', () => {

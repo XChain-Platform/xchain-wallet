@@ -17,6 +17,8 @@
 // the guards below exist precisely because the indexer's own versions
 // are written `tokenInfo && ...` and therefore do NOT run on a create.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
     LOCK_FLAGS,
@@ -67,6 +69,19 @@ describe('LOCK_FLAGS', () => {
         expect(leaks,
             'a LOCK_FLAGS hint is body copy under its own humanized label; say it in the ' +
             "label's words rather than echoing the wire param (which stays on `field`)."
+        ).toEqual([]);
+    });
+
+    // The "permanently locked" warnings on the admin and pause screens are the
+    // same audience, so the same rule holds there.
+    it.each([
+        'packages/core/src/shared/routes/TokenAdminForm.jsx',
+        'packages/core/src/shared/routes/SleepForm.jsx',
+    ])('keeps wire flag names out of the lock warnings in %s', (rel) => {
+        const src = readFileSync(join(process.cwd(), rel), 'utf8');
+        const leaks = src.match(/\(LOCK_[A-Z_]+\)|ISSUE field/g) || [];
+        expect(leaks,
+            'a lock warning says what is locked in plain words; the wire name stays on LOCK_FLAGS[].field',
         ).toEqual([]);
     });
 });

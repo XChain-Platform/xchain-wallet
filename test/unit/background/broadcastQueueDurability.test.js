@@ -61,10 +61,10 @@ const record = (id, extra = {}) => ({
 });
 
 /** A host whose vault can attribute A_ADDR to wallet W. */
-function makeHost({ storage, pendingTxs = memCollection(), broadcastTx = vi.fn() } = {}) {
+function makeHost({ storage, pendingTxs = memCollection(), broadcastTx = vi.fn(), vault } = {}) {
     const sdk = { encoder: { broadcastTx } };
     const host = createBackgroundHost({
-        vault: {
+        vault: vault ?? {
             pendingTxs,
             wallets: { list: async () => [{ id: W }], get: async (id) => ({ id, importedKeys: [] }) },
             accounts: { findBy: async (k, v) => (k === 'walletId' ? [{ id: `acct-${v}`, walletId: v }] : []) },
@@ -220,7 +220,9 @@ describe('discarding a resumed claim retires its record', () => {
 
         const inFlight = h.call('broadcast.queue.broadcast', { walletId: W, id: row.id });
         await vi.waitFor(async () => { expect((await records.get('p1')).status).toBe('broadcasting'); });
-        await h.call('broadcast.queue.discard', { walletId: W, id: row.id });
+        const discard = await h.call('broadcast.queue.discard', { walletId: W, id: row.id });
+        expect(discard.ok).toBe(false);
+        expect(discard.error.message).toMatch(/already being broadcast/);
         expect((await records.get('p1')).status).toBe('broadcasting');
 
         gate.resolve('tx-p1');
@@ -293,5 +295,84 @@ describe('the vault rebuild runs while the queue blob is unreadable', () => {
         store.recover();
         const ids = (await h.list()).map((e) => e.signedTxHex).sort();
         expect(ids).toEqual(['hex-p1', 'hex-psbt']);
+    });
+});
+
+describe('a wallet removed while the queue blob is unreadable stays removed', () => {
+    const GONE = 'w-gone';
+    const queued = (id) => ({ id, chainId: CHAIN, signedTxHex: `hex-${id}`, summary: id, signedAt: 1 });
+
+    /** A vault `removeWallet` can walk, holding wallets W and GONE. */
+    async function removableVault() {
+        const wallets = memCollection();
+        await wallets.put({ id: W, importedKeys: [] });
+        await wallets.put({ id: GONE, importedKeys: [] });
+        return {
+            wallets,
+            accounts: memCollection(),
+            addresses: memCollection(),
+            pendingTxs: memCollection(),
+            pendingAirdrops: memCollection(),
+            multisigSigningSessions: memCollection(),
+            watchlistEntries: memCollection(),
+            priceAlerts: memCollection(),
+            signers: memCollection(),
+            settings: { get: async () => ({ schemaVersion: 2, ads: { enabled: false, perChain: {} } }), put: async () => {} },
+        };
+    }
+
+    it('drops the removed wallet from the blob once the read recovers', async () => {
+        const store = flakyStorage({ [GONE]: [queued('G')], [W]: [queued('K')] });
+        const h = makeHost({ storage: store.adapter, vault: await removableVault() });
+        await h.call('wallet.remove', { walletId: GONE });
+
+        store.recover();
+        await h.list();
+        await settle();
+        expect(store.saves.at(-1)).toEqual({ [W]: [queued('K')] });
+        expect((await h.call('broadcast.queue.list', { walletId: GONE })).result).toEqual([]);
+    });
+
+    it('keeps the removal out of the write-back of entries queued during the outage', async () => {
+        const store = flakyStorage({ [GONE]: [queued('G')], [W]: [queued('K')] });
+        const h = makeHost({ storage: store.adapter, vault: await removableVault() });
+        await h.call('wallet.remove', { walletId: GONE });
+        const parked = await h.call('broadcast.queue.enqueue', { walletId: W, chainId: CHAIN, signedTxHex: 'hex-new' });
+        expect(parked.result.persisted).toBe(false);
+
+        store.recover();
+        await h.list();
+        await settle();
+        const saved = store.saves.at(-1);
+        expect(Object.keys(saved)).toEqual([W]);
+        expect(saved[W].map((e) => e.signedTxHex)).toEqual(['hex-K', 'hex-new']);
+    });
+
+    it('drops the removed wallet from the recovered journal', async () => {
+        let readable = false;
+        const saved = [];
+        const storage = {
+            load: async () => {
+                if (!readable) throw new Error('storage unreadable');
+                return { [W]: [queued('K')] };
+            },
+            loadSettlements: async () => [
+                { id: 's-gone', walletId: GONE, pendingTxId: 'p-gone', op: 'patch', patch: { status: 'broadcast' } },
+                { id: 's-kept', walletId: W, pendingTxId: 'p-kept', op: 'patch', patch: { status: 'broadcast' } },
+            ],
+            save: async () => {},
+            saveSettlements: async (owed) => { saved.push(owed.map((s) => s.id)); },
+            clear: async () => {},
+        };
+        const vault = await removableVault();
+        vault.pendingTxs.get = async () => { throw new Error('VaultStateError: vault is closed'); };
+        const h = makeHost({ storage, vault });
+        await h.call('wallet.remove', { walletId: GONE });
+
+        readable = true;
+        await h.list();
+        await settle();
+        expect(saved.length).toBeGreaterThan(0);
+        expect(saved.at(-1)).toEqual(['s-kept']);
     });
 });

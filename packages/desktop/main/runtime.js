@@ -58,6 +58,7 @@ import {
 } from '@xchain-wallet/core';
 import {
     dispatchPreHost,
+    hasSessionKey,
     PRE_HOST_MESSAGE_TYPES,
 } from '@xchain-wallet/extension/src/background/sessionMeta.js';
 import { serializeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
@@ -195,7 +196,7 @@ export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
     // session backend would only churn the disk.
     let hasPersistedKey = false;
     try {
-        hasPersistedKey = (await runtime.sessionBackend.load()) != null;
+        hasPersistedKey = await hasSessionKey(runtime.sessionBackend);
     } catch {
         hasPersistedKey = false;
     }

@@ -27,6 +27,7 @@ import { useMessaging } from '../useMessaging.js';
 import { normalizeOrderbook } from '../../market/orderbook.js';
 import { sampleOrderbookFor } from '../../market/sampleMarketData.js';
 import { divideDecimalStrings } from '../utils/amountFormat.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -75,7 +76,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 // outages; real wallets surface the error instead of
                 // showing fabricated prices.
                 if (demo) setBook(normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
-                setLoadError(err?.message || String(err));
+                setLoadError(readFailureMessage(err, 'load the order book'));
             }
         };
         tick();

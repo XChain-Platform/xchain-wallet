@@ -34,10 +34,11 @@ const ENVELOPE = {
     tapleafHash: 'cc'.repeat(32),
 };
 
-function harness({ withReveal = true, revealSignThrows = false, revealBroadcastThrows = false } = {}) {
+function harness({ withReveal = true, revealSignThrows = false, revealBroadcastThrows = false, commitAlreadyKnown = false } = {}) {
     const trace = [];
     const broadcastTx = vi.fn(async () => { trace.push('broadcast');
         if (revealBroadcastThrows && trace.filter(t => t === 'broadcast').length === 2) throw new Error('node rejected the reveal');
+        if (commitAlreadyKnown && trace.filter(t => t === 'broadcast').length === 1) throw new Error('Encoder RPC error: txn-already-in-mempool');
         return {}; });
     const signPsbt = vi.fn(async ({ envelopeReveal }) => {
         if (envelopeReveal) {
@@ -124,6 +125,14 @@ describe('submitWithSigner completes the envelope pair', () => {
             signedTxHex: 'reveal-hex',
             phase: 'envelope_reveal',
         });
+    });
+
+    it('a commit the node already holds still gets its reveal, and the recovery record clears', async () => {
+        const h = harness({ commitAlreadyKnown: true });
+        const result = await call(h);
+        expect(h.trace).toEqual(['signCommit', 'signReveal', 'broadcast', 'broadcast']);
+        expect(result.txid).toBe('REVEALTXID');
+        expect(listPendingCommits()).toHaveLength(0);
     });
 
     it('a single-PSBT response never takes any of this path', async () => {

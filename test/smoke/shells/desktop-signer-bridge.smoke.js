@@ -23,7 +23,8 @@
 //   - `webContents.destroyed` tears down any still-owned signerIds
 //     and rejects in-flight sign requests with
 //     `signer bridge disconnected`.
-//   - A detach() returned from the listener fully clears state.
+//   - A detach() returned from the listener fully clears state,
+//     including each window's document-end hooks.
 
 import { strict as assert } from 'node:assert';
 
@@ -220,10 +221,40 @@ assert.equal(bgSignerBridge.getTransport('sig-detach-a'), null,
 assert.equal(bgSignerBridge.getTransport('sig-detach-b'), null,
     'detach() clears registered transports');
 
+// --- 6. detach() unsubscribes document-end hooks, so a stale teardown
+//        cannot clear an id a re-attached listener registered ---------
+
+resetRegistry();
+const ipc5 = createFakeIpcMain();
+const detach5 = attachSignerBridgeListener({ ipcMain: ipc5 });
+const wc5 = createFakeWebContents(505);
+ipc5._emit('xchain-wallet:signer-bridge', { sender: wc5 }, {
+    kind: 'register', signerIds: ['sig-shared'],
+});
+detach5();
+for (const ev of ['destroyed', 'did-navigate', 'render-process-gone']) {
+    assert.equal(wc5._count(ev), 0, `detach() removes the ${ev} hook`);
+}
+const ipc6 = createFakeIpcMain();
+const detach6 = attachSignerBridgeListener({ ipcMain: ipc6 });
+// Another window registers the id the detached instance once held.
+const wc6 = createFakeWebContents(606);
+ipc6._emit('xchain-wallet:signer-bridge', { sender: wc6 }, {
+    kind: 'register', signerIds: ['sig-shared'],
+});
+const liveShared = bgSignerBridge.getTransport('sig-shared');
+assert.equal(typeof liveShared, 'function', 'the re-attached listener owns sig-shared');
+wc5._emit('did-navigate');
+wc5._destroy();
+assert.equal(bgSignerBridge.getTransport('sig-shared'), liveShared,
+    'a document end on a window the detached listener saw keeps the new transport');
+detach6();
+assert.equal(bgSignerBridge.getTransport('sig-shared'), null, 'detach6() clears its own ids');
+
 // Clean up state from case 1 (we never detached).
 detach1();
 resetRegistry();
 
 console.log(
-    'OK: desktop signer bridge smoke (fake ipcMain + webContents round-trip: lazy per-sender entry, register populates signerBridge, transport postMessage reaches webContents.send, response correlator resolves, unregister clears registry, webContents destroy rejects in-flight with "signer bridge disconnected" + clears owned ids, detach() drops all state)',
+    'OK: desktop signer bridge smoke (fake ipcMain + webContents round-trip: lazy per-sender entry, register populates signerBridge, transport postMessage reaches webContents.send, response correlator resolves, unregister clears registry, webContents destroy rejects in-flight with "signer bridge disconnected" + clears owned ids, detach() drops all state and unsubscribes document-end hooks)',
 );

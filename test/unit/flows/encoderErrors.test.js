@@ -45,7 +45,7 @@ function acrossBoundary(err) {
     return revived;
 }
 
-// Every throw site in xchain-sdk src/encoder.js, by code and by its message.
+// Every error the SDK mints itself, by code and by its message.
 const THROW_SITES = [
     ['NO_UTXOS', 'no spendable UTXOs found for the funding address'],
     ['UTXO_TRACKER_STALE', 'utxo-tracker view is not synced; refusing to select utxos from it'],
@@ -62,6 +62,74 @@ const THROW_SITES = [
     ['ENCODER_HTTP_400', 'Encoder returned HTTP 400 for method create_tx'],
     ['ENCODER_RPC_ERROR', 'Encoder RPC error: insufficient funds in the funding set'],
 ];
+
+// The encoder's own refusals for the same two conditions (xchain-encoder
+// input_candidates.js, request_resolution.js), forwarded as -32010 with the
+// code in data.reason and wrapped by the SDK as ENCODER_RPC_ERROR.
+const ENCODER_ORIGIN = [
+    ['NO_UTXOS', 'no utxos were provided and no utxos found on the blockchain'],
+    ['UTXO_TRACKER_STALE', 'utxo-tracker view is stale (lag 12 blocks, exceeds 6-block threshold); refusing to select utxos from it'],
+    ['UTXO_TRACKER_STALE', 'utxo-tracker view is stale (lag -2 blocks, tracker is ahead of the node so its view is orphaned); refusing to select utxos from it'],
+];
+
+function encoderRpcError(reason, message, { viaContext = true } = {}) {
+    const data = { reason };
+    return sdkEncoderError('ENCODER_RPC_ERROR', `Encoder RPC error: ${message}`, {
+        method: 'create_tx',
+        rpcError: { code: -32010, message, data },
+        context: viaContext ? data : null,
+    });
+}
+
+describe('encoderErrorCode: encoder-origin NO_UTXOS / UTXO_TRACKER_STALE', () => {
+    it('lifts the nested data.reason off an ENCODER_RPC_ERROR', () => {
+        for (const [code, message] of ENCODER_ORIGIN) {
+            expect(encoderErrorCode(encoderRpcError(code, message)), message).toBe(code);
+            expect(encoderErrorCode(encoderRpcError(code, message, { viaContext: false })), message).toBe(code);
+        }
+    });
+
+    it('recovers the code from the encoder wording after the messaging boundary', () => {
+        for (const [code, message] of ENCODER_ORIGIN) {
+            expect(encoderErrorCode(acrossBoundary(encoderRpcError(code, message))), message).toBe(code);
+        }
+    });
+
+    it('keeps every other RPC refusal as ENCODER_RPC_ERROR', () => {
+        const funds = encoderRpcError('INSUFFICIENT_FUNDS', 'insufficient funds in the funding set');
+        expect(encoderErrorCode(funds)).toBe('ENCODER_RPC_ERROR');
+        for (const [reason, message] of [
+            ['UTXO_TRACKER_HALTED', 'utxo-tracker is halted (unrecoverable reorg); refusing to select utxos from it'],
+            ['UTXO_TRACKER_NOT_READY', 'utxo-tracker has not reconverged its mempool yet, so an already-spent confirmed output cannot be filtered; refusing to select utxos from it'],
+        ]) {
+            expect(encoderErrorCode(encoderRpcError(reason, message)), reason).toBe('ENCODER_RPC_ERROR');
+            expect(encoderErrorCode(acrossBoundary(encoderRpcError(reason, message))), reason).toBe('ENCODER_RPC_ERROR');
+        }
+        const noDetails = sdkEncoderError('ENCODER_RPC_ERROR', 'Encoder RPC error: createTx requires pubkey', { context: null });
+        expect(encoderErrorCode(noDetails)).toBe('ENCODER_RPC_ERROR');
+    });
+
+    it('gives the tailored sentence, never the wire wording, in-process and across the boundary', () => {
+        for (const [code, message] of ENCODER_ORIGIN) {
+            for (const err of [encoderRpcError(code, message), acrossBoundary(encoderRpcError(code, message))]) {
+                const copy = encoderErrorMessage(err, { coinTicker: 'DOGE' });
+                expect(copy, message).not.toMatch(/utxo/i);
+                expect(copy, message).not.toContain('Encoder RPC error:');
+                expect(copy, message).toMatch(code === 'NO_UTXOS'
+                    ? /add doge to this address/i
+                    : /not a problem with your wallet or your address/i);
+            }
+        }
+    });
+
+    it('reads the fee amount back off an encoder-origin NO_UTXOS that crossed the boundary', () => {
+        const err = annotateEncoderFeeRequirement(
+            encoderRpcError(...ENCODER_ORIGIN[0]),
+            { requiredFeeNative: '20.00000000' },
+        );
+        expect(encoderErrorMessage(acrossBoundary(err), { coinTicker: 'DOGE' })).toContain('20 DOGE');
+    });
+});
 
 describe('encoderErrorCode', () => {
     it('reads the code off the error when it survived', () => {

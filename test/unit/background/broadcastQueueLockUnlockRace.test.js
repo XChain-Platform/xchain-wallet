@@ -33,9 +33,9 @@ const KEY = 'xchain.broadcastQueue';
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); };
 
 function deferred() {
-    let resolve;
-    const promise = new Promise((r) => { resolve = r; });
-    return { promise, resolve };
+    let resolve; let reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
 }
 
 /** A chrome.storage.local double over one plain object. */
@@ -207,14 +207,40 @@ describe('broadcast queue across a lock and unlock', () => {
         expect(again.error.message).toMatch(/already being broadcast/);
         expect(broadcastTx2).not.toHaveBeenCalled();
 
-        await h2('broadcast.queue.discard', { walletId: W, id: 'q-E' });
+        const discard = await h2('broadcast.queue.discard', { walletId: W, id: 'q-E' });
+        expect(discard.ok).toBe(false);
+        expect(discard.error.message).toMatch(/already being broadcast/);
         expect(table.rows.has('p-E')).toBe(true);
+        const listed = await h2('broadcast.queue.list', { walletId: W });
+        expect(listed.result.map((x) => x.signedTxHex)).toContain('hex-E');
 
         gate.resolve('txid-E');
         await inFlight;
         await settle();
         await h2('broadcast.queue.list', { walletId: W });
         expect(table.rows.get('p-E').status).toBe('broadcast');
+    });
+
+    it('a refused discard keeps E listed when the in-flight broadcast then fails transiently', async () => {
+        const { chromeStore, table, gate, inFlight, h2 } = await lockMidBroadcast({ shared: true });
+        const discard = await h2('broadcast.queue.discard', { walletId: W, id: 'q-E' });
+        expect(discard.ok).toBe(false);
+
+        gate.reject(new Error('ECONNRESET'));
+        expect((await inFlight).ok).toBe(false);
+        await settle();
+
+        // E is still queued on both surfaces, so the user can still act on it.
+        const listed = await h2('broadcast.queue.list', { walletId: W });
+        expect(listed.result.map((x) => x.signedTxHex)).toContain('hex-E');
+        expect(storedHexes(chromeStore)).toContain('hex-E');
+        expect(table.rows.get('p-E').status).toBe('queued');
+
+        const again = await h2('broadcast.queue.discard', { walletId: W, id: 'q-E' });
+        expect(again.result).toEqual({ discarded: true });
+        expect(table.rows.has('p-E')).toBe(false);
+        const after = await h2('broadcast.queue.list', { walletId: W });
+        expect(after.result.map((x) => x.signedTxHex)).not.toContain('hex-E');
     });
 
     it('a journal record the torn-down host writes during the next host\'s flush survives it', async () => {

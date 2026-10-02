@@ -1445,7 +1445,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <p className={styles.warning}>
                             This airdrop pays every current holder of the underlying
                             token(s), not a fixed list of addresses. That holder set is
-                            only locked in when the AIRDROP transaction executes
+                            only locked in when the airdrop transaction confirms
                             on-chain; the count above is a snapshot taken now and can
                             change (and be inflated) before then. It is an estimate, not
                             a guarantee of who gets paid or the final cost.
@@ -1453,11 +1453,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     </div>
                 ) : null}
                 <p className={styles.hint}>
-                    Airdrops charge an XChain fee based on the number of
-                    database hits. The network computes the exact
-                    fee at execute time; make sure the source address holds
-                    enough of {token.trim().toUpperCase() || 'the token'} +
-                    fee tick to cover the full distribution.
+                    Airdrops have a protocol fee that grows with the number of
+                    recipients, and the network sets the exact amount when the
+                    airdrop confirms. Make sure the source address holds enough
+                    {' '}{token.trim().toUpperCase() || 'of the token'} for the full
+                    distribution, plus enough to pay the protocol fee.
                 </p>
                 {/* Credentials live on the confirm page for leg 2 too. */}
                 {singleEncode ? null : (
@@ -1802,8 +1802,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         This publishes a new token list, then airdrops to every current
                         holder of {memberTicks.length === 1 ? 'that token' : 'these tokens'}.
                         A wallet holding more than one listed token can receive more than
-                        one payout. The holder set is only fixed when the AIRDROP
-                        transaction executes on-chain, not now; the count above is a
+                        one payout. The holder set is only fixed when the airdrop
+                        transaction confirms on-chain, not now; the count above is a
                         preview, not a guarantee of who gets paid.
                     </p>
                 </>
@@ -1836,8 +1836,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                     : holderPreview.total != null
                                         ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now.`
                                         : ''}
-                            {' '}The holder set is only fixed when the AIRDROP transaction
-                            executes on-chain, not now; treat this as an estimate.
+                            {' '}The holder set is only fixed when the airdrop transaction
+                            confirms on-chain, not now; treat this as an estimate.
                         </p>
                     ) : existingListDetail?.kind === 'address' ? (
                         <p className={styles.hint}>

@@ -22,6 +22,7 @@ import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -996,7 +997,13 @@ export function AddressList({
             { label: 'Type', value: typeLabelFor(selected) },
         ];
         if (selected.record?.addressType) {
-            fields.push({ label: 'Address format', value: String(selected.record.addressType).toUpperCase() });
+            const type = selected.record.addressType;
+            const prefix = addressTypeHint(d, type);
+            fields.push({
+                label: 'Address format',
+                value: prefix ? `${addressTypeLabel(type)} (starts with ${prefix})` : addressTypeLabel(type),
+                hint: 'How this address is written. The format decides what the address starts with; some older services cannot send to the newer SegWit and Taproot formats.',
+            });
         }
         if (selected.multisig) {
             // The badge, not a template string: interpolating .scheme printed the
