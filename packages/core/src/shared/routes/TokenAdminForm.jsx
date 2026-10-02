@@ -52,6 +52,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
+import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -1425,7 +1426,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             <span className={styles.detailsLabel}>Allow-list</span>
                             <span className={styles.detailsValue}>
                                 {allowListIdx && allowListIdx !== '0'
-                                    ? `List #${allowListIdx}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${listLabel(allowListIdx)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
                                     : (allowListIdx === '0' ? 'None after this update' : 'None (anyone may interact)')}
                             </span>
                         </div>
@@ -1443,7 +1444,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             <span className={styles.detailsLabel}>Block-list</span>
                             <span className={styles.detailsValue}>
                                 {blockListIdx && blockListIdx !== '0'
-                                    ? `${sharedBlockListLabel || `List #${blockListIdx}`}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${sharedBlockListLabel || listLabel(blockListIdx)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
                                     : (blockListIdx === '0' ? 'None after this update' : 'None')}
                             </span>
                         </div>
