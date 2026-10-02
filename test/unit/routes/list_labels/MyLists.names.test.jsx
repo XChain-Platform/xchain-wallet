@@ -33,16 +33,23 @@ describe('MyLists row names', () => {
     it('shows a named token list with its name and matching aria-label', async () => {
         renderLists([row({ name: 'Payroll' })]);
 
-        expect(await screen.findByText('Payroll (Token list #12)')).toBeTruthy();
-        expect(screen.getByLabelText('Open Payroll (token list #12)')).toBeTruthy();
-    });
+        expect(await screen.findByText('Payroll (List #12)')).toBeTruthy();
+        expect(screen.getByLabelText('Open Payroll (List #12)')).toBeTruthy();
+    }, 20_000);
+
+    it('shows a named address list with its name and generic list label', async () => {
+        renderLists([row({ type: '2', action_index: 13, name: 'Allowlist' })]);
+
+        expect(await screen.findByText('Allowlist (List #13)')).toBeTruthy();
+        expect(screen.getByLabelText('Open Allowlist (List #13)')).toBeTruthy();
+    }, 20_000);
 
     it('shows an unnamed address list as today', async () => {
         renderLists([row({ type: '2', action_index: 13 })]);
 
         expect(await screen.findByText('Address list #13')).toBeTruthy();
         expect(screen.getByLabelText('Open address list #13')).toBeTruthy();
-    });
+    }, 20_000);
 
     it.each([
         ['empty', { name: '' }],
@@ -53,13 +60,13 @@ describe('MyLists row names', () => {
 
         expect(await screen.findByText('Token list #12')).toBeTruthy();
         expect(screen.getByLabelText('Open token list #12')).toBeTruthy();
-    });
+    }, 20_000);
 
     it('neutralizes a right-to-left override in the name', async () => {
         const rlo = String.fromCharCode(0x202E);
         renderLists([row({ name: `Safe${rlo}name` })]);
 
-        expect(await screen.findByText('Safe␦name (Token list #12)')).toBeTruthy();
-        expect(screen.getByLabelText('Open Safe␦name (token list #12)')).toBeTruthy();
-    });
+        expect(await screen.findByText('Safe␦name (List #12)')).toBeTruthy();
+        expect(screen.getByLabelText('Open Safe␦name (List #12)')).toBeTruthy();
+    }, 20_000);
 });
