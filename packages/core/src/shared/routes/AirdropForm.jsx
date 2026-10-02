@@ -56,6 +56,7 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
 import { MEMO_HINT } from '../utils/memoLimit.js';
+import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -1815,7 +1816,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     <div className={styles.fromLine}>
                         <span className={styles.hint}>
                             {listActionIndex
-                                ? `List #${listActionIndex}${existingListDetail?.kind === 'tick' ? ' (token list)' : existingListDetail?.kind === 'address' ? ' (address list)' : ''}`
+                                ? `${listLabel(listActionIndex)}${existingListDetail?.kind === 'tick' ? ' (token list)' : existingListDetail?.kind === 'address' ? ' (address list)' : ''}`
                                 : 'No list chosen yet.'}
                         </span>
                         <Button type="button" variant="ghost" onClick={() => setListPickerOpen(true)}>
