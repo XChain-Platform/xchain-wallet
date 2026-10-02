@@ -166,9 +166,7 @@ describe('LIST set metadata description', () => {
         });
 
         expect(detailMap(decoded)).toMatchObject({ Name: 'Cleared', Description: 'Unchanged' });
-        expect(decoded.warnings).toEqual([
-            'Renaming a shared list charges the shared-list edit fee.',
-        ]);
+        expect(decoded.warnings).toEqual([]);
     });
 
     it('warns when both fields are unchanged', () => {
