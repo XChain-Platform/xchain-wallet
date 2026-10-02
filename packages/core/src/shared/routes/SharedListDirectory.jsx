@@ -13,6 +13,7 @@ import { Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-w
 import { registry as registryLib } from '@xchain-wallet/core';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import {
     bindLabel,
     orderSharedLists,
@@ -34,6 +35,7 @@ function listType(type) {
 function normalizeEntry(entry) {
     return {
         ...entry,
+        name: typeof entry.name === 'string' && entry.name.length > 0 ? entry.name : null,
         homeChain: entry.homeChain ?? entry.home_chain,
         homeListIndex: entry.homeListIndex ?? entry.home_list_index,
         type: listType(entry.type),
@@ -69,7 +71,7 @@ function valueOrUnknown(value) {
  * @param {string} props.chainId
  * @param {'browse' | 'pick'} props.mode
  * @param {'token' | 'address'} [props.filterType]
- * @param {(selection: { actionIndex: unknown, homeChain: unknown, homeListIndex: unknown, memberCount: unknown }) => void} props.onSelect
+ * @param {(selection: { actionIndex: unknown, homeChain: unknown, homeListIndex: unknown, memberCount: unknown, name?: string }) => void} props.onSelect
  * @param {() => void} props.onBack
  */
 export function SharedListDirectory({ walletId, chainId, mode, filterType, onSelect, onBack }) {
@@ -169,6 +171,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect }) {
         homeChain: entry.homeChain,
         homeListIndex: entry.homeListIndex,
         memberCount: entry.memberCount,
+        ...(entry.name ? { name: entry.name } : {}),
     });
 
     return (
@@ -177,6 +180,12 @@ function SharedListRow({ entry, chainId, pickable, onSelect }) {
             className={styles.detailsList}
             aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)} on ${valueOrUnknown(entry.homeChain)}`}
         >
+            {entry.name ? (
+                <>
+                    <dt className={styles.detailsLabel}>Name</dt>
+                    <dd className={styles.detailsValue}>{neutralizeControlText(entry.name)}</dd>
+                </>
+            ) : null}
             <dt className={styles.detailsLabel}>Home chain</dt>
             <dd className={styles.detailsValue}>
                 {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : valueOrUnknown(entry.homeChain)}
