@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { listLabel } from './listLabel.js';
+
 function validActionIndex(actionIndex) {
     if (typeof actionIndex === 'number') {
         return Number.isInteger(actionIndex) && actionIndex > 0;
@@ -30,6 +32,6 @@ export function sharedBlockPickState(pick) {
         memberCount: typeof pick.memberCount === 'number' && Number.isFinite(pick.memberCount)
             ? pick.memberCount
             : null,
-        label: `List #${blockListIdx} (shared from ${pick.homeChain} list #${pick.homeListIndex})`,
+        label: `${listLabel(blockListIdx, pick.name)} (shared from ${pick.homeChain} list #${pick.homeListIndex})`,
     };
 }

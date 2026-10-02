@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react';
 import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
+import { listLabel } from '../utils/listLabel.js';
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -166,6 +167,10 @@ export function ListPickerScreen({
                     const isUnion = String(row.type) === '3';
                     const status = String(row.status || '');
                     const count = counts[idx];
+                    const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
+                    const titleLabel = typeof row.name === 'string' && row.name.length > 0
+                        ? listLabel(idx, row.name)
+                        : `${kind} list #${idx}`;
                     return (
                         <li key={idx}>
                             <button
@@ -174,7 +179,7 @@ export function ListPickerScreen({
                                 onClick={() => onSelect({ actionIndex: idx, type: String(row.type), memberCount: count ?? null })}
                             >
                                 <span className={styles.abName}>
-                                    {isUnion ? 'Union' : isTick ? 'Token' : 'Address'} list #{idx}
+                                    {titleLabel}
                                     {status && status !== 'valid' ? ` (${status})` : ''}
                                 </span>
                                 <span className={styles.abAddr}>
