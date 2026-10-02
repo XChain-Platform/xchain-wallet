@@ -13,6 +13,7 @@ import { AddressText, Button, ChainBadge, PageHeader, Screen, StatusMessage } fr
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickMemberName } from '../components/TickMemberName.jsx';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -88,6 +89,9 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onTr
         [resolution, state],
     );
     const membershipIndex = state?.membership_action_index != null ? String(state.membership_action_index) : null;
+    const name = typeof data?.name === 'string' && data.name.length > 0 ? data.name : null;
+    const description = typeof data?.description === 'string' && data.description.length > 0
+        ? data.description : null;
 
     const header = (
         <PageHeader onBack={onBack} title={isTick ? 'Token list' : 'Address list'} />
@@ -112,6 +116,18 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onTr
                 <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                 <dt className={styles.detailsLabel}>List index</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
+                {name !== null ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Name</dt>
+                        <dd className={styles.detailsValue}>{neutralizeControlText(name)}</dd>
+                    </>
+                ) : null}
+                {description !== null ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Description</dt>
+                        <dd className={styles.detailsValue}>{neutralizeControlText(description)}</dd>
+                    </>
+                ) : null}
                 <dt className={styles.detailsLabel}>Type</dt>
                 <dd className={styles.detailsValue}>{isTick ? 'Token list' : 'Address list'}</dd>
                 <dt className={styles.detailsLabel}>Created by</dt>
