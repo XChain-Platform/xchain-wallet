@@ -28,6 +28,7 @@ import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -171,6 +172,10 @@ export function ListPickerScreen({
                     const titleLabel = typeof row.name === 'string' && row.name.length > 0
                         ? listLabel(idx, row.name)
                         : `${kind} list #${idx}`;
+                    const description = typeof row.description === 'string' && row.description.length > 0
+                        ? neutralizeControlText(row.description)
+                        : '';
+                    const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
                     return (
                         <li key={idx}>
                             <button
@@ -183,7 +188,7 @@ export function ListPickerScreen({
                                     {status && status !== 'valid' ? ` (${status})` : ''}
                                 </span>
                                 <span className={styles.abAddr}>
-                                    {count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`}
+                                    {description ? `${countText} · ${description}` : countText}
                                 </span>
                             </button>
                         </li>
