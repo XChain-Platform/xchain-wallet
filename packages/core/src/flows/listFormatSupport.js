@@ -30,3 +30,19 @@ export async function listFormatSupport({ sdkRegistry, chainId }) {
         return { ...UNSUPPORTED };
     }
 }
+
+/**
+ * @param {{ sdkRegistry: any, chainId: string }} params
+ * @returns {Promise<boolean>}
+ */
+export async function listMetaSupported({ sdkRegistry, chainId }) {
+    try {
+        const formats = await getActionFormats({ sdkRegistry, chainId, action: 'LIST' });
+        return formats !== null
+            && typeof formats === 'object'
+            && Object.hasOwn(formats, '4')
+            && Object.hasOwn(formats, '5');
+    } catch {
+        return false;
+    }
+}
