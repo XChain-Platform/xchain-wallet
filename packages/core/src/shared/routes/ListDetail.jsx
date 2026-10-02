@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickMemberName } from '../components/TickMemberName.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { listMetaSupported } from '../../flows/listFormatSupport.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,15 +53,17 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onBack
  * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null, source: string | null, parentIndex: string | null }) => void} props.onFork
  * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onShare]     shows "Share list" when passed
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onRename]    shows "Rename list" when passed and supported
  * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]  shows "Transfer list" when passed
  */
-export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onTransfer }) {
+export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
     const [data, setData] = useState(/** @type {any | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [metaSupported, setMetaSupported] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -71,6 +74,21 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onTr
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load list.'); });
         return () => { cancelled = true; };
     }, [chainId, actionIndex, messaging]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setMetaSupported(false);
+        if (!chainId) return () => { cancelled = true; };
+        const sdkRegistry = {
+            get: () => ({
+                getActionFormats: (action) => messaging.getActionFormats({ chainId, action }),
+            }),
+        };
+        Promise.resolve().then(() => listMetaSupported({ sdkRegistry, chainId }))
+            .then((supported) => { if (!cancelled) setMetaSupported(supported === true); })
+            .catch(() => { if (!cancelled) setMetaSupported(false); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const isTick = data ? String(data.type) === '1' : false;
@@ -237,6 +255,11 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onTr
                 {onTransfer ? (
                     <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
                         Transfer list
+                    </Button>
+                ) : null}
+                {onRename && metaSupported ? (
+                    <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
+                        Rename list
                     </Button>
                 ) : null}
             </div>
