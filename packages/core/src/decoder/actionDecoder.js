@@ -49,6 +49,10 @@ import {
     decodeListTransfer,
     decodeUnionListCreate,
 } from './list_share_description.js';
+import {
+    decodeListCreateMeta,
+    decodeListSetMeta,
+} from './list_meta_description.js';
 import { listEditValue } from './list_removal_description.js';
 
 /**
@@ -1002,6 +1006,8 @@ function decodeList(p, chainSuffix) {
 
     if (version === '2') return decodeListShare(p);
     if (version === '3') return decodeListTransfer(p);
+    if (version === '4') return decodeListCreateMeta(p, chainSuffix);
+    if (version === '5') return decodeListSetMeta(p);
 
     if (version === '1') {
         const edit = str(p.EDIT);
