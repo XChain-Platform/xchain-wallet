@@ -81,7 +81,7 @@ export function decodeListSetMeta(p) {
             ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
-            'Updating a shared list name or description charges the shared-list edit fee.',
+            ...(name ? ['Renaming a shared list charges the shared-list edit fee.'] : []),
             ...(!name && !description
                 ? ['Name and description are both unchanged. The indexer will refuse this action as NAME (no change).']
                 : []),

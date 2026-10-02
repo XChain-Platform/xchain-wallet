@@ -147,7 +147,7 @@ describe('LIST set metadata description', () => {
             Memo: 'Quarterly update',
         });
         expect(decoded.warnings).toEqual([
-            'Updating a shared list name or description charges the shared-list edit fee.',
+            'Renaming a shared list charges the shared-list edit fee.',
         ]);
     });
 
@@ -157,6 +157,7 @@ describe('LIST set metadata description', () => {
         });
 
         expect(detailMap(decoded)).toMatchObject({ Name: 'Unchanged', Description: 'Cleared' });
+        expect(decoded.warnings).toEqual([]);
     });
 
     it('describes a cleared name and an unchanged description', () => {
@@ -165,6 +166,9 @@ describe('LIST set metadata description', () => {
         });
 
         expect(detailMap(decoded)).toMatchObject({ Name: 'Cleared', Description: 'Unchanged' });
+        expect(decoded.warnings).toEqual([
+            'Renaming a shared list charges the shared-list edit fee.',
+        ]);
     });
 
     it('warns when both fields are unchanged', () => {
@@ -173,7 +177,6 @@ describe('LIST set metadata description', () => {
         });
 
         expect(decoded.warnings).toEqual([
-            'Updating a shared list name or description charges the shared-list edit fee.',
             'Name and description are both unchanged. The indexer will refuse this action as NAME (no change).',
         ]);
     });
