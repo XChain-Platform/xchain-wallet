@@ -28,6 +28,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
@@ -47,12 +48,17 @@ function listIndex(row) {
     return value == null || value === '' ? null : String(value);
 }
 
+function rowName(row) {
+    return typeof row?.name === 'string' && row.name !== '' ? row.name : null;
+}
+
 function localCandidate(row) {
     const actionIndex = listIndex(row);
     if (!actionIndex) return null;
     return {
         actionIndex,
         type: String(row.type ?? ''),
+        name: rowName(row),
         members: Array.isArray(row.members) ? row.members : undefined,
         shared: false,
     };
@@ -64,6 +70,7 @@ function sharedCandidate(row) {
     return {
         actionIndex: String(value),
         type: String(row.type ?? ''),
+        name: rowName(row),
         members: Array.isArray(row.members) ? row.members : undefined,
         shared: true,
         homeChain: String(row.home_chain ?? ''),
@@ -81,13 +88,19 @@ function mergeCandidates(localRows, sharedRows) {
         });
 }
 
-function candidateName(candidate) {
+function candidateLabel(candidate) {
     const kind = candidate.type === '1' ? 'Token' : 'Address';
     if (!candidate.shared) return `${kind} list #${candidate.actionIndex}`;
     const origin = candidate.homeChain && candidate.homeListIndex
         ? ` from ${candidate.homeChain} list #${candidate.homeListIndex}`
         : '';
     return `Shared ${kind.toLowerCase()} list #${candidate.actionIndex}${origin}`;
+}
+
+function candidateName(candidate) {
+    const label = candidateLabel(candidate);
+    const name = candidate.name ? neutralizeControlText(candidate.name) : '';
+    return name ? `${name} (${label})` : label;
 }
 
 async function readCandidates({ messaging, chainId, addresses }) {
