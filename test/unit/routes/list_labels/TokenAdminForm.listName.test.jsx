@@ -3,6 +3,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MessagingProvider } from '../../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenAdminForm } from '../../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { __clearTokenInfoCache } from '../../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -26,6 +28,18 @@ vi.mock('../../../../packages/core/src/shared/components/ListPickerScreen.jsx', 
 const MAINNET = 'bitcoin-mainnet';
 const REGTEST = 'bitcoin-regtest';
 const TICK = 'POLICY';
+const TOKEN_ADMIN_FORM_SOURCE = readFileSync(
+    resolve('packages/core/src/shared/routes/TokenAdminForm.jsx'),
+    'utf8',
+);
+
+function removeHandlerBody(label) {
+    const match = TOKEN_ADMIN_FORM_SOURCE.match(new RegExp(
+        `aria-label="${label}"\\s+onClick=\\{\\(\\) => \\{([^}]*)\\}\\}`,
+    ));
+    expect(match).not.toBeNull();
+    return match[1];
+}
 
 function sourceFor(chainId) {
     return {
@@ -134,6 +148,11 @@ describe('TokenAdminForm list names', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove allow-list' }));
         expect(screen.getByText('None after this update')).toBeTruthy();
         expect(screen.queryByText(/Picker policy/)).toBeNull();
+    });
+
+    it('clears cached names directly in both Remove handlers', () => {
+        expect(removeHandlerBody('Remove allow-list')).toContain('setAllowListName(null)');
+        expect(removeHandlerBody('Remove block-list')).toContain('setBlockListName(null)');
     });
 
     it('keeps a shared block-list label ahead of the bound list name', async () => {
