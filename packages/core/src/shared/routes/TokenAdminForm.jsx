@@ -202,6 +202,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [blockListIdx, setBlockListIdx] = useState(/** @type {string | null} */ (null));
     const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
     const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
+    const [allowListName, setAllowListName] = useState(/** @type {string | null} */ (null));
+    const [blockListName, setBlockListName] = useState(/** @type {string | null} */ (null));
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     const [sharedBlockPickerOpen, setSharedBlockPickerOpen] = useState(initialPicker === 'shared-block');
     const [sharedBlockListLabel, setSharedBlockListLabel] = useState(/** @type {string | null} */ (null));
@@ -412,21 +414,41 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // Member counts for whichever allow/block lists are currently set
     // (display only; one detail read each, tolerant of failure).
     useEffect(() => {
-        if (mode !== 'access-lists' || !chainId || !allowListIdx || allowListIdx === '0') { setAllowListCount(null); return undefined; }
+        if (mode !== 'access-lists' || !chainId || !allowListIdx || allowListIdx === '0') { setAllowListCount(null); setAllowListName(null); return undefined; }
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: allowListIdx })
-            .then((d) => { if (!cancelled) setAllowListCount(currentListMemberCount(d)); })
-            .catch(() => { if (!cancelled) setAllowListCount(null); });
+            .then((d) => {
+                if (!cancelled) {
+                    setAllowListCount(currentListMemberCount(d));
+                    setAllowListName(typeof d?.name === 'string' && d.name.length > 0 ? d.name : null);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setAllowListCount(null);
+                    setAllowListName(null);
+                }
+            });
         return () => { cancelled = true; };
     }, [mode, chainId, allowListIdx, messaging]);
     useEffect(() => {
-        if (mode !== 'access-lists' || !chainId || !blockListIdx || blockListIdx === '0') { setBlockListCount(null); return undefined; }
+        if (mode !== 'access-lists' || !chainId || !blockListIdx || blockListIdx === '0') { setBlockListCount(null); setBlockListName(null); return undefined; }
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: blockListIdx })
-            .then((d) => { if (!cancelled) setBlockListCount(currentListMemberCount(d)); })
-            .catch(() => { if (!cancelled) setBlockListCount(null); });
+            .then((d) => {
+                if (!cancelled) {
+                    setBlockListCount(currentListMemberCount(d));
+                    setBlockListName(typeof d?.name === 'string' && d.name.length > 0 ? d.name : null);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setBlockListCount(null);
+                    setBlockListName(null);
+                }
+            });
         return () => { cancelled = true; };
     }, [mode, chainId, blockListIdx, messaging]);
 
@@ -1095,6 +1117,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     blockListTouched.current = true;
                     setBlockListIdx(next.blockListIdx);
                     setBlockListCount(next.memberCount);
+                    setBlockListName(null);
                     setSharedBlockListLabel(next.label);
                     setSharedBlockPickerOpen(false);
                 }}
@@ -1120,10 +1143,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     if (listPickerFor === 'allow') {
                         setAllowListIdx(row.actionIndex);
                         setAllowListCount(row.memberCount);
+                        setAllowListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
                     } else {
                         blockListTouched.current = true;
                         setBlockListIdx(row.actionIndex);
                         setBlockListCount(row.memberCount);
+                        setBlockListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
                         setSharedBlockListLabel(null);
                     }
                     setListPickerFor(null);
@@ -1426,7 +1451,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             <span className={styles.detailsLabel}>Allow-list</span>
                             <span className={styles.detailsValue}>
                                 {allowListIdx && allowListIdx !== '0'
-                                    ? `${listLabel(allowListIdx)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
                                     : (allowListIdx === '0' ? 'None after this update' : 'None (anyone may interact)')}
                             </span>
                         </div>
@@ -1434,7 +1459,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             {allowListIdx && allowListIdx !== '0' ? 'Change allow-list' : 'Choose allow-list'}
                         </Button>
                         {listDetachActive && allowListIdx && allowListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); }}>
+                            <Button type="button" variant="ghost" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); setAllowListName(null); }}>
                                 Remove list
                             </Button>
                         ) : null}
@@ -1444,7 +1469,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             <span className={styles.detailsLabel}>Block-list</span>
                             <span className={styles.detailsValue}>
                                 {blockListIdx && blockListIdx !== '0'
-                                    ? `${sharedBlockListLabel || listLabel(blockListIdx)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${sharedBlockListLabel || listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
                                     : (blockListIdx === '0' ? 'None after this update' : 'None')}
                             </span>
                         </div>
@@ -1455,7 +1480,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             Use a shared block list
                         </Button>
                         {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setSharedBlockListLabel(null); }}>
+                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setBlockListName(null); setSharedBlockListLabel(null); }}>
                                 Remove list
                             </Button>
                         ) : null}
