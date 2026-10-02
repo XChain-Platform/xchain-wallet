@@ -137,7 +137,7 @@ describe('createList share, transfer, and union shapes', () => {
 
     it.each([
         [{ VERSION: '0', TYPE: '4', ITEM: ['value'] }, /params.TYPE must be/],
-        [{ VERSION: '4', LIST_ACTION_INDEX: '42' }, /params.VERSION must be/],
+        [{ VERSION: '6', LIST_ACTION_INDEX: '42' }, /params.VERSION must be/],
     ])('keeps refusing unsupported LIST shapes %#', async (params, error) => {
         await expect(createList(opts(params))).rejects.toThrow(error);
         expect(submitAction).not.toHaveBeenCalled();
