@@ -20,4 +20,10 @@ describe('listLabel', () => {
     it('neutralizes bidi overrides in the name', () => {
         expect(listLabel(42, 'Treasury\u202Eevil')).toBe('Treasury␦evil (List #42)');
     });
+
+    it('supports a kind-specific base label', () => {
+        expect(listLabel(42, 'Treasury wallets', 'Token list'))
+            .toBe('Treasury wallets (Token list #42)');
+        expect(listLabel(42, null, 'Address list')).toBe('Address list #42');
+    });
 });

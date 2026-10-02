@@ -15,7 +15,7 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
-import { neutralizeControlText } from '../utils/textHardening.js';
+import { listLabel } from '../utils/listLabel.js';
 import styles from './ActionsMenu.module.css';
 import local from './MyLists.module.css';
 
@@ -264,13 +264,10 @@ function ListRow({ row, onSelect }) {
     const isFork = row.list_action_index != null && row.list_action_index !== '';
     const status = String(row.status || '?');
     const valid = status === 'valid';
-    const name = typeof row.name === 'string' ? neutralizeControlText(row.name) : '';
     const index = row.action_index ?? '?';
     const kind = isTick ? 'Token list' : 'Address list';
-    const label = name ? `${name} (${kind} #${index})` : `${kind} #${index}`;
-    const ariaLabel = name
-        ? `Open ${name} (${kind.toLowerCase()} #${index})`
-        : `Open ${kind.toLowerCase()} #${index}`;
+    const label = listLabel(index, row.name, kind);
+    const ariaLabel = `Open ${listLabel(index, row.name, kind.toLowerCase())}`;
     return (
         <button
             type="button"

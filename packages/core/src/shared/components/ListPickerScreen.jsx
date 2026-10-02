@@ -78,6 +78,7 @@ export function ListPickerScreen({
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [counts, setCounts] = useState(/** @type {Record<string, number | null>} */ ({}));
+    const [descriptions, setDescriptions] = useState(/** @type {Record<string, string | null>} */ ({}));
 
     useEffect(() => {
         let cancelled = false;
@@ -129,9 +130,16 @@ export function ListPickerScreen({
                     if (cancelled) return;
                     // Count the newest valid edit's members: what a gate bound to this index checks
                     setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
+                    setDescriptions((prev) => ({
+                        ...prev,
+                        [idx]: typeof detail?.description === 'string' && detail.description.length > 0
+                            ? detail.description
+                            : null,
+                    }));
                 } catch {
                     if (cancelled) return;
                     setCounts((prev) => ({ ...prev, [idx]: null }));
+                    setDescriptions((prev) => ({ ...prev, [idx]: null }));
                 }
             }
         })();
@@ -172,8 +180,9 @@ export function ListPickerScreen({
                     const titleLabel = typeof row.name === 'string' && row.name.length > 0
                         ? listLabel(idx, row.name)
                         : `${kind} list #${idx}`;
-                    const description = typeof row.description === 'string' && row.description.length > 0
-                        ? neutralizeControlText(row.description)
+                    const rawDescription = descriptions[idx] || row.description;
+                    const description = typeof rawDescription === 'string' && rawDescription.length > 0
+                        ? neutralizeControlText(rawDescription)
                         : '';
                     const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
                     return (

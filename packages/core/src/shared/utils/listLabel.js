@@ -8,10 +8,11 @@ import { neutralizeControlText } from './textHardening.js';
  *
  * @param {string | number} index
  * @param {unknown} name
+ * @param {string} [kind]
  * @returns {string}
  */
-export function listLabel(index, name) {
-    const baseLabel = `List #${index}`;
+export function listLabel(index, name, kind = 'List') {
+    const baseLabel = `${kind} #${index}`;
     if (typeof name !== 'string' || name.length === 0) return baseLabel;
     return `${neutralizeControlText(name)} (${baseLabel})`;
 }
