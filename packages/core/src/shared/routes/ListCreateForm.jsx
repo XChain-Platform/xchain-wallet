@@ -37,11 +37,30 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { qualifyTickItem } from '../utils/listTickCoin.js';
 import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
+import { listMetaSupported } from '../../flows/listFormatSupport.js';
+import {
+    LIST_META_DESCRIPTION_MAX_BYTES,
+    LIST_META_NAME_MAX_BYTES,
+    listMetaInputError,
+    utf8ByteLength,
+} from '../../flows/listMetaInput.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+const META_ERROR_TEXT = {
+    pipe: 'Cannot contain the | character.',
+    semicolon: 'Cannot contain the ; character.',
+    length: 'Too long.',
+    format: 'A single - is not allowed.',
+};
+
+function metaFieldError(field, value) {
+    const code = listMetaInputError(field, value, { isCreate: true });
+    return code ? META_ERROR_TEXT[code] : null;
+}
 
 /**
  * PC-10 "My Lists": LIST v0 create form. One transaction, so (unlike
@@ -109,6 +128,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     );
     const [tickCoinSupported, setTickCoinSupported] = useState(false);
     const [memo, setMemo] = useState('');
+    const [metaSupported, setMetaSupported] = useState(false);
+    const [listName, setListName] = useState('');
+    const [listDescription, setListDescription] = useState('');
 
     const [password, setPassword] = useState('');
     const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
@@ -173,6 +195,21 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         listTickCoinSupport({ sdkRegistry, chainId })
             .then((supported) => { if (!cancelled) setTickCoinSupported(supported); })
             .catch(() => { if (!cancelled) setTickCoinSupported(false); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setMetaSupported(false);
+        if (!chainId) return () => { cancelled = true; };
+        const sdkRegistry = {
+            get: () => ({
+                getActionFormats: (action) => messaging.getActionFormats({ chainId, action }),
+            }),
+        };
+        Promise.resolve().then(() => listMetaSupported({ sdkRegistry, chainId }))
+            .then((supported) => { if (!cancelled) setMetaSupported(supported === true); })
+            .catch(() => { if (!cancelled) setMetaSupported(false); });
         return () => { cancelled = true; };
     }, [chainId, messaging]);
 
@@ -249,12 +286,24 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     // MEMO is optional and sits before the ITEM tail; an empty memo leaves
     // the field out so the wire keeps its empty slot (`LIST|0|1||...`).
-    const wireParams = useMemo(() => ({
+    const trimmedName = listName.trim();
+    const trimmedDescription = listDescription.trim();
+    const nameError = metaSupported ? metaFieldError('name', trimmedName) : null;
+    const descriptionError = metaSupported ? metaFieldError('description', trimmedDescription) : null;
+    const withMeta = metaSupported && (trimmedName !== '' || trimmedDescription !== '');
+    const wireParams = useMemo(() => (withMeta ? {
+        VERSION: '4',
+        TYPE: listType,
+        NAME: trimmedName,
+        DESCRIPTION: trimmedDescription,
+        ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
+        ITEM: items,
+    } : {
         VERSION: '0',
         TYPE: listType,
         ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: items,
-    }), [listType, items, trimmedMemo]);
+    }), [withMeta, listType, items, trimmedMemo, trimmedName, trimmedDescription]);
 
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
@@ -361,6 +410,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
         const memoTooLong = memoLengthError(trimmedMemo);
         if (memoTooLong) { setFormError(memoTooLong); return false; }
+        if (nameError || descriptionError) { setFormError('Fix the list name and description first.'); return false; }
         if (listType === '2') {
             if (recipients.valid.length === 0) { setFormError('Add at least one valid address.'); return false; }
         } else {
@@ -769,6 +819,26 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 />
             )}
 
+            {metaSupported ? (
+                <>
+                    <Input
+                        label="Name (optional)"
+                        hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
+                        error={nameError || undefined}
+                        value={listName}
+                        onChange={(e) => setListName(e.target.value)}
+                        autoComplete="off"
+                    />
+                    <Input
+                        label="Description (optional)"
+                        hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
+                        error={descriptionError || undefined}
+                        value={listDescription}
+                        onChange={(e) => setListDescription(e.target.value)}
+                        autoComplete="off"
+                    />
+                </>
+            ) : null}
             <Input
                 label="Memo (optional)"
                 hint={MEMO_HINT}
