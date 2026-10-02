@@ -15,6 +15,7 @@ import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './ActionsMenu.module.css';
 import local from './MyLists.module.css';
 
@@ -263,13 +264,20 @@ function ListRow({ row, onSelect }) {
     const isFork = row.list_action_index != null && row.list_action_index !== '';
     const status = String(row.status || '?');
     const valid = status === 'valid';
+    const name = typeof row.name === 'string' ? neutralizeControlText(row.name) : '';
+    const index = row.action_index ?? '?';
+    const kind = isTick ? 'Token list' : 'Address list';
+    const label = name ? `${name} (${kind} #${index})` : `${kind} #${index}`;
+    const ariaLabel = name
+        ? `Open ${name} (${kind.toLowerCase()} #${index})`
+        : `Open ${kind.toLowerCase()} #${index}`;
     return (
         <button
             type="button"
             className={local.row}
             role="listitem"
             onClick={onSelect}
-            aria-label={`Open ${isTick ? 'token' : 'address'} list #${row.action_index ?? '?'}`}
+            aria-label={ariaLabel}
         >
             <div className={local.iconWrap}>
                 <span className={local.iconLetter} aria-hidden="true">
@@ -287,7 +295,7 @@ function ListRow({ row, onSelect }) {
             </div>
             <div className={local.body}>
                 <div className={local.name}>
-                    {isTick ? 'Token list' : 'Address list'} #{row.action_index ?? '?'}
+                    {label}
                 </div>
                 <div className={local.subtitle}>
                     {isFork
