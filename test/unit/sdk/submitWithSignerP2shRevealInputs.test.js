@@ -91,6 +91,8 @@ describe('reveal inputs, read from real PSBTs', () => {
         const c = commit('P2SH');
         const hex = reveal(c, 'P2SH', [{ hash: c.txid, index: 1, redeemScript: KEY_P2WPKH.output, nonWitnessUtxo: Buffer.from(c.txHex, 'hex') }]);
         expect(refusalOf(c, 'P2SH', hex)).toEqual({ reason: 'unlocks a key script, not a data script', inputIndex: 1 });
+        const bare = reveal(c, 'P2SH', [{ hash: c.txid, index: 1, nonWitnessUtxo: Buffer.from(c.txHex, 'hex') }]);
+        expect(refusalOf(c, 'P2SH', bare)).toEqual({ reason: 'unlocks a key script, not a data script', inputIndex: 1 });
     });
 
     it('refuses an unreadable or empty input set, and an encoding with no legs', () => {

@@ -22,7 +22,8 @@ import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigne
 // A commit with one data leg and a reveal that spends it, as decomposePsbt reads them
 const revealLegs = (commitTxid, encoding) => {
     const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
-    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType }], outputs: [{ scriptType }] };
+    const script = { [scriptType === 'p2wsh' ? 'witnessScriptHex' : 'redeemScriptHex']: '0100' };
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType }] };
 };
 
 const SPENDER = 'bcrt1qspender';

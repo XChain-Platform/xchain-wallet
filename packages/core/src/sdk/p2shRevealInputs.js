@@ -70,7 +70,8 @@ export function revealInputsRefusal({ revealInputs, phase1Outputs, phase1Txid, e
         spent.add(vout);
         if (outputs[vout]?.scriptType !== legType) return { reason: 'spends a commit output that is not a data leg', inputIndex: i };
         // A nested-segwit change output also pays P2SH; its input unlocks a key, not data
-        if (input.scriptType !== legType) return { reason: 'unlocks a key script, not a data script', inputIndex: i };
+        const dataScript = legType === 'p2sh' ? input.redeemScriptHex : input.witnessScriptHex;
+        if (input.scriptType !== legType || !dataScript) return { reason: 'unlocks a key script, not a data script', inputIndex: i };
     }
     return null;
 }
