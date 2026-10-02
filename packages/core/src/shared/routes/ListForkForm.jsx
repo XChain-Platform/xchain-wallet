@@ -32,6 +32,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListItems, findListOwner } from '../../flows/listMembership.js';
+import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -147,6 +148,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const firstLegInFlightRef = useRef(false);
     // The list's owner: undefined while resolving, null when it cannot be read.
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
+    const [listName, setListName] = useState(/** @type {string | null} */ (null));
 
     // Prefer the explorer's current owner, then walk to the root create for
     // older explorers that do not report one.
@@ -162,6 +164,12 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             ? Promise.resolve().then(() => readList(String(oldIndex))).then((detail) => detail || supplied)
             : Promise.resolve(supplied);
         start
+            .then((detail) => {
+                if (!cancelled) {
+                    setListName(typeof detail?.name === 'string' && detail.name.length > 0 ? detail.name : null);
+                }
+                return detail;
+            })
             .then((detail) => findListOwner({ detail, readList }))
             .then((o) => { if (!cancelled) setOwner(o); })
             .catch(() => { if (!cancelled) setOwner(null); });
@@ -762,7 +770,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
-                    <dd className={styles.detailsValue}>#{intermediateIndex}</dd>
+                    <dd className={styles.detailsValue}>
+                        {listName ? listLabel(intermediateIndex, listName) : `#${intermediateIndex}`}
+                    </dd>
                     <dt className={styles.detailsLabel}>Removing</dt>
                     <dd className={styles.detailsValue}>{toRemove.length} item{toRemove.length === 1 ? '' : 's'}</dd>
                     {trimmedMemo ? (
@@ -832,7 +842,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
-                    <dd className={styles.detailsValue}>#{oldIndex}</dd>
+                    <dd className={styles.detailsValue}>
+                        {listName ? listLabel(oldIndex, listName) : `#${oldIndex}`}
+                    </dd>
                     {memoOnly ? (
                         <>
                             <dt className={styles.detailsLabel}>Members</dt>
