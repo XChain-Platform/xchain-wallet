@@ -14,8 +14,9 @@
 // source address + LIST params, forwards to submitAction.
 //
 // LIST v0 creates token, address, and union lists; v1 edits an existing
-// list; v2 shares a list; and v3 transfers a list to a new owner. The
-// wallet's §40.9 two-transaction airdrop flow emits v0 with TYPE=2.
+// list; v2 shares a list; v3 transfers a list to a new owner; v4 creates
+// a list with metadata; and v5 changes a list's metadata. The wallet's
+// §40.9 two-transaction airdrop flow emits v0 with TYPE=2.
 //
 // The wire shape for LIST uses a rest-field: `params.ITEM` is an array
 // of strings (tickers for TYPE=1, addresses for TYPE=2, and action
@@ -62,18 +63,19 @@ export async function createList(opts) {
         throw new Error('createList: params is required');
     }
     const version = opts.params.VERSION;
-    if (!['0', '1', '2', '3'].includes(version)) {
-        throw new Error('createList: params.VERSION must be "0", "1", "2", or "3"');
+    if (!['0', '1', '2', '3', '4', '5'].includes(version)) {
+        throw new Error('createList: params.VERSION must be "0", "1", "2", "3", "4", or "5"');
     }
     const items = opts.params.ITEM;
-    if (version === '0' || version === '1') {
+    const isCreate = version === '0' || version === '4';
+    if (isCreate || version === '1') {
         if (!Array.isArray(items) || items.length === 0) {
             throw new Error('createList: params.ITEM must be a non-empty array');
         }
     } else if (items !== undefined) {
         throw new Error(`createList: params.ITEM is not valid for v${version}`);
     }
-    if (version === '0') {
+    if (isCreate) {
         if (!['1', '2', '3'].includes(opts.params.TYPE)) {
             throw new Error('createList: params.TYPE must be "1" (TICK), "2" (ADDRESS), or "3" (UNION)');
         }
@@ -83,6 +85,13 @@ export async function createList(opts) {
             }
             if (!items.every((item) => typeof item === 'string' && /^[1-9][0-9]*$/.test(item))) {
                 throw new Error('createList: union params.ITEM values must be positive-integer action indexes');
+            }
+        }
+        if (version === '4') {
+            for (const field of ['NAME', 'DESCRIPTION']) {
+                if (opts.params[field] !== undefined && typeof opts.params[field] !== 'string') {
+                    throw new Error(`createList: params.${field} must be a string for v4`);
+                }
             }
         }
     } else if (version === '1') {
@@ -103,13 +112,28 @@ export async function createList(opts) {
                 || opts.params.DESTINATION.length === 0)) {
             throw new Error('createList: params.DESTINATION is required for v3');
         }
+        if (version === '5') {
+            for (const field of ['NAME', 'DESCRIPTION']) {
+                if (opts.params[field] !== undefined && typeof opts.params[field] !== 'string') {
+                    throw new Error(`createList: params.${field} must be a string for v5`);
+                }
+            }
+            if (!opts.params.NAME && !opts.params.DESCRIPTION) {
+                throw new Error('createList: params.NAME and params.DESCRIPTION contain no change for v5');
+            }
+        }
     }
     const source = normalizeSource(opts.from, 'createList');
 
     let summary;
-    if (version === '0' && opts.params.TYPE === '3') {
+    if (isCreate && version === '4' && opts.params.NAME) {
+        const kind = opts.params.TYPE === '3'
+            ? 'union'
+            : opts.params.TYPE === '2' ? 'address' : 'token';
+        summary = `Create ${kind} list "${opts.params.NAME}" of ${items.length} item${items.length === 1 ? '' : 's'}`;
+    } else if (isCreate && opts.params.TYPE === '3') {
         summary = `Create union of ${items.length} lists`;
-    } else if (version === '0') {
+    } else if (isCreate) {
         const kind = opts.params.TYPE === '2' ? 'address' : 'token';
         summary = `Create ${kind} list of ${items.length} item${items.length === 1 ? '' : 's'}`;
     } else if (version === '1') {
@@ -117,8 +141,10 @@ export async function createList(opts) {
         summary = `${removing ? 'Remove' : 'Add'} ${items.length} item${items.length === 1 ? '' : 's'} ${removing ? 'from' : 'to'} list #${opts.params.LIST_ACTION_INDEX}`;
     } else if (version === '2') {
         summary = `Share list #${opts.params.LIST_ACTION_INDEX}`;
-    } else {
+    } else if (version === '3') {
         summary = `Transfer list #${opts.params.LIST_ACTION_INDEX} to ${opts.params.DESTINATION}`;
+    } else {
+        summary = `Rename list #${opts.params.LIST_ACTION_INDEX}`;
     }
 
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
