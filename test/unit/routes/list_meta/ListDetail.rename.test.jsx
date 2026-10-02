@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListDetail } from '../../../../packages/core/src/shared/routes/ListDetail.jsx';
 
@@ -16,6 +16,16 @@ const baseDetail = {
     source: 'owner',
     list: [],
 };
+
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+}
 
 function renderList({ getActionFormats, onRename } = {}) {
     const messaging = {
@@ -70,30 +80,38 @@ describe('ListDetail rename action', () => {
         ['only LIST 4', { 4: {} }],
         ['only LIST 5', { 5: {} }],
     ])('hides rename with %s', async (_label, formats) => {
+        const formatsRead = deferred();
+        const getActionFormats = vi.fn(() => formatsRead.promise);
         renderList({
-            getActionFormats: vi.fn().mockResolvedValue(formats),
+            getActionFormats,
             onRename: vi.fn(),
         });
 
         await screen.findByRole('button', { name: 'Share list' });
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull());
+        await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
+        await act(async () => formatsRead.resolve(formats));
+        expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
     });
 
     it('hides rename when the format read rejects', async () => {
-        const getActionFormats = vi.fn().mockRejectedValue(new Error('offline'));
+        const formatsRead = deferred();
+        const getActionFormats = vi.fn(() => formatsRead.promise);
         renderList({ getActionFormats, onRename: vi.fn() });
 
         await screen.findByRole('button', { name: 'Share list' });
         await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
+        await act(async () => formatsRead.reject(new Error('offline')));
         expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
     });
 
     it('hides rename when the callback is absent', async () => {
-        const getActionFormats = vi.fn().mockResolvedValue({ 4: {}, 5: {} });
+        const formatsRead = deferred();
+        const getActionFormats = vi.fn(() => formatsRead.promise);
         renderList({ getActionFormats });
 
         await screen.findByRole('button', { name: 'Share list' });
         await waitFor(() => expect(getActionFormats).toHaveBeenCalledTimes(1));
+        await act(async () => formatsRead.resolve({ 4: {}, 5: {} }));
         expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull();
     });
 });
