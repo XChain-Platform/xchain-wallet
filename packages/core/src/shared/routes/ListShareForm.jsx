@@ -35,6 +35,7 @@ import {
 import { currentListMemberCount, findListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -304,6 +305,12 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
+                {typeof detail.name === 'string' && detail.name.length > 0 ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Name</dt>
+                        <dd className={styles.detailsValue}>{neutralizeControlText(detail.name)}</dd>
+                    </>
+                ) : null}
                 <dt className={styles.detailsLabel}>Chain</dt>
                 <dd className={styles.detailsValue}>
                     {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
