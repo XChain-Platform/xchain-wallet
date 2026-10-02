@@ -69,7 +69,7 @@ function extractListRows(resp) {
  * @param {'1' | '2'} [props.filterType]     restrict to token ('1') or address ('2') lists
  * @param {boolean} [props.includeUnions]   also list union lists whose first member matches filterType
  * @param {string} [props.title]
- * @param {(row: { actionIndex: string, type: string, memberCount: number | null }) => void} props.onSelect
+ * @param {(row: { actionIndex: string, type: string, memberCount: number | null, name?: string }) => void} props.onSelect
  * @param {() => void} props.onBack
  */
 export function ListPickerScreen({
@@ -181,7 +181,14 @@ export function ListPickerScreen({
                             <button
                                 type="button"
                                 className={styles.abRow}
-                                onClick={() => onSelect({ actionIndex: idx, type: String(row.type), memberCount: count ?? null })}
+                                onClick={() => onSelect({
+                                    actionIndex: idx,
+                                    type: String(row.type),
+                                    memberCount: count ?? null,
+                                    ...(typeof row.name === 'string' && row.name.length > 0
+                                        ? { name: row.name }
+                                        : {}),
+                                })}
                             >
                                 <span className={styles.abName}>
                                     {titleLabel}
