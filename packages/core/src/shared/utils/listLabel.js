@@ -14,5 +14,5 @@ import { neutralizeControlText } from './textHardening.js';
 export function listLabel(index, name, kind = 'List') {
     const baseLabel = `${kind} #${index}`;
     if (typeof name !== 'string' || name.length === 0) return baseLabel;
-    return `${neutralizeControlText(name)} (${baseLabel})`;
+    return `${neutralizeControlText(name)} (List #${index})`;
 }
