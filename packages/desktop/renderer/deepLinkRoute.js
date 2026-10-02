@@ -13,6 +13,7 @@
 // only thing it can ever do is land the user on a prefilled form they still
 // have to act on: nothing here unlocks, signs or submits.
 
+import { useEffect, useState } from 'react';
 import { uri as coreUri } from '@xchain-wallet/core';
 
 /**
@@ -54,4 +55,47 @@ export function deepLinkRoute(raw, chainRegistry) {
         };
     }
     return null;
+}
+
+/**
+ * Claim parked links from main: once now, then again on every nudge. Only what
+ * takePending returns is routed, so each link lands in at most one window. A
+ * detached window claims nothing; it keeps the view it was opened on.
+ *
+ * @param {{ bridge?: { takePending: () => Promise<any>, onUri: (fn: () => void) => () => void }, detached: boolean, chainRegistry: any, onRoute: (route: NonNullable<ReturnType<typeof deepLinkRoute>>) => void }} opts
+ * @returns {() => void} unsubscribe
+ */
+export function watchDeepLinks({ bridge, detached, chainRegistry, onRoute }) {
+    if (!bridge || detached) return () => {};
+    let live = true;
+    const claim = () => {
+        Promise.resolve()
+            .then(() => bridge.takePending())
+            .then((event) => {
+                const route = live ? deepLinkRoute(event?.raw, chainRegistry) : null;
+                if (route) onRoute(route);
+            })
+            .catch(() => { /* a failed claim is dropped; the next nudge claims again */ });
+    };
+    claim();
+    const off = bridge.onUri(claim);
+    return () => { live = false; off(); };
+}
+
+/**
+ * Desktop deep-link intake: claim on mount, hold the route while locked, and
+ * hand it to apply once a wallet is unlocked. Call it after the last-view
+ * resume so the link's form is the view that sticks.
+ *
+ * @param {{ bridge?: any, detached: boolean, chainRegistry: any, unlocked: boolean, walletId: string | null | undefined, apply: (route: NonNullable<ReturnType<typeof deepLinkRoute>>) => void }} opts
+ */
+export function useDeepLinks({ bridge, detached, chainRegistry, unlocked, walletId, apply }) {
+    const [route, setRoute] = useState(/** @type {ReturnType<typeof deepLinkRoute>} */ (null));
+    // Mount-only: the bridge and the detached flag are fixed for a window's life
+    useEffect(() => watchDeepLinks({ bridge, detached, chainRegistry, onRoute: setRoute }), []);
+    useEffect(() => {
+        if (!route || detached || !unlocked || !walletId) return;
+        apply(route);
+        setRoute(null);
+    }, [route, unlocked, walletId]);
 }

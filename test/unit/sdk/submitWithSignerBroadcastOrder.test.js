@@ -24,6 +24,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
 
+// A commit with one data leg and a reveal that spends it, as decomposePsbt reads them
+const revealLegs = (commitTxid, encoding) => {
+    const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType }], outputs: [{ scriptType }] };
+};
+
 function harness({ progressDelayMs = 0, progressThrows = false } = {}) {
     const trace = [];
     const encoder = {
@@ -108,7 +114,7 @@ describe('submitWithSigner reads an already-on-network answer as delivery', () =
             sdkRegistry: { get: () => ({
                 encoder,
                 actions: { createAction: () => ({ actionString: 'DEPLOY|0|x|1', action: 'DEPLOY', version: 0 }) },
-                wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+                wallet: { decomposePsbt: () => revealLegs('txid-PHASE1', encoding) },
             }) },
             chainId: 'litecoin-regtest',
             chainRegistry: { get: () => ({ id: 'litecoin-regtest', coin: 'litecoin' }) },

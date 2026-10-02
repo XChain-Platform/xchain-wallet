@@ -66,6 +66,7 @@ import { attachHidPermissions, attachHidDenial, observeHidFrames } from './permi
 import {
     attachDeepLinkHandlers,
     createDeepLinkSlot,
+    pickDeepLinkTarget,
     registerProtocolClients,
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
@@ -103,14 +104,16 @@ function isTrustedSender(event) {
 // §24.6 / G057: multi-window: instead of a singleton mainWindow, the
 // main process keeps a Set of every open BrowserWindow so File → New
 // Window can open additional renderers that share the same vault +
-// signer state via the main-process MessageHost. Existing logic
-// (deep-link forward, updater broadcast) targets the focused window
-// when one exists, otherwise the most-recently-created.
+// signer state via the main-process MessageHost. Updater events go to
+// every window; a deep link goes to the focused window that is not
+// detached, otherwise the most-recently-created one (pickDeepLinkTarget).
 const windows = /** @type {Set<BrowserWindow>} */ (new Set());
 let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
+// Windows opened on a pinned view (open-window), which never take a deep link.
+const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
 // §9.7 / G007: boot-time chain-registry sync promise. Main owns the
 // network fetch (the renderer CSP pins connect-src 'self'); the verified
@@ -259,12 +262,6 @@ function liveWindows() {
     return [...windows].filter((w) => !w.isDestroyed());
 }
 
-function pickFocusWindow() {
-    const live = liveWindows();
-    if (live.length === 0) return null;
-    return BrowserWindow.getFocusedWindow() || live[live.length - 1];
-}
-
 function broadcastToWindows(channel, payload) {
     for (const w of liveWindows()) {
         w.webContents.send(channel, payload);
@@ -276,8 +273,11 @@ function forwardDeepLink(event) {
     // that does not exist yet, or has not mounted its listener, claims it on
     // mount through 'xchain:deep-link-take', so a cold-start link is not lost.
     deepLinkSlot.offer(event);
-    const target = pickFocusWindow();
-    if (!target) return;
+    const live = liveWindows();
+    if (live.length === 0) return;
+    const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
+    // Only detached windows are open: a fresh window claims the link on mount
+    if (!target) { createWindow(); return; }
     target.webContents.send('xchain:uri', event);
     if (!target.isFocused()) target.focus();
 }
@@ -415,6 +415,7 @@ function createWindow(opts = {}) {
     win.on('closed', () => { windows.delete(win); });
 
     windows.add(win);
+    if (opts.initialView || opts.initialContext) detachedWindows.add(win);
     return win;
 }
 

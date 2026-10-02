@@ -215,6 +215,23 @@ export function createDeepLinkSlot() {
     };
 }
 
+/**
+ * Pick the window a deep link is nudged to: the focused window unless it is
+ * detached, else the newest window that is not. Null when only detached
+ * windows are open, since a detached window keeps its pinned view.
+ *
+ * @template W
+ * @param {W[]} live
+ * @param {W | null} focused
+ * @param {(win: W) => boolean} isDetached
+ * @returns {W | null}
+ */
+export function pickDeepLinkTarget(live, focused, isDetached) {
+    const primary = live.filter((win) => !isDetached(win));
+    if (focused && primary.includes(focused)) return focused;
+    return primary.length ? primary[primary.length - 1] : null;
+}
+
 function dispatch(url, onDeepLink) {
     const event = classifyDeepLink(url);
     if (event) onDeepLink(event);

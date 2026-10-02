@@ -36,7 +36,8 @@
 //   4. The signer-bridge listener sees the message only, never the raw
 //      IpcRendererEvent (which carries `sender`, i.e. a handle to the frame).
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { renderHook, act, cleanup } from '@testing-library/react';
 import Module, { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -46,8 +47,8 @@ import { IPC_CHANNEL } from '../../../packages/desktop/main/messageHost.js';
 import { SIGNER_BRIDGE_CHANNEL } from '../../../packages/desktop/main/signerBridgeListener.js';
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { sendMessage as rendererSendMessage } from '../../../packages/desktop/renderer/bridgeMessaging.js';
-import { createDeepLinkSlot } from '../../../packages/desktop/main/protocol.js';
-import { deepLinkRoute } from '../../../packages/desktop/renderer/deepLinkRoute.js';
+import { createDeepLinkSlot, pickDeepLinkTarget } from '../../../packages/desktop/main/protocol.js';
+import { deepLinkRoute, watchDeepLinks, useDeepLinks } from '../../../packages/desktop/renderer/deepLinkRoute.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 
 // Path arithmetic goes through node:path, not `new URL(rel, import.meta.url)`:
@@ -567,5 +568,120 @@ describe('desktop renderer: deep-link routing', () => {
             contractRef: { chainId: 'bitcoin-mainnet', contractActionIndex: '12' },
         });
         expect(deepLinkRoute('xchain:BTC/execute?method=foo', reg)).toBe(null);
+    });
+});
+
+describe('desktop main: which window a deep link is nudged to', () => {
+    const detached = new Set(['d1', 'd2']);
+    const isDetached = (w) => detached.has(w);
+
+    it('keeps the focused window when it is a primary one', () => {
+        expect(pickDeepLinkTarget(['p1', 'd1', 'p2'], 'p1', isDetached)).toBe('p1');
+    });
+
+    it('passes over a focused detached window to the newest primary one', () => {
+        expect(pickDeepLinkTarget(['p1', 'p2', 'd1'], 'd1', isDetached)).toBe('p2');
+        expect(pickDeepLinkTarget(['p1', 'd1'], null, isDetached)).toBe('p1');
+    });
+
+    it('names no window when only detached windows are open', () => {
+        expect(pickDeepLinkTarget(['d1', 'd2'], 'd1', isDetached)).toBe(null);
+    });
+});
+
+// A fake xchainWalletDeepLink world: takePending hands out the parked link once.
+function fakeDeepLinkBridge(parked = null) {
+    let slot = parked;
+    const listeners = new Set();
+    const bridge = {
+        takePending: vi.fn(async () => { const e = slot; slot = null; return e; }),
+        onUri: vi.fn((fn) => { listeners.add(fn); return () => listeners.delete(fn); }),
+    };
+    const nudge = (event) => { slot = event; for (const fn of [...listeners]) fn(event); };
+    return { bridge, nudge, listeners };
+}
+
+const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+describe('desktop renderer: deep-link claim and apply', () => {
+    const reg = registryLib.defaultRegistry();
+    const SEND = { raw: 'xchain://bitcoin-mainnet/BTC?amount=1&to=bc1q123' };
+    afterEach(cleanup);
+
+    it('claims the parked link on attach and again on every nudge', async () => {
+        const { bridge, nudge } = fakeDeepLinkBridge(SEND);
+        const routes = [];
+        const off = watchDeepLinks({ bridge, detached: false, chainRegistry: reg, onRoute: (r) => routes.push(r) });
+        await new Promise((r) => setTimeout(r, 0));
+        nudge({ raw: 'xchain:BTC/receive' });
+        await new Promise((r) => setTimeout(r, 0));
+        off();
+        nudge({ raw: 'xchain:BTC/receive' });
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(bridge.takePending).toHaveBeenCalledTimes(2);
+        expect(routes.map((r) => r.view)).toEqual(['send', 'receive']);
+    });
+
+    it('in a detached window, neither subscribes nor claims', async () => {
+        const { bridge } = fakeDeepLinkBridge(SEND);
+        const routes = [];
+        watchDeepLinks({ bridge, detached: true, chainRegistry: reg, onRoute: (r) => routes.push(r) });
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(bridge.takePending).not.toHaveBeenCalled();
+        expect(bridge.onUri).not.toHaveBeenCalled();
+        expect(routes).toEqual([]);
+    });
+
+    it('drops a claim still in flight when the window unsubscribes', async () => {
+        const { bridge } = fakeDeepLinkBridge(SEND);
+        const routes = [];
+        const off = watchDeepLinks({ bridge, detached: false, chainRegistry: reg, onRoute: (r) => routes.push(r) });
+        off();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(routes).toEqual([]);
+    });
+
+    it('holds a link while locked and applies it once a wallet is unlocked', async () => {
+        const { bridge } = fakeDeepLinkBridge(SEND);
+        const apply = vi.fn();
+        const { rerender } = renderHook((p) => useDeepLinks(p), {
+            initialProps: { bridge, detached: false, chainRegistry: reg, unlocked: false, walletId: null, apply },
+        });
+        await flush();
+        expect(apply).not.toHaveBeenCalled();
+
+        rerender({ bridge, detached: false, chainRegistry: reg, unlocked: true, walletId: 'w-1', apply });
+        await flush();
+        rerender({ bridge, detached: false, chainRegistry: reg, unlocked: true, walletId: 'w-2', apply });
+        await flush();
+
+        expect(apply).toHaveBeenCalledTimes(1);
+        expect(apply.mock.calls[0][0]).toMatchObject({ view: 'send', sendPrefill: { address: 'bc1q123', amount: '1' } });
+    });
+
+    it('routes a nudge that arrives while unlocked straight to apply', async () => {
+        const { bridge, nudge } = fakeDeepLinkBridge(null);
+        const apply = vi.fn();
+        renderHook(() => useDeepLinks({ bridge, detached: false, chainRegistry: reg, unlocked: true, walletId: 'w-1', apply }));
+        await flush();
+        expect(apply).not.toHaveBeenCalled();
+
+        await act(async () => { nudge({ raw: 'xchain:BTC/receive' }); });
+        await flush();
+        expect(apply).toHaveBeenCalledWith({ view: 'receive' });
+    });
+
+    it('leaves a detached window on its pinned view and the link parked for a primary one', async () => {
+        const { bridge, nudge } = fakeDeepLinkBridge(SEND);
+        const apply = vi.fn();
+        renderHook(() => useDeepLinks({ bridge, detached: true, chainRegistry: reg, unlocked: true, walletId: 'w-1', apply }));
+        await flush();
+        await act(async () => { nudge({ raw: 'xchain:BTC/receive' }); });
+        await flush();
+
+        expect(apply).not.toHaveBeenCalled();
+        expect(await bridge.takePending()).toEqual({ raw: 'xchain:BTC/receive' });
     });
 });

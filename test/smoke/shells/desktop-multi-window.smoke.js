@@ -74,12 +74,10 @@ assert.ok(/process\.platform === 'darwin'/.test(src),
 
 // --- 4. Deep-link + updater multi-window routing ------------------------
 
-assert.ok(/function pickFocusWindow\(\)/.test(src),
-    'pickFocusWindow() picks the focused (or last-created) window');
-assert.ok(/BrowserWindow\.getFocusedWindow\(\)\s*\|\|\s*live\[live\.length - 1\]/.test(src),
-    'pickFocusWindow falls back to the most-recently-created live window');
-assert.ok(/function forwardDeepLink\(event\)\s*\{[\s\S]*?pickFocusWindow\(\)/.test(src),
-    'forwardDeepLink targets the focused window');
+assert.ok(/function forwardDeepLink\(event\)\s*\{[\s\S]*?pickDeepLinkTarget\(live,\s*BrowserWindow\.getFocusedWindow\(\),\s*\(w\) => detachedWindows\.has\(w\)\)/.test(src),
+    'forwardDeepLink targets the focused window that is not detached (pickDeepLinkTarget)');
+assert.ok(/if \(opts\.initialView \|\| opts\.initialContext\) detachedWindows\.add\(win\)/.test(src),
+    'createWindow marks a window opened on a pinned view as detached');
 assert.ok(/function broadcastToWindows\(channel,\s*payload\)/.test(src),
     'broadcastToWindows() helper iterates every live window');
 // The handler retains the event before broadcasting it (row 148), so

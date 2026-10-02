@@ -23,6 +23,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { submitWithSigner, HardwareChunkLaneError } from '../../../packages/core/src/sdk/submitWithSigner.js';
 import { isWatcherChunkLane, submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
+// A commit with one data leg and a reveal that spends it, as decomposePsbt reads them
+const revealLegs = (commitTxid, encoding) => {
+    const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType }], outputs: [{ scriptType }] };
+};
+
 function harness({ encoding = 'P2SH' } = {}) {
     const encoder = {
         createTx: vi.fn(async () => ({ psbt: '70736274ff', encoding })),
@@ -33,7 +39,7 @@ function harness({ encoding = 'P2SH' } = {}) {
         get: () => ({
             encoder,
             actions: { createAction: () => ({ actionString: 'DEPLOY|0|x', action: 'DEPLOY', version: 0 }) },
-            wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+            wallet: { decomposePsbt: () => revealLegs('TXID', encoding) },
         }),
     };
     return { sdkRegistry, encoder };

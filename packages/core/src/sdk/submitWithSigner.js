@@ -38,6 +38,9 @@ import {
 } from '../flows/nativePayment.js';
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
+import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
+
+export { RevealInputsRefusedError } from './p2shRevealInputs.js';
 
 // Broadcast signed bytes, treating "the node already holds this txid" as delivery: the
 // SDK retries a lost response with the same bytes, and the retry gets that answer.
@@ -505,6 +508,8 @@ export async function submitWithSigner({
             signerKind: typeof signerKind === 'string' ? signerKind : undefined,
         });
     }
+    // Read the commit's outputs before anything is signed; the reveal check needs them
+    const phase1Outputs = needsPhase2 ? sdk.wallet.decomposePsbt(encoded.psbt).outputs : null;
 
     // The software signer signs ONLY the inputs named in signingPaths (so a dApp
     // PSBT cannot get extra UTXOs signed); hardware signers are all-or-refuse
@@ -681,6 +686,15 @@ export async function submitWithSigner({
             // deferred set rather than the fee alone: the commit reserved value
             // for each of them and emitted none, so any left out here is burned.
             ...(deferredOutputs.length ? { customOutputs: deferredOutputs } : {}),
+        });
+        assertRevealSpendsCommitLegs({
+            decomposePsbt: (hex) => sdk.wallet.decomposePsbt(hex),
+            revealPsbtHex: spendResult.psbt,
+            phase1Outputs,
+            phase1Txid: signed.txid,
+            phase1TxHex: signed.txHex,
+            chainId,
+            encoding: encoded.encoding,
         });
         const phase2Signed = await signer.signPsbt({
             psbtHex: spendResult.psbt,

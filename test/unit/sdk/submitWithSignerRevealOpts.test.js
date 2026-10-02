@@ -19,6 +19,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
 
+// A commit with one data leg and a reveal that spends it, as decomposePsbt reads them
+const revealLegs = (commitTxid, encoding) => {
+    const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType }], outputs: [{ scriptType }] };
+};
+
 const SPENDER = 'bcrt1qspender';
 const ROTATED = 'bcrt1qrotatedinternal';
 
@@ -28,7 +34,7 @@ function makeHarness({ encoderOpts, prebuiltPsbt, encoding = 'P2SH' }) {
     const sdk = {
         encoder: { createTx, spendP2sh, broadcastTx: vi.fn(async () => ({})) },
         actions: { createAction: vi.fn(() => ({ actionString: 'DEPLOY|0|x|1', action: 'DEPLOY', version: 0 })) },
-        wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+        wallet: { decomposePsbt: () => revealLegs('txid-COMMIT', encoding) },
     };
     const signer = {
         kind: 'software',
