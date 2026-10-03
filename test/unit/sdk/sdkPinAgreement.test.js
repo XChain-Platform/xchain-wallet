@@ -11,8 +11,12 @@
 // @vitest-environment node
 
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+
+const require = createRequire(import.meta.url);
+const { XChainSDK } = require('xchain-sdk');
 
 const PACKAGE_NAMES = ['web', 'extension', 'desktop'];
 const SDK_PIN_PATTERN = /^npm:@dankest-llc\/xchain-sdk@[0-9]+\.[0-9]+\.[0-9]+$/;
@@ -138,6 +142,14 @@ const currentPin = JSON.parse(packageTexts.web).dependencies['xchain-sdk'];
 const bumpedPin = nextPatchPin(currentPin);
 
 describe('xchain-sdk package and lockfile pins', () => {
+    it('the installed SDK exposes LIST metadata formats', () => {
+        const sdk = new XChainSDK({ network: 'bitcoin-regtest' });
+
+        expect(Object.keys(sdk.getActionFormats('LIST'))).toEqual(
+            expect.arrayContaining(['4', '5'])
+        );
+    });
+
     it('keeps every package manifest and lockfile importer in agreement', () => {
         expect(sdkPinDisagreements(
             packageTexts.web,
