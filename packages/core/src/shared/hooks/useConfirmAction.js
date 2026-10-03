@@ -81,12 +81,15 @@ export function useConfirmAction() {
     const composedStampRef = useRef(0);
     const sessionIdRef = useRef(null);
     const releasedEncoderInputsRef = useRef(new Set());
+    const rejectingRef = useRef(false);
     // Once Approve is pressed the PSBT may be signed or broadcast, so the
     // encoder reservation must stay held whatever happens to this component.
     const approvalBeganRef = useRef(false);
     const releaseUnlessApproving = useCallback((built) => {
         if (approvalBeganRef.current) return;
-        releaseEncoderInputs(built, releasedEncoderInputsRef.current);
+        releaseEncoderInputs(built, releasedEncoderInputsRef.current).catch((err) => {
+            console.error('Encoder input release failed:', err);
+        });
     }, []);
 
     const [phase, setPhase] = useState(/** @type {ConfirmPhase} */('idle'));
@@ -482,11 +485,25 @@ export function useConfirmAction() {
         }
     }, [report, acknowledged, instanceId, settleResolve, settleReject]);
 
-    const reject = useCallback(() => {
-        releaseUnlessApproving(composedRef.current);
+    const reject = useCallback(async () => {
+        if (rejectingRef.current) return;
+        rejectingRef.current = true;
+        setError(null);
+        try {
+            if (!approvalBeganRef.current) {
+                await releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
+            }
+        } catch (err) {
+            const detail = err?.message ? ` ${err.message}` : '';
+            setError(new Error(`Could not release reserved inputs. Try Reject again.${detail}`));
+            setPhase('ready');
+            return;
+        } finally {
+            rejectingRef.current = false;
+        }
         settleReject(new UserRejectedError());
         setPhase('idle');
-    }, [settleReject, releaseUnlessApproving]);
+    }, [settleReject]);
 
     const acknowledge = useCallback((code) => {
         setAcknowledged((prev) => toggleAcknowledged(prev, code));
@@ -501,13 +518,16 @@ export function useConfirmAction() {
     };
 }
 
-function releaseEncoderInputs(composed, released) {
+async function releaseEncoderInputs(composed, released) {
     const release = composed?.releaseEncoderInputs;
     if (typeof release !== 'function' || released.has(release)) return;
     released.add(release);
     try {
-        Promise.resolve(release()).catch(() => {});
-    } catch { /* best-effort */ }
+        await release();
+    } catch (err) {
+        released.delete(release);
+        throw err;
+    }
 }
 
 // Only the caller's explicit pending deltas are gathered here. In-flight
