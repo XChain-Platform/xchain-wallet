@@ -161,20 +161,31 @@ describe('useConfirmAction encoder reservation release', () => {
         expect(releaseInputs).not.toHaveBeenCalled();
     });
 
-    it('swallows synchronous and asynchronous release errors', async () => {
-        for (const releaseInputs of [
-            vi.fn(() => { throw new Error('sync failure'); }),
-            vi.fn(async () => { throw new Error('async failure'); }),
-        ]) {
-            const { compose } = makeCompose({ releaseInputs });
-            const hook = renderHook(() => useConfirmAction());
-            const { confirmation } = await readyConfirm(hook.result, compose);
-            await act(async () => {
-                hook.result.current.reject();
-                await confirmation;
-            });
-            expect(releaseInputs).toHaveBeenCalledOnce();
-            hook.unmount();
-        }
+    it('keeps confirmation open when release fails and retries on Reject', async () => {
+        const releaseInputs = vi.fn()
+            .mockRejectedValueOnce(new Error('release unavailable'))
+            .mockResolvedValueOnce({ released: true });
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const { confirmation } = await readyConfirm(hook.result, compose);
+        let confirmationSettled = false;
+        confirmation.finally(() => { confirmationSettled = true; });
+
+        await act(async () => {
+            await hook.result.current.reject();
+        });
+
+        expect(hook.result.current.phase).toBe('ready');
+        expect(hook.result.current.error?.message).toMatch(/release.*try reject again/i);
+        expect(releaseInputs).toHaveBeenCalledOnce();
+        expect(confirmationSettled).toBe(false);
+
+        await act(async () => {
+            await hook.result.current.reject();
+        });
+
+        expect(releaseInputs).toHaveBeenCalledTimes(2);
+        expect((await confirmation).error).toMatchObject({ reason: 'user-rejected' });
+        expect(confirmationSettled).toBe(true);
     });
 });
