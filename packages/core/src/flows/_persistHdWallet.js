@@ -96,6 +96,13 @@ export async function persistHdWallet({
         kdfParams: storedKdfParams,
     });
 
+    // A create or import adds a wallet; it never replaces one. A stored
+    // record under the same id is refused before any write, so an
+    // existing encrypted seed cannot be clobbered.
+    if (await vault.wallets.get(walletRecord.id)) {
+        throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
+    }
+
     // 4. Build & persist the first Account. `validateAccount` checks
     //    only that walletId is a non-empty string, no foreign-key
     //    lookup against the vault, so this is safe before the wallet
