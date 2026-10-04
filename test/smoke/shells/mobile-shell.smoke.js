@@ -340,10 +340,22 @@ const mainActivity = readFileSync(
     join(android, 'app', 'src', 'main', 'java', 'io', 'xchain', 'wallet', 'android', 'MainActivity.java'),
     'utf8',
 );
+function assertRelativeOrder(source, first, second, firstShouldPrecede, message) {
+    const firstPosition = source.indexOf(first);
+    const secondPosition = source.indexOf(second);
+    assert.ok(firstPosition >= 0, `missing ${first}`);
+    assert.ok(secondPosition >= 0, `missing ${second}`);
+    assert.ok(firstShouldPrecede
+        ? firstPosition < secondPosition
+        : firstPosition > secondPosition, message);
+}
+
 assert.match(mainActivity, /registerPlugin\(XChainVaultPlugin\.class\)/);
-assert.ok(
-    mainActivity.indexOf('registerPlugin(XChainVaultPlugin.class)')
-        < mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'registerPlugin(XChainVaultPlugin.class)',
+    'super.onCreate(',
+    true,
     'the plugin is registered BEFORE super.onCreate builds the bridge',
 );
 
@@ -360,9 +372,11 @@ assert.match(
     /dropUnusedCapacitorPlugins\(\)/,
     'SSC-1: CapacitorHttp/CapacitorCookies must be dropped from the bridge registry',
 );
-assert.ok(
-    mainActivity.indexOf('dropUnusedCapacitorPlugins()')
-        > mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'dropUnusedCapacitorPlugins()',
+    'super.onCreate(',
+    false,
     'the removal runs AFTER super.onCreate: the bridge (and its registry) does'
     + ' not exist before it',
 );
@@ -428,9 +442,11 @@ assert.match(
     'SSC-1 door 2: onCreate must install the WebViewClient that refuses'
     + ' /_capacitor_http_interceptor_',
 );
-assert.ok(
-    mainActivity.indexOf('blockNativeHttpProxy()')
-        > mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'blockNativeHttpProxy()',
+    'super.onCreate(',
+    false,
     'the swap runs AFTER super.onCreate: the bridge does not exist before it',
 );
 for (const proxyPath of ['/_capacitor_http_interceptor_', '/_capacitor_https_interceptor_']) {
@@ -645,9 +661,11 @@ assert.match(
     + ' and handleOnNewIntent, and getIntent() keeps returning it afterwards',
 );
 assert.match(mainActivity, /registerPlugin\(XChainLinksPlugin\.class\)/);
-assert.ok(
-    mainActivity.indexOf('registerPlugin(XChainLinksPlugin.class)')
-        < mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'registerPlugin(XChainLinksPlugin.class)',
+    'super.onCreate(',
+    true,
     'the links plugin is registered before the bridge is built, like the vault',
 );
 
