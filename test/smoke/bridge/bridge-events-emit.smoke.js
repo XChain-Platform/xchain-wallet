@@ -322,7 +322,16 @@ const createSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js'),
     'utf8',
 );
-assert.ok(/bridgeEvents,[\s\S]{0,2000}?\.\.\.hostDeps\s*\}\s*=\s*deps/.test(createSrc),
+const hostFactoryStart = createSrc.indexOf('export function createBackgroundHost');
+const depsStart = createSrc.indexOf('const {', hostFactoryStart);
+const depsEnd = createSrc.indexOf('} = deps', depsStart);
+const depsDestructure = createSrc.slice(depsStart, depsEnd);
+assert.ok(
+    hostFactoryStart >= 0
+        && depsStart > hostFactoryStart
+        && depsEnd > depsStart
+        && depsDestructure.includes('bridgeEvents,')
+        && depsDestructure.includes('...hostDeps'),
     'createBackgroundHost destructures bridgeEvents');
 assert.ok(/registerBridgeHandlers\(host,\s*\{[^)]*events:\s*bridgeEvents[^)]*\}/.test(createSrc),
     'createBackgroundHost forwards bridgeEvents → events into registerBridgeHandlers');
