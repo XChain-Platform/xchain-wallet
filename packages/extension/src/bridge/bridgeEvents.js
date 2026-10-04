@@ -45,7 +45,10 @@
 // smokes, web/desktop shells that expose no extension APIs), every method
 // becomes a no-op. The wallet can still mutate state without crashing.
 
+import { connectedOrigins } from '../background/connectedTabs.js';
+
 const EVENT_MESSAGE_TYPE = 'bridge.event';
+const activeWalletByRuntime = new WeakMap();
 
 /**
  * @param {{
@@ -99,7 +102,7 @@ export function createBridgeEventBroadcaster(deps = {}) {
         }
     }
 
-    return {
+    const events = {
         /**
          * @param {string} origin
          * @param {Array<{ id: string, name?: string }>} accounts
@@ -122,6 +125,72 @@ export function createBridgeEventBroadcaster(deps = {}) {
             await fanOut(origin, 'disconnect', reason ?? 'user-requested');
         },
     };
+    attachWalletSwitchObserver({ runtime, connectedTabs, events });
+    return events;
+}
+
+function attachWalletSwitchObserver({ runtime, connectedTabs, events }) {
+    if (typeof runtime?.onMessage?.addListener !== 'function') return;
+    if (typeof runtime?.sendMessage !== 'function') return;
+    runtime.onMessage.addListener((message, sender) => {
+        if (!isWalletSelection(message, sender, runtime)) return false;
+        if (!walletDidChange(runtime, message.request.walletId)) return false;
+        void notifyWalletSwitch({ runtime, connectedTabs, events }, message.request.walletId);
+        return false;
+    });
+}
+
+function walletDidChange(runtime, walletId) {
+    const previous = activeWalletByRuntime.get(runtime);
+    activeWalletByRuntime.set(runtime, walletId);
+    return previous !== undefined && previous !== walletId;
+}
+
+function isWalletSelection(message, sender, runtime) {
+    if (!runtime.id || sender?.id !== runtime.id) return false;
+    if (typeof runtime.getURL === 'function' && sender?.url !== runtime.getURL('popup.html')) {
+        return false;
+    }
+    if (message?.type !== 'account.list') return false;
+    if (message?.request?.walletSwitchProbe === true) return false;
+    return typeof message?.request?.walletId === 'string' && message.request.walletId.length > 0;
+}
+
+async function notifyWalletSwitch(deps, walletId) {
+    const accounts = await runtimeRequest(deps.runtime, 'account.list', {
+        walletId,
+        walletSwitchProbe: true,
+    });
+    const sites = await runtimeRequest(deps.runtime, 'sites.list', { walletSwitchProbe: true });
+    const connected = new Set(await connectedOrigins(deps.connectedTabs));
+    if (!Array.isArray(accounts) || !Array.isArray(sites)) return;
+    for (const site of sites) {
+        if (!connected.has(site?.origin)) continue;
+        const payload = permittedAccounts(accounts, site?.permissions?.accounts);
+        if (payload.length === 0 && site?.permissions?.accounts?.length > 0) continue;
+        await deps.events.accountsChanged(site.origin, payload);
+    }
+}
+
+function permittedAccounts(accounts, permittedIds) {
+    const ids = new Set(Array.isArray(permittedIds) ? permittedIds : []);
+    return accounts
+        .filter((account) => ids.size === 0 || ids.has(account?.id))
+        .filter((account) => typeof account?.id === 'string' && account.id)
+        .map((account) => ({ id: account.id, name: account.name }));
+}
+
+function runtimeRequest(runtime, type, request) {
+    return new Promise((resolve) => {
+        try {
+            runtime.sendMessage({ type, request }, (response) => {
+                void runtime.lastError;
+                resolve(response?.ok === true ? response.result : null);
+            });
+        } catch {
+            resolve(null);
+        }
+    });
 }
 
 /**
