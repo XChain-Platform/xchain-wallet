@@ -75,6 +75,7 @@ describe('listMultisigReceiveAddresses', () => {
         const result = await listMultisigReceiveAddresses({ ...options(h), ...range });
 
         expect(result.map(({ multisigConfigId }) => multisigConfigId)).toEqual(['first', 'second']);
+        expect(h.deriveMultisigAddress).toHaveBeenCalledTimes(2);
     });
 
     it('returns an empty list when the wallet has no multisig configurations', async () => {
@@ -91,5 +92,4 @@ describe('listMultisigReceiveAddresses', () => {
         await expect(listMultisigReceiveAddresses(options(h))).resolves.toEqual([]);
         expect(h.sdkRegistry.get).not.toHaveBeenCalled();
     });
-
 });
