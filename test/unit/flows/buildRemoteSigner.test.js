@@ -13,22 +13,23 @@ import { buildRemoteSigner } from '../../../packages/core/src/flows/resolveSigne
 import { RemoteSigner } from '../../../packages/core/src/signers/RemoteSigner.js';
 
 describe('buildRemoteSigner', () => {
-    it('builds a RemoteSigner carrying the descriptor address and transport', async () => {
+    it('builds a RemoteSigner with the descriptor address from its transport', async () => {
         const address = { id: 'addr-1', address: 'bc1qremote' };
         const descriptor = {
             kind: 'ledger',
             address,
             signerRecord: { id: 'signer-1', label: 'Ledger One', vendor: 'ledger', model: 'nano-s' },
         };
-        const transport = vi.fn().mockResolvedValue([address]);
+        const transport = vi.fn().mockResolvedValue([descriptor.address]);
 
         const signer = buildRemoteSigner(descriptor, transport);
 
         expect(signer).toBeInstanceOf(RemoteSigner);
         expect(signer).toMatchObject({ id: 'signer-1', displayName: 'Ledger One', kind: 'ledger' });
-        expect(signer.address).toBe(descriptor.address);
         expect(signer._transport).toBe(transport);
-        await expect(signer.getAddresses({ chainId: 'bitcoin-mainnet' })).resolves.toEqual([address]);
+        await expect(signer.getAddresses({ chainId: 'bitcoin-mainnet' })).resolves.toEqual([
+            descriptor.address,
+        ]);
         expect(transport).toHaveBeenCalledWith({
             op: 'getAddresses',
             payload: { chainId: 'bitcoin-mainnet', signerId: 'signer-1' },
