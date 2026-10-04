@@ -122,10 +122,12 @@ describe('encoderOpts fee passthrough', () => {
 
     it('applies the same passthrough to castBallotAction', async () => {
         const { opts } = makeOpts({ params: { pollRef: 1, ballot: [0] } });
-        await castBallotAction({ ...opts, rbf: true });
+        await castBallotAction({ ...opts, fee: 0, feePerKb: 5, rbf: true });
         const enc = submitAction.mock.calls[0][0].encoderOpts;
-        expect(enc.rbf).toBe(true);
-        expect('fee' in enc).toBe(false);
-        expect('feePerKb' in enc).toBe(false);
+        expect(enc).toMatchObject({ fee: 0, feePerKb: 5, rbf: true });
+
+        await castBallotAction(opts);
+        const bare = submitAction.mock.calls[1][0].encoderOpts;
+        expect(Object.keys(bare)).not.toEqual(expect.arrayContaining(['fee', 'feePerKb', 'rbf']));
     });
 });
