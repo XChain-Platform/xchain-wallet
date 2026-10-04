@@ -22,6 +22,7 @@
 
 import { unlockWallet } from './unlockWallet.js';
 import { assertSigningAllowed } from './panicMode.js';
+import { assertNoDeceptiveCharacters } from './signRiskClassifier.js';
 
 const SIGN_IN_CHALLENGE_PREFIX = 'XChain Sign-In v2';
 
@@ -74,6 +75,8 @@ export async function signMessageFlow({
     if (message.startsWith(SIGN_IN_CHALLENGE_PREFIX)) {
         throw new Error('signMessageFlow: sign-in challenges cannot be signed as arbitrary messages');
     }
+    // Refuse text whose visual form can conceal the bytes the signer receives.
+    assertNoDeceptiveCharacters({ chainId, path, addressId, message }, 'signMessageFlow');
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
         throw new Error('signMessageFlow: either `password` or `signer` is required');
     }
@@ -137,6 +140,8 @@ export async function signPsbtFlow({
     if (!Array.isArray(signingPaths) || signingPaths.length === 0) {
         throw new Error('signPsbtFlow: signingPaths must be a non-empty array');
     }
+    // Refuse text whose visual form can conceal the bytes the signer receives.
+    assertNoDeceptiveCharacters({ chainId, psbtHex, signingPaths }, 'signPsbtFlow');
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
         throw new Error('signPsbtFlow: either `password` or `signer` is required');
     }
