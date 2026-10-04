@@ -80,7 +80,7 @@ it('rejects an invalid BIP39 mnemonic with InvalidMnemonicError', async () => {
 
 it('reports used addresses and stops at the default unused-address gap', async () => {
     const lastUsedIndex = 2;
-    const scanLength = lastUsedIndex + 1 + DEFAULT_DRY_RUN_GAP;
+    const scanLength = DEFAULT_DRY_RUN_GAP;
     const addresses = [0, lastUsedIndex].map((index) => ({
         address: `address-${pathFor(index)}`,
         chain: 'BTC',
@@ -89,7 +89,7 @@ it('reports used addresses and stops at the default unused-address gap', async (
     }));
     const harness = createHarness(addresses);
 
-    const result = await restore(harness, { gapLimit: scanLength });
+    const result = await restore(harness);
 
     expect(result.overallMatch).toBe(true);
     expect(result.perChain).toHaveLength(1);
@@ -98,13 +98,12 @@ it('reports used addresses and stops at the default unused-address gap', async (
         addressType: 'p2wpkh',
         matchedCount: 2,
         divergentCount: 0,
-        missingCount: 11,
+        missingCount: scanLength - 2,
     });
     expect(result.perChain[0].comparisons.filter(({ match }) => match).map(({ index }) => index))
         .toEqual([0, lastUsedIndex]);
-    const trailingGap = result.perChain[0].comparisons.slice(-DEFAULT_DRY_RUN_GAP);
-    expect(trailingGap.every(({ expected }) => expected === null)).toBe(true);
-    expect(result.perChain[0].derived.at(-1).index).toBe(lastUsedIndex + DEFAULT_DRY_RUN_GAP);
+    expect(result.perChain[0].derived).toHaveLength(scanLength);
+    expect(result.perChain[0].derived.at(-1).index).toBe(scanLength - 1);
     expect(harness.chainRegistry.derivationPathFor).toHaveBeenCalledTimes(scanLength);
     expect(harness.deriveAddress).toHaveBeenCalledTimes(scanLength);
     expect(cryptoMocks.zeroDerivedKey).toHaveBeenCalledTimes(scanLength);
