@@ -645,7 +645,12 @@ export {
 // §5.3 broadcast-failure permanence. Exported because BOTH queues need the
 // same verdict: the core PendingTx drain above, and the extension host's own
 // on-demand queue, which would otherwise retry a dead transaction forever.
-export { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
+export {
+    classifyBroadcastFailure,
+    isAlreadyOnNetworkRejection,
+    BROADCAST_FAILED_PERMANENT_NAME,
+    BROADCAST_FAILED_TRANSIENT_NAME,
+} from './broadcastPermanence.js';
 // §4.6 input liveness. The host route owns the utxo fetch; the comparison and
 // the "which addresses do I have to ask" question are pure, so both live here
 // and are unit-testable without a chain.
