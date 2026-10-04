@@ -35,9 +35,9 @@ describe('getProjectForTick', () => {
         })).resolves.toBeNull();
     });
 
-    it('returns null when the explorer reports a missing project', async () => {
+    it('returns null when the project lookup throws a no-roster error', async () => {
         const sdk = { getProject: vi.fn(async () => {
-            throw Object.assign(new Error('Project not found'), { status: 404 });
+            throw new Error('Project not found');
         }) };
 
         await expect(getProjectForTick({
