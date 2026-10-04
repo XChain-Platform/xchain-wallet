@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
+import { indexerWaitMessage } from '../../flows/deployLegWait.js';
 import { normalizeMetaRead, CONTRACT_META_REQUIRED } from '../../flows/contractMetaPreflight.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -43,6 +44,9 @@ import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/** How often a running chunked deploy's record is re-read for an indexer wait. */
+const INDEXER_WAIT_POLL_MS = 5000;
 
 // Which chains this form may deploy on, asked of the LIVE registry inside the
 // component (useSupportedChains, filtered on supportedActions.includes('DEPLOY'))
@@ -216,6 +220,11 @@ export function DeployContractForm({ walletId, onBack }) {
     const [chunkProgress, setChunkProgress] = useState(
         /** @type {{ done: number, total: number, phase: string } | null} */ (null),
     );
+    // The leg a running chunked deploy is waiting on the indexer for, as the
+    // run notes it on its pendingDeploy record; null while nothing is waiting.
+    const [indexerWait, setIndexerWait] = useState(
+        /** @type {{ leg: number|null, total: number, chainState: string } | null} */ (null),
+    );
     // PC-38: interrupted runs whose chunks are already paid for on chain.
     const [resumable, setResumable] = useState(/** @type {any[]} */ ([]));
     const [resumeId, setResumeId] = useState(/** @type {string | null} */ (null));
@@ -370,6 +379,31 @@ export function DeployContractForm({ walletId, onBack }) {
         }
         return () => { cancelled = true; };
     }, [messaging, chainId, walletId]);
+
+    // While a chunked run is in flight, read the run's own record for a leg
+    // that is on chain but not yet indexed. The run lives in the host and
+    // sends no progress events, so its pendingDeploy record is the only
+    // place that state is visible from here.
+    const chunkRunActive = stage === 'submitting' && chunkProgress !== null;
+    const planHash = plan ? plan.codeHash : null;
+    useEffect(() => {
+        setIndexerWait(null);
+        if (!chunkRunActive || typeof messaging.listPendingDeploys !== 'function') return undefined;
+        let cancelled = false;
+        const read = () => {
+            messaging.listPendingDeploys({ walletId })
+                .then((rows) => {
+                    if (cancelled) return;
+                    const run = (rows || []).find((r) => r && r.stage !== 'done' && r.chainId === chainId
+                        && (resumeId ? r.id === resumeId : r.codeHash === planHash));
+                    setIndexerWait(run && run.indexerWait ? run.indexerWait : null);
+                })
+                .catch(() => {});
+        };
+        read();
+        const timer = setInterval(read, INDEXER_WAIT_POLL_MS);
+        return () => { cancelled = true; clearInterval(timer); };
+    }, [chunkRunActive, messaging, walletId, chainId, resumeId, planHash]);
 
     // PC-38: re-plan whenever the source or the fields that share the action's
     // byte budget change. The plan is what decides which submit lane runs.
@@ -991,6 +1025,11 @@ export function DeployContractForm({ walletId, onBack }) {
                         Each waits for confirmation before the next is signed, so this takes a
                         few minutes. Leave the wallet open; if it is interrupted you can resume
                         without re-paying for the chunks already sent.
+                    </p>
+                ) : null}
+                {chunkProgress && indexerWaitMessage(indexerWait) ? (
+                    <p className={styles.summary} role="status" data-testid="deploy-indexer-wait">
+                        {indexerWaitMessage(indexerWait)}
                     </p>
                 ) : null}
                 <div className={styles.actions}>

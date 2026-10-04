@@ -36,7 +36,8 @@
 // Exit 0 and prints "manifest-diff: ok" when equal after ignoring the
 // listed keys. Exit 1 and prints every path that differs otherwise.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const DEFAULT_IGNORE = ['update_url', 'key'];
 
@@ -182,7 +183,18 @@ export function structuralDiff(ours, theirs, ignore = DEFAULT_IGNORE) {
     return mismatches;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare against the realpath as a URL: import.meta.url is resolved and percent-encoded,
+// argv[1] is neither, so a symlinked or spaced checkout would skip the CLI and exit 0.
+const invokedDirectly = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
+
+if (invokedDirectly) {
     const { positional, ignore } = parseArgs(process.argv.slice(2));
     const [oursPath, theirsPath] = positional;
     if (!oursPath || !theirsPath) {

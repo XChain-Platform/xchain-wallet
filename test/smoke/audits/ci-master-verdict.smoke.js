@@ -371,6 +371,62 @@ assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] })
     'excluding the reading job by name must leave the rest classifiable. Without this the `verdict` '
     + 'job can only ever report PENDING, because it is always mid-run when it looks.');
 
+// Drive the CLI against a local stub API: a refused annotation must leave the
+// verdict and exit code exactly as the offline form gives them, and a refused
+// jobs call must still exit 2, because without jobs there is nothing to classify.
+{
+    const { createServer } = await import('node:http');
+    const { spawn } = await import('node:child_process');
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const meta = { id: 1, status: 'completed', conclusion: 'failure', path: '.github/workflows/ci.yml' };
+    const stubJobs = [{
+        name: 'test', status: 'completed', conclusion: 'failure', steps: [],
+        check_run_url: 'https://api.example/repos/o/r/check-runs/77',
+    }];
+    let jobsStatus = 200;
+    const server = createServer((req, res) => {
+        const send = (code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+        if (req.url.startsWith('/repos/o/r/actions/runs/1/jobs')) return send(jobsStatus, { jobs: stubJobs });
+        if (req.url === '/repos/o/r/actions/runs/1') return send(200, meta);
+        if (req.url.startsWith('/repos/o/r/check-runs/77/annotations')) return send(403, { message: 'Resource not accessible' });
+        return send(404, {});
+    });
+    await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+    const apiUrl = `http://127.0.0.1:${server.address().port}`;
+    const cli = (args) => new Promise((ok) => {
+        const env = { ...process.env, GITHUB_API_URL: apiUrl, GITHUB_TOKEN: 'dummy' };
+        delete env.GITHUB_STEP_SUMMARY;
+        const child = spawn(process.execPath, [join(here, '../../../tools/release/run-verdict.mjs'), ...args], { env });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d) => { stdout += d; });
+        child.stderr.on('data', (d) => { stderr += d; });
+        child.on('close', (status) => ok({ status, stdout, stderr }));
+    });
+    const work = mkdtempSync(join(tmpdir(), 'run-verdict-cli-'));
+    try {
+        const offlineFile = join(work, 'run.json');
+        writeFileSync(offlineFile, JSON.stringify({ ...meta, jobs: stubJobs }));
+        const offline = await cli(['--from', offlineFile, '--json']);
+        const online = await cli(['--run', '1', '--repo', 'o/r', '--json']);
+        assert.notEqual(online.status, 2,
+            `a refused annotation must not make the run unreadable (exit 2); stderr: ${online.stderr}`);
+        assert.equal(online.status, offline.status,
+            'a refused annotation changed the exit code; the annotation is optional and must change nothing.');
+        assert.equal(JSON.parse(online.stdout).verdict, JSON.parse(offline.stdout).verdict,
+            'a refused annotation changed the verdict; the classification stands on the empty steps array.');
+        assert.match(online.stderr, /checks: read/,
+            'a refused annotation must name the missing `checks: read` scope on stderr.');
+        jobsStatus = 500;
+        const broken = await cli(['--run', '1', '--repo', 'o/r', '--json']);
+        assert.equal(broken.status, 2, 'a refused jobs call must still exit 2: there is nothing to classify.');
+    } finally {
+        server.close();
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
 console.log('OK: ci master-verdict smoke (concurrency exempts refs/heads/master from '
     + 'cancel-in-progress, evaluated both ways; push-to-master trigger intact; `verdict` job waits '
     + `on all ${others.length} jobs and classifies from steps; cancelled/not-started jobs report as `

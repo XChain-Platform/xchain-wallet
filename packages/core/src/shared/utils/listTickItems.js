@@ -15,6 +15,7 @@
 // say so before the user pays for it.
 
 import { tickerReferenceError } from './tickerGrammar.js';
+import { splitTickCoinItem } from './listTickCoin.js';
 
 /**
  * Split pasted token-list text (newline or comma separated) into items.
@@ -22,25 +23,35 @@ import { tickerReferenceError } from './tickerGrammar.js';
  * an earlier item is counted as a duplicate and dropped. An item that fails
  * the chain ticker grammar lands in `invalid` instead of `valid`.
  *
+ * With `coinQualified`, a `COIN:rest` item is judged on its rest, repeats
+ * fold on the upper-cased coin plus the lower-cased rest, and the result also
+ * carries `coinOf`: one entry per `valid` item, the upper-cased coin for a
+ * qualified item and null for a bare one.
+ *
  * @param {string} text
- * @returns {{ valid: string[], invalid: string[], duplicates: number }}
+ * @param {{ coinQualified?: boolean }} [options]
+ * @returns {{ valid: string[], invalid: string[], duplicates: number, coinOf?: Array<string | null> }}
  */
-export function classifyTickItems(text) {
+export function classifyTickItems(text, { coinQualified = false } = {}) {
     const seen = new Set();
     const valid = [];
     const invalid = [];
+    const coinOf = [];
     let duplicates = 0;
     for (const raw of String(text || '').split(/[\n,]+/)) {
         const t = raw.trim();
         if (!t) continue;
-        const identity = t.toLowerCase();
+        const split = coinQualified ? splitTickCoinItem(t) : null;
+        const identity = split ? `${split.coin}:${split.rest.toLowerCase()}` : t.toLowerCase();
         // Count a repeat once and keep only the first occurrence.
         if (seen.has(identity)) { duplicates += 1; continue; }
         seen.add(identity);
-        if (tickerReferenceError(t, { allowRef: true }) === null) valid.push(t);
-        else invalid.push(t);
+        if (tickerReferenceError(split ? split.rest : t, { allowRef: true }) === null) {
+            valid.push(t);
+            coinOf.push(split ? split.coin : null);
+        } else invalid.push(t);
     }
-    return { valid, invalid, duplicates };
+    return coinQualified ? { valid, invalid, duplicates, coinOf } : { valid, invalid, duplicates };
 }
 
 /**

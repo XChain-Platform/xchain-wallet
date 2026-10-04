@@ -24,6 +24,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
 
+// A commit with one data leg and a reveal that spends it, as decomposePsbt reads them
+const revealLegs = (commitTxid, encoding) => {
+    const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
+    const script = { [scriptType === 'p2wsh' ? 'witnessScriptHex' : 'redeemScriptHex']: '0100' };
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType }] };
+};
+
 function harness({ progressDelayMs = 0, progressThrows = false } = {}) {
     const trace = [];
     const encoder = {
@@ -79,5 +86,76 @@ describe('submitWithSigner durably records the broadcast before making it', () =
         h.onProgress = (phase) => { if (phase === 'broadcasting') h.trace.push('sync-progress'); };
         await call(h);
         expect(h.trace).toEqual(['sync-progress', 'broadcast']);
+    });
+});
+
+// A node that already holds these exact bytes answers a re-send with
+// txn-already-in-mempool or txn-already-known: the broadcast was delivered.
+describe('submitWithSigner reads an already-on-network answer as delivery', () => {
+    const IN_MEMPOOL = () => new Error('Encoder RPC error: txn-already-in-mempool');
+    const KNOWN = () => new Error('Encoder RPC error: txn-already-known');
+
+    // `answers` scripts each broadcastTx call in order: an Error rejects, anything else resolves.
+    function scripted({ encoding = 'OP_RETURN', answers = [] } = {}) {
+        let n = 0;
+        const encoder = {
+            createTx: vi.fn(async () => ({ psbt: 'PHASE1', encoding })),
+            broadcastTx: vi.fn(async () => {
+                const a = answers[n++];
+                if (a instanceof Error) throw a;
+                return {};
+            }),
+            spendP2sh: vi.fn(async () => ({ psbt: 'PHASE2' })),
+        };
+        const signer = {
+            kind: 'software',
+            signPsbt: vi.fn(async ({ psbtHex }) => ({ txHex: `TX(${psbtHex})`, txid: `txid-${psbtHex}` })),
+        };
+        const args = {
+            sdkRegistry: { get: () => ({
+                encoder,
+                actions: { createAction: () => ({ actionString: 'DEPLOY|0|x|1', action: 'DEPLOY', version: 0 }) },
+                wallet: { decomposePsbt: () => revealLegs('txid-PHASE1', encoding) },
+            }) },
+            chainId: 'litecoin-regtest',
+            chainRegistry: { get: () => ({ id: 'litecoin-regtest', coin: 'litecoin' }) },
+            actionData: { action: 'DEPLOY', params: { VERSION: '0', CODE: 'x', GAS_LIMIT: '1' } },
+            encoderOpts: { pubkey: 'pub' },
+            signer,
+            signingPaths: [{ inputIndex: 0, path: 'm/0' }],
+        };
+        return { encoder, signer, args };
+    }
+
+    it.each([['in mempool', IN_MEMPOOL], ['known', KNOWN]])('resolves a single-phase send the node already holds (%s)', async (_label, answer) => {
+        const h = scripted({ answers: [answer()] });
+        const result = await submitWithSigner(h.args);
+        expect(result.txid).toBe('txid-PHASE1');
+        expect(h.encoder.broadcastTx).toHaveBeenCalledTimes(1);
+    });
+
+    it('continues a P2SH send to phase 2 when phase 1 is already on the network', async () => {
+        const h = scripted({ encoding: 'P2SH', answers: [KNOWN(), 'ok'] });
+        const result = await submitWithSigner(h.args);
+        expect(h.encoder.spendP2sh).toHaveBeenCalledOnce();
+        expect(h.encoder.broadcastTx).toHaveBeenCalledTimes(2);
+        expect(h.encoder.broadcastTx.mock.calls[1][0]).toBe('TX(PHASE2)');
+        expect(result.txid).toBe('txid-PHASE2');
+    });
+
+    it('resolves with the phase-2 txid when phase 2 is already in the mempool', async () => {
+        const h = scripted({ encoding: 'P2SH', answers: ['ok', IN_MEMPOOL()] });
+        const result = await submitWithSigner(h.args);
+        expect(result.txid).toBe('txid-PHASE2');
+    });
+
+    it.each([
+        ['bad-txns-inputs-missingorspent'],
+        ['ECONNREFUSED'],
+    ])('still throws BroadcastFailedError for %s', async (reason) => {
+        const h = scripted({ answers: [new Error(reason)] });
+        await expect(submitWithSigner(h.args)).rejects.toMatchObject({
+            name: 'BroadcastFailedError', phase: 'phase1', txid: 'txid-PHASE1',
+        });
     });
 });

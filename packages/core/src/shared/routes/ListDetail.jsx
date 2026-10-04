@@ -12,6 +12,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { TickMemberName } from '../components/TickMemberName.jsx';
+import { neutralizeControlText } from '../utils/textHardening.js';
+import { listMetaSupported } from '../../flows/listFormatSupport.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -49,14 +52,18 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
  * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null, source: string | null, parentIndex: string | null }) => void} props.onFork
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onShare]     shows "Share list" when passed
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onRename]    shows "Rename list" when passed and supported
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]  shows "Transfer list" when passed
  */
-export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
+export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
 
     const [data, setData] = useState(/** @type {any | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [metaSupported, setMetaSupported] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -67,6 +74,21 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load list.'); });
         return () => { cancelled = true; };
     }, [chainId, actionIndex, messaging]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setMetaSupported(false);
+        if (!chainId) return () => { cancelled = true; };
+        const sdkRegistry = {
+            get: () => ({
+                getActionFormats: (action) => messaging.getActionFormats({ chainId, action }),
+            }),
+        };
+        Promise.resolve().then(() => listMetaSupported({ sdkRegistry, chainId }))
+            .then((supported) => { if (!cancelled) setMetaSupported(supported === true); })
+            .catch(() => { if (!cancelled) setMetaSupported(false); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const isTick = data ? String(data.type) === '1' : false;
@@ -85,6 +107,9 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
         [resolution, state],
     );
     const membershipIndex = state?.membership_action_index != null ? String(state.membership_action_index) : null;
+    const name = typeof data?.name === 'string' && data.name.length > 0 ? data.name : null;
+    const description = typeof data?.description === 'string' && data.description.length > 0
+        ? data.description : null;
 
     const header = (
         <PageHeader onBack={onBack} title={isTick ? 'Token list' : 'Address list'} />
@@ -109,6 +134,18 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                 <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                 <dt className={styles.detailsLabel}>List index</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
+                {name !== null ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Name</dt>
+                        <dd className={styles.detailsValue}>{neutralizeControlText(name)}</dd>
+                    </>
+                ) : null}
+                {description !== null ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Description</dt>
+                        <dd className={styles.detailsValue}>{neutralizeControlText(description)}</dd>
+                    </>
+                ) : null}
                 <dt className={styles.detailsLabel}>Type</dt>
                 <dd className={styles.detailsValue}>{isTick ? 'Token list' : 'Address list'}</dd>
                 <dt className={styles.detailsLabel}>Created by</dt>
@@ -139,17 +176,17 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                             ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
                             : `No edits yet. Everything that references #${actionIndex} uses these members.`}
                     </p>
-                    <MemberList items={currentItems} isTick={isTick} />
+                    <MemberList items={currentItems} isTick={isTick} messaging={messaging} chainId={chainId} />
                     <h3 className={styles.successLabel}>As created ({items.length})</h3>
                     <p className={styles.hint}>The members this action was published with.</p>
-                    <MemberList items={items} isTick={isTick} />
+                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
                 </>
             ) : (
                 <>
                     <h3 className={styles.successLabel}>
                         {resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
                     </h3>
-                    <MemberList items={items} isTick={isTick} />
+                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
                 </>
             )}
 
@@ -210,6 +247,21 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
                 >
                     Fork &amp; edit
                 </Button>
+                {onShare ? (
+                    <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
+                        Share list
+                    </Button>
+                ) : null}
+                {onTransfer ? (
+                    <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
+                        Transfer list
+                    </Button>
+                ) : null}
+                {onRename && metaSupported ? (
+                    <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
+                        Rename list
+                    </Button>
+                ) : null}
             </div>
         </>,
     );
@@ -218,9 +270,9 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork }) {
 /**
  * One membership block: ticks as code, addresses in full.
  *
- * @param {{ items: string[], isTick: boolean }} props
+ * @param {{ items: string[], isTick: boolean, messaging: object, chainId: string }} props
  */
-function MemberList({ items, isTick }) {
+function MemberList({ items, isTick, messaging, chainId }) {
     if (items.length === 0) {
         return <p className={styles.hint}>This list has no members.</p>;
     }
@@ -228,7 +280,9 @@ function MemberList({ items, isTick }) {
         <ul className={styles.detailsList} style={{ display: 'block' }}>
             {items.map((item, i) => (
                 <li key={i} style={{ padding: '2px 0' }}>
-                    {isTick ? <code>{item}</code> : <AddressText address={item} truncate={false} />}
+                    {isTick
+                        ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
+                        : <AddressText address={item} truncate={false} />}
                 </li>
             ))}
         </ul>

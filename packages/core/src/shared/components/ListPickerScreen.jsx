@@ -18,11 +18,36 @@
 // omit for all. Each row's member count comes from a per-list
 // `getListByActionIndex` read so the owner sees how many entries a list
 // carries before binding it to a token.
+//
+// `includeUnions` (default false) also offers union lists (type 3) whose
+// first member list has the requested `filterType`; a union whose member
+// read fails or that has no members is left out.
 
 import { useEffect, useState } from 'react';
 import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
-import { currentListMemberCount } from '../../flows/listMembership.js';
+import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
+import { listLabel } from '../utils/listLabel.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
+
+function firstMemberIndex(detail) {
+    const first = (currentListItems(detail) || [])[0];
+    const idx = first && typeof first === 'object' ? first.action_index : first;
+    return idx == null || idx === '' ? null : String(idx);
+}
+
+async function unionMatchesType(messaging, chainId, row, filterType) {
+    if (typeof messaging.getListByActionIndex !== 'function') return false;
+    try {
+        const union = await messaging.getListByActionIndex({ chainId, actionIndex: String(row.action_index) });
+        const memberIdx = firstMemberIndex(union);
+        if (!memberIdx) return false;
+        const member = await messaging.getListByActionIndex({ chainId, actionIndex: memberIdx });
+        return String(member?.type) === String(filterType);
+    } catch {
+        return false;
+    }
+}
 
 function extractListRows(resp) {
     if (!resp) return [];
@@ -42,16 +67,18 @@ function extractListRows(resp) {
  * @param {string} props.chainId
  * @param {any[]} props.addresses            the wallet's own addresses on chainId
  * @param {'1' | '2'} [props.filterType]     restrict to token ('1') or address ('2') lists
+ * @param {boolean} [props.includeUnions]   also list union lists whose first member matches filterType
  * @param {string} [props.title]
- * @param {(row: { actionIndex: string, type: string, memberCount: number | null }) => void} props.onSelect
+ * @param {(row: { actionIndex: string, type: string, memberCount: number | null, name?: string }) => void} props.onSelect
  * @param {() => void} props.onBack
  */
 export function ListPickerScreen({
-    variant, messaging, chainId, addresses, filterType, title = 'Choose a list', onSelect, onBack,
+    variant, messaging, chainId, addresses, filterType, includeUnions = false, title = 'Choose a list', onSelect, onBack,
 }) {
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [counts, setCounts] = useState(/** @type {Record<string, number | null>} */ ({}));
+    const [descriptions, setDescriptions] = useState(/** @type {Record<string, string | null>} */ ({}));
 
     useEffect(() => {
         let cancelled = false;
@@ -61,7 +88,7 @@ export function ListPickerScreen({
         if (addrList.length === 0) { setRows([]); return undefined; }
         Promise.all(addrList.map((addr) => messaging.getListsForSource({ chainId, address: addr })
             .then((resp) => extractListRows(resp))))
-            .then((results) => {
+            .then(async (results) => {
                 if (cancelled) return;
                 const merged = results.flat();
                 const seen = new Set();
@@ -71,13 +98,23 @@ export function ListPickerScreen({
                     seen.add(key);
                     return true;
                 });
-                if (filterType) uniq = uniq.filter((row) => String(row.type) === String(filterType));
+                if (filterType) {
+                    const keep = await Promise.all(uniq.map(async (row) => {
+                        if (String(row.type) === String(filterType)) return true;
+                        if (includeUnions && String(row.type) === '3') {
+                            return unionMatchesType(messaging, chainId, row, filterType);
+                        }
+                        return false;
+                    }));
+                    if (cancelled) return;
+                    uniq = uniq.filter((_, i) => keep[i]);
+                }
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
                 setRows(uniq);
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load lists.'); });
         return () => { cancelled = true; };
-    }, [chainId, addresses, messaging, filterType]);
+    }, [chainId, addresses, messaging, filterType, includeUnions]);
 
     // Best-effort member counts for the shown lists (one detail read each).
     useEffect(() => {
@@ -93,9 +130,16 @@ export function ListPickerScreen({
                     if (cancelled) return;
                     // Count the newest valid edit's members: what a gate bound to this index checks
                     setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
+                    setDescriptions((prev) => ({
+                        ...prev,
+                        [idx]: typeof detail?.description === 'string' && detail.description.length > 0
+                            ? detail.description
+                            : null,
+                    }));
                 } catch {
                     if (cancelled) return;
                     setCounts((prev) => ({ ...prev, [idx]: null }));
+                    setDescriptions((prev) => ({ ...prev, [idx]: null }));
                 }
             }
         })();
@@ -129,21 +173,38 @@ export function ListPickerScreen({
                 {rows.map((row) => {
                     const idx = String(row.action_index ?? '?');
                     const isTick = String(row.type) === '1';
+                    const isUnion = String(row.type) === '3';
                     const status = String(row.status || '');
                     const count = counts[idx];
+                    const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
+                    const titleLabel = typeof row.name === 'string' && row.name.length > 0
+                        ? listLabel(idx, row.name)
+                        : `${kind} list #${idx}`;
+                    const rawDescription = descriptions[idx] || row.description;
+                    const description = typeof rawDescription === 'string' && rawDescription.length > 0
+                        ? neutralizeControlText(rawDescription)
+                        : '';
+                    const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
                     return (
                         <li key={idx}>
                             <button
                                 type="button"
                                 className={styles.abRow}
-                                onClick={() => onSelect({ actionIndex: idx, type: String(row.type), memberCount: count ?? null })}
+                                onClick={() => onSelect({
+                                    actionIndex: idx,
+                                    type: String(row.type),
+                                    memberCount: count ?? null,
+                                    ...(typeof row.name === 'string' && row.name.length > 0
+                                        ? { name: row.name }
+                                        : {}),
+                                })}
                             >
                                 <span className={styles.abName}>
-                                    {isTick ? 'Token' : 'Address'} list #{idx}
+                                    {titleLabel}
                                     {status && status !== 'valid' ? ` (${status})` : ''}
                                 </span>
                                 <span className={styles.abAddr}>
-                                    {count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`}
+                                    {description ? `${countText} · ${description}` : countText}
                                 </span>
                             </button>
                         </li>

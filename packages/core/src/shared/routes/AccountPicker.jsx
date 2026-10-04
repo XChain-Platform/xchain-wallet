@@ -82,7 +82,11 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     <div className={styles.entryDescription}>No accounts yet.</div>
                 ) : accounts.map((a) => {
                     const active = a.id === activeAccountId;
-                    const label = a.name || `Account ${a.index + 1}`;
+                    const defaultName = `Account ${a.index + 1}`;
+                    const label = a.name || defaultName;
+                    // Keep the numbered name visible under a custom one, so a renamed account stays findable.
+                    const customName = typeof a.name === 'string' ? a.name.trim() : '';
+                    const subtitle = customName && customName !== defaultName ? defaultName : null;
                     return (
                         <div key={a.id} className={pickerStyles.rowWrap}>
                             <button
@@ -97,9 +101,9 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                 <span className={styles.entryLabel}>
                                     {active ? '● ' : '○ '}{label}
                                 </span>
-                                <span className={styles.entryDescription}>
-                                    BIP44 account index {a.index}
-                                </span>
+                                {subtitle ? (
+                                    <span className={styles.entryDescription}>{subtitle}</span>
+                                ) : null}
                             </button>
                             {onRenameAccount ? (
                                 <button

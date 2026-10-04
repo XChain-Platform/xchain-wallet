@@ -17,7 +17,9 @@ import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { dispenserRateLabel } from '../utils/dispenserPricing.js';
-import { dispenserCancelTimestamp, dispenserCloseEta } from '../utils/dispenserCloseWindow.js';
+import {
+    CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
+} from '../utils/dispenserCloseWindow.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
@@ -69,6 +71,11 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     // Cancel block times of closing dispensers, keyed `chainId:actionIndex`.
     const [cancelTimes, setCancelTimes] = useState(/** @type {Record<string, number>} */ ({}));
     const [nowMs, setNowMs] = useState(() => Date.now());
+    // Each chain's protocol time, the clock the close window is judged by,
+    // keyed by chainId: one read per chain with a closing row, never per row.
+    const [chainClocks, setChainClocks] = useState(
+        /** @type {Record<string, null | { chainTime: number, chainTimeReadAtMs: number }>} */ ({}),
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -195,14 +202,38 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         }
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, walletId]);
-    // Re-render once a minute while any closing row shows a countdown.
-    const hasCountdown = Object.keys(cancelTimes).length > 0;
+    // Re-render once a minute while any closing row shows a countdown, and
+    // re-read the protocol time of each chain with one, at most once per
+    // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
+    // the set of chains does.
+    const countdownChains = [...new Set(Object.keys(cancelTimes)
+        .map((key) => key.slice(0, key.lastIndexOf(':'))))].sort().join(',');
     useEffect(() => {
-        if (!hasCountdown) return undefined;
-        setNowMs(Date.now());
-        const timer = setInterval(() => setNowMs(Date.now()), 60000);
-        return () => clearInterval(timer);
-    }, [hasCountdown]);
+        if (!countdownChains) return undefined;
+        let stopped = false;
+        let lastReadMs = -Infinity;
+        const chains = countdownChains.split(',');
+        const tick = () => {
+            const now = Date.now();
+            setNowMs(now);
+            if (now - lastReadMs < CHAIN_TIME_REFRESH_MS) return;
+            if (typeof messaging.getChainTipBlockTime !== 'function') return;
+            lastReadMs = now;
+            for (const chainId of chains) {
+                // A failed read keeps the chain's last reading.
+                messaging.getChainTipBlockTime({ chainId, withProtocolTime: true })
+                    .then((r) => {
+                        if (stopped) return;
+                        const clock = chainClockFromTipRead(r, Date.now());
+                        setChainClocks((prev) => ({ ...prev, [chainId]: clock }));
+                    })
+                    .catch(() => {});
+            }
+        };
+        tick();
+        const timer = setInterval(tick, 60000);
+        return () => { stopped = true; clearInterval(timer); };
+    }, [countdownChains, messaging]);
     // Flatten every chain's rows into one list, newest first. Each row is
     // annotated with its chainId for the network overlay + detail link.
     const allRows = useMemo(() => {
@@ -326,6 +357,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             oracleFeeds={oracleFeedsFor(row.chainId, row)}
                             cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
                             nowMs={nowMs}
+                            chainClock={chainClocks[row.chainId] || null}
                             onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
                         />
                     ))}
@@ -335,7 +367,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
 }
 
-function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, onSelect }) {
+function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
@@ -351,7 +383,7 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, onSelec
     // A cancelling dispenser is in its close window: say "Closing", with the
     // countdown when the cancel time is known.
     const closeEta = status === 'cancelling' && cancelTimestamp != null
-        ? dispenserCloseEta(cancelTimestamp, { nowMs })
+        ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
         : null;
     const badge = status === 'cancelling'
         ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
@@ -413,7 +445,7 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, onSelec
             <div className={local.trailing}>
                 <span
                     className={`${local.status} ${local[`status_${status}`] || ''}`}
-                    title={closeEta ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
+                    title={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
                 >
                     {badge}
                 </span>

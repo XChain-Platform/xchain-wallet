@@ -49,7 +49,8 @@
 //   node tools/release/run-verdict.mjs --from <jobs.json>
 //
 // Env:
-//   GITHUB_TOKEN   needed for any network form; needs `actions: read`
+//   GITHUB_TOKEN   needed for any network form; needs `actions: read`, plus
+//                  `checks: read` for the annotation naming why a job never started
 //   GITHUB_API_URL optional, defaults to https://api.github.com
 
 /** A job's state, derived from its steps rather than from its colour. */
@@ -332,9 +333,11 @@ test result, which is the exact confusion this tool exists to end.`);
         const apiUrl = (process.env.GITHUB_API_URL || 'https://api.github.com').replace(/\/+$/, '');
         const token = process.env.GITHUB_TOKEN;
         if (!repo || !/^[^/]+\/[^/]+$/.test(repo)) fail('--repo (or GITHUB_REPOSITORY) must be owner/name.');
-        if (!token) fail('GITHUB_TOKEN is not set; reading a run needs `actions: read`.');
+        if (!token) fail('GITHUB_TOKEN is not set; reading a run needs `actions: read` '
+            + '(and `checks: read` for the annotation on a job that never started).');
 
-        const api = async (path) => {
+        // An optional call throws on a non-OK status instead of exiting, so its caller can carry on.
+        const api = async (path, { optional = false } = {}) => {
             const res = await fetch(`${apiUrl}${path}`, {
                 headers: {
                     authorization: `Bearer ${token}`,
@@ -343,6 +346,7 @@ test result, which is the exact confusion this tool exists to end.`);
                     'user-agent': 'xchain-run-verdict',
                 },
             });
+            if (!res.ok && optional) throw new Error(`GitHub API ${res.status} on ${path}`);
             if (!res.ok) fail(`GitHub API ${res.status} on ${path}. A 403/404 here is usually a token without \`actions: read\`.`);
             return res.json();
         };
@@ -367,18 +371,24 @@ test result, which is the exact confusion this tool exists to end.`);
         // jobs only: it is the difference between "not-started" and
         // "not-started because the account is over its spending limit", and
         // the second one is actionable in one click.
+        let annotationNoted = false;
         for (const job of jobs) {
             if ((job.steps ?? []).length !== 0) continue;
             if (job.conclusion === 'success' || job.conclusion === 'skipped') continue;
             const id = String(job.check_run_url ?? '').split('/').pop();
             if (!id) continue;
             try {
-                const notes = await api(`/repos/${repo}/check-runs/${id}/annotations`);
+                const notes = await api(`/repos/${repo}/check-runs/${id}/annotations`, { optional: true });
                 const first = (notes || []).find((n) => n?.message);
                 if (first) job.annotation = first.message;
-            } catch {
+            } catch (err) {
                 // An annotation is a nicety; its absence must never change the
                 // classification, which already stands on the empty steps array.
+                if (!annotationNoted) {
+                    annotationNoted = true;
+                    process.stderr.write(`run-verdict: no annotation (${err?.message || err}); a 401/403/404 `
+                        + 'here is usually a token without `checks: read`. The verdict is unchanged.\n');
+                }
             }
         }
 

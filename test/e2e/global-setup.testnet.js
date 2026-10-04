@@ -12,19 +12,22 @@
 // fit, and priced before Playwright spends an hour of block time on a wallet
 // that could not have completed a single action.
 //
-// Everything here is a READ. The regtest setup heals a clock, seeds a price
-// through ssh and docker into an indexer database and issues a gas token; none
-// of that exists on a public chain and none of it is attempted. The federation
-// prices testnet, XCHAIN is a protocol constant there, and the chain's clock is
-// the chain's. What can still be wrong is the venue in front of it (a halted
-// replica, a stale explorer, a wedged indexer), and those are the states the
-// check names.
+// Everything against the venue here is a READ. The regtest setup heals a
+// clock, seeds a price through ssh and docker into an indexer database and
+// issues a gas token; none of that exists on a public chain and none of it is
+// attempted. The federation prices testnet, XCHAIN is a protocol constant
+// there, and the chain's clock is the chain's. What can still be wrong is the
+// venue in front of it (a halted replica, a stale explorer, a wedged indexer),
+// and those are the states the check names.
 //
-// The treasury is NOT read here. Stdin carries a signing key and this process
-// has no destination to send to yet; `fundFromTreasury` reads it in the spec,
-// once, after the wallet has shown its address.
+// The run input (treasury, and the partial-claim claimant) is piped to the
+// runner, and this is the only process that can read it: Playwright forks its
+// workers with stdin ignored. So after the venue passes, and only then, the
+// input is staged into a 0600 file for the workers (fixtures/testnet.js,
+// stageRunInput), and the teardown returned here removes it. A venue that
+// fails never has the key staged at all.
 
-import { checkTestnetVenue, liveVenue, TESTNET_COIN, testnetEndpoints } from './fixtures/testnet.js';
+import { RUN_INPUT_ENV, checkTestnetVenue, liveVenue, stageRunInput, TESTNET_COIN, testnetEndpoints } from './fixtures/testnet.js';
 
 export default async function globalSetup() {
     const endpoints = testnetEndpoints();
@@ -35,4 +38,14 @@ export default async function globalSetup() {
         + `indexed ${report.indexed}, tip age ${report.tipAgeSeconds}s`);
     console.log(`[testnet ${TESTNET_COIN}] priced: XCHAIN/USD ${report.price.xchainUsdPrice}, `
         + `coin/USD ${report.price.coinUsdPrice} (round ${report.price.oracleRound})`);
+
+    const staged = await stageRunInput(process.stdin);
+    // Backstop for a runner killed before teardown: 'exit' handlers run on a
+    // normal exit and after Playwright's own SIGINT handling.
+    process.once('exit', staged.cleanup);
+    process.env[RUN_INPUT_ENV] = staged.file;
+    return async () => {
+        staged.cleanup();
+        delete process.env[RUN_INPUT_ENV];
+    };
 }

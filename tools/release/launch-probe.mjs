@@ -556,9 +556,9 @@ async function probeMacZip(path, ctx) {
     }
 
     // Cross-architecture: an x64 bundle on Apple silicon runs only under
-    // Rosetta 2, which is not installed by default. Without it the honest
-    // answer is NOT PROBED naming the missing translator, not a failure -
-    // the artifact is fine and this host simply cannot execute it.
+    // Rosetta 2, which is not installed by default. Without it the artifact
+    // is not marked failed, but the result is BLOCKED and the run refuses:
+    // the host is missing a facility, it is not the wrong platform.
     const built = machoArch(exe);
     const hostArch = ctx.arch === 'arm64' ? 'arm64' : 'x64';
     let cmd = exe;
@@ -770,8 +770,9 @@ export function summarise(results) {
  * what GitHub gives us, and a gate that cannot be satisfied gets removed.
  *
  * It is deliberately unset for sign.sh, which runs on the release Mac
- * against a set containing Linux artifacts no Mac can launch; there,
- * silence is prevented by the banner rather than by refusal.
+ * against a set containing Linux artifacts no Mac can launch; there, the
+ * banner covers wrong-platform skips, and the blocked-facility refusal
+ * covers a host that could not run what it should have (no Aqua session).
  */
 export async function run(dir, { releaseSet = 'release', timeoutMs = 8000, expect = [], requireProbed = 0 } = {}) {
     let names;
@@ -882,13 +883,19 @@ Options:
                         cannot execute.
   -h, --help            print this and exit 0
 
-An artifact this host cannot launch reports NOT PROBED, is counted apart from
-the passes, and a run that launched nothing prints a standing banner saying
-so. "We did not look" must never read as "we looked and it was fine".
+A host missing a facility the probe needed refuses with exit 1: a macOS
+launch with no logged-in Aqua session (an SSH shell has none), an x64 mac
+artifact on Apple silicon with no Rosetta 2, or an app that dies for lack of
+FUSE or an X display. A wrong-platform or wrong-architecture artifact, or a
+headless Linux host with no display and no xvfb-run, reports NOT PROBED, is
+counted apart from the passes, and a run that launched nothing prints a
+standing banner saying so. "We did not look" must never read as "we looked
+and it was fine".
 
 Exit codes:
   0  every artifact this host could launch stayed up
-  1  an artifact died, crashed, or lacked a required pattern
+  1  an artifact died, crashed, or lacked a required pattern; this host is
+     missing a facility it needed; or --require-probed was not met
   2  the arguments are unusable
 `;
 

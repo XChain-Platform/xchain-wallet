@@ -26,6 +26,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 /**
  * @param {object} props
@@ -74,7 +75,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             flat.sort((a, b) => rowTime(b) - rowTime(a));
             setRows(flat);
         } catch (err) {
-            setLoadError(err?.message || String(err));
+            setLoadError(readFailureMessage(err, 'load your trade history'));
         } finally {
             setLoading(false);
         }

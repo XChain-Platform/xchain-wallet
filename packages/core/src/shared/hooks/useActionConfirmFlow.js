@@ -28,6 +28,7 @@ import { useConfirmAction, isConfirmOpenPhase } from './useConfirmAction.js';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
+import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 
 /**
  * True for the calm "user pressed Reject" exit, which every form
@@ -153,36 +154,11 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
                 reserve: (e) => messaging.reserve(e),
                 release: (id) => messaging.releaseReservation({ id }),
             },
-            onApprove: (_creds, composed) => onApprove({
-                psbtHex: composed.psbt,
-                encoding: composed.encoding,
-                actionString: composed.actionString,
-                version: composed.version,
-                // On the two-phase lane the protocol fee was left OFF
-                // the previewed PSBT because it belongs on the reveal. Carry
-                // it so the submit path attaches it there.
-                deferredFeeOutput: composed.deferredFeeOutput || null,
-                // ...and the rest of the deferred set, which the fee alone omitted.
-                deferredOutputs: composed.deferredOutputs || [],
-                // ...and the change the reveal must be built with, or its
-                // surplus sweep lands on the un-rotated spending address.
-                revealOpts: composed.revealOpts || null,
-                // A TAPROOT envelope's reveal and recovery record. The submit
-                // path signs the reveal and persists the record before the commit
-                // is broadcast, and refuses the commit if either did not arrive.
-                revealPsbt: composed.revealPsbt || null,
-                envelope: composed.envelope || null,
-                // The donation verdict these bytes actually carry. The submit
-                // path re-resolved it from a fresh settings snapshot, so a
-                // concurrent window that moved the accumulator between compose
-                // and Approve booked a donation this transaction never made.
-                adsDonation: { included: !!composed.adsPlan?.canSubmit },
-                // The encoder's compression report for these exact bytes, so
-                // the success screen can state the size actually stored on
-                // chain. Dropping it here left the Publish file result silent
-                // about a payload the encoder had shrunk to a quarter.
-                compression: composed.compression || null,
-            }, composed),
+            // Map the composed envelope to the form's prebuilt-PSBT argument, carrying
+            // the deferred fee outputs, reveal PSBT, recovery envelope, donation verdict
+            // and compression report so the submit path signs exactly what was previewed.
+            // Each field is explained on the shared helper.
+            onApprove: (_creds, composed) => onApprove(prebuiltPsbtFromComposed(composed), composed),
         })
     ), [confirmAction, messaging, settings, walletId]);
 

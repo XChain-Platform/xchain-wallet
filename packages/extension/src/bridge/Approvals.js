@@ -60,7 +60,8 @@
  * @typedef {Object} SignApprovalResult
  * @property {boolean} approved
  * @property {boolean} [savePermanent]        for signAction: check "always allow"
- * @property {string} [address]               for signIn: user-chosen address
+ * @property {string} [address]               for signIn: user-chosen address, one of payload.addresses
+ * @property {string} [chainId]               for signIn: the chosen address's chain
  * @property {string} [walletId]              for flows that need to pick a wallet
  * @property {string} [password]              popup captures password entry
  */

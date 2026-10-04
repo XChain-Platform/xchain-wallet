@@ -36,9 +36,10 @@
 //                   We use `app.requestSingleInstanceLock()` to
 //                   consolidate into the already-running window.
 //
-// Parsed URIs post to the renderer via webContents.send('xchain:uri', …)
-// where renderer-side code routes to the appropriate view (Send form
-// for payment URIs, action preview for xchain: URIs).
+// Main parks each parsed URI in a one-slot store (createDeepLinkSlot) and
+// nudges the focused window on 'xchain:uri'. The renderer claims the link
+// through the xchainWalletDeepLink preload world and routes it to a
+// prefilled Send, Receive or contract-execute form after unlock.
 
 import { parseBip21Uri, InvalidBip21Error } from '@xchain-wallet/core/uri/bip21.js';
 import { parseXchainUri, hardenUriIntentText } from '@xchain-wallet/core/uri/xchainUri.js';
@@ -163,10 +164,9 @@ export function classifyDeepLink(url) {
         //
         // Hardened here rather than in the renderer because
         // this is where an OS-supplied URI crosses into our process, and
-        // the intent goes out over IPC. The renderer has no listener yet,
-        // so nothing consumes this today; hardening now means whoever
-        // wires that listener inherits a neutralized intent instead of
-        // having to know they needed one.
+        // the intent goes out over IPC. The renderer re-parses `raw` with
+        // its own chain registry and hardens again, so neither side has
+        // to trust the other's copy.
         const intent = hardenUriIntentText(parseXchainUri(url));
         return {
             scheme,
@@ -193,6 +193,43 @@ export function classifyDeepLink(url) {
         }
         throw err;
     }
+}
+
+/**
+ * One-slot hand-off for a deep link waiting on a renderer. A newer link
+ * replaces an unclaimed older one, and `take` claims it exactly once, so a
+ * link that lands before any window or listener exists is still applied by
+ * the first renderer that asks, and never by a second.
+ *
+ * @returns {{ offer: (event: any) => void, take: () => any }}
+ */
+export function createDeepLinkSlot() {
+    let pending = null;
+    return {
+        offer(event) { pending = event ?? null; },
+        take() {
+            const event = pending;
+            pending = null;
+            return event;
+        },
+    };
+}
+
+/**
+ * Pick the window a deep link is nudged to: the focused window unless it is
+ * detached, else the newest window that is not. Null when only detached
+ * windows are open, since a detached window keeps its pinned view.
+ *
+ * @template W
+ * @param {W[]} live
+ * @param {W | null} focused
+ * @param {(win: W) => boolean} isDetached
+ * @returns {W | null}
+ */
+export function pickDeepLinkTarget(live, focused, isDetached) {
+    const primary = live.filter((win) => !isDetached(win));
+    if (focused && primary.includes(focused)) return focused;
+    return primary.length ? primary[primary.length - 1] : null;
 }
 
 function dispatch(url, onDeepLink) {

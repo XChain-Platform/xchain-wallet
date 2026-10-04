@@ -195,3 +195,14 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         ).toBeInTheDocument();
     });
 });
+
+describe('StakeForm network picker', () => {
+    it('offers only Bitcoin chains even when the wallet holds Litecoin and Dogecoin addresses', async () => {
+        const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
+        mountForm(vi.fn().mockResolvedValue([]), { getAddressesByChain: vi.fn().mockResolvedValue(held) });
+        fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
+        const offered = screen.getAllByRole('option').map((o) => o.textContent);
+        expect(offered.some((t) => /Bitcoin/.test(t))).toBe(true);
+        expect(offered.some((t) => /Litecoin|Dogecoin/.test(t))).toBe(false);
+    });
+});

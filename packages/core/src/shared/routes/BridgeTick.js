@@ -38,6 +38,9 @@ import { tickerForCoin, isProtocolCoinTicker } from '../../registry/coinTicker.j
 /** The gas tick, which is bare on every chain and therefore never origin-rooted (token-bridge D35). */
 export const GAS_TICK = 'XCHAIN';
 
+/** The longest tick the indexer stores, which bounds a bridged copy's rooted name too. */
+export const MAX_TICK_LENGTH = 250;
+
 /**
  * Split an origin-rooted bridged tick into its origin chain and bare name.
  *
@@ -122,6 +125,11 @@ export function bridgeLegFor({ tick, sourceCoin }) {
     // is the difference between a disabled button and a paid-for refusal.
     if (t.includes('.')) {
         return refuse(`${t} is a subasset. Subassets cannot be bridged yet, so it can only move on ${coinDisplay(coin)}.`);
+    }
+
+    // Refuse a name whose rooted copy `<COIN>.<TICK>` would exceed the tick length limit.
+    if (coin.length + 1 + t.length > MAX_TICK_LENGTH) {
+        return refuse(`${t} is too long to bridge: its copy would be named ${coin}.${t}, over the ${MAX_TICK_LENGTH}-character limit.`);
     }
 
     return { version: '3', leg: 'lock', fixedDestination: null, origin: coin };

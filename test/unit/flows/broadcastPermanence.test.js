@@ -6,10 +6,22 @@
 import { describe, it, expect } from 'vitest';
 import {
     classifyBroadcastFailure,
+    isAlreadyOnNetworkRejection,
     broadcastFailureKindFromError,
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
 } from '../../../packages/core/src/flows/broadcastPermanence.js';
+import {
+    BROADCAST_FAILED_PERMANENT_NAME as EXPORTED_PERMANENT_NAME,
+    BROADCAST_FAILED_TRANSIENT_NAME as EXPORTED_TRANSIENT_NAME,
+} from '../../../packages/core/src/flows/index.js';
+
+it('exports broadcast failure names through the flows entry point', () => {
+    expect([EXPORTED_PERMANENT_NAME, EXPORTED_TRANSIENT_NAME]).toEqual([
+        'BroadcastFailedPermanentError',
+        'BroadcastFailedTransientError',
+    ]);
+});
 
 describe('classifyBroadcastFailure', () => {
 
@@ -56,6 +68,22 @@ describe('classifyBroadcastFailure', () => {
     it('defaults ambiguous failures to TRANSIENT (keep the signed tx recoverable)', () => {
         expect(classifyBroadcastFailure(new Error('something weird happened'))).toBe('transient');
         expect(classifyBroadcastFailure(null)).toBe('transient');
+    });
+});
+
+describe('isAlreadyOnNetworkRejection', () => {
+    it('matches both already-known rejects, nested causes included', () => {
+        expect(isAlreadyOnNetworkRejection(new Error('txn-already-known'))).toBe(true);
+        expect(isAlreadyOnNetworkRejection('txn-already-in-mempool')).toBe(true);
+        expect(isAlreadyOnNetworkRejection({
+            message: 'Encoder RPC error', cause: { response: { data: { error: 'txn-already-in-mempool' } } },
+        })).toBe(true);
+    });
+
+    it('does not match a dead or an unreachable transaction', () => {
+        expect(isAlreadyOnNetworkRejection(new Error('bad-txns-inputs-missingorspent'))).toBe(false);
+        expect(isAlreadyOnNetworkRejection(new Error('ETIMEDOUT'))).toBe(false);
+        expect(isAlreadyOnNetworkRejection(null)).toBe(false);
     });
 });
 

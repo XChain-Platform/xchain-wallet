@@ -27,6 +27,7 @@ import {
     xbridgeActionString,
     xbridgeWireFields,
     coinDisplay,
+    MAX_TICK_LENGTH,
 } from '../../../packages/core/src/shared/routes/BridgeTick.js';
 
 describe('parseBridgedTick', () => {
@@ -79,6 +80,29 @@ describe('bridgeLegFor', () => {
         const leg = bridgeLegFor({ tick: 'PEPE.CASH', sourceCoin: 'BTC' });
         expect(leg.version).toBeNull();
         expect(leg.reason).toContain('Subassets cannot be bridged yet');
+    });
+
+    it('refuses a native tick whose rooted copy would pass the tick length limit', () => {
+        for (const [coin, longest] of [['BTC', 246], ['LTC', 246], ['DOGE', 245]]) {
+            expect(bridgeLegFor({ tick: 'A'.repeat(longest), sourceCoin: coin }).version, coin).toBe('3');
+            const leg = bridgeLegFor({ tick: 'A'.repeat(longest + 1), sourceCoin: coin });
+            expect(leg.version, coin).toBeNull();
+            expect(leg.reason).toContain('too long to bridge');
+        }
+    });
+
+    // Pin the wallet's bound to the indexer's; skipped without the sibling checkout.
+    it('bounds the rooted name by the indexer MAX_TICK_LENGTH', (ctx) => {
+        const dir = process.env.XCHAIN_INDEXER_DIR || join(process.cwd(), '..', 'xchain-indexer');
+        const config = join(dir, 'src', 'config.js');
+        if (!existsSync(config)) {
+            if (process.env.XCHAIN_REQUIRE_SIBLINGS === '1') throw new Error(`xchain-indexer config.js not found at ${config}`);
+            ctx.skip();
+            return;
+        }
+        const m = readFileSync(config, 'utf8').match(/config\["MAX_TICK_LENGTH"\]\s*=\s*(\d+)/);
+        expect(m, 'xchain-indexer config.js sets no MAX_TICK_LENGTH').toBeTruthy();
+        expect(MAX_TICK_LENGTH).toBe(Number(m[1]));
     });
 });
 

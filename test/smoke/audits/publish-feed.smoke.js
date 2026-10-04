@@ -742,6 +742,22 @@ function runNode(script, args, env = {}) {
         false, 'the store-bound .aab stays off the staging feed too');
 }
 
+{
+    // The store and full APKs stage together: one APK per direct lane, one shared feed pointer.
+    const FULL_NAME = 'xchain-wallet-v0.333.1-full.apk';
+    const both = makePartial('release-partial-both', 'android android-full', {
+        [APK_NAME]: buildApk(),
+        [FULL_NAME]: buildApk(),
+        'xchain-wallet-android-v0.333.1.aab': 'aab-bytes',
+    });
+    const target = makeTarget('feed-partial-both-staging', { staging: true });
+    const s = await run(['--input', both, '--tag', TAG, '--target', target, '--staging', '--no-edge-verify']);
+    assert.equal(s.status, 0, `a store-plus-full android partial stages:\n${s.out}`);
+    assert.ok(existsSync(join(target, 'android', FULL_NAME)), 'the full APK is staged beside the store one');
+    assert.equal(s.out.match(/uploading android\/latest\.json naming/g)?.length, 1,
+        'the shared feed pointer is written once');
+}
+
 /**
  * Serve a directory over TLS with a throwaway certificate for 127.0.0.1, or
  * null when openssl is absent. updateVerify.js refuses a plain-http feed, and

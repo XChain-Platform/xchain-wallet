@@ -37,6 +37,20 @@ import {
     isBareNativePayment, withNativePaymentOutput, hasNativePaymentOutput,
 } from '../flows/nativePayment.js';
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
+import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
+import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
+
+export { RevealInputsRefusedError } from './p2shRevealInputs.js';
+
+// Broadcast signed bytes, treating "the node already holds this txid" as delivery: the
+// SDK retries a lost response with the same bytes, and the retry gets that answer.
+async function broadcastSigned(encoder, txHex) {
+    try {
+        await encoder.broadcastTx(txHex);
+    } catch (err) {
+        if (!isAlreadyOnNetworkRejection(err)) throw err;
+    }
+}
 
 /**
  * Thrown when a transaction was signed successfully but the broadcast
@@ -494,6 +508,8 @@ export async function submitWithSigner({
             signerKind: typeof signerKind === 'string' ? signerKind : undefined,
         });
     }
+    // Read the commit's outputs before anything is signed; the reveal check needs them
+    const phase1Outputs = needsPhase2 ? sdk.wallet.decomposePsbt(encoded.psbt).outputs : null;
 
     // The software signer signs ONLY the inputs named in signingPaths (so a dApp
     // PSBT cannot get extra UTXOs signed); hardware signers are all-or-refuse
@@ -588,7 +604,7 @@ export async function submitWithSigner({
     // submitAction, which marks the row 'failed' - no money has moved yet).
     await onProgress('broadcasting', { txid: signed.txid });
     try {
-        await encoder.broadcastTx(signed.txHex);
+        await broadcastSigned(encoder, signed.txHex);
     } catch (err) {
         throw new BroadcastFailedError({
             cause: err,
@@ -609,7 +625,7 @@ export async function submitWithSigner({
     if (envelopePair && envelopeRevealSigned) {
         onProgress('envelope_revealing', { commitTxid: signed.txid });
         try {
-            await encoder.broadcastTx(envelopeRevealSigned.txHex);
+            await broadcastSigned(encoder, envelopeRevealSigned.txHex);
         } catch (err) {
             // The commit is on chain and the reveal is not: the one stranding path
             // signing-first cannot remove. Surface it as a broadcast failure carrying
@@ -671,6 +687,15 @@ export async function submitWithSigner({
             // for each of them and emitted none, so any left out here is burned.
             ...(deferredOutputs.length ? { customOutputs: deferredOutputs } : {}),
         });
+        assertRevealSpendsCommitLegs({
+            decomposePsbt: (hex) => sdk.wallet.decomposePsbt(hex),
+            revealPsbtHex: spendResult.psbt,
+            phase1Outputs,
+            phase1Txid: signed.txid,
+            phase1TxHex: signed.txHex,
+            chainId,
+            encoding: encoded.encoding,
+        });
         const phase2Signed = await signer.signPsbt({
             psbtHex: spendResult.psbt,
             chainId,
@@ -682,7 +707,7 @@ export async function submitWithSigner({
             reveal: true,
         });
         try {
-            await encoder.broadcastTx(phase2Signed.txHex);
+            await broadcastSigned(encoder, phase2Signed.txHex);
         } catch (err) {
             throw new BroadcastFailedError({
                 cause: err,

@@ -22,7 +22,7 @@ import { accountPathOf } from './pairPartner.js';
 /**
  * @typedef {Object} CosignerInfo
  * @property {string} fingerprint      BIP32 master key fingerprint, 8 lowercase hex chars
- * @property {string} derivationPath   full path of the cosigner key, e.g. "m/84'/1'/0'/0/0"
+ * @property {string} derivationPath   full path of the cosigner key, e.g. "m/84'/0'/0'/0/0"
  * @property {string} accountPath      hardened account prefix of derivationPath
  * @property {string | null} xpub      extended public key at accountPath; null when the signer cannot produce one
  * @property {string} pubkey           compressed pubkey hex at derivationPath

@@ -29,7 +29,7 @@
 
 import { createPendingTx } from '../schemas/pendingTx.js';
 import { assertSigningAllowed } from './panicMode.js';
-import { classifyBroadcastFailure } from './broadcastPermanence.js';
+import { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
 
 // In-flight drain guard. `broadcastTx` is an irreversible effector, so two
 // concurrent drains of the same record (double-click, or popup + background
@@ -137,12 +137,13 @@ export async function listQueuedBroadcasts({ vault, chainId, chainRegistry }) {
 /**
  * Attempt to broadcast a single queued PendingTx. Transitions:
  *   success              → status='broadcast', broadcastAt = now
+ *   already on network   → status='broadcast' (the node holds this txid)
  *   transient failure    → stays 'queued', error recorded, retry allowed
  *   permanent failure    → status='failed' (§5.3: inputs gone; only a
  *                          re-compose can succeed, so it stops retrying)
  *
  * @param {DrainQueuedBroadcastOpts} opts
- * @returns {Promise<{ pendingTx: import('../schemas/pendingTx.js').PendingTx, broadcast: boolean, error: string | null, permanence?: 'permanent' | 'transient' }>}
+ * @returns {Promise<{ pendingTx: import('../schemas/pendingTx.js').PendingTx, broadcast: boolean, error: string | null, permanence?: 'permanent' | 'transient', alreadyOnNetwork?: boolean }>}
  */
 export async function drainQueuedBroadcast({
     vault,
@@ -213,6 +214,21 @@ export async function drainQueuedBroadcast({
             await sdk.encoder.broadcastTx(existing.txHex);
         } catch (err) {
             const msg = err && err.message ? String(err.message) : String(err);
+            // Settle "already known" as delivery: the node holds this txid, so
+            // retiring it as 'failed' would invite a re-compose that pays twice.
+            if (isAlreadyOnNetworkRejection(err)) {
+                const delivered = {
+                    ...existing,
+                    status: 'broadcast',
+                    broadcastAt: new Date().toISOString(),
+                    error: null,
+                };
+                await vault.pendingTxs.put(delivered);
+                if (onProgress) {
+                    try { onProgress('broadcast', { pendingTxId }); } catch { /* swallow */ }
+                }
+                return { pendingTx: delivered, broadcast: true, error: null, alreadyOnNetwork: true };
+            }
             // The SAME permanence split the submit path applies,
             // applied again on EVERY retry. A queued transaction whose inputs
             // have since been spent can never confirm as signed, and leaving it

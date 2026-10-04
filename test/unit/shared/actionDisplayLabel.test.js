@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import {
     actionDisplayLabel,
     hasActionDisplayLabel,
+    psbtActionSummary,
 } from '../../../packages/core/src/shared/utils/actionDisplayLabel.js';
 import MANIFEST from '../../fixtures/action-manifest.json';
 
@@ -115,5 +116,17 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('')).toBe('');
         expect(actionDisplayLabel(null)).toBe('');
         expect(actionDisplayLabel(undefined)).toBe('');
+    });
+});
+
+describe('shared/psbtActionSummary', () => {
+    it('names the decoded action by its display label, with its version', () => {
+        expect(psbtActionSummary({ action: 'XBRIDGE', version: 2 })).toBe('Carries an XChain Bridge transfer action (v2)');
+        expect(psbtActionSummary({ action: 'SEND' })).toBe('Carries an XChain Send action');
+    });
+
+    it('reads cleanly when the action name is missing', () => {
+        expect(psbtActionSummary({ version: 0 })).toBe('Carries an XChain action of unknown type (v0)');
+        expect(psbtActionSummary(null)).toBe('Carries an XChain action of unknown type');
     });
 });

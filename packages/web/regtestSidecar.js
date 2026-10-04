@@ -80,10 +80,11 @@ const LOADER_START = /if\s*\(\s*fullnode\s*\.\s*\$regtestSidecar\b/;
 /**
  * The `$regtestSidecar: '<file>'` data property, whole line.
  *
- * Anchored to a line so it cannot eat a neighbouring key, and the trailing
- * comma is optional so a last-in-object position still matches.
+ * The value cannot hold its own quote, a backslash or a newline, so a line
+ * sharing another key fails to match and the bundle scan refuses the build.
+ * The trailing comma is optional so a last-in-object position still matches.
  */
-const SIDECAR_PROPERTY = /^[ \t]*\$regtestSidecar[ \t]*:[ \t]*(['"]).*?\1[ \t]*,?[ \t]*\r?\n/gm;
+const SIDECAR_PROPERTY = /^[ \t]*\$regtestSidecar[ \t]*:[ \t]*(['"])(?:(?!\1)[^\\\n])*\1[ \t]*,?[ \t]*\r?\n/gm;
 
 /**
  * A whole-line comment: `//…`, or a `*` continuation line inside a block.
@@ -176,6 +177,8 @@ export function removeSidecarLoader(code) {
     // An `else` arm would mean the deletion changes control flow rather than
     // removing a branch that could never run. Not our shape; leave it.
     if (/^\s*else\b/.test(code.slice(afterBody))) return { code, removed: false };
+    // Refuse an `else if` arm too: cutting it would re-attach the dangling `else`.
+    if (/\belse\s*$/.test(code.slice(0, start))) return { code, removed: false };
 
     return {
         code: `${code.slice(0, start)}${code.slice(afterBody)}`,

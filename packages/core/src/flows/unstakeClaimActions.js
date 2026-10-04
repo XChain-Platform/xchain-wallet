@@ -27,6 +27,35 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { assertValidatorLaneChain } from '../registry/actions.js';
+import { compareAmounts } from '../market/orderMath.js';
+
+// A positive XCHAIN amount at the token's 8-decimal precision.
+const AMOUNT_RE = /^[0-9]+(\.[0-9]{1,8})?$/;
+
+/**
+ * The wire params for a COLLECT or UNSTAKE from what the user typed. The
+ * absent-AMOUNT form means "everything", so it is produced only when the
+ * typed amount EQUALS a known total; any other valid amount is sent as
+ * AMOUNT even when the total is unknown, and an amount that does not parse
+ * produces no params at all.
+ *
+ * @param {{ isUnstake: boolean, signingPubkey?: string, amount: string, availableAmt: string | null | undefined }} args
+ * @returns {{ params: object | null, amountValid: boolean, isWholeAmount: boolean, normalizedAmount: string }}
+ */
+export function stakingActionParams({ isUnstake, signingPubkey = '', amount, availableAmt }) {
+    const normalizedAmount = String(amount ?? '').replace(/,/g, '').trim();
+    const amountValid = AMOUNT_RE.test(normalizedAmount) && compareAmounts(normalizedAmount, '0') === 1;
+    const isWholeAmount = availableAmt != null && amountValid
+        && compareAmounts(normalizedAmount, String(availableAmt)) === 0;
+    const base = isUnstake
+        ? { VERSION: '0', SIGNING_PUBKEY: String(signingPubkey).trim().toLowerCase() }
+        : { VERSION: '0' };
+    let params = null;
+    if (isWholeAmount) params = base;
+    else if (amountValid) params = { ...base, AMOUNT: normalizedAmount };
+    return { params, amountValid, isWholeAmount, normalizedAmount };
+}
 
 /**
  * @typedef {Object} UnstakeActionOpts
@@ -38,7 +67,8 @@ import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {{ VERSION: string, SIGNING_PUBKEY: string, AMOUNT?: string }} params AMOUNT optional: partial unstake; absent = full sweep
+ * @property {{ VERSION: string, SIGNING_PUBKEY: string, AMOUNT?: string }} params AMOUNT optional: partial unstake; absent = full sweep, only with full: true
+ * @property {boolean} [full] required true when AMOUNT is absent: the explicit request to unstake everything
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -61,11 +91,19 @@ export async function unstakeAction(opts) {
     if (!/^[0-9a-fA-F]{64}$/.test(opts.params.SIGNING_PUBKEY)) {
         throw new Error('unstakeAction: SIGNING_PUBKEY must be 64 hex chars');
     }
-    if (opts.params.AMOUNT !== undefined) {
-        if (!/^[0-9]+(\.[0-9]+)?$/.test(String(opts.params.AMOUNT)) || Number(opts.params.AMOUNT) <= 0) {
-            throw new Error('unstakeAction: AMOUNT must be a positive decimal when present');
+    // Absent AMOUNT is the protocol's "everything", so it is accepted only on
+    // an explicit full request; an amount the caller meant but lost must fail
+    // here rather than move the whole balance (2026-09-30 testnet: 1 typed,
+    // COLLECT|0 paid 130).
+    if (opts.params.AMOUNT === undefined) {
+        if (opts.full !== true) {
+            throw new Error('unstakeAction: AMOUNT is required unless full is true');
         }
+    } else if (!AMOUNT_RE.test(String(opts.params.AMOUNT)) || Number(opts.params.AMOUNT) <= 0) {
+        throw new Error('unstakeAction: AMOUNT must be a positive decimal with at most 8 places when present');
     }
+    // Refuse a chain whose indexer rejects this validator-lane action.
+    assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'unstakeAction');
     const source = normalizeSource(opts.from, 'unstakeAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
@@ -113,7 +151,8 @@ export async function unstakeAction(opts) {
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {{ VERSION: string, AMOUNT?: string }} params AMOUNT optional: partial claim; absent = claim all pending rewards
+ * @property {{ VERSION: string, AMOUNT?: string }} params AMOUNT optional: partial claim; absent = claim all pending rewards, only with full: true
+ * @property {boolean} [full] required true when AMOUNT is absent: the explicit request to claim everything
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -130,11 +169,19 @@ export async function collectAction(opts) {
     if (!opts.params || typeof opts.params !== 'object') {
         throw new Error('collectAction: params is required');
     }
-    if (opts.params.AMOUNT !== undefined) {
-        if (!/^[0-9]+(\.[0-9]+)?$/.test(String(opts.params.AMOUNT)) || Number(opts.params.AMOUNT) <= 0) {
-            throw new Error('collectAction: AMOUNT must be a positive decimal when present');
+    // Absent AMOUNT is the protocol's "everything", so it is accepted only on
+    // an explicit full request; an amount the caller meant but lost must fail
+    // here rather than move the whole balance (2026-09-30 testnet: 1 typed,
+    // COLLECT|0 paid 130).
+    if (opts.params.AMOUNT === undefined) {
+        if (opts.full !== true) {
+            throw new Error('collectAction: AMOUNT is required unless full is true');
         }
+    } else if (!AMOUNT_RE.test(String(opts.params.AMOUNT)) || Number(opts.params.AMOUNT) <= 0) {
+        throw new Error('collectAction: AMOUNT must be a positive decimal with at most 8 places when present');
     }
+    // Refuse a chain whose indexer rejects this validator-lane action.
+    assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'collectAction');
     const source = normalizeSource(opts.from, 'collectAction');
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,

@@ -340,10 +340,22 @@ const mainActivity = readFileSync(
     join(android, 'app', 'src', 'main', 'java', 'io', 'xchain', 'wallet', 'android', 'MainActivity.java'),
     'utf8',
 );
+function assertRelativeOrder(source, first, second, firstShouldPrecede, message) {
+    const firstPosition = source.indexOf(first);
+    const secondPosition = source.indexOf(second);
+    assert.ok(firstPosition >= 0, `missing ${first}`);
+    assert.ok(secondPosition >= 0, `missing ${second}`);
+    assert.ok(firstShouldPrecede
+        ? firstPosition < secondPosition
+        : firstPosition > secondPosition, message);
+}
+
 assert.match(mainActivity, /registerPlugin\(XChainVaultPlugin\.class\)/);
-assert.ok(
-    mainActivity.indexOf('registerPlugin(XChainVaultPlugin.class)')
-        < mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'registerPlugin(XChainVaultPlugin.class)',
+    'super.onCreate(',
+    true,
     'the plugin is registered BEFORE super.onCreate builds the bridge',
 );
 
@@ -360,9 +372,11 @@ assert.match(
     /dropUnusedCapacitorPlugins\(\)/,
     'SSC-1: CapacitorHttp/CapacitorCookies must be dropped from the bridge registry',
 );
-assert.ok(
-    mainActivity.indexOf('dropUnusedCapacitorPlugins()')
-        > mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'dropUnusedCapacitorPlugins()',
+    'super.onCreate(',
+    false,
     'the removal runs AFTER super.onCreate: the bridge (and its registry) does'
     + ' not exist before it',
 );
@@ -428,9 +442,11 @@ assert.match(
     'SSC-1 door 2: onCreate must install the WebViewClient that refuses'
     + ' /_capacitor_http_interceptor_',
 );
-assert.ok(
-    mainActivity.indexOf('blockNativeHttpProxy()')
-        > mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'blockNativeHttpProxy()',
+    'super.onCreate(',
+    false,
     'the swap runs AFTER super.onCreate: the bridge does not exist before it',
 );
 for (const proxyPath of ['/_capacitor_http_interceptor_', '/_capacitor_https_interceptor_']) {
@@ -645,9 +661,11 @@ assert.match(
     + ' and handleOnNewIntent, and getIntent() keeps returning it afterwards',
 );
 assert.match(mainActivity, /registerPlugin\(XChainLinksPlugin\.class\)/);
-assert.ok(
-    mainActivity.indexOf('registerPlugin(XChainLinksPlugin.class)')
-        < mainActivity.indexOf('super.onCreate('),
+assertRelativeOrder(
+    mainActivity,
+    'registerPlugin(XChainLinksPlugin.class)',
+    'super.onCreate(',
+    true,
     'the links plugin is registered before the bridge is built, like the vault',
 );
 
@@ -904,6 +922,37 @@ assert.match(ceremony, /--mode=universal/, 'the APK is derived from the AAB, not
 // lane is NOT-SHIPPED, so no release demands the file either.
 assert.match(ceremony, /if \[ -n "\$\{XCHAIN_BUILD_ANDROID_FULL:-\}" \]/,
     'the full-feature APK leg exists and is opt-in, leaving the store lane untouched');
+
+// Both legs check the bundle's manifest before a key signs anything, read off
+// the comment-stripped source so prose cannot satisfy it. K10 cannot be rotated.
+{
+    const fullAt = ceremonyCode.indexOf('if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]');
+    const fullLeg = ceremonyCode.slice(fullAt, ceremonyCode.indexOf('\nfi\n', fullAt));
+    const storeCheck = ceremonyCode.indexOf('verify_bundle_manifest "$WORK_DIR/$AAB_NAME"');
+    assert.ok(storeCheck > 0 && storeCheck < ceremonyCode.indexOf('jarsigner -verbose'),
+        'the store bundle\'s manifest is checked before K9 signs it: a bundle that fails is never signed');
+    const fullCheck = fullLeg.indexOf('verify_bundle_manifest "$WORK_DIR/full.aab"');
+    assert.ok(fullCheck > 0, 'the full-profile bundle\'s manifest is checked too, since it is a '
+        + 'second build with different code in and never derived from the verified store bundle');
+    assert.ok(fullCheck < fullLeg.indexOf('--bundle="$WORK_DIR/full.aab"')
+        && fullCheck < fullLeg.indexOf('apksigner sign'),
+    'and that check runs before build-apks and before K10 signs anything derived from it');
+
+    // Stage the signed store pair and its records before the full leg, because
+    // WORK_DIR is deleted on exit and a re-run cannot reproduce the same bytes.
+    for (const [what, needle] of [
+        ['the store AAB', 'mv "$WORK_DIR/$AAB_NAME" "$OUTPUT_DIR/$AAB_NAME"'],
+        ['the store APK', 'mv "$WORK_DIR/$APK_NAME" "$OUTPUT_DIR/$APK_NAME"'],
+        ['the store-only provenance record', 'write_provenance store\n'],
+        ['the rehearsal do-not-publish marker', 'DO-NOT-PUBLISH.txt'],
+    ]) {
+        const at = ceremonyCode.indexOf(needle);
+        assert.ok(at > 0 && at < fullAt,
+            `${what} is staged into OUTPUT_DIR before the optional full leg can fail`);
+    }
+    assert.doesNotMatch(ceremony, /intact in the work directory/,
+        'no failure message claims signed artifacts survive in WORK_DIR, which the EXIT trap deletes');
+}
 
 const expectedArtifacts = readFileSync(
     join(wsRoot, 'tools', 'release', 'expected-artifacts.txt'), 'utf8',

@@ -295,6 +295,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    useEffect(() => {
+        setFormError(null);
+    }, [addressMode, existingAddressId]);
+
     // Cluster P FOLLOWUP 5: form-draft persistence. Persists every
     // user-visible composition field (chain / source / give terms /
     // advanced fields). Password stays in component state.

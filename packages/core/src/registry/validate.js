@@ -181,6 +181,11 @@ export const FAMILY_NETWORK_WIF_BYTE = {
     dogecoin: { mainnet: 0x9e, testnet: 0xf1, regtest: 0xef },
 };
 
+// Pin RBF caps per known family: every RBF guard trusts the live descriptor, so a
+// remote/Developer-Mode override declaring `true` would lift the dogecoin cap.
+// Only caps are listed (less capability is harmless); unknown families stay free.
+export const FAMILY_RBF_SUPPORTED = { dogecoin: false };
+
 const isDerivationPaths = (v) => {
     if (!isPlainObject(v)) return false;
     for (const [k, val] of Object.entries(v)) {
@@ -285,6 +290,15 @@ export function validateChainDescriptor(record) {
             'wifVersionByte',
             r.wifVersionByte === familyWifByte,
             `must be ${familyWifByte} for ${r.coin} ${r.networkKind}`,
+        );
+    }
+    // A capped family must declare rbfSupported:false (see FAMILY_RBF_SUPPORTED).
+    if (FAMILY_RBF_SUPPORTED[r.coin] === false) {
+        check(
+            errors,
+            'feeStrategy.rbfSupported',
+            r.feeStrategy?.rbfSupported === false,
+            `must be false for the ${r.coin} family (RBF is not supported)`,
         );
     }
     // http/ws endpoints are only acceptable where transit interception is

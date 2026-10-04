@@ -326,8 +326,9 @@ const legacyApp = makeMockApp({
     splitTransaction(rawTxHex) { legacySplit.push(rawTxHex); return {}; },
     async createPaymentTransaction(args) { legacyCreate = args; return DEVICE_TX; },
 });
+// A DOGE sign is refused unless the Dogecoin app is the one open.
 const legacySigner = new LedgerSigner({
-    id: 'ledger-legacy', displayName: 'L', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport(),
+    id: 'ledger-legacy', displayName: 'L', model: 'nanoX', deviceIdentifier: 'mockid', transport: makeMockTransport({ name: 'Dogecoin', version: '2.4.2' }),
     app: legacyApp, sdkRegistry: makeMockSdkRegistry({ decomposed: legacyDecomposed }),
 });
 await legacySigner.signPsbt({

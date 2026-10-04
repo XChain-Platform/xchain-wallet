@@ -322,7 +322,6 @@ for (const [needle, why] of [
     ["on('will-navigate'", 'blocks navigation away from the local app'],
     ["on('will-attach-webview'", 'refuses <webview> embedding'],
     ['shell.openExternal', 'external links go to the system browser'],
-    ['isTrustedSender(event)', 'privileged IPC handlers check the sender frame'],
     ['FileUnlockThrottleStore', 'wires the file-backed unlock throttle'],
     ['attachSignerBridgeListener({ ipcMain, isTrustedSender })', 'signer bridge gets the sender-trust predicate'],
     ["const APP_ROOT = join(here, '..', 'renderer', 'dist')", 'defines the packaged renderer dir'],
@@ -363,6 +362,54 @@ assert.ok(
     assert.ok(checked > 0, 'the call-site census found no calls at all, so it proved nothing');
 }
 
+// Census: every ipcMain registration in index.js checks the sender frame
+// as its FIRST statement. A whole-file includes() passes while any one
+// handler is guarded, so each handler body is checked on its own, and an
+// unrecognised registration shape fails closed rather than being skipped.
+function ipcGuardCensus(src) {
+    const failures = [];
+    let count = 0;
+    const shape = /^ipcMain\.(?:handle|handleOnce|on|once)\(\s*([^,]+?)\s*,\s*(?:async\s*)?\(\s*event\b[^)]*\)\s*=>\s*\{/;
+    for (const m of src.matchAll(/ipcMain\.(?:handle|handleOnce|on|once)\(/g)) {
+        count += 1;
+        const at = src.slice(m.index);
+        const head = shape.exec(at);
+        if (!head) {
+            failures.push(`${at.slice(0, 60).split('\n')[0]} (unrecognised handler shape)`);
+            continue;
+        }
+        let body = at.slice(head[0].length);
+        for (;;) {
+            const stripped = body.replace(/^\s+/, '').replace(/^\/\/[^\n]*/, '').replace(/^\/\*[\s\S]*?\*\//, '');
+            if (stripped === body) break;
+            body = stripped;
+        }
+        if (!/^if\s*\(\s*!\s*isTrustedSender\(\s*event\s*\)\s*\)/.test(body)) failures.push(head[1]);
+    }
+    return { count, failures };
+}
+{
+    const { count, failures } = ipcGuardCensus(mainIndex);
+    assert.deepEqual(
+        failures,
+        [],
+        `index.js: these ipcMain handlers must check isTrustedSender(event) as their first statement: ${failures.join(', ')}`,
+    );
+    assert.ok(count >= 6, `the ipcMain census found ${count} handlers, fewer than the 6 index.js registers, so it may check nothing`);
+
+    // Negative controls: the census must flag each of these shapes.
+    for (const [probe, why] of [
+        ["\nipcMain.handle('xchain:probe', async (event) => { return 1; });", 'an unguarded handler'],
+        ["\nipcMain.handle('xchain:probe2', async (event) => { const x = 1; if (!isTrustedSender(event)) return null; return x; });", 'work before the guard'],
+        ["\nipcMain.handle('xchain:probe3', async (_event) => { return 1; });", 'an unrecognised parameter name'],
+        ["\nipcMain.on('xchain:probe4', onProbe);", 'a handler passed by reference'],
+    ]) {
+        assert.equal(ipcGuardCensus(mainIndex + probe).failures.length, 1, `the ipcMain census catches ${why}`);
+    }
+    const commented = "ipcMain.handle('xchain:ok', async (event) => {\n    // why\n    /* more */\n    if (!isTrustedSender(event)) return null;\n});";
+    assert.deepEqual(ipcGuardCensus(commented), { count: 1, failures: [] }, 'a guard after a comment block passes');
+}
+
 console.log(
-    'OK: desktop security-hardening smoke (security.js nav/sender predicates; FileUnlockThrottleStore round-trip + .tmp hygiene + runtime pre-KDF lockout; keychain/storage/meta clear() purges half-written .tmp; signerBridge ownership guard + per-message cap + injected sender-trust; index.js wires web-contents-created lockdown + IPC sender checks)',
+    'OK: desktop security-hardening smoke (security.js nav/sender predicates; FileUnlockThrottleStore round-trip + .tmp hygiene + runtime pre-KDF lockout; keychain/storage/meta clear() purges half-written .tmp; signerBridge ownership guard + per-message cap + injected sender-trust; index.js wires web-contents-created lockdown + every ipcMain handler guards on isTrustedSender first)',
 );

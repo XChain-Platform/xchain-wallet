@@ -13,6 +13,8 @@
 // The network accepts that pairing on a dispenser edit, so the edit form is the
 // place to stop it while respecting zero as the remove-list sentinel.
 
+import { listLabel } from '../shared/utils/listLabel.js';
+
 /**
  * Normalize a LIST action index for comparison: trimmed, and leading zeros
  * dropped so "0042" and "42" name the same list. Blank stays blank.
@@ -80,7 +82,7 @@ export function editListConflict({ allowList, blockList, currentAllowList, curre
  * @returns {string}
  */
 export function listInBothSlotsMessage(idx) {
-    return `List #${listKey(idx)} is set as both the allow-list and the block-list. `
+    return `${listLabel(listKey(idx))} is set as both the allow-list and the block-list. `
         + 'Every address it allows it also blocks, so nobody could use this. '
         + 'Pick a different list for one of the two.';
 }

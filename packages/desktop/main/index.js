@@ -65,6 +65,8 @@ import {
 import { attachHidPermissions, attachHidDenial, observeHidFrames } from './permissions.js';
 import {
     attachDeepLinkHandlers,
+    createDeepLinkSlot,
+    pickDeepLinkTarget,
     registerProtocolClients,
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
@@ -102,14 +104,16 @@ function isTrustedSender(event) {
 // §24.6 / G057: multi-window: instead of a singleton mainWindow, the
 // main process keeps a Set of every open BrowserWindow so File → New
 // Window can open additional renderers that share the same vault +
-// signer state via the main-process MessageHost. Existing logic
-// (deep-link forward, updater broadcast) targets the focused window
-// when one exists, otherwise the most-recently-created.
+// signer state via the main-process MessageHost. Updater events go to
+// every window; a deep link goes to the focused window that is not
+// detached, otherwise the most-recently-created one (pickDeepLinkTarget).
 const windows = /** @type {Set<BrowserWindow>} */ (new Set());
 let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
 
-/** @type {{ scheme: string, raw: string, parsed: any } | null} */
-let pendingDeepLink = null;
+// The latest deep link no renderer has claimed yet (see forwardDeepLink).
+const deepLinkSlot = createDeepLinkSlot();
+// Windows opened on a pinned view (open-window), which never take a deep link.
+const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
 // §9.7 / G007: boot-time chain-registry sync promise. Main owns the
 // network fetch (the renderer CSP pins connect-src 'self'); the verified
@@ -258,12 +262,6 @@ function liveWindows() {
     return [...windows].filter((w) => !w.isDestroyed());
 }
 
-function pickFocusWindow() {
-    const live = liveWindows();
-    if (live.length === 0) return null;
-    return BrowserWindow.getFocusedWindow() || live[live.length - 1];
-}
-
 function broadcastToWindows(channel, payload) {
     for (const w of liveWindows()) {
         w.webContents.send(channel, payload);
@@ -271,14 +269,15 @@ function broadcastToWindows(channel, payload) {
 }
 
 function forwardDeepLink(event) {
-    // Renderer may not exist yet at app start; queue the first one and
-    // replay when a window is ready. Multi-window: the deep link goes
-    // to the focused window so the user's current context wins.
-    const target = pickFocusWindow();
-    if (!target) {
-        pendingDeepLink = event;
-        return;
-    }
+    // Park the link, then nudge the focused window to claim it. A renderer
+    // that does not exist yet, or has not mounted its listener, claims it on
+    // mount through 'xchain:deep-link-take', so a cold-start link is not lost.
+    deepLinkSlot.offer(event);
+    const live = liveWindows();
+    if (live.length === 0) return;
+    const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
+    // Only detached windows are open: a fresh window claims the link on mount
+    if (!target) { createWindow(); return; }
     target.webContents.send('xchain:uri', event);
     if (!target.isFocused()) target.focus();
 }
@@ -412,19 +411,11 @@ function createWindow(opts = {}) {
     win.loadFile(join(APP_ROOT, 'index.html'), loadOpts);
     win.once('ready-to-show', () => {
         if (!win.isDestroyed()) win.show();
-        // Replay any deep link that arrived before the first window
-        // came up. Subsequent windows ignore the queue; once one
-        // renderer has consumed it, additional renderers shouldn't
-        // double-handle the same URI.
-        if (pendingDeepLink) {
-            const event = pendingDeepLink;
-            pendingDeepLink = null;
-            forwardDeepLink(event);
-        }
     });
     win.on('closed', () => { windows.delete(win); });
 
     windows.add(win);
+    if (opts.initialView || opts.initialContext) detachedWindows.add(win);
     return win;
 }
 
@@ -569,16 +560,27 @@ app.whenReady().then(async () => {
     // 15-minute auto-lock and a quit still auto-unlocked weeks later. When
     // the gate locks, it clears session.bin and the ensureHost below finds
     // no key, which is the ordinary lock-screen path.
+    //
+    // Boot unlocks only on an explicit `locked: false`. A gate that threw
+    // could not decide, so it costs a password prompt: the session is
+    // cleared, which also stops the first vault-backed message reopening it.
+    let bootMayUnlock = false;
     try {
         const gate = await enforceLaunchAutoLock(runtime);
+        bootMayUnlock = gate.locked === false;
         if (gate.locked) console.info(`[xchain] auto-lock: relaunch locked (${gate.reason})`);
     } catch (err) {
         console.error('[xchain] desktop auto-lock gate failed:', err);
+        try { await runtime.sessionBackend.clear(); } catch (clearErr) {
+            console.error('[xchain] auto-lock could not clear the cached session key:', clearErr);
+        }
     }
-    try {
-        await ensureHost(runtime);
-    } catch (err) {
-        console.error('[xchain] desktop auto-unlock failed:', err);
+    if (bootMayUnlock) {
+        try {
+            await ensureHost(runtime);
+        } catch (err) {
+            console.error('[xchain] desktop auto-unlock failed:', err);
+        }
     }
 
     // §40.12 / Step 18: allow WebHID access for Ledger + Trezor vendor
@@ -739,6 +741,13 @@ app.whenReady().then(async () => {
         return r.ok
             ? { ok: true, descriptors: r.descriptors, generatedAt: r.generatedAt }
             : { ok: false, reason: r.reason };
+    });
+
+    // Hand the parked deep link to the renderer that asks, once. Same trust
+    // boundary as the other handlers: a remote frame gets nothing.
+    ipcMain.handle('xchain:deep-link-take', async (event) => {
+        if (!isTrustedSender(event)) return null;
+        return deepLinkSlot.take();
     });
 
     // Wire the signer-bridge ipc listener so renderer-hosted HW

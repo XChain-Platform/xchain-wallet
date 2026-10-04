@@ -24,6 +24,7 @@ import { DiagnosticDetails } from '../components/DiagnosticDetails.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
+import { TickItemsEditor } from '../components/TickItemsEditor.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -33,17 +34,33 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
-import { classifyTickItems, tickLookupVerdict } from '../utils/listTickItems.js';
+import { classifyTickItems } from '../utils/listTickItems.js';
+import { qualifyTickItem } from '../utils/listTickCoin.js';
+import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
+import { listMetaSupported } from '../../flows/listFormatSupport.js';
+import {
+    LIST_META_DESCRIPTION_MAX_BYTES,
+    LIST_META_NAME_MAX_BYTES,
+    listMetaInputError,
+    utf8ByteLength,
+} from '../../flows/listMetaInput.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-// Most token lookups one form run fires; a longer list reports the rest as
-// not checked rather than flooding the explorer.
-const MAX_TICK_LOOKUPS = 50;
+const META_ERROR_TEXT = {
+    pipe: 'Cannot contain the | character.',
+    semicolon: 'Cannot contain the ; character.',
+    length: 'Too long.',
+    format: 'A single - is not allowed.',
+};
+
+function metaFieldError(field, value) {
+    const code = listMetaInputError(field, value, { isCreate: true });
+    return code ? META_ERROR_TEXT[code] : null;
+}
 
 /**
  * PC-10 "My Lists": LIST v0 create form. One transaction, so (unlike
@@ -109,8 +126,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [tickStatus, setTickStatus] = useState(
         /** @type {Record<string, 'found' | 'missing' | null>} */ ({}),
     );
-    const [tickChecking, setTickChecking] = useState(false);
+    const [tickCoinSupported, setTickCoinSupported] = useState(false);
     const [memo, setMemo] = useState('');
+    const [metaSupported, setMetaSupported] = useState(false);
+    const [listName, setListName] = useState('');
+    const [listDescription, setListDescription] = useState('');
 
     const [password, setPassword] = useState('');
     const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
@@ -160,6 +180,38 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     // the count the form shows is the count the chain will keep.
     const recipientCoin = descriptor?.coin || null;
     const recipientNetwork = descriptor?.networkKind || null;
+
+    useEffect(() => {
+        let cancelled = false;
+        setTickCoinSupported(false);
+        if (!chainId) return () => { cancelled = true; };
+        const sdkRegistry = {
+            get: () => ({
+                isListTickCoinActive: () => (typeof messaging.isListTickCoinActive === 'function'
+                    ? messaging.isListTickCoinActive({ chainId })
+                    : false),
+            }),
+        };
+        listTickCoinSupport({ sdkRegistry, chainId })
+            .then((supported) => { if (!cancelled) setTickCoinSupported(supported); })
+            .catch(() => { if (!cancelled) setTickCoinSupported(false); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setMetaSupported(false);
+        if (!chainId) return () => { cancelled = true; };
+        const sdkRegistry = {
+            get: () => ({
+                getActionFormats: (action) => messaging.getActionFormats({ chainId, action }),
+            }),
+        };
+        Promise.resolve().then(() => listMetaSupported({ sdkRegistry, chainId }))
+            .then((supported) => { if (!cancelled) setMetaSupported(supported === true); })
+            .catch(() => { if (!cancelled) setMetaSupported(false); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
 
     useEffect(() => {
         if (listType !== '2') return;
@@ -217,63 +269,41 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     // Parse tickers with chain grammar while counting duplicates
     // and malformed names the way the address branch does.
-    const tickItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
+    const tickItems = useMemo(
+        () => classifyTickItems(ticksText, { coinQualified: tickCoinSupported }),
+        [ticksText, tickCoinSupported],
+    );
     const memberTicks = tickItems.valid;
     const invalidTicks = tickItems.invalid;
-    const tickKey = memberTicks.join('|');
-
-    // Look each well-formed tick up on the chain the list is published to.
-    // The network leaves an unknown TICK out of the list, so the form says
-    // which ones it could not find before the user pays for them. A `^`
-    // TICK_ID reference is not a name the lookup takes, so it stays unchecked.
-    useEffect(() => {
-        if (listType !== '1' || !chainId || memberTicks.length === 0) {
-            setTickStatus({});
-            setTickChecking(false);
-            return undefined;
-        }
-        let cancelled = false;
-        setTickChecking(true);
-        const timer = setTimeout(() => {
-            const toCheck = memberTicks.filter((t) => !t.startsWith('^')).slice(0, MAX_TICK_LOOKUPS);
-            Promise.all(toCheck.map((t) => fetchTokenInfo(messaging, chainId, t)
-                .then((info) => [t, tickLookupVerdict(info)])))
-                .then((pairs) => {
-                    if (cancelled) return;
-                    setTickStatus(Object.fromEntries(pairs));
-                    setTickChecking(false);
-                });
-        }, 350);
-        return () => { cancelled = true; clearTimeout(timer); };
-        // tickKey stands in for memberTicks, which is a new array every parse.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [listType, chainId, tickKey, messaging]);
 
     const missingTicks = useMemo(
         () => memberTicks.filter((t) => tickStatus[t] === 'missing'),
         [memberTicks, tickStatus],
     );
-    const foundTicks = useMemo(
-        () => memberTicks.filter((t) => tickStatus[t] === 'found'),
-        [memberTicks, tickStatus],
-    );
-    const uncheckedTickItems = useMemo(
-        () => memberTicks.filter((tick) => tickStatus[tick] !== 'missing' && tickStatus[tick] !== 'found'),
-        [memberTicks, tickStatus],
-    );
-    const uncheckedTicks = uncheckedTickItems.length;
 
     const items = listType === '2' ? recipients.valid : memberTicks;
     const trimmedMemo = memo.trim();
 
     // MEMO is optional and sits before the ITEM tail; an empty memo leaves
     // the field out so the wire keeps its empty slot (`LIST|0|1||...`).
-    const wireParams = useMemo(() => ({
+    const trimmedName = listName.trim();
+    const trimmedDescription = listDescription.trim();
+    const nameError = metaSupported ? metaFieldError('name', trimmedName) : null;
+    const descriptionError = metaSupported ? metaFieldError('description', trimmedDescription) : null;
+    const withMeta = metaSupported && (trimmedName !== '' || trimmedDescription !== '');
+    const wireParams = useMemo(() => (withMeta ? {
+        VERSION: '4',
+        TYPE: listType,
+        NAME: trimmedName,
+        DESCRIPTION: trimmedDescription,
+        ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
+        ITEM: items,
+    } : {
         VERSION: '0',
         TYPE: listType,
         ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: items,
-    }), [listType, items, trimmedMemo]);
+    }), [withMeta, listType, items, trimmedMemo, trimmedName, trimmedDescription]);
 
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
@@ -380,6 +410,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
         const memoTooLong = memoLengthError(trimmedMemo);
         if (memoTooLong) { setFormError(memoTooLong); return false; }
+        if (nameError || descriptionError) { setFormError('Fix the list name and description first.'); return false; }
         if (listType === '2') {
             if (recipients.valid.length === 0) { setFormError('Add at least one valid address.'); return false; }
         } else {
@@ -611,7 +642,12 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 title="Add a token"
                 onSelect={(sel) => {
                     const t = String(sel.tick || '');
-                    if (t) setTicksText((prev) => (prev.trim() ? `${prev}\n${t}` : t));
+                    const selectedDescriptor = sel.chainId ? chainRegistry.get(sel.chainId) : null;
+                    const selectedCoin = selectedDescriptor
+                        ? { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' }[selectedDescriptor.coin]
+                        : coinTicker;
+                    const item = tickCoinSupported ? qualifyTickItem(selectedCoin, t, coinTicker) : t;
+                    if (item) setTicksText((prev) => (prev.trim() ? `${prev}\n${item}` : item));
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -768,57 +804,44 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     </p>
                 </>
             ) : (
-                <>
-                    <label className={styles.pickerLabel} htmlFor="list-tokens">Tokens (one per line)</label>
-                    <textarea
-                        id="list-tokens"
-                        className={styles.picker}
-                        value={ticksText}
-                        onChange={(e) => setTicksText(e.target.value)}
-                        rows={6}
-                        spellCheck={false}
-                        autoCapitalize="none"
-                        placeholder="TICK1&#10;TICK2"
-                    />
-                    <div className={styles.fromLine}>
-                        <Button type="button" variant="ghost" onClick={() => setTokenPickerOpen(true)}>
-                            Add from token picker
-                        </Button>
-                    </div>
-                    {ticksText.trim() ? (
-                        <p className={styles.hint}>
-                            {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
-                            {tickItems.duplicates > 0 ? ` · ${tickItems.duplicates} duplicate${tickItems.duplicates === 1 ? '' : 's'} removed` : ''}
-                            {invalidTicks.length > 0 ? ` · ${invalidTicks.length} invalid` : ''}
-                            {tickChecking ? ' · checking…' : ''}
-                            {!tickChecking && foundTicks.length > 0 ? ` · ${foundTicks.length} found` : ''}
-                            {!tickChecking && missingTicks.length > 0 ? ` · ${missingTicks.length} not found` : ''}
-                            {!tickChecking && uncheckedTicks > 0 && (foundTicks.length + missingTicks.length) > 0 ? ` · ${uncheckedTicks} not checked` : ''}
-                        </p>
-                    ) : null}
-                    {invalidTicks.length > 0 ? (
-                        <p className={styles.hint}>Not a token name: {invalidTicks.join(', ')}</p>
-                    ) : null}
-                    {/* The protocol records an unknown TICK as invalid and
-                        leaves it out of the list without failing the LIST. */}
-                    {!tickChecking && missingTicks.length > 0 ? (
-                        <div role="alert" className={styles.warnings}>
-                            <p className={styles.warning}>
-                                Not found on {descriptor?.displayName || chainId}: {missingTicks.join(', ')}.
-                                The network leaves an unknown token out of the list, so {missingTicks.length === 1 ? 'it' : 'they'} will
-                                not be a member.
-                            </p>
-                        </div>
-                    ) : null}
-                    {!tickChecking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
-                        <p className={styles.hint}>Not checked: {uncheckedTickItems.join(', ')}.</p>
-                    ) : null}
-                </>
+                <TickItemsEditor
+                    value={ticksText}
+                    onChange={setTicksText}
+                    items={tickItems}
+                    chainId={chainId}
+                    chainLabel={descriptor?.displayName || chainId}
+                    listCoin={coinTicker}
+                    coinQualified={tickCoinSupported}
+                    messaging={messaging}
+                    onOpenPicker={() => setTokenPickerOpen(true)}
+                    status={tickStatus}
+                    onStatusChange={setTickStatus}
+                />
             )}
 
+            {metaSupported ? (
+                <>
+                    <Input
+                        label="Name (optional)"
+                        hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
+                        error={nameError || undefined}
+                        value={listName}
+                        onChange={(e) => setListName(e.target.value)}
+                        autoComplete="off"
+                    />
+                    <Input
+                        label="Description (optional)"
+                        hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
+                        error={descriptionError || undefined}
+                        value={listDescription}
+                        onChange={(e) => setListDescription(e.target.value)}
+                        autoComplete="off"
+                    />
+                </>
+            ) : null}
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"

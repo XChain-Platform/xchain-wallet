@@ -75,6 +75,7 @@ import { execFileSync } from 'node:child_process';
 import { pointerNameFor, readPublishConfig } from './update-info.mjs';
 import {
     LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS,
+    basenameGlobMatch, directLanesForArtifacts,
 } from './rehearsal-matrix.mjs';
 
 // fileURLToPath, not `new URL(...).pathname`: the latter leaves a path
@@ -674,10 +675,11 @@ export async function probeDirectLane({
 
     const parsed = parseManifest(Buffer.from(fetched.manifestBytes).toString('utf8'));
     if (!parsed.ok) return fail('manifest', parsed.reason);
-    const apks = [...parsed.entries.keys()].filter((n) => n.toLowerCase().endsWith('.apk'));
+    // Select by the lane's own glob: the store and full APKs share a manifest.
+    const apks = [...parsed.entries.keys()].filter((n) => basenameGlobMatch(lane.artifact, n));
     if (apks.length !== 1) {
-        return fail('artifact', `the signed manifest for ${tag} covers ${apks.length} .apk `
-            + 'files; the direct lane is exactly one universal APK');
+        return fail('artifact', `the signed manifest for ${tag} covers ${apks.length} `
+            + `file(s) matching ${lane.artifact}; lane ${lane.id} is exactly one universal APK`);
     }
     const apk = apks[0];
     entry.selected = apk;
@@ -698,9 +700,8 @@ export async function probeDirectLane({
         expectedTag: tag,
         artifactPath: apk,
         artifactSha256: createHash('sha256').update(bytes).digest('hex'),
-        // Named, because the gate asks which lane a partial manifest has
-        // to cover and this probe is the android lane by construction.
-        lane: 'android',
+        // Named, because the gate asks which lane a partial manifest has to cover.
+        lane: lane.shippedLane,
         ...(pinned === undefined ? {} : { pinned }),
     });
     if (!verdict.ok) return fail('verify', verdict.reason);
@@ -763,6 +764,51 @@ export function swapRequirement({ repo, tag, previousTag, run = gitRun }) {
 
 /** shipped-lanes.txt lane name -> the LANES `os` its artifacts belong to. */
 const LANE_NAME_TO_OS = { mac: 'darwin', linux: 'linux', windows: 'win32' };
+
+/**
+ * Which lanes `coverage` demands a swap of: each lane whose row is SHIPPED, plus each lane
+ * the release in hand carries, since a first release lands before its row flips.
+ *
+ * Fails shut: an unreadable list, an unknown status or a lane with no row demands the lane.
+ *
+ * @param {Object} params
+ * @param {string|null} params.lanesText          shipped-lanes.txt, or null if unreadable
+ * @param {string[]} [params.releaseArtifacts]    the release in hand, when one is named
+ * @returns {{demanded: Set<string>, waived: Map<string, string>, reason: string|null}}
+ */
+export function coverageDemand({ lanesText, releaseArtifacts }) {
+    const all = [...LANES, ...DIRECT_LANES];
+    const everything = (reason) => ({ demanded: new Set(all.map((l) => l.id)), waived: new Map(), reason });
+    if (typeof lanesText !== 'string') return everything('the lane list could not be read');
+    const status = new Map();
+    for (const line of lanesText.split('\n')) {
+        const [lane, word] = line.trim().split(/\s+/);
+        if (!lane || lane.startsWith('#')) continue;
+        if (word !== 'SHIPPED' && word !== 'NOT-SHIPPED') {
+            return everything(`lane '${lane}' declares status '${word ?? ''}'`);
+        }
+        status.set(lane, word);
+    }
+    if (status.size === 0) return everything('the lane list declares no lanes');
+    let carried = { oses: new Set(), direct: [] };
+    if (releaseArtifacts !== undefined) {
+        const oses = osesInRelease(releaseArtifacts);
+        if (oses === null) return everything('the release named by --prod-input carries no artifacts');
+        carried = { oses, direct: lanesInRelease(releaseArtifacts).directLanes };
+    }
+    const demanded = new Set();
+    const waived = new Map();
+    for (const lane of all) {
+        const direct = DIRECT_LANES.includes(lane);
+        const name = direct
+            ? lane.shippedLane
+            : Object.keys(LANE_NAME_TO_OS).find((n) => LANE_NAME_TO_OS[n] === lane.os);
+        const inHand = direct ? carried.direct.includes(lane.id) : carried.oses.has(lane.os);
+        if (status.get(name) === 'NOT-SHIPPED' && !inHand) waived.set(lane.id, `${name} is NOT-SHIPPED`);
+        else demanded.add(lane.id);
+    }
+    return { demanded, waived, reason: null };
+}
 
 /**
  * The OSes that have no published predecessor at `previousTag`, and whose
@@ -1011,7 +1057,9 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
         );
     }
 
-    const { desktop: desktopInRelease, direct: directInRelease } = lanesInRelease(releaseArtifacts);
+    const {
+        desktop: desktopInRelease, direct: directInRelease, directLanes: directIds,
+    } = lanesInRelease(releaseArtifacts);
 
     // Which OSes this release actually carries. Null means the
     // listing could not be read, and null keeps the historical every-lane
@@ -1145,11 +1193,18 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
     // the artifact they distribute.
     if (directInRelease) {
         const direct = Array.isArray(record['direct-lanes']) ? record['direct-lanes'] : [];
-        for (const lane of DIRECT_LANES) {
+        // A direct lane whose artifact this release does not carry is reported, never demanded.
+        for (const result of direct) {
+            if (!directIds.includes(result.id) && !result.ok) {
+                notes.push(`lane ${result.id} failed, and is not demanded: this release carries no `
+                    + `${laneById(result.id)?.artifact ?? 'artifact for it'}`);
+            }
+        }
+        for (const lane of DIRECT_LANES.filter((l) => directIds.includes(l.id))) {
             const result = direct.find((r) => r.id === lane.id);
             if (!result) {
                 problems.push(
-                    `this release ships a .${lane.format} and the record has no result for lane `
+                    `this release ships ${lane.artifact} and the record has no result for lane `
                     + `${lane.id}. Its feed is not rehearsed by the desktop probe: run `
                     + `rehearse.mjs run --lane ${lane.id}.`,
                 );
@@ -1202,20 +1257,29 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
  * or says nothing recognisable, because this function's output waives
  * gates and the failure mode of guessing wrong is a silent one.
  *
+ * `directLanes` names each direct lane whose own artifact glob the release
+ * carries, so a store-APK release is never asked for the full APK's lane.
+ *
  * @param {string[]|undefined} releaseArtifacts
- * @returns {{desktop: boolean, direct: boolean}}
+ * @returns {{desktop: boolean, direct: boolean, directLanes: string[]}}
  */
 export function lanesInRelease(releaseArtifacts) {
-    if (!Array.isArray(releaseArtifacts)) return { desktop: true, direct: false };
+    if (!Array.isArray(releaseArtifacts)) return { desktop: true, direct: false, directLanes: [] };
     const names = releaseArtifacts.map((n) => String(n).split('/').pop().toLowerCase());
     const formats = new Set(LANES.map((l) => l.format.toLowerCase()));
     const desktop = names.some((n) => formats.has(n.slice(n.lastIndexOf('.') + 1)));
-    const direct = DIRECT_LANES.some(
-        (l) => names.some((n) => n.endsWith(`.${l.format.toLowerCase()}`)),
-    );
+    const directLanes = directLanesForArtifacts(names).map((l) => l.id);
+    // An APK no direct lane's glob claims is still a direct artifact: demand every lane.
+    const strayApk = names.some((n) => DIRECT_LANES.some((l) => n.endsWith(`.${l.format.toLowerCase()}`))
+        && !DIRECT_LANES.some((l) => basenameGlobMatch(l.artifact, n)));
+    const direct = directLanes.length > 0 || strayApk;
     // A release with an APK and no update-capable desktop artifact is the
     // only shape that gets to skip the desktop half.
-    return { desktop: desktop || !direct, direct };
+    return {
+        desktop: desktop || !direct,
+        direct,
+        directLanes: strayApk ? DIRECT_LANES.map((l) => l.id) : directLanes,
+    };
 }
 
 function short(v) {
@@ -1230,9 +1294,9 @@ const USAGE = `usage: rehearse.mjs <command> [args]
       [--repo <dir>] [--previous-tag <vX.Y.Z>] [--out <file>]
       [--pinned-key <file> --pinned-fingerprint <hex>] [--lane <id>]...
       Probe every shipped lane against the staging feed and write the
-      rehearsal record. Exits 1 if any lane fails. The direct lanes
-      (android-direct) are probed when the release contains their
-      artifact, or when named with --lane.
+      rehearsal record. Exits 1 if any lane fails. Each direct lane
+      (android-direct, android-full) is probed when the release contains
+      the APK its own glob names, or when named with --lane.
 
   attest --record <file> --lane <id> --from <version> --by <name>
       Record that a human watched the update install and swap on that
@@ -1257,10 +1321,12 @@ const USAGE = `usage: rehearse.mjs <command> [args]
       Print whether this release needs a swap on one OS or on all of
       them, and why.
 
-  coverage [--records <dir>]
-      Which lanes have ever had an observed swap, and which are still
-      blocked on DD4 hardware. Exits 1 if any shipped lane has never
-      been swapped - the §7.5 pre-launch condition.
+  coverage [--records <dir>] [--prod-input <dir>] [--lanes-file <path>]
+      Which lanes have ever had an observed swap. Exits 1 if any lane
+      whose row is SHIPPED in shipped-lanes.txt, or that the --prod-input
+      release carries, has never been swapped - the §7.5 pre-launch
+      condition. NOT-SHIPPED lanes are listed and not demanded; an
+      unreadable lane list demands every lane.
 `;
 
 function fail(msg) {
@@ -1380,7 +1446,7 @@ async function main(argv) {
         const previousVersion = previousTag ? String(previousTag).replace(/^v/, '') : null;
         const directLanes = [];
         for (const lane of DIRECT_LANES) {
-            if (only.length ? !only.includes(lane.id) : !shipping.direct) continue;
+            if (only.length ? !only.includes(lane.id) : !shipping.directLanes.includes(lane.id)) continue;
             process.stderr.write(`rehearse.mjs: ${lane.id} ... `);
             const entry = await probeDirectLane({
                 lane, feedBase: feed, tag, previousVersion, pinned,
@@ -1468,14 +1534,23 @@ async function main(argv) {
 
         const lane = laneById(laneId);
         if (!lane) fail(`unknown lane "${laneId}"`);
+        // A direct lane's open device question is DD-A, not DD4 (a
+        // different blocker with a different owner), and `run` files its
+        // probe result under `direct-lanes`, never under the desktop `lanes`.
+        const direct = DIRECT_LANES.includes(lane);
         if (!lane.device) {
-            fail(`lane ${laneId} has no named smoke device (DD4 is unanswered for it).\n`
-                + '  Attesting a swap without saying what it ran on is the thing DD4\n'
-                + '  exists to prevent: "no named device for a lane = that lane does not\n'
-                + '  ship". Name the device in tools/release/rehearsal-matrix.mjs first.');
+            fail(`lane ${laneId} has no named smoke device (${direct ? 'DD-A' : 'DD4'} is unanswered for it).\n`
+                + (direct
+                    ? '  Recording an install-over without saying which device watched it is\n'
+                        + '  the unlocated claim DD-A exists to refuse.'
+                    : '  Attesting a swap without saying what it ran on is the thing DD4\n'
+                        + '  exists to prevent: "no named device for a lane = that lane does not\n'
+                        + '  ship".')
+                + ' Name the device in tools/release/rehearsal-matrix.mjs first.');
         }
         const record = JSON.parse(readFileSync(file, 'utf8'));
-        const laneResult = (record.lanes || []).find((l) => l.id === laneId);
+        const results = direct ? record['direct-lanes'] : record.lanes;
+        const laneResult = (Array.isArray(results) ? results : []).find((l) => l.id === laneId);
         if (!laneResult?.ok) {
             fail(`lane ${laneId} did not pass its feed-side probe, so there is nothing\n`
                 + '  a swap on it would prove. Fix the probe failure and re-run.');
@@ -1601,6 +1676,14 @@ async function main(argv) {
 
     if (command === 'coverage') {
         const dir = flag(argv, '--records') || 'release-artifacts';
+        const lanesFile = flag(argv, '--lanes-file') || join(HERE, 'shipped-lanes.txt');
+        let lanesText = null;
+        try { lanesText = readFileSync(lanesFile, 'utf8'); } catch { lanesText = null; }
+        const prodInput = flag(argv, '--prod-input');
+        const demand = coverageDemand({
+            lanesText, releaseArtifacts: prodInput ? releaseArtifactsIn(prodInput) : undefined,
+        });
+        if (demand.reason) process.stdout.write(`every lane is demanded: ${demand.reason}\n\n`);
         const seen = new Map();
         const checked = new Map();
         if (existsSync(dir)) {
@@ -1617,7 +1700,8 @@ async function main(argv) {
                 }
             }
         }
-        let blocked = 0;
+        const blocked = [];
+        const waivedIds = [];
         // The direct lane is listed alongside the desktop ones, with its
         // own open question named. Leaving it off this table is how it
         // stayed invisible: a coverage report that ranges over exactly the
@@ -1638,16 +1722,25 @@ async function main(argv) {
             if (hit) {
                 process.stdout.write(`✅ ${lane.id.padEnd(22)} ${verb} at ${hit.tag} on ${hit.device}${machine}\n`);
             } else {
-                blocked += 1;
                 const why = lane.device ? `device ${lane.device}, never rehearsed` : `NO DEVICE NAMED (${dd})`;
-                process.stdout.write(`⬜ ${lane.id.padEnd(22)} ${why}${machine}\n`);
+                const waiver = demand.waived.get(lane.id);
+                if (waiver) waivedIds.push(lane.id);
+                else blocked.push(lane.id);
+                const note = waiver ? ` (not demanded: ${waiver}; rehearse before its first release)` : '';
+                process.stdout.write(`⬜ ${lane.id.padEnd(22)} ${why}${note}${machine}\n`);
             }
         }
-        if (blocked) {
+        if (waivedIds.length) {
             process.stdout.write(
-                `\n${blocked} lane(s) have never had an observed swap. §7.5 requires every\n`
-                + 'shipped OS/arch to be rehearsed at least once before launch, and DD4\n'
-                + 'says a lane with no named device does not ship.\n',
+                `\n${waivedIds.length} NOT-SHIPPED lane(s) are listed and not demanded: ${waivedIds.join(', ')}.\n`
+                + 'Rehearse each before its first release; coverage --prod-input <that release> demands it.\n',
+            );
+        }
+        if (blocked.length) {
+            process.stdout.write(
+                `\n${blocked.length} shipped lane(s) have never had an observed swap: ${blocked.join(', ')}.\n`
+                + '§7.5 requires every shipped OS/arch to be rehearsed at least once before\n'
+                + 'launch, and a lane with no named device does not ship.\n',
             );
             return 1;
         }

@@ -65,6 +65,9 @@ export class KeychainSessionBackend {
         this._tmpPath = `${filePath}.tmp`;
         /** @type {Uint8Array | null} */
         this._inMemory = null;
+        // Set by clear() and reset only by save(): a session.bin an unlink
+        // could not remove is never decrypted again in this process.
+        this._revoked = false;
     }
 
     get filePath() { return this._filePath; }
@@ -104,11 +107,13 @@ export class KeychainSessionBackend {
      * and no in-memory copy is present, or the ciphertext can't be
      * decrypted (e.g. user logged in under a different OS account,
      * keychain was reset). Never throws on "no session"; callers treat
-     * null as "prompt for password".
+     * null as "prompt for password". Also null after `clear()` until the
+     * next `save()`, even when that clear threw leaving the file on disk.
      *
      * @returns {Promise<Uint8Array | null>}
      */
     async load() {
+        if (this._revoked) return null;
         if (this._inMemory) return new Uint8Array(this._inMemory);
         if (!this.isAvailable()) return null;
         /** @type {Buffer | null} */
@@ -144,7 +149,9 @@ export class KeychainSessionBackend {
         }
         // In-memory copy always. This is what load() checks first so
         // the current process stays unlocked even on platforms without
-        // a real OS keychain.
+        // a real OS keychain. A save is a fresh authenticated session, so it
+        // lifts the revocation a clear() left.
+        this._revoked = false;
         if (this._inMemory) this._inMemory.fill(0);
         this._inMemory = new Uint8Array(blob);
 
@@ -156,7 +163,13 @@ export class KeychainSessionBackend {
         await fs.rename(this._tmpPath, this._filePath);
     }
 
+    /**
+     * Drop the cached key. Revokes first, so `load()` returns null for the
+     * rest of this process however the unlinks below end; a caller that
+     * swallows the rejection still gets the lock it asked for.
+     */
     async clear() {
+        this._revoked = true;
         if (this._inMemory) {
             this._inMemory.fill(0);
             this._inMemory = null;
@@ -164,15 +177,18 @@ export class KeychainSessionBackend {
         // Remove both the live ciphertext and any half-written .tmp sibling
         // a crash mid-save may have left. clear() runs on Lock/Reset, so a
         // stray session.bin.tmp holding the encrypted master key must not
-        // survive the lock the user believes purged it.
+        // survive the lock the user believes purged it. Both are attempted
+        // before the first refusal is rethrown.
+        let refusal = null;
         for (const p of [this._filePath, this._tmpPath]) {
             try {
                 await fs.unlink(p);
             } catch (err) {
                 if (err && err.code === 'ENOENT') continue;
-                throw err;
+                refusal = refusal ?? err;
             }
         }
+        if (refusal) throw refusal;
     }
 }
 

@@ -107,7 +107,7 @@ describe('primary actions explain missing list, publisher, and migration input',
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
-        expect(await screen.findByText('Nothing changed: add or remove at least one item.')).toBeTruthy();
+        expect(await screen.findByText('Nothing changed: add or remove an item, or write a memo.')).toBeTruthy();
     });
 
     it('MigrateToBip39 asks for both password fields', async () => {

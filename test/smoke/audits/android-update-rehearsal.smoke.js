@@ -29,10 +29,10 @@
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 
 import {
@@ -42,7 +42,7 @@ import {
     RECORD_VERSION,
 } from '../../../tools/release/rehearse.mjs';
 import {
-    LANES, DIRECT_LANES, laneById, isDirectLane, directLanesForShipped,
+    LANES, DIRECT_LANES, laneById, isDirectLane, directLanesForShipped, basenameGlobMatch,
 } from '../../../tools/release/rehearsal-matrix.mjs';
 import { UPDATE_FEED_URL, updateNoticeText } from '../../../packages/web/src/update/directUpdateCheck.js';
 
@@ -69,6 +69,9 @@ const AAB = `xchain-wallet-android-v${VERSION}.aab`;
 
 const LANE = DIRECT_LANES.find((l) => l.id === 'android-direct');
 assert.ok(LANE, 'the matrix must declare the android-direct lane; is the row that adds it');
+const FULL_LANE = DIRECT_LANES.find((l) => l.id === 'android-full');
+assert.ok(FULL_LANE, 'the matrix must declare the full-APK direct lane');
+const FULL_APK = `xchain-wallet-v${VERSION}-full.apk`;
 
 // A SHORT prefix on purpose: GNUPGHOME below holds gpg-agent's unix socket,
 // and a macOS temp dir plus a descriptive name overruns the ~104-byte
@@ -95,7 +98,7 @@ const pinned = { armoredKey, fingerprint };
  * `tamper` after it (a feed host we do not control), the same split
  * rehearsal.smoke.js draws and for the same reason.
  */
-function makeFeed(name, { mutate = () => {}, tamper = () => {} } = {}) {
+function makeFeed(name, { mutate = () => {}, tamper = () => {}, lanes = '' } = {}) {
     const dir = join(work, name);
     const android = join(dir, 'android');
     const hashes = join(dir, 'RELEASE_HASHES');
@@ -111,10 +114,16 @@ function makeFeed(name, { mutate = () => {}, tamper = () => {} } = {}) {
     const staged = join(work, `${name}-staged`);
     mkdirSync(staged, { recursive: true });
     for (const [n, body] of Object.entries(state.artifacts)) writeFileSync(join(staged, n), body);
+    const release = join(root, 'tools/release');
+    const scoped = lanes
+        ? `scope=$(xr_lane_scope "${release}/shipped-lanes.txt" "${release}/expected-artifacts.txt" `
+            + `${lanes}) && printf '%s\\n' "$scope" > "${staged}.scope" && `
+        : '';
     execFileSync('bash', ['-c',
-        `. "${join(root, 'tools/release/lib.sh')}" && `
+        `. "${release}/lib.sh" && ${scoped}`
         + `xr_write_manifest "${staged}" "${TAG}" "${'0'.repeat(40)}" `
-        + '"2026-08-09T00:00:00Z" "enforced"'], { env: process.env });
+        + '"2026-08-09T00:00:00Z" "enforced"'
+        + (lanes ? ` "${staged}.scope" "${lanes}"` : '')], { env: process.env });
     execFileSync('gpg', ['--batch', '--yes', '--armor', '--detach-sign',
         join(staged, 'RELEASE_HASHES.txt')], { env: gpgEnv });
 
@@ -280,7 +289,36 @@ const probe = (feedDir, over = {}) => {
     });
     const r = await probe(feed.dir);
     assert.equal(r.failed, 'artifact');
-    assert.match(r.reason, /covers 0 \.apk/);
+    assert.match(r.reason, /covers 0 file\(s\) matching xchain-wallet-v\*\[0-9\]\.apk/);
+}
+
+{
+    // Both APKs in one partial manifest: each lane takes its own, under its own lane name.
+    const both = { mutate: (s) => { s.artifacts[FULL_APK] = 'full-apk-bytes'; }, lanes: 'android android-full' };
+    const feed = makeFeed('feed-two-apks', both);
+    const store = await probe(feed.dir);
+    assert.ok(store.ok, `the store lane passes beside the full APK: ${store.failed} ${store.reason}`);
+    assert.equal(store.selected, APK);
+    const full = await probe(feed.dir, { lane: FULL_LANE });
+    assert.ok(full.ok, `the full lane passes: ${full.failed} ${full.reason}`);
+    assert.equal(full.selected, FULL_APK);
+}
+
+{
+    // A host that swapped only the full APK fails only the full lane.
+    const feed = makeFeed('feed-two-apks-swapped', {
+        mutate: (s) => { s.artifacts[FULL_APK] = 'full-apk-bytes'; },
+        tamper: (s) => { s.artifacts[FULL_APK] = 'not-the-signed-bytes'; },
+    });
+    assert.equal((await probe(feed.dir, { lane: FULL_LANE })).failed, 'verify');
+    assert.ok((await probe(feed.dir)).ok, 'the store lane is untouched by the full APK swap');
+}
+
+{
+    // A store-only manifest has nothing for the full lane, and says which glob it wanted.
+    const r = await probe(makeFeed('feed-store-only-full-lane').dir, { lane: FULL_LANE });
+    assert.equal(r.failed, 'artifact');
+    assert.match(r.reason, /covers 0 file\(s\) matching xchain-wallet-v\*-full\.apk/);
 }
 
 {
@@ -328,15 +366,15 @@ const check = (over, releaseArtifacts) => assertRecord({
     // Omitting the listing keeps the behaviour every existing caller has:
     // desktop demanded, direct not considered. A new parameter must not
     // change what an old call means.
-    assert.deepEqual(lanesInRelease(undefined), { desktop: true, direct: false });
+    assert.deepEqual(lanesInRelease(undefined), { desktop: true, direct: false, directLanes: [] });
     assert.ok(check({ 'direct-lanes': [] }).ok,
         'with no listing, a desktop-shaped record still passes');
 
     // An empty or unrecognised listing takes the STRICT branch. "I could
     // not tell what this release is" must never be the sentence that
     // waives a gate.
-    assert.deepEqual(lanesInRelease([]), { desktop: true, direct: false });
-    assert.deepEqual(lanesInRelease(['notes.txt']), { desktop: true, direct: false });
+    assert.deepEqual(lanesInRelease([]), { desktop: true, direct: false, directLanes: [] });
+    assert.deepEqual(lanesInRelease(['notes.txt']), { desktop: true, direct: false, directLanes: [] });
     assert.match(check({ lanes: [] }, []).problems.join(' '), /no result for lane/);
 }
 
@@ -344,7 +382,7 @@ const check = (over, releaseArtifacts) => assertRecord({
     // A desktop release is not asked about Android, even though the lane
     // now exists. The gate ranges over what the release contains.
     const desktopOnly = [`xchain-wallet-setup-${VERSION}-x64.exe`, `xchain-wallet_${VERSION}_amd64.deb`];
-    assert.deepEqual(lanesInRelease(desktopOnly), { desktop: true, direct: false });
+    assert.deepEqual(lanesInRelease(desktopOnly), { desktop: true, direct: false, directLanes: [] });
     assert.ok(check({ 'direct-lanes': [] }, desktopOnly).ok);
 }
 
@@ -353,7 +391,7 @@ const check = (over, releaseArtifacts) => assertRecord({
     // are not demanded of it - this is the shape that used to be blocked by
     // a gate that could not have probed it anyway.
     const apkOnly = [APK, AAB];
-    assert.deepEqual(lanesInRelease(apkOnly), { desktop: false, direct: true });
+    assert.deepEqual(lanesInRelease(apkOnly), { desktop: false, direct: true, directLanes: ['android-direct'] });
 
     const noRecord = check({ lanes: [], 'direct-lanes': [], swaps: [] }, apkOnly);
     assert.ok(!noRecord.ok);
@@ -385,11 +423,29 @@ const check = (over, releaseArtifacts) => assertRecord({
     // A release carrying both. Both halves are demanded; neither excuses
     // the other.
     const both = [APK, `xchain-wallet-setup-${VERSION}-x64.exe`];
-    assert.deepEqual(lanesInRelease(both), { desktop: true, direct: true });
+    assert.deepEqual(lanesInRelease(both), { desktop: true, direct: true, directLanes: ['android-direct'] });
     assert.ok(check({}, both).ok);
     assert.match(check({ 'direct-lanes': [] }, both).problems.join(' '),
         /no result for lane android-direct/);
     assert.match(check({ lanes: [] }, both).problems.join(' '), /no result for lane\(s\)/);
+}
+
+{
+    // Each direct lane is demanded only by the APK its own glob names.
+    const full = (ids) => lanesInRelease(ids).directLanes;
+    assert.deepEqual(full([FULL_APK]), ['android-full']);
+    assert.deepEqual(full([APK, FULL_APK, AAB]), ['android-direct', 'android-full']);
+    assert.deepEqual(full(['stray.apk']), ['android-direct', 'android-full'],
+        'an APK no lane claims demands every direct lane');
+    const twoApks = [APK, FULL_APK, AAB];
+    const fullOk = { id: 'android-full', ok: true, checks: {} };
+    const onlyStore = check({ lanes: [], swaps: [] }, twoApks);
+    assert.match(onlyStore.problems.join(' '), /no result for lane android-full/);
+    assert.ok(check({ lanes: [], swaps: [], 'direct-lanes': [...okDirect, fullOk] }, twoApks).ok);
+    const strayFail = check({ lanes: [], swaps: [], 'direct-lanes': [...okDirect, { ...fullOk, ok: false }] },
+        [APK, AAB]);
+    assert.ok(strayFail.ok, 'a store-only release is not refused for the full lane');
+    assert.match(strayFail.notes.join(' '), /android-full failed, and is not demanded/);
 }
 
 {
@@ -451,6 +507,9 @@ function assertRecordAgainst(lane, over) {
         '--from', PREVIOUS, '--by', 'nobody');
     assert.equal(attest.status, 1);
     assert.match(attest.stderr, /no named smoke device/);
+    // The direct lane's open question is DD-A; DD4 is the desktop one.
+    assert.match(attest.stderr, /DD-A/);
+    assert.doesNotMatch(attest.stderr, /DD4/);
 
     // And the CI refusal itself, which the clearing above would otherwise hide.
     // A runner attesting its own install-over deletes the human witness rather
@@ -519,6 +578,59 @@ function assertRecordAgainst(lane, over) {
     assert.match(matrix.stdout, /direct lane/);
 }
 
+{
+    // The day DD-A names a device, `attest` is the only supported way to
+    // record the install-over assertRecord then demands, so it has to find
+    // the passing probe `run` filed under `direct-lanes`. Driven through the
+    // real CLI with the device set by an --import preload that mutates the
+    // same module instance rehearse.mjs loads, never by a setter on the tool
+    // (see assertRecordAgainst above for why). A preload that missed the
+    // instance would fail case (a) on the no-device refusal, not pass it.
+    const BENCH = 'Pixel 7a (bench)';
+    const matrixUrl = pathToFileURL(realpathSync(join(root, 'tools/release/rehearsal-matrix.mjs'))).href;
+    const preload = join(work, 'stand-in-device.mjs');
+    writeFileSync(preload, `import { DIRECT_LANES } from ${JSON.stringify(matrixUrl)};\n`
+        + `DIRECT_LANES.find((l) => l.id === 'android-direct').device = ${JSON.stringify(BENCH)};\n`);
+    const attestWithDevice = (file) => spawnSync(
+        process.execPath, ['--import', pathToFileURL(preload).href,
+            join(root, 'tools/release/rehearse.mjs'), 'attest', '--record', file,
+            '--lane', 'android-direct', '--from', PREVIOUS, '--by', 'bench tester'],
+        { encoding: 'utf8',
+          env: { ...process.env, CI: '', GITHUB_ACTIONS: '', BUILDKITE: '', GITLAB_CI: '' } },
+    );
+    const directRecord = join(work, 'record-direct-attest.json');
+    const writeDirect = (over) => writeFileSync(directRecord,
+        `${JSON.stringify({ ...baseRecord, lanes: [], swaps: [], ...over }, null, 2)}\n`);
+
+    // (a) A passing direct-lane probe is attestable, and the swap it writes
+    // satisfies the install-over requirement end to end.
+    writeDirect({});
+    const ok = attestWithDevice(directRecord);
+    assert.equal(ok.status, 0, `attest on a passing direct lane must succeed:\n${ok.stderr}`);
+    assert.match(ok.stdout, /swap attested on android-direct/);
+    const written = JSON.parse(readFileSync(directRecord, 'utf8'));
+    assert.equal(written.swaps.length, 1);
+    assert.equal(written.swaps[0].lane, 'android-direct');
+    assert.equal(written.swaps[0].device, BENCH);
+    const endToEnd = assertRecordAgainst({ ...LANE, device: BENCH },
+        { lanes: [], swaps: written.swaps });
+    assert.ok(endToEnd.ok, endToEnd.problems.join(' '));
+
+    // (b) A failed direct-lane probe is still refused, and writes nothing.
+    writeDirect({ 'direct-lanes': [{ id: 'android-direct', ok: false, failed: 'feed', reason: 'HTTP 404' }] });
+    const failedProbe = attestWithDevice(directRecord);
+    assert.equal(failedProbe.status, 1);
+    assert.match(failedProbe.stderr, /did not pass its feed-side probe/);
+    assert.equal(JSON.parse(readFileSync(directRecord, 'utf8')).swaps.length, 0);
+
+    // (c) A passing entry filed under the DESKTOP array does not count: the
+    // lookup reads the array `run` writes direct results to, and no other.
+    writeDirect({ 'direct-lanes': [], lanes: [{ id: 'android-direct', ok: true }] });
+    const wrongArray = attestWithDevice(directRecord);
+    assert.equal(wrongArray.status, 1);
+    assert.match(wrongArray.stderr, /did not pass its feed-side probe/);
+}
+
 // --------------------------------------------------------- the module seam
 
 {
@@ -556,6 +668,28 @@ function assertRecordAgainst(lane, over) {
     assert.throws(() => directLanesForShipped(lanesText, ['andriod']), /not a lane declared/,
         'a mistyped lane is an error, never an empty answer');
     assert.throws(() => directLanesForShipped(lanesText, []), /no lane names/);
+    assert.deepEqual(directLanesForShipped(lanesText, ['android-full']).map((l) => l.id), ['android-full']);
+    assert.deepEqual(directLanesForShipped(lanesText, ['android', 'android-full']).map((l) => l.id),
+        ['android-direct', 'android-full']);
+    assert.throws(() => directLanesForShipped('android SHIPPED xchain-wallet-v*[0-9].apk\n', ['android']),
+        /declares feed/, 'a row with no feed column is refused, not read with its first glob lost');
+    assert.throws(() => directLanesForShipped('android-x NOT-SHIPPED store-only xchain-wallet-v*-x.apk\n',
+        ['android-x']), /no direct lane declares it/, 'an APK glob no lane rehearses is never a clean none');
+
+    // The [0-9] anchor is what keeps the two APKs apart, in both directions.
+    assert.ok(basenameGlobMatch(LANE.artifact, APK));
+    assert.ok(!basenameGlobMatch(LANE.artifact, FULL_APK));
+    assert.ok(basenameGlobMatch(FULL_LANE.artifact, FULL_APK));
+    assert.ok(!basenameGlobMatch(FULL_LANE.artifact, APK));
+
+    // Every lane glob is spelled as the lane list and the release list spell it.
+    const expectedText = readFileSync(join(root, 'tools/release/expected-artifacts.txt'), 'utf8');
+    for (const lane of DIRECT_LANES) {
+        const row = lanesText.split('\n').find((l) => l.split(/\s+/)[0] === lane.shippedLane);
+        assert.ok(row && row.split(/\s+/).slice(3).includes(lane.artifact), `${lane.id} glob on its lane row`);
+        assert.ok(expectedText.split('\n').some((l) => l.split(/\s+/)[1] === lane.artifact),
+            `${lane.id} glob declared in expected-artifacts.txt`);
+    }
 
     const ask = (...args) => spawnSync(process.execPath,
         [join(root, 'tools/release/rehearsal-matrix.mjs'), '--direct-lanes-for', ...args],

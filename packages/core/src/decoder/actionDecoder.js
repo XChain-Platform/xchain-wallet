@@ -44,6 +44,15 @@ import {
     multiplyDecimalStrings,
     roundDecimalString,
 } from '../shared/utils/amountFormat.js';
+import {
+    decodeListShare,
+    decodeListTransfer,
+    decodeUnionListCreate,
+} from './list_share_description.js';
+import {
+    decodeListCreateMeta,
+    decodeListSetMeta,
+} from './list_meta_description.js';
 import { listEditValue } from './list_removal_description.js';
 
 /**
@@ -624,6 +633,16 @@ function decodeDeploy(p, chainSuffix) {
     };
 }
 
+/*
+ * EXECUTE carries no amount, so a method that expects payment (a loan's
+ * fundLoan) sees nothing unless a DEPOSIT precedes it in the same batch.
+ * A tester called such a method bare from a wallet holding the token only
+ * on another chain and could not tell what the call would send. The batch
+ * decoder drops this line when the batch deposits into the same contract.
+ */
+const EXECUTE_NO_DEPOSIT_WARNING =
+    'This call sends no tokens to the contract. If the method needs a deposit, batch a DEPOSIT on this chain before it.';
+
 /* EXECUTE decoder: call a deployed contract method (gas is the fee). */
 function decodeExecute(p, chainSuffix) {
     const idx = str(p.CONTRACT_ACTION_INDEX);
@@ -640,6 +659,7 @@ function decodeExecute(p, chainSuffix) {
             ...(!idx ? ['Contract action index is empty.'] : []),
             ...(!method ? ['Method name is empty.'] : []),
             'Gas is charged even if the contract call fails at runtime.',
+            EXECUTE_NO_DEPOSIT_WARNING,
         ],
     };
 }
@@ -730,6 +750,23 @@ function decodeMessage(p, chainSuffix) {
     };
 }
 
+/*
+ * The bytes of every FILE are public forever; what differs is whether a
+ * reader can make sense of them. The decoder only sees params, so a file
+ * the caller encrypted itself (the labels backup) lands in the plain
+ * branch, which is why that branch says "unless encrypted" rather than
+ * "anyone can read it". A params-only screen can't vouch for more.
+ */
+function fileVisibilityWarning(gate, encryptionMethod) {
+    if (gate) {
+        return `File is stored on the blockchain permanently. Its contents are encrypted; only holders of ${gate} can read them.`;
+    }
+    if (encryptionMethod) {
+        return 'File is stored on the blockchain permanently. Its contents are encrypted.';
+    }
+    return 'File contents are permanent and public on the blockchain. Anyone can read them unless they were encrypted before publishing.';
+}
+
 /* FILE decoder: publish a (possibly gated) file record. */
 function decodeFile(p, chainSuffix) {
     const name = str(p.NAME);
@@ -758,7 +795,7 @@ function decodeFile(p, chainSuffix) {
                 ? ['Memo contains | or ;: the protocol will reject this transaction.']
                 : []),
             ...(!name ? ['File name is empty.'] : []),
-            'File contents are permanent and public on the blockchain (encrypted if gated).',
+            fileVisibilityWarning(gate, str(p.ENCRYPTION_METHOD)),
         ],
     };
 }
@@ -947,7 +984,7 @@ function decodeBet(p, chainSuffix) {
 }
 
 /**
- * LIST decoder. §40.9 / LIST.md. Two format versions:
+ * LIST decoder. §40.9 / LIST.md.
  *
  *   - v0 Create: VERSION|TYPE|MEMO|ITEM (ITEM repeats). TYPE 1 = TICK
  *     list, TYPE 2 = ADDRESS list. The wallet's AIRDROP authoring flow
@@ -967,11 +1004,31 @@ function decodeList(p, chainSuffix) {
     const count = items.length;
     const memo = str(p.MEMO);
 
+    if (version === '2') return decodeListShare(p);
+    if (version === '3') return decodeListTransfer(p);
+    if (version === '4') return decodeListCreateMeta(p, chainSuffix);
+    if (version === '5') return decodeListSetMeta(p);
+
     if (version === '1') {
         const edit = str(p.EDIT);
         const parent = str(p.LIST_ACTION_INDEX);
         const verb = edit === '1' ? 'Add' : edit === '2' ? 'Remove' : 'Edit';
         const prep = edit === '2' ? 'from' : 'to';
+        // An edit that adds and removes nothing but carries a memo is valid
+        // on chain (a new version of the list with the same members). It read
+        // as "Add ? items" with a "no items" warning, which describes the
+        // opposite of what it does.
+        if (count === 0 && memo && parent) {
+            return {
+                summary: `Update the memo on list #${parent}${chainSuffix}`,
+                details: [
+                    { label: 'Edit', value: 'Memo only (members unchanged)' },
+                    { label: 'Parent list action index', value: parent },
+                    { label: 'Memo', value: memo },
+                ],
+                warnings: [],
+            };
+        }
         const summary = `${verb} ${count || '?'} item${count === 1 ? '' : 's'} ${prep} list${parent ? ` #${parent}` : ''}${chainSuffix}`;
         return {
             summary,
@@ -994,6 +1051,8 @@ function decodeList(p, chainSuffix) {
 
     // Version 0: create.
     const type = str(p.TYPE);
+    if (type === '3') return decodeUnionListCreate(items, memo, chainSuffix);
+
     const kind = type === '1' ? 'token' : type === '2' ? 'address' : 'item';
     const summary = `Create ${kind} list of ${count || '?'} item${count === 1 ? '' : 's'}${chainSuffix}`;
     return {
@@ -1671,7 +1730,7 @@ function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
         };
     }
 
-    const decodedChildren = commands.map((cmd) => {
+    const decodedChildren = withoutFundedExecuteWarnings(commands, commands.map((cmd) => {
         if (!cmd || typeof cmd !== 'object') {
             return {
                 summary: 'Unknown command',
@@ -1685,7 +1744,7 @@ function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
             chainId,
             chainRegistry,
         });
-    });
+    }));
 
     const summaryLines = decodedChildren.map((c, i) => `${i + 1}. ${c.summary}`);
     const summary = `Batch of ${commands.length} action${commands.length === 1 ? '' : 's'}${chainSuffix}:\n${summaryLines.join('\n')}`;
@@ -1704,6 +1763,24 @@ function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
     const warnings = decodedChildren.flatMap((child) => child.warnings);
 
     return { summary, details, warnings };
+}
+
+/**
+ * Drop the EXECUTE no-deposit line from a child whose contract the same
+ * batch deposits into: there the call is funded, and the line would say
+ * the opposite of what the batch does.
+ */
+function withoutFundedExecuteWarnings(commands, children) {
+    const paramsOf = (cmd) => (cmd && typeof cmd === 'object' && (cmd.params)) || {};
+    const funded = new Set(commands
+        .filter((cmd) => cmd && cmd.action === 'DEPOSIT')
+        .map((cmd) => String(paramsOf(cmd).CONTRACT_ACTION_INDEX ?? '')));
+    return children.map((child, i) => {
+        const cmd = commands[i];
+        if (!cmd || cmd.action !== 'EXECUTE') return child;
+        if (!funded.has(String(paramsOf(cmd).CONTRACT_ACTION_INDEX ?? ''))) return child;
+        return { ...child, warnings: child.warnings.filter((w) => w !== EXECUTE_NO_DEPOSIT_WARNING) };
+    });
 }
 
 /**

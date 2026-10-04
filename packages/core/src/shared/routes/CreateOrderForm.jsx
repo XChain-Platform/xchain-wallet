@@ -17,6 +17,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import {
     resolvePreflightPrivacy,
@@ -290,26 +291,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         payFeeInNativeCoin: nativeFee.flag,
         ...(feePerKb != null ? { feePerKb } : {}),
         ...(autopayArm ? { autopay: { enabled: true } } : {}),
-        ...(composed ? {
-            prebuiltPsbt: {
-                psbtHex: composed.psbt,
-                encoding: composed.encoding,
-                actionString: composed.actionString,
-                version: composed.version,
-                // On the chunk lane compose deliberately left these outputs OFF
-                // the previewed PSBT because they ride the reveal the submit path
-                // builds, so dropping them here burns the value the commit
-                // reserved for them (see useActionConfirmFlow).
-                deferredFeeOutput: composed.deferredFeeOutput || null,
-                deferredOutputs: composed.deferredOutputs || [],
-                // ...and the change the reveal must be built with, or its surplus
-                // sweep lands on the un-rotated spending address.
-                revealOpts: composed.revealOpts || null,
-                // The donation verdict these bytes actually carry, so the submit
-                // path books from compose time rather than a fresh snapshot.
-                adsDonation: { included: !!composed.adsPlan?.canSubmit },
-            },
-        } : {}),
+        // The shared mapping, envelope and deferred outputs included.
+        ...(composed ? { prebuiltPsbt: prebuiltPsbtFromComposed(composed) } : {}),
     });
 
     async function openConfirmModal() {
@@ -703,8 +686,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     </label>
                     {autopayArm && exposure && Number.isFinite(Number(exposure.total)) ? (
                         <p className={styles.hint}>
-                            Under full indexer compromise, the most auto-pay could send across all your armed
-                            orders is bounded by their combined GIVE amounts.
+                            Even if the service that reports matches were fully compromised, auto-pay could send
+                            at most the combined amounts you give across all your orders with auto-pay on.
                         </p>
                     ) : null}
                     {ackRequired ? (

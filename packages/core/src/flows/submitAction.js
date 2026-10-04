@@ -35,6 +35,7 @@ import {
 } from './broadcastPermanence.js';
 import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js';
 import { resolveChangeAddress } from './changeAddress.js';
+import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -185,9 +186,16 @@ export async function submitAction({
         await vault.pendingTxs.put(pending);
     };
 
+    // Set once phase 1 is on the network: submitWithSigner emits these phases only after it lands.
+    let phase1Landed = false;
+
     // Chain the caller's onProgress with our lifecycle-tracking callback
     // so both fire for every phase.
     const composedOnProgress = async (phase, data) => {
+        // Record the landing before any await: most progress calls are not awaited.
+        if (phase === 'envelope_revealing' || phase === 'p2sh_spending' || phase === 'waiting') {
+            phase1Landed = true;
+        }
         if (onProgress) {
             try {
                 onProgress(phase, data);
@@ -357,7 +365,7 @@ export async function submitAction({
                                 chainId: err.chainId,
                                 signedAt: err.signedAt,
                                 summary: pendingTxMeta?.actionSummary
-                                    || `${actionData.action} on ${chainId}`,
+                                    || actionDisplayLabel(actionData.action),
                                 error: err.message,
                                 // Name the PendingTx stamped 'queued' above so
                                 // the queue's broadcast and discard handlers
@@ -379,10 +387,12 @@ export async function submitAction({
                     }
                 }
             } else if (pending) {
-                await writePending({
-                    status: 'failed',
-                    error: err && err.message ? String(err.message) : String(err),
-                });
+                // Never retire a transaction the network holds as 'failed': that stops it
+                // netting its spend and invites a re-compose. Keep it 'broadcast' with the error.
+                const error = err && err.message ? String(err.message) : String(err);
+                await stampPending(phase1Landed
+                    ? { status: 'broadcast', broadcastAt: pending.broadcastAt ?? new Date().toISOString(), error }
+                    : { status: 'failed', error });
             }
             throw err;
         }

@@ -30,6 +30,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { SharedListDirectory } from './SharedListDirectory.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -50,6 +51,8 @@ import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
+import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -149,8 +152,9 @@ function newOwnerAddressError(address, descriptor) {
  * @param {string} props.walletId
  * @param {AdminMode} props.mode
  * @param {() => void} props.onBack
+ * @param {'shared-block'} [props.initialPicker]
  */
-export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick, initialFromAddress }) {
+export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick, initialFromAddress, initialPicker }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -198,7 +202,12 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [blockListIdx, setBlockListIdx] = useState(/** @type {string | null} */ (null));
     const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
     const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
+    const [allowListName, setAllowListName] = useState(/** @type {string | null} */ (null));
+    const [blockListName, setBlockListName] = useState(/** @type {string | null} */ (null));
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
+    const [sharedBlockPickerOpen, setSharedBlockPickerOpen] = useState(initialPicker === 'shared-block');
+    const [sharedBlockListLabel, setSharedBlockListLabel] = useState(/** @type {string | null} */ (null));
+    const blockListTouched = useRef(false);
     // Bridgeability (mode === 'bridge-settings', ISSUE v7,
     // xchain-token-bridge.md section 7). Three owner-set fields on the ORIGIN
     // row: which destination chains this token may be locked to (default none),
@@ -398,28 +407,48 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     useEffect(() => {
         if (mode !== 'access-lists' || !assetInfo || listsPrefilled) return;
         setAllowListIdx(assetInfo.allowList || null);
-        setBlockListIdx(assetInfo.blockList || null);
+        if (!blockListTouched.current) setBlockListIdx(assetInfo.blockList || null);
         setListsPrefilled(true);
     }, [mode, assetInfo, listsPrefilled]);
 
     // Member counts for whichever allow/block lists are currently set
     // (display only; one detail read each, tolerant of failure).
     useEffect(() => {
-        if (mode !== 'access-lists' || !chainId || !allowListIdx || allowListIdx === '0') { setAllowListCount(null); return undefined; }
+        if (mode !== 'access-lists' || !chainId || !allowListIdx || allowListIdx === '0') { setAllowListCount(null); setAllowListName(null); return undefined; }
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: allowListIdx })
-            .then((d) => { if (!cancelled) setAllowListCount(currentListMemberCount(d)); })
-            .catch(() => { if (!cancelled) setAllowListCount(null); });
+            .then((d) => {
+                if (!cancelled) {
+                    setAllowListCount(currentListMemberCount(d));
+                    setAllowListName(typeof d?.name === 'string' && d.name.length > 0 ? d.name : null);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setAllowListCount(null);
+                    setAllowListName(null);
+                }
+            });
         return () => { cancelled = true; };
     }, [mode, chainId, allowListIdx, messaging]);
     useEffect(() => {
-        if (mode !== 'access-lists' || !chainId || !blockListIdx || blockListIdx === '0') { setBlockListCount(null); return undefined; }
+        if (mode !== 'access-lists' || !chainId || !blockListIdx || blockListIdx === '0') { setBlockListCount(null); setBlockListName(null); return undefined; }
         if (typeof messaging?.getListByActionIndex !== 'function') return undefined;
         let cancelled = false;
         messaging.getListByActionIndex({ chainId, actionIndex: blockListIdx })
-            .then((d) => { if (!cancelled) setBlockListCount(currentListMemberCount(d)); })
-            .catch(() => { if (!cancelled) setBlockListCount(null); });
+            .then((d) => {
+                if (!cancelled) {
+                    setBlockListCount(currentListMemberCount(d));
+                    setBlockListName(typeof d?.name === 'string' && d.name.length > 0 ? d.name : null);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setBlockListCount(null);
+                    setBlockListName(null);
+                }
+            });
         return () => { cancelled = true; };
     }, [mode, chainId, blockListIdx, messaging]);
 
@@ -642,7 +671,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'callback-settings') {
             if (callbackLocked) {
-                setFormError('Callback settings are permanently locked for this token (LOCK_CALLBACK).');
+                setFormError('Callback settings are permanently locked for this token.');
                 return;
             }
             if (callbackDistributed) {
@@ -688,7 +717,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         }
         if (mode === 'bridge-settings') {
             if (bridgeFrozen) {
-                setFormError('Bridge settings are permanently frozen for this token (LOCK_BRIDGE). Neither the chain list nor the depth can change again.');
+                setFormError('Bridge settings are permanently frozen for this token. Neither the chain list nor the depth can change again.');
                 return;
             }
             if (bridgePolicyBound && pickedBridgeChains.length > 0) {
@@ -1075,6 +1104,28 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         );
     }
 
+    if (sharedBlockPickerOpen) {
+        return (
+            <SharedListDirectory
+                walletId={walletId}
+                chainId={chainId}
+                mode="pick"
+                filterType="2"
+                onSelect={(pick) => {
+                    const next = sharedBlockPickState(pick);
+                    if (!next) return;
+                    blockListTouched.current = true;
+                    setBlockListIdx(next.blockListIdx);
+                    setBlockListCount(next.memberCount);
+                    setBlockListName(null);
+                    setSharedBlockListLabel(next.label);
+                    setSharedBlockPickerOpen(false);
+                }}
+                onBack={() => setSharedBlockPickerOpen(false)}
+            />
+        );
+    }
+
     // PC-04: address-list picker for the allow/block-list fields. Only
     // TYPE=2 (address) lists are valid ALLOW_LIST/BLOCK_LIST targets
     // (issue.js isValidList(x, 2)), so filter to them.
@@ -1086,14 +1137,19 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 chainId={chainId}
                 addresses={addressesByChain?.[chainId] || []}
                 filterType="2"
+                includeUnions
                 title={listPickerFor === 'allow' ? 'Choose allow-list' : 'Choose block-list'}
                 onSelect={(row) => {
                     if (listPickerFor === 'allow') {
                         setAllowListIdx(row.actionIndex);
                         setAllowListCount(row.memberCount);
+                        setAllowListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
                     } else {
+                        blockListTouched.current = true;
                         setBlockListIdx(row.actionIndex);
                         setBlockListCount(row.memberCount);
+                        setBlockListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
+                        setSharedBlockListLabel(null);
                     }
                     setListPickerFor(null);
                 }}
@@ -1219,7 +1275,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             {mintDeadLocked ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Minting is permanently locked for {ticker} (LOCK_MINT).
+                                        Minting is permanently locked for {ticker}.
                                         The mint window, max mint per transaction, and per-address
                                         cap below can no longer take effect.
                                     </p>
@@ -1227,22 +1283,22 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             ) : maxMintLocked ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Max mint per transaction is permanently locked for {ticker} (LOCK_MAX_MINT).
+                                        Max mint per transaction is permanently locked for {ticker}.
                                     </p>
                                 </div>
                             ) : null}
                             {mintSupplyLocked ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Minting supply now is permanently locked for {ticker} (LOCK_MINT_SUPPLY).
+                                        Minting supply now is permanently locked for {ticker}.
                                     </p>
                                 </div>
                             ) : null}
                             {maxSupplyLockedInfo ? (
                                 <div role="alert" className={styles.warnings}>
                                     <p className={styles.warning}>
-                                        Max supply is also permanently locked for {ticker} (LOCK_MAX_SUPPLY).
-                                        That is a separate ISSUE field, not part of Mint settings.
+                                        Max supply is also permanently locked for {ticker}.
+                                        That is a separate token setting, not part of Mint settings.
                                     </p>
                                 </div>
                             ) : null}
@@ -1327,7 +1383,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     {callbackLocked ? (
                         <div role="alert" className={styles.warnings}>
                             <p className={styles.warning}>
-                                Callback settings are permanently locked for {ticker} (LOCK_CALLBACK).
+                                Callback settings are permanently locked for {ticker}.
                                 They can no longer be changed.
                             </p>
                         </div>
@@ -1395,7 +1451,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             <span className={styles.detailsLabel}>Allow-list</span>
                             <span className={styles.detailsValue}>
                                 {allowListIdx && allowListIdx !== '0'
-                                    ? `List #${allowListIdx}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
                                     : (allowListIdx === '0' ? 'None after this update' : 'None (anyone may interact)')}
                             </span>
                         </div>
@@ -1403,7 +1459,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             {allowListIdx && allowListIdx !== '0' ? 'Change allow-list' : 'Choose allow-list'}
                         </Button>
                         {listDetachActive && allowListIdx && allowListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); }}>
+                            <Button type="button" variant="ghost" aria-label="Remove allow-list" onClick={() => { setAllowListIdx('0'); setAllowListCount(null); setAllowListName(null); }}>
                                 Remove list
                             </Button>
                         ) : null}
@@ -1413,15 +1469,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             <span className={styles.detailsLabel}>Block-list</span>
                             <span className={styles.detailsValue}>
                                 {blockListIdx && blockListIdx !== '0'
-                                    ? `List #${blockListIdx}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${sharedBlockListLabel || listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
                                     : (blockListIdx === '0' ? 'None after this update' : 'None')}
                             </span>
                         </div>
                         <Button type="button" variant="ghost" onClick={() => setListPickerFor('block')}>
                             {blockListIdx && blockListIdx !== '0' ? 'Change block-list' : 'Choose block-list'}
                         </Button>
+                        <Button type="button" variant="ghost" onClick={() => setSharedBlockPickerOpen(true)}>
+                            Use a shared block list
+                        </Button>
                         {listDetachActive && blockListIdx && blockListIdx !== '0' ? (
-                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { setBlockListIdx('0'); setBlockListCount(null); }}>
+                            <Button type="button" variant="ghost" aria-label="Remove block-list" onClick={() => { blockListTouched.current = true; setBlockListIdx('0'); setBlockListCount(null); setBlockListName(null); setSharedBlockListLabel(null); }}>
                                 Remove list
                             </Button>
                         ) : null}

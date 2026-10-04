@@ -66,6 +66,14 @@
 //     (`getState`), and asks for the verified install (`install`).
 //     Read-and-ask only: nothing here hands the renderer a path, a
 //     URL, or a way to skip the signature gate.
+//
+//   - `xchainWalletDeepLink.{onUri,takePending}`: the renderer's half
+//     of `xchain:` deep links. Main parks each OS-delivered link in a
+//     one-slot store and nudges the focused window (`onUri`); the
+//     renderer claims the link with `takePending`, on mount and on each
+//     nudge, so a link clicked while the app was closed is applied once.
+//     Links are attacker-controlled input: the renderer only ever turns
+//     one into a prefilled form the user still has to act on.
 
 // CommonJS on purpose: Electron loads sandboxed preloads (webPreferences
 // sandbox: true) through its CJS wrapper, so an ESM `import` here throws
@@ -83,6 +91,8 @@ const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
 const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
 const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
+const DEEP_LINK_CHANNEL = 'xchain:uri';
+const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
     /**
@@ -162,6 +172,28 @@ contextBridge.exposeInMainWorld('xchainWalletUpdater', {
      */
     install() {
         return ipcRenderer.invoke(UPDATER_INSTALL_CHANNEL);
+    },
+});
+
+contextBridge.exposeInMainWorld('xchainWalletDeepLink', {
+    /**
+     * Subscribe to main's "a deep link is waiting" nudge. The listener gets
+     * the payload only, never the IpcRendererEvent. Returns an unsubscribe.
+     * @param {(event: { scheme: string, raw: string, parsed: any }) => void} listener
+     * @returns {() => void}
+     */
+    onUri(listener) {
+        const wrapped = (_event, payload) => { listener(payload); };
+        ipcRenderer.on(DEEP_LINK_CHANNEL, wrapped);
+        return () => ipcRenderer.removeListener(DEEP_LINK_CHANNEL, wrapped);
+    },
+    /**
+     * Claim the parked deep link, or null when there is none. Each link is
+     * handed out once, so two windows never both apply it.
+     * @returns {Promise<{ scheme: string, raw: string, parsed: any } | null>}
+     */
+    takePending() {
+        return ipcRenderer.invoke(DEEP_LINK_TAKE_CHANNEL);
     },
 });
 

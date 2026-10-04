@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import {
     compareDecimalStrings,
     roundDecimalString,
@@ -56,7 +57,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             .catch((err) => {
                 if (cancelled) return;
                 setRows(demo ? sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS) : []);
-                setLoadError(err?.message || String(err));
+                setLoadError(readFailureMessage(err, 'load recent trades'));
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo]);

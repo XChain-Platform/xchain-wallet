@@ -222,13 +222,14 @@ describe('CrossChainOrderForm', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
-    it('refuses a native-coin side: only a token can be escrowed for the federation', async () => {
+    it('refuses a native-coin side: only a token can be offered', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
         await domAct(async () => {
             setValue(utils, 'Give token', 'DOGE');
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toMatch(/cannot give native DOGE/);
+        expect(utils.container.textContent).toMatch(/cannot give native DOGE\. Pick a token to offer\./);
+        expect(utils.container.textContent).not.toMatch(/escrowed for the federation/);
         expect(utils.getByRole('button', { name: 'Place order' }).disabled).toBe(true);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });

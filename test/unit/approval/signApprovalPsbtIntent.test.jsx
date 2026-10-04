@@ -36,7 +36,7 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
         action: { actionString: 'MINT|1|JDOG|1', action: 'MINT', version: 1 },
         actionDecodeReason: null,
     })),
-    resolveApproval: async () => ({ approved: true }),
+    resolveApproval: vi.fn(async () => ({ approved: true })),
     getAddressBalances: async () => { throw new Error('not used by signPsbt'); },
     getTokenInfo: async () => { throw new Error('not used by signPsbt'); },
     requoteNativeFee: vi.fn(async () => ({ feeDestination: 'bcrt1qfeedestination' })),
@@ -92,7 +92,7 @@ describe('SignApproval signPsbt intent', () => {
 
         const panel = await screen.findByTestId('psbt-intent-panel');
         expect(screen.getByTestId('psbt-action-intent').textContent)
-            .toBe('Carries an XChain MINT action (v1)');
+            .toBe('Carries an XChain Mint action (v1)');
         expect(panel.textContent).toContain('Recipient');
         expect(panel.textContent).toContain('100,000 sats');
         expect(panel.textContent).toContain('Change (back to you)');
@@ -305,5 +305,58 @@ describe('SignApproval untrusted text', () => {
         expect(await screen.findByText('trusted.example␦moc.live')).toBeTruthy();
         expect(screen.getByText('onetime code')).toBeTruthy();
         expect(screen.getAllByText(/original sign-in text/i)).toHaveLength(2);
+    });
+
+    // The handler refuses an approved sign-in with no address, so the window
+    // must return the one the user picked from the offered list.
+    it('sign-in resolves the picked address and its chain', async () => {
+        const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+        messaging.resolveApproval.mockClear();
+        render(
+            <SignApproval
+                id="signin-pick"
+                kind="signIn"
+                payload={{
+                    origin: 'https://dapp.test',
+                    payload: {
+                        appId: 'dapp.test',
+                        nonce: 'n1',
+                        addresses: [
+                            { address: 'bcrt1qfirstfirstfirst', chainId: 'bitcoin-regtest' },
+                            { address: 'bcrt1qsecondsecondsecond', chainId: 'bitcoin-regtest' },
+                        ],
+                    },
+                }}
+                onReject={() => {}}
+            />,
+        );
+        const second = await screen.findByText('bcrt1qsecondsecondsecond');
+        fireEvent.click(second.closest('label').querySelector('input[type="radio"]'));
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in' }).disabled).toBe(false));
+        fireEvent.submit(document.getElementById('sign-approval-form'));
+        await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledTimes(1));
+        expect(messaging.resolveApproval).toHaveBeenCalledWith('signin-pick', {
+            approved: true,
+            walletId: 'wallet-1',
+            password: 'pw',
+            address: 'bcrt1qsecondsecondsecond',
+            chainId: 'bitcoin-regtest',
+        });
+        closeSpy.mockRestore();
+    });
+
+    it('sign-in with no offered address cannot be approved', async () => {
+        render(
+            <SignApproval
+                id="signin-none"
+                kind="signIn"
+                payload={{ origin: 'https://dapp.test', payload: { appId: 'dapp.test', nonce: 'n1' } }}
+                onReject={() => {}}
+            />,
+        );
+        expect(await screen.findByText(/no address it may sign in with/i)).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+        expect(screen.getByRole('button', { name: 'Sign in' }).disabled).toBe(true);
     });
 });

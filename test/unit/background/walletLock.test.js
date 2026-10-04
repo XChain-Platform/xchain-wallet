@@ -18,7 +18,14 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { handleWalletLock, WalletLockIncompleteError } from '../../../packages/extension/src/background/walletLock.js';
+import {
+    handleWalletLock,
+    WalletLockIncompleteError,
+    createHostBuildFlight,
+} from '../../../packages/extension/src/background/walletLock.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 /** A session backend stub whose clear() either resolves or rejects. */
 function backend({ fails = false } = {}) {
@@ -117,5 +124,45 @@ describe('handleWalletLock', () => {
 
         expect(err.message).toBe('Wallet lock incomplete: sessionBackend.clear failed.');
         expect(err.message).not.toMatch(/hunter2/);
+    });
+});
+
+// Boot, keepalive and unlock overlap in a waking worker; each extra build orphans a Vault.
+describe('createHostBuildFlight', () => {
+    const deferred = () => { let resolve; const p = new Promise((r) => { resolve = r; }); return { p, resolve }; };
+
+    it('runs one build for concurrent callers and a fresh one after it settles', async () => {
+        const gate = deferred();
+        const build = vi.fn(() => gate.p);
+        const ensure = createHostBuildFlight(build);
+        const both = Promise.all([ensure(), ensure()]);
+        gate.resolve('host');
+        expect(await both).toEqual(['host', 'host']);
+        expect(build).toHaveBeenCalledTimes(1);
+        await ensure();
+        expect(build).toHaveBeenCalledTimes(2);
+    });
+
+    it('rebuilds for a joiner whose shared build found no session yet', async () => {
+        const gate = deferred();
+        const build = vi.fn().mockReturnValueOnce(gate.p).mockResolvedValue('host');
+        const ensure = createHostBuildFlight(build);
+        const [first, joiner] = [ensure(), ensure()];
+        gate.resolve(null);
+        expect(await first).toBe(null);
+        expect(await joiner).toBe('host');
+    });
+
+    it('clears a failed build so the next caller can retry', async () => {
+        const build = vi.fn().mockRejectedValueOnce(new Error('open failed')).mockResolvedValue('host');
+        const ensure = createHostBuildFlight(build);
+        await expect(ensure()).rejects.toThrow('open failed');
+        expect(await ensure()).toBe('host');
+    });
+
+    it('is what the service worker routes every ensureHost call through', () => {
+        const bg = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../packages/extension/src/background.js'), 'utf8');
+        expect(bg).toMatch(/const ensureHost = createHostBuildFlight\(buildHost\);/);
+        expect(bg).not.toMatch(/function ensureHost\(/);
     });
 });

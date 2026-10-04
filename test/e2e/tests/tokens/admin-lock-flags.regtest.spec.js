@@ -225,9 +225,9 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('Mint settings disables both locked ISSUE v2 fields', async () => {
             await openTokenAdmin(page, 'Mint settings');
             const main = page.getByRole('main');
-            await expect(main.getByRole('alert').filter({ hasText: /LOCK_MAX_MINT/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Max mint per transaction is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('alert').filter({ hasText: /LOCK_MINT_SUPPLY/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Minting supply now is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByLabel('Max mint per transaction (optional)')).toBeDisabled();
             await expect(main.getByLabel('Mint supply now (optional)')).toBeDisabled();
@@ -237,7 +237,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('Pause token refuses SLEEP before composition', async () => {
             await openTokenAdmin(page, 'Pause token');
             const main = page.getByRole('main');
-            await expect(main.getByRole('alert').filter({ hasText: /LOCK_SLEEP/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Pausing is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByRole('radio', { name: /Pause indefinitely/ })).toBeDisabled();
             await expect(main.getByRole('button', { name: 'Pause token', exact: true })).toBeDisabled();
@@ -247,7 +247,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('Callback settings refuses edits before composition', async () => {
             await openTokenAdmin(page, 'Callback settings');
             const main = page.getByRole('main');
-            await expect(main.getByRole('alert').filter({ hasText: /LOCK_CALLBACK/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Callback settings are permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByLabel('Callback token')).toBeDisabled();
             await expect(main.getByLabel('Payout per unit')).toBeDisabled();

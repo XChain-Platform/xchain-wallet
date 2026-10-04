@@ -141,3 +141,52 @@ describe('ListForkForm memo length', () => {
         expect(screen.queryByText(lengthErrorText)).toBeNull();
     });
 });
+
+// "Protocol rejects | or ;." under the Memo field read as an error to a
+// tester on Create list. The hint now says what the memo is and keeps the
+// character rule, and every memo form shares the one wording.
+describe('Memo hint on Create list', () => {
+    it('says the memo is public and names the forbidden characters', async () => {
+        mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} });
+        expect(await screen.findByText('A public note saved on the blockchain with this action. It cannot contain | or ;.')).toBeTruthy();
+        expect(screen.queryByText('Protocol rejects | or ;.')).toBeNull();
+    });
+});
+
+// A tester opened a one-member list, wrote only a memo in Fork & edit, and
+// was refused "Nothing changed". A memo-only edit is valid on chain (a new
+// version of the list, same members), so the form now publishes it as one
+// LIST v1 edit with no items and says the members are unchanged.
+describe('ListForkForm memo-only edit', () => {
+    function openFork() {
+        return mount(ListForkForm, {
+            walletId: 'w',
+            listRef: { chainId: DOGE, actionIndex: '2700', type: '1', items: ['SWAPTEST'], editResolutionActive: true },
+            onBack() {},
+            onDone() {},
+        });
+    }
+
+    it('publishes a memo with no member change as one item-less edit', async () => {
+        const messaging = openFork();
+        await screen.findByText(/Forking token list #2700/);
+        fireEvent.change(screen.getByLabelText(/Memo/), { target: { value: 'season two' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(await screen.findByText(/Only the memo changes\. The list keeps its 1 member/)).toBeTruthy();
+        expect(screen.getByText(/^Update the memo on list #2700/)).toBeTruthy();
+        const publish = screen.getByRole('button', { name: 'Publish memo' });
+        await waitFor(() => expect(publish.disabled).toBe(false));
+        fireEvent.click(publish);
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params)
+            .toEqual({ VERSION: '1', EDIT: '1', LIST_ACTION_INDEX: '2700', MEMO: 'season two', ITEM: [] });
+    });
+
+    it('still refuses an edit with no member change and no memo', async () => {
+        const messaging = openFork();
+        await screen.findByText(/Forking token list #2700/);
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(await screen.findByText('Nothing changed: add or remove an item, or write a memo.')).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+});

@@ -51,6 +51,7 @@ import {
     test,
 } from '../../fixtures/wallet.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from '../../fixtures/wallet.js';
+import { NATIVE_FEE_ONLY } from '../../fixtures/priceSeed.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     expectConfirmModal,
@@ -58,6 +59,7 @@ import {
     fundAddress,
     mintXchain,
     readReceiveAddress,
+    REGTEST_COIN,
     selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
@@ -245,6 +247,9 @@ test.describe('the PC-26 gated SEND guard', () => {
                 await reviewPassword.fill(PASSWORD);
             }
             await main.getByRole('button', { name: 'Sign and publish' }).click();
+            await expectConfirmModal(issuer, 'the gated publish', 60_000);
+            await expect(issuer.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
+            await issuer.getByTestId('confirm-approve').click();
 
             await expect(main.getByText('Encrypted file published')).toBeVisible({ timeout: 120_000 });
             const txt = await main.innerText();
@@ -338,24 +343,34 @@ test.describe('the PC-26 gated SEND guard', () => {
             await holder.getByRole('textbox', { name: 'DESTINATION', exact: true }).fill(issuerAddr);
 
             await holder.getByRole('button', { name: 'Sign action' }).click();
-            await expectConfirmModal(holder, 'the bypassed raw SEND');
 
-            // The confirm preflight dry-runs the action against the network and
-            // shows the indexer's own refusal. The SDK marks network-sourced
-            // verdicts overridable so confirmed-only state cannot censor signing.
-            const confirm = holder.getByTestId('confirm-modal');
-            const refusal = confirm.getByRole('listitem')
-                .filter({ hasText: /gated token transfer requires key handoff message/ });
-            await expect(refusal, 'the preflight did not surface the network\'s gated-send refusal')
-                .toBeVisible({ timeout: 60_000 });
-            const override = refusal.getByRole('checkbox', { name: 'Sign anyway' });
-            await expect(override, 'the SDK override policy was ignored').toBeVisible();
-            const approve = holder.getByTestId('confirm-approve');
-            await expect(approve, 'Approve was enabled before explicit consent').toBeDisabled();
-            await override.check();
-            await expect(approve, 'Approve stayed disabled after explicit consent').toBeEnabled();
-            await holder.getByTestId('confirm-reject').click();
-            await expect(confirm).toHaveCount(0);
+            if (NATIVE_FEE_ONLY.includes(REGTEST_COIN)) {
+                const refusal = holder.getByRole('alert')
+                    .filter({ hasText: /gated token transfer requires key handoff message/ })
+                    .filter({ hasText: /Nothing was signed or sent/ });
+                await expect(refusal, 'the form did not surface the network\'s gated-send refusal')
+                    .toBeVisible({ timeout: 60_000 });
+                await expect(holder.getByTestId('confirm-modal')).toHaveCount(0);
+            } else {
+                await expectConfirmModal(holder, 'the bypassed raw SEND');
+
+                // The confirm preflight dry-runs the action against the network and
+                // shows the indexer's own refusal. The SDK marks network-sourced
+                // verdicts overridable so confirmed-only state cannot censor signing.
+                const confirm = holder.getByTestId('confirm-modal');
+                const refusal = confirm.getByRole('listitem')
+                    .filter({ hasText: /gated token transfer requires key handoff message/ });
+                await expect(refusal, 'the preflight did not surface the network\'s gated-send refusal')
+                    .toBeVisible({ timeout: 60_000 });
+                const override = refusal.getByRole('checkbox', { name: 'Sign anyway' });
+                await expect(override, 'the SDK override policy was ignored').toBeVisible();
+                const approve = holder.getByTestId('confirm-approve');
+                await expect(approve, 'Approve was enabled before explicit consent').toBeDisabled();
+                await override.check();
+                await expect(approve, 'Approve stayed disabled after explicit consent').toBeEnabled();
+                await holder.getByTestId('confirm-reject').click();
+                await expect(confirm).toHaveCount(0);
+            }
 
             // Rejecting the override leaves the holder's balance unchanged.
             expect(await tokenBalance(holderAddr, TICK)).toBe(holderTickBefore);

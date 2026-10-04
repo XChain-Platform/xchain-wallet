@@ -77,7 +77,7 @@ const MEMPOOL_STAGE_COPY = {
  *                     entry's block, the cell adds a confirmation count
  *                     ("· N confirmations") so the user can read tx
  *                     safety at a glance.
- *   - **Indexed**: the indexer has processed the block carrying this
+ *   - **Processed**: the indexer has processed the block carrying this
  *                  action. Driven by `indexerWatermark` (the latest block
  *                  the indexer has processed, from `getIndexerWatermark`):
  *                  done when it is at or above the entry's block. With no
@@ -210,7 +210,7 @@ export function TxStatusTimeline({
         },
         {
             key: 'indexed',
-            label: 'Indexed',
+            label: 'Processed',
             done: indexed,
             sub: indexedSub,
         },

@@ -31,8 +31,8 @@
 // has lapsed or cannot be shown to have held, and still present in the two
 // cases where the user is entitled to the skip-the-prompt relaunch.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, statSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, statSync, promises as fsPromises } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -45,6 +45,7 @@ import {
 import {
     createRuntime,
     enforceLaunchAutoLock,
+    ensureHost,
     handleIpcMessage,
     AUTO_LOCK_REPORT_TYPE,
 } from '../../../packages/desktop/main/runtime.js';
@@ -65,7 +66,7 @@ const fakeSafeStorage = {
 
 let dir;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'xchain-autolock-')); });
-afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); rmSync(dir, { recursive: true, force: true }); });
 
 /**
  * A runtime with the two stores the gate reads and a session.bin that
@@ -174,6 +175,43 @@ describe('desktop launch auto-lock gate', { timeout: FILESYSTEM_FIXTURE_TIMEOUT 
         expect(existsSync(sessionFile())).toBe(false);
     });
 
+    // An armed record whose window cannot be enforced must not read as
+    // "within window": the shared idle check answers "never lock" there.
+    it.each([
+        ['a zero idleMs', { armed: true, idleMs: 0, lastActivity: 'NOW' }],
+        ['a missing idleMs', { armed: true, lastActivity: 'NOW' }],
+        ['a non-numeric idleMs', { armed: true, idleMs: 'abc', lastActivity: 'NOW' }],
+        ['a negative idleMs', { armed: true, idleMs: -1, lastActivity: 'NOW' }],
+        ['a zero lastActivity', { armed: true, idleMs: 15 * MINUTE, lastActivity: 0 }],
+        ['a missing lastActivity', { armed: true, idleMs: 15 * MINUTE }],
+    ])('fails CLOSED on an armed record with %s', async (_label, record) => {
+        const runtime = await runtimeWithCachedKey();
+        const now = Date.now();
+        const onDisk = { ...record };
+        if (onDisk.lastActivity === 'NOW') onDisk.lastActivity = now;
+        writeFileSync(autoLockStatePathFor(dir), JSON.stringify(onDisk), 'utf8');
+
+        const res = await enforceLaunchAutoLock(runtime, now);
+
+        expect(res).toEqual({ locked: true, reason: 'no-record' });
+        expect(existsSync(sessionFile())).toBe(false);
+        expect(await runtime.autoLockStore.load()).toBe(null);
+    });
+
+    it('fails CLOSED on an armed zero-window state from any injected store', async () => {
+        const runtime = await runtimeWithCachedKey();
+        runtime.autoLockStore = {
+            load: async () => ({ armed: true, idleMs: 0, lastActivity: Date.now() }),
+            save: async () => {},
+            clear: async () => {},
+        };
+
+        const res = await enforceLaunchAutoLock(runtime, Date.now());
+
+        expect(res).toEqual({ locked: true, reason: 'no-record' });
+        expect(existsSync(sessionFile())).toBe(false);
+    });
+
     it('does nothing when no key was cached in the first place', async () => {
         const runtime = await runtimeWithCachedKey();
         await runtime.sessionBackend.clear();
@@ -249,6 +287,23 @@ describe('desktop autolock.report IPC', { timeout: FILESYSTEM_FIXTURE_TIMEOUT },
         expect(state.idleMs).toBe(15 * MINUTE);
     });
 
+    it.each([
+        ['a zero idleMs', 0],
+        ['a non-numeric idleMs', 'nope'],
+    ])('an armed report with %s leaves no record, so the next launch locks', async (_label, idleMs) => {
+        const runtime = await runtimeWithCachedKey();
+        await handleIpcMessage(runtime, {
+            type: AUTO_LOCK_REPORT_TYPE,
+            request: { armed: true, idleMs },
+        });
+        expect(existsSync(autoLockStatePathFor(dir))).toBe(false);
+
+        const res = await enforceLaunchAutoLock(runtime, Date.now());
+
+        expect(res).toEqual({ locked: true, reason: 'no-record' });
+        expect(existsSync(sessionFile())).toBe(false);
+    });
+
     it('an armed session that keeps talking is not locked by the next launch', async () => {
         const runtime = await runtimeWithCachedKey();
         await handleIpcMessage(runtime, {
@@ -260,5 +315,104 @@ describe('desktop autolock.report IPC', { timeout: FILESYSTEM_FIXTURE_TIMEOUT },
         await handleIpcMessage(runtime, { type: 'wallet.list' });
         const res = await enforceLaunchAutoLock(runtime, Date.now());
         expect(res.locked).toBe(false);
+    });
+});
+
+describe('a cached key the lock could not delete is never used again', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
+    /** Refuse the unlink of `target` only, the way an AV handle on session.bin does. */
+    function refuseUnlinkOf(target, code = 'EPERM') {
+        const real = fsPromises.unlink.bind(fsPromises);
+        return vi.spyOn(fsPromises, 'unlink').mockImplementation(async (p) => {
+            if (String(p) === target) throw Object.assign(new Error(code), { code });
+            return real(p);
+        });
+    }
+
+    it('locks this launch and every relaunch while session.bin cannot be removed', async () => {
+        const runtime = await runtimeWithCachedKey();
+        const now = Date.now();
+        await runtime.autoLockStore.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: now - 60 * MINUTE });
+        const spy = refuseUnlinkOf(sessionFile());
+
+        expect(await enforceLaunchAutoLock(runtime, now)).toEqual({ locked: true, reason: 'idle-window-elapsed' });
+        expect(existsSync(sessionFile())).toBe(true);
+        expect(await runtime.sessionBackend.load()).toBe(null);
+        expect(await ensureHost(runtime)).toBe(null);
+        expect(runtime.host).toBe(null);
+
+        // Relaunch with the fault still there: the record is gone, so 'no-record'.
+        const relaunched = createRuntime({
+            storageBackend: { load: async () => null, save: async () => {}, clear: async () => {} },
+            metaBackend: { load: async () => null, save: async () => {}, clear: async () => {} },
+            sessionBackend: new KeychainSessionBackend({ safeStorage: fakeSafeStorage, filePath: sessionFile() }),
+            autoLockStore: new FileAutoLockStore(autoLockStatePathFor(dir)),
+            chainRegistry: {},
+            sdkRegistry: {},
+        });
+        expect(await enforceLaunchAutoLock(relaunched, Date.now())).toEqual({ locked: true, reason: 'no-record' });
+        expect(await ensureHost(relaunched)).toBe(null);
+
+        spy.mockRestore();
+        const third = await runtimeWithCachedKey();
+        await enforceLaunchAutoLock(third, Date.now());
+        expect(existsSync(sessionFile())).toBe(false);
+    });
+
+    it('a fresh save after the failed clear is a fresh session again', async () => {
+        const backend = new KeychainSessionBackend({ safeStorage: fakeSafeStorage, filePath: sessionFile() });
+        await backend.save(new Uint8Array([9, 9]));
+        const spy = refuseUnlinkOf(sessionFile(), 'EBUSY');
+        await expect(backend.clear()).rejects.toThrow('EBUSY');
+        expect(await backend.load()).toBe(null);
+        spy.mockRestore();
+
+        await backend.save(new Uint8Array([7, 7]));
+        expect(Array.from(await backend.load())).toEqual([7, 7]);
+    });
+
+    it('still removes the .tmp sibling when the live file refuses', async () => {
+        const backend = new KeychainSessionBackend({ safeStorage: fakeSafeStorage, filePath: sessionFile() });
+        await backend.save(new Uint8Array([1]));
+        writeFileSync(`${sessionFile()}.tmp`, 'half-written');
+        refuseUnlinkOf(sessionFile());
+        await expect(backend.clear()).rejects.toThrow('EPERM');
+        expect(existsSync(`${sessionFile()}.tmp`)).toBe(false);
+    });
+});
+
+describe('a presence probe zeroes the key copy it loads', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
+    /** Wrap load() so every buffer it hands out is kept for inspection. */
+    function captureLoads(backend) {
+        const handed = [];
+        const real = backend.load.bind(backend);
+        backend.load = async () => {
+            const bytes = await real();
+            if (bytes) handed.push(bytes);
+            return bytes;
+        };
+        return handed;
+    }
+
+    it('the launch gate leaves no plaintext key bytes behind', async () => {
+        const runtime = await runtimeWithCachedKey();
+        const now = Date.now();
+        await runtime.autoLockStore.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: now });
+        const handed = captureLoads(runtime.sessionBackend);
+
+        expect((await enforceLaunchAutoLock(runtime, now)).locked).toBe(false);
+        expect(handed).toHaveLength(1);
+        expect(Array.from(handed[0])).toEqual([0, 0, 0, 0]);
+        expect(Array.from(await runtime.sessionBackend.load())).toEqual([1, 2, 3, 4]);
+    });
+
+    it('session.status reports the session and zeroes the copy it read', async () => {
+        const runtime = await runtimeWithCachedKey();
+        runtime.storageBackend.load = async () => new Uint8Array([5]);
+        const handed = captureLoads(runtime.sessionBackend);
+
+        const res = await handleIpcMessage(runtime, { type: 'session.status', request: {} });
+        expect(res.result).toEqual({ hasWallet: true, hasSession: true, state: 'unlocked' });
+        expect(handed).toHaveLength(1);
+        expect(Array.from(handed[0])).toEqual([0, 0, 0, 0]);
     });
 });

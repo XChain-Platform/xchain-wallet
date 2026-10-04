@@ -19,15 +19,13 @@
 // Runs pre-host so a fresh install can onboard; the MessageHost's
 // vault-backed handlers aren't registered until a session key exists.
 
-import { crypto as cryptoLib, flows, storage as storageLib } from '@xchain-wallet/core';
+import { crypto as cryptoLib, flows, registry, storage as storageLib } from '@xchain-wallet/core';
 import { saveSigningSecret } from './signingSecretSession.js';
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
 
-export const DEFAULT_ACTIVE_CHAIN_IDS = [
-    'bitcoin-mainnet',
-    'dogecoin-mainnet',
-    'litecoin-mainnet',
-];
+// Read from the registry's bundled descriptors, so a new bundled chain reaches
+// new wallets with no shell edit; the web shell imports this same binding.
+export const DEFAULT_ACTIVE_CHAIN_IDS = registry.DEFAULT_ONBOARDING_CHAIN_IDS;
 
 /**
  * @typedef {Object} WalletCreateDeps

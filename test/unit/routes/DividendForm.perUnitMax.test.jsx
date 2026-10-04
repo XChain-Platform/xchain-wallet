@@ -59,18 +59,23 @@ function mountDividend({
     balance = '4999',
     holders = [{ address: HOLDER, amount: '500' }],
     divisibility = 8,
+    walletMode = 'full',
 } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getHoldersForToken: vi.fn().mockResolvedValue({
             tick: 'S19MINT', total: holders.length, data: holders,
         }),
+        // creator/totalSupply mark this as a resolved, real token so the
+        // dividend-ticker existence check (DividendForm.tickChecks) reads it
+        // as found, not as an empty "no such token" record.
         getTokenInfo: vi.fn().mockResolvedValue({
-            chainId: CHAIN, tick: 'XCHAIN', divisibility, locks: {},
+            chainId: CHAIN, tick: 'XCHAIN', creator: '1xchainCreatorAddr', totalSupply: '10000',
+            divisibility, locks: {},
         }),
         getWalletBalances: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -249,5 +254,20 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.change(await amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+    });
+});
+
+describe('DividendForm review hint', () => {
+    it('names the payout token and the fee in plain words', async () => {
+        // Only a watcher wallet stops on the in-form review step before encoding.
+        mountDividend({ walletMode: 'watcher' });
+        await pickDividendToken();
+        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
+        fireEvent.change(await amountField(), { target: { value: '9.998' } });
+        fireEvent.click(submitButton());
+        const hint = await screen.findByTestId('dividend-review-fee-hint', {}, { timeout: 3000 });
+        expect(hint.textContent).toMatch(/holds enough XCHAIN\s+to cover the full payout/);
+        expect(hint.textContent).toMatch(/grows with the number\s+of holders paid/);
+        expect(hint.textContent).not.toMatch(/§|database hits|DIVIDEND ticker|DIVIDEND charges/);
     });
 });

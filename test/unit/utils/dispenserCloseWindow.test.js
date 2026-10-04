@@ -8,14 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A cancelling dispenser closes at the first block whose block time is later
-// than the cancel's block time plus the 1-hour window. The helper turns the
-// cancel time into the earliest close and a countdown that never promises a
-// clock time once the window has passed.
+// A cancelling dispenser closes at the first block whose protocol time is
+// later than the cancel's block time plus the 1-hour window. The helper turns
+// the cancel time into the earliest close and a countdown that never promises
+// a clock time once the window has passed. It measures against the chain's
+// protocol time when given one, and against the wall clock otherwise.
 
 import { describe, it, expect } from 'vitest';
 import {
-    DISPENSER_CLOSE_DELAY_SECONDS, dispenserCancelTimestamp, dispenserCloseEta, shortAddress,
+    DISPENSER_CLOSE_DELAY_SECONDS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta, shortAddress,
 } from '../../../packages/core/src/shared/utils/dispenserCloseWindow.js';
 
 const CANCEL_AT = 1790455620;
@@ -63,6 +64,91 @@ describe('dispenserCloseEta', () => {
     it('returns null for a missing or unreadable cancel time', () => {
         for (const bad of [null, undefined, '', 0, '0', 'soon', Number.NaN, -5]) {
             expect(dispenserCloseEta(bad, { nowMs: at(0) })).toBeNull();
+        }
+    });
+});
+
+describe('dispenserCloseEta on chain time', () => {
+    const LAG = 29 * 60;
+    // The wall clock is 5 minutes past the window's end, and the chain's
+    // protocol time trails it by 29 minutes.
+    const wallNow = at(3600 + 5 * 60);
+    const chainNow = CANCEL_AT + 3600 + 5 * 60 - LAG;
+
+    it('counts the remainder on the chain even when the wall clock says past due', () => {
+        const clockOnly = dispenserCloseEta(CANCEL_AT, { nowMs: wallNow });
+        expect(clockOnly.pastDue).toBe(true);
+        const eta = dispenserCloseEta(CANCEL_AT, { nowMs: wallNow, chainTime: chainNow, chainTimeReadAtMs: wallNow });
+        expect(eta.basis).toBe('chain');
+        expect(eta.pastDue).toBe(false);
+        expect(eta.secondsLeft).toBe(24 * 60);
+        expect(eta.countdown).toBe('about 24 minutes');
+        expect(eta.closeAt).toBe(CANCEL_AT + 3600);
+        // The local clock label is now plus the chain-time remainder.
+        expect(eta.closeAtMs).toBe(wallNow + 24 * 60 * 1000);
+    });
+
+    it('shows about 29 minutes left when the chain lags 29 minutes and the wall clock reads the window end', () => {
+        const eta = dispenserCloseEta(CANCEL_AT, {
+            nowMs: at(3600), chainTime: CANCEL_AT + 3600 - LAG, chainTimeReadAtMs: at(3600),
+        });
+        expect(eta.countdown).toBe('about 29 minutes');
+        expect(eta.shortCountdown).toBe('~29 min');
+    });
+
+    it('advances the chain reading by local time elapsed since the read', () => {
+        const readAt = at(3600);
+        const eta = dispenserCloseEta(CANCEL_AT, {
+            nowMs: readAt + 10 * 60 * 1000, chainTime: CANCEL_AT + 3600 - LAG, chainTimeReadAtMs: readAt,
+        });
+        expect(eta.secondsLeft).toBe(19 * 60);
+    });
+
+    it('never runs the chain reading backwards when the local clock steps back', () => {
+        const readAt = at(3600);
+        const eta = dispenserCloseEta(CANCEL_AT, {
+            nowMs: readAt - 10 * 60 * 1000, chainTime: CANCEL_AT + 3600 - LAG, chainTimeReadAtMs: readAt,
+        });
+        expect(eta.secondsLeft).toBe(LAG);
+    });
+
+    it('says "at the next block" once the chain has passed the window, with no clock time', () => {
+        const eta = dispenserCloseEta(CANCEL_AT, {
+            nowMs: wallNow, chainTime: CANCEL_AT + 3600 + 1, chainTimeReadAtMs: wallNow,
+        });
+        expect(eta.pastDue).toBe(true);
+        expect(eta.secondsLeft).toBe(0);
+        expect(eta.countdown).toBe('at the next block');
+        expect(eta.shortCountdown).toBe('next block');
+    });
+
+    it('falls back to the wall clock when chain time is missing or unreadable', () => {
+        const cases = [
+            {},
+            { chainTime: null, chainTimeReadAtMs: wallNow },
+            { chainTime: chainNow, chainTimeReadAtMs: null },
+            { chainTime: 'soon', chainTimeReadAtMs: wallNow },
+            { chainTime: 0, chainTimeReadAtMs: wallNow },
+        ];
+        for (const extra of cases) {
+            const eta = dispenserCloseEta(CANCEL_AT, { nowMs: wallNow, ...extra });
+            expect(eta.basis).toBe('clock');
+            expect(eta.pastDue).toBe(true);
+            expect(eta.countdown).toBe('any block now');
+            expect(eta.closeAtMs).toBe((CANCEL_AT + 3600) * 1000);
+        }
+    });
+});
+
+describe('chainClockFromTipRead', () => {
+    it('pairs a protocol time with the local read time', () => {
+        expect(chainClockFromTipRead({ blockTime: 1790460068, protocolTime: 1790458382 }, 1790460118000))
+            .toEqual({ chainTime: 1790458382, chainTimeReadAtMs: 1790460118000 });
+    });
+
+    it('returns null when the read has no usable protocol time', () => {
+        for (const read of [null, undefined, {}, { blockTime: 1790460068 }, { protocolTime: null }, { protocolTime: 'x' }, { protocolTime: 0 }]) {
+            expect(chainClockFromTipRead(read, 1)).toBeNull();
         }
     });
 });

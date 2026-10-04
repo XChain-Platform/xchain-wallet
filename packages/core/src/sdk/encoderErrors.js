@@ -46,12 +46,22 @@ import { rateLimitRetryAfterSeconds, rateLimitedMessage } from './explorerErrors
 // form that renders the sentence already knows which chain it is on.
 const FEE_REQUIREMENT_RE = /; protocol fee requires ([0-9]+(?:\.[0-9]+)?) in native coin$/;
 
+// Match the encoder's own wording for NO_UTXOS / UTXO_TRACKER_STALE, which it
+// forwards as an ENCODER_RPC_ERROR carrying the code in `data.reason` (the SDK
+// pre-check wording is above). The stale pattern must miss HALTED/NOT_READY.
+const ENCODER_REASON_WORDING = [
+    [/no utxos were provided and no utxos found on the blockchain/i, 'NO_UTXOS'],
+    [/utxo-tracker view is stale\b/i, 'UTXO_TRACKER_STALE'],
+];
+const LIFTED_RPC_REASONS = new Set(ENCODER_REASON_WORDING.map(([, code]) => code));
+
 // A code recovered from the developer-facing message, for the boundary-crossed
 // case where `err.code` is gone. Ordered most-specific first; ENCODER_HTTP_*
 // carries its status through the capture group.
 const MESSAGE_TO_CODE = [
     [/no spendable UTXOs found for the funding address/i, 'NO_UTXOS'],
     [/utxo-tracker view is not synced/i, 'UTXO_TRACKER_STALE'],
+    ...ENCODER_REASON_WORDING,
     [/requires pubkey/i, 'MISSING_PUBKEY'],
     [/requires p2shHash/i, 'MISSING_P2SH_HASH'],
     [/requires p2shHex/i, 'MISSING_P2SH_HEX'],
@@ -85,6 +95,7 @@ export function encoderErrorCode(err) {
     if (!err || typeof err !== 'object') return null;
     const e = /** @type {any} */ (err);
     const code = typeof e.code === 'string' ? e.code : '';
+    if (code === 'ENCODER_RPC_ERROR') return liftedRpcReason(e) || code;
     // A raw axios/network error also has a `code` (ECONNABORTED, ENOTFOUND);
     // only codes the SDK actually mints count, so those fall through to the
     // message match and, failing that, to null.
@@ -106,6 +117,24 @@ export function encoderErrorCode(err) {
         if (m) return mapped.replace('$1', m[1] || '');
     }
     return null;
+}
+
+/**
+ * NO_UTXOS / UTXO_TRACKER_STALE carried inside an in-process ENCODER_RPC_ERROR.
+ *
+ * Reads the same three spellings `insufficientFundsQuote` (flows/maxSendable.js)
+ * does, then the encoder's own wording for an SDK build that attached no data.
+ *
+ * @param {any} e
+ * @returns {string|null}
+ */
+function liftedRpcReason(e) {
+    for (const data of [e.details?.context, e.details?.rpcError?.data, e.data]) {
+        if (data && typeof data === 'object' && LIFTED_RPC_REASONS.has(data.reason)) return data.reason;
+    }
+    const message = String(e.message || '');
+    const hit = ENCODER_REASON_WORDING.find(([pattern]) => pattern.test(message));
+    return hit ? hit[1] : null;
 }
 
 /**

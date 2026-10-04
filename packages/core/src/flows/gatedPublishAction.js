@@ -278,6 +278,7 @@ async function prepareGatedPublish(opts, caller) {
  * envelope so approval can sign it without generating a second key or cipher.
  *
  * @param {GatedPublishOpts & { ownAddresses?: string[], change?: string, confirmEncoderOpts?: object }} opts
+ * @returns {Promise<import('./composeActionForConfirm.js').HostComposeEnvelope & { gatedPublish: { actionData: object, keyHash: string, ciphertextLength: number } }>}
  */
 export async function composeGatedPublishForConfirm(opts) {
     const prepared = await prepareGatedPublish(opts, 'composeGatedPublishForConfirm');

@@ -84,6 +84,11 @@ import { MyLists } from '@xchain-wallet/core/shared/routes/MyLists.jsx';
 import { ListDetail } from '@xchain-wallet/core/shared/routes/ListDetail.jsx';
 import { ListCreateForm } from '@xchain-wallet/core/shared/routes/ListCreateForm.jsx';
 import { ListForkForm } from '@xchain-wallet/core/shared/routes/ListForkForm.jsx';
+import { ListShareForm } from '@xchain-wallet/core/shared/routes/ListShareForm.jsx';
+import { ListTransferForm } from '@xchain-wallet/core/shared/routes/ListTransferForm.jsx';
+import { ListRenameForm } from '@xchain-wallet/core/shared/routes/ListRenameForm.jsx';
+import { UnionListForm } from '@xchain-wallet/core/shared/routes/UnionListForm.jsx';
+import { SharedListDirectory } from '@xchain-wallet/core/shared/routes/SharedListDirectory.jsx';
 import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
 import { DispenserExplorer } from '@xchain-wallet/core/shared/routes/DispenserExplorer.jsx';
 import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx';
@@ -173,6 +178,7 @@ import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { useDeepLinks } from './deepLinkRoute.js';
 
 // Same default chain registry the web shell uses: buildBalanceRows needs it
 // to resolve divisibility / display names for the palette's token rows.
@@ -214,7 +220,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -377,9 +383,13 @@ function AppInner() {
     // 'manage-token' before opening a per-token form so Back returns
     // to the token's detail page instead of the actions menu.
     const [formReturnView, setFormReturnView] = useState(/** @type {string | null} */ (null));
+    const [tokenAdminInitialPicker, setTokenAdminInitialPicker] = useState(
+        /** @type {'shared-block' | null} */ (null),
+    );
     const formBack = () => {
         const target = formReturnView || 'actions';
         setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
         setUnlockedView(target);
     };
     const fromManage = formReturnView === 'manage-token';
@@ -611,6 +621,21 @@ function AppInner() {
         currentView: unlockedView,
         onResume: setUnlockedView,
         skip: isDetachedWindow.current,
+    });
+
+    // OS deep links, applied after unlock and after the resume above. A
+    // detached window neither claims nor applies one: it keeps its pinned view.
+    useDeepLinks({
+        bridge: typeof window !== 'undefined' ? window.xchainWalletDeepLink : undefined,
+        detached: isDetachedWindow.current,
+        chainRegistry: APP_CHAIN_REGISTRY,
+        unlocked: status.state === 'unlocked',
+        walletId: activeWalletId,
+        apply: (route) => {
+            if (route.sendPrefill) setSendPrefill(route.sendPrefill);
+            if (route.contractRef) setContractRef(route.contractRef);
+            setUnlockedView(route.view);
+        },
     });
 
     // §26: idle auto-lock. Mounted HERE, above the view switch,
@@ -864,6 +889,7 @@ function AppInner() {
                     <TokenAdminForm
                         walletId={activeWalletId}
                         mode={unlockedView}
+                        initialPicker={tokenAdminInitialPicker || undefined}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
@@ -975,6 +1001,8 @@ function AppInner() {
                             setUnlockedView('list-detail');
                         }}
                         onCreateList={() => setUnlockedView('list-create')}
+                        onCreateUnionList={() => setUnlockedView('list-union')}
+                        onOpenSharedLists={() => setUnlockedView('shared-lists')}
                         onBack={formBack}
                     />
                 );
@@ -986,6 +1014,9 @@ function AppInner() {
                         actionIndex={listRef.actionIndex}
                         onBack={() => setUnlockedView('lists')}
                         onFork={(ref) => { setListForkRef(ref); setUnlockedView('list-fork'); }}
+                        onShare={(ref) => { setListRef(ref); setUnlockedView('list-share'); }}
+                        onTransfer={(ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
+                        onRename={(ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
                     />
                 );
             }
@@ -1013,6 +1044,57 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView === 'list-share' && activeWalletId && listRef) {
+                return (
+                    <ListShareForm
+                        walletId={activeWalletId}
+                        listRef={listRef}
+                        onBack={() => setUnlockedView('list-detail')}
+                        onDone={() => setUnlockedView('lists')}
+                    />
+                );
+            }
+            if (unlockedView === 'list-transfer' && activeWalletId && listRef) {
+                return (
+                    <ListTransferForm
+                        walletId={activeWalletId}
+                        listRef={listRef}
+                        onBack={() => setUnlockedView('list-detail')}
+                        onDone={() => setUnlockedView('lists')}
+                    />
+                );
+            }
+            if (unlockedView === 'list-rename' && activeWalletId && listRef) {
+                return (
+                    <ListRenameForm
+                        walletId={activeWalletId}
+                        listRef={listRef}
+                        onBack={() => setUnlockedView('list-detail')}
+                        onDone={() => setUnlockedView('lists')}
+                    />
+                );
+            }
+            if (unlockedView === 'list-union' && activeWalletId) {
+                return (
+                    <UnionListForm
+                        walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
+                        onBack={() => setUnlockedView('lists')}
+                        onDone={() => setUnlockedView('lists')}
+                    />
+                );
+            }
+            if (unlockedView === 'shared-lists' && activeWalletId) {
+                return (
+                    <SharedListDirectory
+                        walletId={activeWalletId}
+                        chainId={listRef?.chainId || 'bitcoin-mainnet'}
+                        mode="browse"
+                        onBack={() => setUnlockedView('lists')}
+                    />
+                );
+            }
+
             if (unlockedView === 'dispensers-list' && activeWalletId) {
                 return (
                     <DispensersList
@@ -2022,7 +2104,11 @@ function AppInner() {
                 );
             }
             if (unlockedView === 'manage-token' && activeWalletId && tokenDetailRef) {
-                const openForm = (view) => { setFormReturnView('manage-token'); setUnlockedView(view); };
+                const openForm = (view, options = {}) => {
+                    setFormReturnView('manage-token');
+                    setTokenAdminInitialPicker(options.initialPicker || null);
+                    setUnlockedView(view);
+                };
                 return (
                     <ManageToken
                         walletId={activeWalletId}
@@ -2037,6 +2123,7 @@ function AppInner() {
                         onCallbackSettings={() => openForm('callback-settings')}
                         onExecuteCallback={() => openForm('execute-callback')}
                         onAccessLists={() => openForm('access-lists')}
+                        onUseSharedBlockList={() => openForm('access-lists', { initialPicker: 'shared-block' })}
                         onBridgeSettings={() => openForm('bridge-settings')}
                         onPauseToken={() => openForm('pause-token')}
                         onUpdateDescription={() => openForm('description')}

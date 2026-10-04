@@ -19,11 +19,14 @@ import { useEffect, useRef } from 'react';
  * 30s) so a precise idle measurement isn't needed; one tick past the
  * threshold is acceptable.
  *
- * Scope note: foreground-only. Doesn't auto-lock while a popup is
- * closed or a web tab is backgrounded. Spec §26 envisions a
- * background-mediated lock that honours the timeout across popup
- * close/open; that needs a `lastActivity` stamp persisted for the
- * service worker to read on startup, tracked separately.
+ * Scope note: this is the FOREGROUND half of the §26 auto-lock; its
+ * timer only runs while the caller is mounted in a live renderer. The
+ * out-of-renderer half already exists: `useAutoLockPolicy` reports
+ * `{ armed, idleMs }` through `messaging.reportAutoLock`, the extension
+ * service worker checks that record on its keepalive alarm (popup
+ * closed), and desktop main checks its `autolock.json` copy at launch
+ * (quit and relaunch). Plain web implements no backstop; see
+ * `useAutoLockPolicy` for why. Don't add a second backstop here.
  *
  * Pass `enabled: false` to make the hook a no-op; the React hook
  * rules forbid skipping the call itself, so callers pass a flag when

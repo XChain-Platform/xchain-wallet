@@ -51,14 +51,17 @@ import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // at build time. Candidate for a lower-level package extraction once a
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
+import { createBroadcastQueueStorage } from '../../extension/src/background/broadcastQueueStorage.js';
+import { createBroadcastQueueStore } from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
 import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
 // Same reason again: one definition of "this install is fresh", so the three
 // in-page lanes below raise the same named WalletExistsError the pre-host
-// shells raise, and check the storage blob as well as the meta slot.
-import { assertFreshVault } from '../../extension/src/background/walletCreate.js';
+// shells raise, and check the storage blob as well as the meta slot. The
+// onboarding chain default is shared for the same reason (a second copy drifts).
+import { assertFreshVault, DEFAULT_ACTIVE_CHAIN_IDS } from '../../extension/src/background/walletCreate.js';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import {
     fakeBalanceFor,
@@ -78,6 +81,7 @@ import {
     seedDefaultFixtures,
     installDevMockConsole,
 } from './devMockEvents.js';
+import { buildDevMockActionString } from './devMockActionString.js';
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -128,7 +132,12 @@ const chainRegistry = registryLib.defaultRegistry();
 //
 // The whole mock is gated on `import.meta.env?.PROD`, which Vite
 // statically replaces, so a production build dead-code-eliminates the
-// entire implementation (and the devFakeBalances dataset it pulls in).
+// entire implementation and the two `!PROD` blocks below. The gate does
+// NOT cover the devFakeBalances.js / devMockEvents.js imports above: they
+// are unconditional, and those modules stay out of a production bundle
+// only because they have no top-level side effects and Rollup tree-shakes
+// them. Adding one to either module ships it; check-no-dev-mock.sh's
+// fixture markers are the gate that catches that.
 // That is what makes tools/build-reproduce/check-no-dev-mock.sh's grep
 // for the mock implementation real evidence: before this gate the mock
 // was referenced from live code paths and shipped in every build. The
@@ -359,12 +368,8 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         // unblocks, mirroring the real host boundary.
         actions: {
             createAction({ action, params }) {
-                // Minimal canonical SEND serializer: ACTION|0|TICK|AMOUNT|DEST[|MEMO].
-                const p = params || {};
-                const tail = [p.TICK, p.AMOUNT, p.DESTINATION];
-                if (p.MEMO != null && p.MEMO !== '') tail.push(p.MEMO);
                 return {
-                    actionString: [action, '0', ...tail.filter((f) => f != null)].join('|'),
+                    actionString: buildDevMockActionString(action, params),
                     action,
                     version: 0,
                 };
@@ -572,16 +577,24 @@ async function sdkBound() {
     }
 }
 
-/** Default active chains for onboarding. Users can change later via Settings. */
-export const DEFAULT_ACTIVE_CHAIN_IDS = [
-    'bitcoin-mainnet',
-    'dogecoin-mainnet',
-    'litecoin-mainnet',
-];
+/** Default active chains for onboarding (shared, see the walletCreate import). */
+export { DEFAULT_ACTIVE_CHAIN_IDS };
 
 let host = null;
 let vault = null;
 let signerPool = null;
+// One broadcast-queue store for every host this page builds, so a host a lock
+// dropped mid-broadcast cannot write a stale queue over the next one's save.
+// A lock keeps it; every wipe reloads the page, which is what ends it here.
+let broadcastQueueStore = null;
+
+/** Build the page's queue store on first use, when the page's storage is known. */
+function sharedBroadcastQueueStore() {
+    if (!broadcastQueueStore) {
+        broadcastQueueStore = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
+    }
+    return broadcastQueueStore;
+}
 let notificationService = null;
 let priceAlertWatcher = null;
 let governancePollWatcher = null;
@@ -1047,6 +1060,7 @@ export async function createWalletLocal(req) {
             sdkRegistry,
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
+            broadcastQueueStore: sharedBroadcastQueueStore(),
         });
         startNotifications();
         sessionStarted = true;
@@ -1136,6 +1150,7 @@ export async function importMnemonicLocal(req) {
             sdkRegistry,
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
+            broadcastQueueStore: sharedBroadcastQueueStore(),
         });
         startNotifications();
         sessionStarted = true;
@@ -1289,6 +1304,7 @@ export async function importBackupLocal(req) {
             sdkRegistry,
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
+            broadcastQueueStore: sharedBroadcastQueueStore(),
         });
         startNotifications();
         sessionStarted = true;
@@ -1325,10 +1341,11 @@ async function getFlows() {
  *   §15.6 25th word; supplied, it unlocks every passphrase-enabled wallet into the pool
  *   and is checked against each one's stored addresses (a wrong one is refused, not
  *   silently accepted as a different seed)
- * @returns {Promise<{ unlocked: true, passphraseCaptureNeeded: Array<{ id: string, name: string }> }>}
+ * @returns {Promise<{ unlocked: true, passphraseCaptureNeeded: Array<{ id: string, name: string }>, poolUnavailable?: true }>}
  *   `passphraseCaptureNeeded` lists the legacy wallets the password opened but that hold no
  *   stored passphrase yet; the unlock screen asks for each one's 25th word once and sends it
- *   to `wallet.passphrase.capture` (§3.4)
+ *   to `wallet.passphrase.capture` (§3.4). `poolUnavailable` is set when the signer pool
+ *   failed to populate, so that empty list means "unknown", not "nothing to capture"
  */
 export async function unlockWalletLocal(req) {
     const password = req?.password;
@@ -1352,6 +1369,10 @@ export async function unlockWalletLocal(req) {
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
     try {
         masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
         const storage = createStorageBackend();
@@ -1363,6 +1384,7 @@ export async function unlockWalletLocal(req) {
             throw err;
         }
         vault = v;
+        openedVault = v;
 
         // Populate the SignerPool while the password is in scope so
         // subsequent HD-derive ops (account.create, receive.getAddress
@@ -1370,13 +1392,22 @@ export async function unlockWalletLocal(req) {
         // re-prompting. Pool is cleared in lockWalletLocal.
         await sdkBound();
         signerPool = new signersLib.SignerPool();
-        const pooled = await signerPool.populate({
-            vault,
-            password,
-            bip39Passphrase,
-            chainRegistry,
-            sdkRegistry,
-        });
+        ownPool = signerPool;
+        // Best-effort, as in the shared handleWalletUnlock: a populate
+        // failure must not block an unlock whose password was right. The
+        // pool keeps whatever it did unlock, the per-op password prompt
+        // covers the rest, and the reply says `poolUnavailable` so an empty
+        // capture list is not read as "nothing to capture".
+        let pooled = null;
+        try {
+            pooled = await signerPool.populate({
+                vault,
+                password,
+                bip39Passphrase,
+                chainRegistry,
+                sdkRegistry,
+            });
+        } catch (_err) { /* best-effort, see above */ }
         // A typed 25th word that reproduced NONE of the passphrase wallets'
         // addresses is a mistype, and the honest answer is to stay on the
         // unlock screen with the field marked, not to open a session whose
@@ -1384,13 +1415,20 @@ export async function unlockWalletLocal(req) {
         // right, so nothing counts against the lockout. When at least one
         // passphrase wallet matched, the unlock stands and the others sit
         // out until the next unlock, exactly as if no passphrase was typed.
-        if (bip39Passphrase && pooled.passphraseMismatch.length > 0 && pooled.passphraseMatched.length === 0) {
-            try { signerPool.lockAll(); } catch (_err) { /* best-effort */ }
-            signerPool = null;
-            try { v.close(); } catch (_err) { /* best-effort */ }
-            vault = null;
+        if (bip39Passphrase && pooled
+            && pooled.passphraseMismatch.length > 0 && pooled.passphraseMatched.length === 0) {
             throw new flowsLib.PassphraseMismatchError(pooled.passphraseMismatchNames);
         }
+        // Legacy passphrase wallets the password opened but that hold no
+        // stored 25th word yet. The pool reports them as two parallel arrays;
+        // zip them here so the caller cannot pair the wrong name with the
+        // wrong wallet.
+        const passphraseCaptureNeeded = pooled
+            ? pooled.passphraseCaptureNeeded.map((id, i) => ({
+                id,
+                name: pooled.passphraseCaptureNames[i] || '',
+            }))
+            : [];
 
         host = createBackgroundHost({
             vault,
@@ -1398,20 +1436,32 @@ export async function unlockWalletLocal(req) {
             sdkRegistry,
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
+            broadcastQueueStore: sharedBroadcastQueueStore(),
         });
+        ownHost = host;
         startNotifications();
         sessionStarted = true;
-        // Legacy passphrase wallets the password opened but that hold no
-        // stored 25th word yet. The pool reports them as two parallel arrays;
-        // zip them here so the caller cannot pair the wrong name with the
-        // wrong wallet.
-        return {
-            unlocked: true,
-            passphraseCaptureNeeded: pooled.passphraseCaptureNeeded.map((id, i) => ({
-                id,
-                name: pooled.passphraseCaptureNames[i] || '',
-            })),
-        };
+        return pooled
+            ? { unlocked: true, passphraseCaptureNeeded }
+            : { unlocked: true, passphraseCaptureNeeded, poolUnavailable: true };
+    } catch (err) {
+        // Any throw after the vault opened: close what this call opened, so
+        // the page never reports "locked" over a vault that is still open.
+        if (openedVault && !sessionStarted) {
+            if (ownHost && host === ownHost) {
+                stopNotifications();
+                host = null;
+            }
+            if (ownPool && signerPool === ownPool) {
+                try { ownPool.lockAll(); } catch (_lockErr) { /* best-effort */ }
+                signerPool = null;
+            }
+            if (vault === openedVault) {
+                try { openedVault.close(); } catch (_closeErr) { /* best-effort */ }
+                vault = null;
+            }
+        }
+        throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
@@ -1476,6 +1526,7 @@ export function __resetForTests() {
     stopNotifications();
     vault = null;
     host = null;
+    broadcastQueueStore = null;
     void releaseWebVaultLease();
 }
 

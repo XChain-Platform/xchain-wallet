@@ -66,7 +66,15 @@ export async function listByActionIndex({ sdkRegistry, chainId, actionIndex }) {
     if (!chainId) throw new Error('listByActionIndex: chainId is required');
     if (!actionIndex) throw new Error('listByActionIndex: actionIndex is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getAction(actionIndex);
+    const action = await sdk.getAction(actionIndex);
+    const format = action?.action_format ?? action?.format;
+    if (action?.action === 'LIST'
+        && Number(format) === 5
+        && action.list_action_index != null
+        && action.list_action_index !== '') {
+        return sdk.getAction(action.list_action_index);
+    }
+    return action;
 }
 
 /**

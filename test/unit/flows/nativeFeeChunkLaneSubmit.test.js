@@ -18,6 +18,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
 
+// A commit with one data leg and a reveal that spends it, as decomposePsbt reads them
+const revealLegs = (commitTxid, encoding) => {
+    const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
+    const script = { [scriptType === 'p2wsh' ? 'witnessScriptHex' : 'redeemScriptHex']: '0100' };
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType }] };
+};
+
 const FEE_DEST = 'mfeesJdVLx23zhtsCveA8EEfmHX7qSV2Ls';
 const FEE_SATS = 6946667;
 
@@ -31,7 +38,7 @@ function makeHarness({ encoding = 'P2SH', requiredFeeSats = FEE_SATS } = {}) {
     const sdk = {
         encoder: { createTx, spendP2sh, broadcastTx },
         actions: { createAction },
-        wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+        wallet: { decomposePsbt: () => revealLegs('txid-COMMIT-PSBT', encoding) },
         quoteNativeFee: vi.fn(async () => ({
             supported: true, valid: null, feeDestination: FEE_DEST, requiredFeeSats,
         })),

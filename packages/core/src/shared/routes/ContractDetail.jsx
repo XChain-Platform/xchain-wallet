@@ -18,7 +18,12 @@ import {
     contractAddressFor,
     contractDisplayLabel,
     contractMetaOf,
+    contractOwnerWithdraw,
+    OWNER_WITHDRAW_DISABLED_REASON,
 } from './contractResponseShape.js';
+import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,6 +57,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * printed with the derived address because names are not unique. The
  * description is 512 bytes and shows here only, never on a list row. A contract
  * deployed before the flag day exports none and reads "Unnamed contract".
+ *
+ * Owner withdraw (OWNER_WITHDRAW_OPT_IN) comes off the explorer's derived
+ * `owner_withdraw`: false hides Withdraw behind a one-line reason, because
+ * consensus refuses the action; true shows the deployer-can-withdraw warning;
+ * an explorer that omits the field leaves the page as it was, with no warning.
  *
  * EXECUTE / DEPOSIT / WITHDRAW buttons are rendered but are no-ops
  * until Steps 5 + 6 land the authoring forms. The `onExecute /
@@ -110,18 +120,18 @@ export function ContractDetail({
                 if (deployIdx) {
                     messaging.getActionByIndex({ chainId, actionIndex: String(deployIdx) })
                         .then((a) => { if (!cancelled) setDeployAction(extractSingle(a)); })
-                        .catch((e) => { if (!cancelled) setDeployError(e?.message || String(e)); });
+                        .catch((e) => { if (!cancelled) setDeployError(readFailureMessage(e, 'load the deploy details')); });
                 }
             })
-            .catch((e) => { if (!cancelled) setContractError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setContractError(readFailureMessage(e, 'load this contract')); });
 
         messaging.getContractState({ chainId, contractActionIndex })
             .then((resp) => { if (!cancelled) setState(resp); })
-            .catch((e) => { if (!cancelled) setStateError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setStateError(readFailureMessage(e, 'load the contract state')); });
 
         messaging.getContractBalance({ chainId, contractActionIndex })
             .then((resp) => { if (!cancelled) setBalances(resp); })
-            .catch((e) => { if (!cancelled) setBalancesError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setBalancesError(readFailureMessage(e, 'load the contract balances')); });
 
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
@@ -142,7 +152,7 @@ export function ContractDetail({
                 setExecutions(extractRows(resp));
                 setExecutionsTotal(typeof resp?.total === 'number' ? resp.total : null);
             })
-            .catch((e) => { if (!cancelled) setExecutionsError(e?.message || String(e)); });
+            .catch((e) => { if (!cancelled) setExecutionsError(readFailureMessage(e, 'load the execution history')); });
         return () => { cancelled = true; };
     }, [chainId, contractActionIndex, executionsPage, messaging]);
 
@@ -168,6 +178,7 @@ export function ContractDetail({
     const slashDestinationAddr = contract?.slash_destination ?? contract?.SLASH_DESTINATION
         ?? contract?.slash_destination_address ?? null;
     const isStakeable = cooldownBlocks !== null && cooldownBlocks !== undefined;
+    const ownerWithdraw = contractOwnerWithdraw(contract);
 
         const header = (
         <PageHeader
@@ -227,10 +238,14 @@ export function ContractDetail({
                                 </div>
                             </>
                         ) : null}
+                        {ownerWithdraw !== null ? (
+                            <div><strong>Owner withdraw:</strong> {ownerWithdraw ? 'Allowed' : 'Not allowed'}</div>
+                        ) : null}
                     </dl>
+                    <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} />
                     {deployError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load deploy details: {deployError}
+                            {deployError}
                         </StatusMessage>
                     ) : null}
                 </section>
@@ -251,7 +266,7 @@ export function ContractDetail({
                 >
                     {stateError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load contract state: {stateError}
+                            {stateError}
                         </StatusMessage>
                     ) : state === null ? (
                         <p className={styles.entryDescription}>Loading state…</p>
@@ -267,7 +282,7 @@ export function ContractDetail({
                 <Section title="Balances (tokens held by the contract)">
                     {balancesError ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load balances: {balancesError}
+                            {balancesError}
                         </StatusMessage>
                     ) : balances === null ? (
                         <p className={styles.entryDescription}>Loading balances…</p>
@@ -279,7 +294,7 @@ export function ContractDetail({
                 <Section title="Execution history">
                     {executionsError && executions.length === 0 ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
-                            Couldn't load executions: {executionsError}
+                            {executionsError}
                         </StatusMessage>
                     ) : executions.length === 0 ? (
                         <p className={styles.entryDescription}>
@@ -290,7 +305,7 @@ export function ContractDetail({
                             {executions.map((row, i) => (
                                 <div key={String(row.action_index ?? i) + ':' + i} className={styles.entry}>
                                     <span className={styles.entryLabel}>
-                                        {row.method || row.METHOD || row.method_name || row.action || '(method)'} #{row.action_index ?? '?'}
+                                        {row.method || row.METHOD || row.method_name || actionDisplayLabel(row.action) || '(method)'} #{row.action_index ?? '?'}
                                         {' '}<ExecutionStatusPill status={row.status} />
                                     </span>
                                     <span className={styles.entryDescription}>
@@ -326,13 +341,15 @@ export function ContractDetail({
                     >
                         Deposit
                     </Button>
-                    <Button
-                        variant="secondary"
-                        onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
-                        disabled={!onWithdraw}
-                    >
-                        Withdraw
-                    </Button>
+                    {ownerWithdraw === false ? null : (
+                        <Button
+                            variant="secondary"
+                            onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
+                            disabled={!onWithdraw}
+                        >
+                            Withdraw
+                        </Button>
+                    )}
                     {isStakeable ? (
                         <Button
                             variant="secondary"
@@ -343,6 +360,11 @@ export function ContractDetail({
                         </Button>
                     ) : null}
                 </div>
+                {ownerWithdraw === false ? (
+                    <p className={styles.entryDescription} data-testid="owner-withdraw-disabled">
+                        {OWNER_WITHDRAW_DISABLED_REASON}
+                    </p>
+                ) : null}
                 {!onExecute && !onDeposit && !onWithdraw ? (
                     <p className={styles.entryDescription}>
                         Contract call, deposit, and withdraw forms are coming in

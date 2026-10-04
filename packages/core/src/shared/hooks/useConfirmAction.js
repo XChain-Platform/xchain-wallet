@@ -80,6 +80,17 @@ export function useConfirmAction() {
     // PSBT whose coins someone else can spend.
     const composedStampRef = useRef(0);
     const sessionIdRef = useRef(null);
+    const releasedEncoderInputsRef = useRef(new Set());
+    const rejectingRef = useRef(false);
+    // Once Approve is pressed the PSBT may be signed or broadcast, so the
+    // encoder reservation must stay held whatever happens to this component.
+    const approvalBeganRef = useRef(false);
+    const releaseUnlessApproving = useCallback((built) => {
+        if (approvalBeganRef.current) return;
+        releaseEncoderInputs(built, releasedEncoderInputsRef.current).catch((err) => {
+            console.error('Encoder input release failed:', err);
+        });
+    }, []);
 
     const [phase, setPhase] = useState(/** @type {ConfirmPhase} */('idle'));
     const [composing, setComposing] = useState(false);
@@ -99,8 +110,9 @@ export function useConfirmAction() {
         if (activeInstanceId === instanceId) {
             activeInstanceId = null;
             if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
+            releaseUnlessApproving(composedRef.current);
         }
-    }, [instanceId]);
+    }, [instanceId, releaseUnlessApproving]);
 
     const teardown = useCallback(() => {
         activeInstanceId = null;
@@ -195,6 +207,8 @@ export function useConfirmAction() {
         const controller = new AbortController();
         abortRef.current = controller;
         optsRef.current = { ...args, reservationId: null };
+        composedRef.current = null;
+        approvalBeganRef.current = false;
         setSource(args.source ?? null);
         setError(null);
         setReport(null);
@@ -219,7 +233,11 @@ export function useConfirmAction() {
                     settleReject(err);
                     return;
                 }
-                if (controller.signal.aborted) { settleReject(new UserRejectedError()); return; }
+                if (controller.signal.aborted) {
+                    releaseUnlessApproving(built);
+                    settleReject(new UserRejectedError());
+                    return;
+                }
 
                 // compose() already ran the tamper check HOST-side; reaching
                 // here means the built PSBT is verified. A tamper (or any
@@ -287,7 +305,7 @@ export function useConfirmAction() {
                 if (rejectRef.current) settleReject(err);
             });
         });
-    }, [instanceId, settleReject]);
+    }, [instanceId, settleReject, releaseUnlessApproving]);
 
     // Approve handler the modal wires to the primary button. Disables
     // synchronously (the caller sets a local disabled flag in the same tick).
@@ -296,6 +314,7 @@ export function useConfirmAction() {
         const built = composedRef.current;
         if (!args || !built) return;
 
+        approvalBeganRef.current = true;
         setPhase('signing');
 
         // §4.6 input liveness. Runs off the PSBT's OWN age, not the report's,
@@ -466,7 +485,22 @@ export function useConfirmAction() {
         }
     }, [report, acknowledged, instanceId, settleResolve, settleReject]);
 
-    const reject = useCallback(() => {
+    const reject = useCallback(async () => {
+        if (rejectingRef.current) return;
+        rejectingRef.current = true;
+        setError(null);
+        try {
+            if (!approvalBeganRef.current) {
+                await releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
+            }
+        } catch (err) {
+            const detail = err?.message ? ` ${err.message}` : '';
+            setError(new Error(`Could not release reserved inputs. Try Reject again.${detail}`));
+            setPhase('ready');
+            return;
+        } finally {
+            rejectingRef.current = false;
+        }
         settleReject(new UserRejectedError());
         setPhase('idle');
     }, [settleReject]);
@@ -482,6 +516,18 @@ export function useConfirmAction() {
         // overridable error has been acknowledged.
         canApprove: canApproveWithReport(report, acknowledged),
     };
+}
+
+async function releaseEncoderInputs(composed, released) {
+    const release = composed?.releaseEncoderInputs;
+    if (typeof release !== 'function' || released.has(release)) return;
+    released.add(release);
+    try {
+        await release();
+    } catch (err) {
+        released.delete(release);
+        throw err;
+    }
 }
 
 // Only the caller's explicit pending deltas are gathered here. In-flight

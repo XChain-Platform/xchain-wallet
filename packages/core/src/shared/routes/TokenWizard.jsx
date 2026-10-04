@@ -37,6 +37,7 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -136,6 +137,8 @@ export function TokenWizard({ walletId, onBack }) {
     const [blockListIdx, setBlockListIdx] = useState(/** @type {string | null} */ (null));
     const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
     const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
+    const [allowListName, setAllowListName] = useState(/** @type {string | null} */ (null));
+    const [blockListName, setBlockListName] = useState(/** @type {string | null} */ (null));
     const [listPickerFor, setListPickerFor] = useState(
         /** @type {'allow' | 'block' | null} */ (null),
     );
@@ -564,9 +567,11 @@ export function TokenWizard({ walletId, onBack }) {
                     if (listPickerFor === 'allow') {
                         setAllowListIdx(row.actionIndex);
                         setAllowListCount(row.memberCount);
+                        setAllowListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
                     } else {
                         setBlockListIdx(row.actionIndex);
                         setBlockListCount(row.memberCount);
+                        setBlockListName(typeof row.name === 'string' && row.name.length > 0 ? row.name : null);
                     }
                     setListPickerFor(null);
                 }}
@@ -627,10 +632,18 @@ export function TokenWizard({ walletId, onBack }) {
                 currentHeight,
                 chainLabel: descriptor?.displayName || chainId,
                 allowListIdx, blockListIdx, allowListCount, blockListCount,
+                allowListName, blockListName,
                 onPickList: setListPickerFor,
                 onClearList: (which) => {
-                    if (which === 'allow') { setAllowListIdx(null); setAllowListCount(null); }
-                    else { setBlockListIdx(null); setBlockListCount(null); }
+                    if (which === 'allow') {
+                        setAllowListIdx(null);
+                        setAllowListCount(null);
+                        setAllowListName(null);
+                    } else {
+                        setBlockListIdx(null);
+                        setBlockListCount(null);
+                        setBlockListName(null);
+                    }
                 },
                 warnings: advancedIssueWarnings(advanced),
             },
@@ -1312,6 +1325,7 @@ function AdvancedIssuePanel({
     currentHeight,
     chainLabel,
     allowListIdx, blockListIdx, allowListCount, blockListCount,
+    allowListName, blockListName,
     onPickList, onClearList,
     warnings = [],
 }) {
@@ -1432,7 +1446,7 @@ function AdvancedIssuePanel({
                             <span className={styles.detailsLabel}>Allow-list</span>
                             <span className={styles.detailsValue}>
                                 {allowListIdx
-                                    ? `List #${allowListIdx}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
                                     : 'None (anyone may interact)'}
                             </span>
                         </div>
@@ -1450,7 +1464,7 @@ function AdvancedIssuePanel({
                             <span className={styles.detailsLabel}>Block-list</span>
                             <span className={styles.detailsValue}>
                                 {blockListIdx
-                                    ? `List #${blockListIdx}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                    ? `${listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
                                     : 'None'}
                             </span>
                         </div>

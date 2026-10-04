@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // stakeAction: STAKE composer for the §42.7.1 "Stake on Bitcoin"
-// form. Mirrors broadcastAction / deployAction. BTC-only per §10.3
-// (SDK staking actions are bitcoin-exclusive).
+// form. Mirrors broadcastAction / deployAction. Bitcoin-only: the indexer
+// refuses STAKE v1/v2 on other chains, so the composer refuses them first.
 //
 // Capability-staking model (capability-staking-model.md §3): one STAKE
 // action, no tier. User picks the AMOUNT; capabilities (price,
@@ -24,6 +24,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { assertValidatorLaneChain } from '../registry/actions.js';
 
 /**
  * @typedef {Object} StakeActionOpts
@@ -73,6 +74,8 @@ export async function stakeAction(opts) {
     if (!/^[0-9a-fA-F]{64}$/.test(opts.params.SIGNING_PUBKEY)) {
         throw new Error('stakeAction: SIGNING_PUBKEY must be 64 hex chars');
     }
+    // Refuse a chain whose indexer rejects this validator-lane action.
+    assertValidatorLaneChain(opts.chainRegistry, opts.chainId, 'stakeAction');
     const source = normalizeSource(opts.from, 'stakeAction');
     const verb = version === '2' ? 'Top up stake' : 'Stake';
 

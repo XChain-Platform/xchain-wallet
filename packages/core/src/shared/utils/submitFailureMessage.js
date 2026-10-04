@@ -126,6 +126,17 @@ export const SIGNED_NOT_BROADCAST_MESSAGE =
     + 'queued-transactions banner and only goes out when you broadcast it from there; the '
     + 'wallet reminds you when the network is back. Do not submit this again.';
 
+const NETWORK_FEE_TOO_LOW_MESSAGE =
+    'The network rejected this transaction because its fee is too low.';
+
+function isCommitFeeTooLowBroadcast(err) {
+    const message = err && typeof err === 'object'
+        ? String(/** @type {any} */ (err).message || '')
+        : (typeof err === 'string' ? err : '');
+    return /^broadcast failed \(commit\):/i.test(message.trim())
+        && /\b(?:min(?:imum)?[-\s]+relay[-\s]+fee|fee[-\s]+too[-\s]+low)\b/i.test(message);
+}
+
 /**
  * Turn a caught submit error into the sentence to show.
  *
@@ -141,10 +152,11 @@ export const SIGNED_NOT_BROADCAST_MESSAGE =
  * @param {string|number} [opts.requiredNative]  native-coin protocol fee, when the caller holds
  * the quote; otherwise read off the error
  * @param {string} [opts.fallback]     the form's own copy for everything else
+ * @param {string} [opts.verb]         action named in the generic opener ("Couldn't <verb>.")
  * @returns {string}
  */
 export function submitFailureMessage(
-    err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '' } = {},
+    err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '', verb = 'complete this' } = {},
 ) {
     if (isNativeFeeForfeit(err)) {
         return nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
@@ -152,6 +164,7 @@ export function submitFailureMessage(
     // Before every other classifier and before the fallback: the error already
     // carries the whole remedy, and nothing else here would recognise it.
     if (isWatcherChunkLane(err)) return String(/** @type {any} */ (err).message || '');
+    if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     const broadcastKind = broadcastFailureKindFromError(err);
     if (broadcastKind === 'transient') return SIGNED_NOT_BROADCAST_MESSAGE;
     // Encoder codes are checked only once the error is known NOT to be a
@@ -180,7 +193,7 @@ export function submitFailureMessage(
         : (typeof err === 'string' ? err : '');
     const fallbackText = String(fallback || '');
     if (fallbackText && fallbackText !== raw) return fallbackText;
-    const humanized = humanizeError(err);
+    const humanized = humanizeError(err, verb);
     if ((fallbackText && fallbackText === raw)
         || humanized.cause !== 'unknown'
         || humanized.details) return humanized.message;

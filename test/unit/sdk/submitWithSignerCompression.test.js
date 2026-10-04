@@ -29,6 +29,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
 
+// A commit with one data leg and a reveal that spends it, as decomposePsbt reads them
+const revealLegs = (commitTxid, encoding) => {
+    const scriptType = encoding === 'P2WSH' ? 'p2wsh' : 'p2sh';
+    const script = { [scriptType === 'p2wsh' ? 'witnessScriptHex' : 'redeemScriptHex']: '0100' };
+    return { inputs: [{ prevTxHash: commitTxid, prevTxIndex: 0, scriptType, ...script }], outputs: [{ scriptType }] };
+};
+
 // A report shaped like the encoder's: it rewrites the COMPRESSION field and
 // reports what it actually wrote.
 const REPORT = { compressed: true, data: 'FILE|0|a.json|application/json|||||||1', rawData: 'deflated-bytes' };
@@ -46,6 +53,7 @@ function harness({ compression } = {}) {
     const sdkRegistry = {
         get: () => ({
             encoder,
+            wallet: { decomposePsbt: () => revealLegs('TXID', 'P2WSH') },
             actions: {
                 createAction: () => ({
                     actionString: 'FILE|0|a.json|application/json',

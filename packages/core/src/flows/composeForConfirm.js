@@ -168,6 +168,7 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @property {object|null} oracleFeeQuote      Mode B dispenser oracle usage fee quote, when one was priced
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
+ * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs when this compose is abandoned
  * @property {object} encoderOpts              the FINAL encoderOpts used to build the PSBT (fee + ADS folded in)
  * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not compress
  */
@@ -463,6 +464,11 @@ export async function composeForConfirm({
                 carried.rawData ?? builtEncoderOpts.rawData,
                 encoded.compression),
     });
+    const encoderReservationId = encoded.reservation?.id;
+    const releaseEncoderInputs = encoderReservationId
+        && typeof sdk.encoder.releaseInputs === 'function'
+        ? sdk.encoder.releaseInputs.bind(sdk.encoder, encoderReservationId)
+        : undefined;
 
     return {
         // Null on the bare-payment path: there is no action, and callers must
@@ -522,6 +528,7 @@ export async function composeForConfirm({
         oracleFeeQuote: oraclePreflight.oracleFeeQuote,
         adsPlan,
         expectedOutputs,
+        releaseEncoderInputs,
         encoderOpts: finalEncoderOpts,
         // The encoder's transparent-compression report, so the submit path can
         // hand it back to the success screen. Every non-watcher publish now

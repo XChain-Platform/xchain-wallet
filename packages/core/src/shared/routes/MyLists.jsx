@@ -9,12 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
+import { listLabel } from '../utils/listLabel.js';
 import styles from './ActionsMenu.module.css';
 import local from './MyLists.module.css';
 
@@ -40,9 +41,11 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} [props.activeAccountId]   scope the address union to this account
  * @param {(chainId: string, actionIndex: string) => void} props.onOpenList
  * @param {() => void} [props.onCreateList]  opens the Create list form
+ * @param {() => void} [props.onCreateUnionList]  shows "Create union list" when passed
+ * @param {() => void} [props.onOpenSharedLists]   shows "Shared lists" when passed
  * @param {() => void} props.onBack
  */
-export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, onBack }) {
+export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -166,16 +169,26 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
             title="My Lists"
-            trailing={onCreateList ? (
-                <button
-                    type="button"
-                    className={local.addBtn}
-                    onClick={() => onCreateList()}
-                    aria-label="Create list"
-                    title="Create list"
-                >
-                    <Icon.PlusIcon />
-                </button>
+            trailing={(onCreateList || onCreateUnionList || onOpenSharedLists) ? (
+                <>
+                    {onOpenSharedLists ? (
+                        <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
+                    ) : null}
+                    {onCreateUnionList ? (
+                        <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
+                    ) : null}
+                    {onCreateList ? (
+                        <button
+                            type="button"
+                            className={local.addBtn}
+                            onClick={() => onCreateList()}
+                            aria-label="Create list"
+                            title="Create list"
+                        >
+                            <Icon.PlusIcon />
+                        </button>
+                    ) : null}
+                </>
             ) : undefined}
         />
     );
@@ -251,13 +264,17 @@ function ListRow({ row, onSelect }) {
     const isFork = row.list_action_index != null && row.list_action_index !== '';
     const status = String(row.status || '?');
     const valid = status === 'valid';
+    const index = row.action_index ?? '?';
+    const kind = isTick ? 'Token list' : 'Address list';
+    const label = listLabel(index, row.name, kind);
+    const ariaLabel = `Open ${listLabel(index, row.name, kind.toLowerCase())}`;
     return (
         <button
             type="button"
             className={local.row}
             role="listitem"
             onClick={onSelect}
-            aria-label={`Open ${isTick ? 'token' : 'address'} list #${row.action_index ?? '?'}`}
+            aria-label={ariaLabel}
         >
             <div className={local.iconWrap}>
                 <span className={local.iconLetter} aria-hidden="true">
@@ -275,7 +292,7 @@ function ListRow({ row, onSelect }) {
             </div>
             <div className={local.body}>
                 <div className={local.name}>
-                    {isTick ? 'Token list' : 'Address list'} #{row.action_index ?? '?'}
+                    {label}
                 </div>
                 <div className={local.subtitle}>
                     {isFork

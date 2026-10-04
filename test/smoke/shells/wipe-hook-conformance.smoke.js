@@ -136,12 +136,15 @@ assert.ok(
 
 const background = readFileSync(join(extension, 'src', 'background.js'), 'utf8');
 assert.ok(
-    /attachWipeStorageListener\(\{\s*beforeWipe:\s*\(\)\s*=>\s*sealBroadcastQueues\(\),\s*onWiped:\s*\(\)\s*=>\s*tearDownHost\(\),?\s*\}\)/.test(background),
-    'background.js seals the broadcast queue before the wipe and tears the host down after it',
+    /attachWipeStorageListener\(\{\s*beforeWipe:\s*\(\)\s*=>\s*sealBroadcastQueues\(\),\s*onWiped:\s*\(\)\s*=>\s*\{\s*tearDownHost\(\);\s*renewBroadcastQueueStore\(\);\s*\},?\s*\}\)/.test(background),
+    'background.js seals the broadcast queue before the wipe, then tears the host down and starts a fresh queue store',
 );
+// The live host and every host a lock tore down share one store, so sealing
+// it reaches them all; a per-host seal would miss a torn-down host's late write.
 assert.ok(
-    /host\.sealBroadcastQueue/.test(background) && /retireQueueSeal\(host\.sealBroadcastQueue\)/.test(background),
-    'background.js seals the live host and the hosts a lock tore down, not only the live one',
+    /sealBroadcastQueueStore\(broadcastQueueStore\)/.test(background)
+        && /createBackgroundHost\(\{[\s\S]*?\bbroadcastQueueStore,[\s\S]*?\}\);/.test(background),
+    'background.js hands every host one queue store and seals that store, not only the live host',
 );
 
 console.log(

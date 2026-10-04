@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/web",
-    "version": "0.339.0",
+    "version": "0.340.0",
     "license": "AGPL-3.0-or-later",
     "private": true,
     "description": "Browser web-app shell for XChain Wallet",
@@ -21,7 +21,7 @@
         "qrcode": "^1.5.4",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.20.0"
+        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.21.3"
     },
     "devDependencies": {
         "@vitejs/plugin-basic-ssl": "^1.1.0",

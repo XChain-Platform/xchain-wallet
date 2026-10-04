@@ -107,7 +107,7 @@ assert.match(sendSrc, /if \(!isWatcherMode\) \{/, 'the confirm path is unconditi
 assert.doesNotMatch(sendSrc, /confirmModalSlices|isConfirmModalSliceEnabled/, 'no slice flag survives');
 assert.match(sendSrc, /messaging\.composeForConfirm\(/, 'compose() calls the host compose route');
 assert.match(sendSrc, /messaging\.preflight\(/, 'preflight streams from the host route');
-assert.match(sendSrc, /const prebuiltPsbt = \{/, 'Approve signs the prebuilt PSBT via sendToken / sendAssetHw');
+assert.match(sendSrc, /const prebuiltPsbt = prebuiltPsbtFromComposed\(composed\)/, 'Approve signs the prebuilt PSBT via sendToken / sendAssetHw');
 // Hardware confirms here too; watcher still branches (it encodes,
 // it never signs). The §18.5 cross-check has to survive the move onto the
 // shared screen, or a HW gate would be silently dropped.

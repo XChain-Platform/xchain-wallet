@@ -6,7 +6,7 @@
 // The defect: the errors list and the Approve gate both keyed the
 // acknowledged set on `f.code` alone. That held only while a report could
 // carry at most one error per code, and it cannot. The SDK's
-// `pushSubCommandFindings` (xchain-sdk/src/preflight/index.js) pushes one
+// `pushSubCommandFindings` (xchain-sdk/src/preflight/index/tier1_findings.js) pushes one
 // `DRYRUN_SUBCOMMAND_INVALID` ERROR per invalid batch sub-command, each
 // tagged with its own `data.commandIndex`, and the batch check pushes one
 // `PARSE_INVALID` per unparseable command the same way. Under a code-scoped

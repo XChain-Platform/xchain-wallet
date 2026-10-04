@@ -13,8 +13,8 @@
 // pure translation that turns UI-friendly rows into the stored policy shape
 // and back, since that is where policy-shape bugs would hide.
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import {
     emptyPolicyDraft,
     buildPolicyDraft,
@@ -25,6 +25,8 @@ import { createCoSignerAccount } from '../../../packages/core/src/schemas/coSign
 
 const AGENT = '02' + 'a'.repeat(64);
 const DAEMON = '02' + 'b'.repeat(64);
+
+afterEach(() => cleanup());
 
 describe('CoSignerPolicyEditor helpers', () => {
     it('requires at least one allowed action', () => {
@@ -157,5 +159,54 @@ describe('CoSignerPolicyEditor allowed-actions vocabulary', () => {
     it('still stores the raw protocol key, never the display label', () => {
         const out = buildPolicyDraft(draftWith('SEND, COINPAY'));
         expect(out.policy.allowedActions).toEqual(['SEND', 'COINPAY']);
+    });
+});
+
+// A per-action limit keyed on a name the agent may not sign never binds (the
+// co-signer matches caps by exact name), so the row is a picker over the
+// allowed list and a stray key blocks save instead of saving as a dead cap.
+describe('CoSignerPolicyEditor per-action limit actions', () => {
+    const withLimit = (allowedActionsText, action) => ({
+        ...emptyPolicyDraft(),
+        allowedActionsText,
+        maxPerAction: [{ action, tick: '*', cap: '100' }],
+    });
+
+    it('refuses a limit on a mistyped action name', () => {
+        expect(buildPolicyDraft(withLimit('SEND', 'SENDD')).error).toMatch(/SENDD.*allowed action/);
+    });
+
+    it('refuses a limit on a real action the agent is not allowed to sign', () => {
+        expect(buildPolicyDraft(withLimit('SEND', 'ISSUE')).error).toMatch(/ISSUE.*allowed action/);
+    });
+
+    it('keeps the protocol name as the stored limit key', () => {
+        const out = buildPolicyDraft({ ...withLimit('SEND, COINPAY', 'COINPAY'), maxPerAction: [{ action: 'COINPAY', tick: '*', cap: '1' }] });
+        expect(out.error).toBeUndefined();
+        expect(out.policy.maxPerAction).toEqual({ COINPAY: { '*': '1' } });
+    });
+
+    it('offers the allowed actions in words, valued by protocol name', () => {
+        render(<CoSignerPolicyEditor value={withLimit('SEND, ISSUE', '')} onChange={() => {}} />);
+        const select = screen.getByLabelText('Action');
+        expect(select.tagName).toBe('SELECT');
+        expect([...select.options].map((o) => o.value)).toEqual(['', 'SEND', 'ISSUE']);
+        expect([...select.options].map((o) => o.textContent)).toEqual(['Choose an action', 'Send', 'Issue']);
+    });
+
+    it('shows a stored stray key as flagged rather than silently as another option', () => {
+        render(<CoSignerPolicyEditor value={withLimit('SEND', 'SENDD')} onChange={() => {}} />);
+        const select = screen.getByLabelText('Action');
+        expect(select.value).toBe('SENDD');
+        expect(document.body.textContent).toContain('SENDD (not in the allowed actions above)');
+        expect(screen.getByRole('alert').textContent).toMatch(/won't apply/);
+    });
+
+    it('writes the chosen protocol name back into the draft', () => {
+        const onChange = vi.fn();
+        render(<CoSignerPolicyEditor value={withLimit('SEND, ISSUE', '')} onChange={onChange} />);
+        fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'ISSUE' } });
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange.mock.calls[0][0].maxPerAction[0].action).toBe('ISSUE');
     });
 });

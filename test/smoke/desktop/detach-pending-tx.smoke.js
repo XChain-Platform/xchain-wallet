@@ -112,6 +112,8 @@ assert.ok(/isDetachedWindow\.current/.test(app),
     'desktop App pins isDetachedWindow ref at mount');
 assert.ok(/skip:\s*isDetachedWindow\.current/.test(app),
     'detached window passes skip=true to useLastView');
+assert.ok(/useDeepLinks\(\{[^}]*?detached:\s*isDetachedWindow\.current/.test(app),
+    'detached window neither claims nor applies an OS deep link');
 
 // --- 6. Round-trip parseInitialRoute via base64 + URLSearchParams -------
 

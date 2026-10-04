@@ -58,6 +58,7 @@ import {
 } from '@xchain-wallet/core';
 import {
     dispatchPreHost,
+    hasSessionKey,
     PRE_HOST_MESSAGE_TYPES,
 } from '@xchain-wallet/extension/src/background/sessionMeta.js';
 import { serializeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
@@ -66,7 +67,7 @@ import { serializeError } from '@xchain-wallet/extension/src/background/MessageH
 import { shouldAutoLock } from '@xchain-wallet/extension/src/background/autoLockState.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
-import { applyAutoLockReport, stampAutoLockActivity } from './autoLockState.js';
+import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
 
 /**
  * Renderer-sent type that arms/disarms the auto-lock backstop. The SAME
@@ -170,7 +171,8 @@ export function createRuntime(deps) {
  * `ensureHost`; when it clears the session backend, that ensureHost finds
  * no key and the renderer gets the lock screen.
  *
- * Fails CLOSED on a missing or unreadable record, which is also what
+ * Fails CLOSED on a missing or unreadable record, or an armed one whose
+ * idle window cannot be enforced, which is also what
  * covers the crash and kill paths that never wrote a stamp: the cost of
  * being wrong is one password prompt, and the cost the other way is an
  * unlocked wallet the user believed had locked itself.
@@ -194,7 +196,7 @@ export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
     // session backend would only churn the disk.
     let hasPersistedKey = false;
     try {
-        hasPersistedKey = (await runtime.sessionBackend.load()) != null;
+        hasPersistedKey = await hasSessionKey(runtime.sessionBackend);
     } catch {
         hasPersistedKey = false;
     }
@@ -206,6 +208,9 @@ export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
     let reason = '';
     if (!state) reason = 'no-record';
     else if (state.armed !== true) reason = 'disarmed';   // the user chose Never, or a demo wallet
+    // Treat an armed record with no enforceable window as no record, for
+    // any injected store (shouldAutoLock would answer "never lock" here)
+    else if (!hasEnforceableWindow(state)) reason = 'no-record';
     else if (shouldAutoLock(state, now)) reason = 'idle-window-elapsed';
 
     if (reason === 'disarmed') return { locked: false, reason };

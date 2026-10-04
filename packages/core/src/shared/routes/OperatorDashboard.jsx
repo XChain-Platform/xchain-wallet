@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AddressText, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
     unclaimedRewards,
@@ -19,6 +20,7 @@ import {
     stakingRowState,
     sumStakingAmounts,
 } from '../../flows/stakingDashboard.js';
+import { latestFeedCreateForAddress } from '../../flows/broadcastQueries.js';
 import dashStyles from './ActionsMenu.module.css';
 import { OperatorPublisherMode } from '../components/OperatorPublisherMode.jsx';
 
@@ -69,7 +71,11 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 setter({ loading: false, rows: [], error: err?.message || String(err) });
             });
         }
-        bind(setStakes, messaging.getStakesForAddress({ chainId, address }));
+        if (isDemoWallet(walletId)) {
+            setStakes({ loading: false, rows: synthesizeDemoStaking(chainId).stakes, error: null });
+        } else {
+            bind(setStakes, messaging.getStakesForAddress({ chainId, address }));
+        }
         bind(setDelegations, messaging.getDelegationsForAddress({ chainId, address }));
         bind(setRewards, messaging.getRewardsForAddress({ chainId, address }));
         bind(setRewardClaims, messaging.getRewardClaimsForAddress({ chainId, address }));
@@ -102,16 +108,17 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
         }) || null;
     }, [validators.rows, activePubkey]);
 
-    // Detect the most recent v2 BROADCAST feed-create; its action_index
-    // is what publisher-mode v3 results reference. Sort newest first.
-    const latestFeed = useMemo(() => {
-        const v2 = broadcasts.rows.filter((b) => {
-            const v = b?.action_format ?? b?.ACTION_FORMAT;
-            return (v === 2 || v === '2') && (b.status ?? b.STATUS) === 'valid';
-        });
-        v2.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
-        return v2[0] || null;
-    }, [broadcasts.rows]);
+    // The latest v2 feed-create is looked up page by page: a busy publisher's
+    // newest one can fall past the first page of broadcasts.
+    const [latestFeed, setLatestFeed] = useState(null);
+    useEffect(() => {
+        let cancelled = false;
+        setLatestFeed(null);
+        latestFeedCreateForAddress({ messaging, chainId, address })
+            .then((feed) => { if (!cancelled) setLatestFeed(feed); })
+            .catch(() => { if (!cancelled) setLatestFeed(null); });
+        return () => { cancelled = true; };
+    }, [chainId, address, messaging]);
 
     const { pending, lifetime } = useMemo(
         () => splitRewards(rewards.rows, rewardClaims.rows),

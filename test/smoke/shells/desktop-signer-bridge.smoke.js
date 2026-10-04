@@ -23,7 +23,8 @@
 //   - `webContents.destroyed` tears down any still-owned signerIds
 //     and rejects in-flight sign requests with
 //     `signer bridge disconnected`.
-//   - A detach() returned from the listener fully clears state.
+//   - A detach() returned from the listener fully clears state,
+//     including each window's document-end hooks.
 
 import { strict as assert } from 'node:assert';
 
@@ -85,17 +86,23 @@ function createFakeWebContents(id) {
         id,
         isDestroyed() { return destroyed; },
         send(channel, msg) { sent.push({ channel, msg }); },
-        once(event, fn) {
+        on(event, fn) {
             if (!eventListeners.has(event)) eventListeners.set(event, new Set());
             eventListeners.get(event).add(fn);
         },
+        once(event, fn) { wc.on(event, fn); },
+        removeListener(event, fn) { eventListeners.get(event)?.delete(fn); },
         _sent: sent,
+        _count(event) { return eventListeners.get(event)?.size ?? 0; },
+        _emit(event) {
+            for (const fn of [...(eventListeners.get(event) || [])]) {
+                try { fn(); } catch { /* swallow */ }
+            }
+        },
         _destroy() {
             if (destroyed) return;
             destroyed = true;
-            for (const fn of eventListeners.get('destroyed') || []) {
-                try { fn(); } catch { /* swallow */ }
-            }
+            wc._emit('destroyed');
         },
     };
     return wc;
@@ -174,6 +181,29 @@ assert.equal(
 
 detach2();
 
+// --- 4b. Reload and crash end the document too; the next message rebuilds ---
+
+resetRegistry();
+const ipc4 = createFakeIpcMain();
+const detach4 = attachSignerBridgeListener({ ipcMain: ipc4 });
+const wc4 = createFakeWebContents(404);
+const register4 = () => ipc4._emit('xchain-wallet:signer-bridge', { sender: wc4 }, {
+    kind: 'register', signerIds: ['sig-reload'],
+});
+for (const ev of ['did-navigate', 'render-process-gone']) {
+    register4();
+    const hung = bgSignerBridge.getTransport('sig-reload')({ op: 'signPsbt', payload: { signerId: 'sig-reload' } });
+    wc4._emit('did-navigate-in-page');
+    assert.ok(bgSignerBridge.getTransport('sig-reload'), 'an in-page navigation keeps the bridge');
+    wc4._emit(ev);
+    await assert.rejects(hung, /signer bridge disconnected/, `${ev} rejects in-flight requests`);
+    assert.equal(bgSignerBridge.getTransport('sig-reload'), null, `${ev} drops owned signerIds`);
+}
+register4();
+assert.equal(typeof bgSignerBridge.getTransport('sig-reload'), 'function', 'the new document re-registers');
+assert.equal(wc4._count('destroyed'), 1, 'each teardown removes its hooks, so they never pile up');
+detach4();
+
 // --- 5. detach() clears residual state --------------------------
 
 resetRegistry();
@@ -191,10 +221,40 @@ assert.equal(bgSignerBridge.getTransport('sig-detach-a'), null,
 assert.equal(bgSignerBridge.getTransport('sig-detach-b'), null,
     'detach() clears registered transports');
 
+// --- 6. detach() unsubscribes document-end hooks, so a stale teardown
+//        cannot clear an id a re-attached listener registered ---------
+
+resetRegistry();
+const ipc5 = createFakeIpcMain();
+const detach5 = attachSignerBridgeListener({ ipcMain: ipc5 });
+const wc5 = createFakeWebContents(505);
+ipc5._emit('xchain-wallet:signer-bridge', { sender: wc5 }, {
+    kind: 'register', signerIds: ['sig-shared'],
+});
+detach5();
+for (const ev of ['destroyed', 'did-navigate', 'render-process-gone']) {
+    assert.equal(wc5._count(ev), 0, `detach() removes the ${ev} hook`);
+}
+const ipc6 = createFakeIpcMain();
+const detach6 = attachSignerBridgeListener({ ipcMain: ipc6 });
+// Another window registers the id the detached instance once held.
+const wc6 = createFakeWebContents(606);
+ipc6._emit('xchain-wallet:signer-bridge', { sender: wc6 }, {
+    kind: 'register', signerIds: ['sig-shared'],
+});
+const liveShared = bgSignerBridge.getTransport('sig-shared');
+assert.equal(typeof liveShared, 'function', 'the re-attached listener owns sig-shared');
+wc5._emit('did-navigate');
+wc5._destroy();
+assert.equal(bgSignerBridge.getTransport('sig-shared'), liveShared,
+    'a document end on a window the detached listener saw keeps the new transport');
+detach6();
+assert.equal(bgSignerBridge.getTransport('sig-shared'), null, 'detach6() clears its own ids');
+
 // Clean up state from case 1 (we never detached).
 detach1();
 resetRegistry();
 
 console.log(
-    'OK: desktop signer bridge smoke (fake ipcMain + webContents round-trip: lazy per-sender entry, register populates signerBridge, transport postMessage reaches webContents.send, response correlator resolves, unregister clears registry, webContents destroy rejects in-flight with "signer bridge disconnected" + clears owned ids, detach() drops all state)',
+    'OK: desktop signer bridge smoke (fake ipcMain + webContents round-trip: lazy per-sender entry, register populates signerBridge, transport postMessage reaches webContents.send, response correlator resolves, unregister clears registry, webContents destroy rejects in-flight with "signer bridge disconnected" + clears owned ids, detach() drops all state and unsubscribes document-end hooks)',
 );

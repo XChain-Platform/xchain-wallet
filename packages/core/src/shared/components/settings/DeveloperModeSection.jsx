@@ -683,7 +683,14 @@ function CustomChainsRow({ developerMode }) {
                     chainRegistry.addCustom(accepted);
                 }
             } catch { /* host already accepted the chain; the next read re-hydrates */ }
-            setStatusText(`Added "${id}".`);
+            // Say which descriptor the vault now holds, since a same-id add may keep the saved one.
+            if (r?.restored) {
+                setStatusText(`Restored saved chain "${id}". To change its descriptor, remove it and add it again.`);
+            } else if (r?.replaced) {
+                setStatusText(`Replaced saved chain "${id}" (the saved copy is no longer valid).`);
+            } else {
+                setStatusText(`Added "${id}".`);
+            }
             setPasted('');
             setOpen(false);
             await refresh();

@@ -19,6 +19,7 @@ import {
     addressTypeFromPath,
     composeBitcoinCompactSignature,
 } from '../../../packages/signers-ledger/src/ledgerFormat.js';
+import { chainIdToTrezorCoin } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
 describe('chainIdToLedgerCurrency', () => {
     it('maps bitcoin-mainnet to bitcoin', () => {
@@ -56,8 +57,16 @@ describe('chainIdToLedgerCurrency', () => {
         expect(() => chainIdToLedgerCurrency('dogecoin-testnet')).toThrow(/software wallet/);
     });
 
-    it('throws for bitcoin-regtest (no Ledger regtest app)', () => {
-        expect(() => chainIdToLedgerCurrency('bitcoin-regtest')).toThrow(/software wallet/);
+    // Same parity refusal as testnet, in the wording Trezor uses for both, and
+    // never the Litecoin/Dogecoin missing-app text meant for other coins.
+    it.each(['bitcoin-testnet', 'bitcoin-regtest'])('throws the Trezor parity message for %s', (chainId) => {
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/software wallet/);
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/funds would appear missing/);
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(`can't be used on ${chainId}`);
+        expect(() => chainIdToLedgerCurrency(chainId)).not.toThrow(/Litecoin|Dogecoin/);
+        const messageOf = (fn) => { try { fn(); } catch (e) { return e.message; } return null; };
+        expect(messageOf(() => chainIdToLedgerCurrency(chainId)))
+            .toBe(messageOf(() => chainIdToTrezorCoin(chainId)));
     });
 });
 
@@ -401,6 +410,32 @@ describe('toLedgerCreatePayment', () => {
         expect(payload.inputs).toHaveLength(1);
         expect(typeof payload.inputs[0].prevTxHex).toBe('string');
         expect(typeof payload.outputScriptHex).toBe('string');
+    });
+
+    function makeTwoInputs(firstType, secondType) {
+        const d = makeDecomposed(firstType);
+        d.inputs.push({ ...makeDecomposed(secondType).inputs[0], prevTxIndex: 1 });
+        return d;
+    }
+    const twoPaths = [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }, { inputIndex: 1, path: "m/84'/0'/0'/0/1" }];
+
+    it('refuses a PSBT whose inputs mix script types, before the device is engaged', () => {
+        for (const [a, b] of [['p2wpkh', 'p2sh-p2wpkh'], ['p2pkh', 'p2wpkh']]) {
+            expect(() => toLedgerCreatePayment({
+                decomposed: makeTwoInputs(a, b), chainId: 'bitcoin-mainnet', signingPaths: twoPaths,
+            })).toThrow(new RegExp(`input 1 is "${b}" but input 0 is "${a}"`));
+        }
+    });
+
+    it('keeps the tx-wide flags for multi-input PSBTs of a single script type', () => {
+        const native = toLedgerCreatePayment({
+            decomposed: makeTwoInputs('p2wpkh', 'p2wpkh'), chainId: 'bitcoin-mainnet', signingPaths: twoPaths,
+        });
+        expect(native).toMatchObject({ segwit: true, additionals: ['bech32'] });
+        const nested = toLedgerCreatePayment({
+            decomposed: makeTwoInputs('p2sh-p2wpkh', 'p2sh-p2wpkh'), chainId: 'bitcoin-mainnet', signingPaths: twoPaths,
+        });
+        expect(nested).toMatchObject({ segwit: true, additionals: [] });
     });
 
     it('segwit=false for p2pkh inputs', () => {

@@ -116,6 +116,10 @@ describe('BackupSection label publication confirmation', () => {
         })));
         expect(messaging.publishLabelsRequest).not.toHaveBeenCalled();
         expect(screen.getByLabelText(FROM.address)).toBeTruthy();
+        // The generic FILE warning can't see this payload's encryption, so
+        // the backup confirm page must say it itself.
+        expect(screen.getByTestId('publish-labels-encrypted-note').textContent)
+            .toMatch(/unreadable\s+without your seed/);
 
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
@@ -153,6 +157,21 @@ describe('BackupSection label publication confirmation', () => {
 
         expect(await screen.findByText('compose failed')).toBeTruthy();
         expect(screen.getByLabelText('Wallet password')).toHaveValue('');
+    });
+
+    it('says the password is wrong when preparing the labels fails its seed decrypt', async () => {
+        mount({
+            prepareLabelsRequest: vi.fn(async () => {
+                throw Object.assign(new Error('aes/gcm: invalid ghash tag'), { name: 'AeadAuthError' });
+            }),
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'typo' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+        expect(await screen.findByText('Incorrect password.')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/aes\/gcm|ghash/);
     });
 
     it('does not prefill the label-backup password after a successful publish', async () => {

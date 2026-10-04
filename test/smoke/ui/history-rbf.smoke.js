@@ -40,8 +40,8 @@ assert.match(
 
 assert.match(
     histSrc,
-    /const replaceable = isEntryReplaceable\(entry\);/,
-    'DetailCard checks replaceability',
+    /const rbfDescriptor = chainRegistry\.get\(entry\.chainId\);\s*const replaceable = isEntryReplaceable\(entry, \{ descriptor: rbfDescriptor \}\);/,
+    'DetailCard checks replaceability against the chain descriptor',
 );
 assert.match(
     histSrc,
@@ -55,7 +55,7 @@ assert.match(histSrc, /async function runRbf\(strategy\)/, 'runRbf handler defin
 assert.match(histSrc, /useMessaging\(\)/, 'reads messaging from hook');
 assert.match(
     histSrc,
-    /replaceFromHistoryEntry\(\{ messaging, entry, strategy, walletId \}\)/,
+    /replaceFromHistoryEntry\(\{ messaging, entry, strategy, walletId, descriptor: rbfDescriptor \}\)/,
     'flow invocation wires entry + strategy',
 );
 assert.match(histSrc, /Speed up/, 'speed-up button label');

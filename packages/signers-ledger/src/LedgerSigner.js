@@ -28,10 +28,12 @@
 //   - Ledger does not expose a stable device identifier via a standard
 //     API (privacy). The factory computes one from a fingerprint of
 //     the account-0 xpub and the class takes it as a parameter.
-//   - Apps are per-coin. The factory constructs one Btc client per
-//     chain family (BTC / LTC / DOGE / testnet all use the Bitcoin
-//     app, parameterized by `currency`). The signer's `chainId` ->
-//     `currency` mapping mirrors Trezor's `chainIdToTrezorCoin`.
+//   - Apps are per-coin (Bitcoin, Litecoin, Dogecoin). Each device call
+//     gets a fresh Btc client for its chain's `currency` (from `getApp`),
+//     because hw-app-btc never leaves the legacy protocol once one call
+//     has used it, so a shared client would carry an LTC/DOGE call's
+//     protocol into every later BTC call. The `chainId` -> `currency`
+//     mapping mirrors Trezor's `chainIdToTrezorCoin`.
 //
 // HW Sign Step 3 wires signPsbt + signMessage: signPsbt pipes the PSBT
 // through `sdk.wallet.decomposePsbt`, translates into the
@@ -59,8 +61,10 @@ import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx
 import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
 import {
     addressTypeFromPath,
+    chainIdToLedgerCurrency,
     composeBitcoinCompactSignature,
     toLedgerCreatePayment,
+    unsupportedBitcoinNetworkError,
 } from './ledgerFormat.js';
 import { readLedgerAppInfo } from './appInfo.js';
 
@@ -85,10 +89,8 @@ import { readLedgerAppInfo } from './appInfo.js';
 
 /**
  * Ledger app names as the device reports them (see appInfo.js). Keyed by chainId
- * so getStatus can check the user has the right app open. All the
- * BIP44-coin variants the wallet supports run on Ledger's Bitcoin
- * app; the `currency` parameter inside the app handles the
- * per-coin differences.
+ * so getStatus and the sign-time check can confirm the right app is open. Each
+ * coin runs its own device app.
  *
  * bitcoin-testnet is deliberately absent (see coinTypeFor): the Bitcoin Test
  * app forces SLIP-44 coin-type 1', which diverges from the wallet's
@@ -132,22 +134,13 @@ function chainIdToLedgerFormat(chainId) {
     }
 }
 
-// Bitcoin-testnet and bitcoin-regtest are both disabled on the Ledger signer
-// for derivation parity, the same way LTC/DOGE testnet + regtest are
-// (ledgerFormat.js): the chain descriptors deliberately pin SLIP-44 coin-type
-// 0' on EVERY Bitcoin network so derivation matches the software signer and the
-// backend, but Ledger's Bitcoin Test app forces the generic testnet coin-type
-// 1'. Deriving either would silently produce m/84'/1'/... addresses the rest of
-// the wallet cannot see (funds appear missing). Throw instead of diverging.
-// Mirror the parity-explaining wording the Trezor side uses for both networks
-// (trezorFormat.js chainIdToTrezorCoin) so the "do not 'fix' this by mapping to
-// the Test app" guardrail attaches to the regtest branch too.
-function unsupportedBitcoinNetworkError(chainId) {
-    return new Error(
-        `This hardware device can't be used on ${chainId} - use a software wallet for this network. `
-        + '(On this network the device would derive a different set of addresses than the '
-        + 'rest of the wallet, so any funds would appear missing.)',
-    );
+// Pick the client currency for a call: the chain's own when this seam supports
+// it, else hw-app-btc's default 'bitcoin', which still drops to the legacy
+// protocol by itself when the open app needs it (callers may omit chainId).
+function clientCurrencyFor(chainId) {
+    return Object.prototype.hasOwnProperty.call(LEDGER_APP_NAME_FOR_CHAIN, chainId)
+        ? chainIdToLedgerCurrency(chainId)
+        : 'bitcoin';
 }
 
 export class LedgerSigner extends Signer {
@@ -157,17 +150,21 @@ export class LedgerSigner extends Signer {
      * @param {string} opts.displayName
      * @param {string} opts.model              Matches firmware-manifest keys (nanoS, nanoSP, nanoX, stax)
      * @param {string} opts.deviceIdentifier
-     * @param {LedgerBtcApp} opts.app          Ledger Bitcoin app client
+     * @param {LedgerBtcApp} [opts.app]        One shared app client; used only when `getApp` is absent
+     * @param {(currency: string) => LedgerBtcApp} [opts.getApp]   Builds a fresh client for a Ledger currency; called once per device call
      * @param {{ send: Function }} opts.transport   The same transport the app client talks over; getStatus reads the open app through it
      * @param {import('../../core/src/sdk/index.js').SDKRegistry} [opts.sdkRegistry]   Optional; required for signPsbt
      */
-    constructor({ id, displayName, model, deviceIdentifier, app, transport, sdkRegistry }) {
+    constructor({ id, displayName, model, deviceIdentifier, app, getApp, transport, sdkRegistry }) {
         super();
         if (!id) throw new Error('LedgerSigner: id is required');
         if (!displayName) throw new Error('LedgerSigner: displayName is required');
         if (!model) throw new Error('LedgerSigner: model is required');
         if (!deviceIdentifier) throw new Error('LedgerSigner: deviceIdentifier is required');
-        if (!app || typeof app !== 'object') {
+        if (getApp !== undefined && typeof getApp !== 'function') {
+            throw new Error('LedgerSigner: getApp must be a function');
+        }
+        if (!getApp && (!app || typeof app !== 'object')) {
             throw new Error('LedgerSigner: app is required');
         }
         // Required, not optional: the app client exposes no way to read the
@@ -182,6 +179,7 @@ export class LedgerSigner extends Signer {
         this._model = model;
         this._deviceIdentifier = deviceIdentifier;
         this._app = app;
+        this._getApp = getApp || null;
         this._transport = transport;
         this._sdkRegistry = sdkRegistry;
     }
@@ -249,6 +247,7 @@ export class LedgerSigner extends Signer {
      */
     async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const format = ledgerFormatFor(addressType, chainId);
+        const app = this._appFor(clientCurrencyFor(chainId));
         const out = [];
         for (let i = 0; i < count; i += 1) {
             const index = startIndex + i;
@@ -266,7 +265,7 @@ export class LedgerSigner extends Signer {
             const res = await runLedger(
                 this._id,
                 'getWalletPublicKey',
-                () => this._app.getWalletPublicKey(path, { verify: !!verify, format }),
+                () => app.getWalletPublicKey(path, { verify: !!verify, format }),
             );
             out.push({
                 index,
@@ -296,10 +295,11 @@ export class LedgerSigner extends Signer {
         // only this method was broken. Derive it from the path's purpose,
         // which is the same thing the caller already encoded there.
         const format = ledgerFormatFor(addressTypeFromPath(path), chainId);
+        const app = this._appFor(clientCurrencyFor(chainId));
         const res = await runLedger(
             this._id,
             'getWalletPublicKey',
-            () => this._app.getWalletPublicKey(path, { verify: false, format }),
+            () => app.getWalletPublicKey(path, { verify: false, format }),
         );
         return {
             publicKey: res.publicKey,
@@ -336,12 +336,16 @@ export class LedgerSigner extends Signer {
         if (typeof psbtHex !== 'string' || psbtHex.length === 0) {
             throw new Error('LedgerSigner.signPsbt: psbtHex is required');
         }
+        // Refuse an unsupported network before any input is examined, as
+        // TrezorSigner.signPsbt does, so both vendors fail with the same message.
+        const currency = chainIdToLedgerCurrency(chainId);
         const sdk = this._sdkRegistry.get(chainId);
         const decomposed = sdk.wallet.decomposePsbt(psbtHex);
         // All-or-refuse: a mixed-input (co-signed) PSBT gets the capability
         // message here, not the converter's `no signingPath for input index N`.
         assertFullInputCoverage(this._id, decomposed.inputs.length, signingPaths);
         const payload = toLedgerCreatePayment({ decomposed, chainId, signingPaths });
+        const app = this._appFor(currency);
 
         const splitInputs = payload.inputs.map((i) => {
             // FOUR args, not five: hw-app-btc v10 dropped the `hasTimestamp`
@@ -350,7 +354,7 @@ export class LedgerSigner extends Signer {
             // `additionals.includes`), and dropped the real additionals
             // array entirely. Signature is now
             // (transactionHex, isSegwitSupported, hasExtraData, additionals).
-            const split = this._app.splitTransaction(
+            const split = app.splitTransaction(
                 i.prevTxHex, true, false, payload.additionals,
             );
             const entry = [split, i.vout];
@@ -360,8 +364,9 @@ export class LedgerSigner extends Signer {
             return entry;
         });
 
+        await this._assertAppOpenFor(chainId);
         const txHex = await runLedger(this._id, 'createPaymentTransaction', () =>
-            this._app.createPaymentTransaction({
+            app.createPaymentTransaction({
                 inputs: splitInputs,
                 associatedKeysets: payload.associatedKeysets,
                 outputScriptHex: payload.outputScriptHex,
@@ -396,18 +401,23 @@ export class LedgerSigner extends Signer {
      * @param {import('../../core/src/signers/Signer.js').SignMessageParams} params
      * @returns {Promise<import('../../core/src/signers/Signer.js').SignMessageReturn>}
      */
-    async signMessage({ message, path }) {
+    async signMessage({ message, path, chainId }) {
         if (typeof message !== 'string') {
             throw new Error('LedgerSigner.signMessage: message is required');
         }
         if (typeof path !== 'string' || !path.startsWith('m/')) {
             throw new Error('LedgerSigner.signMessage: path is required');
         }
+        // Bind the request to the named chain's app, since the app decides the
+        // message prefix; a caller that omits chainId keeps the unchecked path.
+        const currency = chainId === undefined ? 'bitcoin' : chainIdToLedgerCurrency(chainId);
+        if (chainId !== undefined) await this._assertAppOpenFor(chainId);
+        const app = this._appFor(currency);
         const messageHex = messageToHex(message);
         // `signMessage`, not `signMessageNew`: hw-app-btc v10 renamed it, and
         // the old name is absent from the shipped class.
         const sig = await runLedger(this._id, 'signMessage', () =>
-            this._app.signMessage(path, messageHex),
+            app.signMessage(path, messageHex),
         );
         const signature = composeBitcoinCompactSignature(sig, path);
         return { signature };
@@ -417,6 +427,42 @@ export class LedgerSigner extends Signer {
         if (!this._sdkRegistry) {
             throw new Error(
                 `LedgerSigner.${method}: requires an sdkRegistry; construct with { ..., sdkRegistry }`,
+            );
+        }
+    }
+
+    // Build a fresh client per device call when the factory supplied getApp,
+    // so one call's protocol choice never leaks into the next; else fall back
+    // to the single client older constructions pass as `app`.
+    _appFor(currency) {
+        if (!this._getApp) return this._app;
+        const app = this._getApp(currency);
+        if (!app || typeof app !== 'object') {
+            throw new Error(`LedgerSigner: getApp returned no client for currency "${currency}"`);
+        }
+        return app;
+    }
+
+    // Refuse to sign unless the app for this chain is open, the same check
+    // getStatus makes, so a request is never sent to another coin's app.
+    async _assertAppOpenFor(chainId) {
+        let info;
+        try {
+            info = await readLedgerAppInfo(this._transport);
+        } catch (err) {
+            throw new SignerStatusError(
+                this._id, 'disconnected', `could not read the open Ledger app: ${err?.message || err}`,
+            );
+        }
+        if (!info || !info.name) {
+            throw new SignerStatusError(this._id, 'disconnected', 'the Ledger reported no open app');
+        }
+        const expected = LEDGER_APP_NAME_FOR_CHAIN[chainId];
+        if (info.name !== expected) {
+            throw new SignerStatusError(
+                this._id,
+                'wrong-app',
+                `The "${info.name}" app is open on this Ledger. Open the ${expected} app to continue.`,
             );
         }
     }

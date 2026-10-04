@@ -28,11 +28,14 @@ import {
     ChainRegistry,
     FAMILY_MAINNET_COIN_TYPE_SLOT,
     FAMILY_NETWORK_WIF_BYTE,
+    FAMILY_RBF_SUPPORTED,
 } from '../../../packages/core/src/registry/index.js';
 
 const btcMainnet = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-mainnet');
 const btcTestnet = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-testnet');
 const btcRegtest = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-regtest');
+const dogeMainnet = BUNDLED_DESCRIPTORS.find((d) => d.id === 'dogecoin-mainnet');
+const dogeWithRbf = { ...dogeMainnet, feeStrategy: { ...dogeMainnet.feeStrategy, rbfSupported: true } };
 
 // Merge onto the base descriptor's existing paths so only the overridden
 // addressType changes (descriptors require a template for every addressType).
@@ -191,7 +194,61 @@ describe('validateChainDescriptor: family WIF-version-byte parity', () => {
     });
 });
 
+describe('validateChainDescriptor: family RBF capability pin', () => {
+    it('rejects a dogecoin-mainnet override that declares rbfSupported:true', () => {
+        const res = validateChainDescriptor(dogeWithRbf);
+        expect(res.ok).toBe(false);
+        expect(res.errors.join(' ')).toMatch(/feeStrategy\.rbfSupported/);
+    });
+
+    it('accepts the bundled dogecoin descriptors unchanged', () => {
+        const doges = BUNDLED_DESCRIPTORS.filter((d) => d.coin === 'dogecoin');
+        expect(doges.length).toBe(3);
+        for (const d of doges) {
+            const res = validateChainDescriptor(d);
+            expect(res.ok, `${d.id}: ${res.errors?.join('; ')}`).toBe(true);
+        }
+    });
+
+    it('pins caps only: a bitcoin descriptor declaring rbfSupported:false stays valid', () => {
+        const res = validateChainDescriptor({
+            ...btcMainnet,
+            feeStrategy: { ...btcMainnet.feeStrategy, rbfSupported: false },
+        });
+        expect(res.ok, res.errors?.join('; ')).toBe(true);
+    });
+
+    it('leaves an unknown coin family unconstrained on rbfSupported', () => {
+        const res = validateChainDescriptor({
+            ...dogeWithRbf,
+            id: 'forkcoin-mainnet',
+            coin: 'forkcoin',
+            derivationPaths: { p2pkh: "m/44'/9999'/A'/C/I" },
+            wifVersionByte: 0x42,
+        });
+        expect(res.ok, res.errors?.join('; ')).toBe(true);
+    });
+
+    it('the promoted RBF map matches the bundled descriptors', () => {
+        for (const d of BUNDLED_DESCRIPTORS) {
+            if (!(d.coin in FAMILY_RBF_SUPPORTED)) continue;
+            expect(d.feeStrategy.rbfSupported, d.id).toBe(FAMILY_RBF_SUPPORTED[d.coin]);
+        }
+        expect(FAMILY_RBF_SUPPORTED.dogecoin).toBe(false);
+    });
+});
+
 describe('applyRemoteDescriptors / addCustom reject drifted descriptors', () => {
+    it('applyRemoteDescriptors throws on an RBF-enabling override of a dogecoin id', () => {
+        const reg = new ChainRegistry();
+        expect(() => reg.applyRemoteDescriptors([dogeWithRbf])).toThrow(/invalid remote descriptor/);
+    });
+
+    it('addCustom throws on an RBF-enabling dogecoin chain at a non-reserved id', () => {
+        const reg = new ChainRegistry();
+        expect(() => reg.addCustom({ ...dogeWithRbf, id: 'dogecoin-mainnet-evil' })).toThrow();
+    });
+
     it('applyRemoteDescriptors throws on a slot-drifted override of a bundled id', () => {
         const reg = new ChainRegistry();
         expect(() =>

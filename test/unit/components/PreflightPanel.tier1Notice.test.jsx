@@ -273,7 +273,7 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
 // declined to judge rendered "expects it to succeed" under a "Looks good" chip.
 //
 // The fixtures below are copied from what applyTier1 / pushSubCommandFindings
-// actually push (xchain-sdk src/preflight/index.js), messages included, because
+// actually push (xchain-sdk src/preflight/index/tier1_findings.js), messages included, because
 // the defect was precisely that the panel stopped reading them.
 describe('PreflightPanel BATCH sub-command verdicts (§4.2)', () => {
 

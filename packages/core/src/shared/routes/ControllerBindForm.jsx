@@ -241,6 +241,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         /** @type {{ action: string, params: object } | null} */ (null),
     );
 
+    // Label the pending record: on the wire a bind is an ADDRESS or ISSUE, not a bind.
+    const bindSummary = () => {
+        const verb = unbind ? 'Unbind' : 'Bind';
+        return target === 'token' ? `${verb} controller on ${String(tick).trim()}` : `${verb} address controller`;
+    };
+
     async function openConfirmScreen() {
         const from = {
             address: fromAddress.address,
@@ -274,6 +280,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     from,
                     action,
                     params,
+                    actionSummary: bindSummary(),
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -362,6 +369,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 },
                 action,
                 params,
+                actionSummary: bindSummary(),
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;

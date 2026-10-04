@@ -20,8 +20,10 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
+import { WALLET_LOCAL_KEYS } from '../../../packages/extension/src/background/wipeExtensionStorage.js';
 
 const META_KEY = 'xchain-wallet:vault-meta';
+const QUEUE_KEY = 'xchain.broadcastQueue';
 
 /** Minimal stand-in for the IndexedDB delete request handshake. */
 function stubIndexedDB(outcome = 'onsuccess') {
@@ -65,6 +67,14 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
         await expect(wipeWalletStorage()).resolves.toBeUndefined();
     });
 
+    it('removes the page-hosted broadcast queue, which holds signed tx bytes', async () => {
+        globalThis.localStorage.setItem(QUEUE_KEY, '{"queues":{"w1":[{"signedTxHex":"00"}]}}');
+        stubIndexedDB();
+        await wipeWalletStorage();
+        expect(globalThis.localStorage.getItem(QUEUE_KEY)).toBe(null);
+        expect(WALLET_LOCAL_KEYS).toContain(QUEUE_KEY);
+    });
+
     it('resolves where there is no IndexedDB at all', async () => {
         await expect(wipeWalletStorage()).resolves.toBeUndefined();
     });
@@ -100,6 +110,14 @@ describe('wipeWalletStorage on a shell that owns its own store (desktop)', () =>
         };
 
         await expect(wipeWalletStorage()).rejects.toThrow(/meta: EPERM/);
+    });
+
+    it('keeps the queued signed txs when the shell wipe fails, since the wallet survives', async () => {
+        globalThis.localStorage.setItem(QUEUE_KEY, '{}');
+        stubIndexedDB();
+        globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: false, error: 'EPERM' }) };
+        await expect(wipeWalletStorage()).rejects.toThrow(/EPERM/);
+        expect(globalThis.localStorage.getItem(QUEUE_KEY)).toBe('{}');
     });
 
     it('throws when the shell call itself rejects', async () => {

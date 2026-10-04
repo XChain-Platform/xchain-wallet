@@ -476,17 +476,33 @@ function simulateList(p, balMap, coinTick, feeEstimate) {
     pushFeeRow(deltas, balMap, coinTick, feeEstimate);
     const items = toArray(p.ITEM);
     const type = str(p.TYPE);
-    const kind = type === '1' ? 'token' : type === '2' ? 'address' : 'item';
+    const version = str(p.VERSION);
+    let value;
+    let notes = [];
+    if (version === '2') {
+        value = `Share list #${str(p.LIST_ACTION_INDEX) || '?'}`;
+        notes = ['Sharing is permanent. There is no unshare.'];
+    } else if (version === '3') {
+        const index = str(p.LIST_ACTION_INDEX) || '?';
+        const destination = str(p.DESTINATION).replace(/^\^(\d+)$/, 'address id $1') || '?';
+        value = `Transfer list #${index} to ${destination}`;
+        notes = ['This transfer cannot be undone.'];
+    } else if (version === '0' && type === '3') {
+        value = `${items.length} member list${items.length === 1 ? '' : 's'}`;
+    } else {
+        const kind = type === '1' ? 'token' : type === '2' ? 'address' : 'item';
+        value = `${items.length} ${kind} entr${items.length === 1 ? 'y' : 'ies'}`;
+    }
     return {
         deltas,
         sideEffects: [
             {
                 kind: 'list',
                 label: 'List',
-                value: `${items.length} ${kind} entr${items.length === 1 ? 'y' : 'ies'}`,
+                value,
             },
         ],
-        notes: [],
+        notes,
     };
 }
 

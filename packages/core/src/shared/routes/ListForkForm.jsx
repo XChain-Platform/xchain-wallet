@@ -27,11 +27,12 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { memoLengthError } from '../utils/memoLimit.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListItems, findListOwner } from '../../flows/listMembership.js';
+import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -147,20 +148,28 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const firstLegInFlightRef = useRef(false);
     // The list's owner: undefined while resolving, null when it cannot be read.
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
+    const [listName, setListName] = useState(/** @type {string | null} */ (null));
 
-    // Walk from the list being forked up to its root create, whose SOURCE owns
-    // every edit in the chain. ListDetail hands over the row it already read.
+    // Prefer the explorer's current owner, then walk to the root create for
+    // older explorers that do not report one.
     useEffect(() => {
         let cancelled = false;
-        // An older host build without the list read yields no owner claim
+        // An older host build without the list read falls back to the row data
+        // that ListDetail supplied.
         const readList = (idx) => (typeof messaging.getListByActionIndex === 'function'
             ? messaging.getListByActionIndex({ chainId, actionIndex: idx })
             : Promise.reject(new Error('list read unavailable')));
-        const known = listRef.source !== undefined || listRef.parentIndex !== undefined;
-        const start = known
-            ? Promise.resolve({ source: listRef.source, list_action_index: listRef.parentIndex })
-            : Promise.resolve().then(() => readList(String(oldIndex)));
+        const supplied = { source: listRef.source, list_action_index: listRef.parentIndex };
+        const start = typeof messaging.getListByActionIndex === 'function'
+            ? Promise.resolve().then(() => readList(String(oldIndex))).then((detail) => detail || supplied)
+            : Promise.resolve(supplied);
         start
+            .then((detail) => {
+                if (!cancelled) {
+                    setListName(typeof detail?.name === 'string' && detail.name.length > 0 ? detail.name : null);
+                }
+                return detail;
+            })
             .then((detail) => findListOwner({ detail, readList }))
             .then((o) => { if (!cancelled) setOwner(o); })
             .catch(() => { if (!cancelled) setOwner(null); });
@@ -323,6 +332,12 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const needsAdd = toAdd.length > 0;
     const needsRemove = toRemove.length > 0;
     const twoPhase = needsAdd && needsRemove;
+    // A memo with no member change is one valid edit (the chain records a new
+    // version of the list with the same members); a tester was refused it.
+    const memoOnly = !needsAdd && !needsRemove && memo.trim() !== '';
+    const firstTransactionLabel = twoPhase
+        ? 'First transaction (add)'
+        : needsRemove ? 'Fork transaction (remove)' : 'Fork transaction';
 
     function toggleKeep(item) {
         setKeep((prev) => {
@@ -336,7 +351,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const trimmedMemo = memo.trim();
     const firstParams = useMemo(() => ({
         VERSION: '1',
-        EDIT: needsAdd ? '1' : '2',
+        EDIT: needsRemove && !needsAdd ? '2' : '1',
         LIST_ACTION_INDEX: String(oldIndex),
         ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: needsAdd ? toAdd : toRemove,
@@ -460,8 +475,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     async function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
-        if (!needsAdd && !needsRemove) {
-            setFormError('Nothing changed: add or remove at least one item.');
+        if (!needsAdd && !needsRemove && !memoOnly) {
+            setFormError('Nothing changed: add or remove an item, or write a memo.');
             return;
         }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
@@ -596,8 +611,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             title={stage === 'review-1' ? 'Review add/remove'
                 : stage === 'wait-index' ? 'Waiting for fork to be indexed'
                     : stage === 'review-2' ? 'Review remove'
-                        : stage === 'repoint' ? 'Fork published'
-                            : 'Fork & edit list'}
+                        : stage === 'repoint' ? 'Edit published'
+                            : 'Edit list'}
         />
     );
     const wrap = (children) => (
@@ -647,7 +662,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 <h2 className={styles.successTitle}>Fork submitted</h2>
                 {tx1Txid ? (
                     <>
-                        <p className={styles.successLabel}>{needsAdd && !twoPhase ? 'Fork transaction' : 'First transaction (add)'}</p>
+                        <p className={styles.successLabel}>{firstTransactionLabel}</p>
                         <code className={styles.txid}>{tx1Txid}</code>
                     </>
                 ) : null}
@@ -680,34 +695,34 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     </p>
                 )}
 
-                <h3 className={styles.successLabel}>
-                    {resolution === true ? 'Repoint (optional)' : 'Now referenced by'}
-                </h3>
-                <p className={styles.hint}>
-                    {resolution === true
-                        ? `Gates, dispensers, and orders that reference list #${oldIndex} already follow this edit, so nothing needs repointing. Open one only to point it at a different list:`
-                        : `Every gate, dispenser, and order that references list #${oldIndex} keeps using its membership until someone repoints it at the new fork. Repoint from each consumer's own edit screen:`}
-                </p>
-                <ul className={styles.detailsList} style={{ display: 'block' }}>
-                    {REPOINT_TARGETS.map((t) => {
-                        const open = t.built ? repointHandlers[t.id] : undefined;
-                        return (
-                            <li key={t.id} style={{ padding: '4px 0' }}>
-                                <Button type="button" variant="ghost" disabled={!open} onClick={open}>
-                                    {t.label}
-                                </Button>
-                            </li>
-                        );
-                    })}
-                </ul>
                 {resolution === true ? null : (
-                    <div role="alert" className={styles.warnings}>
-                        <p className={styles.warning}>
-                            {resolution === false
-                                ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
-                                : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                    <>
+                        <h3 className={styles.successLabel}>Now referenced by</h3>
+                        <p className={styles.hint}>
+                            Every gate, dispenser, and order that references list #{oldIndex} keeps using its
+                            membership until someone repoints it at the new fork. Repoint from each consumer&apos;s
+                            own edit screen:
                         </p>
-                    </div>
+                        <ul className={styles.detailsList} style={{ display: 'block' }}>
+                            {REPOINT_TARGETS.map((t) => {
+                                const open = t.built ? repointHandlers[t.id] : undefined;
+                                return (
+                                    <li key={t.id} style={{ padding: '4px 0' }}>
+                                        <Button type="button" variant="ghost" disabled={!open} onClick={open}>
+                                            {t.label}
+                                        </Button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                        <div role="alert" className={styles.warnings}>
+                            <p className={styles.warning}>
+                                {resolution === false
+                                    ? `List #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand. The wallet has no way to confirm whether that has happened, so this warning shows regardless of what you do next.`
+                                    : `Unless list-edit resolution is active on this chain, list #${oldIndex} stays live everywhere it is referenced until you repoint each consumer by hand.`}
+                            </p>
+                        </div>
+                    </>
                 )}
 
                 <div className={styles.actions}>
@@ -724,7 +739,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             <>
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>First transaction</dt>
+                    <dt className={styles.detailsLabel}>{firstTransactionLabel}</dt>
                     <dd className={styles.detailsValue}><code className={styles.txid}>{tx1Txid}</code></dd>
                     <dt className={styles.detailsLabel}>Elapsed</dt>
                     <dd className={styles.detailsValue}>{minutes > 0 ? `${minutes} min ${waitElapsed % 60}s` : `${waitElapsed}s`}</dd>
@@ -755,7 +770,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
-                    <dd className={styles.detailsValue}>#{intermediateIndex}</dd>
+                    <dd className={styles.detailsValue}>
+                        {listName ? listLabel(intermediateIndex, listName) : `#${intermediateIndex}`}
+                    </dd>
                     <dt className={styles.detailsLabel}>Removing</dt>
                     <dd className={styles.detailsValue}>{toRemove.length} item{toRemove.length === 1 ? '' : 's'}</dd>
                     {trimmedMemo ? (
@@ -825,9 +842,20 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Forking list</dt>
-                    <dd className={styles.detailsValue}>#{oldIndex}</dd>
-                    <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
-                    <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                    <dd className={styles.detailsValue}>
+                        {listName ? listLabel(oldIndex, listName) : `#${oldIndex}`}
+                    </dd>
+                    {memoOnly ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Members</dt>
+                            <dd className={styles.detailsValue}>Unchanged ({currentItems.length})</dd>
+                        </>
+                    ) : (
+                        <>
+                            <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
+                            <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                        </>
+                    )}
                     {trimmedMemo ? (
                         <>
                             <dt className={styles.detailsLabel}>Memo</dt>
@@ -840,6 +868,12 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     </dd>
                 </dl>
                 {notOwnerNotice}
+                {memoOnly ? (
+                    <p className={styles.hint}>
+                        Only the memo changes. The list keeps its {currentItems.length} member{currentItems.length === 1 ? '' : 's'};
+                        nothing is added or removed.
+                    </p>
+                ) : null}
                 {twoPhase ? (
                     <p className={styles.hint}>
                         This fork both adds and removes items, so it's two
@@ -874,7 +908,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         loading={submitting}
                         disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (needsAdd ? 'Publish add' : 'Publish remove')}
+                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (memoOnly ? 'Publish memo' : needsAdd ? 'Publish add' : 'Publish remove')}
                     </Button>
                 </div>
             </form>,
@@ -942,7 +976,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
 
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"

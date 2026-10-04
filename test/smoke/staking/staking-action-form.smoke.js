@@ -56,8 +56,13 @@ assert.ok(!/Tier 1/.test(formSrc) && !/Tier 2/.test(formSrc),
     'StakingActionForm does not surface tier labels (capability-staking model dropped tiers)');
 assert.ok(/label="Signing public key"/.test(formSrc),
     'StakingActionForm renders a Signing public key input for unstake');
-assert.ok(/SIGNING_PUBKEY:\s*signingPubkey\.trim/.test(formSrc),
-    'StakingActionForm passes SIGNING_PUBKEY in action params');
+// The wire params are built by stakingActionParams in the flows module, so
+// the route file keeps exporting only the component.
+const flowSrc = readFileSync(join(core, 'src', 'flows', 'unstakeClaimActions.js'), 'utf8');
+assert.ok(/stakingActionParams\(/.test(formSrc),
+    'StakingActionForm builds its params through stakingActionParams');
+assert.ok(/SIGNING_PUBKEY:\s*String\(signingPubkey\)\.trim/.test(flowSrc),
+    'stakingActionParams passes SIGNING_PUBKEY in action params');
 
 // partial claim/unstake: the Amount field is editable (real
 // change handler, not a pinned no-op) and a strict partial threads
@@ -67,12 +72,14 @@ assert.ok(!formSrc.includes('onAmountFieldChange={() => {}}'),
     'StakingActionForm Amount field is no longer a pinned no-op');
 assert.ok(/onAmountFieldChange=\{onAmountFieldChange\}/.test(formSrc),
     'StakingActionForm wires a real onAmountFieldChange handler');
-assert.ok(/AMOUNT:\s*String\(amount\)/.test(formSrc),
-    'StakingActionForm threads AMOUNT into actionParams for a partial');
+assert.ok(/AMOUNT:\s*normalizedAmount/.test(flowSrc),
+    'stakingActionParams threads AMOUNT into the params for a partial');
 assert.ok(/isPartial/.test(formSrc),
     'StakingActionForm distinguishes partial vs full (legacy bytes) submits');
-assert.ok(/Amount must be greater than zero/.test(formSrc),
+assert.ok(/Enter an amount greater than zero/.test(formSrc),
     'StakingActionForm validates amount > 0');
+assert.ok(/disabled=\{[^}]*!totalKnown/.test(formSrc) && /TOTAL_LOADING_MESSAGE/.test(formSrc),
+    'StakingActionForm blocks submit until the total it judges the amount against is known');
 assert.ok(/Amount exceeds the/.test(formSrc),
     'StakingActionForm validates amount <= available');
 assert.ok(!/coming soon/.test(formSrc),

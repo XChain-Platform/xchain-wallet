@@ -84,9 +84,18 @@ assert.ok(
     /broadcastQueueStorage = createBroadcastQueueStorage\(\)/.test(bg),
     'createBackgroundHost destructures broadcastQueueStorage with the picker as default',
 );
+// The load latch lives on the queue store every host of a shell shares, so a
+// host built after a lock sees the load (and the map) its predecessor made.
+const storePath = join(ext, 'src', 'background', 'broadcastQueueStore.js');
+assert.ok(existsSync(storePath), 'broadcastQueueStore.js exists');
+const queueStoreSrc = readFileSync(storePath, 'utf8');
 assert.ok(
-    /let queueLoaded = false/.test(bg),
-    'createBackgroundHost tracks queueLoaded state',
+    /loaded: false,/.test(queueStoreSrc) && /loadPromise: null,/.test(queueStoreSrc),
+    'the queue store starts unloaded with no rehydrate in flight',
+);
+assert.ok(
+    /const queueStore = broadcastQueueStore \?\? createBroadcastQueueStore\(\{ storage: broadcastQueueStorage \}\)/.test(bg),
+    'createBackgroundHost serves a shared queue store, or a private one over its storage dep',
 );
 assert.ok(
     /async function ensureQueueLoaded\(\)/.test(bg),
@@ -97,7 +106,7 @@ assert.ok(
     'createBackgroundHost defines persistQueue',
 );
 assert.ok(
-    /let queueLoadPromise = /.test(bg) && /if \(!queueLoadPromise\)/.test(bg),
+    /if \(!queueStore\.loadPromise\)/.test(bg) && /queueStore\.loadPromise = \(async \(\) => \{/.test(bg),
     'ensureQueueLoaded uses a single-flight queueLoadPromise so concurrent callers share one rehydrate',
 );
 
@@ -162,8 +171,8 @@ assert.ok(
     //
     // Exactly two branches of the catch remove an entry, and each removes it
     // because the bytes are settled rather than retryable: a PERMANENT
-    // rejection, whose inputs are gone so nothing can confirm; and a resumed
-    // claim the node answers as already known, which means those exact bytes
+    // rejection, whose inputs are gone so nothing can confirm; and an entry
+    // the node answers as already known, which means those exact bytes
     // reached it and the record is delivered. Everything else stays queued.
     const catchBlock = broadcastBlock.slice(
         broadcastBlock.indexOf('} catch (err)'),
@@ -171,16 +180,20 @@ assert.ok(
     );
     const splices = (catchBlock.match(/q\.splice/g) || []).length;
     assert.equal(splices, 2,
-        'only the permanent branch and the already-on-network resumed claim remove the entry');
+        'only the permanent branch and the already-on-network branch remove the entry');
     assert.ok(
-        /if \(entry\.resumedClaim === true && saysAlreadyOnNetwork\(failure\)\) \{/.test(catchBlock),
-        'the second removal is guarded on a resumed claim the node already knows',
+        /if \(saysAlreadyOnNetwork\(err\)\) \{/.test(catchBlock),
+        'the second removal is guarded on the node already holding these bytes, for every entry',
     );
-    // A resumed claim settles as delivered, never as failed: recording a landed
+    assert.ok(
+        catchBlock.indexOf('saysAlreadyOnNetwork(err)') < catchBlock.indexOf('classifyBroadcastFailure(err)'),
+        'the already-on-network check runs before the permanence verdict can retire the entry',
+    );
+    // A delivered entry settles as broadcast, never as failed: recording a landed
     // transaction as failed is what invites the re-compose that can spend twice.
     assert.ok(
         /alreadyOnNetwork: true/.test(catchBlock) && /status: 'broadcast'/.test(catchBlock),
-        'the resumed-claim branch settles the record as broadcast and says so to the caller',
+        'the already-on-network branch settles the record as broadcast and says so to the caller',
     );
 }
 

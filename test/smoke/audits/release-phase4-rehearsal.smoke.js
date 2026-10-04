@@ -33,10 +33,15 @@
 // or to record why the change cannot reach the signing path.
 
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
-    drift, PIN_PATH, REPO_PATH_FILES, SCRIPT_PATH_FILES,
+    drift, PIN_PATH, pinPathFiles, signingPathFiles,
 } from '../../../tools/release/phase4-rehearsal.mjs';
 
 assert.ok(existsSync(PIN_PATH),
@@ -46,14 +51,15 @@ assert.ok(existsSync(PIN_PATH),
     + '--input <staged dir>` and commit what it writes.');
 
 const pin = JSON.parse(readFileSync(PIN_PATH, 'utf8'));
+const { script: SCRIPT_PATH_FILES, repo: REPO_PATH_FILES } = pinPathFiles(pin);
 
 // The pin must carry BOTH refs. A Phase 4 run reads its scripts from the
 // invoking checkout and its lane roster from the --repo tree, and rows 40, 48
 // and 57 were each one half of that split being mistaken for the whole.
 assert.ok(pin.scriptRef && pin.repoRef,
     'the rehearsal pin names fewer than two refs. A Phase 4 signing run reads from two trees at once '
-    + '(scripts from the invoking checkout, lane roster and dev-mock gate from the --repo tree at the '
-    + 'tag), so a pin naming one of them describes half the run and hides the half that has broken '
+    + '(scripts from the invoking checkout, lane roster from the --repo tree at the tag, signing '
+    + 'controls from whichever of the two the release set names), so a pin naming one of them describes half the run and hides the half that has broken '
     + 'before.');
 
 // A pin nobody can act on is worse than none: it reads like proof.
@@ -70,6 +76,45 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     `the rehearsal pin records no hash for some of ${REPO_PATH_FILES.join(', ')}. The repo side is `
     + 'what the rehearsed tag tree declared, and a file missing from the pin cannot be reported as '
     + 'diverged. Re-drive the rehearsal and re-pin it rather than hand-editing the pin.');
+
+// The signing controls follow sign.sh's per-release-set root: tag side for a release run,
+// script side (hashed from this checkout and gated) for a --staging rehearsal.
+{
+    const gate = 'tools/build-reproduce/check-no-dev-mock.sh';
+    const profile = 'tools/release/expected-artifacts.txt';
+    const release = signingPathFiles('release');
+    const staging = signingPathFiles('staging');
+    assert.ok(release.repo.includes(gate) && release.repo.includes(profile) && !release.script.includes(gate),
+        'a release run reads both signing controls from the tag tree, so they belong on the repo side.');
+    assert.ok(staging.script.includes(gate) && staging.script.includes(profile) && !staging.repo.includes(gate),
+        'a --staging rehearsal runs the invoking checkout\'s signing controls, so they must be hashed and gated there.');
+    assert.throws(() => signingPathFiles('nightly'), /unknown release set/);
+
+    const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const head = spawnSync('git', ['-C', walletRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    const hashes = Object.fromEntries(staging.script.map((p) => [p,
+        createHash('sha256').update(readFileSync(join(walletRoot, p))).digest('hex')]));
+    const work = mkdtempSync(join(tmpdir(), 'phase4-pin-'));
+    try {
+        const pinFile = join(work, 'pin.json');
+        const write = (scriptPath) => writeFileSync(pinFile, JSON.stringify({
+            pinFormat: 2, releaseSet: 'staging', tag: 'v0.0.0', reached: 'manifest-written',
+            scriptRef: head, repoRef: head, scriptPath, repoPath: {},
+        }));
+        write(hashes);
+        const clean = drift({ pinFile });
+        assert.ok(clean.ok && clean.moved.length === 0,
+            `a staging pin of today's bytes must read clean; moved: ${clean.moved.map((m) => m.path).join(', ')}`);
+        for (const p of [gate, profile]) {
+            write({ ...hashes, [p]: 'f'.repeat(64) });
+            const stale = drift({ pinFile });
+            assert.ok(!stale.ok && stale.moved.some((m) => m.path === p),
+                `a staging pin must go STALE when ${p}, which the staging run executed, moves.`);
+        }
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
 
 const d = drift();
 

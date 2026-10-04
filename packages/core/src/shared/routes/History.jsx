@@ -52,6 +52,7 @@ import {
 import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
+import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -1591,7 +1592,8 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
         : null;
     const peer = peerKey ? peerCache[peerKey] : null;
-    const replaceable = isEntryReplaceable(entry);
+    const rbfDescriptor = chainRegistry.get(entry.chainId);
+    const replaceable = isEntryReplaceable(entry, { descriptor: rbfDescriptor });
     // §24.6 / Cluster Y FOLLOWUP 4: desktop-only "Open in new window"
     // affordance for pending (mempool-only) entries. The detached
     // window opens directly on this row via the History `initialFocus`
@@ -1640,7 +1642,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         setRbfError(null);
         setRbfDone(null);
         try {
-            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId });
+            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor: rbfDescriptor });
             setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
             // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
             // The undo is a THIRD transaction replacing the cancel and
@@ -1738,14 +1740,16 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         }
         setContactSaveStage('saving');
         setContactSaveError(null);
+        const entry = { chain: contactPeerCoin, address: contactPeer, label: '' };
         try {
-            await messaging.saveContact({
-                input: {
-                    name: trimmed,
-                    notes: '',
-                    entries: [{ chain: contactPeerCoin, address: contactPeer, label: '' }],
-                },
-            });
+            // The same person seen on another chain: add this address to the
+            // contact that already carries the name, not a second contact.
+            const existing = findContactByName(contacts, trimmed);
+            if (existing) {
+                await messaging.saveContact({ record: withEntriesAdded(existing, [entry]) });
+            } else {
+                await messaging.saveContact({ input: { name: trimmed, notes: '', entries: [entry] } });
+            }
             setContactSaveStage('saved');
         } catch (err) {
             setContactSaveError(err?.message || 'Save failed.');

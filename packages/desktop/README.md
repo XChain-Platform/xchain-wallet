@@ -36,7 +36,8 @@ preload.cjs
   )
   … and the other worlds pinned in BRIDGE_WORLDS
     (xchainWalletWindow, xchainWalletUpdater,
-     xchainWalletRegistry, xchainWalletSignerBridge)
+     xchainWalletRegistry, xchainWalletSignerBridge,
+     xchainWalletDeepLink)
 
 Electron renderer
   messaging.js (popup/web parity helpers)
@@ -61,7 +62,8 @@ Electron renderer
   (`test/integration/shells/desktop-preload-contract.test.js`) and nothing
   else: `xchainWalletBridge` (`sendMessage`, `wipeStorage`),
   `xchainWalletWindow`, `xchainWalletUpdater`, `xchainWalletRegistry`,
-  `xchainWalletSignerBridge`.
+  `xchainWalletSignerBridge`, `xchainWalletDeepLink` (`onUri`,
+  `takePending`).
 - `renderer/main.jsx` + `renderer/App.jsx` - mounts the shared React
   app under `shell="desktop"`. Every route from popup/web renders
   unchanged.

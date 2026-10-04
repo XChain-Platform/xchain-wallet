@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { resolvePreflightPrivacy } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -214,7 +215,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             return 'Give and get chains must differ. For a same-chain order use Create order.';
         }
         if (giveTick && giveTick.trim().toUpperCase() === giveCoinTicker) {
-            return `A cross-chain order cannot give native ${giveCoinTicker}; only a token can be escrowed for the federation to settle.`;
+            return `A cross-chain order cannot give native ${giveCoinTicker}. Pick a token to offer.`;
         }
         if (getTick && getTick.trim().toUpperCase() === getCoinTicker) {
             return `A cross-chain order cannot get native ${getCoinTicker}; ask for a token on ${getDescriptor?.displayName || getChainId}.`;
@@ -247,21 +248,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const extraBaseFor = (composed) => ({
         payFeeInNativeCoin: nativeFee.flag,
         ...(feePerKb != null ? { feePerKb } : {}),
-        ...(composed ? {
-            prebuiltPsbt: {
-                psbtHex: composed.psbt,
-                encoding: composed.encoding,
-                actionString: composed.actionString,
-                version: composed.version,
-                // Outputs compose left off the previewed PSBT because they
-                // ride the reveal the submit path builds (see
-                // useActionConfirmFlow); dropping them burns the reserved value.
-                deferredFeeOutput: composed.deferredFeeOutput || null,
-                deferredOutputs: composed.deferredOutputs || [],
-                revealOpts: composed.revealOpts || null,
-                adsDonation: { included: !!composed.adsPlan?.canSubmit },
-            },
-        } : {}),
+        // The shared mapping, envelope and deferred outputs included.
+        ...(composed ? { prebuiltPsbt: prebuiltPsbtFromComposed(composed) } : {}),
     });
 
     async function openConfirmModal() {

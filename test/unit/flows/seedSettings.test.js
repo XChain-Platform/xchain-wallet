@@ -117,9 +117,19 @@ describe('resolveFeeConfig follows the descriptor feeStrategy defaults', () => {
 
     it('stored overrides win', () => {
         const r = resolveFeeConfig(
+            { strategy: 'custom', customSatsPerKb: 4321, rbfByDefault: false },
+            chainRegistry.get('bitcoin-mainnet'),
+        );
+        expect(r).toEqual({ strategy: 'custom', customSatsPerKb: 4321, rbfByDefault: false });
+    });
+
+    it('a stored rbfByDefault true is capped on a chain without RBF support', () => {
+        const r = resolveFeeConfig(
             { strategy: 'custom', customSatsPerKb: 4321, rbfByDefault: true },
             chainRegistry.get('dogecoin-mainnet'),
         );
-        expect(r).toEqual({ strategy: 'custom', customSatsPerKb: 4321, rbfByDefault: true });
+        expect(r).toEqual({ strategy: 'custom', customSatsPerKb: 4321, rbfByDefault: false });
+        expect(resolveFeeConfig(undefined, chainRegistry.get('dogecoin-mainnet')).rbfByDefault).toBe(false);
+        expect(resolveFeeConfig({ rbfByDefault: true }, chainRegistry.get('litecoin-mainnet')).rbfByDefault).toBe(true);
     });
 });

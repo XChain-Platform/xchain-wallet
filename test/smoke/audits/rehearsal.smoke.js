@@ -675,10 +675,19 @@ const check = (over) => assertRecord({
         }
     }
 
+    // Keep the release key out of the blocker prose: K1 exists, so it blocks no lane.
+    const matrixSrc = readFileSync(join(root, 'tools/release/rehearsal-matrix.mjs'), 'utf8');
+    const readmeSrc = readFileSync(join(root, 'tools/release/README.md'), 'utf8');
+    for (const [file, text] of [['rehearsal-matrix.mjs', matrixSrc], ['README.md', readmeSrc]]) {
+        assert.doesNotMatch(text, /blocks a rehearsal now is K1|names K1 as what blocks/i,
+            `tools/release/${file} names K1 as the rehearsal blocker, but K1 exists; the open `
+            + 'blocker is the observed swap. Re-state the prose rather than editing this assertion.');
+    }
+
     // And naming must NOT read as rehearsing. Every lane is named, none has an
     // observed swap, so coverage still fails and still says why: the two are
     // different blockers with different owners (a device is DD4's; an observed
-    // swap is K1's) and the output must not let one stand in for the other.
+    // swap is its witness's) and the output must not let one stand in for the other.
     assert.match(coverage.stdout, /never rehearsed/);
     assert.doesNotMatch(coverage.stdout, /✅/,
         'no swap has been attested, so no lane may report as covered');

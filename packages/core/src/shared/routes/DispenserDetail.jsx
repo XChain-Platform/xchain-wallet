@@ -40,7 +40,9 @@ import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { refillsUsed, refillCeilingMessage } from '../utils/dispenserRefills.js';
 import { isTerminalDispenserStatus, reopenTermsFrom, terminalDispenserNotice } from '../utils/dispenserReopen.js';
-import { dispenserCancelTimestamp, dispenserCloseEta, shortAddress } from '../utils/dispenserCloseWindow.js';
+import {
+    CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta, shortAddress,
+} from '../utils/dispenserCloseWindow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { dispenserPriceFloor } from '../../flows/dispenserDustFloor.js';
 import {
@@ -568,15 +570,36 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             : null),
         [isClosing, lifecycle, actionIndex],
     );
-    // Re-render once a minute while a countdown is on screen.
+    // Re-render once a minute while a countdown is on screen. The close is
+    // judged by the chain's protocol time, not the wall clock, so the same
+    // timer re-reads that time, at most once per CHAIN_TIME_REFRESH_MS.
     const [nowMs, setNowMs] = useState(() => Date.now());
+    const [chainClock, setChainClock] = useState(
+        /** @type {null | { chainTime: number, chainTimeReadAtMs: number }} */ (null),
+    );
     useEffect(() => {
         if (cancelTimestamp == null) return undefined;
-        setNowMs(Date.now());
-        const timer = setInterval(() => setNowMs(Date.now()), 60000);
-        return () => clearInterval(timer);
-    }, [cancelTimestamp]);
-    const closeEta = cancelTimestamp != null ? dispenserCloseEta(cancelTimestamp, { nowMs }) : null;
+        let stopped = false;
+        let lastReadMs = -Infinity;
+        const tick = () => {
+            const now = Date.now();
+            setNowMs(now);
+            if (now - lastReadMs < CHAIN_TIME_REFRESH_MS) return;
+            if (typeof messaging?.getChainTipBlockTime !== 'function') return;
+            lastReadMs = now;
+            // A failed read keeps the last chain time, which the countdown
+            // keeps advancing by local elapsed time.
+            messaging.getChainTipBlockTime({ chainId, withProtocolTime: true })
+                .then((r) => { if (!stopped) setChainClock(chainClockFromTipRead(r, Date.now())); })
+                .catch(() => {});
+        };
+        tick();
+        const timer = setInterval(tick, 60000);
+        return () => { stopped = true; clearInterval(timer); };
+    }, [cancelTimestamp, chainId, messaging]);
+    const closeEta = cancelTimestamp != null
+        ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
+        : null;
     const isTerminal = isTerminalDispenserStatus(liveStatus);
     // An ownership dispenser's form lane does not exist (DispenserForm has no
     // GIVE_OWNERSHIP), and a sold one no longer has the ownership to offer.
@@ -2268,10 +2291,15 @@ function closeWindowNotice({ eta, escrowRemaining, giveTick, cancelledBy, heldAd
     if (!eta) {
         return `Closing: this dispenser is in its 1-hour close window. ${capitalize(escrow)} returns to ${destination} when the window ends. ${honored}`;
     }
-    // Past the window, the close waits for a block whose median time is later
-    // than the window's end, so no clock time is promised.
+    // Past the window, the close waits for a block whose protocol time is
+    // later than the window's end, so no clock time is promised. Only a chain
+    // time reading can say the next block is that block; the device clock
+    // alone cannot, since the chain's time can trail it.
+    if (eta.pastDue && eta.basis === 'chain') {
+        return `Closing at the next block: the chain has passed the end of the 1-hour close window. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+    }
     if (eta.pastDue) {
-        return `Closing any block now: the 1-hour close window has passed and the close lands with the next block. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
+        return `Closing any block now: the 1-hour close window has passed by this device's clock, and the close lands with the first block after the chain's time passes it too. ${capitalize(escrow)} returns to ${destination}. ${honored}`;
     }
     return `Closing in ${eta.countdown} (around ${formatLocalClock(eta.closeAtMs)}). This dispenser is in its 1-hour close window; ${escrow} returns to ${destination} with the first block after it ends. ${honored}`;
 }

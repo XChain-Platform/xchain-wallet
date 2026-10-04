@@ -58,6 +58,12 @@ export const CONNECTED_TABS_SESSION_KEY = 'xchain.connectedTabs';
 /** Upper bound on retained entries; oldest insertion is dropped first. */
 export const DEFAULT_MAX_CONNECTED_TABS = 200;
 
+export async function connectedOrigins(registry) {
+    if (typeof registry?.snapshot !== 'function') return [];
+    const snapshot = await registry.snapshot();
+    return [...new Set(Object.values(snapshot))];
+}
+
 /**
  * @typedef {Object} ConnectedTabRegistry
  * @property {(tabId: number, origin: string) => void} record        note a tab as talking to `origin`

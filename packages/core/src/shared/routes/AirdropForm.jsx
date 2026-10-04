@@ -55,6 +55,8 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/sub
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
+import { MEMO_HINT } from '../utils/memoLimit.js';
+import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -186,7 +188,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // "address list" (deterministic count) vs "token list" (holder-
     // snapshot preview) branch in the review-airdrop stage.
     const [existingListDetail, setExistingListDetail] = useState(
-        /** @type {{ loading: boolean, kind: 'address' | 'tick' | null, items: string[], error: string | null } | null} */
+        /** @type {{ loading: boolean, kind: 'address' | 'tick' | null, items: string[], name: string | null, error: string | null } | null} */
         (null),
     );
     // Best-effort holder-count preview for whichever tick set is in play
@@ -367,19 +369,20 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return undefined;
         }
         let cancelled = false;
-        setExistingListDetail({ loading: true, kind: null, items: [], error: null });
+        setExistingListDetail({ loading: true, kind: null, items: [], name: null, error: null });
         messaging.getListByActionIndex({ chainId, actionIndex: listActionIndex })
             .then((row) => {
                 if (cancelled) return;
                 const kind = String(row?.type) === '1' ? 'tick' : 'address';
                 // The airdrop pays the list's newest valid edit, not its created members
                 const items = currentListItems(row) || [];
-                setExistingListDetail({ loading: false, kind, items, error: null });
+                const name = typeof row?.name === 'string' && row.name.length > 0 ? row.name : null;
+                setExistingListDetail({ loading: false, kind, items, name, error: null });
             })
             .catch((err) => {
                 if (cancelled) return;
                 setExistingListDetail({
-                    loading: false, kind: null, items: [],
+                    loading: false, kind: null, items: [], name: null,
                     error: err?.message || 'Failed to load list.',
                 });
             });
@@ -1444,7 +1447,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <p className={styles.warning}>
                             This airdrop pays every current holder of the underlying
                             token(s), not a fixed list of addresses. That holder set is
-                            only locked in when the AIRDROP transaction executes
+                            only locked in when the airdrop transaction confirms
                             on-chain; the count above is a snapshot taken now and can
                             change (and be inflated) before then. It is an estimate, not
                             a guarantee of who gets paid or the final cost.
@@ -1452,11 +1455,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     </div>
                 ) : null}
                 <p className={styles.hint}>
-                    Airdrops charge an XChain fee based on the number of
-                    database hits. The network computes the exact
-                    fee at execute time; make sure the source address holds
-                    enough of {token.trim().toUpperCase() || 'the token'} +
-                    fee tick to cover the full distribution.
+                    Airdrops have a protocol fee that grows with the number of
+                    recipients, and the network sets the exact amount when the
+                    airdrop confirms. Make sure the source address holds enough
+                    {' '}{token.trim().toUpperCase() || 'of the token'} for the full
+                    distribution, plus enough to pay the protocol fee.
                 </p>
                 {/* Credentials live on the confirm page for leg 2 too. */}
                 {singleEncode ? null : (
@@ -1801,8 +1804,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         This publishes a new token list, then airdrops to every current
                         holder of {memberTicks.length === 1 ? 'that token' : 'these tokens'}.
                         A wallet holding more than one listed token can receive more than
-                        one payout. The holder set is only fixed when the AIRDROP
-                        transaction executes on-chain, not now; the count above is a
+                        one payout. The holder set is only fixed when the airdrop
+                        transaction confirms on-chain, not now; the count above is a
                         preview, not a guarantee of who gets paid.
                     </p>
                 </>
@@ -1814,7 +1817,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     <div className={styles.fromLine}>
                         <span className={styles.hint}>
                             {listActionIndex
-                                ? `List #${listActionIndex}${existingListDetail?.kind === 'tick' ? ' (token list)' : existingListDetail?.kind === 'address' ? ' (address list)' : ''}`
+                                ? `${listLabel(listActionIndex, existingListDetail?.name)}${existingListDetail?.kind === 'tick' ? ' (token list)' : existingListDetail?.kind === 'address' ? ' (address list)' : ''}`
                                 : 'No list chosen yet.'}
                         </span>
                         <Button type="button" variant="ghost" onClick={() => setListPickerOpen(true)}>
@@ -1835,8 +1838,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                     : holderPreview.total != null
                                         ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now.`
                                         : ''}
-                            {' '}The holder set is only fixed when the AIRDROP transaction
-                            executes on-chain, not now; treat this as an estimate.
+                            {' '}The holder set is only fixed when the airdrop transaction
+                            confirms on-chain, not now; treat this as an estimate.
                         </p>
                     ) : existingListDetail?.kind === 'address' ? (
                         <p className={styles.hint}>
@@ -1854,7 +1857,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
             <Input
                 label="Memo (optional)"
-                hint="Protocol rejects | or ;."
+                hint={MEMO_HINT}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
