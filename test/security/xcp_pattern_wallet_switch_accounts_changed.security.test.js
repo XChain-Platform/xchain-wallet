@@ -50,7 +50,7 @@ describe('wallet switch bridge notification', () => {
             second: [{ id: 'account-second', name: 'Second' }],
         }, [{
             origin: 'https://connected.example',
-            permissions: { accounts: ['account-first', 'account-second'] },
+            permissions: { accounts: ['account-first'] },
         }]);
         const delivered = new Promise((resolve) => {
             createBridgeEventBroadcaster({

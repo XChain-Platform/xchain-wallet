@@ -166,16 +166,12 @@ async function notifyWalletSwitch(deps, walletId) {
     if (!Array.isArray(accounts) || !Array.isArray(sites)) return;
     for (const site of sites) {
         if (!connected.has(site?.origin)) continue;
-        const payload = permittedAccounts(accounts, site?.permissions?.accounts);
-        if (payload.length === 0 && site?.permissions?.accounts?.length > 0) continue;
-        await deps.events.accountsChanged(site.origin, payload);
+        await deps.events.accountsChanged(site.origin, eventAccounts(accounts));
     }
 }
 
-function permittedAccounts(accounts, permittedIds) {
-    const ids = new Set(Array.isArray(permittedIds) ? permittedIds : []);
+function eventAccounts(accounts) {
     return accounts
-        .filter((account) => ids.size === 0 || ids.has(account?.id))
         .filter((account) => typeof account?.id === 'string' && account.id)
         .map((account) => ({ id: account.id, name: account.name }));
 }
