@@ -35,14 +35,23 @@ describe('getProjectForTick', () => {
         })).resolves.toBeNull();
     });
 
-    it('returns null when the project lookup throws a no-roster error', async () => {
+    it('returns null when the project lookup throws a 404 error', async () => {
         const sdk = { getProject: vi.fn(async () => {
-            throw new Error('Project not found');
+            throw Object.assign(new Error('Explorer request failed'), { status: 404 });
         }) };
 
         await expect(getProjectForTick({
             sdkRegistry: fakeRegistry(sdk), chainId: 'chain-a', tick: 'missing',
         })).resolves.toBeNull();
+    });
+
+    it('rethrows an arbitrary project lookup error', async () => {
+        const error = new Error('Gateway unavailable');
+        const sdk = { getProject: vi.fn(async () => { throw error; }) };
+
+        await expect(getProjectForTick({
+            sdkRegistry: fakeRegistry(sdk), chainId: 'chain-a', tick: 'alpha',
+        })).rejects.toBe(error);
     });
 
     it('rejects a missing tick before consulting the registry', async () => {
