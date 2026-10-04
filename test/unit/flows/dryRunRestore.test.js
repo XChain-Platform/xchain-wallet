@@ -79,7 +79,9 @@ it('rejects an invalid BIP39 mnemonic with InvalidMnemonicError', async () => {
 });
 
 it('reports used addresses and stops at the default unused-address gap', async () => {
-    const addresses = [0, 2].map((index) => ({
+    const lastUsedIndex = 2;
+    const scanLength = lastUsedIndex + 1 + DEFAULT_DRY_RUN_GAP;
+    const addresses = [0, lastUsedIndex].map((index) => ({
         address: `address-${pathFor(index)}`,
         chain: 'BTC',
         network: 'mainnet',
@@ -87,7 +89,7 @@ it('reports used addresses and stops at the default unused-address gap', async (
     }));
     const harness = createHarness(addresses);
 
-    const result = await restore(harness);
+    const result = await restore(harness, { gapLimit: scanLength });
 
     expect(result.overallMatch).toBe(true);
     expect(result.perChain).toHaveLength(1);
@@ -96,13 +98,16 @@ it('reports used addresses and stops at the default unused-address gap', async (
         addressType: 'p2wpkh',
         matchedCount: 2,
         divergentCount: 0,
-        missingCount: 8,
+        missingCount: 11,
     });
     expect(result.perChain[0].comparisons.filter(({ match }) => match).map(({ index }) => index))
-        .toEqual([0, 2]);
-    expect(harness.chainRegistry.derivationPathFor).toHaveBeenCalledTimes(DEFAULT_DRY_RUN_GAP);
-    expect(harness.deriveAddress).toHaveBeenCalledTimes(DEFAULT_DRY_RUN_GAP);
-    expect(cryptoMocks.zeroDerivedKey).toHaveBeenCalledTimes(DEFAULT_DRY_RUN_GAP);
+        .toEqual([0, lastUsedIndex]);
+    const trailingGap = result.perChain[0].comparisons.slice(-DEFAULT_DRY_RUN_GAP);
+    expect(trailingGap.every(({ expected }) => expected === null)).toBe(true);
+    expect(result.perChain[0].derived.at(-1).index).toBe(lastUsedIndex + DEFAULT_DRY_RUN_GAP);
+    expect(harness.chainRegistry.derivationPathFor).toHaveBeenCalledTimes(scanLength);
+    expect(harness.deriveAddress).toHaveBeenCalledTimes(scanLength);
+    expect(cryptoMocks.zeroDerivedKey).toHaveBeenCalledTimes(scanLength);
 });
 
 it('uses a custom gap instead of the default', async () => {
