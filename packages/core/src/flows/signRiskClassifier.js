@@ -31,6 +31,42 @@
 // Pure function: no I/O, no side effects. Caller computes the inputs
 // (the form already has them) and passes them in.
 
+const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
+const ZERO_WIDTH = /[\u00AD\u034F\u180E\u200B-\u200D\u2060-\u2064\u206A-\u206F\uFEFF]/u;
+const LATIN = /\p{Script_Extensions=Latin}/u;
+const GREEK_OR_CYRILLIC = /[\p{Script_Extensions=Greek}\p{Script_Extensions=Cyrillic}]/u;
+const WORDLIKE_RUNS = /[\p{L}\p{N}]+/gu;
+const ASCII_ALPHANUMERIC = /[A-Za-z0-9]/u;
+
+function deceptiveString(value) {
+    if (BIDI_CONTROLS.test(value) || ZERO_WIDTH.test(value)) return true;
+    const mixedScriptWord = (value.match(WORDLIKE_RUNS) ?? [])
+        .some((word) => LATIN.test(word) && GREEK_OR_CYRILLIC.test(word));
+    if (mixedScriptWord) return true;
+    const canonical = value.normalize('NFC');
+    const compatible = value.normalize('NFKC');
+    return compatible !== canonical && ASCII_ALPHANUMERIC.test(compatible);
+}
+
+function containsDeceptiveCharacters(value, seen = new Set()) {
+    if (typeof value === 'string') return deceptiveString(value);
+    if (!value || typeof value !== 'object' || seen.has(value)) return false;
+    seen.add(value);
+    return Object.values(value).some((part) => containsDeceptiveCharacters(part, seen));
+}
+
+/** Refuse text whose displayed characters can disagree with its signed bytes. */
+export function assertNoDeceptiveCharacters(value, surface = 'signing request') {
+    if (containsDeceptiveCharacters(value)) {
+        throw new Error(`${surface}: deceptive characters are not allowed`);
+    }
+}
+
+function exactInteger(value) {
+    const raw = String(value ?? '').trim();
+    return /^\d+$/.test(raw) ? BigInt(raw) : null;
+}
+
 /**
  * @typedef {Object} SignRiskInput
  * @property {'trezor' | 'ledger' | string | null | undefined} signerKind
@@ -58,6 +94,8 @@
  * @returns {SignRiskResult}
  */
 export function classifySignRisk(input = {}) {
+    // Refuse misleading text before an approval decision can be derived from it.
+    assertNoDeceptiveCharacters(input, 'classifySignRisk');
     const {
         signerKind,
         amountSats,
@@ -99,10 +137,6 @@ export function classifySignRisk(input = {}) {
     // Large amount: `testSendThresholdSats` is the user-configured
     // "above this is large enough to need extra confirmation" knob.
     // 0 disables the threshold entirely.
-    const exactInteger = (value) => {
-        const raw = String(value ?? '').trim();
-        return /^\d+$/.test(raw) ? BigInt(raw) : null;
-    };
     const threshold = exactInteger(settings?.testSendThresholdSats) ?? 0n;
     if (threshold > 0n) {
         const amount = exactInteger(amountSats);
