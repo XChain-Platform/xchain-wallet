@@ -38,13 +38,13 @@ describe('readLedgerAppInfo', () => {
         expect(transport.send).toHaveBeenCalledWith(0xb0, 0x01, 0x00, 0x00);
     });
 
-    it('propagates a non-success status from the transport', async () => {
-        const statusError = Object.assign(new Error('Device returned status 0x6a80'), {
-            statusCode: 0x6a80,
-        });
-        const transport = { send: vi.fn().mockRejectedValue(statusError) };
+    it('rejects a resolved non-success status reply', async () => {
+        const reply = Uint8Array.from([0x6a, 0x80]);
+        const transport = { send: vi.fn().mockResolvedValue(reply) };
 
-        await expect(readLedgerAppInfo(transport)).rejects.toBe(statusError);
+        await expect(readLedgerAppInfo(transport)).rejects.toThrow(
+            'readLedgerAppInfo: unsupported response format 106',
+        );
         expect(transport.send).toHaveBeenCalledWith(0xb0, 0x01, 0x00, 0x00);
     });
 
