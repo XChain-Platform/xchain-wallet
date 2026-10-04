@@ -61,6 +61,9 @@ const {
     assertWindowsSigningMaterial,
 } = require(HELPER);
 
+assert.equal(SUBJECT_VAR, 'WIN_CSC_SUBJECT_NAME',
+    'the certificate-subject environment contract stays stable');
+
 const AZURE_CONFIG = {
     AZURE_CODE_SIGNING_ENDPOINT: 'https://eus.codesigning.azure.net/',
     AZURE_CODE_SIGNING_NAME: 'xchain-signing',
