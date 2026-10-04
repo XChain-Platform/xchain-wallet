@@ -24,6 +24,7 @@ import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const OTHER_MNEMONIC = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
 const CHAIN_IDS = [
     'bitcoin-regtest',
     'dogecoin-regtest',
@@ -77,11 +78,16 @@ describe('createDemoWallet', () => {
     it('derives the same first address from the same mnemonic', async () => {
         const first = await create({ activeChainIds: ['bitcoin-regtest'] });
         const second = await create({ activeChainIds: ['bitcoin-regtest'] });
+        generateBip39Mnemonic.mockReturnValueOnce(OTHER_MNEMONIC);
+        const other = await create({ activeChainIds: ['bitcoin-regtest'] });
 
         expect(first.result.mnemonic).toBe(MNEMONIC);
         expect(second.result.mnemonic).toBe(MNEMONIC);
         expect(second.result.addresses[0].address.address)
             .toBe(first.result.addresses[0].address.address);
+        expect(other.result.mnemonic).toBe(OTHER_MNEMONIC);
+        expect(other.result.addresses[0].address.address)
+            .not.toBe(first.result.addresses[0].address.address);
     });
 
     it('honors name and active-chain overrides', async () => {
