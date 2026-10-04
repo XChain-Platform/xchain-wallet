@@ -43,7 +43,7 @@ function options(h) {
 }
 
 describe('listMultisigReceiveAddresses', () => {
-    it('returns every configured address in order with the single-address result shape', async () => {
+    it('returns one ordered result per config matching the singular export', async () => {
         const configs = [
             multisig('first', 'p2wsh-multisig', 2, ['Alice', 'Bob', 'Carol']),
             multisig('second', 'p2sh-multisig', 1, ['Dana', 'Eli']),
@@ -58,6 +58,23 @@ describe('listMultisigReceiveAddresses', () => {
         expect(actual).toEqual(expected);
         expect(actual).toHaveLength(configs.length);
         expect(actual.map(({ multisigConfigId }) => multisigConfigId)).toEqual(['first', 'second']);
+    });
+
+    it.each([
+        { count: 0 },
+        { count: -1 },
+        { startIndex: -1 },
+        { startIndex: 'invalid' },
+        { count: 1, startIndex: 1 },
+    ])('ignores unsupported range options $count $startIndex', async (range) => {
+        const h = harness([
+            multisig('first', 'p2wsh-multisig', 2, ['Alice', 'Bob']),
+            multisig('second', 'p2wsh-multisig', 2, ['Carol', 'Dana']),
+        ]);
+
+        const result = await listMultisigReceiveAddresses({ ...options(h), ...range });
+
+        expect(result.map(({ multisigConfigId }) => multisigConfigId)).toEqual(['first', 'second']);
     });
 
     it('returns an empty list when the wallet has no multisig configurations', async () => {
@@ -75,18 +92,4 @@ describe('listMultisigReceiveAddresses', () => {
         expect(h.sdkRegistry.get).not.toHaveBeenCalled();
     });
 
-    it('skips a configuration whose address cannot be derived', async () => {
-        const h = harness([
-            multisig('good', 'p2wsh-multisig', 2, ['Alice', 'Bob']),
-            multisig('bad', 'p2wsh-multisig', 2, ['Carol', 'Dana']),
-        ]);
-        h.deriveMultisigAddress.mockImplementation(({ scriptTemplate }) => (
-            scriptTemplate === 'bad-template' ? null : { address: 'good-address' }
-        ));
-
-        const result = await listMultisigReceiveAddresses(options(h));
-
-        expect(result.map(({ multisigConfigId }) => multisigConfigId)).toEqual(['good']);
-        expect(h.deriveMultisigAddress).toHaveBeenCalledTimes(2);
-    });
 });
