@@ -6,11 +6,6 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: §11.3.2 active (operating) address per chain. Resolution defaults to
-
-// The error carries the colliding address and signer ids so a caller can
-// report which rows need manual resolution.
-
 import { describe, it, expect } from 'vitest';
 import { AmbiguousSignerMatchError } from '../../../packages/core/src/flows/reconcileAddressSigners.js';
 
