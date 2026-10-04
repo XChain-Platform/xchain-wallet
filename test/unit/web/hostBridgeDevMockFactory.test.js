@@ -13,7 +13,7 @@ import { __createDevMockSdkForTests } from '../../../packages/web/src/hostBridge
 
 describe('hostBridge dev mock SDK factory', () => {
     it('exposes the action codec sections', () => {
-        const sdk = __createDevMockSdkForTests({ network: 'bitcoin-regtest' });
+        const sdk = __createDevMockSdkForTests({ chainId: 'bitcoin-regtest' });
 
         expect(sdk).toEqual(expect.objectContaining({
             actions: expect.any(Object),
