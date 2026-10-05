@@ -82,7 +82,6 @@ import {
     installDevMockConsole,
 } from './devMockEvents.js';
 import { buildDevMockActionString } from './devMockActionString.js';
-import { createDevMockDecoder } from './devMockDecoder.js';
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -209,6 +208,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             try { return JSON.parse(hex.slice(MOCK_PSBT_MARKER.length)); } catch { /* fall through */ }
         }
         return { inputs: [], outputs: [] };
+    };
+    const decodeMockAction = (psbtHex) => {
+        const decoded = decodeMockPsbt(psbtHex);
+        return decoded?.actionString
+            ? { ok: true, actionString: decoded.actionString }
+            : { ok: false, reason: 'decode-failed' };
     };
 
     // Read-side stub. Any `get*` method the wallet calls before the
@@ -405,7 +410,14 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             },
             broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
         },
-        decoder: createDevMockDecoder(decodeMockPsbt),
+        decoder: {
+            decodeActionFromPsbt(psbtHex) {
+                return decodeMockAction(psbtHex);
+            },
+            decodeActionStringFromPsbt(psbtHex) {
+                return decodeMockAction(psbtHex);
+            },
+        },
         // Best-effort dev pre-flight: parses a SEND string and flags an
         // insufficient balance against the dev balance dataset so the
         // excess-amount fail->fix flow is exercisable; otherwise passes.
