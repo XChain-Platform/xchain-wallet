@@ -286,7 +286,18 @@ describe('composeActionForConfirm', () => {
         it('does not quote at all in native-coin mode', async () => {
             // That lane already has a quote it sized a real output from, and a
             // second XCHAIN figure beside a coin debit reads as a second charge.
-            const h = quoting({ supported: true, valid: true, xchainFee: '1.00000000' });
+            const h = quoting({
+                supported: true, valid: true, xchainFee: '1.00000000',
+                requiredFeeSats: 1000, feeDestination: 'feedest',
+            });
+            h.sdk.wallet.decomposePsbt = vi.fn(() => ({
+                inputs: [{ value: 5000 }],
+                outputs: [
+                    { address: null, scriptPubKeyHex: '6a20deadbeef', scriptType: 'unknown', value: 0 },
+                    { address: 'feedest', scriptPubKeyHex: '0014fe', scriptType: 'p2wpkh', value: 1000 },
+                    { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 100 },
+                ],
+            }));
             const composed = await composeActionForConfirm({
                 ...ARGS(h), encoderOpts: { pubkey: 'pub', payFeeInNativeCoin: true },
             });
