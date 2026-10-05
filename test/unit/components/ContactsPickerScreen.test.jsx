@@ -136,7 +136,8 @@ describe('ContactsPickerScreen selection and header', () => {
 
         fireEvent.click(row);
         expect(props.onPick).toHaveBeenCalledOnce();
-        expect(props.onPick).toHaveBeenCalledWith(bitcoinEntry);
+        expect(props.onPick.mock.calls[0]).toHaveLength(1);
+        expect(props.onPick.mock.calls[0][0]).toBe(bitcoinEntry);
     });
 
     it('shows the Contacts header title', () => {
