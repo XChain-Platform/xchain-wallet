@@ -11,7 +11,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 
-const { messaging } = vi.hoisted(() => ({ messaging: {} }));
+const { messaging, stateUpdates } = vi.hoisted(() => ({
+    messaging: {},
+    stateUpdates: { observing: false, attempts: 0, setters: [] },
+}));
+
+vi.mock('react', async (importOriginal) => {
+    const react = await importOriginal();
+    return {
+        ...react,
+        useState(initialValue) {
+            const [value, setValue] = react.useState(initialValue);
+            const trackedSetValue = (nextValue) => {
+                if (stateUpdates.observing) {
+                    stateUpdates.attempts += 1;
+                    return;
+                }
+                setValue(nextValue);
+            };
+            stateUpdates.setters.push(trackedSetValue);
+            return [value, trackedSetValue];
+        },
+    };
+});
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging }),
@@ -38,12 +60,18 @@ function deferred() {
 
 beforeEach(() => {
     messaging.getNativePricesRequest = vi.fn();
+    stateUpdates.observing = false;
+    stateUpdates.attempts = 0;
+    stateUpdates.setters = [];
 });
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     delete messaging.getNativePricesRequest;
+    stateUpdates.observing = false;
+    stateUpdates.attempts = 0;
+    stateUpdates.setters = [];
 });
 
 describe('useNativePrice inactive states', () => {
@@ -138,17 +166,17 @@ describe('useNativePrice rejected and late responses', () => {
         const pending = deferred();
         messaging.getNativePricesRequest.mockReturnValue(pending.promise);
         const { result, unmount } = renderHook(() => useNativePrice(CHAIN_ID));
-        const mountedState = result.current;
 
-        expect(mountedState.loading).toBe(true);
+        expect(result.current.loading).toBe(true);
         unmount();
+        stateUpdates.observing = true;
         await act(async () => {
             pending.resolve({ prices: { [CHAIN_ID]: ENTRY } });
             await pending.promise;
         });
 
-        expect(result.current).toBe(mountedState);
-        expect(result.current.entry).toBe(null);
-        expect(result.current.loading).toBe(true);
+        expect(stateUpdates.attempts).toBe(0);
+        stateUpdates.setters[0](null);
+        expect(stateUpdates.attempts).toBe(1);
     });
 });
