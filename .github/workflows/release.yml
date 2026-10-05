@@ -831,6 +831,7 @@ jobs:
           AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
           # An unsigned artifact from THIS step is a failed release, not a
           # quiet one: every missing piece of the environment above is silent
           # on its own, so the build config refuses to load rather than pack
@@ -865,6 +866,7 @@ jobs:
           AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
           XCHAIN_REQUIRE_WIN_SIGNING: '1'
         run: pnpm -C packages/desktop dist --win --x64 --arm64
       - name: Drop delta metadata and build byproducts
@@ -902,6 +904,7 @@ jobs:
           AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
           AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
           AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
           # The rehearsal exercises the REAL update path, and half of what
           # electron-updater checks is the Authenticode publisher, so an
