@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 const mocked = vi.hoisted(() => ({ balancesFromSdk: vi.fn() }));
 
@@ -34,7 +34,7 @@ async function advance(ms) {
 }
 
 async function expectBalance(result, expected) {
-    await vi.waitFor(() => expect(result.current).toBe(expected));
+    await waitFor(() => expect(result.current).toBe(expected));
 }
 
 function stubBalances(rows, address = 'addr1', chainId = 'bitcoin') {
@@ -44,11 +44,13 @@ function stubBalances(rows, address = 'addr1', chainId = 'bitcoin') {
 
 beforeEach(() => {
     vi.useFakeTimers();
+    globalThis.jest = { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) };
     messaging = { getWalletBalances: vi.fn() };
     mocked.balancesFromSdk.mockReset();
 });
 
 afterEach(() => {
+    delete globalThis.jest;
     vi.useRealTimers();
     vi.restoreAllMocks();
 });
