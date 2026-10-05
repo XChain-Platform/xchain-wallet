@@ -81,6 +81,7 @@ import {
     seedDefaultFixtures,
     installDevMockConsole,
 } from './devMockEvents.js';
+import { buildDevMockActionString } from './devMockActionString.js';
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -198,7 +199,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
 
     // dev-mock "PSBT": a marker-prefixed JSON blob (browser-safe, no
     // Buffer) so encoder.createTx, wallet.decomposePsbt, and
-    // decoder.decodeActionFromPsbt round-trip the SAME structure and the
+    // both decoder action methods round-trip the SAME structure and the
     // confirm-pipeline tamper check stays self-consistent in the dev shell.
     const MOCK_PSBT_MARKER = 'devmockpsbt:';
     const encodeMockPsbt = (obj) => MOCK_PSBT_MARKER + JSON.stringify(obj);
@@ -207,6 +208,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             try { return JSON.parse(hex.slice(MOCK_PSBT_MARKER.length)); } catch { /* fall through */ }
         }
         return { inputs: [], outputs: [] };
+    };
+    const decodeMockAction = (psbtHex) => {
+        const decoded = decodeMockPsbt(psbtHex);
+        return decoded?.actionString
+            ? { ok: true, actionString: decoded.actionString }
+            : { ok: false, reason: 'decode-failed' };
     };
 
     // Read-side stub. Any `get*` method the wallet calls before the
@@ -354,25 +361,28 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             // The confirm pipeline's tamper check decomposes the PSBT
             // host-side. The dev mock builds its "PSBT" as a marker-prefixed
             // JSON blob (encodeMockPsbt below), so decompose just parses it
-            // back - self-consistent with encoder.createTx + decodeActionFromPsbt.
+            // back - self-consistent with encoder.createTx + both decoder
+            // action methods.
             decomposePsbt(psbtHex) {
                 return decodeMockPsbt(psbtHex);
             },
         },
         // confirm pipeline: createAction + encoder.createTx + preflight +
-        // decodeActionFromPsbt so the single-encode modal can OPEN, tamper-check,
-        // and pre-flight in the dev shell (the real SDK isn't reachable here).
+        // both decoder action methods so the single-encode modal can OPEN,
+        // tamper-check, and pre-flight in the dev shell (the real SDK isn't
+        // reachable here).
         // Signing still throws by design (see wallet.signPsbt), so Approve fails
         // loudly rather than broadcasting - the confirm-stage flow is what this
         // unblocks, mirroring the real host boundary.
         actions: {
             createAction({ action, params }) {
-                // Minimal canonical SEND serializer: ACTION|0|TICK|AMOUNT|DEST[|MEMO].
-                const p = params || {};
-                const tail = [p.TICK, p.AMOUNT, p.DESTINATION];
-                if (p.MEMO != null && p.MEMO !== '') tail.push(p.MEMO);
+                const actionString = action === 'BROADCAST'
+                    ? [action, params.VERSION ?? '0', params.MESSAGE, params.VALUE, params.FEE, params.MEMO]
+                        .filter((field) => field != null && field !== '')
+                        .join('|')
+                    : buildDevMockActionString(action, params);
                 return {
-                    actionString: [action, '0', ...tail.filter((f) => f != null)].join('|'),
+                    actionString,
                     action,
                     version: 0,
                 };
@@ -407,10 +417,10 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         },
         decoder: {
             decodeActionFromPsbt(psbtHex) {
-                const decoded = decodeMockPsbt(psbtHex);
-                return decoded.actionString
-                    ? { ok: true, actionString: decoded.actionString }
-                    : { ok: false, reason: 'decode-failed' };
+                return decodeMockAction(psbtHex);
+            },
+            decodeActionStringFromPsbt(psbtHex) {
+                return decodeMockAction(psbtHex);
             },
         },
         // Best-effort dev pre-flight: parses a SEND string and flags an
@@ -499,6 +509,8 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         },
     });
 };
+
+export const __createDevMockSdkForTests = createDevMockSdk;
 
 // Pre-resolution placeholder for PRODUCTION builds, where
 // the dev mock is compiled out. Any SDK call that lands before the real
