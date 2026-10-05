@@ -22,6 +22,8 @@ import {
 import { vaultPathFor } from '../../../packages/desktop/main/storage.js';
 import {
     buildProfileRuntime,
+    PROFILE_HISTORY_CHAIN_ID,
+    PROFILE_HISTORY_TXID,
     PROFILE_PASSWORD,
     PROFILE_SETTINGS,
     seedPopulatedProfile,
@@ -64,6 +66,17 @@ try {
         },
         PROFILE_SETTINGS,
         'non-default profile settings survive restart',
+    );
+
+    const history = await handleIpcMessage(runtime, {
+        type: 'pendingTxs.forAddress',
+        request: { chainId: PROFILE_HISTORY_CHAIN_ID },
+    });
+    assert.equal(history.ok, true, 'pendingTxs.forAddress succeeds after unlock');
+    assert.deepEqual(
+        history.result.map(({ txid, status }) => [txid, status]),
+        [[PROFILE_HISTORY_TXID, 'broadcast']],
+        'broadcast history survives restart',
     );
 } finally {
     if (runtime) tearDownHost(runtime);
