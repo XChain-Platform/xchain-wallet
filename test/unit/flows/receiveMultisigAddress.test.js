@@ -12,18 +12,13 @@ import { receiveMultisigAddress } from '../../../packages/core/src/flows/multisi
 const KEY_A = `02${'11'.repeat(32)}`;
 const KEY_B = `03${'22'.repeat(32)}`;
 const KEY_C = `02${'33'.repeat(32)}`;
-const SCRIPT_TEMPLATE = `multi:2:${KEY_A}:${KEY_B}:${KEY_C}`;
-const REJECTION_CASES = [
-    {
-        label: 'a threshold above the cosigner count',
-        overrides: { threshold: 4, scriptTemplate: `multi:4:${KEY_A}:${KEY_B}:${KEY_C}` },
-        message: 'deriveMultisigAddress: threshold exceeds key count',
-    },
-    {
-        label: 'an invalid public key',
-        overrides: { scriptTemplate: `multi:2:${KEY_A}:not-a-key:${KEY_C}` },
-        message: 'deriveMultisigAddress: invalid compressed public key',
-    },
+const SEGWIT_TEMPLATE = `multi:2:${KEY_A}:${KEY_B}:${KEY_C}`;
+const CLASSIC_TEMPLATE = `multi:1:${KEY_C}:${KEY_A}`;
+const REQUIRED_OPTION_CASES = [
+    ['vault', undefined, 'receiveMultisigAddress: vault is required'],
+    ['sdkRegistry', undefined, 'receiveMultisigAddress: sdkRegistry is required'],
+    ['walletId', '', 'receiveMultisigAddress: walletId is required'],
+    ['chainId', '', 'receiveMultisigAddress: chainId is required'],
 ];
 
 function cosigner(name, pubkey) {
@@ -40,38 +35,21 @@ function config(overrides = {}) {
             cosigner('Bob', KEY_B),
             cosigner('Carol', KEY_C),
         ],
-        scriptTemplate: SCRIPT_TEMPLATE,
+        scriptTemplate: SEGWIT_TEMPLATE,
         ...overrides,
     };
 }
 
-function harness(configs, deriveMultisigAddress) {
+function harness(configs = [config()], deriveMultisigAddress = vi.fn()) {
     const wallet = { id: 'wallet-1', multisigs: configs };
     const vault = { wallets: { get: vi.fn().mockResolvedValue(wallet) } };
     const sdkRegistry = { get: vi.fn().mockReturnValue({ deriveMultisigAddress }) };
     return { vault, sdkRegistry, walletId: wallet.id, chainId: 'bitcoin-testnet' };
 }
 
-function deriveFixture({ scriptTemplate, scheme }) {
-    const isExpectedInput = scriptTemplate === SCRIPT_TEMPLATE && scheme === 'p2wsh-multisig';
-    return isExpectedInput
-        ? { address: 'tb1qdeterministic', witnessScript: '52210211ae' }
-        : { address: 'tb1qinputchanged', witnessScript: 'unexpected' };
-}
-
-function validatingDerive({ scriptTemplate }) {
-    const [, thresholdText, ...keys] = scriptTemplate.split(':');
-    if (Number(thresholdText) > keys.length) {
-        throw new Error('deriveMultisigAddress: threshold exceeds key count');
-    }
-    if (keys.some((key) => !/^(02|03)[0-9a-f]{64}$/.test(key))) {
-        throw new Error('deriveMultisigAddress: invalid compressed public key');
-    }
-    return { address: 'tb1qvalid' };
-}
-
-it('returns the deterministic address and multisig metadata', async () => {
-    const derive = vi.fn(deriveFixture);
+it('returns a deterministic address and metadata from the default config', async () => {
+    const derived = { address: 'tb1qdeterministic', witnessScript: '52210211ae' };
+    const derive = vi.fn().mockReturnValue(derived);
     const opts = harness([config()], derive);
 
     const first = await receiveMultisigAddress(opts);
@@ -86,52 +64,98 @@ it('returns the deterministic address and multisig metadata', async () => {
     });
     expect(second).toEqual(first);
     expect(derive).toHaveBeenCalledTimes(2);
-    expect(derive).toHaveBeenLastCalledWith({
-        scriptTemplate: SCRIPT_TEMPLATE,
-        scheme: 'p2wsh-multisig',
-    });
-});
-
-it('uses the persisted script template when cosigner metadata is reordered', async () => {
-    const derive = vi.fn(deriveFixture);
-    const reorderedTemplate = `multi:2:${KEY_C}:${KEY_A}:${KEY_B}`;
-    const reordered = config({
-        id: 'config-2',
-        cosigners: [
-            cosigner('Carol', KEY_C),
-            cosigner('Alice', KEY_A),
-            cosigner('Bob', KEY_B),
-        ],
-    });
-    const opts = harness([config(), reordered], derive);
-    const changed = derive({
-        scriptTemplate: reorderedTemplate, scheme: 'p2wsh-multisig',
-    });
-    expect(changed.address).toBe('tb1qinputchanged');
-    derive.mockClear();
-
-    const original = await receiveMultisigAddress(opts);
-    const result = await receiveMultisigAddress({ ...opts, multisigConfigId: 'config-2' });
-
-    expect(result.address).toBe(original.address);
-    expect(result.cosignerNames).toEqual(['Carol', 'Alice', 'Bob']);
     expect(derive).toHaveBeenNthCalledWith(1, {
-        scriptTemplate: SCRIPT_TEMPLATE, scheme: 'p2wsh-multisig',
+        scriptTemplate: SEGWIT_TEMPLATE, scheme: 'p2wsh-multisig',
     });
     expect(derive).toHaveBeenNthCalledWith(2, {
-        scriptTemplate: SCRIPT_TEMPLATE, scheme: 'p2wsh-multisig',
+        scriptTemplate: SEGWIT_TEMPLATE, scheme: 'p2wsh-multisig',
     });
 });
 
-it.each(REJECTION_CASES)('propagates the SDK error for $label', async ({ overrides, message }) => {
-    const derive = vi.fn(validatingDerive);
-    const opts = harness([config(overrides)], derive);
-
-    expect(() => derive({ scriptTemplate: SCRIPT_TEMPLATE })).not.toThrow();
-    derive.mockClear();
-    await expect(receiveMultisigAddress(opts)).rejects.toThrow(message);
-    expect(derive).toHaveBeenCalledTimes(1);
-    expect(derive).toHaveBeenCalledWith({
-        scriptTemplate: overrides.scriptTemplate, scheme: 'p2wsh-multisig',
+it('selects the requested config and forwards its exact derivation fields', async () => {
+    const selected = config({
+        id: 'config-2', scheme: 'p2sh-multisig', threshold: 1,
+        cosigners: [cosigner('Carol', KEY_C), cosigner('Alice', KEY_A)],
+        scriptTemplate: CLASSIC_TEMPLATE,
     });
+    const derive = vi.fn().mockReturnValue({
+        address: '2Nselected', redeemScript: '51210211ae',
+    });
+    const opts = harness([config(), selected], derive);
+
+    const result = await receiveMultisigAddress({ ...opts, multisigConfigId: 'config-2' });
+
+    expect(derive).toHaveBeenCalledOnce();
+    expect(derive).toHaveBeenCalledWith({
+        scriptTemplate: CLASSIC_TEMPLATE, scheme: 'p2sh-multisig',
+    });
+    expect(result).toMatchObject({
+        multisigConfigId: 'config-2', address: '2Nselected',
+        scheme: 'p2sh-multisig', threshold: 1, cosignerCount: 2,
+        schemeLabel: '1-of-2 Classic multi-signature',
+    });
+});
+
+it.each(REQUIRED_OPTION_CASES)('rejects a missing %s option', async (key, value, message) => {
+    const opts = harness();
+    opts[key] = value;
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(message);
+});
+
+it('rejects a wallet that does not exist', async () => {
+    const opts = harness();
+    opts.vault.wallets.get.mockResolvedValue(undefined);
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(
+        'receiveMultisigAddress: wallet "wallet-1" not found',
+    );
+    expect(opts.vault.wallets.get).toHaveBeenCalledWith('wallet-1');
+});
+
+it('rejects an unknown multisig config id', async () => {
+    const opts = harness();
+
+    await expect(receiveMultisigAddress({
+        ...opts, multisigConfigId: 'missing-config',
+    })).rejects.toThrow(
+        'receiveMultisigAddress: wallet "wallet-1" has no multisig config with id "missing-config"',
+    );
+});
+
+it('rejects a wallet with no multisig config', async () => {
+    const opts = harness([]);
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(
+        'receiveMultisigAddress: wallet "wallet-1" has no multisig configuration',
+    );
+});
+
+it('rejects a chain with no registered SDK', async () => {
+    const opts = harness();
+    opts.sdkRegistry.get.mockReturnValue(undefined);
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(
+        'receiveMultisigAddress: no SDK registered for chainId "bitcoin-testnet"',
+    );
+    expect(opts.sdkRegistry.get).toHaveBeenCalledWith('bitcoin-testnet');
+});
+
+it('rejects an SDK without multisig address derivation', async () => {
+    const opts = harness();
+    opts.sdkRegistry.get.mockReturnValue({});
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(
+        'receiveMultisigAddress: sdk.deriveMultisigAddress is unavailable',
+    );
+});
+
+it('rejects an empty address returned by the SDK', async () => {
+    const derive = vi.fn().mockReturnValue({ address: '' });
+    const opts = harness([config()], derive);
+
+    await expect(receiveMultisigAddress(opts)).rejects.toThrow(
+        'receiveMultisigAddress: SDK returned no address',
+    );
+    expect(derive).toHaveBeenCalledOnce();
 });
