@@ -67,7 +67,9 @@ describe('usePortfolioChartVisible synchronization', () => {
         expect(second.result.current[0]).toBe(true);
         expect(window.localStorage.getItem(STORAGE_KEY)).toBe('1');
     });
+});
 
+describe('usePortfolioChartVisible event lifecycle', () => {
     it('treats storage value 0 as false and every other value as true', () => {
         const { result } = renderHook(() => usePortfolioChartVisible());
         act(() => window.dispatchEvent(new StorageEvent('storage', {
