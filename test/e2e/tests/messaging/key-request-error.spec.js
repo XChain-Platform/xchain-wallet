@@ -317,21 +317,18 @@ test.describe('a failed message key-request says why', () => {
 
         await requestButton(main).click();
 
-        // SOMETHING has to come back, and waiting for it is what makes the
-        // negative assertion below mean anything: a press that produced nothing
-        // would otherwise "not match" the not-ready sentence and pass. What
-        // comes back is the dev-mock SDK's business and is not this file's
-        // subject - a compose failure and a "Key request sent" are both fine
-        // here. What must NOT come back is a refusal for a signer this wallet
-        // has.
-        const outcome = pressOutcome(main);
-        await expect(outcome.first(),
-            'the key request answered nothing at all on a wallet that can sign, which is the '
-            + 'original silent-button defect in its other half')
+        // An ordinary wallet proceeds to the shared confirmation screen. That
+        // is the control this file needs: the no-signer branch above returns
+        // before composition, so it can never open this screen. Do not approve
+        // here. The dev-mock venue deliberately cannot sign or broadcast, and
+        // exercising that unrelated path would turn this signer-readiness
+        // control into an assertion about a service this suite does not have.
+        const confirm = page.getByTestId('confirm-modal');
+        await expect(confirm,
+            'an ordinary wallet did not proceed to key-request confirmation')
             .toBeVisible({ timeout: 60_000 });
-
-        expect((await outcome.allInnerTexts()).join(' | '),
+        await expect(confirm,
             'an unlocked wallet with a pooled signer was refused as not-ready')
-            .not.toMatch(/25th-word passphrase|wallet is locked/i);
+            .not.toContainText(/25th-word passphrase|wallet is locked/i);
     });
 });
