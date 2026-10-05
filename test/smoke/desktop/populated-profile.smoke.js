@@ -24,6 +24,7 @@ import {
     buildProfileRuntime,
     PROFILE_HISTORY_CHAIN_ID,
     PROFILE_HISTORY_TXID,
+    PROFILE_SIGN_ADDRESS,
     PROFILE_PASSWORD,
     PROFILE_SETTINGS,
     seedPopulatedProfile,
@@ -78,6 +79,43 @@ try {
         [[PROFILE_HISTORY_TXID, 'broadcast']],
         'broadcast history survives restart',
     );
+
+    const wallets = await handleIpcMessage(runtime, { type: 'wallet.list' });
+    assert.equal(wallets.ok, true, 'wallet.list succeeds after unlock');
+    const walletId = wallets.result[0].id;
+    const activeAddresses = await handleIpcMessage(runtime, {
+        type: 'addresses.active',
+        request: { walletId },
+    });
+    assert.equal(activeAddresses.ok, true, 'addresses.active succeeds after unlock');
+    const activeBitcoin = activeAddresses.result['bitcoin-mainnet'];
+    assert.ok(activeBitcoin, 'bitcoin-mainnet has an active address');
+
+    const balances = await handleIpcMessage(runtime, {
+        type: 'balances.wallet',
+        request: { walletId },
+    });
+    assert.equal(balances.ok, true, 'balances.wallet succeeds after unlock');
+    const bitcoinBalance = balances.result['bitcoin-mainnet']
+        .find(({ address }) => address === activeBitcoin.address);
+    assert.deepEqual(
+        bitcoinBalance.balances.native,
+        { tick: 'BTC', quantity: '12345678', divisibility: 8 },
+        'native balance survives restart',
+    );
+
+    const message = 'reopened profile signing check';
+    const signed = await handleIpcMessage(runtime, {
+        type: 'auth.signMessage',
+        request: { walletId, addressId: activeBitcoin.id, message },
+    });
+    assert.equal(signed.ok, true, 'auth.signMessage succeeds without a password');
+    const verification = runtime.sdkRegistry.get('bitcoin-mainnet').auth.verifyMessage(
+        PROFILE_SIGN_ADDRESS,
+        message,
+        signed.result.signature,
+    );
+    assert.equal(verification.valid, true, 'signature matches the seeded profile mnemonic');
 } finally {
     if (runtime) tearDownHost(runtime);
     rmSync(userDataDir, { recursive: true, force: true });

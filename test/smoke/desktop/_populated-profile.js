@@ -19,6 +19,7 @@ import {
     sdk as sdkLib,
 } from '../../../packages/core/src/index.js';
 import { createDevMockSdk } from '../../../packages/extension/src/background/sdkFactory.js';
+import { XChainSDK } from '../../../packages/extension/src/background/sdkStatic.js';
 import {
     KeychainSessionBackend,
     sessionKeyPathFor,
@@ -42,6 +43,8 @@ import {
 
 export const PROFILE_PASSWORD = 'fixture-password';
 export const PROFILE_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+export const PROFILE_NATIVE_CONFIRMED = '0.12345678';
+export const PROFILE_SIGN_ADDRESS = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
 export const PROFILE_HISTORY_CHAIN_ID = 'bitcoin-regtest';
 export const PROFILE_HISTORY_TXID = 'ab'.repeat(32);
 export const PROFILE_SETTINGS = {
@@ -92,6 +95,11 @@ export function buildProfileRuntime(userDataDir) {
             chainRegistry,
             sdkFactory: (opts) => ({
                 ...createDevMockSdk(opts),
+                getBalances: async () => ({ data: [] }),
+                getAddress: async () => ({
+                    balances: { confirmed: PROFILE_NATIVE_CONFIRMED },
+                }),
+                auth: sdkLib.adaptXChainSDK(XChainSDK)(opts).auth,
                 encoder: {
                     broadcastTx: async () => PROFILE_HISTORY_TXID,
                 },
