@@ -491,6 +491,8 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     });
 };
 
+export const __createDevMockSdkForTests = createDevMockSdk;
+
 // Pre-resolution placeholder for PRODUCTION builds, where
 // the dev mock is compiled out. Any SDK call that lands before the real
 // factory swaps in (or after it failed to load) throws loudly instead of
