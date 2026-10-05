@@ -38,7 +38,7 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
-const { assertWindowsSigningMaterial } = require('./scripts/windows-signing.cjs');
+const { SUBJECT_VAR, assertWindowsSigningMaterial } = require('./scripts/windows-signing.cjs');
 const { assertMacosSigningMaterial, macosSigningStatus } = require('./scripts/macos-signing.cjs');
 
 const here = __dirname;
@@ -444,7 +444,13 @@ const azureSigning
 // every step that builds a Windows artifact, and
 // test/smoke/audits/windows-signing-required.smoke.js fails if a step is
 // added that does not.
-assertWindowsSigningMaterial(process.env);
+const winSigning = assertWindowsSigningMaterial(process.env);
+
+// A certificate already in the machine store is chosen by its subject. It is
+// only emitted when Azure is not selected, so exactly one signing key remains.
+const subjectSigning = winSigning.path === 'subject'
+    ? { certificateSubjectName: process.env[SUBJECT_VAR].trim() }
+    : {};
 
 /** @type {import('electron-builder').Configuration} */
 const config = {
@@ -852,6 +858,7 @@ const config = {
             : {
                 signtoolOptions: {
                     publisherName: WIN_PUBLISHER,
+                    ...subjectSigning,
                     // Authenticode: CSC_LINK + CSC_KEY_PASSWORD drive
                     // signing. Timestamp server pinned so signatures stay
                     // verifiable after cert expiry (RFC 3161 SHA256).
