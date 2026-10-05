@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.340.0] - 2026-10-04
+
 ### Added
 - A coin-priced dispenser now has a Buy control that pays the native coin from this wallet through the usual review and sign screen, with the pay-to address kept for buyers using another wallet.
 - Browse dispensers is in the command palette, found by "browse", "dispenser" or "buy".
@@ -19,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A batch can compose a parent token and its sub-tokens in one action.
 
 ### Changed
+- The wallet pins xchain-sdk 0.21.3, matching the v0.21.3 platform release.
+- Callback config and execute, gated SEND, GATE_MIN_AMOUNT and the other flows listed in https://github.com/XChain-Platform/xchain-wallet/issues/41 now have real regtest specs (https://github.com/XChain-Platform/xchain-wallet/issues/46).
 - The test runner moves to Vitest 4.1.11, closing the @vitest/mocker path-traversal advisory (GHSA-82fw-gwwq-j7x9) that affected development only.
 - The wallet moves to xchain-sdk 0.15.3, whose deploy workflow resolves a chunked contract through the explorer.
 - Release tooling transcribes the zone's current edge rules: the API hosts are rate limited per client over 10-second windows instead of skipped.
@@ -34,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The deploy form's Name field, the contract Rename control and the device-local contract label store (`contractNameMemory.js`); labels already saved on a device are discarded.
 
 ### Fixed
+- Rejecting or leaving the Confirm screen now releases the encoder input reservation, so the next action from that address builds at once (https://github.com/XChain-Platform/xchain-wallet/issues/65).
 - History now orders transactions from different chains by when they happened, so a Dogecoin send no longer sits above newer Bitcoin ones because Dogecoin counts its blocks higher.
 - Opening History from a token now lists only that token's activity instead of the whole parent chain, in the web app and the extension; the native coin's page still shows its plain transfers.
 - Manage Token's activity View all no longer throws on click.
