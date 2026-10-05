@@ -56,7 +56,9 @@ describe('AlertsRoute empty state', () => {
     it('carries the Alerts title in its header', () => {
         mount();
 
-        expect(screen.getByText('Alerts')).toBeTruthy();
+        const header = screen.getByRole('banner');
+
+        expect(within(header).getByText('Alerts')).toBeTruthy();
     });
 });
 
