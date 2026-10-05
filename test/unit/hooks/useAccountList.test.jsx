@@ -12,7 +12,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useAccountList } from '../../../packages/core/src/shared/hooks/useAccountList.js';
 
-const mocked = vi.hoisted(() => ({ messaging: undefined }));
+const mocked = vi.hoisted(() => ({
+    messaging: undefined,
+    setAccountState: vi.fn(),
+}));
+
+vi.mock('react', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        useState(initialValue) {
+            const [value, setValue] = actual.useState(initialValue);
+            const setObservedValue = (...args) => {
+                mocked.setAccountState(...args);
+                return setValue(...args);
+            };
+            return [value, setObservedValue];
+        },
+    };
+});
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging: mocked.messaging }),
@@ -30,6 +48,7 @@ function deferred() {
 
 beforeEach(() => {
     mocked.messaging = { listAccounts: vi.fn() };
+    mocked.setAccountState.mockClear();
 });
 
 afterEach(() => {
@@ -138,18 +157,13 @@ describe('useAccountList cancellation', () => {
 
     it('ignores a resolution after unmount', async () => {
         const pending = deferred();
-        const renders = [];
         mocked.messaging.listAccounts.mockReturnValue(pending.promise);
-        const { unmount } = renderHook(() => {
-            const accounts = useAccountList('wallet-a');
-            renders.push(accounts);
-            return accounts;
-        });
+        const { unmount } = renderHook(() => useAccountList('wallet-a'));
 
-        const renderCountAtUnmount = renders.length;
         unmount();
+        mocked.setAccountState.mockClear();
         await act(() => pending.resolve([{ id: 'late', index: 1 }]));
 
-        expect(renders).toHaveLength(renderCountAtUnmount);
+        expect(mocked.setAccountState).not.toHaveBeenCalled();
     });
 });
