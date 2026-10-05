@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 import { webcrypto } from 'node:crypto';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -31,6 +33,7 @@ import {
 import {
     createRuntime,
     handleIpcMessage,
+    tearDownHost,
 } from '../../../packages/desktop/main/runtime.js';
 import {
     FileStorageBackend,
@@ -111,24 +114,35 @@ export function buildProfileRuntime(userDataDir) {
 export async function seedPopulatedProfile(userDataDir) {
     const runtime = buildProfileRuntime(userDataDir);
     const fixtureSecret = PROFILE_PASSWORD;
-    resultOrThrow(await handleIpcMessage(runtime, {
-        type: 'wallet.import',
-        request: {
-            password: fixtureSecret,
-            mnemonic: PROFILE_MNEMONIC,
-            name: 'Upgrade fixture wallet',
-        },
-    }));
-    resultOrThrow(await handleIpcMessage(runtime, {
-        type: 'settings.update',
-        request: { patch: PROFILE_SETTINGS },
-    }));
-    resultOrThrow(await handleIpcMessage(runtime, {
-        type: 'broadcast.signedTx',
-        request: {
-            chainId: PROFILE_HISTORY_CHAIN_ID,
-            txHex: '0200000000',
-        },
-    }));
-    resultOrThrow(await handleIpcMessage(runtime, { type: 'wallet.lock' }));
+    try {
+        resultOrThrow(await handleIpcMessage(runtime, {
+            type: 'wallet.import',
+            request: {
+                password: fixtureSecret,
+                mnemonic: PROFILE_MNEMONIC,
+                name: 'Upgrade fixture wallet',
+            },
+        }));
+        resultOrThrow(await handleIpcMessage(runtime, {
+            type: 'settings.update',
+            request: { patch: PROFILE_SETTINGS },
+        }));
+        resultOrThrow(await handleIpcMessage(runtime, {
+            type: 'broadcast.signedTx',
+            request: {
+                chainId: PROFILE_HISTORY_CHAIN_ID,
+                txHex: '0200000000',
+            },
+        }));
+        resultOrThrow(await handleIpcMessage(runtime, { type: 'wallet.lock' }));
+    } finally {
+        tearDownHost(runtime);
+    }
+}
+
+const invokedPath = process.argv[1] && resolve(process.argv[1]);
+if (invokedPath === fileURLToPath(import.meta.url)) {
+    const userDataDir = process.argv[2];
+    if (!userDataDir) throw new Error('Usage: node _populated-profile.js <dir>');
+    await seedPopulatedProfile(userDataDir);
 }
