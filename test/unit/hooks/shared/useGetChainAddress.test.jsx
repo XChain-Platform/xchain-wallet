@@ -10,7 +10,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import * as React from 'react';
 import { useGetChainAddress } from '../../../../packages/core/src/shared/hooks/useGetChainAddress.js';
+
+vi.mock('react', { spy: true });
 
 afterEach(() => {
     cleanup();
@@ -118,6 +121,14 @@ describe('useGetChainAddress touched state', () => {
 describe('useGetChainAddress after unmount', () => {
     it('sets nothing and logs no console error when a late result lands', async () => {
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { useState } = await vi.importActual('react');
+        let addressSetter;
+        vi.spyOn(React, 'useState').mockImplementation((initialValue) => {
+            const [value, setValue] = useState(initialValue);
+            if (initialValue !== '') return [value, setValue];
+            addressSetter ??= vi.fn(setValue);
+            return [value, addressSetter];
+        });
         let resolveLookup;
         const messaging = {
             getNewestAddress: vi.fn(() => new Promise((resolve) => { resolveLookup = resolve; })),
@@ -126,8 +137,10 @@ describe('useGetChainAddress after unmount', () => {
         await waitFor(() => expect(messaging.getNewestAddress).toHaveBeenCalled());
 
         unmount();
+        addressSetter.mockClear();
         await act(async () => { resolveLookup({ address: 'bc1x' }); });
 
+        expect(addressSetter).not.toHaveBeenCalled();
         expect(result.current.getAddress).toBe('');
         expect(errorSpy).not.toHaveBeenCalled();
     });
