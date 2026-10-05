@@ -30,11 +30,15 @@ import {
     seedPopulatedProfile,
 } from './_populated-profile.js';
 
-const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-profile-'));
+const suppliedProfileDir = process.env.XCHAIN_PROFILE_DIR;
+const userDataDir = suppliedProfileDir
+    ?? mkdtempSync(join(tmpdir(), 'xchain-profile-'));
 let runtime;
 
 try {
-    await seedPopulatedProfile(userDataDir);
+    if (suppliedProfileDir === undefined) {
+        await seedPopulatedProfile(userDataDir);
+    }
     assert.ok(existsSync(vaultPathFor(userDataDir)), 'seeder writes vault.bin');
     assert.ok(existsSync(metaPathFor(userDataDir)), 'seeder writes meta.json');
     assert.equal(
@@ -118,7 +122,9 @@ try {
     assert.equal(verification.valid, true, 'signature matches the seeded profile mnemonic');
 } finally {
     if (runtime) tearDownHost(runtime);
-    rmSync(userDataDir, { recursive: true, force: true });
+    if (suppliedProfileDir === undefined) {
+        rmSync(userDataDir, { recursive: true, force: true });
+    }
 }
 
 console.log('populated desktop profile smoke OK');
