@@ -33,6 +33,10 @@ async function advance(ms) {
     await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 }
 
+async function expectBalance(result, expected) {
+    await vi.waitFor(() => expect(result.current).toBe(expected));
+}
+
 function stubBalances(rows, address = 'addr1', chainId = 'bitcoin') {
     messaging.getWalletBalances.mockResolvedValue({ [chainId]: [{ address, balances: {} }] });
     mocked.balancesFromSdk.mockReturnValue(rows);
@@ -79,28 +83,28 @@ describe('useTickBalance lookup', () => {
         stubBalances([{ tick: 'PEPE', amount: 12.5 }]);
         const { result } = render({ tick: ' pepe ' });
         await advance(400);
-        expect(result.current).toBe('12.5');
+        await expectBalance(result, '12.5');
     });
 
     it('gives 0 when no row matches the tick', async () => {
         stubBalances([{ tick: 'OTHER', amount: '5' }]);
         const { result } = render();
         await advance(400);
-        expect(result.current).toBe('0');
+        await expectBalance(result, '0');
     });
 
     it('gives 0 when the address has no entry', async () => {
         stubBalances([{ tick: 'PEPE', amount: '5' }], 'someone-else');
         const { result } = render();
         await advance(400);
-        expect(result.current).toBe('0');
+        await expectBalance(result, '0');
     });
 
     it('gives 0 when the chain key is missing', async () => {
         stubBalances([{ tick: 'PEPE', amount: '5' }], 'addr1', 'other-chain');
         const { result } = render();
         await advance(400);
-        expect(result.current).toBe('0');
+        await expectBalance(result, '0');
     });
 });
 
@@ -125,7 +129,7 @@ describe('useTickBalance failure and lifecycle', () => {
         stubBalances([{ tick: 'PEPE', amount: '7' }]);
         const { result, rerender } = render();
         await advance(400);
-        expect(result.current).toBe('7');
+        await expectBalance(result, '7');
         messaging.getWalletBalances.mockClear();
         rerender({ address: 'addr2' });
         expect(result.current).toBeNull();
