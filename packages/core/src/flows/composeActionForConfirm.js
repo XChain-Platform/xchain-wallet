@@ -14,7 +14,7 @@
 // and decodeActionFromPsbt - lives host-side (the React tree only ever
 // talks to the host over `messaging`, there is no client-side SDK). So
 // compose AND the tamper check both run here, and the popup receives a
-// fully-serializable, already-tamper-verified ComposedAction.
+// already-tamper-verified HostComposeEnvelope.
 //
 //   composeForConfirm (build the one PSBT + resolve ADS/fee) ->
 //   assertNoTamper (output-set + inline action-byte, HOST-side) ->
@@ -52,7 +52,7 @@ import { withListRemovalDescriptions } from '../decoder/list_removal_description
  */
 
 /**
- * What actually crosses the host boundary, which is NOT `ComposedAction`.
+ * The confirmation surface receives this shape, not `ComposedAction`.
  *
  * `ComposedAction` is the INTERNAL shape composeForConfirm returns; the
  * envelope below drops two of its fields (`encoderOpts`, `carrierScripts` -
@@ -90,6 +90,7 @@ import { withListRemovalDescriptions } from '../decoder/list_removal_description
  * @property {object|null} oracleFeeQuote    Mode B dispenser oracle usage fee quote; NULL when none was priced
  * @property {object} adsPlan                resolved ADS plan
  * @property {ReturnType<typeof import('./confirmChecks.js').buildExpectedOutputs>} expectedOutputs
+ * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs when this compose is rejected
  * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not report one
  * @property {number|null} networkFeeSats    exact miner fee of the built bytes; NULL when not derivable
  * @property {number|null} protocolFeeSats   protocol fee in the native coin; NULL in XCHAIN-fee mode
@@ -340,9 +341,8 @@ export async function composeActionForConfirm({
         simulation = null;
     }
 
-    // Serializable envelope for the popup. `encoderOpts` (which carries the
-    // ADS-folded customOutputs and is not needed client-side) is dropped;
-    // everything returned here survives structured-clone / JSON transport.
+    // Keep only what the confirmation surface needs. Reject retains the release
+    // callback so the encoder does not hold inputs after the action is abandoned.
     return {
         actionString: composed.actionString,
         action: composed.action,
@@ -392,6 +392,7 @@ export async function composeActionForConfirm({
         oracleFeeQuote: composed.oracleFeeQuote || null,
         adsPlan: composed.adsPlan,
         expectedOutputs: composed.expectedOutputs,
+        releaseEncoderInputs: composed.releaseEncoderInputs,
         // The encoder's compression report for these bytes: the submit path
         // hands it to the success screen's stored-size line, and this envelope
         // is its only route there.
