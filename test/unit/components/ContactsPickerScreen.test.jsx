@@ -62,7 +62,7 @@ afterAll(() => {
     vi.doUnmock('../../../packages/core/src/shared/utils/contactChain.js');
 });
 
-describe('ContactsPickerScreen', () => {
+describe('ContactsPickerScreen empty and listing states', () => {
     it.each([
         ['no contacts', []],
         ['contacts without addresses', [{ id: 'empty', name: 'Empty', entries: [{ label: 'Home' }] }]],
@@ -90,7 +90,9 @@ describe('ContactsPickerScreen', () => {
             'bobD-bob',
         ]);
     });
+});
 
+describe('ContactsPickerScreen filters', () => {
     it.each([
         ['contact name', 'ALICE', 'bc1-alice'],
         ['address', 'd-BOB', 'D-bob'],
@@ -125,7 +127,9 @@ describe('ContactsPickerScreen', () => {
         expect(screen.getByText('D-bob')).toBeInTheDocument();
         expect(screen.queryByText('bc1-alice')).toBeNull();
     });
+});
 
+describe('ContactsPickerScreen selection and header', () => {
     it('passes the exact selected entry to onPick once', () => {
         const { props } = mount();
         const row = screen.getByText('bc1-alice').closest('button');
