@@ -18,7 +18,7 @@
 //
 //   composeForConfirm (build the one PSBT + resolve ADS/fee) ->
 //   assertNoTamper (output-set + inline action-byte, HOST-side) ->
-//   return the serializable envelope
+//   return the confirmation envelope
 //
 // A tamper failure THROWS (TamperDetectedError): it crosses the messaging
 // boundary as a plain error and the invoking form renders it exactly like
