@@ -42,6 +42,8 @@ import {
 
 export const PROFILE_PASSWORD = 'fixture-password';
 export const PROFILE_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+export const PROFILE_HISTORY_CHAIN_ID = 'bitcoin-regtest';
+export const PROFILE_HISTORY_TXID = 'ab'.repeat(32);
 export const PROFILE_SETTINGS = {
     theme: 'dark',
     fiatCurrency: 'EUR',
@@ -88,7 +90,12 @@ export function buildProfileRuntime(userDataDir) {
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
-            sdkFactory: createDevMockSdk,
+            sdkFactory: (opts) => ({
+                ...createDevMockSdk(opts),
+                encoder: {
+                    broadcastTx: async () => PROFILE_HISTORY_TXID,
+                },
+            }),
         }),
     });
 }
@@ -107,6 +114,13 @@ export async function seedPopulatedProfile(userDataDir) {
     resultOrThrow(await handleIpcMessage(runtime, {
         type: 'settings.update',
         request: { patch: PROFILE_SETTINGS },
+    }));
+    resultOrThrow(await handleIpcMessage(runtime, {
+        type: 'broadcast.signedTx',
+        request: {
+            chainId: PROFILE_HISTORY_CHAIN_ID,
+            txHex: '0200000000',
+        },
     }));
     resultOrThrow(await handleIpcMessage(runtime, { type: 'wallet.lock' }));
 }
