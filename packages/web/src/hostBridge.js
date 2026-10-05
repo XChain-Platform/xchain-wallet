@@ -81,6 +81,8 @@ import {
     seedDefaultFixtures,
     installDevMockConsole,
 } from './devMockEvents.js';
+import { buildDevMockActionString } from './devMockActionString.js';
+import { createDevMockDecoder } from './devMockDecoder.js';
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -367,12 +369,8 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         // unblocks, mirroring the real host boundary.
         actions: {
             createAction({ action, params }) {
-                // Minimal canonical SEND serializer: ACTION|0|TICK|AMOUNT|DEST[|MEMO].
-                const p = params || {};
-                const tail = [p.TICK, p.AMOUNT, p.DESTINATION];
-                if (p.MEMO != null && p.MEMO !== '') tail.push(p.MEMO);
                 return {
-                    actionString: [action, '0', ...tail.filter((f) => f != null)].join('|'),
+                    actionString: buildDevMockActionString(action, params),
                     action,
                     version: 0,
                 };
@@ -405,14 +403,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             },
             broadcastTx() { return Promise.reject(new Error('Dev SDK stub: broadcast requires the real xchain-sdk')); },
         },
-        decoder: {
-            decodeActionFromPsbt(psbtHex) {
-                const decoded = decodeMockPsbt(psbtHex);
-                return decoded.actionString
-                    ? { ok: true, actionString: decoded.actionString }
-                    : { ok: false, reason: 'decode-failed' };
-            },
-        },
+        decoder: createDevMockDecoder(decodeMockPsbt),
         // Best-effort dev pre-flight: parses a SEND string and flags an
         // insufficient balance against the dev balance dataset so the
         // excess-amount fail->fix flow is exercisable; otherwise passes.

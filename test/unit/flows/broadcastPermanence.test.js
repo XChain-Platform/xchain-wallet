@@ -11,6 +11,17 @@ import {
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
 } from '../../../packages/core/src/flows/broadcastPermanence.js';
+import {
+    BROADCAST_FAILED_PERMANENT_NAME as EXPORTED_PERMANENT_NAME,
+    BROADCAST_FAILED_TRANSIENT_NAME as EXPORTED_TRANSIENT_NAME,
+} from '../../../packages/core/src/flows/index.js';
+
+it('exports broadcast failure names through the flows entry point', () => {
+    expect([EXPORTED_PERMANENT_NAME, EXPORTED_TRANSIENT_NAME]).toEqual([
+        'BroadcastFailedPermanentError',
+        'BroadcastFailedTransientError',
+    ]);
+});
 
 describe('classifyBroadcastFailure', () => {
 
