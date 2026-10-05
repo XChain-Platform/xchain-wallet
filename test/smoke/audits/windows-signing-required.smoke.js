@@ -293,6 +293,8 @@ function loadError(env) {
         assert.ok(new RegExp(`${REQUIRE_VAR}:\\s*'1'`).test(step),
             `the Windows build step '${name}' must set ${REQUIRE_VAR}: '1', or a missing`
             + ' signing secret produces unsigned installers and a green lane');
+        assert.ok(new RegExp(`${SUBJECT_VAR}:\\s*\\$\\{\\{\\s*secrets\\.${SUBJECT_VAR}\\s*\\}\\}`).test(step),
+            `the Windows build step '${name}' must pass ${SUBJECT_VAR} through`);
         // The requirement without the values is a lane that can only fail, so
         // both halves are asserted together: config trio AND credentials.
         for (const secret of [...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS]) {
