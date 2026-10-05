@@ -11,6 +11,7 @@
 // Delegate and clear composers for standing VOTE delegations: input guards,
 // summaries, builder selection, and the signing path chosen from the source.
 
+import assert from 'node:assert/strict';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { submitCalls } = vi.hoisted(() => ({ submitCalls: [] }));
@@ -63,7 +64,7 @@ describe('delegateVoteAction', () => {
     it('summarizes with the tick and the first 12 characters of delegateTo', async () => {
         await delegateVoteAction(baseOpts(h.sdkRegistry, { tick: 'GOV', delegateTo: DELEGATE_TO }));
         const summary = submitCalls[0].pendingTxMeta.actionSummary;
-        expect(summary).toBe(`Delegate GOV votes to ${DELEGATE_TO.slice(0, 12)}`);
+        assert.strictEqual(summary, `Delegate GOV votes to ${DELEGATE_TO.slice(0, 12)}`);
         expect(summary).not.toContain(DELEGATE_TO.slice(0, 13));
     });
 
