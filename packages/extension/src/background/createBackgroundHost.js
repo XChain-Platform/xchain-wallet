@@ -629,6 +629,14 @@ async function sessionSigner(req, vault, signerPool) {
     return signer || undefined;
 }
 
+function hwId(address, deps) {
+    const chainId = deps.chainRegistry.chainIdFor(address.chain, address.network);
+    if (!chainId) {
+        throw new Error(`auth.signPsbt.hw: no chain id for chain "${address.chain}" and network "${address.network}"`);
+    }
+    return chainId;
+}
+
 /**
  * Return the newest (highest external index) HD address for a wallet +
  * chain, or `null` if no address exists. External = change = 0 in the
@@ -2676,6 +2684,10 @@ export function createBackgroundHost(deps) {
         if (!address) {
             throw new Error(`auth.signMessage: address "${addressId}" not found`);
         }
+        const chainId = chainRegistry.chainIdFor(address.chain, address.network);
+        if (!chainId) {
+            throw new Error(`auth.signMessage: no chain id for chain "${address.chain}" and network "${address.network}"`);
+        }
         const isHd = address.source === 'hd' && typeof address.derivationPath === 'string';
         return signMessageFlow({
             vault,
@@ -2685,7 +2697,7 @@ export function createBackgroundHost(deps) {
             bip39Passphrase: req?.bip39Passphrase,
             chainRegistry,
             sdkRegistry,
-            chainId: address.chainId,
+            chainId,
             path: isHd ? address.derivationPath : undefined,
             addressId: isHd ? undefined : addressId,
             message,
@@ -3917,7 +3929,10 @@ export function createBackgroundHost(deps) {
         if (!address) {
             throw new Error(`auth.signPsbt: address "${addressId}" not found`);
         }
-        const chainId = address.chainId;
+        const chainId = chainRegistry.chainIdFor(address.chain, address.network);
+        if (!chainId) {
+            throw new Error(`auth.signPsbt: no chain id for chain "${address.chain}" and network "${address.network}"`);
+        }
         const sdk = sdkRegistry.get(chainId);
         if (typeof sdk?.wallet?.decomposePsbt !== 'function') {
             throw new Error(`auth.signPsbt: SDK for "${chainId}" lacks wallet.decomposePsbt`);
@@ -3988,7 +4003,7 @@ export function createBackgroundHost(deps) {
             );
         }
         const signer = buildRemoteSigner(descriptor, transport);
-        const chainId = address.chainId;
+        const chainId = hwId(address, deps);
         const sdk = sdkRegistry.get(chainId);
         if (typeof sdk?.wallet?.decomposePsbt !== 'function') {
             throw new Error(`auth.signPsbt.hw: SDK for "${chainId}" lacks wallet.decomposePsbt`);
