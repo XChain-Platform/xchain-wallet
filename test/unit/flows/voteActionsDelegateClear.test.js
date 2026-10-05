@@ -72,10 +72,11 @@ describe('delegateVoteAction', () => {
         await delegateVoteAction(baseOpts(h.sdkRegistry, params));
         expect(h.voting.delegateParams).toHaveBeenCalledWith(params);
         expect(h.voting.clearDelegationParams).not.toHaveBeenCalled();
-        expect(submitCalls[0].actionData).toEqual({
-            action: 'VOTE',
-            params: { version: 3, built: 'delegate', ...params },
-        });
+        expect(submitCalls[0].actionData.action).toBe('VOTE');
+        assert.strictEqual(
+            submitCalls[0].actionData.params,
+            h.voting.delegateParams.mock.results[0].value,
+        );
     });
 });
 
@@ -99,10 +100,11 @@ describe('clearVoteDelegationAction', () => {
         await clearVoteDelegationAction(baseOpts(h.sdkRegistry, params));
         expect(h.voting.clearDelegationParams).toHaveBeenCalledWith(params);
         expect(h.voting.delegateParams).not.toHaveBeenCalled();
-        expect(submitCalls[0].actionData).toEqual({
-            action: 'VOTE',
-            params: { version: 3, built: 'clear', ...params },
-        });
+        expect(submitCalls[0].actionData.action).toBe('VOTE');
+        assert.strictEqual(
+            submitCalls[0].actionData.params,
+            h.voting.clearDelegationParams.mock.results[0].value,
+        );
     });
 });
 
