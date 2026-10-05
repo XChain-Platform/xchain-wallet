@@ -10,6 +10,8 @@
 
 import { writeFile } from 'node:fs/promises';
 
+import { encryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
+import { makeFreshKdfParams } from '../../../packages/core/src/crypto/kdf.js';
 import { createPendingTx } from '../../../packages/core/src/schemas/pendingTx.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { createWallet } from '../../../packages/core/src/schemas/wallet.js';
@@ -17,25 +19,27 @@ import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 
 const MASTER_KEY_FILL = 11;
+const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const UNLOCK_WORD = 'fixture-password';
+const RECEIVE_PUBLIC_KEY_HEX = '0330d54fd0dd420a6e5f8d3624f5f3482cae350f79d5f0753bf5beef9c2d91af3c';
 const masterKey = new Uint8Array(32).fill(MASTER_KEY_FILL);
 const backend = new InMemoryBackend();
 const vault = new Vault({ backend, masterKey });
 
 await vault.open();
 
+const { encryptedSeed, kdfParams } = await encryptWalletSeed({
+    password: UNLOCK_WORD,
+    seed: new TextEncoder().encode(MNEMONIC),
+    kdfParams: makeFreshKdfParams(),
+});
 const wallet = createWallet({
     name: 'Imported fixture wallet',
     origin: 'imported-mnemonic',
     format: 'bip39',
     passphraseEnabled: false,
-    encryptedSeed: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-    kdfParams: {
-        algorithm: 'argon2id',
-        salt: 'AAAAAAAAAAAAAAAAAAAAAA==',
-        iterations: 3,
-        memory: 65536,
-        parallelism: 1,
-    },
+    encryptedSeed,
+    kdfParams,
 });
 const pendingTx = createPendingTx({
     chain: 'bitcoin',
@@ -62,6 +66,8 @@ const fixture = {
     documentVersion: vault.documentVersion,
     masterKeyFill: MASTER_KEY_FILL,
     walletId: wallet.id,
+    password: UNLOCK_WORD,
+    receivePublicKeyHex: RECEIVE_PUBLIC_KEY_HEX,
     pendingTxId: pendingTx.id,
     theme: settings.theme,
     fiatCurrency: settings.fiatCurrency,
