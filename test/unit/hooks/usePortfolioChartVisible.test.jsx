@@ -15,6 +15,10 @@ import { usePortfolioChartVisible } from '../../../packages/core/src/shared/hook
 const STORAGE_KEY = 'xc:portfolioChartVisible';
 const CHANGE_EVENT = 'xc:portfolio-chart-visible-change';
 
+function findChangeEvent(dispatch) {
+    return dispatch.mock.calls.findLast(([event]) => event.type === CHANGE_EVENT)?.[0];
+}
+
 beforeEach(() => window.localStorage.clear());
 
 afterEach(() => {
@@ -57,8 +61,10 @@ describe('usePortfolioChartVisible synchronization', () => {
         expect(first.result.current[0]).toBe(false);
         expect(second.result.current[0]).toBe(false);
         expect(window.localStorage.getItem(STORAGE_KEY)).toBe('0');
-        expect(dispatch.mock.calls.some(([event]) => event.type === CHANGE_EVENT)).toBe(true);
+        expect(findChangeEvent(dispatch)).toBeInstanceOf(CustomEvent);
+        expect(findChangeEvent(dispatch).detail).toBe(false);
 
+        dispatch.mockClear();
         await act(async () => {
             second.result.current[1]();
             await Promise.resolve();
@@ -66,6 +72,8 @@ describe('usePortfolioChartVisible synchronization', () => {
         expect(first.result.current[0]).toBe(true);
         expect(second.result.current[0]).toBe(true);
         expect(window.localStorage.getItem(STORAGE_KEY)).toBe('1');
+        expect(findChangeEvent(dispatch)).toBeInstanceOf(CustomEvent);
+        expect(findChangeEvent(dispatch).detail).toBe(true);
     });
 });
 
