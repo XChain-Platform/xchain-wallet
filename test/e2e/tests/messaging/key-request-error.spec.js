@@ -317,13 +317,23 @@ test.describe('a failed message key-request says why', () => {
 
         await requestButton(main).click();
 
-        // SOMETHING has to come back, and waiting for it is what makes the
-        // negative assertion below mean anything: a press that produced nothing
-        // would otherwise "not match" the not-ready sentence and pass. What
-        // comes back is the dev-mock SDK's business and is not this file's
-        // subject - a compose failure and a "Key request sent" are both fine
-        // here. What must NOT come back is a refusal for a signer this wallet
-        // has.
+        // An ordinary wallet proceeds to the shared confirmation screen. The
+        // request has not been attempted until that screen is approved, so
+        // waiting on the form-stage outcome before approving would only prove
+        // that the confirmation gate works.
+        const confirm = page.getByTestId('confirm-modal');
+        await expect(confirm,
+            'an ordinary wallet did not proceed to key-request confirmation')
+            .toBeVisible({ timeout: 60_000 });
+        const approve = page.getByTestId('confirm-approve');
+        await expect(approve, 'the key-request confirmation never became approvable')
+            .toBeEnabled({ timeout: 60_000 });
+        await approve.click();
+
+        // SOMETHING has to come back after approval, and waiting for it is what
+        // makes the negative assertion below mean anything. A compose failure
+        // and a "Key request sent" are both fine in the dev-mock venue. What
+        // must NOT come back is a refusal for a signer this wallet has.
         const outcome = pressOutcome(main);
         await expect(outcome.first(),
             'the key request answered nothing at all on a wallet that can sign, which is the '
