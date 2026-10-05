@@ -80,6 +80,13 @@ const AZURE_CREDENTIAL_VARS = [
 /** The classic certificate path, kept because the config still offers it. */
 const CLASSIC_VARS = ['CSC_LINK', 'CSC_KEY_PASSWORD'];
 
+/**
+ * The certificate subject a signtool run selects its certificate by, for a
+ * certificate held in the machine's store (a cloud signer's local key
+ * provider) rather than supplied as a file.
+ */
+const SUBJECT_VAR = 'WIN_CSC_SUBJECT_NAME';
+
 const present = (env, name) => Boolean(env[name] && String(env[name]).trim());
 
 /**
@@ -88,7 +95,7 @@ const present = (env, name) => Boolean(env[name] && String(env[name]).trim());
  * @param {Record<string, string|undefined>} env
  * @returns {{
  *   required: boolean,
- *   path: 'azure'|'classic'|'none',
+ *   path: 'azure'|'subject'|'classic'|'none',
  *   ready: boolean,
  *   missingAzure: string[],
  *   missingClassic: string[],
@@ -103,8 +110,13 @@ function windowsSigningStatus(env = process.env) {
     // credentials are there - that asymmetry is the whole trap, so it is
     // modelled rather than smoothed over.
     const azureSelected = AZURE_CONFIG_VARS.every((name) => present(env, name));
-    const path = azureSelected ? 'azure' : (missingClassic.length ? 'none' : 'classic');
-    const ready = azureSelected ? missingAzure.length === 0 : missingClassic.length === 0;
+    const subjectSelected = !azureSelected && present(env, SUBJECT_VAR);
+    let path = missingClassic.length ? 'none' : 'classic';
+    if (azureSelected) path = 'azure';
+    else if (subjectSelected) path = 'subject';
+    const ready = azureSelected
+        ? missingAzure.length === 0
+        : (subjectSelected || missingClassic.length === 0);
     return {
         required: env[REQUIRE_VAR] === '1',
         path,
@@ -147,6 +159,10 @@ function assertWindowsSigningMaterial(env = process.env) {
         lines.push('The classic signtool path is not configured either. Missing:');
         for (const name of status.missingClassic) lines.push(`  - ${name}`);
         lines.push('');
+        lines.push('A third way to sign is a certificate in the machine store, selected by'
+            + ' subject. Missing:');
+        lines.push(`  - ${SUBJECT_VAR}`);
+        lines.push('');
         lines.push('With a partial Azure environment the config drops azureSignOptions'
             + ' entirely and falls back to the classic path, which signs nothing when'
             + ' CSC_LINK is unset. That is the silent unsigned release this check exists'
@@ -160,12 +176,13 @@ function assertWindowsSigningMaterial(env = process.env) {
     err.name = 'WindowsSigningCredentialsMissing';
     err.missing = status.path === 'azure'
         ? status.missingAzure
-        : [...status.missingAzure, ...status.missingClassic];
+        : [...status.missingAzure, ...status.missingClassic, SUBJECT_VAR];
     throw err;
 }
 
 module.exports = {
     REQUIRE_VAR,
+    SUBJECT_VAR,
     AZURE_CONFIG_VARS,
     AZURE_CREDENTIAL_VARS,
     CLASSIC_VARS,
