@@ -200,7 +200,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
 
     // dev-mock "PSBT": a marker-prefixed JSON blob (browser-safe, no
     // Buffer) so encoder.createTx, wallet.decomposePsbt, and
-    // decoder.decodeActionFromPsbt round-trip the SAME structure and the
+    // both decoder action methods round-trip the SAME structure and the
     // confirm-pipeline tamper check stays self-consistent in the dev shell.
     const MOCK_PSBT_MARKER = 'devmockpsbt:';
     const encodeMockPsbt = (obj) => MOCK_PSBT_MARKER + JSON.stringify(obj);
@@ -356,14 +356,16 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             // The confirm pipeline's tamper check decomposes the PSBT
             // host-side. The dev mock builds its "PSBT" as a marker-prefixed
             // JSON blob (encodeMockPsbt below), so decompose just parses it
-            // back - self-consistent with encoder.createTx + decodeActionFromPsbt.
+            // back - self-consistent with encoder.createTx + both decoder
+            // action methods.
             decomposePsbt(psbtHex) {
                 return decodeMockPsbt(psbtHex);
             },
         },
         // confirm pipeline: createAction + encoder.createTx + preflight +
-        // decodeActionFromPsbt so the single-encode modal can OPEN, tamper-check,
-        // and pre-flight in the dev shell (the real SDK isn't reachable here).
+        // both decoder action methods so the single-encode modal can OPEN,
+        // tamper-check, and pre-flight in the dev shell (the real SDK isn't
+        // reachable here).
         // Signing still throws by design (see wallet.signPsbt), so Approve fails
         // loudly rather than broadcasting - the confirm-stage flow is what this
         // unblocks, mirroring the real host boundary.
