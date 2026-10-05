@@ -369,8 +369,13 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         // unblocks, mirroring the real host boundary.
         actions: {
             createAction({ action, params }) {
+                const actionString = action === 'BROADCAST'
+                    ? [action, params.VERSION ?? '0', params.MESSAGE, params.VALUE, params.FEE, params.MEMO]
+                        .filter((field) => field != null && field !== '')
+                        .join('|')
+                    : buildDevMockActionString(action, params);
                 return {
-                    actionString: buildDevMockActionString(action, params),
+                    actionString,
                     action,
                     version: 0,
                 };
