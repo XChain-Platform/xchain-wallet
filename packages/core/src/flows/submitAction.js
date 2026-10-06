@@ -210,6 +210,9 @@ export async function submitAction({
             await writePending({ status: 'awaiting-signature' });
         } else if (phase === 'broadcasting' && typeof data?.txid === 'string') {
             await writePending({ status: 'broadcasting', txid: data.txid });
+        } else if (phase === 'envelope_revealed' && typeof data?.txid === 'string') {
+            // The reveal is the action's identity; the row moves off the commit txid.
+            await writePending({ txid: data.txid });
         } else if (phase === 'p2sh_spending' && typeof data?.phase1Txid === 'string') {
             // phase-2 still pending; stay in broadcasting.
         } else if (phase === 'waiting' && typeof data?.txid === 'string') {
@@ -341,7 +344,17 @@ export async function submitAction({
                 err.name = permanence === 'permanent'
                     ? BROADCAST_FAILED_PERMANENT_NAME
                     : BROADCAST_FAILED_TRANSIENT_NAME;
-                if (permanence === 'permanent') {
+                if (permanence === 'permanent' && err.phase !== 'phase1') {
+                    // Phase 1 is on the network, so the coin already sits in
+                    // the commit output: 'failed' would stop it netting its
+                    // spend and invite a re-compose over a live commit. The
+                    // row stays 'broadcast' on the commit txid with the error.
+                    await stampPending({
+                        status: 'broadcast',
+                        broadcastAt: pending?.broadcastAt ?? new Date().toISOString(),
+                        error: err && err.message ? String(err.message) : String(err),
+                    });
+                } else if (permanence === 'permanent') {
                     await stampPending({
                         status: 'failed',
                         txid: err.txid,
