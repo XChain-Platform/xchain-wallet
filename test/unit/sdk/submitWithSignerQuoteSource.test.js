@@ -39,7 +39,11 @@ function makeHarness(encoderOpts) {
         actions: {
             createAction: vi.fn(() => ({ actionString: 'SEND|0|x', action: 'SEND', version: 0 })),
         },
-        wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+        // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.
+        wallet: {
+            decomposePsbt: () => ({ inputs: [{}], outputs: [] }),
+            getBitcoinNetwork: () => ({ dustThreshold: 5460 }),
+        },
         quoteNativeFee,
     };
     const signer = {

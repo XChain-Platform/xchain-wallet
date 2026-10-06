@@ -38,7 +38,11 @@ function makeHarness({ encoding = 'P2SH', requiredFeeSats = FEE_SATS } = {}) {
     const sdk = {
         encoder: { createTx, spendP2sh, broadcastTx },
         actions: { createAction },
-        wallet: { decomposePsbt: () => revealLegs('txid-COMMIT-PSBT', encoding) },
+        // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.
+        wallet: {
+            decomposePsbt: () => revealLegs('txid-COMMIT-PSBT', encoding),
+            getBitcoinNetwork: () => ({ dustThreshold: 5460 }),
+        },
         quoteNativeFee: vi.fn(async () => ({
             supported: true, valid: null, feeDestination: FEE_DEST, requiredFeeSats,
         })),
