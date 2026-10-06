@@ -818,7 +818,9 @@ jobs:
       # registers the certificate in the runner's store and signtool picks it
       # by subject (WIN_CSC_SUBJECT_NAME), which is the path the build config
       # takes when no classic CSC_LINK is supplied. The four ES_ and
-      # CREDENTIAL_ secrets live in the release-signing environment only.
+      # CREDENTIAL_ secrets and the subject live in the release-signing
+      # environment only; an empty subject fails here by name rather than
+      # reaching a build that would sign nothing.
       - name: Install and register the eSigner CKA
         shell: pwsh
         env:
@@ -826,8 +828,9 @@ jobs:
           ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
           CREDENTIAL_ID: ${{ secrets.CREDENTIAL_ID }}
           ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
+          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
         run: |
-          foreach ($name in 'ES_USERNAME','ES_PASSWORD','CREDENTIAL_ID','ES_TOTP_SECRET') {
+          foreach ($name in 'ES_USERNAME','ES_PASSWORD','CREDENTIAL_ID','ES_TOTP_SECRET','WIN_CSC_SUBJECT_NAME') {
             if (-not (Get-Item "env:$name" -ErrorAction SilentlyContinue).Value) {
               throw "eSigner credential $name is not set on the release-signing environment"
             }
@@ -845,8 +848,9 @@ jobs:
           & $tool credentials -id $env:CREDENTIAL_ID
       - name: Build and sign (Windows x64 + arm64)
         env:
-          # AZURE_TENANT_ID / CLIENT_ID / CLIENT_SECRET are read by the
-          # Azure SDK itself, not by electron-builder.config.cjs.
+          # The Azure values stay inert while their secrets are unset, so the
+          # subject below selects the eSigner certificate. AZURE_TENANT_ID /
+          # CLIENT_ID / CLIENT_SECRET are read by the Azure SDK itself.
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}

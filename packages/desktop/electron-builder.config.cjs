@@ -19,8 +19,9 @@
 //     of https://docs.xchain.io/components/wallet/reproducible-builds.
 //   - Code-signing structured but env-var-driven; no certs in repo.
 //     `pnpm run dist` works without any cert config (produces unsigned
-//     dev artifacts). Signed releases happen when CSC_LINK +
-//     CSC_KEY_PASSWORD (or equivalents) are set in the environment.
+//     dev artifacts). Signed Windows releases go through the eSigner
+//     cloud key adapter, selected by WIN_CSC_SUBJECT_NAME; macOS signs when
+//     CSC_LINK + CSC_KEY_PASSWORD (or equivalents) are set.
 //   - URI schemes registered at install time for later runtime opt-in:
 //     xchain: claimed unconditionally; bitcoin/litecoin/dogecoin
 //     registered so the OS knows we CAN handle them, but
