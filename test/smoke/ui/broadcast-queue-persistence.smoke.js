@@ -89,6 +89,9 @@ assert.ok(
 const storePath = join(ext, 'src', 'background', 'broadcastQueueStore.js');
 assert.ok(existsSync(storePath), 'broadcastQueueStore.js exists');
 const queueStoreSrc = readFileSync(storePath, 'utf8');
+const enginePath = join(ext, 'src', 'background', 'broadcastQueueEngine.js');
+assert.ok(existsSync(enginePath), 'broadcastQueueEngine.js exists');
+const engineSrc = readFileSync(enginePath, 'utf8');
 assert.ok(
     /loaded: false,/.test(queueStoreSrc) && /loadPromise: null,/.test(queueStoreSrc),
     'the queue store starts unloaded with no rehydrate in flight',
@@ -98,15 +101,15 @@ assert.ok(
     'createBackgroundHost serves a shared queue store, or a private one over its storage dep',
 );
 assert.ok(
-    /async function ensureQueueLoaded\(\)/.test(bg),
-    'createBackgroundHost defines ensureQueueLoaded',
+    /async function ensureQueueLoaded\(\)/.test(engineSrc),
+    'the queue engine defines ensureQueueLoaded',
 );
 assert.ok(
-    /async function persistQueue\(\)/.test(bg),
-    'createBackgroundHost defines persistQueue',
+    /async function persistQueue\(\)/.test(engineSrc),
+    'the queue engine defines persistQueue',
 );
 assert.ok(
-    /if \(!queueStore\.loadPromise\)/.test(bg) && /queueStore\.loadPromise = \(async \(\) => \{/.test(bg),
+    /if \(!queueStore\.loadPromise\)/.test(engineSrc) && /queueStore\.loadPromise = \(async \(\) => \{/.test(engineSrc),
     'ensureQueueLoaded uses a single-flight queueLoadPromise so concurrent callers share one rehydrate',
 );
 
@@ -204,7 +207,7 @@ assert.ok(
 );
 // pushQueueEntry persists too (fire-and-forget so auto-enqueue paths
 // stay non-async).
-const pushBodyMatch = /function pushQueueEntry\([^)]*\)\s*\{([\s\S]+?)\n\s{4}\}\s*\n\s{4}host\.register/.exec(bg);
+const pushBodyMatch = /function pushQueueEntry\([^)]*\)\s*\{([\s\S]+?)\n\s{4}\}\s*\n\s{4}return \{/.exec(engineSrc);
 assert.ok(pushBodyMatch, 'pushQueueEntry body parses');
 assert.ok(
     /getQueue\(walletId\)\.push\(stored\);/.test(pushBodyMatch[1])
@@ -215,11 +218,11 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(bg),
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(engineSrc),
     'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing',
 );
 assert.ok(
-    !/async \(entry\) => \{ pushQueueEntry\(/.test(bg),
+    !/async \(entry\) => \{ pushQueueEntry\(/.test(bg) && !/async \(entry\) => \{ pushQueueEntry\(/.test(engineSrc),
     'no route builds its own hook that skips the rehydrate',
 );
 

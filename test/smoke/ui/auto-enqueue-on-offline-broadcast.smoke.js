@@ -126,9 +126,10 @@ for (const file of FORWARD_EXEMPT.keys()) {
 // --- 4. createBackgroundHost wires the queue + auto-enqueue --------------
 
 const bg = readFileSync(join(ext, 'src', 'background', 'createBackgroundHost.js'), 'utf8');
+const engine = readFileSync(join(ext, 'src', 'background', 'broadcastQueueEngine.js'), 'utf8');
 assert.ok(
-    /function pushQueueEntry\(walletId, entry\)/.test(bg),
-    'createBackgroundHost defines a pushQueueEntry helper',
+    /function pushQueueEntry\(walletId, entry\)/.test(engine),
+    'the queue engine defines a pushQueueEntry helper',
 );
 assert.ok(
     /host\.register\('broadcast\.queue\.enqueue'/.test(bg),
@@ -136,7 +137,7 @@ assert.ok(
 );
 // One hook builder feeds every signing route, and it pushes onto the queue.
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(bg),
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(engine),
     'enqueueOnBroadcastFailure builds a hook that pushes onto the queue',
 );
 assert.ok(
