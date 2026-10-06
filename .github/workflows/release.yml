@@ -848,20 +848,6 @@ jobs:
           & $tool credentials -id $env:CREDENTIAL_ID
       - name: Build and sign (Windows x64 + arm64)
         env:
-          # The Azure values stay inert while their secrets are unset, so the
-          # subject below selects the eSigner certificate. AZURE_TENANT_ID /
-          # CLIENT_ID / CLIENT_SECRET are read by the Azure SDK itself.
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          # The remaining three are config values. `endpoint` is REQUIRED by
-          # the v26 azureSignOptions type and is region-specific, so it
-          # cannot be defaulted; without it the config falls back to the
-          # classic-cert path and the lane would produce UNSIGNED artifacts
-          # while looking like it was configured for Azure.
-          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
-          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
-          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
           WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
           # An unsigned artifact from THIS step is a failed release, not a
           # quiet one: every missing piece of the environment above is silent
@@ -891,12 +877,6 @@ jobs:
         if: env.APPX_IDENTITY_NAME != '' && env.APPX_PUBLISHER != ''
         env:
           XCHAIN_BUILD_APPX: '1'
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
-          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
-          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
           WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
           XCHAIN_REQUIRE_WIN_SIGNING: '1'
         run: pnpm -C packages/desktop dist --win --x64 --arm64
@@ -929,12 +909,6 @@ jobs:
       - name: Build the rehearsal variant (staging feed)
         if: env.STAGING_FEED != ''
         env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
-          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
-          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
           WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
           # The rehearsal exercises the REAL update path, and half of what
