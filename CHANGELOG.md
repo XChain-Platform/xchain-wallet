@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.341.1] - 2026-10-06
+
+### Fixed
+- macOS release builds sign from a keychain the release job builds itself, which the macOS 26 build image accepts.
+- The Windows release lane registers the eSigner certificate with its master key and stops at once if registration fails.
+
 ## [0.341.0] - 2026-10-06
 
 ### Added
