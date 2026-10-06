@@ -296,6 +296,44 @@ jobs:
           path: test/e2e/playwright-report/
           retention-days: 7
 
+  # The regtest specs sign and broadcast against a live chain, so the default
+  # e2e job above excludes every *.regtest.spec.js. Without a job of its own
+  # they are never exercised by GitHub at all. Discovery always runs: it proves
+  # the regtest config loads and still finds its specs. The venue run happens
+  # only where a regtest host is configured (repository variable
+  # XC_REGTEST_SSH_HOST); a hosted runner has no chain of its own.
+  e2e-regtest:
+    runs-on: ubuntu-latest
+    env:
+      XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      - name: List regtest specs
+        run: |
+          pnpm exec playwright test --config test/e2e/playwright.regtest.config.js --list | tee regtest-list.txt
+          grep -q 'regtest.spec' regtest-list.txt
+      - name: Run regtest suite
+        if: ${{ vars.XC_REGTEST_SSH_HOST != '' }}
+        run: pnpm test:e2e:regtest
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-regtest
+          path: test/e2e/playwright-report/
+          retention-days: 7
+
   # Vulnerabilities in code that actually SHIPS. Deliberately --prod: the dev
   # toolchain's advisories (vitest's UI server, vite's dev-server path handling)
   # never reach a user, and blocking every push on them trains people to ignore the
@@ -339,7 +377,7 @@ jobs:
   # itself the account-level answer.
   verdict:
     runs-on: ubuntu-latest
-    needs: [test, drift-guards, build, coverage, e2e, audit]
+    needs: [test, drift-guards, build, coverage, e2e, e2e-regtest, audit]
     # Runs whatever the others did. Gating it on success would silence it in
     # exactly the case it exists for.
     if: ${{ always() }}
