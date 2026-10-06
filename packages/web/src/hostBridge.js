@@ -192,6 +192,17 @@ if (!import.meta.env?.PROD) {
 // from anything and nothing can sign with it.
 const MOCK_RECIPIENT_PUBKEY = `02${'ab'.repeat(32)}`;
 
+// Base units the dev venue says `address` holds of `tick`, or null when it
+// holds no row for it. Tokens come from the `/balances/` ledger; the chain
+// native coin is absent from that ledger, so it is read from the same fake
+// dataset the `/address/` stub serves.
+function devHeldBaseUnits(address, chainId, tick) {
+    const want = String(tick).toUpperCase();
+    const { native, tokens } = fakeBalanceFor(address, chainId);
+    const row = [native, ...tokens].find((t) => t && String(t.tick).toUpperCase() === want);
+    return row ? Number(row.quantity ?? 0) : null;
+}
+
 const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     // Each per-chain SDK instance carries its own `network` (chainId)
     // so the fake-balance dataset can return chain-appropriate values.
@@ -433,13 +444,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 const parts = String(actionString).split('|'); // SEND|0|TICK|AMOUNT|DEST[|MEMO]
                 const tick = parts[2];
                 const amount = Number(parts[3]);
-                const bals = await readStub.getBalances(opts?.source);
-                const row = Array.isArray(bals) ? bals.find((b) => String(b.tick).toUpperCase() === String(tick).toUpperCase()) : null;
+                const held = devHeldBaseUnits(opts?.source, chainId, tick);
                 // Dev balances are base units (8dp); the SEND amount is display
                 // units. Normalize at 8dp (right for the native-coin excess test;
                 // a dev approximation for other-decimal tokens).
                 const amountBase = amount * 1e8;
-                if (row && Number.isFinite(amount) && amountBase > Number(row.quantity ?? row.amount ?? 0)) {
+                if (held !== null && Number.isFinite(amount) && amountBase > held) {
                     verdict = 'fail';
                     // overridable: TRUE, mirroring the real engine. The SDK
                     // registers BALANCE_INSUFFICIENT as `network` in
