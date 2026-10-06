@@ -173,6 +173,21 @@ if [[ ! -f "$MANIFEST" ]]; then
     exit 1
 fi
 
+# --- Snapshot -----------------------------------------------------------
+#
+# The manifest and its signature are copied once into a private directory
+# and every later read (hash lines, profiles, header, anchor, gpg) uses the
+# copy. The caller's path may be a download directory another process is
+# still writing, so reading it more than once would let the hash check, the
+# header check and the signature check each see a different document.
+SNAP_DIR="$(mktemp -d)"
+SNAP_MANIFEST="$SNAP_DIR/$(basename "$MANIFEST")"
+SNAP_SIG="$SNAP_MANIFEST.asc"
+cp "$MANIFEST" "$SNAP_MANIFEST"
+if [[ -f "$SIG" ]]; then
+    cp "$SIG" "$SNAP_SIG"
+fi
+
 # --- Hash check ---------------------------------------------------------
 #
 # Header lines are stripped before the check. `shasum -c` ignores them
@@ -183,8 +198,9 @@ fi
 SHA256="$(xr_sha256_cmd)"
 echo "verify.sh: checking artifact hashes against $MANIFEST ..." >&2
 STRIPPED="$(mktemp)"
-trap 'rm -f "$STRIPPED"' EXIT
-grep -v '^#' "$MANIFEST" > "$STRIPPED" || true
+NARROWED=""
+trap 'rm -rf "$SNAP_DIR"; rm -f "$STRIPPED" "$NARROWED"' EXIT
+grep -v '^#' "$SNAP_MANIFEST" > "$STRIPPED" || true
 if [[ ! -s "$STRIPPED" ]]; then
     echo "verify.sh: $MANIFEST contains no hash lines." >&2
     exit 1
@@ -208,13 +224,12 @@ FULL_COUNT="$(grep -c . "$STRIPPED" || true)"
 # signed one does. The check therefore ran against precisely the manifests
 # documented not to have profile lines, and this script refused to read its
 # own --recompute output on any tag.
-if xr_is_release_manifest "$MANIFEST"; then
-    xr_check_profiles "$MANIFEST" "$STRIPPED" || exit 1
+if xr_is_release_manifest "$SNAP_MANIFEST"; then
+    xr_check_profiles "$SNAP_MANIFEST" "$STRIPPED" || exit 1
 fi
 
 if [[ -n "$ARTIFACT" ]]; then
     NARROWED="$(mktemp)"
-    trap 'rm -f "$STRIPPED" "$NARROWED"' EXIT
     # Match the trailing path component exactly, so `wallet.deb` cannot
     # be satisfied by a line for `other-wallet.deb`.
     ARTIFACT_BASE="$(basename "$ARTIFACT")"
@@ -238,11 +253,11 @@ fi
 )
 
 # --- Header / anchor check ----------------------------------------------
-if xr_has_header "$MANIFEST"; then
-    M_TAG="$(xr_header_field "$MANIFEST" 'tag')"
-    M_COMMIT="$(xr_header_field "$MANIFEST" 'tag-commit')"
-    M_GATE="$(xr_header_field "$MANIFEST" 'dev-mock-gate')"
-    M_COUNT="$(xr_header_field "$MANIFEST" 'artifacts')"
+if xr_has_header "$SNAP_MANIFEST"; then
+    M_TAG="$(xr_header_field "$SNAP_MANIFEST" 'tag')"
+    M_COMMIT="$(xr_header_field "$SNAP_MANIFEST" 'tag-commit')"
+    M_GATE="$(xr_header_field "$SNAP_MANIFEST" 'dev-mock-gate')"
+    M_COUNT="$(xr_header_field "$SNAP_MANIFEST" 'artifacts')"
 
     ACTUAL_COUNT="$FULL_COUNT"
     if [[ -n "$M_COUNT" && "$M_COUNT" != "$ACTUAL_COUNT" ]]; then
@@ -345,7 +360,7 @@ if xr_has_header "$MANIFEST"; then
     # Partial coverage, said out loud. Without this line, "the
     # artifact I have is not in the manifest" reads as a tampering alarm
     # when the truth may be that this manifest was never about that lane.
-    M_LANES="$(xr_header_field "$MANIFEST" 'lanes')"
+    M_LANES="$(xr_header_field "$SNAP_MANIFEST" 'lanes')"
     if [[ -n "$M_LANES" ]]; then
         echo "verify.sh: this is a PARTIAL release manifest, covering: $M_LANES" >&2
         echo "  It attests the artifacts it hashes and says nothing about any" >&2
@@ -376,7 +391,7 @@ if [[ "$NO_SIG" -eq 1 ]]; then
 fi
 
 # --- Signature check ----------------------------------------------------
-if [[ ! -f "$SIG" ]]; then
+if [[ ! -f "$SNAP_SIG" ]]; then
     echo "verify.sh: $SIG not found - run sign.sh or pass --no-sig" >&2
     exit 1
 fi
@@ -428,7 +443,7 @@ echo "verify.sh: signature must come from $EXPECT_KEY (via $PIN_SOURCE)" >&2
 # fingerprint a user reads on the published channel never appears as the
 # signer. Either half may be named by --key; a mismatch on both is a
 # wrong key. The human output still goes to stderr for the operator.
-GPG_STATUS="$(gpg --status-fd 3 --verify "$SIG" "$MANIFEST" 3>&1 1>&2)" || {
+GPG_STATUS="$(gpg --status-fd 3 --verify "$SNAP_SIG" "$SNAP_MANIFEST" 3>&1 1>&2)" || {
     echo "verify.sh: gpg could not verify the signature on $MANIFEST" >&2
     exit 1
 }
