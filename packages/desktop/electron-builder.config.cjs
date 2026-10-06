@@ -859,8 +859,10 @@ const config = {
                 signtoolOptions: {
                     publisherName: WIN_PUBLISHER,
                     ...subjectSigning,
-                    // Authenticode: CSC_LINK + CSC_KEY_PASSWORD drive
-                    // signing. Timestamp server pinned so signatures stay
+                    // Authenticode: the eSigner CKA registers the release
+                    // certificate in the machine store and the subject name
+                    // selects it; CSC_LINK + CSC_KEY_PASSWORD remain the
+                    // file-based alternative. Timestamp server pinned so signatures stay
                     // verifiable after cert expiry (RFC 3161 SHA256).
                     signingHashAlgorithms: ['sha256'],
                     rfc3161TimeStampServer: 'http://timestamp.digicert.com',
