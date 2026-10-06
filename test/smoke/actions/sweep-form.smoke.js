@@ -22,6 +22,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { COMMON_ACTIONS, PROTOCOL_ONLY_ACTIONS } from '../../../packages/core/src/registry/actions.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
@@ -120,10 +122,15 @@ assert.match(palette, /id: 'create-sweep'/, 'command palette reaches the sweep f
 const advanced = read('packages', 'core', 'src', 'shared', 'routes', 'AdvancedActionsForm.jsx');
 // Membership, not position: the set grows as forms land (PC-30 appended
 // PRICE), and pinning SWEEP as the last entry made an unrelated addition
-// look like this regression.
+// look like this regression. The set is now derived from the registry, so
+// pin the derivation plus SWEEP's place in the authorable, form-backed set.
 assert.match(
     advanced,
-    /const ACTIONS_WITH_DEDICATED_FORMS = new Set\(\[[^\]]*'SWEEP'/s,
+    /const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions\(\{\s*authorable: \[\.\.\.COMMON_ACTIONS, \.\.\.BTC_EXCLUSIVE_ACTIONS\],\s*protocolOnly: PROTOCOL_ONLY_ACTIONS,/,
+    'ACTIONS_WITH_DEDICATED_FORMS is derived from the registry authorable set',
+);
+assert.ok(
+    COMMON_ACTIONS.includes('SWEEP') && !PROTOCOL_ONLY_ACTIONS.includes('SWEEP'),
     'SWEEP restored to ACTIONS_WITH_DEDICATED_FORMS (PC-56 stale-label fix closed)',
 );
 

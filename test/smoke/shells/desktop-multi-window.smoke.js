@@ -18,13 +18,14 @@
 //      registers itself with the `windows` Set and unregisters on
 //      `closed`. Show on `ready-to-show`.
 //   3. `buildApplicationMenu()` wires `File → New Window` with
-//      CmdOrCtrl+N → `createWindow()` so the user can open additional
-//      windows without restarting the app.
+//      CmdOrCtrl+N → `openWindowAfterIdleCheck()` so the user can open
+//      additional windows without restarting the app.
 //   4. Deep-link forwarder targets the focused window (or last-created
 //      fallback) instead of a singleton; updater events broadcast to
 //      every live window.
-//   5. `app.activate` (macOS dock click) calls `createWindow()` when no
-//      windows exist, matching the §24.6 single/multi-window contract.
+//   5. `app.activate` (macOS dock click) opens a window when none exist,
+//      matching the §24.6 single/multi-window contract, and both windowless
+//      reopen paths run the idle auto-lock check before the renderer exists.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -66,8 +67,8 @@ assert.ok(/function buildApplicationMenu\(\)/.test(src),
     'buildApplicationMenu() exists');
 assert.ok(/Menu\.setApplicationMenu\(Menu\.buildFromTemplate\(template\)\)/.test(src),
     'application menu is installed from the template');
-assert.ok(/label:\s*'New Window'[\s\S]*?accelerator:\s*'CmdOrCtrl\+N'[\s\S]*?createWindow\(\)/.test(src),
-    'File → New Window (Cmd/Ctrl+N) calls createWindow()');
+assert.ok(/label:\s*'New Window',\s*accelerator:\s*'CmdOrCtrl\+N',\s*click:\s*\(\)\s*=>\s*\{\s*void openWindowAfterIdleCheck\(\);\s*\}/.test(src),
+    'File → New Window (Cmd/Ctrl+N) opens through the idle-check helper');
 // macOS-aware app-name submenu shape.
 assert.ok(/process\.platform === 'darwin'/.test(src),
     'menu template branches on macOS for the app-name submenu');
@@ -91,8 +92,21 @@ assert.ok(/onEvent:\s*\(event\)\s*=>\s*\{[^}]*?broadcastToWindows\('xchain:updat
 
 assert.ok(/buildApplicationMenu\(\);\s*\n\s*createWindow\(\);/.test(src),
     'whenReady installs the menu, then opens the primary window');
-assert.ok(/app\.on\('activate',\s*\(\)\s*=>\s*\{\s*if \(BrowserWindow\.getAllWindows\(\)\.length === 0\) createWindow\(\)/.test(src),
-    'app.activate (dock click on macOS) creates a window when none exist');
+assert.ok(/app\.on\('activate',\s*\(\)\s*=>\s*\{\s*if \(BrowserWindow\.getAllWindows\(\)\.length === 0\) void openWindowAfterIdleCheck\(\)/.test(src),
+    'app.activate (dock click on macOS) opens a window when none exist, through the idle-check helper');
+
+// A windowless macOS app keeps the vault open, and a new renderer re-stamps
+// the idle clock on its first message, so the check must finish first.
+const helper = src.slice(src.indexOf('function openWindowAfterIdleCheck('));
+assert.ok(helper.length > 0 && src.includes('function openWindowAfterIdleCheck('),
+    'openWindowAfterIdleCheck() exists');
+assert.ok(helper.indexOf('await enforceIdleAutoLock(runtime)') !== -1
+    && helper.indexOf('await enforceIdleAutoLock(runtime)') < helper.indexOf('createWindow();\n    })()'),
+    'the windowless reopen awaits the idle check before it creates the window');
+assert.ok(/app\.on\('window-all-closed',[\s\S]*?startWindowlessIdleLock\(\);/.test(src),
+    'closing the last window on macOS starts the windowless idle check');
+assert.ok(/function createWindow\([^)]*\)\s*\{\s*\/\/[^\n]*\n\s*stopWindowlessIdleLock\(\);/.test(src),
+    'a live window stops the windowless idle check');
 
 console.log(
     'OK: desktop-multi-window smoke (§24.6 / G057 windows Set replaces singleton mainWindow; createWindow factory + register-on-add / unregister-on-closed; File > New Window menu (Cmd/Ctrl+N) calls createWindow; deep-link forwarder + updater event multiplex over live windows; activate-hook reopens when none remain)',

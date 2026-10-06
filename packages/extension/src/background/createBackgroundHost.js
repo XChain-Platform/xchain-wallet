@@ -2805,7 +2805,6 @@ export function createBackgroundHost(deps) {
                     if (entries.length > 0) { heldEntries = true; break; }
                 }
                 const heldOwed = queueStore.owed.length > 0;
-                let journalRead = false;
                 let snapshot = null;
                 try {
                     snapshot = await queueStore.storage.load();
@@ -2825,18 +2824,25 @@ export function createBackgroundHost(deps) {
                 // A wallet removed while the read was failing is still in the
                 // blob, so the write-back below has to run to drop it.
                 const replayedPrune = queueStore.prunedWallets?.size > 0;
-                mergeQueueSnapshot(snapshot);
+                // Read the journal before merging anything, so a failed read
+                // leaves live state exactly as it was for the retry.
+                let persistedOwed = null;
                 if (typeof queueStore.storage.loadSettlements === 'function') {
                     try {
-                        const persistedOwed = await queueStore.storage.loadSettlements();
-                        if (queueStore.sealed) return false;
-                        mergeOwedSettlements(persistedOwed);
-                        journalRead = true;
+                        persistedOwed = await queueStore.storage.loadSettlements();
                     } catch (_e) {
-                        // An unreadable journal costs the replay of writes owed
-                        // before this boot, never the queue itself.
+                        // Both halves ride one storage key, so an unreadable
+                        // journal is an unreadable key: fail closed exactly as a
+                        // failed `load` does. `loaded` stays false, every persist
+                        // keeps refusing, and the next access retries the read.
+                        // Latching here would let the next journal write save
+                        // this process's records over the unread ones.
+                        return false;
                     }
+                    if (queueStore.sealed) return false;
                 }
+                mergeQueueSnapshot(snapshot);
+                mergeOwedSettlements(persistedOwed);
                 queueStore.loaded = true;
                 // Once `loaded` latches no merge runs again, so the live map is
                 // the whole truth and the pending prunes have nothing left to skip.
@@ -2850,12 +2856,12 @@ export function createBackgroundHost(deps) {
                 // single-flight promise so a save a later mutation issues
                 // cannot be overtaken by this one.
                 if (heldEntries || replayedPrune) await persistQueue();
-                // The journal half is asymmetric on purpose. Both halves ride
-                // one storage key, so writing the journal back after a
-                // `loadSettlements` that threw would save a known-incomplete
-                // journal over the owed writes recorded before this boot: the
-                // same erasure the `queueStore.loaded` gate exists to prevent.
-                if ((heldOwed || replayedPrune) && journalRead) await persistOwedSettlements();
+                // The journal half needs no read check of its own here. Both
+                // halves ride one storage key, and a `loadSettlements` that
+                // threw returned above before `loaded` latched, so reaching
+                // this line means the journal was read and merged; writing it
+                // back cannot erase the owed writes recorded before this boot.
+                if (heldOwed || replayedPrune) await persistOwedSettlements();
                 return true;
             })();
         }

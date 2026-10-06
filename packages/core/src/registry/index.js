@@ -285,6 +285,7 @@ export {
     BITCOIN_ACTIONS,
     DOGECOIN_ACTIONS,
     LITECOIN_ACTIONS,
+    AUTHORABLE_ACTIONS,
 } from './actions.js';
 export {
     FEE_UNITS,

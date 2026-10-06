@@ -27,7 +27,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
-import { isActionOfferedOnChain } from '../../registry/actions.js';
+import { AUTHORABLE_ACTIONS, isActionOfferedOnChain } from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -110,16 +110,11 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 if (Array.isArray(actions) && actions.length > 0) {
                     setActionsList(actions);
                 } else {
-                    // Conservative fallback list: covers the majority of
-                    // §40.x and §42.x writes when SDK introspection fails.
-                    setActionsList([
-                        'SEND', 'ISSUE', 'MINT', 'DESTROY', 'BROADCAST',
-                        'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
-                        'ORDER', 'SWAP', 'COINPAY', 'MESSAGE',
-                        'LINK', 'STAKE', 'UNSTAKE', 'COLLECT',
-                        'DELEGATE',
-                        'DEPLOY', 'EXECUTE', 'DEPOSIT', 'WITHDRAW',
-                    ]);
+                    // Fallback when SDK introspection fails: the registry's
+                    // authorable set, so it covers the §40.x and §42.x writes
+                    // and never drifts behind it. The row picker still filters
+                    // each entry per chain with isActionOfferedOnChain.
+                    setActionsList([...AUTHORABLE_ACTIONS]);
                 }
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)

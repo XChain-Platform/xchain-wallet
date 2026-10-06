@@ -28,7 +28,7 @@
 //
 // Trust boundary (parallels the extension's isTrustedExtensionSender
 // gate): the process-wide signerBridge registry is a plain Map keyed by
-// signerId with last-writer-wins semantics. Three guards keep a second
+// signerId with last-writer-wins semantics. These guards keep a second
 // (or hostile) webContents from hijacking another window's hardware
 // signer:
 //

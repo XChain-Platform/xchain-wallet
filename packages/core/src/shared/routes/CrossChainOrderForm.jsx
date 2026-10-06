@@ -272,6 +272,15 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId: giveChainId, ...o }),
+                // §4.6: the input-liveness half of the Approve-time re-check,
+                // the same one useActionConfirmFlow.run gives every migrated form.
+                checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId: giveChainId, psbtHex }),
+                // §4.7: reserve the debited balance on the host-shared ledger,
+                // so two windows cannot both approve against the same balance.
+                reservationLedger: {
+                    reserve: (e) => messaging.reserve(e),
+                    release: (id) => messaging.releaseReservation({ id }),
+                },
                 // Re-price the native-coin protocol fee at Approve: the amount
                 // consensus requires moves with the coin price while the
                 // confirm screen sits open.
