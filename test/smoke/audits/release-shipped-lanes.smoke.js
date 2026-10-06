@@ -355,6 +355,22 @@ try {
         })();
         check('an unreadable lane list fails SHUT, demanding the checks',
             missing === 'updater', missing);
+        const probe = (body, ...want) => {
+            const f = join(work, 'feed-probe.txt');
+            writeFileSync(f, body);
+            const script = `source ${JSON.stringify(lib)}; `
+                + `xr_lanes_have_updater_feed ${JSON.stringify(f)} `
+                + want.map((w) => JSON.stringify(w)).join(' ')
+                + ` && echo updater || echo store-only`;
+            return execFileSync('bash', ['-c', script], { encoding: 'utf8' }).trim();
+        };
+        const rowsText = 'android SHIPPED store-only x\nmac SHIPPED updater x\nios SHIPPED usually x\n';
+        check('a lane with no row fails shut, demanding the checks',
+            probe(rowsText, 'android', 'ghost') === 'updater', probe(rowsText, 'android', 'ghost'));
+        check('an invalid feed word fails shut, demanding the checks',
+            probe(rowsText, 'ios') === 'updater', probe(rowsText, 'ios'));
+        check('a store-only lane that has a row still reads store-only',
+            probe(rowsText, 'android') === 'store-only', probe(rowsText, 'android'));
     }
     {
         // The committed file, not a fixture: these three rows are what make
