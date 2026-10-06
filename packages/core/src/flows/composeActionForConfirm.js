@@ -215,6 +215,11 @@ export async function composeActionForConfirm({
         // the PSBT hex, which is what survives the host messaging boundary.
         psbt: composed.psbt,
         carrierScripts: composed.carrierScripts,
+        // The payload the caller handed the encoder, not the stored form: the SDK
+        // inflates the stored push and compares it to this, so the rawData push
+        // is bound to the approved bytes rather than to whatever the encoder wrote.
+        rawData: encoderOpts.rawData ?? null,
+        rawDataCompressed: composed.compression?.compressed === true,
         network: sdk.config && sdk.config.network,
         verifyCarrierScripts: sdk.decoder.verifyCarrierScripts,
     });
