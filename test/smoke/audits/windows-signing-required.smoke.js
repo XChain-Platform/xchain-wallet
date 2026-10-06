@@ -321,6 +321,20 @@ function loadError(env) {
             `the eSigner CKA step must pass ${secret} through, or the signing`
             + ' requirement the build steps declare can never be met');
     }
+    // `config` without -key exits non-zero with "A required parameter is
+    // missing", and pwsh carries on past a native failure, so v0.341.0 built
+    // with no certificate loaded. Each CKA call is checked, and the step
+    // proves the subject reached the store before any build runs.
+    assert.ok(/\$tool config[^\n]*-key\s/.test(cka),
+        'the eSigner CKA config call passes -key, the master key file it requires');
+    for (const verb of ['config', 'unload', 'load']) {
+        assert.ok(new RegExp(`& \\$tool ${verb}[^\\n]*\\n\\s*if \\(\\$LASTEXITCODE -ne 0\\)`).test(cka),
+            `the eSigner CKA ${verb} call is followed by a $LASTEXITCODE check`);
+    }
+    assert.ok(/Cert:\\CurrentUser\\My[^\n]*WIN_CSC_SUBJECT_NAME/.test(cka),
+        'the eSigner CKA step asserts a certificate with the configured subject is in CurrentUser\\My');
+    assert.ok(!/\$tool credentials/.test(cka),
+        'the eSigner CKA step calls only commands the tool has (config, unload, load)');
 }
 
 // ---------------------------------------- the far end still rejects an .exe

@@ -606,13 +606,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
+      # The Developer ID Application cert (K3) goes into a keychain this job
+      # builds itself, and the build steps get CSC_KEYCHAIN instead of
+      # CSC_LINK. Given CSC_LINK, app-builder-lib 26.15.7 runs
+      # set-key-partition-list with the .p12 passphrase as the keychain
+      # password, which macos-26 refuses (v0.341.0's mac lane died there).
+      # See tools/release/ci-keychain.sh.
+      - name: Import the Developer ID identity into a build keychain
+        env:
+          MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          MACOS_CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/xchain-devid.keychain-db"
+          bash tools/release/ci-keychain.sh "$KC" MACOS_CSC_LINK:MACOS_CSC_KEY_PASSWORD
+          echo "XCHAIN_DEVID_KEYCHAIN=$KC" >> "$GITHUB_ENV"
       - name: Build, sign and notarize (macOS x64 + arm64)
         env:
-          # Developer ID Application cert (K3) + App Store Connect API
-          # key (K4), consumed by electron-builder. Bound to this
-          # environment, never repo-level.
-          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          # Developer ID Application cert (K3), imported by the step above,
+          # + App Store Connect API key (K4), consumed by electron-builder.
+          # Bound to this environment, never repo-level.
+          CSC_KEYCHAIN: ${{ env.XCHAIN_DEVID_KEYCHAIN }}
           # Names the signer explicitly. This step once shipped
           # unsigned, unnotarized artifacts while reading as configured:
           # `mac.identity` was `CSC_IDENTITY_NAME || null`, and
@@ -656,6 +669,13 @@ jobs:
       # above and does not exist yet, so this stays inert until it does.
       - name: Build the Mac App Store package (opt-in, §13)
         if: env.MAS_CSC_LINK != ''
+        # The mas lane is NOT-SHIPPED in tools/release/shipped-lanes.txt, so
+        # its failure must not strand the Developer ID artifacts this job
+        # uploads next. It still takes its certificates through CSC_LINK,
+        # which meets the app-builder-lib keychain defect described at the
+        # import step above; moving it to CSC_KEYCHAIN belongs with the
+        # lane's first submission.
+        continue-on-error: true
         env:
           XCHAIN_BUILD_MAS: '1'
           CSC_LINK: ${{ secrets.MAS_CSC_LINK }}
@@ -748,8 +768,7 @@ jobs:
       - name: Build the rehearsal variant (staging feed)
         if: env.STAGING_FEED != ''
         env:
-          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          CSC_KEYCHAIN: ${{ env.XCHAIN_DEVID_KEYCHAIN }}
           # Same reason as the production step above: without a
           # qualifier the rehearsal build is unsigned, and an unsigned zip
           # is exactly what the publisher-match half of the update chain
@@ -842,10 +861,22 @@ jobs:
           $setup = Get-ChildItem -Path $dir -Filter '*.exe' -Recurse | Select-Object -First 1
           Start-Process -FilePath $setup.FullName -ArgumentList '/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES',"/DIR=$dir\app" -Wait
           $tool = "$dir\app\eSignerCKATool.exe"
-          & $tool config -mode product -user $env:ES_USERNAME -pass $env:ES_PASSWORD -totp $env:ES_TOTP_SECRET -r
+          # -key is required: the master key file the CKA derives each
+          # signing OTP from. pwsh does not stop on a native non-zero exit,
+          # so each call is checked; v0.341.0's run printed "A required
+          # parameter is missing" here and went green into an unsigned build.
+          & $tool config -mode product -user $env:ES_USERNAME -pass $env:ES_PASSWORD -totp $env:ES_TOTP_SECRET -key "$dir\master.key" -r
+          if ($LASTEXITCODE -ne 0) { throw "eSignerCKATool config failed ($LASTEXITCODE)" }
           & $tool unload
+          if ($LASTEXITCODE -ne 0) { throw "eSignerCKATool unload failed ($LASTEXITCODE)" }
           & $tool load
-          & $tool credentials -id $env:CREDENTIAL_ID
+          if ($LASTEXITCODE -ne 0) { throw "eSignerCKATool load failed ($LASTEXITCODE)" }
+          # The CKA loads every certificate on the eSigner account into
+          # CurrentUser\My; the build selects one by subject, so that subject
+          # must now be there.
+          $certs = @(Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -like "*$env:WIN_CSC_SUBJECT_NAME*" })
+          if ($certs.Count -lt 1) { throw "no certificate with the WIN_CSC_SUBJECT_NAME subject in CurrentUser\My after the eSigner load" }
+          Write-Host "eSigner CKA loaded $($certs.Count) certificate(s) matching the subject"
       - name: Build and sign (Windows x64 + arm64)
         env:
           WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
