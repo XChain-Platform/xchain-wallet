@@ -20,7 +20,7 @@
 //   1. Send.jsx accepts a `prefill` prop and seeds initial form state
 //      from it (address, amount, tick, chainId, memo).
 //   2. Send's first-chain auto-select preserves a prefilled chainId.
-//   3. Web App.jsx imports the core uri namespace, declares a
+//   3. Web App.jsx imports the shared deepLinkRoute mapping, declares a
 //      `sendPrefill` state slot, and runs a one-shot effect that reads
 //      `?uri=` and routes to the matching view.
 //   4. The effect strips the `uri` query param via
@@ -66,28 +66,35 @@ const webApp = readFileSync(
     join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
     'utf8',
 );
-assert.ok(/import\s*\{\s*uri as coreUri\s*\}\s*from\s*'@xchain-wallet\/core'/.test(webApp),
-    'web App imports the core uri namespace as coreUri');
+// The web App delegates to the desktop shell's deepLinkRoute; its branches
+// are pinned by test/unit/uriIntentMapping.test.js.
+assert.ok(/import \{ deepLinkRoute \} from '\.\.\/\.\.\/desktop\/renderer\/deepLinkRoute\.js'/.test(webApp),
+    'web App imports the shared deepLinkRoute mapping');
 assert.ok(/const \[sendPrefill, setSendPrefill\] = useState/.test(webApp),
     'web App declares a sendPrefill state slot');
 assert.ok(
     /new URLSearchParams\(window\.location\.search\)[\s\S]*?\.get\('uri'\)/.test(webApp),
     'web App reads ?uri= from location.search',
 );
-assert.ok(/coreUri\.parseXchainUri\(raw,\s*\{\s*chainRegistry:\s*APP_CHAIN_REGISTRY\s*\}\)/.test(webApp),
-    'web App passes the raw URI through coreUri.parseXchainUri WITH the chain registry (coin-code URIs need it to resolve chainId)');
+assert.ok(/deepLinkRoute\(raw,\s*APP_CHAIN_REGISTRY\)/.test(webApp),
+    'web App passes the raw URI to deepLinkRoute WITH the chain registry (coin-code URIs need it to resolve chainId)');
 assert.ok(
-    /intent\.kind === 'send'[\s\S]*?setSendPrefill\([\s\S]*?setUnlockedView\('send'\)/.test(webApp),
-    'web App routes kind:send → setSendPrefill + setUnlockedView(send)',
+    /route\.view === 'send'\) setSendPrefill\(route\.sendPrefill\)/.test(webApp),
+    'web App seeds the Send prefill from a send route',
 );
 assert.ok(
-    /intent\.kind === 'receive'[\s\S]*?setUnlockedView\('receive'\)/.test(webApp),
-    'web App routes kind:receive → setUnlockedView(receive)',
+    /route\.view === 'contract-execute'[\s\S]*?setContractRef\(route\.contractRef\)[\s\S]*?setExecutePrefill\(route\.executePrefill\)/.test(webApp),
+    'web App applies the contract ref and execute prefill from a contract-execute route',
 );
-assert.ok(
-    /intent\.kind === 'execute' && intent\.contractActionIndex && intent\.chainId[\s\S]*?setContractRef\([\s\S]*?setExecutePrefill\([\s\S]*?setUnlockedView\('contract-execute'\)/.test(webApp),
-    'web App routes kind:execute (guarded on contract index + chainId) → setContractRef + setExecutePrefill + contract-execute view',
+assert.ok(/setUnlockedView\(route\.view\)/.test(webApp),
+    'web App routes to the view the mapping returns');
+
+const routeSrc = readFileSync(
+    join(wsRoot, 'packages', 'desktop', 'renderer', 'deepLinkRoute.js'),
+    'utf8',
 );
+assert.ok(/coreUri\.parseXchainUri\(raw,\s*\{\s*chainRegistry\s*\}\)/.test(routeSrc),
+    'deepLinkRoute parses with the chain registry');
 assert.ok(/const \[executePrefill, setExecutePrefill\] = useState/.test(webApp),
     'web App declares an executePrefill state slot');
 assert.ok(
@@ -118,5 +125,5 @@ assert.ok(
 );
 
 console.log(
-    "OK: web-uri-deeplink smoke (§47 Cluster L FOLLOWUP 1: Send.prefill prop seeds address/amount/tick/chainId/memo; first-chain auto-select preserves prefill; web App.jsx reads ?uri= → parseXchainUri → setSendPrefill + setUnlockedView; history.replaceState strips the param; back-navigation clears the prefill)",
+    "OK: web-uri-deeplink smoke (§47 Cluster L FOLLOWUP 1: Send.prefill prop seeds address/amount/tick/chainId/memo; first-chain auto-select preserves prefill; web App.jsx reads ?uri= → deepLinkRoute → setSendPrefill + setUnlockedView; history.replaceState strips the param; back-navigation clears the prefill)",
 );
