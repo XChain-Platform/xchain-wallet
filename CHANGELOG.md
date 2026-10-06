@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.341.2] - 2026-10-06
+
+### Fixed
+- macOS release builds notarize with the App Store Connect key passed as a file, as notarytool expects.
+- Windows release builds sign with a Windows SDK signtool proved against the eSigner certificate before the build starts.
+
 ## [0.341.1] - 2026-10-06
 
 ### Fixed
