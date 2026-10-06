@@ -66,4 +66,22 @@ describe('<Input>', () => {
         render(<Harness />);
         expect(document.activeElement).toBe(screen.getByLabelText('Focus me'));
     });
+
+    it('date-time fields name the local time zone and show the value in UTC', () => {
+        const { rerender } = render(<Input label="Expires" type="datetime-local" value="" onChange={() => {}} />);
+        const input = screen.getByLabelText('Expires');
+        const ids = input.getAttribute('aria-describedby').split(' ');
+        const zone = document.getElementById(ids[ids.length - 1]);
+        expect(zone).toHaveTextContent(/^Time is in your local time zone/);
+        expect(zone).not.toHaveTextContent('UTC.');
+        rerender(<Input label="Expires" type="datetime-local" value="2026-12-01T15:30" onChange={() => {}} />);
+        const iso = new Date(Date.parse('2026-12-01T15:30')).toISOString();
+        expect(zone).toHaveTextContent(`That is ${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC.`);
+    });
+
+    it('other field types get no time zone line', () => {
+        render(<Input label="Name" />);
+        expect(screen.queryByText(/local time zone/)).toBeNull();
+    });
 });
+
