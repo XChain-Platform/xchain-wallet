@@ -250,7 +250,7 @@ export function assertCompleteEnvelope(built, action) {
  */
 
 /**
- * @typedef {'creating' | 'encoding' | 'signing' | 'broadcasting' | 'p2sh_spending' | 'waiting' | 'confirmed'} SubmitPhase
+ * @typedef {'creating' | 'encoding' | 'signing' | 'broadcasting' | 'envelope_revealing' | 'envelope_revealed' | 'p2sh_spending' | 'waiting' | 'confirmed'} SubmitPhase
  */
 
 /**
@@ -641,9 +641,15 @@ export async function submitWithSigner({
                 phase: 'envelope_reveal',
             });
         }
-        clearPendingCommit(encoded.envelope?.commitTxid, encoded.envelope?.commitVout);
         finalTxid = envelopeRevealSigned.txid;
         finalSigned = envelopeRevealSigned;
+        // The reveal is on the network: nothing after it may turn the outcome into a failure.
+        try {
+            clearPendingCommit(encoded.envelope?.commitTxid, encoded.envelope?.commitVout);
+        } catch { /* the stale recovery record is harmless once the reveal landed */ }
+        try {
+            await onProgress('envelope_revealed', { txid: finalTxid, commitTxid: signed.txid });
+        } catch { /* progress observers cannot fail a delivered reveal */ }
     }
 
     // Step 4b: P2SH/P2WSH two-phase: encoder paid to a script, we now
