@@ -83,10 +83,12 @@ export function checkEnvelopeReveal({
 
     // The SDK's own rule for what a reveal must carry, so the wallet and the
     // submit path cannot disagree about a substituted reveal.
-    if (typeof assertEnvelopeCarrierBinding === 'function') {
-        try { assertEnvelopeCarrierBinding({ revealPsbt, actionString, network }); } catch {
-            return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
-        }
+    // A missing rule refuses: an unchecked reveal must never pass.
+    if (typeof assertEnvelopeCarrierBinding !== 'function') {
+        return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
+    }
+    try { assertEnvelopeCarrierBinding({ revealPsbt, actionString, network }); } catch {
+        return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
     }
     return { ok: true };
 }

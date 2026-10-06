@@ -57,6 +57,11 @@ describe('checkEnvelopeReveal carrier binding', () => {
             .toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
     });
 
+    it('refuses when no binding rule is supplied', () => {
+        expect(checkEnvelopeReveal(base({ assertEnvelopeCarrierBinding: undefined })))
+            .toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
+    });
+
     it('does not reach the binding rule when a structural check already refused', () => {
         const assertEnvelopeCarrierBinding = vi.fn();
         const verdict = checkEnvelopeReveal(base({ ownAddresses: ['bcrt1qother'], assertEnvelopeCarrierBinding }));
@@ -102,6 +107,12 @@ describe('composeActionForConfirm carrier binding', () => {
         const composed = await composeActionForConfirm(harness(rule));
         expect(composed.tamperVerified).toBe(true);
         expect(rule).toHaveBeenCalledWith({ revealPsbt: 'REVEAL', actionString: ACTION, network: 'regtest' });
+    });
+
+    it('refuses with a tamper error when the SDK exposes no rule', async () => {
+        const err = await composeActionForConfirm(harness(undefined)).catch((e) => e);
+        expect(err).toBeInstanceOf(TamperDetectedError);
+        expect(err.details.reason).toBe('REVEAL_CARRIER_BINDING');
     });
 
     it('refuses with a tamper error when the SDK rule rejects the reveal', async () => {
