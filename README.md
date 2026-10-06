@@ -4,7 +4,7 @@
 # XChain Platform Wallet
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.340.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.341.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/tests-471%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node">
   <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="License">
@@ -42,7 +42,7 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 - **Air-gapped PSBT signing:** BIP21 / multisig PSBT envelope / chunked PSBT-QR encoding; QR scanner + AnimatedQrFrames for offline cosigner round-trips; `prefers-reduced-motion` honored with manual frame stepping
 - **Sign message / verify signature:** sign arbitrary text with any address (BIP322-compatible) and verify counterparty signatures; output is copyable; gated behind password re-entry in the sensitive-action flow
 - **Sign-screen safety rails:** plain-English action decoder shows `to` / `amount` / `asset` as you typed them, even if the encoder fabricates output; multi-step approval requires explicit user confirmation; per-action expectation summaries
-- **Onboarding and recovery:** create / import / Counterwallet-migrate / dry-run-restore / discover-used-addresses (gap-limit scan); view-private-key + export-WIF gated behind password re-entry
+- **Onboarding and recovery:** create / import / Counterwallet-migrate / dry-run-restore / discover-used-addresses (gap-limit scan); view-private-key + export-WIF gated by a "Before you continue" warning in an unlocked session (no password re-entry; a locked wallet must be unlocked first)
 - **Lock / unlock / auto-lock:** Argon2id-derived session key cached in `chrome.storage.session` (extension) or in-memory (web/desktop); foreground auto-lock on idle; manual lock action; OS keychain auto-unlock on desktop
 - **i18n + a11y:** string registry under `core/src/i18n`; static a11y audit gate (button label / img alt / input label / textarea label / div-onclick role+tabIndex) blocks regressions in CI; WCAG 2.2 AA target for the external audit
 - **Reproducible builds:** Level-2 reproducibility of the pre-signing Linux desktop bundle: digest-pinned base image, frozen lockfile, `SOURCE_DATE_EPOCH` from `git log`, `RELEASE_HASHES.txt` SHA-256 manifest, 18-rule static repro-build audit gate
@@ -74,7 +74,7 @@ Full wallet documentation lives in the [xchain-documentation](https://github.com
 
 ## Status
 
-Pre-v1.0 (current version: `0.340.0`). All four implementation phases (Phase 1: framework; Phase 2: issuance + hardware; Phase 3: DEX + messaging; Phase 4: contracts + staking + cross-chain + multisig) are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
+Pre-v1.0 (current version: `0.341.0`). All four implementation phases (Phase 1: framework; Phase 2: issuance + hardware; Phase 3: DEX + messaging; Phase 4: contracts + staking + cross-chain + multisig) are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
 
 ## Quick Start
 

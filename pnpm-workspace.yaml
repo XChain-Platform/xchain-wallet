@@ -117,6 +117,11 @@ overrides:
   # time rather than anything a user's wallet parses; floored anyway because
   # the fix is a patch release and plist asks for ^0.8.8, which it satisfies.
   '@xmldom/xmldom': ^0.8.15
+  # proxy-addr below 2.0.8 mishandles trusted-proxy address matching
+  # (GHSA-jqcg-44mw-7w3h); express pulls it in under the SDK and the MCP SDK.
+  proxy-addr: ^2.0.8
+  # GHSA-6qxp-vccf-f47h: high advisory in the MCP SDK that xchain-sdk pulls in; patched in 1.31.0.
+  '@modelcontextprotocol/sdk': ^1.31.0
 
 # "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall

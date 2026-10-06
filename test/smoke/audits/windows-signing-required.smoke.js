@@ -53,12 +53,16 @@ const HELPER = join(root, 'packages/desktop/scripts/windows-signing.cjs');
 
 const {
     REQUIRE_VAR,
+    SUBJECT_VAR,
     AZURE_CONFIG_VARS,
     AZURE_CREDENTIAL_VARS,
     CLASSIC_VARS,
     windowsSigningStatus,
     assertWindowsSigningMaterial,
 } = require(HELPER);
+
+assert.equal(SUBJECT_VAR, 'WIN_CSC_SUBJECT_NAME',
+    'the certificate-subject environment contract stays stable');
 
 const AZURE_CONFIG = {
     AZURE_CODE_SIGNING_ENDPOINT: 'https://eus.codesigning.azure.net/',
@@ -75,7 +79,7 @@ const AZURE_CREDS = {
 
 // Every variable the config or the helper reads, cleared before each load so
 // the assertions describe the config and not the shell that invoked the suite.
-const OWNED_VARS = [REQUIRE_VAR, ...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS,
+const OWNED_VARS = [REQUIRE_VAR, SUBJECT_VAR, ...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS,
     ...CLASSIC_VARS, 'CSC_KEYCHAIN', 'CSC_IDENTITY_NAME', 'XCHAIN_STAGING_FEED_URL',
     'XCHAIN_BUILD_MAS', 'XCHAIN_BUILD_APPX', 'XCHAIN_BUILD_SNAP'];
 
@@ -226,6 +230,23 @@ function loadError(env) {
         'a supplied certificate satisfies the requirement on the classic path');
 }
 
+// ------------------------------------------- the certificate subject path
+
+{
+    const env = { [REQUIRE_VAR]: '1', [SUBJECT_VAR]: 'Dankest, LLC' };
+    const ok = assertWindowsSigningMaterial(env);
+    assert.equal(ok.path, 'subject', 'the subject alone satisfies the requirement');
+    assert.equal(ok.ready, true);
+    assert.equal(loadError(env), null, 'and the build config loads');
+
+    const empty = windowsSigningStatus({ [REQUIRE_VAR]: '1', [SUBJECT_VAR]: '' });
+    assert.notEqual(empty.path, 'subject', 'an empty subject (an unset secret) is not selected');
+    assert.equal(empty.ready, false);
+    const err = loadError({ [REQUIRE_VAR]: '1', [SUBJECT_VAR]: '' });
+    assert.ok(err && err.message.includes(SUBJECT_VAR),
+        'the missing-material message names the subject as a third way to sign');
+}
+
 // --------------------------------------------------- the status helper
 
 {
@@ -272,13 +293,33 @@ function loadError(env) {
         assert.ok(new RegExp(`${REQUIRE_VAR}:\\s*'1'`).test(step),
             `the Windows build step '${name}' must set ${REQUIRE_VAR}: '1', or a missing`
             + ' signing secret produces unsigned installers and a green lane');
-        // The requirement without the values is a lane that can only fail, so
-        // both halves are asserted together: config trio AND credentials.
+        assert.ok(new RegExp(`${SUBJECT_VAR}:\\s*\\$\\{\\{\\s*secrets\\.${SUBJECT_VAR}\\s*\\}\\}`).test(step),
+            `the Windows build step '${name}' must pass ${SUBJECT_VAR} through`);
+        // The lane signs through the eSigner certificate selected by subject
+        // (D3). Azure variables handed through as well would win the path
+        // selection in windows-signing.cjs and sign with a second key, so a
+        // build step must carry none of them.
         for (const secret of [...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS]) {
-            assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(step),
-                `the Windows build step '${name}' must pass ${secret} through, or the`
-                + ' requirement it declares can never be met');
+            assert.ok(!new RegExp(`${secret}:`).test(step),
+                `the Windows build step '${name}' must not pass ${secret}: the release`
+                + ' lane signs through the eSigner subject only');
         }
+    }
+
+    // The requirement without the credentials is a lane that can only fail.
+    // The subject names the certificate; the eSigner CKA step registers the
+    // cloud key behind it, and it needs all five values from the
+    // release-signing environment before any Windows build step runs.
+    const cka = steps.find((s) => /name:\s*Install and register the eSigner CKA/.test(s));
+    assert.ok(cka, 'release.yml registers the eSigner CKA in the Windows job');
+    const ckaAt = wf.indexOf('Install and register the eSigner CKA');
+    const firstWinBuild = wf.indexOf(winBuilds[0]);
+    assert.ok(ckaAt >= 0 && ckaAt < firstWinBuild,
+        'the eSigner CKA is registered before the first Windows build step');
+    for (const secret of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', SUBJECT_VAR]) {
+        assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(cka),
+            `the eSigner CKA step must pass ${secret} through, or the signing`
+            + ' requirement the build steps declare can never be met');
     }
 }
 

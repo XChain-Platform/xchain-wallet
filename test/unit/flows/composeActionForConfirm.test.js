@@ -21,6 +21,8 @@ function makeHarness({ outputs, decoded, inputs } = {}) {
         encoder: { createTx: vi.fn(async () => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN' })) },
         actions: { createAction: vi.fn(() => ({ actionString: 'SEND|0|JDOG|1|addr', action: 'SEND', version: 0 })) },
         wallet: {
+            // A bitcoin-regtest SDK, so the native fee pads to Bitcoin's dust floor.
+            getBitcoinNetwork: () => ({ dustThreshold: 546 }),
             decomposePsbt: vi.fn(() => ({
                 ...(inputs ? { inputs } : {}),
                 outputs: outputs || [
@@ -286,7 +288,18 @@ describe('composeActionForConfirm', () => {
         it('does not quote at all in native-coin mode', async () => {
             // That lane already has a quote it sized a real output from, and a
             // second XCHAIN figure beside a coin debit reads as a second charge.
-            const h = quoting({ supported: true, valid: true, xchainFee: '1.00000000' });
+            const h = quoting({
+                supported: true, valid: true, xchainFee: '1.00000000',
+                requiredFeeSats: 1000, feeDestination: 'feedest',
+            });
+            h.sdk.wallet.decomposePsbt = vi.fn(() => ({
+                inputs: [{ value: 5000 }],
+                outputs: [
+                    { address: null, scriptPubKeyHex: '6a20deadbeef', scriptType: 'unknown', value: 0 },
+                    { address: 'feedest', scriptPubKeyHex: '0014fe', scriptType: 'p2wpkh', value: 1000 },
+                    { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 100 },
+                ],
+            }));
             const composed = await composeActionForConfirm({
                 ...ARGS(h), encoderOpts: { pubkey: 'pub', payFeeInNativeCoin: true },
             });

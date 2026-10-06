@@ -166,9 +166,15 @@ describe('CrossChainOrderForm', () => {
         expect(pickerName(utils, 'Get chain')).toBe('Get chain: Bitcoin');
         expect(utils.getByLabelText('Receive at').value).toBe(BTC_ADDRESS.address);
         expect(calls.filter((c) => c.method === 'getNewestAddress').map((c) => c.args.chainId)).toEqual([BTC]);
+        // Matching is described in plain words, not by the mechanism.
+        expect(utils.container.textContent).toMatch(/order book and fills automatically/);
+        expect(utils.container.textContent).not.toMatch(/federation|price-time/i);
 
         await fillPair(utils);
         await placeAndApprove(utils);
+        expect(utils.container.textContent).toContain('Cross-chain order broadcast');
+        expect(utils.container.textContent).toMatch(/The network\s+matches this order automatically/);
+        expect(utils.container.textContent).not.toMatch(/federation|price-time/i);
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose, 'composeForConfirm was dispatched').toBeTruthy();

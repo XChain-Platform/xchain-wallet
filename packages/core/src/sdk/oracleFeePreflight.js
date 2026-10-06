@@ -35,6 +35,8 @@
 // read validator snapshots, and validators are compensated through the protocol fee. This
 // helper is a no-op for them, and for every non-DISPENSER action.
 
+import { finiteResponseAmount } from './amountValidation.js';
+
 /**
  * Thrown to refuse a Mode B dispenser whose oracle fee cannot be priced, because the
  * transaction would be rejected on chain with its costs already spent.
@@ -134,7 +136,10 @@ export async function applyOracleFeePreflight({ sdk, actionData, encoderOpts = {
     }
 
     const outs = Array.isArray(rest.customOutputs) ? rest.customOutputs.slice() : [];
-    const sats = Number(quote.requiredFeeSats);
+    const sats = finiteResponseAmount(quote.requiredFeeSats, {
+        source: 'oracle fee quote',
+        field: 'requiredFeeSats',
+    });
     if (!quote.belowDust && sats > 0) {
         outs.push({ address: quote.oracleAddress || ctx.oracleAddress, value: sats });
     }

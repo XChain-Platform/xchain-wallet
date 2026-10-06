@@ -8,12 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
     buildBalanceRows,
+    buildPlatformTokenRow,
     sortByChainThenAsset,
     coinFromChainId,
     tickerColor,
@@ -32,6 +33,7 @@ import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useMessaging } from '../useMessaging.js';
 import styles from './HomeTabs.module.css';
 
 /**
@@ -71,7 +73,10 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
     // here so it persists across tab switches.
-    const [filterOpen, setFilterOpen] = useState(false);
+    // It opens on its own while a token query is live: the query outlives
+    // this component (the shell owns it), so a remount would otherwise hide
+    // the only control showing why the Tokens list is empty.
+    const [filterOpen, setFilterOpen] = useState(() => tokenQuery.trim().length > 0);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
 
     const allRows = useMemo(
@@ -96,6 +101,20 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         [filteredRows],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
+    const ownedTokens = useOwnedTokens(balances, active === 'tokens');
+    const issuedUnheld = useMemo(() => {
+        const held = new Set(allRows.map((r) => `${r.chainId}:${r.tick}`));
+        const out = [];
+        for (const o of ownedTokens) {
+            if (held.has(`${o.chainId}:${o.tick}`)) continue;
+            if (networkFilter !== 'all' && coinFromChainId(o.chainId) !== networkFilter) continue;
+            if (tokenQueryTrim && !o.tick.toLowerCase().includes(tokenQueryTrim)) continue;
+            const row = buildPlatformTokenRow(o.chainId, o.tick, null, chainRegistry);
+            if (!row) continue;
+            out.push(Number.isFinite(o.divisibility) ? { ...row, divisibility: o.divisibility } : row);
+        }
+        return sortByChainThenAsset(out);
+    }, [ownedTokens, allRows, networkFilter, tokenQueryTrim, chainRegistry]);
     const filteredTokens = useMemo(() => {
         if (!tokenQueryTrim) return tokens;
         return tokens.filter((r) => {
@@ -198,17 +217,20 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 ) : null}
 
                 {active === 'tokens' ? (
+                    <>
                     <BalanceList
                         rows={filteredTokens}
                         emptyTitle={tokenQueryTrim
                             ? 'No matching tokens'
                             : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
                         emptyBody={tokenQueryTrim
-                            ? `Nothing matches "${tokenQuery.trim()}". Clear the filter from the top toolbar to see all tokens.`
+                            ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see all tokens.`
                             : (networkFilter === 'all'
                                 ? 'Browse markets or accept a token transfer to populate this view.'
                                 : undefined)}
                         onReceive={!tokenQueryTrim && networkFilter === 'all' ? onReceive : undefined}
+                        emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
+                        onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         onSelectToken={onSelectToken}
                         pinnedKeys={pinnedKeys}
                         onTogglePin={onTogglePin}
@@ -217,6 +239,21 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
                     />
+                    {issuedUnheld.length > 0 ? (
+                        <section aria-label="Issued by you" data-testid="issued-unheld">
+                            <p className={styles.tabNote}>Issued by you</p>
+                            <BalanceList
+                                rows={issuedUnheld}
+                                onSelectToken={onSelectToken}
+                                pinnedKeys={pinnedKeys}
+                                onTogglePin={onTogglePin}
+                                hiddenKeys={hiddenKeys}
+                                onToggleHide={onToggleHide}
+                                verifyMap={verifyMap}
+                            />
+                        </section>
+                    ) : null}
+                    </>
                 ) : null}
 
                 {active === 'nfts' ? (
@@ -290,6 +327,41 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             </div>
         </div>
     );
+}
+
+// Ticks any of the wallet's addresses owns, balance or not: a token whose
+// whole supply was sent on still belongs to its issuer. Failed reads yield
+// nothing rather than an error, since the balance rows above stand alone.
+function useOwnedTokens(balances, enabled) {
+    const { messaging } = useMessaging();
+    const [owned, setOwned] = useState([]);
+    const addressKey = useMemo(() => {
+        const pairs = [];
+        for (const [chainId, entries] of Object.entries(balances || {})) {
+            if (!Array.isArray(entries)) continue;
+            for (const e of entries) {
+                if (typeof e?.address === 'string') pairs.push(`${chainId}|${e.address}`);
+            }
+        }
+        return [...new Set(pairs)].sort().join(',');
+    }, [balances]);
+
+    useEffect(() => {
+        if (!enabled || !addressKey || typeof messaging?.getOwnedTokens !== 'function') return undefined;
+        let cancelled = false;
+        Promise.all(addressKey.split(',').map((pair) => {
+            const [chainId, address] = pair.split('|');
+            return Promise.resolve(messaging.getOwnedTokens({ chainId, address }))
+                .then((rows) => (Array.isArray(rows) ? rows : [])
+                    .filter((r) => typeof r?.tick === 'string')
+                    .map((r) => ({ chainId, tick: r.tick, divisibility: Number(r.divisibility) })))
+                .catch(() => []);
+        })).then((batches) => {
+            if (!cancelled) setOwned(batches.flat());
+        });
+        return () => { cancelled = true; };
+    }, [enabled, addressKey, messaging]);
+    return owned;
 }
 
 function Placeholder({ title, body, action = null }) {

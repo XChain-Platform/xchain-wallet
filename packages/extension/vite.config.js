@@ -206,6 +206,9 @@ function iconResizePlugin({ source, outDir, sizes }) {
 }
 
 export default defineConfig({
+    define: {
+        'require.main': 'undefined',
+    },
     // Keep MV3-friendly: no eval, no dynamic imports in SW / content / inject,
     // stable output paths that match what manifest.json references.
     //

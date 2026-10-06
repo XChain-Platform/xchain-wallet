@@ -69,6 +69,7 @@ function makeHarness({ reveal = revealOf(), revealAction = ACTION } = {}) {
         decoder: {
             decodeActionStringFromPsbt: vi.fn(() => ({ ok: false, reason: 'NO_ACTION' })),
             decodeActionFromPsbt: vi.fn(() => ({ ok: true, actionString: revealAction })),
+            assertEnvelopeCarrierBinding: vi.fn(),
             describe: vi.fn(() => ({ summary: 'described', details: [], warnings: [] })),
         },
     };
@@ -163,6 +164,7 @@ describe('checkEnvelopeReveal', () => {
         ownAddresses: [SOURCE],
         actionString: ACTION,
         decodeRevealAction: () => ({ ok: true, actionString: ACTION }),
+        assertEnvelopeCarrierBinding: () => {},
     });
 
     it('accepts the reveal the encoder builds', () => {

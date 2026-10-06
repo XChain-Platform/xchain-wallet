@@ -469,8 +469,8 @@ export function useConfirmAction() {
             }
             if (kind === 'permanent') {
                 // Can never confirm as-is (inputs spent / confirmed conflict).
-                // PendingTx is already `failed`; re-signing is forbidden, so the
-                // caller must re-compose. Terminal error.
+                // PendingTx is already `failed` (or `broadcast` when the commit had
+                // landed); re-signing is forbidden, so the caller must re-compose. Terminal error.
                 setPhase('error');
                 setError(err);
                 settleReject(err);
@@ -610,7 +610,11 @@ export function isCredentialFailure(err) {
  */
 export function canApproveWithReport(report, acknowledged) {
     if (!report) return true; // no report (best-effort / timed out): allow
-    for (const f of report.findings) {
+    const findings = report.findings || [];
+    // A fail verdict with no findings entry has nothing to acknowledge, so
+    // it blocks outright.
+    if (report.verdict === 'fail' && findings.length === 0) return false;
+    for (const f of findings) {
         if (f.severity !== 'error') continue;
         if (isHardPreflightFinding(f)) return false;         // hard block
         // Needs an explicit ack of THIS finding, per sub-command.

@@ -382,7 +382,7 @@ try {
     {
         const verify = readFileSync(join(repo, 'tools', 'release', 'verify.sh'), 'utf8');
         check('verify.sh reads the lanes field',
-            /xr_header_field "\$MANIFEST" 'lanes'/.test(verify), 'not read');
+            /xr_header_field "\$SNAP_MANIFEST" 'lanes'/.test(verify), 'not read');
         check('...and reports partial coverage', /PARTIAL/.test(verify), 'not reported');
     }
 

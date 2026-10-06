@@ -28,6 +28,7 @@
 // key may ever be present.
 
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -46,7 +47,8 @@ const AZURE_VARS = {
     AZURE_CODE_SIGNING_NAME: 'xchain-signing',
     AZURE_CERT_PROFILE_NAME: 'xchain-profile',
 };
-const OWNED_VARS = [...Object.keys(AZURE_VARS), 'APPLE_API_KEY_ID', 'APPLE_TEAM_ID',
+const SUBJECT = 'Dankest, LLC';
+const OWNED_VARS = [...Object.keys(AZURE_VARS), 'WIN_CSC_SUBJECT_NAME', 'APPLE_API_KEY_ID', 'APPLE_TEAM_ID',
     'XCHAIN_STAGING_FEED_URL',
     // The signed-or-fail requirement (§14). Ambient in the shell it would
     // turn every load below into a thrown WindowsSigningCredentialsMissing,
@@ -145,6 +147,45 @@ function loadConfig(env = {}) {
         'an Azure env missing the endpoint does not produce a half-built azureSignOptions');
     assert.ok(cfg.win.signtoolOptions,
         'it falls back to the classic path instead');
+}
+
+// ------------------------------------------- certificate subject path
+
+{
+    const cfg = loadConfig({ WIN_CSC_SUBJECT_NAME: SUBJECT });
+    assert.equal(cfg.win.signtoolOptions.certificateSubjectName, SUBJECT,
+        'the subject alone selects the certificate by subject');
+    assert.equal(cfg.win.signtoolOptions.publisherName, PUBLISHER,
+        'the pinned publisher stays beside the subject');
+    assert.equal(cfg.win.azureSignOptions, undefined,
+        'the subject path never emits azureSignOptions');
+
+    const both = loadConfig({ ...AZURE_VARS, WIN_CSC_SUBJECT_NAME: SUBJECT });
+    assert.ok(both.win.azureSignOptions, 'a complete Azure trio still wins over the subject');
+    assert.equal(both.win.signtoolOptions, undefined,
+        'and no signtoolOptions is emitted beside it');
+
+    assert.equal(loadConfig().win.signtoolOptions.certificateSubjectName, undefined,
+        'with no subject set the classic config carries no certificateSubjectName');
+}
+
+// ------------------------------------------- eSigner release lane
+
+{
+    const wf = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
+    const winJob = wf.slice(wf.indexOf('Install and register the eSigner CKA'));
+    for (const name of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', 'WIN_CSC_SUBJECT_NAME']) {
+        assert.ok(winJob.includes(`${name}: \${{ secrets.${name} }}`),
+            `the eSigner install step reads ${name} from the secrets`);
+    }
+    assert.ok(!wf.includes('AZURE_'), 'release.yml carries no Azure signing variable');
+    assert.ok(!/^\s+CSC_LINK:.*WIN/m.test(wf), 'no Windows CSC_LINK path remains in release.yml');
+    const builds = winJob.split('- name:').filter((b) => b.includes('dist --win'));
+    assert.ok(builds.length >= 3, 'every Windows build step is present');
+    for (const b of builds) {
+        assert.ok(b.includes('WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}'),
+            'every Windows build step selects the eSigner certificate by subject');
+    }
 }
 
 // ------------------------------------------------------------ macOS

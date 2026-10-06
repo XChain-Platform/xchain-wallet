@@ -210,6 +210,9 @@ export async function submitAction({
             await writePending({ status: 'awaiting-signature' });
         } else if (phase === 'broadcasting' && typeof data?.txid === 'string') {
             await writePending({ status: 'broadcasting', txid: data.txid });
+        } else if (phase === 'envelope_revealed' && typeof data?.txid === 'string') {
+            // The reveal is the action's identity; the row moves off the commit txid.
+            await writePending({ txid: data.txid });
         } else if (phase === 'p2sh_spending' && typeof data?.phase1Txid === 'string') {
             // phase-2 still pending; stay in broadcasting.
         } else if (phase === 'waiting' && typeof data?.txid === 'string') {
@@ -331,7 +334,8 @@ export async function submitAction({
                 // PERMANENCE. A PERMANENT rejection (inputs spent/missing, or
                 // a confirmed conflict) can never confirm as-is: mark the
                 // PendingTx `failed` (never queued) so the modal offers a
-                // fresh re-compose. A TRANSIENT failure keeps the existing
+                // fresh re-compose, unless phase 1 already landed (kept
+                // `broadcast` below). A TRANSIENT failure keeps the existing
                 // queued-rebroadcast path (the SAME signed tx can still land).
                 const permanence = classifyBroadcastFailure(err);
                 // Stamp the permanence into the error NAME so it survives the
@@ -341,7 +345,16 @@ export async function submitAction({
                 err.name = permanence === 'permanent'
                     ? BROADCAST_FAILED_PERMANENT_NAME
                     : BROADCAST_FAILED_TRANSIENT_NAME;
-                if (permanence === 'permanent') {
+                if (permanence === 'permanent' && phase1Landed) {
+                    // The commit is on the network and only the reveal or phase-2 spend was refused.
+                    // Same rule as the non-broadcast branch below: keep it 'broadcast' so the commit's
+                    // spend stays netted, and keep the commit's txid rather than the refused one.
+                    await stampPending({
+                        status: 'broadcast',
+                        broadcastAt: pending?.broadcastAt ?? new Date().toISOString(),
+                        error: err && err.message ? String(err.message) : String(err),
+                    });
+                } else if (permanence === 'permanent') {
                     await stampPending({
                         status: 'failed',
                         txid: err.txid,

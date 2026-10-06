@@ -2261,7 +2261,8 @@ function relativeTime(ts) {
 }
 
 // Format a Unix timestamp (seconds; tolerates ms) as a short local
-// date-time. '' for unparseable input so callers can omit the row.
+// date-time with the zone named, so it reads against the edit field's
+// local-time entry. '' for unparseable input so callers can omit the row.
 function formatUnixDate(ts) {
     const n = Number(ts);
     if (!n || !Number.isFinite(n)) return '';
@@ -2269,7 +2270,7 @@ function formatUnixDate(ts) {
     try {
         return new Date(ms).toLocaleString(undefined, {
             year: 'numeric', month: 'short', day: 'numeric',
-            hour: '2-digit', minute: '2-digit',
+            hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
         });
     } catch {
         return new Date(ms).toISOString();

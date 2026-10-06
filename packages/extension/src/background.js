@@ -230,10 +230,20 @@ let signerPool = new signersLib.SignerPool();
 // Share one build among overlapping callers; two concurrent builds orphan a Vault and a listener.
 const ensureHost = createHostBuildFlight(buildHost);
 
+// Bumped by every teardown. A build that finds it moved since it started was
+// overtaken by a lock or a wipe and must not install its host.
+let hostEpoch = 0;
+
 async function buildHost() {
     if (host) return host;
+    const epoch = hostEpoch;
+    const pool = signerPool;
     const sessionBackend = new ChromeSessionBackend();
     const masterKey = await sessionBackend.load();
+    if (epoch !== hostEpoch) {
+        masterKey?.fill(0);
+        return null;
+    }
     if (!masterKey) {
         // No unlocked session. The popup must unlock + re-init the host.
         return null;
@@ -243,19 +253,31 @@ async function buildHost() {
     // this one to the collector keeps plaintext key bytes in worker heap for
     // the whole unlocked session, against the fill(0) convention every other
     // key-loading path here follows.
+    let buildVault;
     try {
-        vault = new storageLib.Vault({
+        buildVault = new storageLib.Vault({
             backend: new ChromeStorageBackend(),
             masterKey,
         });
     } finally {
         masterKey.fill(0);
     }
+    vault = buildVault;
+
+    // Undo what an overtaken build opened: its vault, and any key it put in the
+    // pool the teardown had already locked.
+    const abandonBuild = () => {
+        try { buildVault.close(); } catch (_err) { /* best-effort */ }
+        if (vault === buildVault) vault = null;
+        try { pool.lockAll(); } catch (_err) { /* best-effort */ }
+        return null;
+    };
     // Guard vault.open() only: a later failure (a watcher, the panic-mode load)
     // leaves the key valid, so force-locking there would cost a usable session.
     try {
-        await vault.open();
+        await buildVault.open();
     } catch (err) {
+        if (epoch !== hostEpoch) return abandonBuild();
         // Lock rather than leave a half-rehydrated session: a key that cannot open
         // the vault proves nothing and sits beside the signing-capable password.
         try {
@@ -265,6 +287,7 @@ async function buildHost() {
         }
         throw err;
     }
+    if (epoch !== hostEpoch) return abandonBuild();
 
     // Re-populate the SignerPool after a service-worker restart. On the
     // normal unlock path the pre-host handler already filled the pool while
@@ -279,14 +302,14 @@ async function buildHost() {
     // holds the encrypted 25th word. It is non-empty only for a session that
     // was unlocked on the previous build and has not locked since, which is
     // the one case where passing it through is what keeps signing alive.
-    if (signerPool.size() === 0) {
+    if (pool.size() === 0) {
         try {
             const cached = await loadSigningCredentials(
                 new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
             );
             if (cached) {
-                await signerPool.populate({
-                    vault,
+                await pool.populate({
+                    vault: buildVault,
                     password: cached.password,
                     bip39Passphrase: cached.bip39Passphrase,
                     chainRegistry,
@@ -304,9 +327,10 @@ async function buildHost() {
     // background. Start hydration before the host serves any signing route;
     // assertSigningAllowed fails closed until the initial load resolves.
     await initPanicModePersistence(flowsLib);
+    if (epoch !== hostEpoch) return abandonBuild();
 
     host = createBackgroundHost({
-        vault,
+        vault: buildVault,
         chainRegistry,
         sdkRegistry,
         signerPool,
@@ -508,6 +532,7 @@ async function buildHost() {
  * callback; also safe to call from any cleanup path (e.g. panic mode).
  */
 function tearDownHost() {
+    hostEpoch += 1;
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;

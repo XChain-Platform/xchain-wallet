@@ -35,9 +35,16 @@ import { exactNetworkFeeSats } from './psbtNetworkFee.js';
  * @param {string} args.actionString             the action string the user approved
  * @param {() => { ok: boolean, actionString?: string, reason?: string }} args.decodeRevealAction
  *   reads the action the reveal's envelope leaf carries
+ * @param {string} [args.revealPsbt]   the reveal PSBT as built, handed to the carrier binding rule
+ * @param {string} [args.network]      network name the carrier binding rule parses the PSBT on
+ * @param {(a: { revealPsbt: string, actionString: string, network?: string }) => void} [args.assertEnvelopeCarrierBinding]
+ *   the SDK's envelope carrier binding rule; throws when the reveal does not carry the action
  * @returns {EnvelopeRevealVerdict}
  */
-export function checkEnvelopeReveal({ commit, reveal, envelope, ownAddresses, actionString, decodeRevealAction }) {
+export function checkEnvelopeReveal({
+    commit, reveal, envelope, ownAddresses, actionString, decodeRevealAction,
+    revealPsbt, network, assertEnvelopeCarrierBinding,
+}) {
     const commitOutputs = Array.isArray(commit?.outputs) ? commit.outputs : [];
     const revealInputs = Array.isArray(reveal?.inputs) ? reveal.inputs : [];
     const revealOutputs = Array.isArray(reveal?.outputs) ? reveal.outputs : [];
@@ -72,6 +79,16 @@ export function checkEnvelopeReveal({ commit, reveal, envelope, ownAddresses, ac
     try { decoded = decodeRevealAction(); } catch { decoded = null; }
     if (!decoded?.ok || decoded.actionString !== actionString) {
         return { ok: false, reason: 'REVEAL_ACTION_MISMATCH' };
+    }
+
+    // The SDK's own rule for what a reveal must carry, so the wallet and the
+    // submit path cannot disagree about a substituted reveal.
+    // A missing rule refuses: an unchecked reveal must never pass.
+    if (typeof assertEnvelopeCarrierBinding !== 'function') {
+        return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
+    }
+    try { assertEnvelopeCarrierBinding({ revealPsbt, actionString, network }); } catch {
+        return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
     }
     return { ok: true };
 }

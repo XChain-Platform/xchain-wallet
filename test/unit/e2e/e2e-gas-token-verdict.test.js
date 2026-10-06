@@ -16,7 +16,7 @@
 // throws with the body instead of becoming "absent".
 
 import { describe, it, expect } from 'vitest';
-import { gasTokenVerdict, GAS_ISSUE, GAS_TICK } from '../e2e/fixtures/gasToken.js';
+import { gasTokenVerdict, GAS_ISSUE, GAS_TICK } from '../../e2e/fixtures/gasToken.js';
 
 const ABSENT = { status: 'invalid: TICK (unknown)', error: 'invalid: TICK (unknown)', validated: true, valid: false };
 const PRESENT = { supported: true, action: 'MINT', coin: 'DOGE', status: 'valid', validated: true, xchainFee: '0.00000000' };

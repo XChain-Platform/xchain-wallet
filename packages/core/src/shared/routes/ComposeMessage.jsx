@@ -32,8 +32,7 @@ import {
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { humanizeError } from '../utils/humanizeError.js';
+import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -495,10 +494,10 @@ export function ComposeMessage({
             // half swallows a specific host reason, such as an
             // insufficient-funds shortfall naming the amount required, behind
             // a bare "Send failed."
-            const failure = humanizeError(err);
-            setSubmitError(submitFailureMessage(err, {
+            const failureMessage = submitFailureMessage(err, {
                 chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || 'Send failed.',
-            }), failure.details);
+            });
+            setSubmitError(failureMessage, submitFailureDetails(err, failureMessage));
         }
     }
 
@@ -599,10 +598,10 @@ export function ComposeMessage({
                 // above. The helper's own header names this exact trap: a form
                 // swept on one submit path and not the other still ships wire
                 // wording on the other.
-                const failure = humanizeError(err);
-                setSubmitError(submitFailureMessage(err, {
+                const failureMessage = submitFailureMessage(err, {
                     chainId, coinTicker: nativeTicker, verb: 'send this message', fallback: err?.message || 'Send failed.',
-                }), failure.details);
+                });
+                setSubmitError(failureMessage, submitFailureDetails(err, failureMessage));
             }
             setStage('review');
             if (!hw) {

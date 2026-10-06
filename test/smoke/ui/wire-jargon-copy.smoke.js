@@ -16,7 +16,8 @@
 // copy a holder reads. Code values ('LIST' as an action name) are not matched:
 // only a verb followed by a word inside the same literal is. Done screens
 // label the id row "Transaction ID", never the shorthand "Txid", and pending
-// copy says "the network" where a developer would say "mempool".
+// copy says "the network" where a developer would say "mempool". The deploy
+// wait messages and the transaction simulator notes are read the same way.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -50,6 +51,16 @@ const RULES = [
     },
 ];
 
+const COPY_FILES = [
+    join(wsRoot, 'packages', 'core', 'src', 'flows', 'deployLegWait.js'),
+    join(wsRoot, 'packages', 'core', 'src', 'decoder', 'txSimulator.js'),
+];
+const COPY_RULES = [
+    { re: /\b(?:the|in) mempool\b/i, say: 'names the mempool; say "the network"' },
+    { re: /['"`][^'"`]*\bsnapshot block\b/i, say: 'names the snapshot block; say "when this transaction confirms"' },
+    { re: /['"`][^'"`]*\bpre-?fetch/i, say: 'says "pre-fetch"; say "work it out ahead of time"' },
+];
+
 const files = sources(SHARED);
 assert.ok(files.length > 100, `expected the shared tree to hold >100 sources, found ${files.length}`);
 
@@ -59,6 +70,15 @@ for (const file of files) {
     lines.forEach((line, i) => {
         if (/^\s*(\/\/|\*)/.test(line)) return;
         for (const { re, say } of RULES) {
+            if (re.test(line)) hits.push(`${relative(wsRoot, file)}:${i + 1}: ${say}: ${line.trim()}`);
+        }
+    });
+}
+
+for (const file of COPY_FILES) {
+    readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+        if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+        for (const { re, say } of COPY_RULES) {
             if (re.test(line)) hits.push(`${relative(wsRoot, file)}:${i + 1}: ${say}: ${line.trim()}`);
         }
     });

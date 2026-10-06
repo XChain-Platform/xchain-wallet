@@ -55,4 +55,9 @@ describe.each(CONFIGS)('%s shell vite config', (_name, path) => {
         expect(http, 'http alias missing').toMatch(/http-browser\.js$/);
         expect(https, 'https alias missing').toBe(http);
     });
+
+    it('defines require.main as undefined for browser bundles', async () => {
+        const mod = await import(path);
+        expect(mod.default?.define?.['require.main']).toBe('undefined');
+    });
 });

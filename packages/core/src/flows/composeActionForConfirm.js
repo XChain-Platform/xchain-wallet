@@ -14,11 +14,11 @@
 // and decodeActionFromPsbt - lives host-side (the React tree only ever
 // talks to the host over `messaging`, there is no client-side SDK). So
 // compose AND the tamper check both run here, and the popup receives a
-// fully-serializable, already-tamper-verified ComposedAction.
+// already-tamper-verified HostComposeEnvelope.
 //
 //   composeForConfirm (build the one PSBT + resolve ADS/fee) ->
 //   assertNoTamper (output-set + inline action-byte, HOST-side) ->
-//   return the serializable envelope
+//   return the confirmation envelope
 //
 // A tamper failure THROWS (TamperDetectedError): it crosses the messaging
 // boundary as a plain error and the invoking form renders it exactly like
@@ -30,7 +30,7 @@ import { composeForConfirm } from './composeForConfirm.js';
 import { isBareNativePayment } from './nativePayment.js';
 import { assertNoTamper, TamperDetectedError } from './confirmChecks.js';
 import { checkEnvelopeReveal, envelopeNetworkFees } from './envelopeRevealCheck.js';
-import { totalNetworkFeeSats } from './psbtNetworkFee.js';
+import { totalNetworkFeeSats, sumExactSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
 import { simulateAction } from '../decoder/txSimulator.js';
@@ -52,7 +52,7 @@ import { withListRemovalDescriptions } from '../decoder/list_removal_description
  */
 
 /**
- * What actually crosses the host boundary, which is NOT `ComposedAction`.
+ * The confirmation surface receives this shape, not `ComposedAction`.
  *
  * `ComposedAction` is the INTERNAL shape composeForConfirm returns; the
  * envelope below drops two of its fields (`encoderOpts`, `carrierScripts` -
@@ -90,6 +90,7 @@ import { withListRemovalDescriptions } from '../decoder/list_removal_description
  * @property {object|null} oracleFeeQuote    Mode B dispenser oracle usage fee quote; NULL when none was priced
  * @property {object} adsPlan                resolved ADS plan
  * @property {ReturnType<typeof import('./confirmChecks.js').buildExpectedOutputs>} expectedOutputs
+ * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs when this compose is rejected
  * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not report one
  * @property {number|null} networkFeeSats    exact miner fee of the built bytes; NULL when not derivable
  * @property {number|null} protocolFeeSats   protocol fee in the native coin; NULL in XCHAIN-fee mode
@@ -189,9 +190,11 @@ export async function composeActionForConfirm({
     let networkFeeSats = totalNetworkFeeSats(decomposed, {
         carrierScripts: composed.carrierScripts,
         ownAddresses: own,
+        // Sum exactly: a DOGE output can exceed 2^53, and a malformed value must read
+        // as "fee unknown" (null), never as a zero that turns the carrier into miner fee.
         revealOutputSats: revealOutputs.length
-            ? revealOutputs.reduce((sum, o) => sum + (Number(o?.value) || 0), 0)
-            : Number(composed.quote?.requiredFeeSats) || 0,
+            ? sumExactSats(revealOutputs.map((o) => o?.value))
+            : (composed.quote?.requiredFeeSats ?? 0),
     });
     assertNoTamper({
         psbtHex: composed.psbt,
@@ -212,6 +215,11 @@ export async function composeActionForConfirm({
         // the PSBT hex, which is what survives the host messaging boundary.
         psbt: composed.psbt,
         carrierScripts: composed.carrierScripts,
+        // The payload the caller handed the encoder, not the stored form: the SDK
+        // inflates the stored push and compares it to this, so the rawData push
+        // is bound to the approved bytes rather than to whatever the encoder wrote.
+        rawData: encoderOpts.rawData ?? null,
+        rawDataCompressed: composed.compression?.compressed === true,
         network: sdk.config && sdk.config.network,
         verifyCarrierScripts: sdk.decoder.verifyCarrierScripts,
     });
@@ -340,9 +348,8 @@ export async function composeActionForConfirm({
         simulation = null;
     }
 
-    // Serializable envelope for the popup. `encoderOpts` (which carries the
-    // ADS-folded customOutputs and is not needed client-side) is dropped;
-    // everything returned here survives structured-clone / JSON transport.
+    // Keep only what the confirmation surface needs. Reject retains the release
+    // callback so the encoder does not hold inputs after the action is abandoned.
     return {
         actionString: composed.actionString,
         action: composed.action,
@@ -392,6 +399,7 @@ export async function composeActionForConfirm({
         oracleFeeQuote: composed.oracleFeeQuote || null,
         adsPlan: composed.adsPlan,
         expectedOutputs: composed.expectedOutputs,
+        releaseEncoderInputs: composed.releaseEncoderInputs,
         // The encoder's compression report for these bytes: the submit path
         // hands it to the success screen's stored-size line, and this envelope
         // is its only route there.
@@ -441,6 +449,9 @@ function checkedEnvelopeFees({ sdk, composed, commit, own }) {
         // The co-signer decoder reads the envelope leaf; the inline extractor
         // the commit check uses cannot see it.
         decodeRevealAction: () => sdk.decoder.decodeActionFromPsbt(composed.revealPsbt),
+        revealPsbt: composed.revealPsbt,
+        network: sdk.config && sdk.config.network,
+        assertEnvelopeCarrierBinding: sdk.decoder.assertEnvelopeCarrierBinding,
     });
     if (!verdict.ok) {
         throw new TamperDetectedError(

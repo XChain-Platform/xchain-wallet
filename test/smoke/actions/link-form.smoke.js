@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { COMMON_ACTIONS, PROTOCOL_ONLY_ACTIONS } from '../../../packages/core/src/registry/actions.js';
 import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -151,7 +152,11 @@ for (const [shell, msgPath] of [
 // --- AdvancedActionsForm declares LINK as having a dedicated form ---
 
 const advanced = readFileSync(join(sharedRoutes, 'AdvancedActionsForm.jsx'), 'utf8');
-assert.ok(/'LINK'/.test(advanced),
+// The dedicated-form set is derived from the registry, so LINK is marked
+// when the form derives the set and LINK is authorable and form-backed.
+assert.ok(
+    /const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions\(\{\s*authorable: \[\.\.\.COMMON_ACTIONS, \.\.\.BTC_EXCLUSIVE_ACTIONS\],\s*protocolOnly: PROTOCOL_ONLY_ACTIONS,/.test(advanced)
+        && COMMON_ACTIONS.includes('LINK') && !PROTOCOL_ONLY_ACTIONS.includes('LINK'),
     'AdvancedActionsForm marks LINK as having a dedicated form');
 
 // --- App.jsx wiring (all three shells) ---

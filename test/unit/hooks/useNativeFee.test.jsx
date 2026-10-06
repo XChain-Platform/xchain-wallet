@@ -23,9 +23,13 @@ import { applyNativeFeePreflight } from '../../../packages/core/src/sdk/nativeFe
 
 const FEE_DEST = 'mrFeeDestinationRegtest';
 
-/** An indexer that prices the fee, as the real `feequote` does for a quotable action. */
-function quotingSdk() {
+/**
+ * An indexer that prices the fee, as the real `feequote` does for a quotable action,
+ * on an SDK whose network carries the chain's dust floor, which the preflight pads the fee to.
+ */
+function quotingSdk(dustThreshold) {
     return {
+        wallet: { getBitcoinNetwork: () => ({ dustThreshold }) },
         quoteNativeFee: vi.fn(async () => ({
             supported: true, valid: true, requiredFeeSats: 50000, feeDestination: FEE_DEST,
         })),
@@ -94,7 +98,7 @@ describe('useNativeFee', () => {
 describe('default form state through the submit preflight', () => {
     it('builds the FEE_DESTINATION output on LTC without the user touching anything', async () => {
         const { result } = renderHook(() => useNativeFee('litecoin-regtest'));
-        const sdk = quotingSdk();
+        const sdk = quotingSdk(5460);
 
         const { encoderOpts, quote } = await applyNativeFeePreflight({
             sdk,
@@ -112,7 +116,7 @@ describe('default form state through the submit preflight', () => {
 
     it('still composes a Bitcoin action with no fee output, paying the fee in XCHAIN', async () => {
         const { result } = renderHook(() => useNativeFee('bitcoin-regtest'));
-        const sdk = quotingSdk();
+        const sdk = quotingSdk(546);
 
         const { encoderOpts, quote } = await applyNativeFeePreflight({
             sdk,

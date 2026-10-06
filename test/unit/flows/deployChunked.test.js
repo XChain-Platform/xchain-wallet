@@ -946,7 +946,7 @@ describe('a leg that outlasts one indexer-wait round keeps waiting while it is o
         const { opts } = baseOpts({ sdk });
         const err = await deployChunkedRun(opts).catch((e) => e);
         expect(err.chainState).toBe('dropped');
-        expect(err.message).toMatch(/neither confirmed on chain nor in the mempool/);
+        expect(err.message).toMatch(/neither confirmed on chain nor still pending/);
         expect(err.message).toMatch(/send this chunk again/);
         // Two readings a round apart, not the whole patience.
         expect(sdk.waitForAction).toHaveBeenCalledTimes(2);

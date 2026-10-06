@@ -262,6 +262,9 @@ const musigBaseCrypto = createRequire(
 ).resolve('@brandonblack/musig/base_crypto');
 
 export default defineConfig({
+    define: {
+        'require.main': 'undefined',
+    },
     // xchain-sdk is CJS and pulls in `ws` + Node `crypto` + Buffer at
     // module load. `ws` is aliased to our browser shim
     // (packages/core/src/shims/ws-browser.js); `crypto`/Buffer/process/

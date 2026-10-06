@@ -120,13 +120,14 @@ describe('shared/actionDisplayLabel', () => {
 });
 
 describe('shared/psbtActionSummary', () => {
-    it('names the decoded action by its display label, with its version', () => {
-        expect(psbtActionSummary({ action: 'XBRIDGE', version: 2 })).toBe('Carries an XChain Bridge transfer action (v2)');
+    it('names the decoded action by its display label, without the wire version', () => {
+        expect(psbtActionSummary({ action: 'XBRIDGE', version: 2 })).toBe('Carries an XChain Bridge transfer action');
+        expect(psbtActionSummary({ action: 'MINT', version: '1' })).toBe('Carries an XChain Mint action');
         expect(psbtActionSummary({ action: 'SEND' })).toBe('Carries an XChain Send action');
     });
 
     it('reads cleanly when the action name is missing', () => {
-        expect(psbtActionSummary({ version: 0 })).toBe('Carries an XChain action of unknown type (v0)');
+        expect(psbtActionSummary({ version: 0 })).toBe('Carries an XChain action of unknown type');
         expect(psbtActionSummary(null)).toBe('Carries an XChain action of unknown type');
     });
 });

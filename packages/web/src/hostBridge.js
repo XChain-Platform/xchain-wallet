@@ -52,7 +52,7 @@ import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStorage } from '../../extension/src/background/broadcastQueueStorage.js';
-import { createBroadcastQueueStore } from '../../extension/src/background/broadcastQueueStore.js';
+import { createBroadcastQueueStore, sealBroadcastQueueStore } from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
@@ -192,6 +192,17 @@ if (!import.meta.env?.PROD) {
 // from anything and nothing can sign with it.
 const MOCK_RECIPIENT_PUBKEY = `02${'ab'.repeat(32)}`;
 
+// Base units the dev venue says `address` holds of `tick`, or null when it
+// holds no row for it. Tokens come from the `/balances/` ledger; the chain
+// native coin is absent from that ledger, so it is read from the same fake
+// dataset the `/address/` stub serves.
+function devHeldBaseUnits(address, chainId, tick) {
+    const want = String(tick).toUpperCase();
+    const { native, tokens } = fakeBalanceFor(address, chainId);
+    const row = [native, ...tokens].find((t) => t && String(t.tick).toUpperCase() === want);
+    return row ? Number(row.quantity ?? 0) : null;
+}
+
 const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
     // Each per-chain SDK instance carries its own `network` (chainId)
     // so the fake-balance dataset can return chain-appropriate values.
@@ -199,7 +210,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
 
     // dev-mock "PSBT": a marker-prefixed JSON blob (browser-safe, no
     // Buffer) so encoder.createTx, wallet.decomposePsbt, and
-    // decoder.decodeActionFromPsbt round-trip the SAME structure and the
+    // both decoder action methods round-trip the SAME structure and the
     // confirm-pipeline tamper check stays self-consistent in the dev shell.
     const MOCK_PSBT_MARKER = 'devmockpsbt:';
     const encodeMockPsbt = (obj) => MOCK_PSBT_MARKER + JSON.stringify(obj);
@@ -208,6 +219,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             try { return JSON.parse(hex.slice(MOCK_PSBT_MARKER.length)); } catch { /* fall through */ }
         }
         return { inputs: [], outputs: [] };
+    };
+    const decodeMockAction = (psbtHex) => {
+        const decoded = decodeMockPsbt(psbtHex);
+        return decoded?.actionString
+            ? { ok: true, actionString: decoded.actionString }
+            : { ok: false, reason: 'decode-failed' };
     };
 
     // Read-side stub. Any `get*` method the wallet calls before the
@@ -355,21 +372,28 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             // The confirm pipeline's tamper check decomposes the PSBT
             // host-side. The dev mock builds its "PSBT" as a marker-prefixed
             // JSON blob (encodeMockPsbt below), so decompose just parses it
-            // back - self-consistent with encoder.createTx + decodeActionFromPsbt.
+            // back - self-consistent with encoder.createTx + both decoder
+            // action methods.
             decomposePsbt(psbtHex) {
                 return decodeMockPsbt(psbtHex);
             },
         },
         // confirm pipeline: createAction + encoder.createTx + preflight +
-        // decodeActionFromPsbt so the single-encode modal can OPEN, tamper-check,
-        // and pre-flight in the dev shell (the real SDK isn't reachable here).
+        // both decoder action methods so the single-encode modal can OPEN,
+        // tamper-check, and pre-flight in the dev shell (the real SDK isn't
+        // reachable here).
         // Signing still throws by design (see wallet.signPsbt), so Approve fails
         // loudly rather than broadcasting - the confirm-stage flow is what this
         // unblocks, mirroring the real host boundary.
         actions: {
             createAction({ action, params }) {
+                const actionString = action === 'BROADCAST'
+                    ? [action, params.VERSION ?? '0', params.MESSAGE, params.VALUE, params.FEE, params.MEMO]
+                        .filter((field) => field != null && field !== '')
+                        .join('|')
+                    : buildDevMockActionString(action, params);
                 return {
-                    actionString: buildDevMockActionString(action, params),
+                    actionString,
                     action,
                     version: 0,
                 };
@@ -404,10 +428,10 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         },
         decoder: {
             decodeActionFromPsbt(psbtHex) {
-                const decoded = decodeMockPsbt(psbtHex);
-                return decoded.actionString
-                    ? { ok: true, actionString: decoded.actionString }
-                    : { ok: false, reason: 'decode-failed' };
+                return decodeMockAction(psbtHex);
+            },
+            decodeActionStringFromPsbt(psbtHex) {
+                return decodeMockAction(psbtHex);
             },
         },
         // Best-effort dev pre-flight: parses a SEND string and flags an
@@ -420,13 +444,12 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 const parts = String(actionString).split('|'); // SEND|0|TICK|AMOUNT|DEST[|MEMO]
                 const tick = parts[2];
                 const amount = Number(parts[3]);
-                const bals = await readStub.getBalances(opts?.source);
-                const row = Array.isArray(bals) ? bals.find((b) => String(b.tick).toUpperCase() === String(tick).toUpperCase()) : null;
+                const held = devHeldBaseUnits(opts?.source, chainId, tick);
                 // Dev balances are base units (8dp); the SEND amount is display
                 // units. Normalize at 8dp (right for the native-coin excess test;
                 // a dev approximation for other-decimal tokens).
                 const amountBase = amount * 1e8;
-                if (row && Number.isFinite(amount) && amountBase > Number(row.quantity ?? row.amount ?? 0)) {
+                if (held !== null && Number.isFinite(amount) && amountBase > held) {
                     verdict = 'fail';
                     // overridable: TRUE, mirroring the real engine. The SDK
                     // registers BALANCE_INSUFFICIENT as `network` in
@@ -496,6 +519,8 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         },
     });
 };
+
+export const __createDevMockSdkForTests = createDevMockSdk;
 
 // Pre-resolution placeholder for PRODUCTION builds, where
 // the dev mock is compiled out. Any SDK call that lands before the real
@@ -585,7 +610,8 @@ let vault = null;
 let signerPool = null;
 // One broadcast-queue store for every host this page builds, so a host a lock
 // dropped mid-broadcast cannot write a stale queue over the next one's save.
-// A lock keeps it; every wipe reloads the page, which is what ends it here.
+// A lock keeps it; a wipe seals it before core removes the stored key, so a
+// broadcast that resolves after the removal writes nothing back.
 let broadcastQueueStore = null;
 
 /** Build the page's queue store on first use, when the page's storage is known. */
@@ -594,6 +620,42 @@ function sharedBroadcastQueueStore() {
         broadcastQueueStore = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
     }
     return broadcastQueueStore;
+}
+
+/**
+ * End the page's queue store for a wallet wipe and give the next host a fresh one.
+ * Never throws: a failed seal must not fail the wipe, which removes the key itself.
+ *
+ * @returns {Promise<void>}
+ */
+export async function sealPageBroadcastQueue() {
+    const sealed = broadcastQueueStore;
+    broadcastQueueStore = null;
+    if (!sealed) return;
+    try {
+        await sealBroadcastQueueStore(sealed);
+    } catch (_err) {
+        // Only the sealed store's writers were at stake; the wipe removes the key.
+    }
+}
+
+/**
+ * Publish the wipe hook a plain browser page needs for the seal. The native
+ * shell's hook carries the seal itself, and a hook another shell published stays.
+ *
+ * @returns {boolean} whether this call published the hook
+ */
+function installPageWipeSeal() {
+    const g = /** @type {any} */ (globalThis);
+    if (g.xchainWalletBridge?.wipeStorage) return false;
+    g.xchainWalletBridge = {
+        ...(g.xchainWalletBridge || {}),
+        wipeStorage: async () => {
+            await sealPageBroadcastQueue();
+            return { ok: true };
+        },
+    };
+    return true;
 }
 let notificationService = null;
 let priceAlertWatcher = null;
@@ -829,7 +891,7 @@ export async function getSessionStatus() {
     // the biometric enrollment flag honest after the user enrolls, disables,
     // or re-registers a fingerprint in system settings. No-op in a browser.
     try {
-        installNativeWipeHook();
+        if (!installNativeWipeHook({ afterWipe: sealPageBroadcastQueue })) installPageWipeSeal();
         installNativeScreenGuard();
         await installNativeBiometricProvider();
         // SSC-7, and the await is load-bearing rather than tidy: the lockout
