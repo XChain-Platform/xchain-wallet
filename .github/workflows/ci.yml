@@ -296,25 +296,39 @@ jobs:
           path: test/e2e/playwright-report/
           retention-days: 7
 
-  # Regtest e2e against the PRODUCTION build (`pnpm test:e2e:regtest`).
+  # The regtest specs sign and broadcast against a live chain, so the default
+  # e2e job above excludes every *.regtest.spec.js. This job runs them against
+  # the PRODUCTION build (`pnpm test:e2e:regtest`), which the dev-server e2e job
+  # cannot do: the dev server serves the dev-mock SDK, so only a built bundle
+  # notices a failure to load the real SDK.
   #
-  # The `e2e` job above drives the Vite dev server, which serves the dev-mock
-  # SDK, so it can never notice that a production bundle fails to load the real
-  # SDK. This job builds and previews the shipped bundle and signs and
-  # broadcasts against the regtest venue, which is the check `release:gate`
-  # already requires locally and CI never ran.
-  #
-  # The venue is not on GitHub's network. It is reached through an SSH tunnel to
-  # the host named by the XC_REGTEST_SSH_HOST repository variable, using the
-  # XC_REGTEST_SSH_KEY secret. Without both, the job ends green but says in its
-  # summary that the regtest suite did NOT run, so a skipped gate is never
-  # mistaken for a passed one. With both, any failure is a real failure.
+  # Discovery always runs: it proves the regtest config loads and still finds its
+  # specs. The venue run needs XC_REGTEST_SSH_HOST (repository variable) and
+  # XC_REGTEST_SSH_KEY (secret), reached through an SSH tunnel because the venue
+  # is not on GitHub's network. Without both, the job says in its summary that
+  # the venue suite did NOT run, so a skipped gate is never read as a pass.
   e2e-regtest:
     runs-on: ubuntu-latest
     env:
       XC_REGTEST_SSH_HOST: ${{ vars.XC_REGTEST_SSH_HOST }}
       XC_REGTEST_SSH_KEY: ${{ secrets.XC_REGTEST_SSH_KEY }}
     steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      - name: List regtest specs
+        run: |
+          pnpm exec playwright test --config test/e2e/playwright.regtest.config.js --list | tee regtest-list.txt
+          grep -q 'regtest.spec' regtest-list.txt
       - name: Check regtest venue access
         id: venue
         run: |
@@ -322,27 +336,10 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::regtest e2e NOT RUN: XC_REGTEST_SSH_HOST variable or XC_REGTEST_SSH_KEY secret is not set"
-            echo "### regtest e2e NOT RUN" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::regtest e2e venue run NOT RUN: XC_REGTEST_SSH_HOST variable or XC_REGTEST_SSH_KEY secret is not set"
+            echo "### regtest e2e venue run NOT RUN" >> "$GITHUB_STEP_SUMMARY"
             echo "The regtest venue is not configured for this repository, so the production-build regtest suite did not execute." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: actions/checkout@v4
-        if: steps.venue.outputs.configured == 'true'
-      - name: Enable pnpm (corepack)
-        if: steps.venue.outputs.configured == 'true'
-        run: corepack enable
-      - name: Use Node.js 22
-        if: steps.venue.outputs.configured == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: Install dependencies
-        if: steps.venue.outputs.configured == 'true'
-        run: pnpm install --frozen-lockfile
-      - name: Install Playwright browsers
-        if: steps.venue.outputs.configured == 'true'
-        run: pnpm exec playwright install --with-deps chromium
       - name: Open the regtest tunnel
         if: steps.venue.outputs.configured == 'true'
         run: |
@@ -354,7 +351,7 @@ jobs:
             -L 3023:localhost:3023 -L 3025:localhost:3025 \
             -L 3223:localhost:3223 -L 3225:localhost:3225 \
             -L 3123:localhost:3123 -L 3125:localhost:3125 "$XC_REGTEST_SSH_HOST"
-      - name: Run regtest E2E suite
+      - name: Run regtest suite
         if: steps.venue.outputs.configured == 'true'
         run: pnpm test:e2e:regtest
         env:
@@ -363,7 +360,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-regtest-report
+          name: playwright-report-regtest
           path: |
             test/e2e/playwright-report/
             test/e2e/test-results-regtest/

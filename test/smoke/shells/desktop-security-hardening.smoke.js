@@ -16,8 +16,8 @@
 //      pre-locked store makes runtime wallet.unlock fail BEFORE the KDF.
 //   3. keychain/storage/meta clear() removes a half-written .tmp sibling.
 //   4. signerBridgeListener: signerId ownership guard (a second sender
-//      cannot re-point another sender's id), per-message cap, and the
-//      injected sender-trust predicate.
+//      cannot re-point another sender's id), per-message cap, cumulative
+//      per-sender quota, and the injected sender-trust predicate.
 //   5. index.js wires the navigation lockdown + sender checks (source scan;
 //      index.js imports electron so it is scanned, not imported).
 

@@ -50,9 +50,9 @@
 // up, so an untouched copy - and one that still carries the template's
 // own "copy this file" instructions - is refused by name.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));            // tools/release
@@ -470,8 +470,14 @@ function inspectRecordAt(file, tag) {
     return inspectBody(readFileSync(file, 'utf8'), normalized, file);
 }
 
-const invokedDirectly = process.argv[1]
-    && fileURLToPath(import.meta.url) === process.argv[1];
+const invokedDirectly = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
 
 if (invokedDirectly) {
     process.exit(main(process.argv.slice(2)));

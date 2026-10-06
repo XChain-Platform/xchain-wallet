@@ -74,6 +74,7 @@ import { attachUpdater } from './updater.js';
 import { applyTorRouting } from './torRouting.js';
 import {
     createRuntime,
+    enforceIdleAutoLock,
     enforceLaunchAutoLock,
     ensureHost,
     handleIpcMessage,
@@ -389,6 +390,8 @@ function buildRuntime() {
  * @param {{ initialView?: string, initialContext?: any }} [opts]
  */
 function createWindow(opts = {}) {
+    // A live window hands idle tracking back to its renderer's timer.
+    stopWindowlessIdleLock();
     const win = new BrowserWindow({
         width: 420,
         height: 720,
@@ -444,9 +447,72 @@ function buildLoadOptions(opts) {
     }
 }
 
+// How often the windowless idle check runs. A sleeping machine fires it on
+// wake, and the check reads wall-clock time, so a lapse during sleep locks.
+const WINDOWLESS_IDLE_CHECK_MS = 30 * 1000;
+let windowlessIdleTimer = /** @type {ReturnType<typeof setInterval> | null} */ (null);
+let reopenInFlight = /** @type {Promise<void> | null} */ (null);
+
+/**
+ * Enforce the configured auto-lock while the app runs with no window. Only
+ * then: user activity is tracked in the renderer and never reaches main, so
+ * with a window open this would lock someone who is using it.
+ */
+function startWindowlessIdleLock() {
+    if (windowlessIdleTimer) return;
+    windowlessIdleTimer = setInterval(() => {
+        if (!runtime || BrowserWindow.getAllWindows().length > 0) return;
+        void enforceIdleAutoLock(runtime).then((res) => {
+            if (res.locked) console.info(`[xchain] auto-lock: windowless session locked (${res.reason})`);
+        });
+    }, WINDOWLESS_IDLE_CHECK_MS);
+    windowlessIdleTimer.unref?.();
+}
+
+// Stop the windowless check; a live window's renderer timer governs again.
+function stopWindowlessIdleLock() {
+    if (!windowlessIdleTimer) return;
+    clearInterval(windowlessIdleTimer);
+    windowlessIdleTimer = null;
+}
+
+/**
+ * Open a window from the dock or File > New Window. With no window live, the
+ * idle check runs and is awaited BEFORE the renderer exists, because its
+ * first message and its mount-time report both re-stamp the idle clock.
+ * Two quick clicks share one check and open one window.
+ *
+ * @returns {Promise<void>}
+ */
+function openWindowAfterIdleCheck() {
+    if (BrowserWindow.getAllWindows().length > 0) {
+        createWindow();
+        return Promise.resolve();
+    }
+    if (reopenInFlight) return reopenInFlight;
+    reopenInFlight = (async () => {
+        try {
+            if (runtime) {
+                const res = await enforceIdleAutoLock(runtime);
+                if (res.locked) console.info(`[xchain] auto-lock: reopened window locked (${res.reason})`);
+            }
+        } catch (err) {
+            // Cannot decide, so it costs a password prompt rather than an unlock.
+            console.error('[xchain] auto-lock check before reopening failed:', err);
+            if (runtime) {
+                tearDownHost(runtime);
+                try { await runtime.sessionBackend.clear(); } catch { /* logged by the check */ }
+            }
+        }
+        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    })().finally(() => { reopenInFlight = null; });
+    return reopenInFlight;
+}
+
 /**
  * Wire the macOS-style application menu. The custom slot we care about
- * is `File → New Window` (Cmd+N / Ctrl+N) which calls `createWindow()`.
+ * is `File → New Window` (Cmd+N / Ctrl+N) which calls `createWindow()`
+ * through `openWindowAfterIdleCheck()`.
  * The rest of the menu uses Electron's `role: ...` defaults so standard
  * editing / window-management behaviors stay native to each platform.
  *
@@ -476,7 +542,7 @@ function buildApplicationMenu() {
                 {
                     label: 'New Window',
                     accelerator: 'CmdOrCtrl+N',
-                    click: () => { createWindow(); },
+                    click: () => { void openWindowAfterIdleCheck(); },
                 },
                 { type: 'separator' },
                 isMac ? { role: 'close' } : { role: 'quit' },
@@ -763,12 +829,14 @@ app.whenReady().then(async () => {
     createWindow();
 
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        if (BrowserWindow.getAllWindows().length === 0) void openWindowAfterIdleCheck();
     });
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    if (process.platform !== 'darwin') { app.quit(); return; }
+    // macOS keeps the app, and with it the open vault, alive with no window.
+    startWindowlessIdleLock();
 });
 
 app.on('before-quit', () => {
@@ -777,6 +845,7 @@ app.on('before-quit', () => {
     // cases where a GC'd buffer might otherwise linger until
     // reallocation. The session-backend ciphertext stays on disk; the
     // next launch reuses it via the keychain.
+    stopWindowlessIdleLock();
     if (runtime) tearDownHost(runtime);
 });
 

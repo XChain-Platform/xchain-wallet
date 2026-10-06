@@ -314,6 +314,12 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
         field: 'requiredFeeSats',
     });
     const dustThreshold = resolveDustThreshold(sdk);
+    // Refuse to size a positive fee against an unknown floor; guessing Bitcoin's 546 would pad a
+    // Dogecoin or Litecoin fee to an output the node rejects. A zero quote builds no output.
+    if (quotedFeeSats > 0 && dustThreshold === null) {
+        throw new Error('applyNativeFeePreflight: cannot resolve the chain dust threshold (SDK has no network); '
+            + 'refusing to size the native fee output');
+    }
     const feeSats = quotedFeeSats > 0 ? Math.max(quotedFeeSats, dustThreshold) : quotedFeeSats;
     const payableQuote = feeSats > quotedFeeSats
         ? {
@@ -351,8 +357,8 @@ function nativeDecimalFromSats(sats) {
 // This table is a COPY of the SDK's, and it exists because the popup has no SDK: the Send
 // form has to answer "is this amount dust?" while the user is still typing, and reaching
 // across the messaging boundary for a value that has not changed in the lifetime of any of
-// these chains would buy nothing but a race. `resolveDustThreshold` below still prefers the
-// SDK's live number wherever an SDK is in hand, so this only ever governs the UI-side check.
+// these chains would buy nothing but a race. `resolveDustThreshold` below reads only the
+// SDK's live number and never this copy, so this only ever governs the UI-side check.
 export const DUST_THRESHOLD_SATS_BY_COIN = Object.freeze({
     bitcoin: 546,
     litecoin: 5460,
@@ -374,9 +380,10 @@ export function dustThresholdForCoin(coin) {
 
 // The chain's dust threshold, read from the SAME coin registry the SDK builds its
 // addresses and PSBTs from, so the refusal above tracks the network the transaction is
-// actually going to. Falls back to Bitcoin's floor when the SDK was constructed without a
-// network: the guardrail must still fire on a 2-sat fee, and a too-low threshold would let
-// exactly the doomed transaction through.
+// actually going to. Returns null when the SDK was constructed without a network: null
+// means "cannot judge", exactly as dustThresholdForCoin uses it, and the caller refuses
+// rather than guessing, because any one coin's floor is too low for another coin and a
+// too-low threshold would let exactly the doomed transaction through.
 export function resolveDustThreshold(sdk) {
     try {
         const params = sdk && sdk.wallet && typeof sdk.wallet.getBitcoinNetwork === 'function'
@@ -384,6 +391,6 @@ export function resolveDustThreshold(sdk) {
             : null;
         const dust = params && Number(params.dustThreshold);
         if (Number.isFinite(dust) && dust > 0) return dust;
-    } catch { /* fall through to the default */ }
-    return DUST_THRESHOLD_SATS_BY_COIN.bitcoin;
+    } catch { /* an unreadable network is the same as none: cannot judge */ }
+    return null;
 }

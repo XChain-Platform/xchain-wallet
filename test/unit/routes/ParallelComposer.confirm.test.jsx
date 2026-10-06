@@ -90,6 +90,29 @@ describe('ParallelComposer confirmation', () => {
         expect(await screen.findByText('Parallel run complete')).toBeTruthy();
     });
 
+    it('names an action refused on the row\'s chain by its display label, not its wire code', async () => {
+        const ltcFrom = { ...FROM, id: 'address-ltc', address: 'ltc1qparallelfromaddress00000000000000000000' };
+        const messaging = {
+            getAddressesByChain: vi.fn(async () => ({ 'litecoin-mainnet': [ltcFrom] })),
+            getActiveAddresses: vi.fn(async () => ({ 'litecoin-mainnet': ltcFrom })),
+            listActions: vi.fn(async () => ['SEND', 'COLLECT']),
+            getSettings: vi.fn(async () => ({ walletMode: 'full' })),
+            signerReady: vi.fn(async () => ({ ready: true })),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ParallelComposer
+                    walletId="wallet-1"
+                    onBack={() => {}}
+                    initialRows={[{ chainId: 'litecoin-mainnet', action: 'COLLECT', params: {} }]}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Row 1: Collect rewards is not available on Litecoin.')).toBeTruthy();
+        expect(screen.queryByText(/COLLECT is not available/)).toBeNull();
+    });
+
     it('shows an unsigned transaction without completing the row in watcher mode', async () => {
         const messaging = mount({ walletMode: 'watcher' });
 

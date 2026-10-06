@@ -45,7 +45,8 @@ import { readFileSync } from 'node:fs';
 import {
     classifyVersionRecord, credentialsFromEnv, bundleIdFromProject, shippedCapabilities,
     ascToken, EXIT, CANONICAL_PRIVACY_URL, SEED_PLACEHOLDER, REQUIRED_SCREENSHOT_TYPES,
-    SCREENSHOT_DIR_BY_TYPE, pinnedListingDigests, tagDerivations,
+    SCREENSHOT_DIR_BY_TYPE, pinnedListingDigests, tagDerivations, selectVersionRecord, fetchVersionRecord,
+    checkAppStoreVersion,
 } from '../../../tools/release/verify-appstore-version.mjs';
 
 const SHIPS_BOTH = { messaging: true, betting: true };
@@ -522,5 +523,88 @@ assert.equal(claims.aud, 'appstoreconnect-v1');
 assert.equal(claims.iss, 'test-issuer');
 assert.equal(claims.exp - claims.iat, 600, 'the token is short-lived');
 assert.ok(!jwt.includes('='), 'base64url carries no padding');
+
+// --- which version record is judged --------------------------------------
+// Apple promises no order for appStoreVersions, so once one version is live
+// and the next is being prepared either can come back first. Every case below
+// runs in both orders: the selection must not move with the list.
+
+const verRec = (versionString, appStoreState, platform = 'IOS') => ({
+    id: `ver-${versionString}-${platform}`,
+    attributes: { versionString, appStoreState, platform, releaseType: 'MANUAL' },
+});
+const LIVE = verRec('0.335.0', 'READY_FOR_SALE');
+const NEXT = verRec('0.336.0', 'PREPARE_FOR_SUBMISSION');
+const bothOrders = (list) => [list, [...list].reverse()];
+
+for (const list of bothOrders([LIVE, NEXT])) {
+    assert.equal(selectVersionRecord(list).version, NEXT,
+        'with no tag the single version open for submission is judged, whichever Apple lists first');
+    const tagged = tagDerivations('v0.336.0-respin.1');
+    assert.equal(selectVersionRecord(list, { marketing: tagged.marketing }).version, NEXT,
+        'with a tag the version carrying its marketing string is judged, whichever Apple lists first');
+    const missing = selectVersionRecord(list, { marketing: tagDerivations('v0.337.0').marketing });
+    assert.equal(missing.verdict, 'failure', 'a tag naming a version Apple does not hold fails');
+    assert.match(missing.error, /0\.337\.0/, 'and the failure names the version that is missing');
+}
+assert.equal(selectVersionRecord([LIVE]).verdict, 'inconclusive',
+    'a live version alone is not a submission candidate, so a tagless run cannot judge it');
+for (const list of bothOrders([NEXT, verRec('0.337.0', 'DEVELOPER_REJECTED')])) {
+    const two = selectVersionRecord(list);
+    assert.equal(two.verdict, 'inconclusive', 'two open versions are ambiguous without a tag');
+    assert.match(two.error, /--tag/, 'and the operator is told how to resolve it');
+}
+for (const list of bothOrders([verRec('0.336.0', 'PREPARE_FOR_SUBMISSION', 'MAC_OS'), NEXT])) {
+    assert.equal(selectVersionRecord(list, { marketing: '0.336.0' }).version, NEXT,
+        'a non-iOS record carrying the same version string is ignored');
+}
+assert.equal(selectVersionRecord([verRec('0.336.0', 'PREPARE_FOR_SUBMISSION', 'MAC_OS')]).verdict, 'inconclusive',
+    'a non-iOS record alone is never judged as the iOS version');
+
+// fetchVersionRecord asks Apple for iOS versions, narrows by version string
+// only when one is known, and judges the selected record even when the live
+// one is listed first.
+async function fetchWith(listed, marketing) {
+    const urls = [];
+    const fetchImpl = async (url) => {
+        urls.push(url);
+        const body = url.includes('/v1/apps?filter[bundleId]=')
+            ? { data: [{ id: 'app-1', attributes: { name: 'XChain Wallet', bundleId: 'io.xchain.wallet' } }] }
+            : url.includes('/appStoreVersions?') ? { data: listed } : { data: [] };
+        return { status: 200, json: async () => body };
+    };
+    const out = await fetchVersionRecord({ token: 'TOK', bundleId: 'io.xchain.wallet', marketing, fetchImpl });
+    return { out, versionsUrl: urls.find((u) => u.includes('/appStoreVersions?')) };
+}
+{
+    const tagless = await fetchWith([LIVE, NEXT], null);
+    assert.match(tagless.versionsUrl, /filter\[platform\]=IOS/, 'the version list is asked for iOS only');
+    assert.ok(!tagless.versionsUrl.includes('filter[versionString]'), 'no version filter without a tag');
+    assert.equal(tagless.out.record.version.versionString, '0.336.0', 'the open version is judged, not the live one');
+    const tagged = await fetchWith([LIVE, NEXT], '0.336.0');
+    assert.match(tagged.versionsUrl, /filter\[versionString\]=0\.336\.0/, 'a known version narrows the list');
+    assert.equal(tagged.out.record.version.versionString, '0.336.0');
+    const none = await fetchWith([LIVE], '0.401.0');
+    assert.equal(none.out.verdict, 'failure', 'a tagged version Apple does not hold is a failure');
+}
+
+// The gate maps a missing tagged version to FAILURE, not to the credential
+// error its 401 pattern would read into a version string like 0.401.0.
+{
+    const env = {
+        APPLE_API_KEY: KEY_PEM, APPLE_API_KEY_ID: 'TESTKEYID', APPLE_API_ISSUER: 'test-issuer',
+    };
+    const fetchImpl = async (url) => ({
+        status: 200,
+        json: async () => (url.includes('/v1/apps?filter[bundleId]=')
+            ? { data: [{ id: 'app-1', attributes: { name: 'XChain Wallet', bundleId: 'io.xchain.wallet' } }] }
+            : { data: [LIVE] }),
+    });
+    const gated = await checkAppStoreVersion({ env, fetchImpl, tag: 'v0.401.0' });
+    assert.equal(gated.exit, EXIT.FAILURE, 'a tag naming a version Apple does not hold is DO NOT SUBMIT');
+    assert.equal(gated.checks[0].id, 'version-record', 'and the failure is printed as a FAIL line');
+    const tagless = await checkAppStoreVersion({ env, fetchImpl });
+    assert.equal(tagless.exit, EXIT.INCONCLUSIVE, 'only a live version and no tag is inconclusive, never READY');
+}
 
 console.log('appstore-version-check.smoke.js: OK');

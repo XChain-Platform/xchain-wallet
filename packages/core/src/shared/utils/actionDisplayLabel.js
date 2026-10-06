@@ -142,12 +142,12 @@ export function hasActionDisplayLabel(name) {
 /**
  * Summarize an action decoded out of a PSBT for every PSBT sign screen.
  * Stays terse: the output set is what gets verified, the action is context.
+ * The wire version is left out on purpose, since "(v2)" tells a signer nothing.
  *
  * @param {{ action?: string, version?: number | null } | null | undefined} parsed
  * @returns {string}
  */
 export function psbtActionSummary(parsed) {
     const label = parsed?.action ? `XChain ${actionDisplayLabel(parsed.action)} action` : 'XChain action of unknown type';
-    const version = parsed?.version ?? null;
-    return version != null ? `Carries an ${label} (v${version})` : `Carries an ${label}`;
+    return `Carries an ${label}`;
 }

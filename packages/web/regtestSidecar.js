@@ -94,11 +94,15 @@ const SIDECAR_PROPERTY = /^[ \t]*\$regtestSidecar[ \t]*:[ \t]*(['"])(?:(?!\1)[^\
  * can be a flat "no marker anywhere" rather than "no marker except in the
  * comments", which is the kind of exception that later swallows a real one.
  *
- * A lone block-comment terminator is excluded, and so is a line that OPENS a
- * block: dropping either would leave a comment open, or end one that never
- * started, and take the rest of the file with it.
+ * A line that OPENS a block is excluded, and so is any line that carries a
+ * block terminator anywhere, a `*` continuation that also closes the block
+ * included (BLOCK_TERMINATOR below): dropping either would leave a comment
+ * open, or end one that never started, and take the code after it with it.
  */
 const COMMENT_LINE = /^[ \t]*(?:\/\/|\*(?!\/))/;
+
+// A line holding `*/` is never swept, whichever COMMENT_LINE branch it matched.
+const BLOCK_TERMINATOR = '*/';
 
 /**
  * Index just past the delimiter matching the one at `open`.
@@ -210,7 +214,9 @@ export function stripRegtestSidecar(code) {
     }
 
     const withoutComments = out.split('\n')
-        .filter((line) => !(COMMENT_LINE.test(line) && findRegtestSidecarMarkers(line).length > 0))
+        .filter((line) => !(COMMENT_LINE.test(line)
+            && !line.includes(BLOCK_TERMINATOR)
+            && findRegtestSidecarMarkers(line).length > 0))
         .join('\n');
     if (withoutComments !== out) {
         removed.push('comments');

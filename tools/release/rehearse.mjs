@@ -309,19 +309,81 @@ function assign(entry, key, value) {
  * Same upstream code path, opposite consequence, so the caller needs the
  * count to tell them apart.
  *
+ * macOS is NOT only `findFile`. MacUpdater first runs `filterFilesForArch`
+ * over the list, and an Apple-silicon Mac (Rosetta included) keeps only the
+ * arm64 files, so an x64 build under Rosetta installs the ARM64 zip. Pass
+ * `{ os: 'darwin', isArm64Mac }` to apply that pre-filter first, in
+ * upstream's order. `candidates` still counts the files of this extension
+ * the feed offered BEFORE the pre-filter: it measures the choice there was
+ * to get wrong, not what was left after it.
+ *
  * @param {Array<{url: string}>} files
  * @param {string} arch      a process.arch value
  * @param {string} extension the update-capable format for the lane
+ * @param {{os?: string, isArm64Mac?: boolean}} [host] the host, for MacUpdater's pre-filter
  * @returns {{file: {url: string}|null, selection: 'by-arch'|'first-listed'|'none', candidates: number}}
  */
-export function selectFileForArch(files, arch, extension) {
-    const filtered = files.filter(
+export function selectFileForArch(files, arch, extension, { os, isArm64Mac = false } = {}) {
+    const ofExtension = (list) => list.filter(
         (f) => f.url.toLowerCase().endsWith(`.${String(extension).toLowerCase()}`),
     );
-    if (filtered.length === 0) return { file: null, selection: 'none', candidates: 0 };
+    const candidates = ofExtension(files).length;
+    const filtered = ofExtension(os === 'darwin' ? filterMacFilesForArch(files, isArm64Mac) : files);
+    if (filtered.length === 0) return { file: null, selection: 'none', candidates };
     const byArch = filtered.find((f) => f.url.includes(arch));
-    if (byArch) return { file: byArch, selection: 'by-arch', candidates: filtered.length };
-    return { file: filtered[0], selection: 'first-listed', candidates: filtered.length };
+    if (byArch) return { file: byArch, selection: 'by-arch', candidates };
+    return { file: filtered[0], selection: 'first-listed', candidates };
+}
+
+/**
+ * MacUpdater.filterFilesForArch from electron-updater 6.8.9 `out/MacUpdater.js`,
+ * on this file's `{url: string}` shape: an arm64 Mac (Rosetta included) keeps
+ * only the arm64 files when any are listed, and every other Mac drops them.
+ * test/unit/desktop/updaterArchSelection.test.js pins it against the real one.
+ *
+ * @param {Array<{url: string}>} files
+ * @param {boolean} isArm64Mac
+ * @returns {Array<{url: string}>}
+ */
+export function filterMacFilesForArch(files, isArm64Mac) {
+    const isArm64File = (f) => f.url.includes('arm64');
+    if (isArm64Mac && files.some(isArm64File)) return files.filter((f) => isArm64File(f));
+    return files.filter((f) => !isArm64File(f));
+}
+
+// The two mac zips a stable-mac.yml lists, so a device's choice is computed by the same selector.
+const MAC_FEED_SHAPE = [{ url: 'app-x64-mac.zip' }, { url: 'app-arm64-mac.zip' }];
+
+/**
+ * The arch of the artifact a lane's NAMED device installs from a feed carrying both arches.
+ * For a mac lane that is decided by the device's silicon, not the lane: MacUpdater treats
+ * any Apple-silicon Mac, Rosetta included, as arm64. Every other lane installs its own arch.
+ *
+ * @param {import('./rehearsal-matrix.mjs').Lane} lane
+ * @returns {string}
+ */
+export function deviceInstalledArch(lane) {
+    if (lane?.os !== 'darwin' || !lane.deviceHost) return lane?.arch;
+    // The translated build reports its own process.arch, which is what findFile matches on.
+    const processArch = lane.deviceHost.translated ? lane.arch : lane.deviceHost.silicon;
+    const { file } = selectFileForArch(MAC_FEED_SHAPE, processArch, lane.format,
+        { os: 'darwin', isArm64Mac: lane.deviceHost.silicon === 'arm64' });
+    return file && file.url.includes('arm64') ? 'arm64' : 'x64';
+}
+
+/**
+ * Whether a recorded swap installed its own lane's artifact. A swap that names the arch it
+ * exercised is read by that; one that does not (a legacy or hand-written entry) is judged by
+ * what the lane's named device installs, since `attest` only ever records that device.
+ *
+ * @param {{lane: string, device?: string, 'exercised-arch'?: string}} swap
+ * @returns {boolean}
+ */
+export function swapExercisesLane(swap) {
+    const lane = laneById(swap?.lane);
+    if (!lane) return false;
+    if (swap['exercised-arch'] !== undefined) return swap['exercised-arch'] === lane.arch;
+    return deviceInstalledArch(lane) === lane.arch;
 }
 
 // ------------------------------------------------------------- the probe
@@ -384,7 +446,10 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
     entry.checks.version = info.version;
 
     // --- 3. selection resolves BY NAME, not by list order ---------------
-    const { file, selection, candidates } = selectFileForArch(info.files, lane.arch, lane.format);
+    // The feed is judged for the lane's NATIVE host (an arm64 Mac for mac-arm64, an Intel Mac
+    // for mac-x64); what the lane's named device installs is checked by `attest`.
+    const { file, selection, candidates } = selectFileForArch(info.files, lane.arch, lane.format,
+        { os: lane.os, isArm64Mac: lane.arch === 'arm64' });
     if (!file) {
         return fail('selection', `pointer lists no .${lane.format} for ${lane.id}`);
     }
@@ -1140,8 +1205,17 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
         }
     }
 
+    // A swap that installed ANOTHER lane's artifact is not evidence for its own lane: an x64
+    // build under Rosetta swaps to the arm64 zip, so it is reported and never counted.
+    for (const swap of swaps.filter((s) => laneById(s.lane) && !swapExercisesLane(s))) {
+        notes.push(
+            `the swap on ${swap.lane} (${swap.device}) installed the `
+            + `${swap['exercised-arch'] ?? deviceInstalledArch(laneById(swap.lane))} artifact, not `
+            + `${laneById(swap.lane).arch}, so it is not counted as ${swap.lane} evidence.`,
+        );
+    }
     const swappedOs = new Set(
-        swaps.map((s) => laneById(s.lane)?.os).filter(Boolean),
+        swaps.filter(swapExercisesLane).map((s) => laneById(s.lane)?.os).filter(Boolean),
     );
     const requirement = record['swap-requirement'];
     // Checked whatever the release contains: this is the record's SHAPE,
@@ -1548,6 +1622,15 @@ async function main(argv) {
                         + '  ship".')
                 + ' Name the device in tools/release/rehearsal-matrix.mjs first.');
         }
+        // Refuse a device that installs another lane's artifact, so the record never files it here.
+        const installs = deviceInstalledArch(lane);
+        if (installs !== lane.arch) {
+            fail(`lane ${laneId}'s named device (${lane.device}) installs the ${installs} artifact, not ${lane.arch}.\n`
+                + '  electron-updater\'s MacUpdater treats an Apple-silicon Mac, Rosetta included, as\n'
+                + `  arm64 and swaps it to the arm64 zip, so attesting here would certify the ${installs}\n`
+                + `  artifact under the ${lane.arch} lane. Name a native ${lane.arch} device in\n`
+                + `  tools/release/rehearsal-matrix.mjs, or attest the swap under the ${installs} lane.`);
+        }
         const record = JSON.parse(readFileSync(file, 'utf8'));
         const results = direct ? record['direct-lanes'] : record.lanes;
         const laneResult = (Array.isArray(results) ? results : []).find((l) => l.id === laneId);
@@ -1559,6 +1642,7 @@ async function main(argv) {
         record.swaps.push({
             lane: laneId,
             device: lane.device,
+            'exercised-arch': installs,
             from,
             to: String(record.tag).replace(/^v/, ''),
             'attested-by': by,
@@ -1692,6 +1776,8 @@ async function main(argv) {
                 let record;
                 try { record = JSON.parse(readFileSync(join(dir, name), 'utf8')); } catch { continue; }
                 for (const swap of record.swaps || []) {
+                    // A swap that installed another lane's artifact covers nothing for its own lane.
+                    if (!swapExercisesLane(swap)) continue;
                     seen.set(swap.lane, { tag: record.tag, device: swap.device, at: swap.at });
                 }
                 for (const auto of record['automated-checks'] || []) {
@@ -1702,6 +1788,7 @@ async function main(argv) {
         }
         const blocked = [];
         const waivedIds = [];
+        const unwitnessable = [];
         // The direct lane is listed alongside the desktop ones, with its
         // own open question named. Leaving it off this table is how it
         // stayed invisible: a coverage report that ranges over exactly the
@@ -1722,11 +1809,21 @@ async function main(argv) {
             if (hit) {
                 process.stdout.write(`✅ ${lane.id.padEnd(22)} ${verb} at ${hit.tag} on ${hit.device}${machine}\n`);
             } else {
+                const installs = deviceInstalledArch(lane);
+                // A named device that installs another lane's artifact can never witness this one,
+                // so the lane is a named waiver awaiting the operator's hardware decision, not a red.
+                const cannot = Boolean(lane.device) && installs !== lane.arch;
                 const why = lane.device ? `device ${lane.device}, never rehearsed` : `NO DEVICE NAMED (${dd})`;
                 const waiver = demand.waived.get(lane.id);
                 if (waiver) waivedIds.push(lane.id);
+                else if (cannot) unwitnessable.push(lane.id);
                 else blocked.push(lane.id);
-                const note = waiver ? ` (not demanded: ${waiver}; rehearse before its first release)` : '';
+                const note = waiver
+                    ? ` (not demanded: ${waiver}; rehearse before its first release)`
+                    : cannot
+                        ? ` (WAIVED, device cannot witness: it installs the ${installs} artifact; `
+                          + `operator hardware decision owed: name a native ${lane.arch} device)`
+                        : '';
                 process.stdout.write(`⬜ ${lane.id.padEnd(22)} ${why}${note}${machine}\n`);
             }
         }
@@ -1734,6 +1831,14 @@ async function main(argv) {
             process.stdout.write(
                 `\n${waivedIds.length} NOT-SHIPPED lane(s) are listed and not demanded: ${waivedIds.join(', ')}.\n`
                 + 'Rehearse each before its first release; coverage --prod-input <that release> demands it.\n',
+            );
+        }
+        if (unwitnessable.length) {
+            process.stdout.write(
+                `\n${unwitnessable.length} shipped lane(s) are WAIVED because the named device cannot `
+                + `witness them: ${unwitnessable.join(', ')}.\n`
+                + 'Their artifact has NO human-witnessed swap. Operator hardware decision owed: name a\n'
+                + 'native device for each in tools/release/rehearsal-matrix.mjs, then attest it.\n',
             );
         }
         if (blocked.length) {

@@ -68,8 +68,10 @@ function adsSettings() {
  * working, backed by one blob for both halves, and a vault whose PendingTx
  * reads refuse. `withJournal: false` drops the journal verbs from the adapter,
  * which is the negative control: the same outage, with nothing able to replay.
+ * `journalOnly: true` keeps the queue read working and fails only the journal
+ * read, the split outage a one-key adapter could still report.
  */
-function makeJournalHost({ withJournal = true, seedSettlements = [] } = {}) {
+function makeJournalHost({ withJournal = true, seedSettlements = [], journalOnly = false } = {}) {
     let readable = false;
     let queues = { [W]: [] };
     let settlements = JSON.parse(JSON.stringify(seedSettlements));
@@ -86,7 +88,7 @@ function makeJournalHost({ withJournal = true, seedSettlements = [] } = {}) {
     };
     const storage = {
         load: async () => {
-            if (!readable) throw new Error('storage unreadable');
+            if (!readable && !journalOnly) throw new Error('storage unreadable');
             return JSON.parse(JSON.stringify(queues));
         },
         save: async (snapshot) => { queues = JSON.parse(JSON.stringify(snapshot)); },
@@ -223,5 +225,31 @@ describe('the journal cap evicts the oldest owed write after a recovered merge',
         expect(after.slice(-2)).toEqual(['new-1', 'new-2']);
         expect(after).not.toContain('old-1');
         expect(after[0]).toBe('old-2');
+    });
+});
+
+describe('a journal read that fails after a good queue read never erases the journal', () => {
+    const preBoot = [{ id: 's-old', walletId: W, pendingTxId: 'p-old', op: 'discard', recordedAt: 1 }];
+
+    it('refuses every journal write until the journal reads, then keeps both records', async () => {
+        const h = makeJournalHost({ seedSettlements: preBoot, journalOnly: true });
+        const id = await queueThroughFailedSend(h, { pendingTxId: 'p-new' });
+
+        // Recording the owed write must not save a journal missing the
+        // pre-boot record nobody has read yet.
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id })).ok).toBe(true);
+        await h.settle();
+        for (const saved of h.settlementSaves) {
+            expect(saved.map((s) => s.pendingTxId)).toContain('p-old');
+        }
+        expect(h.journal().map((s) => s.pendingTxId)).toContain('p-old');
+
+        // Once the journal reads, the next access merges and writes both.
+        h.recover();
+        await h.call('broadcast.queue.list', { walletId: W });
+        await h.settle();
+        const ids = h.journal().map((s) => s.pendingTxId);
+        expect(ids).toContain('p-old');
+        expect(ids).toContain('p-new');
     });
 });

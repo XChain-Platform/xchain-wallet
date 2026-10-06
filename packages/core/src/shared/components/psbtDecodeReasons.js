@@ -44,3 +44,50 @@ export function isUnreadableActionReason(reason) {
     if (!reason) return false;
     return !NO_ACTION_DECODE_REASONS.includes(reason);
 }
+
+// Plain-language clauses for the decoder's reason codes, grouped by what the
+// signer can do about them. Display only: the refusal above keeps reading the
+// raw code, and a code missing here falls back to a sentence with no reason.
+const UNSUPPORTED_FORM = 'the action is written in a form this wallet cannot read yet';
+const UNKNOWN_TYPE = 'the action is a type or version this wallet does not recognize';
+const MALFORMED = 'the action data is malformed';
+const UNREADABLE_REASON_TEXT = Object.freeze({
+    P2SH_P2WSH_UNSUPPORTED: UNSUPPORTED_FORM,
+    MULTI_LEG_UNSUPPORTED: UNSUPPORTED_FORM,
+    REST_FIELD_UNSUPPORTED: UNSUPPORTED_FORM,
+    BATCH_UNSUPPORTED: UNSUPPORTED_FORM,
+    MULTI_OP_RETURN: UNSUPPORTED_FORM,
+    MULTI_ENVELOPE: UNSUPPORTED_FORM,
+    ENVELOPE_NOT_INPUT_ZERO: UNSUPPORTED_FORM,
+    ENVELOPE_MIXED_CARRIER: UNSUPPORTED_FORM,
+    UNKNOWN_ACTION: UNKNOWN_TYPE,
+    BAD_VERSION: UNKNOWN_TYPE,
+    DEOBFUSCATION_FAILED: MALFORMED,
+    NOT_UTF8: MALFORMED,
+    OVERSIZED: MALFORMED,
+    FIELD_COUNT_MISMATCH: MALFORMED,
+    INNER_DECOMPILE_FAILED: MALFORMED,
+    ENVELOPE_SCRIPT_INVALID: MALFORMED,
+    UNEXPECTED_FORMAT: MALFORMED,
+    MALFORMED_ACTION_STRING: MALFORMED,
+    REST_FIELD_TOO_LONG: MALFORMED,
+    PARAM_INVALID: MALFORMED,
+});
+
+/**
+ * Why an unreadable action could not be read, as a short clause for the
+ * signing alert, or null when the reason has no plain description (a host
+ * fallback code, an exception message, nothing at all).
+ *
+ * Never echoes its input: the raw reason can be arbitrary exception text, so
+ * it belongs in the technical details, not in the sentence a signer reads.
+ *
+ * @param {string|null|undefined} reason
+ * @returns {string|null}
+ */
+export function describeUnreadableReason(reason) {
+    if (typeof reason !== 'string') return null;
+    return Object.prototype.hasOwnProperty.call(UNREADABLE_REASON_TEXT, reason)
+        ? UNREADABLE_REASON_TEXT[reason]
+        : null;
+}
