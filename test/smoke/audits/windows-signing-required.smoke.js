@@ -295,13 +295,31 @@ function loadError(env) {
             + ' signing secret produces unsigned installers and a green lane');
         assert.ok(new RegExp(`${SUBJECT_VAR}:\\s*\\$\\{\\{\\s*secrets\\.${SUBJECT_VAR}\\s*\\}\\}`).test(step),
             `the Windows build step '${name}' must pass ${SUBJECT_VAR} through`);
-        // The requirement without the values is a lane that can only fail, so
-        // both halves are asserted together: config trio AND credentials.
+        // The lane signs through the eSigner certificate selected by subject
+        // (D3). Azure variables handed through as well would win the path
+        // selection in windows-signing.cjs and sign with a second key, so a
+        // build step must carry none of them.
         for (const secret of [...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS]) {
-            assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(step),
-                `the Windows build step '${name}' must pass ${secret} through, or the`
-                + ' requirement it declares can never be met');
+            assert.ok(!new RegExp(`${secret}:`).test(step),
+                `the Windows build step '${name}' must not pass ${secret}: the release`
+                + ' lane signs through the eSigner subject only');
         }
+    }
+
+    // The requirement without the credentials is a lane that can only fail.
+    // The subject names the certificate; the eSigner CKA step registers the
+    // cloud key behind it, and it needs all five values from the
+    // release-signing environment before any Windows build step runs.
+    const cka = steps.find((s) => /name:\s*Install and register the eSigner CKA/.test(s));
+    assert.ok(cka, 'release.yml registers the eSigner CKA in the Windows job');
+    const ckaAt = wf.indexOf('Install and register the eSigner CKA');
+    const firstWinBuild = wf.indexOf(winBuilds[0]);
+    assert.ok(ckaAt >= 0 && ckaAt < firstWinBuild,
+        'the eSigner CKA is registered before the first Windows build step');
+    for (const secret of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', SUBJECT_VAR]) {
+        assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(cka),
+            `the eSigner CKA step must pass ${secret} through, or the signing`
+            + ' requirement the build steps declare can never be met');
     }
 }
 
