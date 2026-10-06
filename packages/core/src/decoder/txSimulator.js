@@ -338,7 +338,7 @@ function simulateDividend(p, balMap, coinTick, feeEstimate) {
             label: 'Dividend pool',
             value: `${amount} ${dividendTick} per unit of ${tick}`,
         });
-        notes.push('Total cost depends on the holder count at the snapshot block (excluding the source address). Review the indexer estimate before signing; the wallet cannot pre-fetch this.');
+        notes.push('Total cost depends on the holder count when this transaction confirms (not counting the sending address). The wallet cannot work it out ahead of time, so check the estimate before signing.');
     }
 
     return { deltas, sideEffects, notes };
@@ -467,7 +467,7 @@ function simulateAirdrop(p, balMap, coinTick, feeEstimate) {
     return {
         deltas,
         sideEffects,
-        notes: ['Total cost depends on the list size at the snapshot block. The wallet cannot pre-fetch this.'],
+        notes: ['Total cost depends on the list size when this transaction confirms. The wallet cannot work it out ahead of time.'],
     };
 }
 
