@@ -40,10 +40,10 @@ const ext = join(wsRoot, 'packages', 'extension');
 
 const bg = readFileSync(join(ext, 'src', 'background.js'), 'utf8');
 
-const guarded = /try\s*\{\s*await vault\.open\(\);\s*\}\s*catch\s*\(err\)\s*\{/;
+const guarded = /try\s*\{\s*await buildVault\.open\(\);\s*\}\s*catch\s*\(err\)\s*\{/;
 assert.ok(
     guarded.test(bg),
-    'background.js wraps ensureHost vault.open() in a try/catch',
+    'background.js wraps ensureHost buildVault.open() in a try/catch',
 );
 
 const rollback = bg.slice(bg.search(guarded));

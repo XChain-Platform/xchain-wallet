@@ -2718,6 +2718,11 @@ export function createBackgroundHost(deps) {
     // journal record then land in the same map, journal and cached blob the
     // next host serves, instead of in a private copy written over that host's.
     const queueStore = broadcastQueueStore ?? createBroadcastQueueStore({ storage: broadcastQueueStorage });
+    // A sealed store was ended by a wipe and drops every write, so a host built
+    // over it would accept broadcasts it can never persist.
+    if (queueStore.sealed) {
+        throw new Error('createBackgroundHost: the broadcast queue store was sealed by a wallet wipe');
+    }
     /** @type {Map<string, import('./broadcastQueueStorage.js').QueueEntry[]>} */
     const queuedBroadcasts = queueStore.queues;
     // `queueStore.sealed` is set by the wallet wipe, and only by it. Every
