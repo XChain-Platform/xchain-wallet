@@ -210,6 +210,9 @@ export async function submitAction({
             await writePending({ status: 'awaiting-signature' });
         } else if (phase === 'broadcasting' && typeof data?.txid === 'string') {
             await writePending({ status: 'broadcasting', txid: data.txid });
+        } else if (phase === 'envelope_revealed' && typeof data?.txid === 'string') {
+            // The reveal is the action's identity; the row moves off the commit txid.
+            await writePending({ txid: data.txid });
         } else if (phase === 'p2sh_spending' && typeof data?.phase1Txid === 'string') {
             // phase-2 still pending; stay in broadcasting.
         } else if (phase === 'waiting' && typeof data?.txid === 'string') {
