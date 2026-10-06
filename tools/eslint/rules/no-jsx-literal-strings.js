@@ -34,9 +34,9 @@
 //     emptyText, actionLabel, backLabel, text, body, ariaLabel,
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
-//     copyLabel, balanceText, submitLabel, what, prefix, noun, summary
-//     (the USER_FACING_ATTRS set below is the authority; keep this list
-//     in step with it). The last twenty-five are component props rather
+//     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
+//     error (the USER_FACING_ATTRS set below is the authority; keep this
+//     list in step with it). The last twenty-six are component props rather
 //     than DOM attributes: shipping components render copy through them,
 //     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -228,6 +228,12 @@ const USER_FACING_ATTRS = new Set([
     // DiagnosticDetails renders `summary` verbatim as its disclosure label,
     // and no JSX attribute or prop key in packages/*/src uses it technically.
     'summary',
+    // Input, Textarea and Select render `error` verbatim in a role="alert" div,
+    // and TokenField and Loading render it in a StatusMessage. Checked across
+    // packages/*/src: every JSX `error=` either carries copy or a runtime value
+    // (`error={err}`, `error={x || undefined}`), which no gate reports, and no
+    // ObjectPattern gives `error` a string default.
+    'error',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both

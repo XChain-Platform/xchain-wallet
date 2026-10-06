@@ -148,8 +148,9 @@ export async function revokeDelegationAction(opts) {
         chainRegistry: opts.chainRegistry,
         sdkRegistry: opts.sdkRegistry,
         chainId: opts.chainId,
-        // DELEGATE v2 = capability revoke (was its own REVOKE_DELEGATION action pre-consolidation)
-        actionData: { action: 'DELEGATE', params: { VERSION: '2', ...opts.params } },
+        // DELEGATE v2 = capability revoke (was its own REVOKE_DELEGATION action pre-consolidation).
+        // VERSION goes last so a caller's stale VERSION cannot pin a version with no SIGNING_PUBKEY slot.
+        actionData: { action: 'DELEGATE', params: { ...opts.params, VERSION: '2' } },
         encoderOpts: {
             pubkey: source.publicKey,
             ...fundingEncoderOpts(source),

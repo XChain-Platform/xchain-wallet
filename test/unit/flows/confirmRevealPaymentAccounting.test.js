@@ -103,3 +103,28 @@ describe('reveal payments are not counted as miner fee', () => {
         expect(composed.networkFeeSats).toBe(1000);
     });
 });
+
+describe('the reveal total is summed exactly', () => {
+    // 2^53 + 1 sats: a DOGE native payment can carry this, and Number() rounds it.
+    it('stays exact for a deferred output above 2^53', async () => {
+        const h = makeHarness();
+        h.sdk.wallet.decomposePsbt = vi.fn(() => ({
+            inputs: [{ value: '9007199254744993' }],
+            outputs: [
+                { address: null, scriptPubKeyHex: `a914${'11'.repeat(20)}87`, scriptType: 'p2sh', value: '9007199254742993' },
+                { address: 'chg', scriptPubKeyHex: '0014', scriptType: 'p2wpkh', value: 1000 },
+            ],
+        }));
+        h.args.encoderOpts = { pubkey: 'pub', customOutputs: [{ address: 'feeDest', value: '9007199254740993' }] };
+        const composed = await composeActionForConfirm(h.args);
+        expect(composed.networkFeeSats).toBe(3000);
+    });
+
+    // A malformed deferred value never reaches the screen: the tamper check refuses the compose.
+    // The fee helper's own null-for-unknown rule is pinned in psbtNetworkFee.test.js.
+    it('refuses the compose when a deferred value is not a number', async () => {
+        const h = makeHarness();
+        h.args.encoderOpts = { pubkey: 'pub', customOutputs: [ORACLE, { address: 'donationAddr', value: 'not-a-number' }] };
+        await expect(composeActionForConfirm(h.args)).rejects.toThrow(/missing 1 output/);
+    });
+});

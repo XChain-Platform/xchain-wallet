@@ -2618,7 +2618,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         value={memo}
                         onChange={(e) => setMemo(e.target.value)}
                         autoComplete="off"
-                        error={/[|;]/.test(memo) ? 'Cannot contain | or ; characters.' : undefined}
+                        error={/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined}
                     />
                 )}
                 {/* §44.3 per-send RBF toggle. Default seeds from
