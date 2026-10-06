@@ -45,6 +45,7 @@ import { isPrunableConfirmedPendingTx } from '../schemas/pendingTx.js';
  * @property {string | null} broadcastAt
  * @property {string | null} mempoolSeenAt   M2.2; absent on a v2 record
  * @property {string | null} rbfReplacement
+ * @property {boolean | null} rbf   whether the send signalled replaceability; null when unrecorded
  * @property {string | null} tick
  * @property {string | null} amount
  * @property {boolean} networkSeenNow   the chain's UTXO set held this transaction
@@ -82,6 +83,7 @@ function summarize(record, networkSeenNow) {
         broadcastAt: record.broadcastAt == null ? null : String(record.broadcastAt),
         mempoolSeenAt: record.mempoolSeenAt == null ? null : String(record.mempoolSeenAt),
         rbfReplacement: record.rbfReplacement == null ? null : String(record.rbfReplacement),
+        rbf: typeof record.rbf === 'boolean' ? record.rbf : null,
         tick: record.tick == null ? null : String(record.tick),
         amount: record.amount == null ? null : String(record.amount),
         networkSeenNow: networkSeenNow === true,
