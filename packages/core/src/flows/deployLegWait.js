@@ -143,11 +143,11 @@ export function legNotIndexedError({ chainState, legLabel, txid, patienceMs, isC
             + `after ${minutes} minutes. Do not send it again. ${saved}: resume it once the indexer `
             + 'catches up and it continues from this point without re-sending anything already on chain.';
     } else if (chainState === 'mempool') {
-        message = `${legLabel} (${txid}) is still in the mempool waiting for a block after ${minutes} `
+        message = `${legLabel} (${txid}) is still waiting on the network to be confirmed after ${minutes} `
             + `minutes. It is not lost, so do not send it again. ${saved}: resume it later and it `
             + 'continues once the transaction confirms.';
     } else if (chainState === 'dropped') {
-        message = `${legLabel} (${txid}) is neither confirmed on chain nor in the mempool, so the `
+        message = `${legLabel} (${txid}) is neither confirmed on chain nor still pending, so the `
             + `network dropped it and its inputs were not spent. ${saved}: resume it to send this `
             + `${isChunk ? 'chunk' : 'transaction'} again.`;
     } else {
@@ -253,7 +253,7 @@ export function indexerWaitMessage(wait) {
             + '(it can take several minutes on this network).';
     }
     if (wait.chainState === 'mempool') {
-        return `${leg} is in the mempool, waiting for a block and then the indexer.`;
+        return `${leg} is waiting on the network to be confirmed, then for the indexer.`;
     }
     return `${leg} is taking longer than usual to index; still waiting.`;
 }

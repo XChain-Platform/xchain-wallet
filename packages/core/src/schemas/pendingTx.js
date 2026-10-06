@@ -76,6 +76,10 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  *          it holds this transaction (ISO). Null from creation until a mempool
  *          reports it, which is the whole point: null is the honest reading
  *          "broadcast, awaiting network", not "not yet checked"
+ * @property {boolean | null} [rbf]  whether the broadcast signalled BIP-125
+ *          replaceability (null when the send did not say). Additive and
+ *          undefined-tolerant: a record written before it carries none, and
+ *          the RBF/cancel UX must read that as "unknown", never as "off"
  * @property {boolean} [chainConfirmed]  the wallet itself proved a block
  *          carries this transaction (from the coin's UTXO set, the explorer's
  *          transaction record or a confirmed descendant), as opposed to an
@@ -100,6 +104,7 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * @param {string} [input.tick]     v2: token moved (optional)
  * @param {string} [input.amount]   v2: decimal-string amount moved (optional)
  * @param {object} [input.params]   v2: raw action params snapshot (optional)
+ * @param {boolean} [input.rbf]     whether the send signalled replaceability (optional)
  * @returns {PendingTx}
  */
 export function createPendingTx(input) {
@@ -131,6 +136,7 @@ export function createPendingTx(input) {
         // It is stamped later, by whatever sees it first (an own-address
         // MEMPOOL_ACTION frame or the mempool poll).
         mempoolSeenAt: null,
+        rbf: typeof input.rbf === 'boolean' ? input.rbf : null,
     };
 }
 
@@ -186,6 +192,12 @@ export function validatePendingTx(record) {
         'mempoolSeenAt',
         r.mempoolSeenAt === undefined || r.mempoolSeenAt === null || isIsoTimestamp(r.mempoolSeenAt),
         'must be null or an ISO timestamp',
+    );
+    check(
+        errors,
+        'rbf',
+        r.rbf === undefined || r.rbf === null || typeof r.rbf === 'boolean',
+        'must be null or a boolean',
     );
     // Inclusion proof, written only by the reconcile that found it. Same
     // undefined-tolerance: no record carries either field until then.

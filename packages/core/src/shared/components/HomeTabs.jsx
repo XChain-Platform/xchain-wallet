@@ -73,7 +73,10 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
     // here so it persists across tab switches.
-    const [filterOpen, setFilterOpen] = useState(false);
+    // It opens on its own while a token query is live: the query outlives
+    // this component (the shell owns it), so a remount would otherwise hide
+    // the only control showing why the Tokens list is empty.
+    const [filterOpen, setFilterOpen] = useState(() => tokenQuery.trim().length > 0);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
 
     const allRows = useMemo(
@@ -221,11 +224,13 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             ? 'No matching tokens'
                             : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
                         emptyBody={tokenQueryTrim
-                            ? `Nothing matches "${tokenQuery.trim()}". Clear the filter from the top toolbar to see all tokens.`
+                            ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see all tokens.`
                             : (networkFilter === 'all'
                                 ? 'Browse markets or accept a token transfer to populate this view.'
                                 : undefined)}
                         onReceive={!tokenQueryTrim && networkFilter === 'all' ? onReceive : undefined}
+                        emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
+                        onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         onSelectToken={onSelectToken}
                         pinnedKeys={pinnedKeys}
                         onTogglePin={onTogglePin}

@@ -105,7 +105,7 @@ describe('indexerWaitMessage', () => {
         expect(indexerWaitMessage({ leg: null, total: 4, chainState: 'confirmed' }))
             .toMatch(/^The assembling transaction is confirmed on chain, waiting for the indexer/);
         expect(indexerWaitMessage({ leg: 0, total: 4, chainState: 'mempool' }))
-            .toBe('Chunk 1 of 4 is in the mempool, waiting for a block and then the indexer.');
+            .toBe('Chunk 1 of 4 is waiting on the network to be confirmed, then for the indexer.');
     });
 
     it('is null with no wait in progress', () => {

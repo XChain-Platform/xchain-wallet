@@ -55,6 +55,8 @@
  * @property {string | null} pendingTxId
  * @property {boolean} replaced            superseded by an RBF replacement
  * @property {string | null} replacementTxHash
+ * @property {boolean | null} rbf          the send signalled replaceability; null when
+ *                                          the record does not say
  * @property {boolean} chainConfirmed      this wallet proved a block carries the
  *                                          transaction and no explorer row exists
  *                                          to take the entry's place (a plain
@@ -358,6 +360,7 @@ export function pendingTxToEntry({
             localStatus: String(pendingTx?.status || ''),
             pendingTxId: pendingTx?.id ? String(pendingTx.id) : null,
             replaced: String(pendingTx?.status || '') === 'rbf-replaced',
+            rbf: typeof pendingTx?.rbf === 'boolean' ? pendingTx.rbf : null,
             replacementTxHash: pendingTx?.rbfReplacement
                 ? normalizeHash(pendingTx.rbfReplacement)
                 : null,

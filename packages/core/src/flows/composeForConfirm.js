@@ -168,7 +168,7 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @property {object|null} oracleFeeQuote      Mode B dispenser oracle usage fee quote, when one was priced
  * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
- * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs when this compose is abandoned
+ * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs when this compose is abandoned; a function, so MessageHost swaps it for a releaseEncoderInputsToken before the result crosses sendMessage or IPC
  * @property {object} encoderOpts              the FINAL encoderOpts used to build the PSBT (fee + ADS folded in)
  * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not compress
  */

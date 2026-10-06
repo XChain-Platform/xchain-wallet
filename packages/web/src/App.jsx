@@ -81,7 +81,6 @@ import { registry as registryLib } from '@xchain-wallet/core';
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 const APP_COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
-import { uri as coreUri } from '@xchain-wallet/core';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
@@ -187,6 +186,7 @@ import { pairLedgerSigner } from './signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
+import { deepLinkRoute } from '../../desktop/renderer/deepLinkRoute.js';
 import { subscribeToNativeDeepLinks } from './deeplinks/nativeDeepLinks.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
@@ -358,6 +358,8 @@ function AppInner() {
     const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
     // Free-text token filter: lifted alongside the network filter so the
     // AppHeader popover and Home's HomeTabs share one source of truth.
+    // The Send and Receive pickers keep their own search text: sharing this
+    // one left a ticker typed there ("LTC") filtering Home's Tokens tab.
     const [globalTokenQuery, setGlobalTokenQuery] = useState('');
     // Asset-kind filter: surfaced via the global filter popover on the
     // send-picker route so the user can narrow the spendable list to
@@ -620,43 +622,18 @@ function AppInner() {
     // only applied once the session reports unlocked (see `refresh`).
     const applyUriIntent = useCallback((raw) => {
         try {
-            // Pass the registry so coin-code URIs (xchain:TBTC/...) resolve to
-            // a chainId; without it intent.chainId is always undefined, which
-            // Send tolerated but contract routes cannot.
-            //
-            // `hardenUriIntentText` neutralizes the free-text
-            // fields (memo/tick/method/params) before they ever become
-            // prefill state, since this is the first point a `?uri=` query
-            // string becomes something the SPA renders. `address` stays
-            // whatever the link sent; see the function's own comment for why.
-            const intent = coreUri.hardenUriIntentText(
-                coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY }),
-            );
-            if (intent && intent.kind === 'send') {
-                setSendPrefill({
-                    address: intent.address,
-                    amount: intent.amount,
-                    tick: intent.tick,
-                    chainId: intent.chainId,
-                    memo: intent.memo,
-                });
-                setUnlockedView('send');
-                pendingUriView.current = 'send';
-            } else if (intent && intent.kind === 'receive') {
-                setUnlockedView('receive');
-                pendingUriView.current = 'receive';
-            } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
-                // Explorer Write-tab deep link: land on the EXECUTE form
-                // prefilled. Unroutable without a contract index and a
-                // resolved chain, so both are required.
-                setContractRef({ chainId: intent.chainId, contractActionIndex: intent.contractActionIndex });
-                setExecutePrefill({
-                    method: intent.method || '',
-                    paramsText: intent.executeParams || '',
-                });
-                setUnlockedView('contract-execute');
-                pendingUriView.current = 'contract-execute';
+            // The mapping is shared with the desktop shell; it parses with
+            // the registry, hardens the free text and routes only links that
+            // carry what their form needs.
+            const route = deepLinkRoute(raw, APP_CHAIN_REGISTRY);
+            if (!route) return;
+            if (route.view === 'send') setSendPrefill(route.sendPrefill);
+            if (route.view === 'contract-execute') {
+                setContractRef(route.contractRef);
+                setExecutePrefill(route.executePrefill);
             }
+            setUnlockedView(route.view);
+            pendingUriView.current = route.view;
         } catch {
             // Parser surfaces unknown via kind === 'unknown'; nothing else
             // throws here. Defensive try/catch in case future parser
@@ -982,8 +959,6 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
-                        tokenQuery={globalTokenQuery}
-                        onTokenQueryChange={setGlobalTokenQuery}
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter
@@ -1012,8 +987,6 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
-                        tokenQuery={globalTokenQuery}
-                        onTokenQueryChange={setGlobalTokenQuery}
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter

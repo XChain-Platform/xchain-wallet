@@ -48,6 +48,8 @@
 // round-trip; the authoritative check still runs in the SDK at compose
 // time.
 
+import { CHAIN_GATED_ACTIONS, assertActionAllowedOnChain } from '../registry/actions.js';
+
 /** Actions a BATCH can never contain (SDK BatchBuilder + validator). */
 export const BATCH_FORBIDDEN_ACTIONS = ['BATCH'];
 
@@ -299,10 +301,14 @@ export function validateBatchConstraints(subActions) {
  * FILE out of the queue; if one slips through without rawData the builder
  * still serializes it, and the constraint pre-check bounds it to one.
  *
- * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainId: string, subActions: Array<{ action: string, params: Record<string, unknown> }> }} params
+ * When a chainRegistry is supplied, every nested COLLECT, STAKE, UNSTAKE,
+ * DELEGATE and XBRIDGE is gated by chain the same way advancedAction gates
+ * them at the top level.
+ *
+ * @param {{ sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry, chainRegistry?: import('../registry/index.js').ChainRegistry, chainId: string, subActions: Array<{ action: string, params: Record<string, unknown> }> }} params
  * @returns {Promise<{ command: string, subStrings: string[] }>}
  */
-export async function buildBatchCommand({ sdkRegistry, chainId, subActions }) {
+export async function buildBatchCommand({ sdkRegistry, chainRegistry, chainId, subActions }) {
     if (!sdkRegistry) throw new Error('buildBatchCommand: sdkRegistry is required');
     if (!chainId) throw new Error('buildBatchCommand: chainId is required');
     if (!Array.isArray(subActions) || subActions.length === 0) {
@@ -329,5 +335,30 @@ export async function buildBatchCommand({ sdkRegistry, chainId, subActions }) {
         throw new Error(`buildBatchCommand: unexpected BATCH action string "${actionString.slice(0, 24)}…"`);
     }
     const command = actionString.slice(prefix.length);
-    return { command, subStrings: command.split(';') };
+    const subStrings = command.split(';');
+    if (chainRegistry) assertNestedActionsAllowedOnChain(chainRegistry, chainId, subStrings);
+    return { command, subStrings };
+}
+
+/**
+ * Apply the per-chain action gate to every nested sub-action, reading the
+ * action name and version from its canonical wire string (ACTION|VERSION|...),
+ * the form the indexer judges. A chain-gated action whose version cannot be
+ * read is refused rather than let through.
+ *
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @param {string} chainId
+ * @param {string[]} subStrings
+ */
+function assertNestedActionsAllowedOnChain(chainRegistry, chainId, subStrings) {
+    for (const sub of subStrings) {
+        const [rawAction, rawVersion] = sub.split('|');
+        const action = String(rawAction || '').trim().toUpperCase();
+        if (!CHAIN_GATED_ACTIONS.includes(action)) continue;
+        const version = Number(rawVersion);
+        if (rawVersion === undefined || rawVersion === '' || !Number.isInteger(version)) {
+            throw new Error(`buildBatchCommand: ${action} version is unreadable in a nested sub-action`);
+        }
+        assertActionAllowedOnChain(chainRegistry, chainId, action, version, 'buildBatchCommand');
+    }
 }
