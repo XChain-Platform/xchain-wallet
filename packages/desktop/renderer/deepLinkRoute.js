@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Desktop half of `xchain:` deep links: turn the raw URI main handed over
+// The one URI to view mapping for `xchain:` links, shared by the desktop
+// shell and the web/native shell so the two cannot drift: turn the raw URI main handed over
 // into the form it prefills. A link is attacker-controlled input, so the
 // only thing it can ever do is land the user on a prefilled form they still
 // have to act on: nothing here unlocks, signs or submits.
@@ -24,7 +25,7 @@ import { uri as coreUri } from '@xchain-wallet/core';
  *
  * @param {unknown} raw
  * @param {any} chainRegistry
- * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }, contractRef?: { chainId: string, contractActionIndex: string } } | null}
+ * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | null}
  */
 export function deepLinkRoute(raw, chainRegistry) {
     if (typeof raw !== 'string' || !raw) return null;
@@ -52,6 +53,10 @@ export function deepLinkRoute(raw, chainRegistry) {
         return {
             view: 'contract-execute',
             contractRef: { chainId: intent.chainId, contractActionIndex: intent.contractActionIndex },
+            executePrefill: {
+                method: intent.method || '',
+                paramsText: intent.executeParams || '',
+            },
         };
     }
     return null;
