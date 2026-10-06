@@ -35,26 +35,171 @@
  * @property {Promise<boolean> | null} loadPromise  the single-flight rehydrate
  * @property {Set<string>} inFlight  `walletId:entryId` claims of broadcasts on the network
  * @property {Set<string>} prunedWallets  walletIds removed before `loaded` latched,
- *   which the rehydrate merge skips and its write-back drops from the blob
+ *   which the rehydrate merge skips and its write-back drops from the blob;
+ *   each add is also written to a durable ledger so a worker evicted before
+ *   the read recovers still drops the wallet on the next boot
  */
+
+const PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
+
+function chromeLedger() {
+    const settle = (resolve, reject) => () => (chrome.runtime?.lastError ? reject(new Error('pruned ledger write refused')) : resolve());
+    return {
+        list() {
+            return new Promise((resolve) => {
+                try {
+                    chrome.storage.local.get(null, (items) => {
+                        if (chrome.runtime?.lastError || !items) { resolve(null); return; }
+                        resolve(Object.keys(items).filter((k) => k.startsWith(PRUNED_PREFIX)).map((k) => k.slice(PRUNED_PREFIX.length)));
+                    });
+                } catch (_e) {
+                    resolve(null);
+                }
+            });
+        },
+        add(id) {
+            return new Promise((resolve, reject) => {
+                try {
+                    chrome.storage.local.set({ [PRUNED_PREFIX + id]: 1 }, settle(resolve, reject));
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        },
+        remove(ids) {
+            if (ids.length === 0) return Promise.resolve();
+            return new Promise((resolve, reject) => {
+                try {
+                    chrome.storage.local.remove(ids.map((id) => PRUNED_PREFIX + id), settle(resolve, reject));
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        },
+    };
+}
+
+function localLedger() {
+    return {
+        async list() {
+            try {
+                const ids = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith(PRUNED_PREFIX)) ids.push(k.slice(PRUNED_PREFIX.length));
+                }
+                return ids;
+            } catch (_e) {
+                return null;
+            }
+        },
+        async add(id) {
+            localStorage.setItem(PRUNED_PREFIX + id, '1');
+        },
+        async remove(ids) {
+            for (const id of ids) localStorage.removeItem(PRUNED_PREFIX + id);
+        },
+    };
+}
+
+function defaultLedger() {
+    if (typeof chrome !== 'undefined' && chrome?.storage?.local) return chromeLedger();
+    try {
+        if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') return localLedger();
+    } catch (_e) {
+        // Access can throw under sandboxed iframes; the ledger is then unavailable.
+    }
+    return null;
+}
+
+/**
+ * The prune set, mirrored to a durable ledger with one record per walletId so
+ * a write never has to read the store, which is what is failing when a prune
+ * lands here. An add starts its write in the same tick.
+ */
+class PrunedWallets extends Set {
+    constructor(ledger) {
+        super();
+        this.ledger = ledger;
+        this.tail = Promise.resolve();
+    }
+
+    add(id) {
+        const fresh = !this.has(id);
+        super.add(id);
+        if (fresh && this.ledger) this.queue(() => this.ledger.add(id));
+        return this;
+    }
+
+    hydrate(ids) {
+        for (const id of ids) super.add(id);
+    }
+
+    async forget(snapshot) {
+        const stored = await this.ledger.list();
+        if (stored === null) return;
+        await this.ledger.remove(stored.filter((id) => !(Array.isArray(snapshot?.[id]) && snapshot[id].length > 0)));
+    }
+
+    async erase() {
+        if (!this.ledger) return;
+        await this.queue(async () => {
+            const stored = await this.ledger.list();
+            if (stored) await this.ledger.remove(stored);
+        });
+    }
+
+    queue(job) {
+        const run = this.tail.then(job);
+        this.tail = run.catch(() => {});
+        return run;
+    }
+}
+
+function withLedger(storage, pruned) {
+    const wrapped = Object.create(storage);
+    wrapped.load = async () => {
+        const snapshot = await storage.load();
+        if (!snapshot || typeof snapshot !== 'object') return snapshot;
+        await pruned.tail;
+        const ids = await pruned.ledger.list();
+        // An unreadable ledger is an unreadable store: fail closed like a failed load.
+        if (ids === null) return null;
+        pruned.hydrate(ids);
+        return snapshot;
+    };
+    wrapped.save = async (snapshot) => {
+        await storage.save(snapshot);
+        try {
+            await pruned.queue(() => pruned.forget(snapshot));
+        } catch (_e) {
+            // A stale entry only skips a wallet the blob no longer holds.
+        }
+    };
+    return wrapped;
+}
 
 /**
  * Build an empty store over one storage adapter.
  *
- * @param {{ storage?: BroadcastQueueStorage | null }} [opts]
- *   `null` keeps the queue in memory only, as the host's own opt-out does
+ * @param {{ storage?: BroadcastQueueStorage | null,
+ *           prunedLedger?: { list: () => Promise<string[] | null>, add: (id: string) => Promise<void>, remove: (ids: string[]) => Promise<void> } | null }} [opts]
+ *   `storage: null` keeps the queue in memory only, as the host's own opt-out
+ *   does; `prunedLedger` replaces the default durable ledger, `null` drops it
  * @returns {BroadcastQueueStore}
  */
-export function createBroadcastQueueStore({ storage = null } = {}) {
+export function createBroadcastQueueStore({ storage = null, prunedLedger } = {}) {
+    const ledger = storage ? (prunedLedger === undefined ? defaultLedger() : prunedLedger) : null;
+    const prunedWallets = new PrunedWallets(ledger);
     return {
-        storage,
+        storage: ledger ? withLedger(storage, prunedWallets) : storage,
         queues: new Map(),
         owed: [],
         loaded: false,
         sealed: false,
         loadPromise: null,
         inFlight: new Set(),
-        prunedWallets: new Set(),
+        prunedWallets,
     };
 }
 
@@ -74,6 +219,9 @@ export async function sealBroadcastQueueStore(store) {
     store.queues.clear();
     store.owed = [];
     store.prunedWallets?.clear();
+    // Not awaited: a read already held by the failing store must not stall the
+    // wipe, and the ledger holds walletIds only.
+    store.prunedWallets?.erase?.().catch(() => {});
     if (typeof store.storage?.clear === 'function') {
         try {
             await store.storage.clear();
