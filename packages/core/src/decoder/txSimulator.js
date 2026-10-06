@@ -467,7 +467,7 @@ function simulateAirdrop(p, balMap, coinTick, feeEstimate) {
     return {
         deltas,
         sideEffects,
-        notes: ['Total cost depends on how long the list is when this transaction confirms. The wallet cannot work it out ahead of time.'],
+        notes: ['Total cost depends on the list size when this transaction confirms. The wallet cannot work it out ahead of time.'],
     };
 }
 
