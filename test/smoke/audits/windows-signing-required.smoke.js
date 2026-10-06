@@ -333,6 +333,10 @@ function loadError(env) {
     }
     assert.ok(/Cert:\\CurrentUser\\My[^\n]*WIN_CSC_SUBJECT_NAME/.test(cka),
         'the eSigner CKA step asserts a certificate with the configured subject is in CurrentUser\\My');
+    // The bundled signtool could see the certificate and not use its key, so
+    // the step proves an SDK signtool signs with it and hands that one on.
+    assert.ok(/signtool\.exe[\s\S]*sign \/debug[\s\S]*SIGNTOOL_PATH=\$chosen[^\n]*GITHUB_ENV/.test(cka),
+        'the eSigner CKA step probes a Windows SDK signtool and exports it as SIGNTOOL_PATH');
     assert.ok(!/\$tool credentials/.test(cka),
         'the eSigner CKA step calls only commands the tool has (config, unload, load)');
 }

@@ -620,6 +620,20 @@ jobs:
           KC="$RUNNER_TEMP/xchain-devid.keychain-db"
           bash tools/release/ci-keychain.sh "$KC" MACOS_CSC_LINK:MACOS_CSC_KEY_PASSWORD
           echo "XCHAIN_DEVID_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+      # The App Store Connect key secret holds the .p8 CONTENTS (ios-archive.sh
+      # reads it the same way), while @electron/notarize hands APPLE_API_KEY to
+      # notarytool as a PATH. The PEM text began with dashes, so notarytool
+      # read it as an option and v0.341.1 failed "Invalid option". Written to
+      # a 0600 file here, and the build steps take the path.
+      - name: Write the App Store Connect key to a file
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          ( umask 077; printf '%s\n' "$APPLE_API_KEY" > "$KEY" )
+          grep -q "BEGIN PRIVATE KEY" "$KEY" || { echo "APPLE_API_KEY is not a .p8 private key" >&2; exit 1; }
+          echo "XCHAIN_ASC_KEY_PATH=$KEY" >> "$GITHUB_ENV"
       - name: Build, sign and notarize (macOS x64 + arm64)
         env:
           # Developer ID Application cert (K3), imported by the step above,
@@ -645,7 +659,7 @@ jobs:
           # DEVELOPER_ID_SHA1; the smoke fails if the two disagree, so a
           # certificate renewal updates both.
           CSC_IDENTITY_NAME: 92EA61B6FFD757FE524F3F5F4D4E28FD0A19FDAF
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY: ${{ env.XCHAIN_ASC_KEY_PATH }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -775,7 +789,7 @@ jobs:
           # cannot rehearse. The same certificate fingerprint as the
           # production step, for the same reason.
           CSC_IDENTITY_NAME: 92EA61B6FFD757FE524F3F5F4D4E28FD0A19FDAF
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY: ${{ env.XCHAIN_ASC_KEY_PATH }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -877,6 +891,26 @@ jobs:
           $certs = @(Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -like "*$env:WIN_CSC_SUBJECT_NAME*" })
           if ($certs.Count -lt 1) { throw "no certificate with the WIN_CSC_SUBJECT_NAME subject in CurrentUser\My after the eSigner load" }
           Write-Host "eSigner CKA loaded $($certs.Count) certificate(s) matching the subject"
+          # electron-builder's bundled signtool (x64, from winCodeSign 2.6.0)
+          # found that certificate and could not use its key: "No
+          # certificates were found that met all the given criteria" on
+          # v0.341.1. SSL.com documents the CKA with the Windows SDK signtool,
+          # so each SDK signtool, x86 first, signs a scratch file here, and the
+          # first that succeeds goes to electron-builder as SIGNTOOL_PATH. A
+          # lane where none can sign stops here, with signtool's own /debug
+          # account of why, rather than inside the build.
+          $thumb = $certs[0].Thumbprint
+          $probe = Join-Path $env:RUNNER_TEMP 'signtool-probe.exe'
+          $candidates = @(Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin\*\x86\signtool.exe', 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)
+          $chosen = $null
+          foreach ($st in $candidates) {
+            Copy-Item "$env:WINDIR\System32\whoami.exe" $probe -Force
+            & $st.FullName sign /debug /fd sha256 /tr http://timestamp.digicert.com /td sha256 /sha1 $thumb $probe
+            if ($LASTEXITCODE -eq 0) { $chosen = $st.FullName; break }
+          }
+          if (-not $chosen) { throw "no Windows SDK signtool could sign with the eSigner certificate ($($candidates.Count) tried)" }
+          Write-Host "signtool for this lane: $chosen"
+          "SIGNTOOL_PATH=$chosen" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build and sign (Windows x64 + arm64)
         env:
           WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
