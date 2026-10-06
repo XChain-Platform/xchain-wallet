@@ -16,9 +16,18 @@ import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.j
 
 const VALID_LTC = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
 
+// The price feed is a third-party service the dev server reaches live. When it
+// rate-limits a CI runner it answers without CORS headers, and the browser logs
+// that as an error that says nothing about this flow.
+const PRICE_FEED = /api\.coingecko\.com/;
+
 test('an unaffordable Litecoin token send offers Sign anyway behind the same warning', async ({ page }) => {
     const consoleErrors = [];
-    page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+    page.on('console', (msg) => {
+        if (msg.type() !== 'error') return;
+        if (PRICE_FEED.test(msg.text()) || PRICE_FEED.test(msg.location()?.url || '')) return;
+        consoleErrors.push(msg.text());
+    });
     page.on('pageerror', (err) => consoleErrors.push(String(err)));
 
     await createWallet(page);
