@@ -10,6 +10,7 @@
 
 import { forwardRef, useId, useState } from 'react';
 import styles from './Input.module.css';
+import { localTimeZoneNote } from './localTimeZoneNote.js';
 
 /**
  * Controlled text input with label, hint, and error slots. Pass-through
@@ -20,6 +21,11 @@ import styles from './Input.module.css';
  * is on (§26 / G067). Detection runs only for `type="password"`; other
  * inputs see no behavior change. Caller-provided `onKeyDown` / `onKeyUp`
  * / `onFocus` / `onBlur` handlers are chained, never replaced.
+ *
+ * Date-time fields (`type="datetime-local"`) always carry a line naming the
+ * device time zone the value is read in, plus the entered moment in UTC,
+ * because the browser control shows no zone and every expiration and
+ * deadline form parses it as local time.
  *
  * @typedef {object} InputOwnProps
  * @property {string} [label]
@@ -37,6 +43,8 @@ export const Input = forwardRef(function Input(
     const hintId = hint ? `${inputId}-hint` : undefined;
     const errorId = error ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
+    const isDateTime = type === 'datetime-local';
+    const zoneId = isDateTime ? `${inputId}-zone` : undefined;
 
     const isPassword = type === 'password';
     const [capsLockOn, setCapsLockOn] = useState(false);
@@ -46,6 +54,7 @@ export const Input = forwardRef(function Input(
     const describedBy = [
         hintId,
         errorId,
+        zoneId,
         showCapsLock ? capsLockId : undefined,
     ].filter(Boolean).join(' ') || undefined;
     const inputClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
@@ -98,6 +107,9 @@ export const Input = forwardRef(function Input(
             />
             {hint && !error ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
+            ) : null}
+            {isDateTime ? (
+                <div id={zoneId} className={styles.hint}>{localTimeZoneNote(rest.value)}</div>
             ) : null}
             {error ? (
                 <div id={errorId} className={styles.error} role="alert">{error}</div>
