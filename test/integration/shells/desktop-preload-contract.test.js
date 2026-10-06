@@ -566,6 +566,7 @@ describe('desktop renderer: deep-link routing', () => {
         expect(deepLinkRoute('xchain:BTC/execute?contract=12&method=foo', reg)).toEqual({
             view: 'contract-execute',
             contractRef: { chainId: 'bitcoin-mainnet', contractActionIndex: '12' },
+            executePrefill: { method: 'foo', paramsText: '' },
         });
         expect(deepLinkRoute('xchain:BTC/execute?method=foo', reg)).toBe(null);
     });
