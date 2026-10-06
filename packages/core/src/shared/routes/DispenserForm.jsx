@@ -221,7 +221,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [payWith, setPayWith] = useState(/** @type {'coin' | 'token'} */ (reopen?.payWith === 'token' ? 'token' : 'coin'));
     const [getTick, setGetTick] = useState(reopen?.getTick || '');
     const [getTokenAmount, setGetTokenAmount] = useState(reopen?.getTokenAmount || '');
-    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ (reopen?.expiration ? 'custom' : 'default'));
+    // Every form starts on the default window, a reopen included: the indexer fills a concrete
+    // EXPIRATION into every dispenser, so a reopened one's expiration is usually the old default
+    // window's leftover deadline, not a time its creator chose. It stays prefilled for the custom
+    // choice.
+    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
     const [expInput, setExpInput] = useState(reopen?.expiration ? unixToLocalInput(reopen.expiration) : '');
     const [allowListIdx, setAllowListIdx] = useState(reopen?.allowList || '');
     const [blockListIdx, setBlockListIdx] = useState(reopen?.blockList || '');

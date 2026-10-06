@@ -192,7 +192,7 @@ describe('DispenserForm opened again from a finished dispenser', () => {
         expect(compose.args.from.address).toBe(CREATOR.address);
     });
 
-    it('carries oracle pricing and a future expiration', async () => {
+    it('carries oracle pricing and starts on the default window despite a future expiration', async () => {
         // A whole minute, since the Expires input has minute resolution.
         const expiration = 4102444800;
         const { utils, calls } = await mountReopen({
@@ -205,13 +205,25 @@ describe('DispenserForm opened again from a finished dispenser', () => {
         });
         expect(utils.queryByLabelText(/^Trigger price/), 'oracle pricing hides the coin trigger').toBeNull();
         expect(utils.getByLabelText(/^Oracle address/).value).toBe('bc1qoracleoracleoracleoracleoracleoracle');
+        expect(utils.getByRole('radio', { name: /Default window/ }).checked).toBe(true);
         const { compose } = await createAsIs(utils, calls);
         expect(compose.args.actionData.params).toMatchObject({
             GET_AMOUNT: '0',
             ORACLE_ADDRESS: 'bc1qoracleoracleoracleoracleoracleoracle',
             FIAT_CODE: 'USD',
-            EXPIRATION: String(expiration),
         });
+        expect(compose.args.actionData.params, 'the default window omits EXPIRATION').not.toHaveProperty('EXPIRATION');
+    });
+
+    it('offers the old expiration when a specific time is chosen', async () => {
+        const expiration = 4102444800;
+        const { utils, calls } = await mountReopen({ ...TERMS, expiration });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('radio', { name: /Expire at a specific time/ }));
+            await drainMicrotasks();
+        });
+        const { compose } = await createAsIs(utils, calls);
+        expect(compose.args.actionData.params.EXPIRATION).toBe(String(expiration));
     });
 
     it('carries token pricing', async () => {
