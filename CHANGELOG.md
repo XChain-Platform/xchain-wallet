@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.341.0] - 2026-10-06
+
+### Added
+- Windows desktop installers are signed with the Dankest, LLC code-signing certificate through SSL.com eSigner, so Windows joins mac and Linux on the desktop update feed.
+- The Tokens tab lists tokens you issued that hold no balance under an "Issued by you" section.
+
+### Changed
+- Date and time fields name your local time zone and show the entered moment in UTC.
+- Wallet errors and labels use plain language across every shell.
+- The desktop wallet locks its vault when the last macOS window closes.
+- The dispenser form opens on the default window, including when it is reopened.
+- Capacitor moves to 8.5.1 and proxy-addr to 2.0.8, and @modelcontextprotocol/sdk to 1.31.0, clearing the production dependency audit.
+- `verify.sh` reads the manifest and its signature from one snapshot, so a file swapped mid-check cannot pass.
+
+### Fixed
+- Approve is blocked on a review that fails with no listed findings.
+- Signing routes resolve the chain from the address's chain and network and refuse an unknown mapping.
+- Searching the Send picker no longer filters Home's Tokens tab, and the empty state clears the filter.
+- A failed message send is shown once instead of again under its details.
+- A delegation revoke keeps its revoke version.
+
 ## [0.340.0] - 2026-10-04
 
 ### Added
