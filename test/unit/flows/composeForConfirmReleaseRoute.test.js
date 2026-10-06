@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { composeActionForConfirm } from '../../../packages/core/src/flows/composeActionForConfirm.js';
 import { MessageHost, RELEASE_ENCODER_INPUTS_TYPE } from '../../../packages/extension/src/background/MessageHost.js';
+import { createDesktopMessageHost } from '../../../packages/desktop/main/messageHost.js';
 
 function makeHarness() {
     let reserved = false;
@@ -96,5 +97,18 @@ describe('release across the host boundary', () => {
         const unknown = await host.handle({ type: RELEASE_ENCODER_INPUTS_TYPE, request: { token: 'nope' } });
         expect(unknown).toEqual({ ok: true, result: { released: false } });
         expect(encoder.releaseInputs).not.toHaveBeenCalled();
+    });
+});
+
+describe('release through the desktop main-process host', () => {
+    it('is served by the same MessageHost that issues the tokens', async () => {
+        const { handle, host } = createDesktopMessageHost({
+            vault: {}, chainRegistry: {}, sdkRegistry: {},
+        });
+        expect(host).toBeInstanceOf(MessageHost);
+        const res = await handle({ type: RELEASE_ENCODER_INPUTS_TYPE, request: { token: 'nope' } });
+        expect(res).toEqual({ ok: true, result: { released: false } });
+        const missing = await handle({ type: RELEASE_ENCODER_INPUTS_TYPE, request: {} });
+        expect(missing.ok).toBe(false);
     });
 });
