@@ -305,6 +305,22 @@ function loadError(env) {
                 + ' lane signs through the eSigner subject only');
         }
     }
+
+    // The requirement without the credentials is a lane that can only fail.
+    // The subject names the certificate; the eSigner CKA step registers the
+    // cloud key behind it, and it needs all five values from the
+    // release-signing environment before any Windows build step runs.
+    const cka = steps.find((s) => /name:\s*Install and register the eSigner CKA/.test(s));
+    assert.ok(cka, 'release.yml registers the eSigner CKA in the Windows job');
+    const ckaAt = wf.indexOf('Install and register the eSigner CKA');
+    const firstWinBuild = wf.indexOf(winBuilds[0]);
+    assert.ok(ckaAt >= 0 && ckaAt < firstWinBuild,
+        'the eSigner CKA is registered before the first Windows build step');
+    for (const secret of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', SUBJECT_VAR]) {
+        assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(cka),
+            `the eSigner CKA step must pass ${secret} through, or the signing`
+            + ' requirement the build steps declare can never be met');
+    }
 }
 
 // ---------------------------------------- the far end still rejects an .exe
