@@ -56,6 +56,14 @@ export class InvalidMessageError extends Error {
  * @typedef {{ ok: true, result: unknown } | { ok: false, error: { name: string, message: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number } }} MessageResponse
  */
 
+// Wire type that releases the inputs a compose step reserved. A compose result
+// carries its release as a function, which neither runtime.sendMessage nor
+// Electron IPC can transport, so the host keeps the function and hands the
+// caller a single-use token to present here instead.
+export const RELEASE_ENCODER_INPUTS_TYPE = 'action.releaseEncoderInputs';
+const RELEASE_TOKEN_FIELD = 'releaseEncoderInputsToken';
+const MAX_PENDING_RELEASES = 64;
+
 export class MessageHost {
     /** @param {MessageHostDeps} deps */
     constructor(deps) {
@@ -65,6 +73,40 @@ export class MessageHost {
         this._deps = deps;
         /** @type {Map<string, MessageHandler<any, any>>} */
         this._handlers = new Map();
+        /** @type {Map<string, () => Promise<unknown>>} */
+        this._pendingReleases = new Map();
+    }
+
+    /**
+     * Swap a function-valued `releaseEncoderInputs` for a token the caller can
+     * send back. Returns the result unchanged when it carries no such function.
+     *
+     * @param {unknown} result
+     */
+    _detachRelease(result) {
+        const release = /** @type {any} */ (result)?.releaseEncoderInputs;
+        if (typeof release !== 'function') return result;
+        const { releaseEncoderInputs: _fn, ...rest } = /** @type {any} */ (result);
+        const token = globalThis.crypto.randomUUID();
+        this._pendingReleases.set(token, release);
+        if (this._pendingReleases.size > MAX_PENDING_RELEASES) {
+            this._pendingReleases.delete(this._pendingReleases.keys().next().value);
+        }
+        return { ...rest, [RELEASE_TOKEN_FIELD]: token };
+    }
+
+    /** @param {unknown} request */
+    async _runRelease(request) {
+        const token = /** @type {any} */ (request)?.token;
+        if (typeof token !== 'string' || !token) {
+            throw new InvalidMessageError(`${RELEASE_ENCODER_INPUTS_TYPE}: token is required`);
+        }
+        const release = this._pendingReleases.get(token);
+        if (!release) return { released: false };
+        // Kept until the release succeeds, so a failed attempt can be retried.
+        await release();
+        this._pendingReleases.delete(token);
+        return { released: true };
     }
 
     /**
@@ -99,13 +141,20 @@ export class MessageHost {
                 new InvalidMessageError('message.type must be a non-empty string'),
             );
         }
+        if (type === RELEASE_ENCODER_INPUTS_TYPE) {
+            try {
+                return { ok: true, result: await this._runRelease(request) };
+            } catch (err) {
+                return serializeError(err);
+            }
+        }
         const handler = this._handlers.get(type);
         if (!handler) {
             return serializeError(new UnknownMessageTypeError(type));
         }
         try {
             const result = await handler(request, this._deps);
-            return { ok: true, result };
+            return { ok: true, result: this._detachRelease(result) };
         } catch (err) {
             return serializeError(err);
         }
