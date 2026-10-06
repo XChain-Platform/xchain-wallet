@@ -52,7 +52,7 @@ import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStorage } from '../../extension/src/background/broadcastQueueStorage.js';
-import { createBroadcastQueueStore } from '../../extension/src/background/broadcastQueueStore.js';
+import { createBroadcastQueueStore, sealBroadcastQueueStore } from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
@@ -610,7 +610,8 @@ let vault = null;
 let signerPool = null;
 // One broadcast-queue store for every host this page builds, so a host a lock
 // dropped mid-broadcast cannot write a stale queue over the next one's save.
-// A lock keeps it; every wipe reloads the page, which is what ends it here.
+// A lock keeps it; a wipe seals it before core removes the stored key, so a
+// broadcast that resolves after the removal writes nothing back.
 let broadcastQueueStore = null;
 
 /** Build the page's queue store on first use, when the page's storage is known. */
@@ -619,6 +620,42 @@ function sharedBroadcastQueueStore() {
         broadcastQueueStore = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
     }
     return broadcastQueueStore;
+}
+
+/**
+ * End the page's queue store for a wallet wipe and give the next host a fresh one.
+ * Never throws: a failed seal must not fail the wipe, which removes the key itself.
+ *
+ * @returns {Promise<void>}
+ */
+export async function sealPageBroadcastQueue() {
+    const sealed = broadcastQueueStore;
+    broadcastQueueStore = null;
+    if (!sealed) return;
+    try {
+        await sealBroadcastQueueStore(sealed);
+    } catch (_err) {
+        // Only the sealed store's writers were at stake; the wipe removes the key.
+    }
+}
+
+/**
+ * Publish the wipe hook a plain browser page needs for the seal. The native
+ * shell's hook carries the seal itself, and a hook another shell published stays.
+ *
+ * @returns {boolean} whether this call published the hook
+ */
+function installPageWipeSeal() {
+    const g = /** @type {any} */ (globalThis);
+    if (g.xchainWalletBridge?.wipeStorage) return false;
+    g.xchainWalletBridge = {
+        ...(g.xchainWalletBridge || {}),
+        wipeStorage: async () => {
+            await sealPageBroadcastQueue();
+            return { ok: true };
+        },
+    };
+    return true;
 }
 let notificationService = null;
 let priceAlertWatcher = null;
@@ -854,7 +891,7 @@ export async function getSessionStatus() {
     // the biometric enrollment flag honest after the user enrolls, disables,
     // or re-registers a fingerprint in system settings. No-op in a browser.
     try {
-        installNativeWipeHook();
+        if (!installNativeWipeHook({ afterWipe: sealPageBroadcastQueue })) installPageWipeSeal();
         installNativeScreenGuard();
         await installNativeBiometricProvider();
         // SSC-7, and the await is load-bearing rather than tidy: the lockout

@@ -127,9 +127,17 @@ export function installNativeScreenGuard() {
  * unlock screen for the vault it just promised to erase. Core's failure
  * policy does the rest: a shell wipe that fails REJECTS and the user is told.
  *
+ * `afterWipe` runs once every native store has cleared, still inside the
+ * hook, so a refusal earlier in the sequence never reaches it and a failure
+ * inside it reports the wipe as failed. Core removes the page's queue key
+ * only after this hook returns, which is what lets `afterWipe` fence a
+ * queued broadcast that resolves after that removal.
+ *
  * Idempotent, and it never displaces a hook another shell installed.
+ *
+ * @param {{ afterWipe?: () => void | Promise<void> }} [opts]
  */
-export function installNativeWipeHook() {
+export function installNativeWipeHook({ afterWipe } = {}) {
     if (!usingNativeVault()) return false;
     const g = /** @type {any} */ (globalThis);
     if (g.xchainWalletBridge?.wipeStorage) return true;
@@ -148,6 +156,7 @@ export function installNativeWipeHook() {
                 // the biometric wrap: a guard slot that would not clear must
                 // not leave a wrap holding the old password behind it.
                 await callNativeVault('clearGuards');
+                if (typeof afterWipe === 'function') await afterWipe();
                 return { ok: true };
             } catch (err) {
                 return { ok: false, error: err?.message || String(err) };
