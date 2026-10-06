@@ -9,6 +9,9 @@
 // contact legal@dankest.llc.
 
 import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     GAS_TICK,
@@ -41,6 +44,17 @@ const ACTIVATION_TIMEOUT = INDEXED_WAIT_MS + 60 * 60_000;
 
 const venue = liveVenue();
 const { explorerUrl } = testnetEndpoints();
+
+// The funded wallet has a random seed, so its phrase is the only way back to the
+// sats sent to it. It is written here, owner-only, before any funding is sent.
+const RECOVERY_DIR = path.join(os.tmpdir(), 'xchain-wallet-testnet-recovery');
+
+function recordRecovery(address, phrase) {
+    mkdirSync(RECOVERY_DIR, { recursive: true, mode: 0o700 });
+    const file = path.join(RECOVERY_DIR, `stake-unstake-${address}.json`);
+    writeFileSync(file, JSON.stringify({ address, phrase: phrase.join(' ') }), { mode: 0o600 });
+    return file;
+}
 
 function signingPubkey() {
     return randomBytes(32).toString('hex');
@@ -117,10 +131,22 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
     test.setTimeout(5 * INCLUSION_TIMEOUT + ACTIVATION_TIMEOUT + 60 * 60_000);
 
     let treasury;
+    let fundedAddress = null;
+    let recoveryFile = null;
 
     test.beforeAll(async () => {
         treasury = readRunInput();
         await checkTestnetVenue(venue);
+    });
+
+    test.afterAll(async () => {
+        if (!fundedAddress) return;
+        const view = await venue.utxos(fundedAddress).catch(() => null);
+        const left = (view?.utxos || []).reduce((sum, u) => sum + Number(u.value), 0);
+        if (left > 0) {
+            console.warn(`[testnet ${TESTNET_COIN}] ${left} sats remain on ${fundedAddress}; `
+                + `restore the wallet from ${recoveryFile} to recover them`);
+        }
     });
 
     test('mints, stakes, waits for activation, and partially unstakes', async ({ page }) => {
@@ -129,9 +155,11 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
         let stake;
 
         await test.step('fund a new wallet and mint XCHAIN', async () => {
-            await createWallet(page, { password: WALLET_UNLOCK });
+            const phrase = await createWallet(page, { password: WALLET_UNLOCK });
             await switchToTestnet(page, WALLET_UNLOCK);
             address = await readTestnetReceiveAddress(page);
+            fundedAddress = address;
+            recoveryFile = recordRecovery(address, phrase);
             await fundAddress(treasury, address);
             await page.reload();
             await unlockAfterReload(page, WALLET_UNLOCK);
