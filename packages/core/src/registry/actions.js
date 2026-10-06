@@ -233,3 +233,7 @@ export const BITCOIN_ACTIONS = [...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS, ...
     .sort();
 export const LITECOIN_ACTIONS = [...COMMON_ACTIONS, ...PROTOCOL_ONLY_ACTIONS].slice().sort();
 export const DOGECOIN_ACTIONS = [...COMMON_ACTIONS, ...PROTOCOL_ONLY_ACTIONS].slice().sort();
+
+// Offer the authorable union when a generic composer cannot ask the SDK for
+// its action list, so the fallback can never fall behind this registry.
+export const AUTHORABLE_ACTIONS = Object.freeze([...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS].slice().sort());

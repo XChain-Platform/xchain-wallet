@@ -150,6 +150,33 @@ describe('totalNetworkFeeSats', () => {
         })).toBeNull();
     });
 
+    describe('an unknown reveal total', () => {
+        const FUNDED = {
+            inputs: [{ value: 100000 }],
+            outputs: [
+                { value: 2546, scriptType: 'p2sh', address: 'carrier' },
+                { value: 96954, scriptType: 'p2wpkh', address: 'own' },
+            ],
+        };
+        const opts = { carrierScripts: ['52ae'], ownAddresses: ['own'] };
+
+        it('refuses a null reveal total instead of counting it as zero', () => {
+            expect(totalNetworkFeeSats(FUNDED, { ...opts, revealOutputSats: null })).toBeNull();
+        });
+
+        it('still subtracts nothing when the reveal total is omitted', () => {
+            expect(totalNetworkFeeSats(FUNDED, opts)).toBe(500 + 2546);
+        });
+
+        it('gives a BigInt reveal total the same answer as the number', () => {
+            expect(totalNetworkFeeSats(FUNDED, { ...opts, revealOutputSats: 2000n })).toBe(500 + 546);
+        });
+
+        it('ignores a null reveal total on a lane with no carriers', () => {
+            expect(totalNetworkFeeSats(FUNDED, { carrierScripts: [], revealOutputSats: null })).toBe(500);
+        });
+    });
+
     it('stays null when the funding fee itself is unknowable', () => {
         expect(totalNetworkFeeSats({
             inputs: [{ value: null }],

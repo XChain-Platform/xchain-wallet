@@ -512,7 +512,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
             showToast({ message: 'QR code copied to clipboard.' });
         } catch (err) {
-            showToast({ message: `Copy failed: ${err?.message || 'clipboard unavailable'}` });
+            // The browser's own wording ("Document is not focused") goes to
+            // the log; the toast stays in plain words.
+            console.error('Receive QR copy failed:', err); // eslint-disable-line no-console
+            showToast({ message: 'Copy failed: clipboard unavailable' });
         }
     }, [qrDataUrl, qrUri, address?.address, canCopyImages, showToast]);
 
@@ -522,7 +525,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         try {
             blob = dataUrlToBlob(qrDataUrl);
         } catch (err) {
-            showToast({ message: `Share failed: ${err?.message || 'could not read QR image'}` });
+            console.error('Receive QR share (read image) failed:', err); // eslint-disable-line no-console
+            showToast({ message: 'Share failed: could not read QR image' });
             return;
         }
         // Mirror the Copy action first so the user always ends up with
@@ -542,7 +546,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             });
         } catch (err) {
             if (err?.name === 'AbortError') return; // user dismissed sheet
-            showToast({ message: `Share failed: ${err?.message || 'share unavailable'}` });
+            console.error('Receive QR share failed:', err); // eslint-disable-line no-console
+            showToast({ message: 'Share failed: share unavailable' });
         }
     }, [qrDataUrl, address?.address, qrFileName, canCopyImages, showToast]);
 

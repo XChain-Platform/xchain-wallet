@@ -61,6 +61,8 @@ import {
     bundleIdFromProject,
     credentialsFromEnv,
     ascToken,
+    selectVersionRecord,
+    tagDerivations,
 } from './verify-appstore-version.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -86,7 +88,11 @@ order and waits for Apple to report each one COMPLETE.
   --help
 
 Credentials: APPLE_API_KEY (or APPLE_API_KEY_PATH), APPLE_API_KEY_ID,
-APPLE_API_ISSUER - the same three the gates read with.`;
+APPLE_API_ISSUER - the same three the gates read with.
+
+The version written to is the iOS version carrying XCHAIN_RELEASE_TAG's
+marketing version when that is set, otherwise the single iOS version still
+open for submission; anything else is refused.`;
 
 /**
  * Parse argv into flags.
@@ -248,9 +254,18 @@ export async function uploadListingAssets({ argv = [], env = process.env, wsRoot
     const app = apps.body.data?.[0];
     if (!app) { log(`no app record for bundle id ${bundleId}`); return EXIT.FAILURE; }
 
-    const versions = await api.get(`/v1/apps/${app.id}/appStoreVersions?limit=1`);
-    const version = versions.body.data?.[0];
-    if (!version) { log(`app ${bundleId} has no App Store version`); return EXIT.FAILURE; }
+    // Pick the version by release tag or editable state, never by Apple's list
+    // order, through the same selector the verify gate judges with.
+    const derived = tagDerivations(env.XCHAIN_RELEASE_TAG);
+    if (derived?.error) { log(`XCHAIN_RELEASE_TAG is not a release tag this repo can parse: ${derived.error}`); return EXIT.CONFIG; }
+    const marketing = derived?.marketing ?? null;
+    const versionFilter = marketing ? `&filter[versionString]=${encodeURIComponent(marketing)}` : '';
+    const versions = await api.get(`/v1/apps/${app.id}/appStoreVersions?filter[platform]=IOS${versionFilter}&limit=200`);
+    if (versions.status !== 200) { log(`listing versions: ${apiError(versions)}`); return EXIT.FAILURE; }
+    if (versions.body.links?.next) { log('App Store Connect paged the version list; refusing to pick from part of it'); return EXIT.FAILURE; }
+    const picked = selectVersionRecord(versions.body.data, { marketing });
+    if (picked.error) { log(picked.error); return EXIT.FAILURE; }
+    const version = picked.version;
     const state = version.attributes.appStoreState ?? version.attributes.appVersionState;
     if (state !== 'PREPARE_FOR_SUBMISSION') {
         log(`version ${version.attributes.versionString} is ${state}, not PREPARE_FOR_SUBMISSION.`);

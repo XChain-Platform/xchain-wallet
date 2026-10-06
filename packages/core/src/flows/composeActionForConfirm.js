@@ -30,7 +30,7 @@ import { composeForConfirm } from './composeForConfirm.js';
 import { isBareNativePayment } from './nativePayment.js';
 import { assertNoTamper, TamperDetectedError } from './confirmChecks.js';
 import { checkEnvelopeReveal, envelopeNetworkFees } from './envelopeRevealCheck.js';
-import { totalNetworkFeeSats } from './psbtNetworkFee.js';
+import { totalNetworkFeeSats, sumExactSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
 import { simulateAction } from '../decoder/txSimulator.js';
@@ -190,9 +190,11 @@ export async function composeActionForConfirm({
     let networkFeeSats = totalNetworkFeeSats(decomposed, {
         carrierScripts: composed.carrierScripts,
         ownAddresses: own,
+        // Sum exactly: a DOGE output can exceed 2^53, and a malformed value must read
+        // as "fee unknown" (null), never as a zero that turns the carrier into miner fee.
         revealOutputSats: revealOutputs.length
-            ? revealOutputs.reduce((sum, o) => sum + (Number(o?.value) || 0), 0)
-            : Number(composed.quote?.requiredFeeSats) || 0,
+            ? sumExactSats(revealOutputs.map((o) => o?.value))
+            : (composed.quote?.requiredFeeSats ?? 0),
     });
     assertNoTamper({
         psbtHex: composed.psbt,

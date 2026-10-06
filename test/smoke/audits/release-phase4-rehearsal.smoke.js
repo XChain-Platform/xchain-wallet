@@ -35,13 +35,14 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-    drift, PIN_PATH, pinPathFiles, signingPathFiles,
+    announcedGateFallback, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
+    gateFallbackMismatch, PIN_FORMAT, PIN_PATH, pinPathFiles, signingPathFiles, STEPS, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
 
 assert.ok(existsSync(PIN_PATH),
@@ -111,6 +112,127 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
             assert.ok(!stale.ok && stale.moved.some((m) => m.path === p),
                 `a staging pin must go STALE when ${p}, which the staging run executed, moves.`);
         }
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// The signature gate and the launch probe are steps of their own, between the artifact set and the
+// manifest, and a refusal at either is classified at its own depth and quoted in the gate's own words.
+{
+    const at = (s) => STEPS.indexOf(s);
+    assert.ok(at('artifact-set') < at('signature-gate') && at('signature-gate') < at('launch-probe')
+        && at('launch-probe') < at('manifest-written'),
+        `STEPS must order artifact-set < signature-gate < launch-probe < manifest-written; got ${STEPS.join(', ')}`);
+
+    const sigRefused = 'release/lib.sh: artifact-set gate ok (5 artifact(s))\n'
+        + '✗ X.exe: UNSIGNED: certificate table is empty\n'
+        + 'verify-signatures: 1 artifact(s) are NOT signed.\n'
+        + '  The release must not be manifest-signed in this state.\n';
+    assert.equal(classify(sigRefused), 'artifact-set', 'a signature-gate refusal means the artifact set passed');
+    assert.equal(firstRefusal(sigRefused), 'verify-signatures: 1 artifact(s) are NOT signed.',
+        'the blocker of a signature-gate refusal is the gate\'s own refusal line');
+
+    const launchFailed = 'signature gate ok (2 verified, 0 recorded-not-verified)\n'
+        + 'launch probe: 3 file(s) in the release set, host darwin/arm64, 8s window\n'
+        + 'release/lib.sh: artifact-set gate ok (5 artifact(s))\n'
+        + 'launch-probe: 1 artifact(s) failed the launch probe.\n';
+    assert.equal(classify(launchFailed), 'signature-gate', 'a launch-probe refusal means the signature gate passed');
+    assert.equal(firstRefusal(launchFailed), 'launch-probe: 1 artifact(s) failed the launch probe.',
+        'the blocker of a launch-probe refusal is the probe\'s own refusal line, never a progress line');
+
+    const hostBlocked = 'launch-probe: 2 artifact(s) could NOT be probed because this host is missing a facility\n';
+    assert.equal(classify(hostBlocked), 'signature-gate', 'the word "missing" in a launch-probe refusal is not lane scope');
+
+    const gpgAfterGates = 'signature gate ok (2 verified, 0 recorded-not-verified)\n'
+        + 'launch probe ok (1 launched and still alive, 2 not probed on this host, 0 non-app file(s) ignored)\n'
+        + 'gpg: signing failed: Inappropriate ioctl for device\n';
+    assert.equal(classify(gpgAfterGates), 'manifest-written', 'gpg evidence still outranks both gates');
+
+    assert.equal(classify('launch probe ok (1 launched and still alive)\nsign.sh: hashing artifacts in x ...\n'),
+        'launch-probe', 'a passed launch probe with no later evidence reached the launch-probe step');
+    assert.equal(classify('signature gate ok (1 verified, 0 recorded-not-verified)\n'), 'signature-gate');
+    assert.equal(classify('signature gate ok (1 verified, 0 recorded-not-verified)\n'
+        + '  ****  LAUNCH PROBE RAN NOTHING  ****\n'), 'signature-gate',
+    'a launch probe that launched nothing proves no launch, so it claims no launch-probe depth');
+    assert.equal(classify('sign.sh: tools/release/verify-signatures.mjs is in neither tree. Refusing to sign.\n'),
+        'artifact-set');
+    assert.equal(classify('sign.sh: tools/release/launch-probe.mjs is in neither tree. Refusing to sign.\n'),
+        'signature-gate');
+
+    // Lines that name a gate without proving it passed or refused claim no depth.
+    for (const quiet of [
+        'sign.sh: v0.339.0 predates tools/release/launch-probe.mjs - running this checkout\'s copy.\nboom\n',
+        'sign.sh: v0.339.0 predates tools/release/verify-signatures.mjs - running this checkout\'s copy.\nboom\n',
+        'launch probe: 3 file(s) in the release set, host darwin/arm64, 8s window\nboom\n',
+    ]) {
+        assert.equal(classify(quiet), 'invoked', `a non-refusal gate mention claimed depth: ${quiet.split('\n')[0]}`);
+    }
+    assert.equal(classify('something nobody recognises\n'), 'invoked', 'unrecognised output stays conservative');
+    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates]) {
+        assert.ok(STEPS.includes(classify(output)), 'classify returned a step STEPS does not list');
+    }
+}
+
+// The executable gates are tracked from format 3: tag side by default, script side (hashed and gated)
+// where the tag predated a gate and sign.sh ran this checkout's copy. Formats 1 and 2 never list them.
+{
+    assert.equal(PIN_FORMAT, 3, 'the gates entered the tracked set at pin format 3');
+    for (const set of ['release', 'staging']) {
+        const now = signingPathFiles(set);
+        assert.ok(EXECUTABLE_GATES.every((g) => now.repo.includes(g) && !now.script.includes(g)),
+            `a ${set} run executes the tag's copy of each gate, so both belong on the repo side`);
+        for (const fmt of [1, 2]) {
+            const old = signingPathFiles(set, fmt);
+            assert.ok(EXECUTABLE_GATES.every((g) => !old.repo.includes(g) && !old.script.includes(g)),
+                `format ${fmt} must keep the file lists it was recorded with`);
+        }
+    }
+    const probeGate = 'tools/release/launch-probe.mjs';
+    const sigGate = 'tools/release/verify-signatures.mjs';
+    const fell = signingPathFiles('release', 3, { gateFallback: [probeGate] });
+    assert.ok(fell.script.includes(probeGate) && !fell.repo.includes(probeGate) && fell.repo.includes(sigGate),
+        'a gate the tag predated is hashed from this checkout, which is the copy sign.sh ran');
+    assert.throws(() => signingPathFiles('release', 3, { gateFallback: ['tools/release/sign.sh'] }),
+        /not an executable gate/);
+
+    assert.deepEqual(announcedGateFallback(
+        `sign.sh: v0.336.0 predates ${probeGate} - running this checkout's copy.\n`), [probeGate]);
+    assert.deepEqual(gateFallbackMismatch({ computed: [probeGate], output: '', reached: 'artifact-set' }), [],
+        'a run that never resolved the launch probe cannot contradict its fallback');
+    assert.deepEqual(gateFallbackMismatch({ computed: [probeGate], output: '', reached: 'signature-gate' }),
+        [probeGate], 'a computed fallback sign.sh never announced must refuse the pin');
+    assert.deepEqual(gateFallbackMismatch({ computed: [], output: `sign.sh: v0.336.0 predates ${sigGate} - running this checkout's copy.\n`, reached: 'artifact-set' }),
+        [sigGate], 'an announced fallback the tool did not compute must refuse the pin');
+
+    const legacy = uncoveredByPin({ releaseSet: 'release' });
+    assert.ok(EXECUTABLE_GATES.every((g) => legacy.includes(g)), 'check must name the gates a legacy pin never covered');
+    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 3, gateFallback: [] }), []);
+
+    const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const work = mkdtempSync(join(tmpdir(), 'phase4-gates-'));
+    try {
+        mkdirSync(join(work, 'tools', 'release'), { recursive: true });
+        writeFileSync(join(work, sigGate), '// tag copy\n');
+        assert.deepEqual(gateFallbackFor(work), [probeGate], 'a tag tree without the probe falls back for it alone');
+
+        const head = spawnSync('git', ['-C', walletRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+        const files = signingPathFiles('release', 3, { gateFallback: [probeGate] });
+        const hashes = Object.fromEntries(files.script.map((p) => [p,
+            createHash('sha256').update(readFileSync(join(walletRoot, p))).digest('hex')]));
+        const pinFile = join(work, 'pin.json');
+        const write = (scriptPath) => writeFileSync(pinFile, JSON.stringify({
+            pinFormat: 3, releaseSet: 'release', gateFallback: [probeGate], tag: 'v0.0.0',
+            reached: 'manifest-written', scriptRef: head, repoRef: head, scriptPath, repoPath: {},
+        }));
+        write(hashes);
+        const clean = drift({ pinFile });
+        assert.ok(clean.ok && clean.moved.length === 0,
+            `a format-3 pin of today's bytes must read clean; moved: ${clean.moved.map((m) => m.path).join(', ')}`);
+        write({ ...hashes, [probeGate]: 'f'.repeat(64) });
+        const stale = drift({ pinFile });
+        assert.ok(!stale.ok && stale.moved.some((m) => m.path === probeGate),
+            'a pin must go STALE when a fallback gate, which the run executed from this checkout, moves');
     } finally {
         rmSync(work, { recursive: true, force: true });
     }

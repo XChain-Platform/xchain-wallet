@@ -66,7 +66,8 @@ const STORAGE_KEY = BROADCAST_QUEUE_STORAGE_KEY;
  * and would otherwise outlive the wallet holding records that name its
  * transactions. `loadSettlements` reports the journal the last successful
  * `load` read, and either save writes the pair, so neither half can erase the
- * other. `save`, `saveSettlements` and `clear` reject when the store refused
+ * other. It should not reject; the host treats a rejection as an unreadable
+ * store (it fails closed and retries), never as an empty journal. `save`, `saveSettlements` and `clear` reject when the store refused
  * the write, so the caller can tell a landed save from a refused one.
  *
  * @typedef {Object} BroadcastQueueStorage

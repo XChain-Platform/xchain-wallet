@@ -34,10 +34,10 @@
 // --require-measured makes a row with no readable artifact UNMEASURED (exit 1)
 // instead of trusting its declared date; the release-machine smoke passes it.
 
-import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -259,6 +259,15 @@ export async function main(argv, { now = new Date(), log = console.log, err = co
     return result.code;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const invokedDirectly = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
+
+if (invokedDirectly) {
     main(process.argv.slice(2)).then((c) => process.exit(c));
 }

@@ -45,9 +45,9 @@
 //                    must not read green because a network call failed or
 //                    because the answer came back empty.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -328,6 +328,15 @@ async function main(argv) {
     return result.ok ? 0 : 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const invokedDirectly = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
+
+if (invokedDirectly) {
     process.exit(await main(process.argv.slice(2)));
 }
