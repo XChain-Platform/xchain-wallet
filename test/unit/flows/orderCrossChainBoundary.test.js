@@ -177,6 +177,7 @@ describe('CrossChainOrderForm is the cross-chain ORDER surface', () => {
         const entry = ACTION_ENTRY_DEFS.find((e) => e.id === 'cross-chain-order');
         expect(entry?.handler).toBe('onCrossChainOrder');
         expect(entry?.label).toBe('Cross-chain order');
+        expect(entry?.description).not.toMatch(/federation|price-time/i);
     });
 
     it('CrossChainSwapForm is unchanged in shape: SWAP still splits give/get chains', () => {

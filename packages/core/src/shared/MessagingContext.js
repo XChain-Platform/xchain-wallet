@@ -25,7 +25,8 @@ import { createContext } from 'react';
  * exports ~320 helpers and core reaches most of them behind
  * `typeof messaging?.x !== 'function'` guards. The executable statement of
  * the agreement is test/smoke/shells/desktop-messaging-parity.smoke.js, which
- * compares all three modules name-for-name and type-for-type.
+ * compares all three modules name-for-name and type-for-type, and checks that
+ * every `messaging.<name>` core calls is exported (or listed as pending there).
  *
  * @property {(password: string, opts?: { bip39Passphrase?: string }) => Promise<{ unlocked: true, passphraseCaptureNeeded?: Array<{ id: string, name: string }>, poolUnavailable?: true }>} unlockWallet
  * @property {(opts: { walletId: string, password: string, bip39Passphrase: string }) => Promise<any>} [capturePassphrase]

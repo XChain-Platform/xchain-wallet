@@ -841,6 +841,15 @@ function main(argv) {
     return { CLEAN: 0, STALE: 1, INCONCLUSIVE: 2 }[result.state];
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+const invokedDirectly = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
+
+if (invokedDirectly) {
     process.exit(main(process.argv.slice(2)));
 }

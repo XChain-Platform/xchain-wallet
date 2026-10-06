@@ -38,7 +38,12 @@ import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { isActionOfferedOnChain } from '../../registry/actions.js';
+import {
+    BTC_EXCLUSIVE_ACTIONS,
+    COMMON_ACTIONS,
+    PROTOCOL_ONLY_ACTIONS,
+    isActionOfferedOnChain,
+} from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -75,22 +80,36 @@ const REST_PREFIX = '...';
 // user-provided in the form.
 const AUTO_FIELDS = new Set(['VERSION']);
 
+/**
+ * Name the actions that have a dedicated form: the registry's authorable set
+ * minus its protocol-only set, which is where a form-less action belongs.
+ * Exported so the derivation is pinned on its own, apart from the render.
+ *
+ * @param {{ authorable: readonly string[], protocolOnly: readonly string[] }} lists
+ * @returns {Set<string>}
+ */
+export function dedicatedFormActions({ authorable, protocolOnly }) {
+    const formless = new Set(protocolOnly);
+    return new Set(authorable.filter((a) => !formless.has(a)));
+}
+
 // Actions that have their own dedicated forms. The Advanced form
 // still exposes them (power users may want the raw field surface),
 // but the dropdown decorates them with "(dedicated form available)"
 // so the user doesn't reach for Advanced when a curated UX exists.
-const ACTIONS_WITH_DEDICATED_FORMS = new Set([
-    'SEND', 'ISSUE', 'MINT', 'DESTROY',
-    'BROADCAST', 'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
-    'LINK', 'SWEEP', 'PRICE', 'ADDRESS',
-]);
+// Derived from the registry, so a new form is labelled the day it ships.
+const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions({
+    authorable: [...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS],
+    protocolOnly: PROTOCOL_ONLY_ACTIONS,
+});
 
 /**
  * Advanced Actions form (§40.10).
  *
- * Generic "submit any XChain action" surface for power users and for
- * action kinds without a dedicated form (FILE beyond collectibles,
- * CALLBACK, SLEEP, raw MESSAGE). Fields are
+ * Generic "submit any XChain action" surface for power users, for the
+ * versions and fields a curated form does not cover (a raw MESSAGE, a FILE
+ * beyond collectibles), and for any action the SDK lists that the registry
+ * gives no form. Fields are
  * driven entirely by the SDK's schema introspection; the form has no
  * per-action knowledge beyond generic rendering rules for rest-fields
  * + auto-fields.

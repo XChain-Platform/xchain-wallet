@@ -56,6 +56,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { AUTHORABLE_ACTIONS } from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -67,11 +68,9 @@ const chainRegistry = registryLib.defaultRegistry();
 // cap the same way it surfaces ISSUE's and FILE's.
 const EXCLUDED_ACTIONS = new Set(['BATCH', 'FILE']);
 
-const FALLBACK_ACTIONS = [
-    'SEND', 'ISSUE', 'MINT', 'DESTROY', 'BROADCAST',
-    'DISPENSER', 'DIVIDEND', 'AIRDROP', 'LIST',
-    'ORDER', 'SWAP', 'COINPAY', 'MESSAGE', 'LINK', 'SLEEP', 'DEPLOY',
-];
+// Fall back to the registry's authorable set when SDK introspection fails,
+// so the picker never drifts behind it; EXCLUDED_ACTIONS still applies.
+const FALLBACK_ACTIONS = AUTHORABLE_ACTIONS;
 
 let nextRowId = 0;
 const newRowId = () => `brow-${++nextRowId}`;

@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last twenty-five are component props: copy shipped through them
+// The last twenty-six are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -69,7 +69,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
-    'what', 'prefix', 'noun', 'summary',
+    'what', 'prefix', 'noun', 'summary', 'error',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -280,6 +280,15 @@ assert.strictEqual(v.length, 1, 'flags copy in a nested ternary branch');
 assert.match(v[0].message, /Confirm password/);
 v = findViolations(jsxAttr('title', jsxExpr(logical(identifier('custom'), literal('Pin to top')))));
 assert.strictEqual(v.length, 1, 'flags copy in a `||` fallback');
+
+// An `error` prop renders verbatim (Input's role="alert", Loading's
+// StatusMessage): ternary copy is flagged, a runtime value is not.
+v = findViolations(jsxAttr('error', jsxExpr(conditional(literal('Cannot contain | or ; characters.'), identifier('undefined')))));
+assert.strictEqual(v.length, 1, 'flags copy in an error ternary');
+v = findViolations(jsxAttr('error', jsxExpr(identifier('err'))));
+assert.strictEqual(v.length, 0, 'a runtime error value stays silent');
+v = findViolations(jsxAttr('error', jsxExpr(logical(identifier('submitError'), identifier('undefined')))));
+assert.strictEqual(v.length, 0, 'an || undefined error fallback stays silent');
 
 // Templates inside a branch count, and a technical attribute stays silent.
 v = findViolations(jsxAttr('aria-label', jsxExpr(conditional(template('Hide ', ' filters'), identifier('other')))));

@@ -24,13 +24,28 @@
 // (§3.5.5: never prettify what you cannot verify).
 
 import { AddressText } from '@xchain-wallet/core/ui';
-import { isUnreadableActionReason } from './psbtDecodeReasons.js';
+import { describeUnreadableReason, isUnreadableActionReason } from './psbtDecodeReasons.js';
 import {
     exactNetworkFeeSats,
     formatExactSats,
     sumExactSats,
 } from '../../flows/psbtNetworkFee.js';
 import styles from './PsbtIntentPanel.module.css';
+
+/**
+ * The alert's first sentence for an action the wallet could not read. Names
+ * the cause in plain words when the decoder's code has one, and otherwise
+ * says only that it could not be read (the raw code is never interpolated).
+ *
+ * @param {string|null} decodeError
+ * @returns {string}
+ */
+function undecodedSentence(decodeError) {
+    const why = describeUnreadableReason(decodeError);
+    return why
+        ? `The XChain action inside this transaction could not be read because ${why}.`
+        : 'The XChain action inside this transaction could not be read.';
+}
 
 /**
  * @param {object} props
@@ -88,10 +103,18 @@ export function PsbtIntentPanel({
                 // An action IS in here and the wallet could not read it. Loud:
                 // this is the case where the output set is the ONLY thing the
                 // user can verify.
-                <p className={styles.undecoded} role="alert" data-testid="psbt-action-undecoded">
-                    {`The XChain action inside this transaction could not be read (${decodeError}). `}
-                    Verify the amounts and destinations below before you sign.
-                </p>
+                <>
+                    <p className={styles.undecoded} role="alert" data-testid="psbt-action-undecoded">
+                        {undecodedSentence(decodeError)}
+                        {' '}Verify the amounts and destinations below before you sign.
+                    </p>
+                    {/* The raw decoder code stays available for support, but
+                        outside the alert so a signer reads only plain words. */}
+                    <details className={styles.details} data-testid="psbt-action-undecoded-details">
+                        <summary>Technical details</summary>
+                        <code>{decodeError}</code>
+                    </details>
+                </>
             ) : (
                 // No action at all: an ordinary payment. Stating that plainly is
                 // honest; an alert here would cry wolf on the common case and

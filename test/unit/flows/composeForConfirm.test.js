@@ -179,6 +179,8 @@ describe('composeForConfirm native-coin protocol fee (BET on LTC)', () => {
         const sdk = {
             encoder: { createTx },
             actions: { createAction },
+            // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.
+            wallet: { getBitcoinNetwork: () => ({ dustThreshold: 5460 }) },
             quoteNativeFee: vi.fn(async () => quote),
         };
         return {
@@ -259,6 +261,8 @@ describe('composeForConfirm native-fee placement on the chunk lane', () => {
         const sdk = {
             encoder: { createTx },
             actions: { createAction },
+            // A litecoin-regtest SDK, so the native fee pads to Litecoin's dust floor.
+            wallet: { getBitcoinNetwork: () => ({ dustThreshold: 5460 }) },
             quoteNativeFee: vi.fn(async () => ({
                 supported: true, valid: null, feeDestination: FEE_DEST, requiredFeeSats: FEE_SATS,
             })),

@@ -51,6 +51,8 @@ import {
     bootstrapOsesAt,
     resolveProdFeed,
     RECORD_VERSION,
+    deviceInstalledArch,
+    swapExercisesLane,
 } from '../../../tools/release/rehearse.mjs';
 import { LANES } from '../../../tools/release/rehearsal-matrix.mjs';
 import { pointerNameFor } from '../../../tools/release/update-info.mjs';
@@ -542,6 +544,61 @@ const check = (over) => assertRecord({
     assert.ok(!check({ 'swap-requirement': 'whatever', swaps: [] }).ok);
 }
 
+// --- a swap must install its OWN lane's artifact -------------------------
+//
+// electron-updater's MacUpdater treats an Apple-silicon Mac, Rosetta included,
+// as arm64 and swaps it to the arm64 zip. So the mac-x64 lane's named device
+// (an x64 build under Rosetta) never installs the x64 zip, and a swap watched
+// there is arm64 evidence that must not be filed or counted under mac-x64.
+{
+    const macX64 = LANES.find((l) => l.id === 'mac-x64');
+    const macArm64 = LANES.find((l) => l.id === 'mac-arm64');
+    assert.equal(deviceInstalledArch(macX64), 'arm64', 'the Rosetta Mac Studio installs the arm64 zip');
+    assert.equal(deviceInstalledArch(macArm64), 'arm64');
+    assert.equal(deviceInstalledArch(LANES.find((l) => l.id === 'win-x64')), 'x64',
+        'an emulated x64 Windows install still swaps its own x64 installer');
+    // A native Intel Mac, were one named, would witness the x64 zip.
+    assert.equal(deviceInstalledArch({ ...macX64, deviceHost: { silicon: 'x64', translated: false } }), 'x64');
+
+    const rosettaSwap = { lane: 'mac-x64', device: macX64.device, from: '0.333.0' };
+    assert.ok(!swapExercisesLane(rosettaSwap), 'a legacy Rosetta swap is not mac-x64 evidence');
+    assert.ok(!swapExercisesLane({ ...rosettaSwap, device: 'Mac Studio under Rosetta' }),
+        'a hand-written entry paraphrasing the device is not mac-x64 evidence either');
+    assert.ok(swapExercisesLane({ ...rosettaSwap, 'exercised-arch': 'x64' }));
+    assert.ok(!swapExercisesLane({ ...rosettaSwap, 'exercised-arch': 'arm64' }));
+
+    const onlyRosetta = check({ swaps: [rosettaSwap] });
+    assert.ok(!onlyRosetta.ok, 'a Rosetta swap alone must not satisfy the darwin swap');
+    assert.match(onlyRosetta.problems.join(' '), /no observed swap on any OS/);
+    assert.match(onlyRosetta.notes.join(' '), /installed the arm64 artifact, not x64/);
+    assert.ok(check({ swaps: [rosettaSwap, ...baseRecord.swaps] }).ok,
+        'the mac-arm64 swap on the same machine still satisfies darwin');
+
+    const work = mkdtempSync(join(tmpdir(), 'rehearsal-attest-'));
+    try {
+        const recordFile = join(work, 'REHEARSAL-test.json');
+        writeFileSync(recordFile, JSON.stringify({ ...baseRecord, swaps: [] }));
+        // Clear the CI markers, because attest refuses to run in CI before it reaches the device check.
+        const env = { ...process.env, GITHUB_ACTIONS: '', CI: '', BUILDKITE: '', GITLAB_CI: '' };
+        const attest = (lane) => spawnSync(process.execPath, [join(root, 'tools/release/rehearse.mjs'),
+            'attest', '--record', recordFile, '--lane', lane, '--from', '0.333.0', '--by', 'Test Person'],
+        { encoding: 'utf8', env });
+
+        const refused = attest('mac-x64');
+        assert.notEqual(refused.status, 0, 'attest must refuse mac-x64 on a translated device');
+        assert.match(refused.stderr, /installs the arm64 artifact, not x64/);
+        assert.equal(JSON.parse(readFileSync(recordFile, 'utf8')).swaps.length, 0, 'a refused attest writes nothing');
+
+        const accepted = attest('mac-arm64');
+        assert.equal(accepted.status, 0, `mac-arm64 attest succeeds: ${accepted.stderr}`);
+        const written = JSON.parse(readFileSync(recordFile, 'utf8')).swaps;
+        assert.equal(written.length, 1);
+        assert.equal(written[0]['exercised-arch'], 'arm64', 'attest records the arch the swap exercised');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
 // ------------------------------------------------------ the requirement
 
 {
@@ -642,6 +699,26 @@ const check = (over) => assertRecord({
     assert.equal(coverage.status, 1, 'no lane has been swapped, so coverage fails');
     assert.match(coverage.stdout, /mac-arm64\s+device Mac Studio/,
         'a lane with hardware is reported as hardware-ready but unrehearsed');
+    // mac-x64's Rosetta device can never witness the x64 zip, so it is a named waiver, never a red.
+    assert.match(coverage.stdout, /mac-x64\s+device .*WAIVED, device cannot witness.*operator hardware decision owed/);
+    assert.doesNotMatch(coverage.stdout, /never had an observed swap: .*mac-x64/);
+    {
+        // Every shipped lane swapped but mac-x64 passes; dropping mac-arm64 too must fail again.
+        const shipped = [...LANES.filter((l) => l.os !== 'win32' && l.id !== 'mac-x64').map((l) => l.id), 'android-direct'];
+        const coverWith = (lanes) => {
+            const records = mkdtempSync(join(work, 'cover-'));
+            writeFileSync(join(records, 'REHEARSAL-v0.337.2.json'), JSON.stringify({
+                ...baseRecord, swaps: lanes.map((lane) => ({ lane, device: 'bench', at: '2026-10-01T00:00:00Z' })),
+            }));
+            return cli('coverage', '--records', records);
+        };
+        const waived = coverWith(shipped);
+        assert.equal(waived.status, 0, `only the unwitnessable mac-x64 is unswapped:\n${waived.stdout}`);
+        assert.match(waived.stdout, /WAIVED because the named device cannot witness them: mac-x64/);
+        const short = coverWith(shipped.filter((id) => id !== 'mac-arm64'));
+        assert.equal(short.status, 1, 'the waiver covers mac-x64 alone, never the rest of darwin');
+        assert.match(short.stdout, /never had an observed swap: mac-arm64\./);
+    }
 
     // THIS ASSERTION IS THE INVERSE OF WHAT IT USED TO BE, and the reason is
     // worth keeping. It used to require that "NO DEVICE NAMED (DD4)" APPEAR

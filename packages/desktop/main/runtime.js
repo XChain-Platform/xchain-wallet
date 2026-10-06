@@ -109,6 +109,7 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   dispenserEscrowWatcher: import('@xchain-wallet/core').notifications.DispenserEscrowWatcher | null,
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
+ *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  * }} DesktopRuntime
  */
 
@@ -157,6 +158,8 @@ export function createRuntime(deps) {
         // this pool empty: the wallet works with per-op passwords and
         // auto-pay stays disarmed until one password unlock arms it.
         signerPool: new signersLib.SignerPool(),
+        // The windowless idle check in flight, shared by concurrent callers.
+        idleLockInFlight: null,
     };
 }
 
@@ -224,6 +227,60 @@ export async function enforceLaunchAutoLock(runtime, now = Date.now()) {
     }
     try { await store.clear(); } catch { /* best-effort */ }
     return { locked: true, reason };
+}
+
+/**
+ * Enforce the user's configured auto-lock while the app runs with NO window.
+ *
+ * On macOS closing the last window does not quit, so the open vault, the
+ * in-memory master key and the unlocked signer pool outlive the renderer
+ * whose foreground timer was the only idle check. Reopening a window then
+ * re-stamped the idle clock before anything read it. index.js calls this on
+ * a timer while no window is live, and awaits it before a windowless reopen
+ * creates the renderer that would stamp first.
+ *
+ * In-session semantics, the opposite of `enforceLaunchAutoLock`: a missing,
+ * unreadable or disarmed record means do not lock, because an explicit lock
+ * already cleared the record and the launch gate owns the crash paths. Only
+ * call it while no window is live: activity is tracked in the renderer and
+ * never reaches main, so with a window open this would lock an active user.
+ * Never throws; concurrent callers share one in-flight check.
+ *
+ * @param {DesktopRuntime} runtime
+ * @param {number} [now]
+ * @returns {Promise<{ locked: boolean, reason: string }>}
+ */
+export function enforceIdleAutoLock(runtime, now = Date.now()) {
+    if (!runtime) return Promise.resolve({ locked: false, reason: 'no-runtime' });
+    if (!runtime.idleLockInFlight) {
+        runtime.idleLockInFlight = runIdleAutoLock(runtime, now)
+            .catch((err) => {
+                console.error('[xchain] windowless auto-lock check failed:', err);
+                return { locked: false, reason: 'check-failed' };
+            })
+            .finally(() => { runtime.idleLockInFlight = null; });
+    }
+    return runtime.idleLockInFlight;
+}
+
+// The body of enforceIdleAutoLock, without the single-flight wrapper.
+async function runIdleAutoLock(runtime, now) {
+    const store = runtime.autoLockStore;
+    if (!store) return { locked: false, reason: 'no-store' };
+    let state = null;
+    try { state = await store.load(); } catch { state = null; }
+    if (!state) return { locked: false, reason: 'no-record' };
+    if (state.armed !== true) return { locked: false, reason: 'disarmed' };
+    if (!hasEnforceableWindow(state)) return { locked: false, reason: 'no-window' };
+    if (!shouldAutoLock(state, now)) return { locked: false, reason: 'within-window' };
+
+    // Stop the watchers first so nothing signs from the pool while the key goes.
+    tearDownHost(runtime);
+    try { await runtime.sessionBackend.clear(); } catch (err) {
+        console.error('[xchain] auto-lock could not clear the cached session key:', err);
+    }
+    try { await store.clear(); } catch { /* best-effort */ }
+    return { locked: true, reason: 'idle-window-elapsed' };
 }
 
 /**

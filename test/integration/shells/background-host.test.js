@@ -180,6 +180,26 @@ describe('background message host (all three shells)', () => {
         expect(cleared.result).toEqual({ supported: false, cleared: false });
     });
 
+    it('answers the list tick-coin probe from the chain SDK, false when it cannot', async () => {
+        // The create-list form offers coin-qualified ticker items only when
+        // this route says the chain is past the activation.
+        const withProbe = makeHost({
+            sdkRegistry: { get: () => ({ isListTickCoinActive: async () => true }) },
+        });
+        const active = await withProbe.handle({
+            type: 'sdk.isListTickCoinActive',
+            request: { chainId: 'bitcoin-regtest' },
+        });
+        expect(active).toEqual({ ok: true, result: true });
+
+        const withoutProbe = makeHost({ sdkRegistry: { get: () => ({}) } });
+        const inactive = await withoutProbe.handle({
+            type: 'sdk.isListTickCoinActive',
+            request: { chainId: 'bitcoin-regtest' },
+        });
+        expect(inactive).toEqual({ ok: true, result: false });
+    });
+
     it('refuses to register the same route twice', () => {
         // Two shells (or a merge) quietly clobbering a privileged route with a
         // second handler is a trust-boundary bug, so the host fails loudly.
