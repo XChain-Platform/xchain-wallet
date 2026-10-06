@@ -28,6 +28,7 @@
 // key may ever be present.
 
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -166,6 +167,25 @@ function loadConfig(env = {}) {
 
     assert.equal(loadConfig().win.signtoolOptions.certificateSubjectName, undefined,
         'with no subject set the classic config carries no certificateSubjectName');
+}
+
+// ------------------------------------------- eSigner release lane
+
+{
+    const wf = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
+    const winJob = wf.slice(wf.indexOf('Install and register the eSigner CKA'));
+    for (const name of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', 'WIN_CSC_SUBJECT_NAME']) {
+        assert.ok(winJob.includes(`${name}: \${{ secrets.${name} }}`),
+            `the eSigner install step reads ${name} from the secrets`);
+    }
+    assert.ok(!wf.includes('AZURE_'), 'release.yml carries no Azure signing variable');
+    assert.ok(!/^\s+CSC_LINK:.*WIN/m.test(wf), 'no Windows CSC_LINK path remains in release.yml');
+    const builds = winJob.split('- name:').filter((b) => b.includes('dist --win'));
+    assert.ok(builds.length >= 3, 'every Windows build step is present');
+    for (const b of builds) {
+        assert.ok(b.includes('WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}'),
+            'every Windows build step selects the eSigner certificate by subject');
+    }
 }
 
 // ------------------------------------------------------------ macOS
