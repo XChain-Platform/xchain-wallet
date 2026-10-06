@@ -338,7 +338,7 @@ function simulateDividend(p, balMap, coinTick, feeEstimate) {
             label: 'Dividend pool',
             value: `${amount} ${dividendTick} per unit of ${tick}`,
         });
-        notes.push('Total cost depends on how many holders there are when this transaction confirms (not counting the sending address). The wallet cannot work it out ahead of time, so check the estimate before signing.');
+        notes.push('Total cost depends on the holder count when this transaction confirms (not counting the sending address). The wallet cannot work it out ahead of time, so check the estimate before signing.');
     }
 
     return { deltas, sideEffects, notes };
