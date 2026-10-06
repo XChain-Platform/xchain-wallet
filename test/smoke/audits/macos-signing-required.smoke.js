@@ -462,20 +462,38 @@ const PINNED = loadConfig(SIGNED_ENV).mac.identity;
             + ' the builder config pins, not by a name qualifier');
         // The requirement without the values is a lane that can only fail, so
         // both halves are asserted together: certificate AND notarization.
-        for (const [envVar, secret] of [
-            ['CSC_LINK', 'MACOS_CSC_LINK'],
-            ['CSC_KEY_PASSWORD', 'MACOS_CSC_KEY_PASSWORD'],
-        ]) {
-            assert.ok(new RegExp(`${envVar}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(step),
-                `the mac build step '${name}' must pass ${secret} through as ${envVar}, or the`
-                + ' requirement it declares can never be met');
-        }
+        // The certificate arrives as a finished keychain, never as CSC_LINK:
+        // given CSC_LINK, app-builder-lib 26.15.7 runs set-key-partition-list
+        // with the .p12 passphrase as the keychain password, which macos-26
+        // refuses. The import step below is where the secrets go.
+        assert.ok(/CSC_KEYCHAIN:\s*\$\{\{\s*env\.XCHAIN_DEVID_KEYCHAIN\s*\}\}/.test(step),
+            `the mac build step '${name}' must take the Developer ID identity from the`
+            + ' build keychain (CSC_KEYCHAIN: ${{ env.XCHAIN_DEVID_KEYCHAIN }})');
+        assert.ok(!/^\s*CSC_LINK:/m.test(step) && !/^\s*CSC_KEY_PASSWORD:/m.test(step),
+            `the mac build step '${name}' must not pass CSC_LINK or CSC_KEY_PASSWORD, which`
+            + ' sends electron-builder down its broken keychain path');
         for (const secret of NOTARIZE_VARS) {
             assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(step),
                 `the mac build step '${name}' must pass ${secret} through, or the`
                 + ' requirement it declares can never be met');
         }
     }
+
+    // The requirement without the values is a lane that can only fail, so the
+    // keychain the build steps read must be built, from both secrets, before
+    // the first of them runs.
+    const importStep = steps.find((s) => /name:\s*Import the Developer ID identity into a build keychain/.test(s));
+    assert.ok(importStep, 'release.yml imports the Developer ID identity into a build keychain');
+    for (const secret of ['MACOS_CSC_LINK', 'MACOS_CSC_KEY_PASSWORD']) {
+        assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(importStep),
+            `the keychain import step must pass ${secret} through, or the requirement the`
+            + ' mac build steps declare can never be met');
+    }
+    assert.ok(/tools\/release\/ci-keychain\.sh/.test(importStep)
+        && /XCHAIN_DEVID_KEYCHAIN=.*>>\s*"\$GITHUB_ENV"/.test(importStep),
+        'the import step builds the keychain with ci-keychain.sh and exports XCHAIN_DEVID_KEYCHAIN');
+    assert.ok(wf.indexOf(importStep) < wf.indexOf(mainline[0]),
+        'the keychain is built before the first mac build step');
 
     // The store step must NOT declare it, because it would then demand
     // notarization credentials it has no use for and could never be met. The
