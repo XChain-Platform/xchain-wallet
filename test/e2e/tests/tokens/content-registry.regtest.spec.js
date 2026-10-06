@@ -170,6 +170,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
         let source;
         let fileActionIndex;
         let issueActionIndex;
+        let managedListIndex;
 
         await test.step('shared fixture: onboard, fund, issue a token, attach content (FILE then LINK)', async () => {
             await createWallet(page, { password: PASSWORD, name: 'Content Registry Wallet' });
@@ -306,6 +307,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const createTxid = await approveAndGetTxid(page);
             const created = await waitForValidAction(createTxid);
             const listActionIndex = String(created.action_index);
+            managedListIndex = listActionIndex;
 
             await gotoPalette(page, 'My Lists');
             const listRow = page.getByRole('listitem', { name: `Open address list #${listActionIndex}` });
@@ -355,6 +357,51 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByRole('main'),
                 `ListDetail for fork #${forkActionIndex} does not show the member it added`)
                 .toContainText(REGTEST_DESTINATION);
+        });
+
+        await test.step('the list manager: rename the list, then transfer it to another owner', async () => {
+            const NAME = `Roster ${STAMP}`;
+            const openManagedList = async () => {
+                await gotoPalette(page, 'My Lists');
+                const row = page.getByRole('listitem', { name: `Open address list #${managedListIndex}` });
+                await expect(row, `list #${managedListIndex} is not in My Lists`).toBeVisible({ timeout: 60_000 });
+                await row.click();
+            };
+
+            await openManagedList();
+            await page.getByRole('button', { name: 'Rename list', exact: true }).click();
+            const renameMain = page.getByRole('main');
+            await renameMain.getByLabel('Name (empty means unchanged)').fill(NAME);
+            await renameMain.getByRole('button', { name: 'Review', exact: true }).click();
+            const renamePassword = renameMain.getByLabel('Password', { exact: true });
+            if (await renamePassword.count() > 0 && await renamePassword.isVisible()) await renamePassword.fill(PASSWORD);
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const renameTxid = await approveAndGetTxid(page);
+            await waitForValidAction(renameTxid);
+
+            await expect.poll(async () => {
+                const detail = await explorerJson(`action/${managedListIndex}`);
+                return (detail?.data || detail)?.name;
+            }, { message: `the explorer never showed the new name on list #${managedListIndex}`, timeout: 120_000 })
+                .toBe(NAME);
+            await openManagedList();
+            await expect(page.locator('dt:has-text("Name") + dd'),
+                'ListDetail does not show the name the rename published')
+                .toContainText(NAME, { timeout: 30_000 });
+
+            await page.getByRole('button', { name: 'Transfer list', exact: true }).click();
+            const transferMain = page.getByRole('main');
+            await transferMain.getByLabel('Destination').fill(REGTEST_DESTINATION);
+            await transferMain.getByLabel('Type TRANSFER to confirm').fill('TRANSFER');
+            await transferMain.getByRole('button', { name: 'Review', exact: true }).click();
+            const transferPassword = transferMain.getByLabel('Password', { exact: true });
+            if (await transferPassword.count() > 0 && await transferPassword.isVisible()) await transferPassword.fill(PASSWORD);
+            await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            const transferTxid = await approveAndGetTxid(page);
+            const transferred = await waitForValidAction(transferTxid);
+            expect(String(transferred.status ?? 'valid')).toBe('valid');
         });
 
         await test.step('the project roster: publish a token list and link it to the project', async () => {
