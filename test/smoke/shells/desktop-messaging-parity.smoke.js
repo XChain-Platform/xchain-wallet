@@ -43,8 +43,8 @@
 // types, compared - not a claim that the UI is fine.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -250,8 +250,113 @@ assert.deepEqual(
     + `is what a new shell is built against: ${stale.join(' | ')}. Correct the typedef.`,
 );
 
+// CORE -> SHELL. Every check above compares the shells to each other or to the
+// partial typedef, so a helper that shared core calls and NO shell exports
+// passes them all, and core's `typeof messaging?.x` guard then switches the
+// feature off without a word. So read what core actually calls.
+// Not followed: computed calls (`messaging[name](...)`) and destructured ones.
+const coreRoot = join(wsRoot, 'packages', 'core', 'src');
+
+// Hooks core probes on purpose before any shell implements them. Each entry
+// is reasoned, and stale entries fail below so the list cannot only grow.
+const CORE_PENDING = new Map([
+    // flows/feeEstimate.js: the shell-side fee estimator is a future hook;
+    // core falls back to its own fee table while no shell registers one.
+    ['estimateFee', 'future shell fee estimator; core uses its fee table meanwhile'],
+    // flows/rbfReplace.js: the replacement engine is pending, and core throws
+    // a typed not-supported error while no shell exports it.
+    ['replaceTx', 'replacement engine pending; core refuses with a typed error'],
+]);
+
+/** Blank out comments, keeping strings and line numbers, so prose never counts as a call. */
+function stripComments(src) {
+    let out = '';
+    let quote = null;
+    for (let i = 0; i < src.length; i += 1) {
+        const ch = src[i];
+        if (quote) {
+            out += ch;
+            if (ch === '\\') { out += src[i + 1] ?? ''; i += 1; } else if (ch === quote) quote = null;
+            continue;
+        }
+        if (ch === '/' && src[i + 1] === '*') {
+            const end = src.indexOf('*/', i + 2);
+            const stop = end < 0 ? src.length : end + 2;
+            out += src.slice(i, stop).replace(/[^\n]/g, ' ');
+            i = stop - 1;
+            continue;
+        }
+        if (ch === '/' && src[i + 1] === '/') {
+            const end = src.indexOf('\n', i);
+            i = (end < 0 ? src.length : end) - 1;
+            continue;
+        }
+        if (ch === '"' || ch === "'" || ch === '`') quote = ch;
+        out += ch;
+    }
+    return out;
+}
+
+function sourceFiles(dir) {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return sourceFiles(path);
+        return /\.(?:js|jsx)$/.test(entry.name) ? [path] : [];
+    });
+}
+
+// A bare `messaging` binding only: `sdk.messaging.x` is the SDK's own
+// namespace, not a shell module, so a preceding dot or identifier excludes it.
+const CORE_CALL = /(?<![.\w$])messaging\??\.(\w+)/g;
+/** @type {Map<string, string>} name -> first core call site */
+const coreCalls = new Map();
+for (const file of sourceFiles(coreRoot)) {
+    const src = stripComments(readFileSync(file, 'utf8'));
+    for (const m of src.matchAll(CORE_CALL)) {
+        if (coreCalls.has(m[1])) continue;
+        const line = src.slice(0, m.index).split('\n').length;
+        coreCalls.set(m[1], `${relative(wsRoot, file)}:${line}`);
+    }
+}
+
+assert.ok(coreCalls.size > 100, `core parsed as ${coreCalls.size} messaging.<name> calls, which means `
+    + 'this check is reading the wrong tree rather than passing');
+
+const exportedBy = (name) => Object.entries(shells).filter(([, m]) => m.has(name)).map(([s]) => s);
+const uncalled = [];
+for (const [name, site] of coreCalls) {
+    if (CORE_PENDING.has(name)) continue;
+    const has = exportedBy(name);
+    if (has.length === 3) continue;
+    // A documented shell-only helper is checked for its exact set above.
+    if (SHELL_ONLY.has(name) && has.length > 0) continue;
+    uncalled.push(`${name} (first called at ${site}): exported by ${has.join(' + ') || 'none'}`);
+}
+assert.deepEqual(
+    uncalled,
+    [],
+    'shared core calls these messaging helpers, but not every shell exports them, so core\'s guard '
+    + `turns the feature off on those shells: ${uncalled.join(' | ')}. Add the wrapper to every shell `
+    + 'and a host handler for its type, or, if core probes a hook nobody implements yet on purpose, '
+    + 'add it to CORE_PENDING with the reason. Never widen the list just to get green.',
+);
+
+const stalePending = [];
+for (const name of CORE_PENDING.keys()) {
+    if (!coreCalls.has(name)) stalePending.push(`${name}: core no longer calls it`);
+    const has = exportedBy(name);
+    if (has.length > 0) stalePending.push(`${name}: now exported by ${has.join(' + ')}`);
+}
+assert.deepEqual(
+    stalePending,
+    [],
+    `CORE_PENDING entries are stale: ${stalePending.join(' | ')}. Delete each one; a pending hook `
+    + 'that a shell now exports is held by the set-equality check above.',
+);
+
 console.log('OK: shell-messaging-parity smoke ('
     + Object.entries(shells).map(([s, m]) => `${s} ${m.size}`).join(', ')
     + `; ${names.size} names agree three ways on export, message type and parameter list, `
     + `with ${SHELL_ONLY.size} documented shell-only exception(s); `
-    + `${declared.length} MessagingModule typedef properties match all three)`);
+    + `${declared.length} MessagingModule typedef properties match all three; `
+    + `${coreCalls.size} messaging names core calls are checked, with ${CORE_PENDING.size} pending hook(s))`);

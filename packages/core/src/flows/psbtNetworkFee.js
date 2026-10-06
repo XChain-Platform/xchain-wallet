@@ -99,7 +99,7 @@ export function formatExactSats(value) {
  * @param {object} [opts]
  * @param {string[]} [opts.carrierScripts]   redeem scripts create_tx committed to; [] off the chunk lanes
  * @param {Iterable<string>} [opts.ownAddresses]  addresses the wallet controls, so change is not mistaken for a carrier
- * @param {number|string} [opts.revealOutputSats] total value the reveal re-emits
+ * @param {number|string|bigint|null} [opts.revealOutputSats] total value the reveal re-emits; null means unknown, so the result is null
  * @returns {number | string | null} fee in the chain's smallest unit
  */
 export function totalNetworkFeeSats(decomposed, {
@@ -123,7 +123,8 @@ export function totalNetworkFeeSats(decomposed, {
     // means our identification is wrong, not that the fee is different.
     if (carriers.length !== carrierCount) return null;
     const carrierTotal = sumExactSats(carriers.map((carrier) => carrier.value));
-    const revealOutputs = exactSats(revealOutputSats || 0);
+    // No `|| 0` here: an unknown (null) or unparseable reveal total must refuse, not count as zero.
+    const revealOutputs = exactSats(revealOutputSats);
     if (carrierTotal === null || revealOutputs === null) return null;
     const revealFee = carrierTotal - revealOutputs;
     if (revealFee < 0n) return null;

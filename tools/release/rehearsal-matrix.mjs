@@ -115,6 +115,9 @@ import { readFileSync } from 'node:fs';
  * @property {string} arch      process.arch value: x64 | arm64
  * @property {string} format    the update-capable artifact extension
  * @property {string|null} device  named smoke hardware (DD4), or null
+ * @property {{silicon: string, translated: boolean}} [deviceHost]  the named device's CPU, and
+ *           whether the lane's build runs translated there; set on the mac lanes, where it decides
+ *           which zip electron-updater installs on that device
  * @property {string} [note]
  */
 
@@ -150,7 +153,13 @@ export const LANES = [
         arch: 'x64',
         format: 'zip',
         device: 'Mac Studio M3 Ultra, x64 build under Rosetta (not native silicon)',
-        note: 'zip, never dmg: the dmg has no auto-update path. Shares stable-mac.yml.',
+        deviceHost: { silicon: 'arm64', translated: true },
+        note: 'zip, never dmg: the dmg has no auto-update path. Shares stable-mac.yml. '
+            + 'ON THIS DEVICE THE SWAP INSTALLS THE ARM64 ZIP: electron-updater\'s MacUpdater '
+            + 'treats Rosetta as an arm64 Mac and keeps only the arm64 files, so an x64 install '
+            + 'here migrates to arm64 and the x64 zip is never installed. `attest` refuses this '
+            + 'lane on a translated device and `coverage` waives it by name; witnessing the x64 zip '
+            + 'needs a native Intel Mac.',
     },
     {
         id: 'mac-arm64',
@@ -158,6 +167,7 @@ export const LANES = [
         arch: 'arm64',
         format: 'zip',
         device: 'Mac Studio (release machine)',
+        deviceHost: { silicon: 'arm64', translated: false },
         note: 'The one lane whose hardware the program already owns.',
     },
     {

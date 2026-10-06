@@ -21,6 +21,8 @@ function makeHarness({ outputs, decoded, inputs } = {}) {
         encoder: { createTx: vi.fn(async () => ({ psbt: 'PSBTHEX', encoding: 'OP_RETURN' })) },
         actions: { createAction: vi.fn(() => ({ actionString: 'SEND|0|JDOG|1|addr', action: 'SEND', version: 0 })) },
         wallet: {
+            // A bitcoin-regtest SDK, so the native fee pads to Bitcoin's dust floor.
+            getBitcoinNetwork: () => ({ dustThreshold: 546 }),
             decomposePsbt: vi.fn(() => ({
                 ...(inputs ? { inputs } : {}),
                 outputs: outputs || [

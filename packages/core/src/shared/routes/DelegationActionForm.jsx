@@ -187,7 +187,6 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
-        const wireParams = isDelegate ? actionParams : { VERSION: '2', ...actionParams };
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -201,11 +200,10 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: 'DELEGATE', params: wireParams },
+                actionData: { action: 'DELEGATE', params: actionParams },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
-                // The flow re-derives the wire params (revoke is v2), so the
-                // submit keeps the LEGACY shape; only the compose above needs
-                // the versioned wire form.
+                // Compose and submit carry the same versioned params; the
+                // revoke flow also pins v2 itself, whatever VERSION arrives.
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
@@ -253,8 +251,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     const actionParams = useMemo(() => {
         const pk = pubkey.trim().toLowerCase();
+        // Rotate is DELEGATE v0; capability revoke is DELEGATE v2 (v0 has no SIGNING_PUBKEY slot)
         if (isDelegate) return { VERSION: '0', NEW_SIGNING_PUBKEY: pk };
-        return { VERSION: '0', SIGNING_PUBKEY: pk };
+        return { VERSION: '2', SIGNING_PUBKEY: pk };
     }, [isDelegate, pubkey]);
 
     function handleReview(event) {
@@ -297,12 +296,11 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             };
             let res;
             if (isWatcherMode) {
-                // Both rotate and revoke share the DELEGATE wire action; revoke is v2
-                const wireParams = isDelegate ? actionParams : { VERSION: '2', ...actionParams };
+                // Both rotate and revoke share the DELEGATE wire action; actionParams already carries v0 or v2
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action: 'DELEGATE', params: wireParams },
+                    actionData: { action: 'DELEGATE', params: actionParams },
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else {

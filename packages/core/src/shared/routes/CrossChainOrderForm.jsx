@@ -272,6 +272,15 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     },
                 }),
                 preflight: (o) => messaging.preflight({ chainId: giveChainId, ...o }),
+                // §4.6: the input-liveness half of the Approve-time re-check,
+                // the same one useActionConfirmFlow.run gives every migrated form.
+                checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId: giveChainId, psbtHex }),
+                // §4.7: reserve the debited balance on the host-shared ledger,
+                // so two windows cannot both approve against the same balance.
+                reservationLedger: {
+                    reserve: (e) => messaging.reserve(e),
+                    release: (id) => messaging.releaseReservation({ id }),
+                },
                 // Re-price the native-coin protocol fee at Approve: the amount
                 // consensus requires moves with the coin price while the
                 // confirm screen sits open.
@@ -385,8 +394,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     </>
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
                 <p className={styles.hint}>
-                    Your {giveTick.trim().toUpperCase()} is escrowed on {giveDescriptor?.displayName}. The validator
-                    federation matches this order against the book on {getDescriptor?.displayName}; it may fill in
+                    Your {giveTick.trim().toUpperCase()} is escrowed on {giveDescriptor?.displayName}. The network
+                    matches this order automatically against offers on {getDescriptor?.displayName}; it may fill in
                     parts, and each fill is released from escrow on both chains with no further transaction from you.
                 </p>
                 <div className={styles.actions}>
@@ -489,7 +498,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <p className={styles.hint}>
-                A cross-chain order rests on the federation&apos;s price-time book and can fill in parts.
+                Your order waits on the network&apos;s order book and fills automatically, possibly in parts,
+                as matching offers arrive.
                 For an all-or-nothing single fill use Cross-chain swap.
             </p>
             <div style={{

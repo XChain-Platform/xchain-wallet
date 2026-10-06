@@ -27,6 +27,8 @@ assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMo
 assert.match(formSrc, /import \{ WatcherResultPanel \} from '\.\.\/components\/WatcherResultPanel\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /actionData: \{ action: 'DELEGATE'/);
-assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DELEGATE', params: wireParams/);
+assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DELEGATE', params: actionParams/);
+// Revoke mode builds DELEGATE v2 params itself; v0 has no SIGNING_PUBKEY slot.
+assert.match(formSrc, /return \{ VERSION: '2', SIGNING_PUBKEY: pk \};/);
 assert.match(formSrc, /Create unsigned transaction/);
 console.log('delegation-watcher-mode smoke OK');

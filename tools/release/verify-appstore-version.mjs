@@ -646,12 +646,58 @@ export function credentialsFromEnv(env = process.env) {
     return { keyPem, keyId, issuer };
 }
 
+// The states in which Apple still takes edits and a submission for a version.
+export const EDITABLE_VERSION_STATES = Object.freeze([
+    'PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED', 'INVALID_BINARY',
+]);
+
+const versionStateOf = (v) => v?.attributes?.appStoreState ?? v?.attributes?.appVersionState;
+
+/**
+ * Pick the App Store version record to judge, purely and never by list order.
+ *
+ * Apple does not promise an order for appStoreVersions, so once one version is
+ * live and the next is being prepared either can come back first. With a
+ * marketing version this takes the iOS record carrying it, whatever its state,
+ * and a missing one is a failure. Without one it takes the single iOS record
+ * still open for submission; none or several is inconclusive, never a guess.
+ *
+ * @param {object[]} list                    the `data` of an appStoreVersions response
+ * @param {{marketing?: string|null}} [opts] the release's marketing version, if known
+ * @returns {{version: object}|{error: string, verdict: 'failure'|'inconclusive'}}
+ */
+export function selectVersionRecord(list, { marketing = null } = {}) {
+    const ios = (Array.isArray(list) ? list : []).filter((v) => v?.attributes?.platform === 'IOS');
+    const held = (vs) => vs.map((v) => `${v.attributes.versionString} (${versionStateOf(v)})`).join(', ') || 'none';
+    if (marketing) {
+        const hits = ios.filter((v) => v.attributes.versionString === marketing);
+        if (hits.length === 1) return { version: hits[0] };
+        if (hits.length === 0) {
+            return {
+                verdict: 'failure',
+                error: `Apple has no iOS App Store version ${JSON.stringify(marketing)} (it holds ${held(ios)});`
+                    + ' create that version before submitting',
+            };
+        }
+        return { verdict: 'inconclusive', error: `Apple lists ${hits.length} iOS records for version ${JSON.stringify(marketing)}` };
+    }
+    const open = ios.filter((v) => EDITABLE_VERSION_STATES.includes(versionStateOf(v)));
+    if (open.length === 1) return { version: open[0] };
+    if (open.length === 0) {
+        return { verdict: 'inconclusive', error: `no iOS App Store version is open for submission (Apple holds ${held(ios)})` };
+    }
+    return {
+        verdict: 'inconclusive',
+        error: `${open.length} iOS versions are open for submission (${held(open)}); pass --tag to name the one being submitted`,
+    };
+}
+
 /**
  * Assemble the version record from App Store Connect. GET only.
  *
- * @param {{token: string, bundleId: string, fetchImpl?: typeof fetch}} opts
+ * @param {{token: string, bundleId: string, marketing?: string|null, fetchImpl?: typeof fetch}} opts
  */
-export async function fetchVersionRecord({ token, bundleId, fetchImpl = fetch }) {
+export async function fetchVersionRecord({ token, bundleId, marketing = null, fetchImpl = fetch }) {
     const get = async (path) => {
         const res = await fetchImpl(`https://api.appstoreconnect.apple.com${path}`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -666,9 +712,19 @@ export async function fetchVersionRecord({ token, bundleId, fetchImpl = fetch })
     const app = apps.body.data?.[0];
     if (!app) return { error: `no app record for bundle id ${bundleId}` };
 
-    const versions = await get(`/v1/apps/${app.id}/appStoreVersions?limit=1`);
-    const version = versions.body.data?.[0];
-    if (!version) return { error: `app ${bundleId} has no App Store version` };
+    // Filter server-side only to narrow the list; selectVersionRecord re-checks
+    // platform, version string and state itself, so a filter Apple ignores
+    // cannot turn into judging the wrong record.
+    const versionFilter = marketing ? `&filter[versionString]=${encodeURIComponent(marketing)}` : '';
+    const versions = await get(`/v1/apps/${app.id}/appStoreVersions?filter[platform]=IOS${versionFilter}&limit=200`);
+    if (versions.status !== 200) return { error: `HTTP ${versions.status} listing App Store versions` };
+    // A partial list could hide the record that decides the selection.
+    if (versions.body.links?.next) {
+        return { error: 'App Store Connect paged the version list, so it cannot be judged whole', verdict: 'inconclusive' };
+    }
+    const picked = selectVersionRecord(versions.body.data, { marketing });
+    if (picked.error) return { error: picked.error, verdict: picked.verdict };
+    const version = picked.version;
 
     const record = {
         app: { id: app.id, name: app.attributes.name, bundleId: app.attributes.bundleId },
@@ -744,6 +800,10 @@ Options:
                     only checked against that release's respin band; with it,
                     both Apple fields are checked exactly. Falls back to
                     XCHAIN_RELEASE_TAG, the same input sign.sh takes.
+                    It also picks the record judged: with a tag, the iOS
+                    version carrying that release's marketing version (none
+                    is a failure); without one, the single iOS version still
+                    open for submission (none or several is inconclusive).
   --json            machine-readable outcome
   -h, --help        print this and exit 0
 
@@ -797,9 +857,17 @@ export async function checkAppStoreVersion({
 
     let fetched;
     try {
-        fetched = await fetchVersionRecord({ token, bundleId, fetchImpl });
+        fetched = await fetchVersionRecord({ token, bundleId, marketing: derived?.marketing ?? null, fetchImpl });
     } catch (err) {
         return { exit: EXIT.INCONCLUSIVE, reason: `App Store Connect unreachable: ${err.message}`, checks: [] };
+    }
+    // A selection verdict is read before the credential test below, whose
+    // pattern would also match a version string such as 0.401.0.
+    if (fetched.verdict === 'failure') {
+        return { exit: EXIT.FAILURE, reason: fetched.error, checks: [bad('version-record', fetched.error)] };
+    }
+    if (fetched.verdict === 'inconclusive') {
+        return { exit: EXIT.INCONCLUSIVE, reason: fetched.error, checks: [] };
     }
     if (fetched.error) {
         const config = /401|not authorized/i.test(fetched.error);

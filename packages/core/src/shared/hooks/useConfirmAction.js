@@ -469,8 +469,8 @@ export function useConfirmAction() {
             }
             if (kind === 'permanent') {
                 // Can never confirm as-is (inputs spent / confirmed conflict).
-                // PendingTx is already `failed`; re-signing is forbidden, so the
-                // caller must re-compose. Terminal error.
+                // PendingTx is already `failed` (or `broadcast` when the commit had
+                // landed); re-signing is forbidden, so the caller must re-compose. Terminal error.
                 setPhase('error');
                 setError(err);
                 settleReject(err);

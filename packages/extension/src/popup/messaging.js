@@ -2509,6 +2509,16 @@ export function getActionFormats(req) {
 }
 
 /**
+ * Whether the chain has reached the list tick-coin activation, so the create
+ * form may offer coin-qualified ticker items. Answers false on any failure.
+ *
+ * @param {{ chainId: string }} req
+ */
+export function isListTickCoinActive(req) {
+    return /** @type {any} */ (sendMessage('sdk.isListTickCoinActive', req));
+}
+
+/**
  * Fetch the field list for an action (union of all versions when
  * `version` is omitted). Rest-fields keep their `...` prefix so the
  * form can render them as array inputs.
@@ -2603,10 +2613,12 @@ export function updateSettings(patch) {
 
 /**
  * §26 auto-lock backstop: arm/disarm the service-worker idle-lock. The popup's
- * foreground timer stops when the popup closes, so Home reports whether
- * auto-lock applies to the active wallet + the idle threshold; the background
- * enforces it while the popup is gone. Extension-only (web/desktop keep a
- * long-lived window and rely on the foreground hook).
+ * foreground timer stops when the popup closes, so the shell-level
+ * useAutoLockPolicy hook reports whether auto-lock applies to the active
+ * wallet + the idle threshold; the background enforces it while the popup is
+ * gone. Desktop exports the same helper for its own lifetime (its main
+ * process bounds a keychain relaunch by the same window); plain web keeps the
+ * key in memory only and has none.
  *
  * @param {{ armed: boolean, idleMs: number }} signal
  */

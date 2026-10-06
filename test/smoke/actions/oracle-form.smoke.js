@@ -24,6 +24,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { COMMON_ACTIONS, PROTOCOL_ONLY_ACTIONS } from '../../../packages/core/src/registry/actions.js';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
@@ -101,9 +103,15 @@ assert.match(palette, /create-oracle-price/, 'command palette offers the oracle 
 // PRICE now has a dedicated form, so the raw Advanced form must say so
 // rather than presenting itself as the only way to publish a price.
 const advanced = read('packages', 'core', 'src', 'shared', 'routes', 'AdvancedActionsForm.jsx');
+// The set is derived from the registry, so pin the derivation plus PRICE's
+// place in the authorable, form-backed set.
 assert.match(
     advanced,
-    /const ACTIONS_WITH_DEDICATED_FORMS = new Set\(\[[^\]]*'PRICE'/s,
+    /const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions\(\{\s*authorable: \[\.\.\.COMMON_ACTIONS, \.\.\.BTC_EXCLUSIVE_ACTIONS\],\s*protocolOnly: PROTOCOL_ONLY_ACTIONS,/,
+    'ACTIONS_WITH_DEDICATED_FORMS is derived from the registry authorable set',
+);
+assert.ok(
+    COMMON_ACTIONS.includes('PRICE') && !PROTOCOL_ONLY_ACTIONS.includes('PRICE'),
     'PRICE listed as having a dedicated form',
 );
 

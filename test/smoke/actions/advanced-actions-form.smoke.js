@@ -43,6 +43,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { COMMON_ACTIONS, PROTOCOL_ONLY_ACTIONS } from '../../../packages/core/src/registry/actions.js';
 import { surfacesEntry } from '../_action-entries.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -111,9 +112,16 @@ assert.ok(
     /ACTIONS_WITH_DEDICATED_FORMS\b/.test(src),
     'AdvancedActionsForm carries a dedicated-form set',
 );
+// The set is derived from the registry rather than hand-kept, so a new form
+// is labelled the day it ships; pin the derivation and the members it yields.
+assert.match(
+    src,
+    /const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions\(\{\s*authorable: \[\.\.\.COMMON_ACTIONS, \.\.\.BTC_EXCLUSIVE_ACTIONS\],\s*protocolOnly: PROTOCOL_ONLY_ACTIONS,/,
+    'dedicated-form set is derived from the registry authorable set',
+);
 for (const dedicated of ['AIRDROP', 'DIVIDEND', 'DISPENSER', 'BROADCAST', 'ISSUE', 'MINT', 'DESTROY', 'SEND', 'SWEEP']) {
     assert.ok(
-        src.includes(`'${dedicated}'`),
+        COMMON_ACTIONS.includes(dedicated) && !PROTOCOL_ONLY_ACTIONS.includes(dedicated),
         `dedicated-form set names ${dedicated}`,
     );
 }
