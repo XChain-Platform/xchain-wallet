@@ -341,7 +341,8 @@ xr_is_lane_feed() {
 # desktop release, which is the same silent-waiver shape this column
 # exists to end.
 #
-# Fails SHUT on an unreadable list (return 0, "treat as updater"): the
+# Fails SHUT on an unreadable list, a named lane with no row, or a row
+# whose feed word is not a declared feed (return 0, "treat as updater"): the
 # consequence of a false positive is a rehearsal being demanded of a
 # release that did not need one, and of a false negative is a desktop
 # release published unrehearsed.
@@ -350,6 +351,7 @@ xr_lanes_have_updater_feed() {
     shift
     local -a want=("$@")
     local lane lstatus feed rest w
+    local -A seen=()
 
     if [[ ! -f "$lanes" ]] || [[ ${#want[@]} -eq 0 ]]; then
         return 0
@@ -359,9 +361,15 @@ xr_lanes_have_updater_feed() {
         case "$lane" in ''|'#'*) continue ;; esac
         for w in "${want[@]}"; do
             [[ "$w" == "$lane" ]] || continue
+            seen[$w]=1
             [[ "$feed" == "updater" ]] && return 0
+            xr_is_lane_feed "$feed" || return 0
         done
     done < "$lanes"
+
+    for w in "${want[@]}"; do
+        [[ -n "${seen[$w]:-}" ]] || return 0
+    done
 
     return 1
 }
