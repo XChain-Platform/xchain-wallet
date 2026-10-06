@@ -217,6 +217,7 @@ CI is intentionally not configured against `master` during the active build phas
 2. Bump versions + update `CHANGELOG.md`.
 3. Make sure your `git status` is clean apart from intended changes (no `node_modules/`, no editor leftovers, no `.env`).
 4. Open the PR with a clear title and a description that lists what changed and why. Reference the gap ID(s) it closes.
+5. The CLA Assistant bot records your signature once for every XChain Platform repository when it links the Contributor License Agreement on your first PR. Its `license/cla` check must pass before merge, so a PR from a contributor who has not signed cannot be merged.
 
 **A PR that breaks the smoke baseline will not be merged.** A PR that bumps the version without a CHANGELOG entry will not be merged.
 
