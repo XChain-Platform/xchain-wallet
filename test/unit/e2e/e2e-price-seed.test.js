@@ -42,7 +42,7 @@ import {
     unusablePriceMessage,
     venueDisagreement,
     writeRowsScript,
-} from '../e2e/fixtures/priceSeed.js';
+} from '../../e2e/fixtures/priceSeed.js';
 
 const CHAIN = 1_785_300_000;
 const WALL = CHAIN + 9_000;   // the idle regime: chain trails wall by 2.5h

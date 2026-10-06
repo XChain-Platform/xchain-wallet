@@ -29,7 +29,7 @@ import {
     kdfStepTimeout,
     loadScale,
     timeoutBudget,
-} from '../e2e/timeout-budget.js';
+} from '../../e2e/timeout-budget.js';
 
 describe('e2e timeout budget', () => {
     describe('loadScale', () => {
