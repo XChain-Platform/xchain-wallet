@@ -36,10 +36,9 @@ import { exactNetworkFeeSats } from './psbtNetworkFee.js';
  * @param {() => { ok: boolean, actionString?: string, reason?: string }} args.decodeRevealAction
  *   reads the action the reveal's envelope leaf carries
  * @param {string} [args.revealPsbt]   the reveal PSBT as built, handed to the carrier binding rule
- * @param {string} [args.network]      network name, handed to the carrier binding rule
- * @param {(input: { revealPsbt: string, actionString: string, network: string }) => void} [args.assertEnvelopeCarrierBinding]
- *   rule that throws when the reveal does not carry the approved action in its envelope;
- *   run last, only on a reveal that passed every check above, and skipped when absent
+ * @param {string} [args.network]      network name the carrier binding rule parses the PSBT on
+ * @param {(a: { revealPsbt: string, actionString: string, network?: string }) => void} [args.assertEnvelopeCarrierBinding]
+ *   the SDK's envelope carrier binding rule; throws when the reveal does not carry the action
  * @returns {EnvelopeRevealVerdict}
  */
 export function checkEnvelopeReveal({
@@ -82,10 +81,14 @@ export function checkEnvelopeReveal({
         return { ok: false, reason: 'REVEAL_ACTION_MISMATCH' };
     }
 
-    if (typeof assertEnvelopeCarrierBinding === 'function') {
-        try { assertEnvelopeCarrierBinding({ revealPsbt, actionString, network }); } catch {
-            return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
-        }
+    // The SDK's own rule for what a reveal must carry, so the wallet and the
+    // submit path cannot disagree about a substituted reveal.
+    // A missing rule refuses: an unchecked reveal must never pass.
+    if (typeof assertEnvelopeCarrierBinding !== 'function') {
+        return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
+    }
+    try { assertEnvelopeCarrierBinding({ revealPsbt, actionString, network }); } catch {
+        return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
     }
     return { ok: true };
 }

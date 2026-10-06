@@ -449,6 +449,9 @@ function checkedEnvelopeFees({ sdk, composed, commit, own }) {
         // The co-signer decoder reads the envelope leaf; the inline extractor
         // the commit check uses cannot see it.
         decodeRevealAction: () => sdk.decoder.decodeActionFromPsbt(composed.revealPsbt),
+        revealPsbt: composed.revealPsbt,
+        network: sdk.config && sdk.config.network,
+        assertEnvelopeCarrierBinding: sdk.decoder.assertEnvelopeCarrierBinding,
     });
     if (!verdict.ok) {
         throw new TamperDetectedError(
