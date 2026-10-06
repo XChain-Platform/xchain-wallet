@@ -35,6 +35,8 @@ import {
  * @param {string} [props.emptyTitle]                empty-state headline
  * @param {string} [props.emptyBody]                 explanatory body copy
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
+ * @param {string} [props.emptyActionLabel]          label for a caller-defined empty-state action; takes the button over from Receive
+ * @param {() => void} [props.onEmptyAction]         runs that action (e.g. clearing the filter that emptied the list)
  * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
  *        Click handler for a balance row. Surfaces the §27.6 Token detail page (G071) when supplied.
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
@@ -52,6 +54,8 @@ export function BalanceList({
     emptyTitle = 'No balances yet',
     emptyBody,
     onReceive,
+    emptyActionLabel,
+    onEmptyAction,
     onSelectToken,
     pinnedKeys,
     onTogglePin,
@@ -64,13 +68,14 @@ export function BalanceList({
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     const [smallExpanded, setSmallExpanded] = useState(false);
     if (!rows || rows.length === 0) {
+        const hasEmptyAction = Boolean(emptyActionLabel) && typeof onEmptyAction === 'function';
         return (
             <EmptyStateNudge
                 title={emptyTitle}
                 body={emptyBody}
-                actionLabel={onReceive ? 'Receive' : undefined}
-                onAction={onReceive}
-                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                actionLabel={hasEmptyAction ? emptyActionLabel : (onReceive ? 'Receive' : undefined)}
+                onAction={hasEmptyAction ? onEmptyAction : onReceive}
+                icon={!hasEmptyAction && onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
         );
     }

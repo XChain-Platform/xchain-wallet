@@ -358,6 +358,8 @@ function AppInner() {
     const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
     // Free-text token filter: lifted alongside the network filter so the
     // AppHeader popover and Home's HomeTabs share one source of truth.
+    // The Send and Receive pickers keep their own search text: sharing this
+    // one left a ticker typed there ("LTC") filtering Home's Tokens tab.
     const [globalTokenQuery, setGlobalTokenQuery] = useState('');
     // Asset-kind filter: surfaced via the global filter popover on the
     // send-picker route so the user can narrow the spendable list to
@@ -957,8 +959,6 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
-                        tokenQuery={globalTokenQuery}
-                        onTokenQueryChange={setGlobalTokenQuery}
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter
@@ -987,8 +987,6 @@ function AppInner() {
                         accountId={activeAccountId || undefined}
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
-                        tokenQuery={globalTokenQuery}
-                        onTokenQueryChange={setGlobalTokenQuery}
                         kindFilter={globalKindFilter}
                         onKindFilterChange={setGlobalKindFilter}
                         hideOwnFilter
