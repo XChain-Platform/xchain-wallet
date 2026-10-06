@@ -22,7 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createPriceKeeper, DEFAULT_KEEP_INTERVAL_MS, MIN_SEED_MARGIN_SECONDS }
-    from '../e2e/fixtures/priceKeeper.js';
+    from '../../e2e/fixtures/priceKeeper.js';
 
 /** A `seedPrices`-shaped result for a venue that still has life in it. */
 const HEALTHY = { seeded: false, reason: 'venue already priced', marginSeconds: 1500 };
