@@ -415,6 +415,22 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // Capability revoke is DELEGATE v2; a v0 pin has no SIGNING_PUBKEY slot and the SDK refuses it.
+    it('DelegationActionForm (revoke) composes DELEGATE v2 and signs the prebuilt PSBT', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: DelegationActionForm,
+            props: { mode: 'revoke' },
+            actionLabel: 'Revoke delegation',
+            fill: (utils) => setValue(utils, 'Signing pubkey to revoke', 'd'.repeat(64)),
+        });
+        const submit = expectSingleEncode(calls, {
+            action: 'DELEGATE',
+            params: { VERSION: '2', SIGNING_PUBKEY: 'd'.repeat(64) },
+            submitMethod: 'revokeDelegationAction',
+        });
+        expect(submit.args.params).toMatchObject({ VERSION: '2', SIGNING_PUBKEY: 'd'.repeat(64) });
+    });
+
     it('DelegateVoteForm composes VOTE v3 and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: DelegateVoteForm,

@@ -44,6 +44,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { findFile } = require('electron-updater/out/providers/Provider.js');
+// eslint-disable-next-line import/no-extraneous-dependencies
+const { MacUpdater } = require('electron-updater/out/MacUpdater.js');
 
 const realArch = process.arch;
 afterEach(() => {
@@ -105,7 +107,7 @@ describe('arch-tagged naming makes selection order-independent', () => {
     }
 });
 
-describe('macOS routes through the same selector, so it has the same fix', () => {
+describe('macOS ends in the same selector, so it has the same fix (native host, no pre-filter)', () => {
     const MAC = ['xchain-wallet-0.333.1-x64-mac.zip', 'xchain-wallet-0.333.1-arm64-mac.zip'];
 
     // MacUpdater calls findFile(files, "zip", ["pkg", "dmg"]), so the dmgs
@@ -132,5 +134,42 @@ describe('the substring match is not accidentally ambiguous', () => {
         const only = files('xchain-wallet-0.333.1-arm64.AppImage');
         expect(findFile(only, 'AppImage', ['rpm', 'deb', 'pacman']).info.url)
             .toBe('xchain-wallet-0.333.1-arm64.AppImage');
+    });
+});
+
+// MacUpdater does NOT hand the list straight to findFile. It first runs
+// filterFilesForArch, and any Apple-silicon Mac (Rosetta included) keeps only
+// the arm64 files, so an x64 build under Rosetta installs the ARM64 zip. These
+// drive the REAL upstream pair and pin the release probe's model to it.
+describe('MacUpdater pre-filters by hardware before findFile', () => {
+    const MAC = ['xchain-wallet-0.333.1-x64-mac.zip', 'xchain-wallet-0.333.1-arm64-mac.zip'];
+    const withDmgs = [...MAC, 'xchain-wallet-0.333.1-x64.dmg', 'xchain-wallet-0.333.1-arm64.dmg'];
+    const upstream = (names, isArm64Mac) => findFile(
+        MacUpdater.filterFilesForArch(files(...names), isArm64Mac), 'zip', ['pkg', 'dmg'],
+    ).info.url;
+    const HOSTS = [
+        ['a native Intel Mac', 'x64', false, MAC[0]],
+        ['a native Apple-silicon Mac', 'arm64', true, MAC[1]],
+        ['an x64 build under Rosetta', 'x64', true, MAC[1]],
+    ];
+
+    for (const [host, arch, isArm64Mac, expected] of HOSTS) {
+        it(`${host} installs ${expected}, in either order`, () => {
+            asArch(arch);
+            expect(upstream(withDmgs, isArm64Mac)).toBe(expected);
+            expect(upstream([...withDmgs].reverse(), isArm64Mac)).toBe(expected);
+        });
+    }
+
+    it('the release probe selects what the real MacUpdater selects, for every host', async () => {
+        const { selectFileForArch } = await import('../../../tools/release/rehearse.mjs');
+        for (const [, arch, isArm64Mac] of HOSTS) {
+            for (const order of [withDmgs, [...withDmgs].reverse()]) {
+                asArch(arch);
+                const probe = selectFileForArch(order.map((url) => ({ url })), arch, 'zip',
+                    { os: 'darwin', isArm64Mac });
+                expect(probe.file.url).toBe(upstream(order, isArm64Mac));
+            }
+        }
     });
 });

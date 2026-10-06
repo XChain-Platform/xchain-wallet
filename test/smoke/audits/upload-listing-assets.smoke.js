@@ -33,10 +33,11 @@
 //    mid-run.
 
 import { strict as assert } from 'node:assert';
+import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import {
-    parseArgs, apiError, awaitComplete, ascClient, USAGE,
+    parseArgs, apiError, awaitComplete, ascClient, USAGE, uploadListingAssets,
 } from '../../../tools/release/upload-listing-assets.mjs';
 
 // --- argument parsing -------------------------------------------------------
@@ -182,6 +183,42 @@ const noSleep = async () => {};
         src, /relationships\/appScreenshots/,
         'order is set explicitly after upload (property 2)',
     );
+}
+
+// --- the version written to does not depend on Apple's list order -----------
+
+{
+    // The open version is prepared whichever order Apple lists it in, even
+    // behind a live version listed first. A dry run writes nothing.
+    const keyPem = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+        .privateKey.export({ type: 'pkcs8', format: 'pem' });
+    const env = { APPLE_API_KEY: keyPem, APPLE_API_KEY_ID: 'TESTKEYID', APPLE_API_ISSUER: 'test-issuer' };
+    const live = { id: 'v-live', attributes: { versionString: '0.335.0', appStoreState: 'READY_FOR_SALE', platform: 'IOS' } };
+    const next = { id: 'v-next', attributes: { versionString: '0.336.0', appStoreState: 'PREPARE_FOR_SUBMISSION', platform: 'IOS' } };
+    const run = async (listed, extraEnv = {}) => {
+        const lines = [];
+        const urls = [];
+        const fetchImpl = async (url, init) => {
+            urls.push(url);
+            if ((init?.method ?? 'GET') !== 'GET') throw new Error(`dry run wrote: ${init.method} ${url}`);
+            const body = url.includes('/v1/apps?filter[bundleId]=')
+                ? { data: [{ id: 'app-1', attributes: { name: 'XChain Wallet' } }] }
+                : url.includes('/appStoreVersions?') ? { data: listed } : { data: [] };
+            return { status: 200, text: async () => JSON.stringify(body) };
+        };
+        await uploadListingAssets({ argv: ['--dry-run'], env: { ...env, ...extraEnv }, fetchImpl, log: (l) => lines.push(String(l)) });
+        return { out: lines.join('\n'), versionsUrl: urls.find((u) => u.includes('/appStoreVersions?')) };
+    };
+    for (const listed of [[live, next], [next, live]]) {
+        const { out, versionsUrl } = await run(listed);
+        assert.ok(versionsUrl, 'the version list was read');
+        assert.match(versionsUrl, /filter\[platform\]=IOS/, 'only iOS versions are asked for');
+        assert.match(out, /version 0\.336\.0 {2}PREPARE_FOR_SUBMISSION/, 'the open version is the one prepared');
+        assert.ok(!/Refusing/.test(out), 'a live version listed first no longer causes a refusal');
+    }
+    const tagged = await run([live, next], { XCHAIN_RELEASE_TAG: 'v0.336.0' });
+    assert.match(tagged.versionsUrl, /filter\[versionString\]=0\.336\.0/, 'a release tag narrows the list');
+    assert.match(tagged.out, /version 0\.336\.0 {2}PREPARE_FOR_SUBMISSION/);
 }
 
 console.log('upload-listing-assets smoke: ok');

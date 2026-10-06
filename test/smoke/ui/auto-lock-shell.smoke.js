@@ -29,8 +29,9 @@
 //      every route change.
 //   3. No route under core/src/shared/routes/ calls either hook.
 //   4. The shared useAutoLock hook still wires the window-level activity
-//      listeners, and the policy hook still feeds the extension's
-//      service-worker backstop via reportAutoLock.
+//      listeners, and the policy hook still feeds the out-of-renderer
+//      backstop via reportAutoLock (the extension service worker and the
+//      desktop main process both consume it).
 
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync, statSync } from 'node:fs';

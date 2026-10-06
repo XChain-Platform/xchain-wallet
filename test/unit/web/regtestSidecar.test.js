@@ -309,6 +309,39 @@ describe('the transform when it does not recognize the shape', { timeout: SDK_FI
         expect(out).toContain('const a = 1;');
     });
 
+    // A continuation line that also closes its block must survive, or the block runs on to the next terminator.
+    it('keeps a ` * marker */` line so the code after it stays live', () => {
+        const code = [
+            '/**',
+            ' * reads the fullnode.regtest.json sidecar */',
+            'function kept() { return 1; }',
+            '/* later */',
+        ].join('\n');
+        const out = stripRegtestSidecar(code).code;
+        expect(out).toContain(' * reads the fullnode.regtest.json sidecar */');
+        expect(new Function(`${out}\nreturn kept();`)()).toBe(1);
+    });
+
+    it('keeps a `// marker */` line inside a block so the code after it stays live', () => {
+        const code = [
+            '/*',
+            ' // see $regtestSidecar */',
+            'function kept2() { return 2; }',
+            '/* later */',
+        ].join('\n');
+        const out = stripRegtestSidecar(code).code;
+        expect(out).toContain(' // see $regtestSidecar */');
+        expect(new Function(`${out}\nreturn kept2();`)()).toBe(2);
+    });
+
+    it('still sweeps a marker continuation line that does not close its block', () => {
+        const code = ['/**', ' * $regtestSidecar', ' */', 'const a = 1;'].join('\n');
+        const { code: out, removed } = stripRegtestSidecar(code);
+        expect(out).not.toContain('$regtestSidecar');
+        expect(removed).toEqual(['comments']);
+        expect(out).toContain('const a = 1;');
+    });
+
     it('reports nothing removed for source that never had it', () => {
         const code = 'const a = 1;\n';
         expect(stripRegtestSidecar(code)).toEqual({ code, removed: [] });

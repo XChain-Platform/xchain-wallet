@@ -203,7 +203,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         id: 'cross-chain-order',
         handler: 'onCrossChainOrder',
         label: 'Cross-chain order',
-        description: 'Place a limit order that gives a token on one chain and gets a token on another. Matched by the validator federation on a price-time book; can fill in parts.',
+        description: 'Place a limit order that gives a token on one chain and gets a token on another. It waits on the network\'s order book and fills automatically, possibly in parts.',
     },
     {
         id: 'cross-chain-templates',

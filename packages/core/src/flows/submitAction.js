@@ -334,7 +334,8 @@ export async function submitAction({
                 // PERMANENCE. A PERMANENT rejection (inputs spent/missing, or
                 // a confirmed conflict) can never confirm as-is: mark the
                 // PendingTx `failed` (never queued) so the modal offers a
-                // fresh re-compose. A TRANSIENT failure keeps the existing
+                // fresh re-compose, unless phase 1 already landed (kept
+                // `broadcast` below). A TRANSIENT failure keeps the existing
                 // queued-rebroadcast path (the SAME signed tx can still land).
                 const permanence = classifyBroadcastFailure(err);
                 // Stamp the permanence into the error NAME so it survives the
@@ -344,11 +345,10 @@ export async function submitAction({
                 err.name = permanence === 'permanent'
                     ? BROADCAST_FAILED_PERMANENT_NAME
                     : BROADCAST_FAILED_TRANSIENT_NAME;
-                if (permanence === 'permanent' && err.phase !== 'phase1') {
-                    // Phase 1 is on the network, so the coin already sits in
-                    // the commit output: 'failed' would stop it netting its
-                    // spend and invite a re-compose over a live commit. The
-                    // row stays 'broadcast' on the commit txid with the error.
+                if (permanence === 'permanent' && phase1Landed) {
+                    // The commit is on the network and only the reveal or phase-2 spend was refused.
+                    // Same rule as the non-broadcast branch below: keep it 'broadcast' so the commit's
+                    // spend stays netted, and keep the commit's txid rather than the refused one.
                     await stampPending({
                         status: 'broadcast',
                         broadcastAt: pending?.broadcastAt ?? new Date().toISOString(),

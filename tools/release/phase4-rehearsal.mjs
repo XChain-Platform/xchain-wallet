@@ -41,6 +41,10 @@
 // release run, the invoking checkout for a --staging rehearsal, where they are
 // hashed and gated with the scripts. signingPathFiles() mirrors that mapping.
 //
+// The executable gates (verify-signatures.mjs, launch-probe.mjs) are a third
+// kind: sign.sh runs the tag's copy where it exists and this checkout's copy
+// only where the tag predates the gate, so a pin hashes whichever copy ran.
+//
 // A pin naming one ref would therefore be a lie by omission half the time,
 // which is precisely how "rehearsed end to end" survived three stages while
 // meaning something different each time. Both refs are recorded.
@@ -76,31 +80,87 @@ const LANE_ROSTER = 'tools/release/shipped-lanes.txt';
 const DEV_MOCK_GATE = 'tools/build-reproduce/check-no-dev-mock.sh';
 const SIGNING_CONTROLS = ['tools/release/expected-artifacts.txt', DEV_MOCK_GATE];
 
+// The executable gates sign.sh runs before the manifest, resolved by its gate_script:
+// the tag tree's copy wins, and this checkout's copy runs only when the tag predates the gate.
+export const EXECUTABLE_GATES = [
+    'tools/release/verify-signatures.mjs',
+    'tools/release/launch-probe.mjs',
+];
+
 // Read a pin with no pinFormat with the fixed legacy split, which is what recorded it.
-export const PIN_FORMAT = 2;
+// Format 3 adds the executable gates; formats 1 and 2 keep the lists they were recorded with.
+export const PIN_FORMAT = 3;
 
 /**
  * The script-side and repo-side files for a release set, mirroring lib.sh's
  * xr_signing_control_root: staging reads both signing controls from the
  * invoking checkout, release reads them from the tag tree.
  *
+ * From format 3 the executable gates join the repo side, because the tag's copy
+ * wins. A gate named in `gateFallback` moves to the script side instead: sign.sh
+ * ran this checkout's copy, so those are the bytes to hash and gate.
+ *
  * @param {string} releaseSet  'release' or 'staging'
  * @param {number} [pinFormat] the pin format to read; below 2 is the fixed legacy split
+ * @param {{ gateFallback?: string[] }} [opts] gates the tag tree did not carry
  * @returns {{ script: string[], repo: string[] }}
  */
-export function signingPathFiles(releaseSet, pinFormat = PIN_FORMAT) {
+export function signingPathFiles(releaseSet, pinFormat = PIN_FORMAT, { gateFallback = [] } = {}) {
     if (releaseSet !== 'release' && releaseSet !== 'staging') {
         throw new Error(`phase4-rehearsal: unknown release set '${releaseSet}'`);
     }
+    // Refuse a fallback naming a file that is not a gate, so a typo cannot drop a gate from both sides.
+    const unknown = gateFallback.filter((p) => !EXECUTABLE_GATES.includes(p));
+    if (unknown.length) throw new Error(`phase4-rehearsal: not an executable gate: ${unknown.join(', ')}`);
     if (pinFormat < 2) return { script: SIGNING_SCRIPTS, repo: [LANE_ROSTER, DEV_MOCK_GATE] };
-    return releaseSet === 'staging'
+    const split = releaseSet === 'staging'
         ? { script: [...SIGNING_SCRIPTS, ...SIGNING_CONTROLS], repo: [LANE_ROSTER] }
         : { script: SIGNING_SCRIPTS, repo: [LANE_ROSTER, ...SIGNING_CONTROLS] };
+    if (pinFormat < 3) return split;
+    return {
+        script: [...split.script, ...EXECUTABLE_GATES.filter((p) => gateFallback.includes(p))],
+        repo: [...split.repo, ...EXECUTABLE_GATES.filter((p) => !gateFallback.includes(p))],
+    };
 }
 
 /** The file lists a written pin was recorded with; an absent releaseSet is a release run. */
 export function pinPathFiles(pin) {
-    return signingPathFiles(pin.releaseSet ?? 'release', pin.pinFormat ?? 1);
+    return signingPathFiles(pin.releaseSet ?? 'release', pin.pinFormat ?? 1,
+        { gateFallback: pin.gateFallback ?? [] });
+}
+
+/** The executable gates a tag tree does not carry, which sign.sh would run from this checkout. */
+export function gateFallbackFor(repoRoot) {
+    return EXECUTABLE_GATES.filter((p) => !existsSync(join(repoRoot, p)));
+}
+
+/** The executable gates sign.sh announced it ran from this checkout because the tag predates them. */
+export function announcedGateFallback(output) {
+    const announced = new Set();
+    for (const m of String(output).matchAll(/predates (\S+) - running this checkout's copy/g)) {
+        if (EXECUTABLE_GATES.includes(m[1])) announced.add(m[1]);
+    }
+    return EXECUTABLE_GATES.filter((p) => announced.has(p));
+}
+
+// The deepest step a run must have passed for sign.sh to have resolved each gate.
+const GATE_RESOLVED_AFTER = {
+    'tools/release/verify-signatures.mjs': 'artifact-set',
+    'tools/release/launch-probe.mjs': 'signature-gate',
+};
+
+/**
+ * Gates whose computed fallback disagrees with what sign.sh announced, judged only
+ * for gates the run got far enough to resolve, so a pin never hashes the wrong copy.
+ *
+ * @param {{ computed: string[], output: string, reached: string }} args
+ * @returns {string[]}
+ */
+export function gateFallbackMismatch({ computed, output, reached }) {
+    const announced = announcedGateFallback(output);
+    const depth = STEPS.indexOf(reached);
+    return EXECUTABLE_GATES.filter((p) => depth >= STEPS.indexOf(GATE_RESOLVED_AFTER[p])
+        && computed.includes(p) !== announced.includes(p));
 }
 
 // The steps a signing run passes through, deepest last. `reached` is the last
@@ -112,6 +172,8 @@ export const STEPS = [
     'dev-mock-gate',
     'lane-scope',
     'artifact-set',
+    'signature-gate',
+    'launch-probe',
     'manifest-written',
     'signature',
 ];
@@ -170,7 +232,7 @@ export function dirtySigningPath(root = WALLET_ROOT, files = SIGNING_SCRIPTS) {
 // through to the conservative answer rather than silently claiming depth: an
 // unrecognised failure reports the step BEFORE the shallowest thing it could
 // be, never a deeper one.
-function classify(output) {
+export function classify(output) {
     if (/is not a lane declared in/.test(output)) return 'dev-mock-gate';
     if (/dev-mock gate exited 0 without saying it read anything/.test(output)) return 'gpg-key-named';
     if (/XCHAIN_RELEASE_GPG_KEY is not set/.test(output)) return 'invoked';
@@ -184,6 +246,14 @@ function classify(output) {
     // manifest with key ...". A later step's evidence outranks an earlier
     // step's vocabulary.
     if (/gpg: |No secret key|Inappropriate ioctl|passphrase/i.test(output)) return 'manifest-written';
+    // Match the signature gate and launch probe on their own line-anchored words, deepest first,
+    // above the generic match whose vocabulary (UNSIGNED, missing) both gates' refusals carry.
+    // The spaced `launch probe:` progress line and the `predates` notice prove nothing, so neither matches.
+    // Only the ok line proves a launch; a run that launched nothing stays at the signature gate.
+    if (/^launch probe ok \(/m.test(output)) return 'launch-probe';
+    if (/^launch-probe: |launch-probe\.mjs is in neither tree/m.test(output)) return 'signature-gate';
+    if (/^signature gate ok \(/m.test(output)) return 'signature-gate';
+    if (/^verify-signatures: |verify-signatures\.mjs is in neither tree/m.test(output)) return 'artifact-set';
     if (/UNSIGNED|UNDECLARED|missing/i.test(output)) return 'lane-scope';
     return 'invoked';
 }
@@ -240,11 +310,12 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
 // preference: sign.sh narrates its progress with the same `sign.sh:` prefix it
 // refuses with ("running pre-sign dev-mock gate against ..."), so taking the
 // first one pinned a progress message as the blocker. A refusal is the last
-// thing a run says before it stops.
-function firstRefusal(output) {
+// thing a run says before it stops. The two executable gates refuse under their
+// own prefixes, so those count too (hyphenated `launch-probe:`, never the spaced progress line).
+export function firstRefusal(output) {
     const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
     for (let i = lines.length - 1; i >= 0; i -= 1) {
-        if (/^(sign\.sh|release\/lib\.sh):/.test(lines[i])) return lines[i];
+        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe):/.test(lines[i])) return lines[i];
     }
     return lines[lines.length - 1] || null;
 }
@@ -282,7 +353,9 @@ function cmdPin(argv) {
     const lane = arg(argv, '--lane');
     const staging = argv.includes('--staging');
     if (!repo || !tag || !input) { usage(); process.exit(2); }
-    const files = signingPathFiles(staging ? 'staging' : 'release');
+    // Decide before the dirty check, so a fallback gate with uncommitted edits blocks the pin.
+    const gateFallback = gateFallbackFor(repo);
+    const files = signingPathFiles(staging ? 'staging' : 'release', PIN_FORMAT, { gateFallback });
 
     const dirty = dirtySigningPath(WALLET_ROOT, files.script);
     if (dirty.length) {
@@ -302,6 +375,15 @@ function cmdPin(argv) {
         console.error(`[phase4-rehearsal] refusing to pin: sign.sh read its signing controls from the ${announced} `
             + `tree, but this tool hashes them from the ${expectedTree} tree for this release set. `
             + 'Bring signingPathFiles() back in line with lib.sh xr_signing_control_root first.');
+        return 1;
+    }
+    // Refuse when sign.sh ran a gate from a different tree than this tool hashes it from.
+    const mismatched = gateFallbackMismatch({ computed: gateFallback, output: result.output, reached: result.reached });
+    if (mismatched.length) {
+        console.error('[phase4-rehearsal] refusing to pin: sign.sh resolved these gates from a different '
+            + `tree than this tool expected: ${mismatched.join(', ')}. The tag tree's copy should win `
+            + 'wherever it exists, and this checkout\'s copy should run only where the tag predates the gate. '
+            + 'Bring gateFallbackFor() back in line with sign.sh gate_script first.');
         return 1;
     }
     // The commit that last touched the SIGNING PATH, not bare HEAD.
@@ -338,6 +420,8 @@ function cmdPin(argv) {
         // bytes, and a reader of this pin should not have to infer that from
         // the blocker string.
         releaseSet: staging ? 'staging' : 'release',
+        // Gates the tag predated, which sign.sh ran from this checkout and this pin hashes on the script side.
+        gateFallback,
         reached: result.reached,
         reachedSignature: result.reached === 'signature',
         blocker: portable(result.blocker),
@@ -415,6 +499,24 @@ export function repoDivergence(pin) {
         .filter((m) => m.pinned !== m.now);
 }
 
+/** Signing-path files the current format tracks that a pin's older format never recorded. */
+export function uncoveredByPin(pin) {
+    const pinned = pinPathFiles(pin);
+    const current = signingPathFiles(pin.releaseSet ?? 'release', PIN_FORMAT,
+        { gateFallback: pin.gateFallback ?? [] });
+    const had = new Set([...pinned.script, ...pinned.repo]);
+    return [...current.script, ...current.repo].filter((p) => !had.has(p));
+}
+
+// Say which files an older pin cannot cover, so an OK line never implies it watched them.
+function reportUncovered(pin) {
+    const missing = uncoveredByPin(pin);
+    if (!missing.length) return;
+    console.log(`[phase4-rehearsal] NOTE, not gated: this pin (format ${pin.pinFormat ?? 1}) predates `
+        + `${missing.length} signing-path file(s) the tool now tracks: ${missing.join(', ')}.`
+        + '\n  Their drift is not covered until the rehearsal is re-driven and re-pinned.');
+}
+
 // Say what the gate did not compare, so a green line never claims the repo side.
 function reportRepoSide(d) {
     if (!d.repoDiverged.length) {
@@ -450,12 +552,14 @@ function cmdCheck(argv) {
             + `at ${against} are byte-identical to the rehearsal pinned at ${String(d.pin.scriptRef).slice(0, 8)} `
             + `(reached '${d.pin.reached}', observed ${d.pin.observedAt}).`);
         reportRepoSide(d);
+        reportUncovered(d.pin);
         return 0;
     }
     console.error(`[phase4-rehearsal] STALE: the signing path has moved since the rehearsal pinned at `
         + `${String(d.pin.scriptRef).slice(0, 8)}:`);
     for (const m of d.moved) console.error(`  ${m.path}`);
     reportRepoSide(d);
+    reportUncovered(d.pin);
     console.error('\n  The recorded observation no longer describes the tooling ceremony Phase 4 would'
         + '\n  run, so "Phase 4 is rehearsed" is a claim about a tree that has moved on. Re-drive the'
         + '\n  rehearsal and re-pin it, or record in the release record why these changes cannot affect'

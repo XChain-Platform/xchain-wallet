@@ -17,13 +17,16 @@ import {
     NATIVE_FEE_WARNING,
     nativeFeeErrorMessage,
     nativeFeeToggleLabel,
+    resolveDustThreshold,
 } from '../../../packages/core/src/sdk/nativeFeePreflight.js';
 import { protocolFeeRowCopy } from '../../../packages/core/src/flows/protocolFeeRow.js';
 
 // Minimal SDK stub whose quoteNativeFee returns a canned quote and records its args.
+// It is a bitcoin SDK by default, so a test that pads to 546 says that it assumes Bitcoin.
 function makeSdk(quote) {
     return {
         seen: null,
+        wallet: { getBitcoinNetwork: () => ({ dustThreshold: 546 }) },
         async quoteNativeFee(actionData, opts) {
             this.seen = { actionData, opts };
             return Object.assign(
@@ -145,6 +148,37 @@ describe('applyNativeFeePreflight', () => {
 
     it('exposes a non-empty forfeiture warning string', () => {
         expect(NATIVE_FEE_WARNING).toMatch(/forfeit/i);
+    });
+});
+
+// With no network the chain's dust floor is unknown, and guessing Bitcoin's 546 would pad a
+// Dogecoin or Litecoin fee to an output the node rejects, so a positive fee is refused instead.
+describe('applyNativeFeePreflight without a resolvable dust floor', () => {
+    const networkless = {
+        'no wallet': (sdk) => Object.assign(sdk, { wallet: undefined }),
+        'a null network': (sdk) => Object.assign(sdk, { wallet: { getBitcoinNetwork: () => null } }),
+        'a throwing network read': (sdk) => Object.assign(sdk, {
+            wallet: { getBitcoinNetwork: () => { throw new Error('Network not configured'); } },
+        }),
+        'a network with no dust floor': (sdk) => Object.assign(sdk, { wallet: { getBitcoinNetwork: () => ({}) } }),
+    };
+
+    it.each(Object.keys(networkless))('refuses a positive fee with %s', async (shape) => {
+        const sdk = networkless[shape](makeSdk({ requiredFeeSats: 600 }));
+        await expect(applyNativeFeePreflight({
+            sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true },
+        })).rejects.toThrow(/dust threshold/);
+    });
+
+    it('still builds no output for a zero fee with no network', async () => {
+        const sdk = networkless['no wallet'](makeSdk({ requiredFeeSats: 0 }));
+        const out = await applyNativeFeePreflight({ sdk, actionData: ACTION, encoderOpts: { payFeeInNativeCoin: true } });
+        expect(out.encoderOpts.customOutputs).toEqual([]);
+    });
+
+    it('reports an unknown floor as null rather than any coin\'s number', () => {
+        expect(resolveDustThreshold({})).toBe(null);
+        expect(resolveDustThreshold({ wallet: { getBitcoinNetwork: () => ({ dustThreshold: 100000 }) } })).toBe(100000);
     });
 });
 

@@ -92,6 +92,12 @@ assert.doesNotMatch(registry, /PROTOCOL_ONLY_ACTIONS = [^\]]*'ADDRESS'/s, 'ADDRE
 const manifest = JSON.parse(read('test', 'fixtures', 'action-manifest.json'));
 assert.equal(manifest.actions.ADDRESS.walletForm, true, 'vendored manifest carries ADDRESS walletForm:true');
 const advanced = core('shared', 'routes', 'AdvancedActionsForm.jsx');
-assert.match(advanced, /'PRICE', 'ADDRESS',\n\]\);/, 'ADDRESS listed among dedicated-form actions');
+// The dedicated-form set is derived from the registry, so the two lockstep
+// assertions above plus the derivation are what list ADDRESS there.
+assert.match(
+    advanced,
+    /const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions\(\{\s*authorable: \[\.\.\.COMMON_ACTIONS, \.\.\.BTC_EXCLUSIVE_ACTIONS\],\s*protocolOnly: PROTOCOL_ONLY_ACTIONS,/,
+    'ADDRESS listed among dedicated-form actions',
+);
 
 console.log('address-preferences smoke: all assertions passed');

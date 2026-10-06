@@ -54,6 +54,7 @@ export const SDK_DEEP_PATHS = {
     networks: ['src/networks.js'],
     preflightConstants: ['src/preflight/constants.js'],
     protocolConstants: ['src/protocol/constants.js'],
+    protocolNetworks: ['src/protocol/networks.js', 'src/networks.js'],
     wallet: ['src/wallet.js'],
 };
 

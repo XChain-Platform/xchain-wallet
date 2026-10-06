@@ -114,3 +114,19 @@
     font-size: var(--xc-text-sm);
     overflow-wrap: anywhere;
 }
+
+/* Collapsed raw decoder code under the undecoded alert: there for support,
+   kept out of the sentence a signer reads. */
+.details {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.details code {
+    display: block;
+    margin-top: var(--xc-space-1);
+    font-family: var(--xc-font-mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
