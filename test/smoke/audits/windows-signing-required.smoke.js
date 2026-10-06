@@ -295,12 +295,14 @@ function loadError(env) {
             + ' signing secret produces unsigned installers and a green lane');
         assert.ok(new RegExp(`${SUBJECT_VAR}:\\s*\\$\\{\\{\\s*secrets\\.${SUBJECT_VAR}\\s*\\}\\}`).test(step),
             `the Windows build step '${name}' must pass ${SUBJECT_VAR} through`);
-        // The requirement without the values is a lane that can only fail, so
-        // both halves are asserted together: config trio AND credentials.
+        // The lane signs through the eSigner certificate selected by subject
+        // (D3). Azure variables handed through as well would win the path
+        // selection in windows-signing.cjs and sign with a second key, so a
+        // build step must carry none of them.
         for (const secret of [...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS]) {
-            assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(step),
-                `the Windows build step '${name}' must pass ${secret} through, or the`
-                + ' requirement it declares can never be met');
+            assert.ok(!new RegExp(`${secret}:`).test(step),
+                `the Windows build step '${name}' must not pass ${secret}: the release`
+                + ' lane signs through the eSigner subject only');
         }
     }
 }
