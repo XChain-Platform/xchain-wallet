@@ -183,7 +183,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
             if (!r.action) return `Row ${i + 1}: pick an action.`;
             if (!isActionOfferedOnChain(chainRegistry, r.chainId, r.action)) {
                 const chainName = chainRegistry.get(r.chainId)?.displayName || r.chainId;
-                return `Row ${i + 1}: ${r.action} is not available on ${chainName}.`;
+                return `Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available on ${chainName}.`;
             }
             const parseErr = parseParamsJson(r.paramsJson);
             if (parseErr) return `Row ${i + 1}: ${parseErr}`;

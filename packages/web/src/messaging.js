@@ -1816,6 +1816,16 @@ export function getActionFormats(req) {
     return /** @type {any} */ (sendMessage('sdk.getActionFormats', req));
 }
 
+/**
+ * Whether the chain has reached the list tick-coin activation, so the create
+ * form may offer coin-qualified ticker items. Answers false on any failure.
+ *
+ * @param {{ chainId: string }} req
+ */
+export function isListTickCoinActive(req) {
+    return /** @type {any} */ (sendMessage('sdk.isListTickCoinActive', req));
+}
+
 /** @param {object} req */
 export function getActionFields(req) {
     return /** @type {any} */ (sendMessage('sdk.getActionFields', req));

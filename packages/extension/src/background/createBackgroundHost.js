@@ -25,6 +25,7 @@
 import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
+import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
@@ -5198,6 +5199,12 @@ export function createBackgroundHost(deps) {
 
     host.register('sdk.getActionFormats', async (req, { sdkRegistry }) => {
         return getActionFormats({ ...req, sdkRegistry });
+    });
+
+    // The list tick-coin probe the create-list form reads. The flow already
+    // answers false for a missing SDK method, a throw or an unknown chain.
+    host.register('sdk.isListTickCoinActive', async (req, { sdkRegistry }) => {
+        return listTickCoinSupport({ sdkRegistry, chainId: req?.chainId });
     });
 
     host.register('sdk.getActionFields', async (req, { sdkRegistry }) => {

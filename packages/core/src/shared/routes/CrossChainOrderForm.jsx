@@ -385,8 +385,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     </>
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
                 <p className={styles.hint}>
-                    Your {giveTick.trim().toUpperCase()} is escrowed on {giveDescriptor?.displayName}. The validator
-                    federation matches this order against the book on {getDescriptor?.displayName}; it may fill in
+                    Your {giveTick.trim().toUpperCase()} is escrowed on {giveDescriptor?.displayName}. The network
+                    matches this order automatically against offers on {getDescriptor?.displayName}; it may fill in
                     parts, and each fill is released from escrow on both chains with no further transaction from you.
                 </p>
                 <div className={styles.actions}>
@@ -489,7 +489,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     return wrap(
         <form onSubmit={handleReview} noValidate>
             <p className={styles.hint}>
-                A cross-chain order rests on the federation&apos;s price-time book and can fill in parts.
+                Your order waits on the network&apos;s order book and fills automatically, possibly in parts,
+                as matching offers arrive.
                 For an all-or-nothing single fill use Cross-chain swap.
             </p>
             <div style={{

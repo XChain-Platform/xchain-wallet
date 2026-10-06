@@ -32,7 +32,10 @@ import { ConfirmActionModal } from '../../../packages/core/src/shared/components
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { PsbtIntentPanel } from '../../../packages/core/src/shared/components/PsbtIntentPanel.jsx';
 import { psbtRefusalReason } from '../../../packages/core/src/shared/components/PsbtConfirmScreen.jsx';
-import { isUnreadableActionReason } from '../../../packages/core/src/shared/components/psbtDecodeReasons.js';
+import {
+    describeUnreadableReason,
+    isUnreadableActionReason,
+} from '../../../packages/core/src/shared/components/psbtDecodeReasons.js';
 import { canApproveWithReport, toggleAcknowledged } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
 
 const OWN = 'bc1qownownownownownownownownownownownowno';
@@ -76,7 +79,7 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
             decomposed: DECOMPOSED,
             ownAddresses: new Set([OWN]),
             signingAddress: OWN,
-            decodedAction: { summary: 'Carries an XChain SEND action (v0)' },
+            decodedAction: { summary: 'Carries an XChain Send action' },
         }));
         const text = utils.container.textContent;
 
@@ -128,10 +131,54 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
         }));
         const alert = utils.getByTestId('psbt-action-undecoded');
         expect(alert.getAttribute('role')).toBe('alert');
-        expect(alert.textContent).toContain('P2SH_P2WSH_UNSUPPORTED');
+        // The signer reads plain words; the raw decoder code sits in the
+        // collapsed technical details beside the alert, not inside it.
+        expect(alert.textContent).not.toContain('P2SH_P2WSH_UNSUPPORTED');
+        expect(alert.textContent).toContain('cannot read yet');
+        expect(alert.textContent).toContain('Verify the amounts and destinations');
+        const details = utils.getByTestId('psbt-action-undecoded-details');
+        expect(details.textContent).toContain('P2SH_P2WSH_UNSUPPORTED');
+        expect(alert.contains(details)).toBe(false);
         // The output set is still enumerated: an unreadable action is exactly
         // when the user most needs to see where the coins go.
         expect(utils.container.textContent).toContain('Outputs (3)');
+    });
+
+    it('keeps exception text and unmapped codes out of the alert sentence', () => {
+        for (const decodeError of [
+            "Cannot read properties of undefined (reading 'x')",
+            'DECODE_FAILED',
+        ]) {
+            const utils = render(React.createElement(PsbtIntentPanel, {
+                decomposed: DECOMPOSED,
+                ownAddresses: new Set([OWN]),
+                decodedAction: null,
+                decodeError,
+            }));
+            const alert = utils.getByTestId('psbt-action-undecoded');
+            expect(alert.getAttribute('role')).toBe('alert');
+            expect(alert.textContent).toMatch(
+                /^The XChain action inside this transaction could not be read\. Verify/,
+            );
+            expect(alert.textContent).not.toContain(decodeError);
+            expect(utils.getByTestId('psbt-action-undecoded-details').textContent).toContain(decodeError);
+            utils.unmount();
+        }
+    });
+
+    it('describes every unreadable code in words, never by echoing the code', () => {
+        for (const reason of [
+            'P2SH_P2WSH_UNSUPPORTED', 'MULTI_OP_RETURN', 'DEOBFUSCATION_FAILED',
+            'OVERSIZED', 'NOT_UTF8', 'UNKNOWN_ACTION', 'REST_FIELD_UNSUPPORTED',
+            'MULTI_LEG_UNSUPPORTED', 'FIELD_COUNT_MISMATCH',
+        ]) {
+            const why = describeUnreadableReason(reason);
+            expect(typeof why, reason).toBe('string');
+            expect(why, reason).not.toMatch(/[A-Z_]{4,}/);
+        }
+        expect(describeUnreadableReason('DECODE_FAILED')).toBe(null);
+        expect(describeUnreadableReason('toString')).toBe(null);
+        expect(describeUnreadableReason(null)).toBe(null);
     });
 
     it('states an ordinary payment plainly instead of crying wolf', () => {
