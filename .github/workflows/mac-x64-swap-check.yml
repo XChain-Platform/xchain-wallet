@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   swap-check:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -70,20 +70,33 @@ jobs:
           cp packages/desktop/dist/stable-mac.yml swap-check/
           ls -l swap-check
 
-      - name: Record that the offered pointer lists the x64 zip (check, not an attestation)
+      - name: Record what the native runner witnessed (check, not an attestation)
         run: |
+          rm -rf swap-check/unpacked && mkdir -p swap-check/unpacked
+          newest="$(ls -t swap-check/*-x64*.zip | head -n 1)"
+          ditto -x -k "$newest" swap-check/unpacked
+          bin="$(ls swap-check/unpacked/*.app/Contents/MacOS/* | head -n 1)"
+          file "$bin" | tee swap-check/binary-arch.txt
           node -e "
-          const fs=require('fs');
+          const fs=require('fs'),cp=require('child_process'),crypto=require('crypto');
           const yml=fs.readFileSync('swap-check/stable-mac.yml','utf8');
           const zips=[...yml.matchAll(/url:\s*(\S+\.zip)/g)].map(m=>m[1]);
-          const ok=zips.length>0&&zips.every(z=>/x64/.test(z));
+          const shas=[...yml.matchAll(/sha512:\s*(\S+)/g)].map(m=>m[1]);
+          const bin=process.argv[1];
+          const arch=fs.readFileSync('swap-check/binary-arch.txt','utf8');
+          const native=process.arch==='x64'&&cp.execSync('sysctl -n sysctl.proc_translated 2>/dev/null || echo 0').toString().trim()==='0';
+          const staged=fs.readdirSync('swap-check').filter(n=>/x64.*\.zip$/.test(n));
+          const hashes=staged.map(n=>crypto.createHash('sha512').update(fs.readFileSync('swap-check/'+n)).digest('base64'));
+          const pointerMatches=zips.length>0&&zips.every(z=>staged.includes(z.replace(/.*\//,'')))&&shas.length>0&&shas.every(h=>hashes.includes(h));
+          const x64Only=zips.length>0&&zips.every(z=>/x64/.test(z))&&/x86_64/.test(arch)&&!/arm64/.test(arch);
+          const ok=native&&x64Only&&pointerMatches;
           fs.writeFileSync('swap-check-result.json',JSON.stringify({
             kind:'automated-swap-check',lane:'mac-x64',
-            runner:'GitHub-hosted macos-13 runner (native x64)',
-            zips,result:ok?'pass':'fail'},null,2)+'\n');
+            runner:'GitHub-hosted macos-15-intel runner (native x64)',
+            native,binary:arch.trim(),zips,pointerMatchesStagedZip:pointerMatches,
+            result:ok?'pass':'fail'},null,2)+'\n');
           process.exit(ok?0:1);
-          "
-
+          " "$bin"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
