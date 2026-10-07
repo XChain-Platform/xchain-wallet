@@ -597,6 +597,23 @@ jobs:
       # one condition (§13; same shape as the iOS lane's ASC_KEY_ID).
       MAS_CSC_LINK: ${{ secrets.MAS_CSC_LINK }}
     steps:
+      - name: Require every macOS signing secret
+        env:
+          MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          MACOS_CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in MACOS_CSC_LINK MACOS_CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::release-signing environment is missing: ${missing[*]}"
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
         run: corepack enable
