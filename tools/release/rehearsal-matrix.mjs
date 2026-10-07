@@ -159,7 +159,8 @@ export const LANES = [
             + 'treats Rosetta as an arm64 Mac and keeps only the arm64 files, so an x64 install '
             + 'here migrates to arm64 and the x64 zip is never installed. `attest` refuses this '
             + 'lane on a translated device and `coverage` waives it by name; witnessing the x64 zip '
-            + 'needs a native Intel Mac.',
+            + 'needs a native Intel Mac. A native-Intel build check runs beside this lane '
+            + '(.github/workflows/mac-x64-swap-check.yml); it is separate evidence, never this lane\'s attestation.',
     },
     {
         id: 'mac-arm64',

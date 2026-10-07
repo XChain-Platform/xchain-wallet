@@ -1,0 +1,105 @@
+# The macOS x64 zip, built and inspected on a machine that is NATIVELY Intel.
+#
+# WHY THIS FILE EXISTS. The `mac-x64` rehearsal device is the M3 Ultra Mac
+# Studio running the x64 build under Rosetta. electron-updater's MacUpdater
+# treats a Rosetta process as an arm64 Mac and keeps only the arm64 files, so
+# on that device the swap installs the arm64 zip and the x64 zip is never
+# witnessed. A GitHub-hosted Intel macOS runner has no translation layer, so
+# the x64 zip is the only zip it can be offered.
+#
+# WHAT THIS JOB IS NOT. It is not an attestation and it does not take the
+# lane. `rehearse.mjs attest` requires `--by <who watched it>` and refuses to
+# run in CI; this job only produces evidence JSON for `rehearse.mjs check`,
+# which lands in `automated-checks` and never satisfies the per-release swap
+# requirement.
+#
+# NO SECRETS, NO SIGNING, NO UPLOAD OF BUILDS. Only the evidence JSON leaves.
+
+name: macOS x64 update-swap check
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-x64-swap-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  swap-check:
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Say what silicon this runner really is
+        run: |
+          mkdir -p swap-check
+          machine="$(uname -m)"
+          translated="$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)"
+          echo "uname -m: $machine, proc_translated: $translated"
+          if [ "$machine" != "x86_64" ] || [ "$translated" != "0" ]; then
+            echo "this runner is not native Intel; the check would not witness the x64 zip" >&2
+            exit 1
+          fi
+
+      - name: Build the x64 zip as tagged
+        run: pnpm -C packages/desktop dist --mac zip --x64
+      - name: Stage it
+        run: |
+          cp packages/desktop/dist/*-x64*.zip swap-check/
+          rm -rf packages/desktop/dist
+
+      - name: Bump the desktop package one patch and rebuild
+        run: |
+          node -e "const f='packages/desktop/package.json',fs=require('fs');const p=JSON.parse(fs.readFileSync(f,'utf8'));const [a,b,c]=p.version.split('.');p.version=[a,b,Number(c)+1].join('.');fs.writeFileSync(f,JSON.stringify(p,null,4)+'\n');console.log('updating to '+p.version)"
+          pnpm -C packages/desktop dist --mac zip --x64
+          cp packages/desktop/dist/*-x64*.zip swap-check/
+          cp packages/desktop/dist/stable-mac.yml swap-check/
+          ls -l swap-check
+
+      - name: Record what the native runner witnessed (check, not an attestation)
+        run: |
+          rm -rf swap-check/unpacked && mkdir -p swap-check/unpacked
+          newest="$(ls -t swap-check/*-x64*.zip | head -n 1)"
+          ditto -x -k "$newest" swap-check/unpacked
+          bin="$(ls swap-check/unpacked/*.app/Contents/MacOS/* | head -n 1)"
+          file "$bin" | tee swap-check/binary-arch.txt
+          node -e "
+          const fs=require('fs'),cp=require('child_process'),crypto=require('crypto');
+          const yml=fs.readFileSync('swap-check/stable-mac.yml','utf8');
+          const zips=[...yml.matchAll(/url:\s*(\S+\.zip)/g)].map(m=>m[1]);
+          const shas=[...yml.matchAll(/sha512:\s*(\S+)/g)].map(m=>m[1]);
+          const bin=process.argv[1];
+          const arch=fs.readFileSync('swap-check/binary-arch.txt','utf8');
+          const native=process.arch==='x64'&&cp.execSync('sysctl -n sysctl.proc_translated 2>/dev/null || echo 0').toString().trim()==='0';
+          const staged=fs.readdirSync('swap-check').filter(n=>/x64.*\.zip$/.test(n));
+          const hashes=staged.map(n=>crypto.createHash('sha512').update(fs.readFileSync('swap-check/'+n)).digest('base64'));
+          const pointerMatches=zips.length>0&&zips.every(z=>staged.includes(z.replace(/.*\//,'')))&&shas.length>0&&shas.every(h=>hashes.includes(h));
+          const x64Only=zips.length>0&&zips.every(z=>/x64/.test(z))&&/x86_64/.test(arch)&&!/arm64/.test(arch);
+          const ok=native&&x64Only&&pointerMatches;
+          fs.writeFileSync('swap-check-result.json',JSON.stringify({
+            kind:'automated-swap-check',lane:'mac-x64',
+            runner:'GitHub-hosted macos-15-intel runner (native x64)',
+            native,binary:arch.trim(),zips,pointerMatchesStagedZip:pointerMatches,
+            result:ok?'pass':'fail'},null,2)+'\n');
+          process.exit(ok?0:1);
+          " "$bin"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-x64-swap-check
+          path: swap-check-result.json
+          if-no-files-found: error
