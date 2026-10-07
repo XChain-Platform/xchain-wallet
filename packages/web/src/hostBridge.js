@@ -53,7 +53,11 @@ import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueEngine } from '../../extension/src/background/broadcastQueueEngine.js';
 import { createBroadcastQueueStorage } from '../../extension/src/background/broadcastQueueStorage.js';
-import { createBroadcastQueueStore, sealBroadcastQueueStore } from '../../extension/src/background/broadcastQueueStore.js';
+import {
+    createBroadcastQueueStore,
+    refreshBroadcastQueueStore,
+    sealBroadcastQueueStore,
+} from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
@@ -647,24 +651,6 @@ function sharedBroadcastQueueStore() {
 }
 
 /**
- * Reset the load latch so the next host merges the persisted queue under its lease.
- *
- * @param {import('../../extension/src/background/broadcastQueueStore.js').BroadcastQueueStore | null} store
- * @returns {Promise<boolean>} whether a persisted queue can be refreshed
- */
-async function prepareBroadcastQueueForLease(store) {
-    if (!store || store.sealed || !store.storage) return false;
-    const previousLoad = store.loadPromise;
-    if (previousLoad) {
-        try { await previousLoad; } catch (_err) { /* the new lease retries below */ }
-    }
-    if (store.sealed) return false;
-    store.loaded = false;
-    store.loadPromise = null;
-    return true;
-}
-
-/**
  * End the page's queue store for a wallet wipe and give the next host a fresh one.
  * Never throws: a failed seal must not fail the wipe, which removes the key itself.
  *
@@ -801,7 +787,7 @@ function createWebVaultLeaseCoordinator({ getLockManager, getQueueStore, isNativ
         try {
             const acquiredLease = await acquisition;
             if (!acquiredLease) throw new VaultInUseError();
-            await prepareBroadcastQueueForLease(getQueueStore());
+            await refreshBroadcastQueueStore(getQueueStore());
             return acquiredLease;
         } finally {
             acquisition = null;
