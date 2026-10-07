@@ -107,7 +107,6 @@ export default defineConfig({
         // ceilings that bound real CPU work.
         env: { XCHAIN_TEST_INSTRUMENTED: INSTRUMENTED ? '1' : '0' },
         environment: 'jsdom',
-        passWithNoTests: true,
         include: ['test/unit/**/*.test.{js,jsx}'],
         exclude: [
             'test/**/*.smoke.js',
