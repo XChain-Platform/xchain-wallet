@@ -567,6 +567,7 @@ jobs:
           name: desktop-linux-rehearsal
           path: |
             packages/desktop/dist-staging/*.AppImage
+            packages/desktop/dist-staging/*.deb
             packages/desktop/dist-staging/*.yml
           if-no-files-found: error
 

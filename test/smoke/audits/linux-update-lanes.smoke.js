@@ -366,9 +366,10 @@ const SHIPPED_ARCHES = ['x64', 'arm64'];
     const nextJob = workflow.indexOf('\n  desktop-macos:\n', jobStart);
     assert.notEqual(nextJob, -1, 'release.yml keeps the desktop-macos job after desktop-linux');
     const linuxJob = workflow.slice(jobStart, nextJob);
-    const uploadSteps = linuxJob.split(/(?=^      - uses: actions\/upload-artifact@v4)/m);
-    const rehearsalUpload = uploadSteps.find((step) => (
-        /^\s+name: desktop-linux-rehearsal\s*$/m.test(step)
+    const steps = linuxJob.split(/(?=^      - )/m);
+    const rehearsalUpload = steps.find((step) => (
+        /^      - uses: actions\/upload-artifact@v4\s*$/m.test(step)
+        && /^\s+name: desktop-linux-rehearsal\s*$/m.test(step)
     ));
 
     assert.ok(rehearsalUpload,
