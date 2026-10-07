@@ -53,7 +53,7 @@ name: Release
 # none was created rather than a partial one). Anyone with push access
 # can create a tag; what they cannot do is make a signing job run on it.
 #
-# Decisions in force: D3 = SSL.com eSigner CKA (Windows),
+# Decisions in force: D3 = Azure Trusted Signing (Windows),
 # D4 = GitHub-hosted runners everywhere.
 
 on:
@@ -611,7 +611,7 @@ jobs:
             [ -n "${!name}" ] || missing+=("$name")
           done
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::release-signing environment is missing: ${missing[*]}"
+            echo "::error::repository or release-signing environment secrets are missing: ${missing[*]}"
             exit 1
           fi
       - uses: actions/checkout@v4
@@ -864,74 +864,42 @@ jobs:
       - name: Pin SOURCE_DATE_EPOCH to the tag commit
         shell: bash
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%at)" >> "$GITHUB_ENV"
-      # D3 = SSL.com eSigner cloud key adapter: cloud signing, no hardware
-      # token, so this lane can run on a hosted runner at all. The adapter
-      # registers the certificate in the runner's store and signtool picks it
-      # by subject (WIN_CSC_SUBJECT_NAME), which is the path the build config
-      # takes when no classic CSC_LINK is supplied. The four ES_ and
-      # CREDENTIAL_ secrets and the subject live in the release-signing
-      # environment only; an empty subject fails here by name rather than
-      # reaching a build that would sign nothing.
-      - name: Install and register the eSigner CKA
+      # Azure Trusted Signing needs three service coordinates consumed by
+      # electron-builder and three Entra credentials consumed by the Azure
+      # SDK. A partial set is not useful: the build config silently drops an
+      # incomplete coordinate set, while missing credentials fail only after
+      # packaging has started. Refuse either shape before doing build work.
+      - name: Require every Azure Trusted Signing secret
         shell: pwsh
         env:
-          ES_USERNAME: ${{ secrets.ES_USERNAME }}
-          ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
-          CREDENTIAL_ID: ${{ secrets.CREDENTIAL_ID }}
-          ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
-          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
-          foreach ($name in 'ES_USERNAME','ES_PASSWORD','CREDENTIAL_ID','ES_TOTP_SECRET','WIN_CSC_SUBJECT_NAME') {
+          $required = @(
+            'AZURE_CODE_SIGNING_ENDPOINT',
+            'AZURE_CODE_SIGNING_NAME',
+            'AZURE_CERT_PROFILE_NAME',
+            'AZURE_TENANT_ID',
+            'AZURE_CLIENT_ID',
+            'AZURE_CLIENT_SECRET'
+          )
+          foreach ($name in $required) {
             if (-not (Get-Item "env:$name" -ErrorAction SilentlyContinue).Value) {
-              throw "eSigner credential $name is not set on the release-signing environment"
+              throw "Azure Trusted Signing secret $name is not set at repository or release-signing environment scope"
             }
           }
-          $dir = Join-Path $env:RUNNER_TEMP 'esigner-cka'
-          New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          Invoke-WebRequest -Uri 'https://www.ssl.com/download/ssl-com-esigner-cka/' -OutFile "$dir\cka.zip"
-          Expand-Archive -Path "$dir\cka.zip" -DestinationPath $dir -Force
-          $setup = Get-ChildItem -Path $dir -Filter '*.exe' -Recurse | Select-Object -First 1
-          Start-Process -FilePath $setup.FullName -ArgumentList '/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES',"/DIR=$dir\app" -Wait
-          $tool = "$dir\app\eSignerCKATool.exe"
-          # -key is required: the master key file the CKA derives each
-          # signing OTP from. pwsh does not stop on a native non-zero exit,
-          # so each call is checked; v0.341.0's run printed "A required
-          # parameter is missing" here and went green into an unsigned build.
-          & $tool config -mode product -user $env:ES_USERNAME -pass $env:ES_PASSWORD -totp $env:ES_TOTP_SECRET -key "$dir\master.key" -r
-          if ($LASTEXITCODE -ne 0) { throw "eSignerCKATool config failed ($LASTEXITCODE)" }
-          & $tool unload
-          if ($LASTEXITCODE -ne 0) { throw "eSignerCKATool unload failed ($LASTEXITCODE)" }
-          & $tool load
-          if ($LASTEXITCODE -ne 0) { throw "eSignerCKATool load failed ($LASTEXITCODE)" }
-          # The CKA loads every certificate on the eSigner account into
-          # CurrentUser\My; the build selects one by subject, so that subject
-          # must now be there.
-          $certs = @(Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -like "*$env:WIN_CSC_SUBJECT_NAME*" })
-          if ($certs.Count -lt 1) { throw "no certificate with the WIN_CSC_SUBJECT_NAME subject in CurrentUser\My after the eSigner load" }
-          Write-Host "eSigner CKA loaded $($certs.Count) certificate(s) matching the subject"
-          # electron-builder's bundled signtool (x64, from winCodeSign 2.6.0)
-          # found that certificate and could not use its key: "No
-          # certificates were found that met all the given criteria" on
-          # v0.341.1. SSL.com documents the CKA with the Windows SDK signtool,
-          # so each SDK signtool, x86 first, signs a scratch file here, and the
-          # first that succeeds goes to electron-builder as SIGNTOOL_PATH. A
-          # lane where none can sign stops here, with signtool's own /debug
-          # account of why, rather than inside the build.
-          $thumb = $certs[0].Thumbprint
-          $probe = Join-Path $env:RUNNER_TEMP 'signtool-probe.exe'
-          $candidates = @(Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin\*\x86\signtool.exe', 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)
-          $chosen = $null
-          foreach ($st in $candidates) {
-            Copy-Item "$env:WINDIR\System32\whoami.exe" $probe -Force
-            & $st.FullName sign /debug /fd sha256 /tr http://timestamp.digicert.com /td sha256 /sha1 $thumb $probe
-            if ($LASTEXITCODE -eq 0) { $chosen = $st.FullName; break }
-          }
-          if (-not $chosen) { throw "no Windows SDK signtool could sign with the eSigner certificate ($($candidates.Count) tried)" }
-          Write-Host "signtool for this lane: $chosen"
-          "SIGNTOOL_PATH=$chosen" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build and sign (Windows x64 + arm64)
         env:
-          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           # An unsigned artifact from THIS step is a failed release, not a
           # quiet one: every missing piece of the environment above is silent
           # on its own, so the build config refuses to load rather than pack
@@ -960,7 +928,12 @@ jobs:
         if: env.APPX_IDENTITY_NAME != '' && env.APPX_PUBLISHER != ''
         env:
           XCHAIN_BUILD_APPX: '1'
-          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           XCHAIN_REQUIRE_WIN_SIGNING: '1'
         run: pnpm -C packages/desktop dist --win --x64 --arm64
       - name: Drop delta metadata and build byproducts
@@ -992,7 +965,12 @@ jobs:
       - name: Build the rehearsal variant (staging feed)
         if: env.STAGING_FEED != ''
         env:
-          WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+          AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           XCHAIN_STAGING_FEED_URL: ${{ secrets.XCHAIN_STAGING_FEED_URL }}
           # The rehearsal exercises the REAL update path, and half of what
           # electron-updater checks is the Authenticode publisher, so an

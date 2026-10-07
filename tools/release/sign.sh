@@ -805,7 +805,26 @@ xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 # used as an argument throws its exit status away, so `node "$(...)"`
 # would run node with an empty path on the refusal branch.
 SIGNATURE_GATE="$(gate_script tools/release/verify-signatures.mjs)" || exit 1
-node "$SIGNATURE_GATE" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
+run_signature_gate() {
+    node "$SIGNATURE_GATE" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
+}
+SIGNATURE_OUT=""
+if ! SIGNATURE_OUT="$(run_signature_gate 2>&1)"; then
+    printf '%s\n' "$SIGNATURE_OUT" >&2
+    exit 1
+fi
+printf '%s\n' "$SIGNATURE_OUT" >&2
+
+# Exit 0 is not enough: require the verifier's completion receipt. This
+# makes a truncated or accidentally short-circuited checker a refusal rather
+# than permission to wrap unchecked installers in the release manifest.
+if ! printf '%s\n' "$SIGNATURE_OUT" \
+    | grep -qE '^signature gate ok \([0-9]+ verified, [0-9]+ recorded-not-verified(, [0-9]+ undeclared left to the artifact-set gate)?\)$'; then
+    echo "sign.sh: signature gate exited 0 without its completion receipt." >&2
+    echo "  Refusing to sign: the installer-signature checks did not prove" >&2
+    echo "  that they reached their final verdict." >&2
+    exit 1
+fi
 
 # --- Launch probe (row 144) --------------------------------------
 # EVERY GATE ABOVE THIS LINE READS THE ARTIFACTS. NONE OF THEM RUNS ONE.
