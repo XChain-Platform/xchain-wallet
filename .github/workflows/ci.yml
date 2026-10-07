@@ -58,6 +58,7 @@ jobs:
       # outside the workspace, so the sibling cannot sit beside the repo the way
       # a developer checkout puts it.
       XCHAIN_DOCS_ROOT: ${{ github.workspace }}/.docs-sibling
+      XCHAIN_ACTION_MANIFEST_ROOT: ${{ github.workspace }}/.docs-sibling/action-manifest-ref
     steps:
       - uses: actions/checkout@v4
       # The docs sibling, which `.ci-siblings` declares and this job did not
@@ -111,6 +112,12 @@ jobs:
           # wording that has not shipped yet.
           ref: master
           path: .docs-sibling
+      - name: Check out the canonical action manifest
+        uses: actions/checkout@v4
+        with:
+          repository: XChain-Platform/xchain-documentation
+          ref: ${{ github.base_ref || (github.ref == 'refs/heads/master' && 'master' || 'develop') }}
+          path: .docs-sibling/action-manifest-ref
       # pnpm must be on PATH BEFORE setup-node, or its `cache: pnpm` step can't
       # resolve the pnpm store and fails with "Unable to locate executable file: pnpm".
       - name: Enable pnpm (corepack)
