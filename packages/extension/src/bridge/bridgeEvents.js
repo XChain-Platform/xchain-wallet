@@ -166,8 +166,17 @@ async function notifyWalletSwitch(deps, walletId) {
     if (!Array.isArray(accounts) || !Array.isArray(sites)) return;
     for (const site of sites) {
         if (!connected.has(site?.origin)) continue;
-        await deps.events.accountsChanged(site.origin, eventAccounts(accounts));
+        // Send each site only the accounts it was granted; skip a site left with none.
+        const payload = eventAccounts(accountsGrantedTo(site, accounts));
+        if (payload.length === 0) continue;
+        await deps.events.accountsChanged(site.origin, payload);
     }
+}
+
+// Narrow to the site's account grant, where an empty grant means every account.
+function accountsGrantedTo(site, accounts) {
+    const granted = new Set(Array.isArray(site?.permissions?.accounts) ? site.permissions.accounts : []);
+    return granted.size > 0 ? accounts.filter((account) => granted.has(account?.id)) : accounts;
 }
 
 function eventAccounts(accounts) {

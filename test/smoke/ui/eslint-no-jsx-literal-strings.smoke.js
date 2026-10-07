@@ -613,7 +613,11 @@ const { shouldSkipFile } = rule;
 const abs = (p) => `/repo/xchain-wallet/${p}`;
 assert.ok(shouldSkipFile(abs('packages/core/src/legacy/Foo.jsx'), ['/src/legacy/']), 'a regex source skips its directory');
 assert.ok(!shouldSkipFile(abs('packages/core/src/app/Foo.jsx'), ['/src/legacy/']), 'and nothing outside it');
-assert.ok(shouldSkipFile(abs('packages/core/src/Old.jsx'), [/Old\.jsx$/]), 'a RegExp instance passes through');
+assert.throws(() => shouldSkipFile(abs('packages/core/src/Old.jsx'), [/Old\.jsx$/]),
+    (err) => err instanceof TypeError && /ignoreFiles/.test(err.message),
+    'a RegExp entry is refused, matching meta.schema, rather than silently skipping nothing');
+assert.strictEqual(rule.meta.schema[0].properties.ignoreFiles.items.type, 'string',
+    'meta.schema takes ignoreFiles entries as strings, the one contract the helper enforces');
 assert.ok(!shouldSkipFile(abs('packages/core/src/legacy/Foo.jsx'), ['^src/legacy/']),
     'a repo-root anchor never matches the absolute filename, which is why the header example is unanchored');
 for (const glob of ['src/legacy/**', 'src/*.jsx', '*.test.jsx', 'src/(legacy']) {
@@ -633,6 +637,7 @@ assert.match(ruleSrc, /eslint-disable-next-line @xchain\/no-jsx-literal-strings/
     'rule documents the per-line disable comment');
 assert.doesNotMatch(ruleSrc, /ignoreFiles` glob/, 'the header does not document ignoreFiles as globs');
 assert.match(ruleSrc, /ignoreFiles: \['\/src\/legacy\/'\]/, 'the header shows a regex-source ignoreFiles example');
+assert.doesNotMatch(ruleSrc, /or a RegExp/, 'the header does not advertise RegExp ignoreFiles entries, which meta.schema rejects');
 for (const dir of ['dist', 'node_modules']) {
     assert.match(ruleSrc, new RegExp(`\`/${dir}/\``), `the header lists the ${dir} default`);
 }

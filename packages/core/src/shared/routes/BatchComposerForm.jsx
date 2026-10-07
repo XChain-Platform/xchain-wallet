@@ -56,7 +56,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AUTHORABLE_ACTIONS } from '../../registry/actions.js';
+import { AUTHORABLE_ACTIONS, isActionDataOfferedInBuild, isActionOfferedInBuild } from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -109,8 +109,9 @@ function parseRowParams(json) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; ORDER and SWAP are then absent from the picker
  */
-export function BatchComposerForm({ walletId, onBack }) {
+export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
@@ -160,7 +161,8 @@ export function BatchComposerForm({ walletId, onBack }) {
             setAddressesByChain(byChain || {});
             setActiveByChain(active || {});
             const raw = (Array.isArray(actions) && actions.length > 0) ? actions : FALLBACK_ACTIONS;
-            setActionsList(raw.filter((a) => !EXCLUDED_ACTIONS.has(String(a).toUpperCase())));
+            setActionsList(raw.filter((a) => !EXCLUDED_ACTIONS.has(String(a).toUpperCase())
+                && isActionOfferedInBuild(a, { hasDexSurface })));
             const chains = Object.entries(byChain || {})
                 .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                 .map(([cid]) => cid);
@@ -174,7 +176,7 @@ export function BatchComposerForm({ walletId, onBack }) {
             if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
         });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, hasDexSurface]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -224,6 +226,9 @@ export function BatchComposerForm({ walletId, onBack }) {
             const pr = parsedRows[i];
             if (!pr.row.action) return `Step ${i + 1}: pick an action.`;
             if (pr.error) return `Step ${i + 1}: ${pr.error}`;
+            if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
+                return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
+            }
         }
         // Pass params through (same shape goReview sends the SDK at compose
         // time, ~line 216): validateBatchConstraints classifies ISSUE by
@@ -234,7 +239,7 @@ export function BatchComposerForm({ walletId, onBack }) {
         const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
         const constraintErrors = flowsLib.validateBatchConstraints(subActions);
         return constraintErrors.length > 0 ? constraintErrors[0] : null;
-    }, [parsedRows]);
+    }, [parsedRows, hasDexSurface]);
 
     const updateRow = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     const addRow = () => setRows((rs) => [...rs, blankRow()]);

@@ -37,7 +37,7 @@ import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
 import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
-import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
+import { isBareNativePayment, withNativePaymentOutput } from './nativePayment.js';
 import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
 import { envelopeEncoderOpts } from './envelopeSelection.js';
 
@@ -260,15 +260,10 @@ export async function composeForConfirm({
     // encoder folds its value into the change math. Token sends return null here
     // and are unchanged. The output is added to the SAME customOutputs the tamper
     // matcher reads below, so the built PSBT and the expected set stay in sync.
-    const nativeOut = nativePaymentOutput({
-        tick: actionData?.params?.TICK,
-        amount: actionData?.params?.AMOUNT,
-        destination: actionData?.params?.DESTINATION,
-        descriptor,
-    });
-    const withNativeOut = nativeOut
-        ? { ...encoderOptsWithAds, customOutputs: [ ...(encoderOptsWithAds.customOutputs || []), nativeOut ] }
-        : encoderOptsWithAds;
+    // Skip an output the caller already supplied, as the atomic path does, so a
+    // pre-supplied payment is paid once rather than twice. Unlike that path this
+    // is not gated on a bare payment: a native SEND carrying a MEMO still pays.
+    const withNativeOut = withNativePaymentOutput({ actionData, descriptor, encoderOpts: encoderOptsWithAds });
 
     // 3c. The protocol fee must ride the transaction that carries the
     // ACTION, which on the two-phase lane is the phase-2 REVEAL, not the

@@ -79,6 +79,10 @@
 //     descriptor array that is filtered and mapped before it renders).
 //   - Descriptor keys outside USER_FACING_ATTRS, such as `description`,
 //     wherever the copy is written.
+//   - Copy passed through a `value` prop, e.g. a row component that
+//     renders <DetailRow label="x" value="Default window" /> as text.
+//     `value` stays unchecked because CopyButton and form controls carry
+//     data under it; give a copy-rendering prop a name in the set instead.
 //
 // What the rule allows:
 //
@@ -101,7 +105,7 @@
 //     `.smoke.js` or `.test.js` / `.jsx` / `.ts` / `.tsx`, or a path
 //     through a `/test/`, `/tools/`, `/claude/`, `/dist/` or
 //     `/node_modules/` directory) or an `ignoreFiles` entry. Each entry
-//     is a regular-expression source (or a RegExp) tested against the
+//     is a regular-expression source string tested against the
 //     absolute filename ESLint passes, so anchor on a directory, not the
 //     repo root: `ignoreFiles: ['/src/legacy/']`. Glob notation such as
 //     `src/legacy/**` or `src/*.jsx` is refused with an error naming the
@@ -332,7 +336,7 @@ function branchCopy(node, allow = [], minLength = 2) {
  * Files we never check (tests, tools, claude/, dist/, etc).
  *
  * @param {string} filename
- * @param {Array<RegExp | string>} extra
+ * @param {string[]} extra
  */
 export function shouldSkipFile(filename, extra = []) {
     if (typeof filename !== 'string') return true;
@@ -347,12 +351,17 @@ export function shouldSkipFile(filename, extra = []) {
  * the wrong files), and `**` or a leading `*` does not compile at all;
  * either way the author meant a glob, so say what the option takes.
  *
- * @param {RegExp | string} entry
+ * @param {string} entry
  * @returns {RegExp}
  */
 function ignorePattern(entry) {
-    if (entry instanceof RegExp) return entry;
-    const source = String(entry);
+    // Refuse a non-string loudly, matching meta.schema (String() of a RegExp keeps its slashes and never matches).
+    if (typeof entry !== 'string') {
+        throw new TypeError(
+            `no-jsx-literal-strings: ignoreFiles entries must be regex source strings (e.g. "/src/legacy/"), got ${entry instanceof RegExp ? 'a RegExp' : typeof entry}`,
+        );
+    }
+    const source = entry;
     const refuse = () => new Error(
         `no-jsx-literal-strings: ignoreFiles entry "${source}" is not a regular-expression source; `
         + 'ignoreFiles takes regex sources tested against the full filename (e.g. "/src/legacy/"), not globs',

@@ -39,6 +39,7 @@ import {
     pendingTxToEntry,
 } from '../utils/pendingHistory.js';
 import { t } from '../../i18n/index.js';
+import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
@@ -2050,6 +2051,21 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
 }
 
 /**
+ * Split a failed record's stored error into a sentence for the user and the
+ * raw text for a collapsed disclosure. Only a recognised cause becomes prose:
+ * flow prefixes, SDK strings and unclassified node text stay in the details.
+ *
+ * @param {unknown} stored
+ * @returns {{ reason: string | null, details: string }}
+ */
+function failedReasonOf(stored) {
+    const raw = stored == null ? '' : String(stored).trim();
+    if (!raw) return { reason: null, details: '' };
+    const h = humanizeError(raw, 'send this transaction');
+    return { reason: h.cause === 'unknown' ? null : h.message, details: raw };
+}
+
+/**
  * M2.3 pending branch of the detail card. Everything a user can be told
  * honestly about a transaction that has been sent and not yet indexed:
  * which of the five states it is in, when the network first reported it,
@@ -2069,6 +2085,7 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
     const settled = state === 'confirmed';
     const failed = state === 'failed';
     const meta = entry?.pending || null;
+    const failure = failed ? failedReasonOf(meta?.error) : null;
     const desc = describePendingAction(entry);
     const amountOf = (value) => (balancesHidden ? '•••••' : value);
 
@@ -2099,10 +2116,14 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 ) : null
             ) : failed ? (
                 <>
-                    {meta?.error ? (
-                        <p className={styles.pendingNotValidated}>
-                            {t('pending.detail.failedReason', { error: meta.error })}
-                        </p>
+                    {failure?.reason ? (
+                        <p className={styles.pendingNotValidated}>{failure.reason}</p>
+                    ) : null}
+                    {failure?.details ? (
+                        <details className={styles.pendingTiming}>
+                            <summary>{t('pending.detail.technicalDetails')}</summary>
+                            <code>{failure.details}</code>
+                        </details>
                     ) : null}
                     {typeof onDismissFailed === 'function' && meta?.pendingTxId ? (
                         <Button

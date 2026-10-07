@@ -41,11 +41,12 @@
 //     uses over `chrome.runtime.connect` ports.
 //     TWO methods, not three: the synthetic port in
 //     main/signerBridgeListener.js also carries `onDisconnect`, but that
-//     half stays main-side, where `sender.once('destroyed')` is what
-//     actually observes the renderer going away. Nothing renderer-side
-//     consumes it (renderer/signerBridge.js builds its PortLike from
-//     these two), and exposing it would widen this boundary for a
-//     capability no consumer wants. This list is pinned by
+//     half stays main-side, where the webContents document-end events
+//     (`DOCUMENT_END_EVENTS` in main/signerBridgeListener.js: destroy,
+//     reload and crash alike) observe the renderer going away. Nothing
+//     renderer-side consumes it (renderer/signerBridge.js builds its
+//     PortLike from these two), and exposing it would widen this boundary
+//     for a capability no consumer wants. This list is pinned by
 //     test/integration/shells/desktop-preload-contract.test.js.
 //
 //   - `xchainWalletWindow.openDetached({ initialView, initialContext })`:

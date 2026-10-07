@@ -269,9 +269,11 @@ function driveLibrary(out) {
     // The real function. Resolved from the installed tree rather than
     // copied, so a dependency bump changes the capture instead of
     // silently invalidating it.
+    // Resolved from this file, not from the CWD, the same tree drive() and --out use.
+    const desktopDir = fileURLToPath(new URL('../../packages/desktop/', import.meta.url));
     const httpExecutorPath = require.resolve('builder-util-runtime/out/httpExecutor.js', {
         paths: [require.resolve('electron-updater/package.json', {
-            paths: ['packages/desktop'],
+            paths: [desktopDir],
         })],
     });
     const { configureRequestOptions } = require(httpExecutorPath);
@@ -288,7 +290,7 @@ function driveLibrary(out) {
     // request, and a page claiming "nothing but IP and user agent" would
     // be wrong about it.
     const utilPath = require.resolve('electron-updater/out/util.js', {
-        paths: ['packages/desktop'],
+        paths: [desktopDir],
     });
     const { newUrlFromBase, getChannelFilename } = require(utilPath);
     const exampleUrl = newUrlFromBase(

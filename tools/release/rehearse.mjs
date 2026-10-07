@@ -74,7 +74,7 @@ import { execFileSync } from 'node:child_process';
 
 import { pointerNameFor, readPublishConfig } from './update-info.mjs';
 import {
-    LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS,
+    LANES, DIRECT_LANES, laneById, lanesByOs, ALL_OS_TRIGGER_PATHS, ALL_OS_TRIGGER_PACKAGES,
     basenameGlobMatch, directLanesForArtifacts,
 } from './rehearsal-matrix.mjs';
 
@@ -824,7 +824,74 @@ export function swapRequirement({ repo, tag, previousTag, run = gitRun }) {
             paths: hits,
         };
     }
+    // A lockfile change may be an updater or shell bump with no first-party path touched.
+    if (changed.includes('pnpm-lock.yaml')) {
+        const bumped = lockedPackageChanges({ repo, tag, previousTag, run });
+        if (bumped === null) {
+            return {
+                requirement: 'all-os',
+                reason: `could not compare the resolved updater/shell versions in pnpm-lock.yaml `
+                    + `between ${previousTag} and ${tag}; defaulting to the strict requirement`,
+                paths: ['pnpm-lock.yaml'],
+            };
+        }
+        if (bumped.length > 0) {
+            return {
+                requirement: 'all-os',
+                reason: `this release changes the updater / shell packages: ${bumped.join('; ')}`,
+                paths: ['pnpm-lock.yaml'],
+            };
+        }
+    }
     return { requirement: 'one-os', reason: 'no updater, vault or release-path files changed' };
+}
+
+/**
+ * The lockfile entries each named package resolves to, or null when the text
+ * is not a lockfile this parse understands (which callers treat as changed).
+ *
+ * Entry keys are compared whole, version plus any parenthesised peer or
+ * patch suffix, so a patch or peer change counts as a change.
+ *
+ * @param {string} lockText
+ * @param {string[]} names
+ * @returns {Record<string, string[]>|null}
+ */
+export function resolvedPackageEntries(lockText, names) {
+    const text = String(lockText ?? '');
+    // Refuse text with no lockfileVersion line: an unknown layout is "could not compare", never "unchanged".
+    if (!/^lockfileVersion: /m.test(text)) return null;
+    const out = {};
+    for (const name of names) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const entry = new RegExp(`^ {2}'?${escaped}@([^\\s'][^\\n']*)'?:[ \\t]*$`, 'gm');
+        out[name] = [...new Set([...text.matchAll(entry)].map((m) => m[1]))].sort();
+    }
+    // Refuse a parse that found no electron or electron-updater: both ship in every desktop build.
+    for (const required of ['electron', 'electron-updater']) {
+        if (names.includes(required) && out[required].length === 0) return null;
+    }
+    return out;
+}
+
+/**
+ * Which ALL_OS_TRIGGER_PACKAGES resolve differently at the two tags, as
+ * "name from -> to" strings, or null when either lockfile cannot be read.
+ */
+function lockedPackageChanges({ repo, tag, previousTag, run }) {
+    let before;
+    let after;
+    try {
+        before = resolvedPackageEntries(run(repo, ['show', `${previousTag}:pnpm-lock.yaml`]), ALL_OS_TRIGGER_PACKAGES);
+        after = resolvedPackageEntries(run(repo, ['show', `${tag}:pnpm-lock.yaml`]), ALL_OS_TRIGGER_PACKAGES);
+    } catch {
+        return null;
+    }
+    if (!before || !after) return null;
+    const shown = (entries) => (entries.length > 0 ? entries.join(', ') : '(absent)');
+    return ALL_OS_TRIGGER_PACKAGES
+        .filter((name) => before[name].join('\n') !== after[name].join('\n'))
+        .map((name) => `${name} ${shown(before[name])} -> ${shown(after[name])}`);
 }
 
 /** shipped-lanes.txt lane name -> the LANES `os` its artifacts belong to. */
@@ -1048,7 +1115,8 @@ export function osesInRelease(releaseArtifacts) {
 }
 
 function gitRun(repo, args) {
-    return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+    // Raise the 1 MiB default: `git show <tag>:pnpm-lock.yaml` reads a whole lockfile.
+    return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
 /**

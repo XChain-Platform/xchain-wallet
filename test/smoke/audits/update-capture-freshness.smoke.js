@@ -33,7 +33,9 @@
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,6 +81,30 @@ assert.equal(
     true,
     'and it must not vary between installs, which is the whole claim',
 );
+
+// The default (library) mode resolves its dependencies from the script's own
+// tree, so a run from any other directory captures THIS checkout's versions.
+{
+    const away = mkdtempSync(join(tmpdir(), 'xc-capture-cwd-'));
+    try {
+        const out = join(away, 'capture.json');
+        const run = spawnSync(process.execPath,
+            [join(root, 'tools', 'release', 'capture-update-check.mjs'), '--out', out],
+            { cwd: away, encoding: 'utf8' });
+        assert.equal(run.status, 0,
+            'capture-update-check.mjs (library mode) fails when run from outside the repo, so it '
+            + `resolves its dependencies from the CWD rather than its own tree: ${run.stderr}`);
+        const builderUtilRuntime = require(require.resolve('builder-util-runtime/package.json', {
+            paths: [require.resolve('electron-updater/package.json', {
+                paths: [join(root, 'packages', 'desktop')],
+            })],
+        })).version;
+        assert.equal(JSON.parse(readFileSync(out, 'utf8'))['builder-util-runtime'], builderUtilRuntime,
+            'a capture taken from outside the repo reports this checkout\'s builder-util-runtime');
+    } finally {
+        rmSync(away, { recursive: true, force: true });
+    }
+}
 
 console.log(
     'OK: update-capture freshness (the archived update-check'

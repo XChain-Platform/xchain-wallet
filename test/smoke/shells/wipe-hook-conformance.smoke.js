@@ -125,6 +125,16 @@ for (const key of [
 ]) {
     assert.ok(wipeModule.includes(`'${key}'`), `the wipe clears ${key}`);
 }
+// The pruned-wallet ledger is one key per walletId, so it is swept by prefix,
+// and a worker or page that never built a queue store has no seal to erase it.
+assert.ok(
+    /WALLET_LOCAL_KEY_PREFIXES\s*=\s*Object\.freeze\(\[\s*BROADCAST_QUEUE_PRUNED_PREFIX\b/.test(wipeModule),
+    'the extension wipe sweeps the pruned-wallet ledger prefix',
+);
+assert.ok(
+    /sweepLocalStoragePrefix\(BROADCAST_QUEUE_PRUNED_PREFIX\)/.test(coreWipe),
+    'core\'s renderer wipe sweeps the pruned-wallet ledger prefix',
+);
 assert.ok(
     /session\.clear\(\)/.test(wipeModule),
     'the wipe clears chrome.storage.session wholesale (master key + cached password)',

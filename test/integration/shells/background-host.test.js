@@ -35,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { PRE_HOST_MESSAGE_TYPES } from '../../../packages/extension/src/background/sessionMeta.js';
+import { RELEASE_ENCODER_INPUTS_TYPE } from '../../../packages/extension/src/background/MessageHost.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -268,6 +269,8 @@ describe('client message types against the host route table', () => {
             expect(literal.length, `${file} parsed as ${literal.length} sends`).toBeGreaterThan(floor);
             expect(computed, `${file} sends a computed type this check cannot follow`).toEqual([]);
             for (const type of new Set(literal)) {
+                // MessageHost.handle answers the encoder-input release itself, ahead of the route table.
+                if (type === RELEASE_ENCODER_INPUTS_TYPE) continue;
                 if (registered.has(type) || (preHost && PRE_HOST_MESSAGE_TYPES.has(type))) continue;
                 unrouted.push(`${file} -> '${type}'`);
             }

@@ -40,36 +40,72 @@ function fakeTabs(onSend) {
     };
 }
 
+function accountsChangedTo(tabId, origin, payload) {
+    return {
+        tabId,
+        message: { type: 'bridge.event', event: 'accountsChanged', payload, origin },
+    };
+}
+
+const WALLETS = {
+    first: [{ id: 'account-first', name: 'First' }],
+    second: [
+        { id: 'second-a', name: 'Second A' },
+        { id: 'second-b', name: 'Second B' },
+    ],
+};
+
 describe('wallet switch bridge notification', () => {
-    it('emits accountsChanged with the new wallet accounts', async () => {
+    it('sends each connected site only the new wallet accounts it was granted', async () => {
         const registry = createConnectedTabRegistry({ sessionArea: null });
-        registry.record(7, 'https://connected.example');
-        registry.record(8, 'https://stale.example');
-        const runtime = fakeRuntime({
-            first: [{ id: 'account-first', name: 'First' }],
-            second: [{ id: 'account-second', name: 'Second' }],
-        }, [{
-            origin: 'https://connected.example',
-            permissions: { accounts: ['account-first'] },
-        }]);
-        const delivered = new Promise((resolve) => {
+        registry.record(7, 'https://partial.example');
+        registry.record(8, 'https://other-wallet.example');
+        registry.record(9, 'https://wildcard.example');
+        registry.record(10, 'https://stale.example');
+        const runtime = fakeRuntime(WALLETS, [
+            { origin: 'https://partial.example', permissions: { accounts: ['account-first', 'second-a'] } },
+            { origin: 'https://other-wallet.example', permissions: { accounts: ['account-first'] } },
+            { origin: 'https://wildcard.example', permissions: { accounts: [] } },
+        ]);
+        const sends = [];
+        const wildcardDelivered = new Promise((resolve) => {
             createBridgeEventBroadcaster({
                 runtime,
                 connectedTabs: registry,
-                tabs: fakeTabs(resolve),
+                tabs: fakeTabs((send) => {
+                    sends.push(send);
+                    if (send.tabId === 9) resolve();
+                }),
             });
         });
 
         expect(runtime.select('first')).toBe(false);
         expect(runtime.select('second')).toBe(false);
-        await expect(delivered).resolves.toEqual({
-            tabId: 7,
-            message: {
-                type: 'bridge.event',
-                event: 'accountsChanged',
-                payload: [{ id: 'account-second', name: 'Second' }],
-                origin: 'https://connected.example',
-            },
+        await wildcardDelivered;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(sends).toEqual([
+            accountsChangedTo(7, 'https://partial.example', [{ id: 'second-a', name: 'Second A' }]),
+            accountsChangedTo(9, 'https://wildcard.example', WALLETS.second),
+        ]);
+    });
+
+    it('sends nothing when the account lookup gets no answer', async () => {
+        const registry = createConnectedTabRegistry({ sessionArea: null });
+        registry.record(9, 'https://wildcard.example');
+        const runtime = fakeRuntime(WALLETS, [
+            { origin: 'https://wildcard.example', permissions: { accounts: [] } },
+        ]);
+        runtime.sendMessage = (message, callback) => callback(undefined);
+        const sends = [];
+        createBridgeEventBroadcaster({
+            runtime,
+            connectedTabs: registry,
+            tabs: fakeTabs((send) => sends.push(send)),
         });
+
+        expect(runtime.select('first')).toBe(false);
+        expect(runtime.select('second')).toBe(false);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(sends).toEqual([]);
     });
 });

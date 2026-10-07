@@ -43,6 +43,8 @@ import {
     COMMON_ACTIONS,
     PROTOCOL_ONLY_ACTIONS,
     isActionOfferedOnChain,
+    isActionDataOfferedInBuild,
+    isActionOfferedInBuild,
 } from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -120,8 +122,9 @@ const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions({
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; ORDER and SWAP are then absent from the picker
  */
-export function AdvancedActionsForm({ walletId, onBack }) {
+export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -234,6 +237,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                     // The SDK lists every action; drop one this chain's indexer refuses at every version.
                     const sorted = [...(list || [])]
                         .filter((name) => isActionOfferedOnChain(chainRegistry, chainId, name))
+                        .filter((name) => isActionOfferedInBuild(name, { hasDexSurface }))
                         .sort();
                     setActions(sorted);
                 }
@@ -242,7 +246,7 @@ export function AdvancedActionsForm({ walletId, onBack }) {
                 if (!cancelled) setFormError(err?.message || 'Failed to load actions.');
             });
         return () => { cancelled = true; };
-    }, [chainId, messaging]);
+    }, [chainId, messaging, hasDexSurface]);
 
     useEffect(() => {
         if (!chainId || !action) {
@@ -370,6 +374,11 @@ export function AdvancedActionsForm({ walletId, onBack }) {
         }
         if (validation && !validation.valid) {
             setFormError('Fix the validation errors below before previewing.');
+            return;
+        }
+        // A raw BATCH COMMAND can name ORDER or SWAP legs the picker never offered.
+        if (!isActionDataOfferedInBuild({ action, params: actionParams }, { hasDexSurface })) {
+            setFormError('Order and swap actions are not available in this build, including as BATCH steps.');
             return;
         }
         setFormError(null);

@@ -184,7 +184,7 @@ export const en = {
     'pending.detail.failed': 'Failed before it reached the network',
     'pending.detail.failedHelp':
         'This wallet could not complete the send. Nothing was broadcast, so no coins moved and no fee was paid. You can send again.',
-    'pending.detail.failedReason': 'Reason: {error}',
+    'pending.detail.technicalDetails': 'Technical details',
     'pending.detail.dismissFailed': 'Remove from history',
     // A transaction this wallet proved into a block that no feed will ever
     // list: a plain coin transfer, or an action the service recorded nothing

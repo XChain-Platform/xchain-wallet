@@ -387,6 +387,25 @@ export const ALL_OS_TRIGGER_PATHS = [
     'tools/release/',
 ];
 
+/**
+ * Third-party packages whose resolved version in pnpm-lock.yaml raises the
+ * requirement to "every OS" when it changes between the two tags.
+ *
+ * Most of the download-and-swap code is not ours: electron-updater and its
+ * runtime (the per-OS updaters), the Electron shell, and the builders that
+ * write each OS's installer. A bump of any of them changes the swap on every
+ * OS while touching no path above. Keyed on the lockfile's resolution, not on
+ * packages/desktop/package.json, whose `version` moves on every release.
+ */
+export const ALL_OS_TRIGGER_PACKAGES = [
+    'electron',
+    'electron-updater',
+    'builder-util-runtime',
+    'electron-builder',
+    'app-builder-lib',
+    'dmg-builder',
+];
+
 /** @param {string} id */
 export function laneById(id) {
     return ALL_LANES.find((l) => l.id === id) ?? null;
@@ -501,7 +520,7 @@ Two kinds of lane, and they are rehearsed by different probes:
                 install-over the user performs by hand.
 
 Exports: LANES, DIRECT_LANES, ALL_LANES, LINUX_FORMAT_UPDATE_SUPPORT,
-ALL_OS_TRIGGER_PATHS, laneById(id), isDirectLane(id), lanesByOs(),
+ALL_OS_TRIGGER_PATHS, ALL_OS_TRIGGER_PACKAGES, laneById(id), isDirectLane(id), lanesByOs(),
 basenameGlobMatch(glob, name), directLanesForArtifacts(names),
 directLanesForShipped(lanesText, names).
 `;
@@ -519,6 +538,7 @@ if (process.argv[1] && process.argv[1].endsWith('rehearsal-matrix.mjs')) {
                 directLanes: DIRECT_LANES,
                 linuxFormats: LINUX_FORMAT_UPDATE_SUPPORT,
                 allOsTriggerPaths: ALL_OS_TRIGGER_PATHS,
+                allOsTriggerPackages: ALL_OS_TRIGGER_PACKAGES,
             },
             null,
             2,

@@ -562,11 +562,11 @@ function PermissionsSummary({ permissions }) {
     const actions = permissions.canSignAction || {};
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
-            <PermRow label="Chains" value={chains.length === 0 ? 'none' : chains.join(', ')} />
-            <PermRow label="Accounts" value={accounts.length === 0 ? 'none' : accounts.join(', ')} />
-            <PermRow label="Sign messages" value={permissions.canSignMessage ? 'allow' : 'deny'} />
+            <PermRow label="Chains" text={chains.length === 0 ? 'none' : chains.join(', ')} />
+            <PermRow label="Accounts" text={accounts.length === 0 ? 'none' : accounts.join(', ')} />
+            <PermRow label="Sign messages" text={permissions.canSignMessage ? 'allow' : 'deny'} />
             {Object.keys(actions).length === 0 ? (
-                <PermRow label="Sign actions" value="none granted" />
+                <PermRow label="Sign actions" text="none granted" />
             ) : (
                 <div>
                     <div style={{ color: 'var(--xc-text-muted)' }}>Sign actions</div>
@@ -585,11 +585,11 @@ function PermissionsSummary({ permissions }) {
     );
 }
 
-function PermRow({ label, value }) {
+function PermRow({ label, text }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--xc-text-muted)' }}>{label}</span>
-            <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{value}</span>
+            <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{text}</span>
         </div>
     );
 }

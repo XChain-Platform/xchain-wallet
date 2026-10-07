@@ -16,9 +16,9 @@
 #
 # bin/ci-full.sh: run EVERY tier this repo's GitHub CI runs, in one process.
 #
-# .github/workflows/ci.yml fans this repo out as seven parallel jobs (test,
-# drift-guards, build, coverage, e2e, audit, verdict). The pre-push venue gate
-# used to run only `npm run ci`, which is the `test` job alone, so a push could
+# .github/workflows/ci.yml fans this repo out as eight parallel jobs (test,
+# drift-guards, build, coverage, e2e, e2e-regtest, audit, verdict). The
+# pre-push venue gate used to run only `npm run ci`, the `test` job alone, so a push could
 # gate green locally and then go red on GitHub on a job the gate never ran
 # (2026-08-15: exactly that, on three repos at once). This script IS the local
 # twin of the workflow: every job's run-steps, transcribed, in job order. When
@@ -46,6 +46,11 @@
 #
 #   - job `e2e`, step "Upload Playwright report": actions/upload-artifact, a
 #     GitHub-only step with no local equivalent, and `if: failure()` anyway.
+#   - job `e2e-regtest`, steps "Check regtest venue access", "Open the regtest
+#     tunnel" and "Run regtest suite": they need a repository variable, a
+#     secret and an SSH tunnel to the regtest venue, and release:gate runs the
+#     same suite before any tag. Its spec discovery step DOES run here. Its
+#     "Upload Playwright report" is GitHub-only, as in `e2e`.
 #   - job `verdict`: tools/release/run-verdict.mjs classifies the jobs of a
 #     GitHub Actions RUN, read by run_id through the Actions API. There is no
 #     run to read on a venue, and what it reports (which tier stated a finding
@@ -219,6 +224,22 @@ run_tier "coverage ratchet (test:unit:coverage)" pnpm test:unit:coverage
 run_tier "e2e: Playwright browsers" pnpm exec playwright install --with-deps chromium
 run_tier "e2e suite (test:e2e)" env CI=1 pnpm test:e2e
 echo "ci:full: SKIPPED-BY-DESIGN e2e/Upload Playwright report: actions/upload-artifact is a GitHub-only step (and if: failure()); the report stays on disk at test/e2e/playwright-report/."
+
+# --- job: e2e-regtest ------------------------------------------------------
+# Discovery always runs on GitHub and can go red on its own: it proves the
+# regtest config still loads and still finds its specs. `--list` starts no web
+# server and needs no browser, so it runs in every tier (browsers come from e2e).
+regtest_discovery() {
+  local out
+  out="$(CI=1 pnpm exec playwright test --config test/e2e/playwright.regtest.config.js --list)" || return 1
+  printf '%s\n' "$out"
+  # Fail when the list names no regtest spec, as the workflow's grep does (a
+  # here-string, so an early grep exit cannot SIGPIPE a writer under pipefail).
+  grep -q 'regtest.spec' <<<"$out"
+}
+run_tier "e2e-regtest: list regtest specs" regtest_discovery
+echo "ci:full: SKIPPED-BY-DESIGN e2e-regtest/Check regtest venue access, Open the regtest tunnel, Run regtest suite: the venue run needs the XC_REGTEST_SSH_HOST variable and XC_REGTEST_SSH_KEY secret and an SSH tunnel to the regtest venue; release:gate runs the same suite (pnpm test:e2e:regtest) before any tag."
+echo "ci:full: SKIPPED-BY-DESIGN e2e-regtest/Upload Playwright report: actions/upload-artifact is a GitHub-only step (and if: failure())."
 
 # --- job: audit ------------------------------------------------------------
 # Deliberately --prod: the dev toolchain's advisories never reach a user.

@@ -609,14 +609,20 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * beside the PendingTx submitAction stamped 'queued', rather than only
      * after the next worker restart rebuilds them without their ADS verdict.
      * Awaits the rehydrate first so a push racing a worker restart cannot
-     * orphan the persisted entries.
+     * orphan the persisted entries, and awaits the save after the push so the
+     * entry's ADS verdict, which no PendingTx record carries, is on disk
+     * before submitAction re-throws.
      *
      * @param {string | undefined} walletId
      * @returns {((entry: any) => Promise<void>) | undefined}
      */
     function enqueueOnBroadcastFailure(walletId) {
         if (typeof walletId !== 'string' || !walletId) return undefined;
-        return async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); };
+        return async (entry) => {
+            await ensureQueueLoaded();
+            pushQueueEntry(walletId, entry);
+            await persistQueue();
+        };
     }
     /**
      * Push a signed-but-unbroadcast tx onto the per-walletId queue.
@@ -663,10 +669,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 : {}),
         };
         getQueue(walletId).push(stored);
-        // Fire-and-forget: onBroadcastFailure callers (every signing
-        // action route) intentionally don't await pushQueueEntry,
-        // so we can't make it a Promise. The persist runs in the
-        // background; load + restart guarantees consistency on next boot.
+        // Start a background save for the vault rebuild, which pushes in a loop.
+        // Callers that need the entry on disk (the onBroadcastFailure hook and
+        // the renderer enqueue route) await their own persistQueue() after this.
         void persistQueue();
         return stored;
     }

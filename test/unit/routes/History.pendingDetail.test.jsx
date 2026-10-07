@@ -336,3 +336,48 @@ describe('History shows a transaction this wallet proved into a block as confirm
         expect(region.textContent).not.toMatch(/not seen by the network/i);
     });
 });
+
+describe('History failed-transaction detail words the stored error for a user', () => {
+    /** A local record the wallet stamped failed with the error it caught. */
+    function failedLocal(error) {
+        return staleLocalSend({ id: 'ptx-failed', status: 'failed', txid: null, error });
+    }
+
+    async function openFailed(error) {
+        const { view } = mountHistory({ pendingTxs: [failedLocal(error)] });
+        const region = await openRow(view, 'failed');
+        return within(region).getByRole('region', { name: 'Failed transaction' });
+    }
+
+    function proseOf(panel) {
+        return Array.from(panel.querySelectorAll('p')).map((p) => p.textContent || '').join(' | ');
+    }
+
+    it('keeps a function-prefixed precondition out of the prose', async () => {
+        const raw = 'submitAction: params.TICK is required';
+        const panel = await openFailed(raw);
+        expect(proseOf(panel)).not.toMatch(/submitAction:|Reason:/);
+        const details = panel.querySelector('details');
+        expect(details, 'raw text kept behind a disclosure').toBeTruthy();
+        expect(details.querySelector('summary').textContent).toBe('Technical details');
+        expect(details.textContent).toContain(raw);
+    });
+
+    it('keeps an SDK string out of the prose', async () => {
+        const panel = await openFailed('broadcast.signedTx: SDK did not return a txid');
+        expect(proseOf(panel)).not.toMatch(/SDK did not return|broadcast\.signedTx|Reason:/);
+    });
+
+    it('turns a node reject code into a plain sentence and keeps the code in the details', async () => {
+        const raw = 'bad-txns-inputs-missingorspent';
+        const panel = await openFailed(raw);
+        expect(proseOf(panel)).toMatch(/The network rejected this transaction\./);
+        expect(proseOf(panel)).not.toContain(raw);
+        expect(panel.querySelector('details').textContent).toContain(raw);
+    });
+
+    it('turns an insufficient-funds failure into the house sentence', async () => {
+        const panel = await openFailed('Insufficient funds');
+        expect(proseOf(panel)).toMatch(/You don't have enough funds for this transaction\./);
+    });
+});

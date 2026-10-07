@@ -131,6 +131,30 @@ describe('broadcast queue engine restart invariant', () => {
         expect(next.engine.getQueue('w1').map((e) => e.signedTxHex)).toEqual(['kept']);
     });
 
+    it('the broadcast-failure hook resolves only after the entry and its ADS verdict are saved', async () => {
+        const storage = memStorage();
+        let release;
+        const gate = new Promise((resolve) => { release = resolve; });
+        const saved = [];
+        storage.save = async (snapshot) => {
+            saved.push(JSON.parse(JSON.stringify(snapshot)));
+            await gate;
+        };
+        const { engine } = boot(storage);
+        const hook = engine.enqueueOnBroadcastFailure('w1');
+        let resolved = false;
+        const done = hook({
+            chainId: 'c1', signedTxHex: 'hex-ads', pendingTxId: 'p1',
+            adsCommit: { chainId: 'c1', donationIncluded: true },
+        }).then(() => { resolved = true; });
+        for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
+        expect(resolved).toBe(false);
+        expect(saved.at(-1).w1[0].adsCommit).toEqual({ chainId: 'c1', donationIncluded: true });
+        release();
+        await done;
+        expect(resolved).toBe(true);
+    });
+
     it('an unreadable store keeps the load un-latched and writes nothing', async () => {
         const storage = memStorage();
         storage.load = async () => null;

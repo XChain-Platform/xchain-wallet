@@ -24,6 +24,8 @@ import { WALLET_LOCAL_KEYS } from '../../../packages/extension/src/background/wi
 
 const META_KEY = 'xchain-wallet:vault-meta';
 const QUEUE_KEY = 'xchain.broadcastQueue';
+// Literal, not the exported constant, so a renamed prefix fails here.
+const PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
 
 /** Minimal stand-in for the IndexedDB delete request handshake. */
 function stubIndexedDB(outcome = 'onsuccess') {
@@ -75,6 +77,19 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
         expect(WALLET_LOCAL_KEYS).toContain(QUEUE_KEY);
     });
 
+    // One ledger key per walletId, so it is swept by prefix; a freshly loaded
+    // Locked page never built the queue store whose seal would erase it.
+    it('sweeps the queue\'s pruned-wallet ledger keys and nothing else', async () => {
+        globalThis.localStorage.setItem(`${PRUNED_PREFIX}w-a`, '1');
+        globalThis.localStorage.setItem(`${PRUNED_PREFIX}w-b`, '1');
+        globalThis.localStorage.setItem('unrelated.pref', 'keep');
+        stubIndexedDB();
+        await wipeWalletStorage();
+        expect(globalThis.localStorage.getItem(`${PRUNED_PREFIX}w-a`)).toBe(null);
+        expect(globalThis.localStorage.getItem(`${PRUNED_PREFIX}w-b`)).toBe(null);
+        expect(globalThis.localStorage.getItem('unrelated.pref')).toBe('keep');
+    });
+
     it('resolves where there is no IndexedDB at all', async () => {
         await expect(wipeWalletStorage()).resolves.toBeUndefined();
     });
@@ -118,6 +133,14 @@ describe('wipeWalletStorage on a shell that owns its own store (desktop)', () =>
         globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: false, error: 'EPERM' }) };
         await expect(wipeWalletStorage()).rejects.toThrow(/EPERM/);
         expect(globalThis.localStorage.getItem(QUEUE_KEY)).toBe('{}');
+    });
+
+    it('keeps the pruned-wallet ledger with the queue it guards when the shell wipe fails', async () => {
+        globalThis.localStorage.setItem(`${PRUNED_PREFIX}w-a`, '1');
+        stubIndexedDB();
+        globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: false, error: 'EPERM' }) };
+        await expect(wipeWalletStorage()).rejects.toThrow(/EPERM/);
+        expect(globalThis.localStorage.getItem(`${PRUNED_PREFIX}w-a`)).toBe('1');
     });
 
     it('throws when the shell call itself rejects', async () => {

@@ -16,9 +16,9 @@
 //
 // Per-target transports (§18.2):
 //
-//   packages/extension/src/signers/ledgerFactory.js   (WebHID)
-//   packages/web/src/signers/ledgerFactory.js         (WebHID)
-//   packages/desktop/src/signers/ledgerFactory.js     (node-HID; Piece 5)
+//   packages/extension/src/signers/ledgerFactory.js              (WebHID)
+//   packages/web/src/signers/ledgerFactory.js                    (WebHID)
+//   packages/desktop/renderer/signerFactories/ledgerFactory.js   (WebHID)
 //
 // Ledger specifics that shape the surface:
 //

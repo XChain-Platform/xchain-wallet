@@ -210,6 +210,50 @@ export function isActionOfferedOnChain(chainRegistry, chainId, action) {
     return chainRegistry?.get?.(chainId)?.coin === VALIDATOR_LANE_COIN;
 }
 
+// Actions whose generic authoring belongs to the DEX surface, which a store
+// build compiles out (web surfaces/registry.js); sell-name's ORDER is its own form.
+export const DEX_ACTIONS = Object.freeze(['ORDER', 'SWAP']);
+
+/**
+ * Whether a generic composer picker should list `action` in this build: false
+ * only for a DEX action when the build compiled the DEX surface out.
+ *
+ * @param {string} action
+ * @param {{ hasDexSurface?: boolean }} [build]
+ * @returns {boolean}
+ */
+export function isActionOfferedInBuild(action, { hasDexSurface = true } = {}) {
+    if (hasDexSurface !== false) return true;
+    return !DEX_ACTIONS.includes(String(action || '').trim().toUpperCase());
+}
+
+/**
+ * Whether a composed action may be submitted in this build: false for a DEX
+ * action, or a BATCH with a DEX leg, when the build compiled the DEX surface
+ * out. Every string param of a BATCH is read as a COMMAND (legs split on ';',
+ * leg name is the first '|' field, as the indexer splits them), so a key
+ * spelling the composer did not expect still fails closed.
+ *
+ * @param {{ action?: string, params?: Record<string, unknown> }} actionData
+ * @param {{ hasDexSurface?: boolean }} [build]
+ * @returns {boolean}
+ */
+export function isActionDataOfferedInBuild({ action, params } = {}, build = {}) {
+    if (!isActionOfferedInBuild(action, build)) return false;
+    if (build.hasDexSurface !== false) return true;
+    if (String(action || '').trim().toUpperCase() !== 'BATCH') return true;
+    const texts = Object.values(params || {}).flat().filter((v) => typeof v === 'string');
+    for (const text of texts) {
+        for (const leg of text.split(';')) {
+            // Skip any pasted BATCH|<version>| prefix so the real first leg is read.
+            const fields = leg.split('|').map((f) => f.replace(/["'\s]/g, '').toUpperCase());
+            while (fields[0] === 'BATCH') fields.splice(0, 2);
+            if (DEX_ACTIONS.includes(fields[0])) return false;
+        }
+    }
+    return true;
+}
+
 // Protocol-accepted on every chain, form-less by design (see header note 2).
 // ADDRESS moved OUT of this list in PC-32: v0 preferences got a real form
 // (AddressPreferencesForm) and v1 controller-bind already had one

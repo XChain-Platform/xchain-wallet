@@ -1588,6 +1588,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 // broadcast, in the permanent terminal §5.3.4 forbids
                 // re-signing out of.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+                releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
                 // And the native-fee half, for the sends that carry a
                 // protocol fee (a gated tick composes as BATCH, and a
                 // multi-recipient send is priced per leg).

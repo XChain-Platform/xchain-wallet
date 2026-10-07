@@ -406,6 +406,10 @@ else
 fi
 mv "$WORK_DIR/$APK_NAME.signed" "$WORK_DIR/$APK_NAME"
 apksigner verify --verbose "$WORK_DIR/$APK_NAME" >/dev/null || die "K10 signature did not verify"
+# Refuse any signer but the K10 certificate SECURITY.md pins: a valid signature
+# from the wrong keystore passes the line above, and K10 cannot be rotated.
+node "$REPO_ROOT/tools/release/verify-apk-signer.mjs" "$WORK_DIR/$APK_NAME" \
+    || die "the APK is not signed by the pinned K10 certificate (check XCHAIN_K10_KEYSTORE and XCHAIN_K10_ALIAS); nothing was staged"
 
 # ---------------------------------------------------------------------
 # 3a. Publish the signed store pair into the staging directory
@@ -564,6 +568,8 @@ if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
         || full_leg_failed "renaming the signed full APK"
     apksigner verify --verbose "$WORK_DIR/$FULL_APK_NAME" >/dev/null \
         || full_leg_failed "verifying the K10 signature on the full APK"
+    node "$REPO_ROOT/tools/release/verify-apk-signer.mjs" "$WORK_DIR/$FULL_APK_NAME" \
+        || full_leg_failed "the K10 identity check on the full APK (its signer is not the pinned certificate)"
 
     # Only a full leg that got this far adds its APK and widens the record.
     mv "$WORK_DIR/$FULL_APK_NAME" "$OUTPUT_DIR/$FULL_APK_NAME" \

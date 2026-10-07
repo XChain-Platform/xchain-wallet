@@ -22,6 +22,8 @@ import {
     CoSignerPolicyEditor,
 } from '../../../packages/core/src/shared/routes/CoSignerPolicyEditor.jsx';
 import { createCoSignerAccount } from '../../../packages/core/src/schemas/coSignerAccount.js';
+import { BITCOIN_ACTIONS } from '../../../packages/core/src/registry/actions.js';
+import { actionDisplayLabel } from '../../../packages/core/src/shared/utils/actionDisplayLabel.js';
 
 const AGENT = '02' + 'a'.repeat(64);
 const DAEMON = '02' + 'b'.repeat(64);
@@ -150,10 +152,13 @@ describe('CoSignerPolicyEditor allowed-actions vocabulary', () => {
         expect(screen.queryByTestId('allowed-actions-preview')).toBeNull();
     });
 
-    it('teaches the mapping in the help copy rather than naming opcodes alone', () => {
+    it('asks the owner to tick labelled actions instead of typing protocol codes', () => {
         const { container } = render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={() => {}} />);
-        expect(container.textContent).toContain('SEND for Send');
-        expect(container.textContent).toContain('ISSUE for Issue');
+        const fieldset = container.querySelector('fieldset');
+        expect(fieldset.querySelector('legend').textContent).toBe('Allowed actions');
+        expect(fieldset.querySelector('textarea')).toBeNull();
+        expect(fieldset.textContent).not.toContain('SEND for');
+        expect(fieldset.textContent).not.toContain('SEND, ISSUE');
     });
 
     it('still stores the raw protocol key, never the display label', () => {
@@ -208,5 +213,68 @@ describe('CoSignerPolicyEditor per-action limit actions', () => {
         fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'ISSUE' } });
         expect(onChange).toHaveBeenCalledTimes(1);
         expect(onChange.mock.calls[0][0].maxPerAction[0].action).toBe('ISSUE');
+    });
+});
+
+// The picker writes raw protocol keys into allowedActionsText, so the stored
+// policy is byte-identical to what typing produced; these pin every toggle path.
+describe('CoSignerPolicyEditor allowed-actions picker', () => {
+    const draftWith = (allowedActionsText) => ({ ...emptyPolicyDraft(), allowedActionsText });
+    const allowedAfter = (onChange) => buildPolicyDraft(onChange.mock.calls[0][0]).policy.allowedActions;
+
+    it('renders one checkbox per known action, each named by its display label', () => {
+        render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={() => {}} />);
+        for (const key of BITCOIN_ACTIONS) {
+            const box = screen.getByRole('checkbox', { name: actionDisplayLabel(key) });
+            expect(box.checked).toBe(false);
+        }
+        expect(screen.getByRole('checkbox', { name: 'Coin payment' })).toBeTruthy();
+    });
+
+    it('ticking an action appends its raw key', () => {
+        const onChange = vi.fn();
+        render(<CoSignerPolicyEditor value={draftWith('SEND')} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Issue' }));
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(allowedAfter(onChange)).toEqual(['SEND', 'ISSUE']);
+    });
+
+    it('unticking an action removes only that key and keeps an unknown one in place', () => {
+        const onChange = vi.fn();
+        render(<CoSignerPolicyEditor value={draftWith('SEND, SENDD, ISSUE')} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Issue' }));
+        expect(allowedAfter(onChange)).toEqual(['SEND', 'SENDD']);
+    });
+
+    it('flags an unknown stored key with its own Remove button that drops only it', () => {
+        const onChange = vi.fn();
+        render(<CoSignerPolicyEditor value={draftWith('SEND, SENDD')} onChange={onChange} />);
+        expect(screen.getByTestId('allowed-actions-preview').textContent).toContain('SENDD (not a known action)');
+        fireEvent.click(screen.getByRole('button', { name: 'Remove SENDD' }));
+        expect(allowedAfter(onChange)).toEqual(['SEND']);
+    });
+
+    it('pre-ticks exactly the stored actions of an existing account', () => {
+        const account = createCoSignerAccount({
+            walletId: 'w1',
+            chainId: 'bitcoin-regtest',
+            aggregateAddress: 'bcrt1pagg',
+            agentPubkey: AGENT,
+            daemonPubkey: DAEMON,
+            daemonDerivationPath: "m/86'/0'/0'/0/0",
+            publicKeyOrder: [AGENT.toLowerCase(), DAEMON.toLowerCase()],
+            policy: { allowedActions: ['SEND', 'ISSUE'] },
+        });
+        render(<CoSignerPolicyEditor value={draftFromAccount(account)} onChange={() => {}} />);
+        const ticked = screen.getAllByRole('checkbox').filter((b) => b.checked);
+        expect(ticked.map((b) => b.getAttribute('value')).sort()).toEqual(['ISSUE', 'SEND']);
+    });
+
+    it('keeps a lowercase typed key ticked under its canonical name', () => {
+        const onChange = vi.fn();
+        render(<CoSignerPolicyEditor value={draftWith('send')} onChange={onChange} />);
+        expect(screen.getByRole('checkbox', { name: 'Send' }).checked).toBe(true);
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
+        expect(onChange.mock.calls[0][0].allowedActionsText).toBe('');
     });
 });

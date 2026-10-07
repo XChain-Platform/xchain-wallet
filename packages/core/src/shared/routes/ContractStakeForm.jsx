@@ -396,7 +396,7 @@ export function ContractStakeForm({
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: wireAction, params: { VERSION: wireVersion, ...actionParams } },
+                actionData: { action: wireAction, params: { ...actionParams, VERSION: wireVersion } },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 // The flow builds its own wire params from mode + params, so
                 // the submit keeps the LEGACY shape; only the compose above
@@ -456,7 +456,7 @@ export function ContractStakeForm({
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action, params: { VERSION: version, ...actionParams } },
+                    actionData: { action, params: { ...actionParams, VERSION: version } },
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {

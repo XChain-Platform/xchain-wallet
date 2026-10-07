@@ -14,8 +14,9 @@
 //   - Active wallet name + a "Switch wallet" drilldown (preserves the
 //     current behaviour; the WalletPicker is still reachable).
 //   - "Rename" drilldown to the existing RenameWalletForm route.
-//   - "Migrate to BIP39" drilldown when the active wallet's format is
-//     `counterwallet-legacy`.
+//   - "Upgrade recovery phrase" row, only when the active wallet's format
+//     is `counterwallet-legacy`; it opens the wallet list, whose details
+//     screen carries the migration button.
 //   - "Remove wallet": destructive delete with two-step confirmation
 //     (typed-name confirmation modal). Wires `wallet.remove` host
 //     handler / `messaging.removeWallet` wrapper added in this step.
@@ -109,16 +110,19 @@ export function ThisWalletSection({
         <div style={STACK}>
             <Row
                 label="Wallet"
-                value={activeWallet.name}
+                hint={activeWallet.name}
                 actionLabel={onOpenWalletPicker ? 'Switch / rename…' : null}
                 onClick={onOpenWalletPicker}
             />
-            <Row
-                label="Migrate to BIP39"
-                value="Counterwallet-legacy migration is reachable via the wallet picker → details for legacy-format wallets."
-                actionLabel={null}
-                onClick={null}
-            />
+            {/* Offer the upgrade only to the older 12-word format; a standard wallet has nothing to upgrade. */}
+            {activeWallet.format === 'counterwallet-legacy' ? (
+                <Row
+                    label="Upgrade recovery phrase"
+                    hint="This wallet uses an older 12-word recovery phrase format. Open your wallets, choose this wallet's details, and pick Migrate to BIP39."
+                    actionLabel={onOpenWalletPicker ? 'Open wallets…' : null}
+                    onClick={onOpenWalletPicker}
+                />
+            ) : null}
             {confirmingRemove ? (
                 <RemoveConfirm
                     walletName={activeWallet.name}
@@ -150,12 +154,12 @@ export function ThisWalletSection({
     );
 }
 
-function Row({ label, value, actionLabel, onClick }) {
+function Row({ label, hint, actionLabel, onClick }) {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</span>
-                <span style={ROW_HINT}>{value}</span>
+                <span style={ROW_HINT}>{hint}</span>
             </div>
             {actionLabel && onClick ? (
                 <button type="button" onClick={onClick} style={ACTION_BTN}>{actionLabel}</button>

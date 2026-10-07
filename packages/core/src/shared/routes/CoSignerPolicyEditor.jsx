@@ -19,7 +19,7 @@
 // Reused by both CoSignerProvision (author) and CoSignerAccountDetail (edit),
 // so all policy-shape knowledge lives in one place.
 
-import { Input, Button, Textarea, Select } from '@xchain-wallet/core/ui';
+import { Input, Button, Select } from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
@@ -244,9 +244,14 @@ const fieldsetStyle = {
 // over the action decoded from the PSBT). Every READ surface, including this
 // account's own detail screen, shows those keys through actionDisplayLabel, so
 // an owner reads "Send, Issue" there and is asked for "SEND, ISSUE" here with
-// nothing connecting the two vocabularies. Echo the typed list back in the
-// read surface's own words instead of asking the owner to hold both.
+// nothing connecting the two vocabularies. The editor offers each action by
+// that same label and writes the raw key behind it, so the owner never types a code.
 const KNOWN_ACTIONS = new Set(BITCOIN_ACTIONS);
+
+// List the pickable actions alphabetically by the label the owner reads.
+const ACTION_CHOICES = BITCOIN_ACTIONS
+    .map((key) => ({ key, label: actionDisplayLabel(key) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
 /**
  * Human-readable echo of the typed action list, one entry per parsed name.
@@ -269,6 +274,13 @@ function previewActions(text) {
 const legendStyle = { fontWeight: 600, padding: '0 var(--xc-space-2)' };
 const helpStyle = { fontSize: '0.85em', color: 'var(--xc-text-muted)', margin: '0 0 var(--xc-space-2) 0' };
 const rowStyle = { display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-end', marginBottom: 'var(--xc-space-2)' };
+const pickerStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(10rem, 1fr))',
+    gap: 'var(--xc-space-1) var(--xc-space-3)',
+    marginBottom: 'var(--xc-space-2)',
+};
+const pickLabelStyle = { display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center' };
 
 /**
  * Controlled policy editor.
@@ -290,25 +302,35 @@ export function CoSignerPolicyEditor({ value, onChange }) {
         [key]: draft[key].map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
     });
     const actionPreview = previewActions(draft.allowedActionsText);
+    const pickedKeys = actionPreview.map((a) => a.key);
+    // Rewrite the action list from raw keys; every other key, unknown ones included, keeps its place.
+    const writeKeys = (keys) => set({ allowedActionsText: keys.join(', ') });
+    const toggleAction = (key, on) => {
+        const rest = pickedKeys.filter((k) => k !== key);
+        writeKeys(on ? (pickedKeys.includes(key) ? pickedKeys : [...pickedKeys, key]) : rest);
+    };
 
     return (
         <div>
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed actions</legend>
                 <p style={helpStyle}>
-                    Which actions may the agent sign? Enter the protocol name of each
-                    one, separated by commas: SEND for {actionDisplayLabel('SEND')},
-                    ISSUE for {actionDisplayLabel('ISSUE')}, MINT for{' '}
-                    {actionDisplayLabel('MINT')}. The agent can never sign an action
-                    that is not listed here.
+                    Which actions may the agent sign? Tick each one. The agent can never
+                    sign an action that is not ticked.
                 </p>
-                <Textarea
-                    label="Actions"
-                    value={draft.allowedActionsText}
-                    onChange={(e) => set({ allowedActionsText: e.target.value })}
-                    placeholder="SEND, ISSUE"
-                    rows={2}
-                />
+                <div style={pickerStyle} role="group" aria-label="Actions">
+                    {ACTION_CHOICES.map(({ key, label }) => (
+                        <label key={key} style={pickLabelStyle}>
+                            <input
+                                type="checkbox"
+                                value={key}
+                                checked={pickedKeys.includes(key)}
+                                onChange={(e) => toggleAction(key, e.target.checked)}
+                            />
+                            <span>{label}</span>
+                        </label>
+                    ))}
+                </div>
                 {actionPreview.length > 0 ? (
                     <p style={helpStyle} data-testid="allowed-actions-preview">
                         This agent may sign:{' '}
@@ -316,6 +338,21 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             <span key={a.key}>
                                 {i > 0 ? ', ' : null}
                                 {a.known ? a.label : `${a.key} (not a known action)`}
+                                {/* Keep an unknown stored key until the owner removes it on purpose. */}
+                                {a.known ? null : (
+                                    <>
+                                        {' '}
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            aria-label={`Remove ${a.key}`}
+                                            onClick={() => writeKeys(pickedKeys.filter((k) => k !== a.key))}
+                                        >
+                                            Remove
+                                        </Button>
+                                    </>
+                                )}
                             </span>
                         ))}
                     </p>

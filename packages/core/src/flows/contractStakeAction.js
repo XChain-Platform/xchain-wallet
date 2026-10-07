@@ -26,6 +26,7 @@
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
+import { assertActionAllowedOnChain } from '../registry/actions.js';
 
 /**
  * @typedef {Object} ContractStakeActionOpts
@@ -114,7 +115,10 @@ export async function contractStakeAction(opts) {
     else if (mode === 'unstake') { action = 'UNSTAKE';  version = '1'; summaryVerb = 'Unstake'; }
     else                         { action = 'DELEGATE'; version = '1'; summaryVerb = 'Delegate'; }
 
-    const params = { VERSION: version, ...opts.params };
+    // Pin VERSION last so a caller's VERSION cannot move this onto a Bitcoin-only version.
+    const params = { ...opts.params, VERSION: version };
+    // Refuse a version this chain rejects before the user pays a fee for it.
+    assertActionAllowedOnChain(opts.chainRegistry, opts.chainId, action, Number(params.VERSION), 'contractStakeAction');
 
     // Human-readable pending-tx summary
     let actionSummary;

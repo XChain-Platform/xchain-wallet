@@ -16,6 +16,8 @@
 // stale queue over the one the new host had just saved, so a shell holds ONE
 // store for its whole process and hands it to every host it builds.
 
+import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
+
 /**
  * @typedef {import('./broadcastQueueStorage.js').BroadcastQueueStorage} BroadcastQueueStorage
  */
@@ -40,22 +42,34 @@
  *   the read recovers still drops the wallet on the next boot
  */
 
-const PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
+// Core owns the prefix so both wipe paths sweep exactly the keys written here.
+const PRUNED_PREFIX = BROADCAST_QUEUE_PRUNED_PREFIX;
 
 function chromeLedger() {
     const settle = (resolve, reject) => () => (chrome.runtime?.lastError ? reject(new Error('pruned ledger write refused')) : resolve());
-    return {
-        list() {
-            return new Promise((resolve) => {
-                try {
-                    chrome.storage.local.get(null, (items) => {
-                        if (chrome.runtime?.lastError || !items) { resolve(null); return; }
-                        resolve(Object.keys(items).filter((k) => k.startsWith(PRUNED_PREFIX)).map((k) => k.slice(PRUNED_PREFIX.length)));
-                    });
-                } catch (_e) {
-                    resolve(null);
-                }
+    const ledgerIds = (keys) => keys.filter((k) => k.startsWith(PRUNED_PREFIX)).map((k) => k.slice(PRUNED_PREFIX.length));
+    const listByReadingAll = () => new Promise((resolve) => {
+        try {
+            chrome.storage.local.get(null, (items) => {
+                if (chrome.runtime?.lastError || !items) { resolve(null); return; }
+                resolve(ledgerIds(Object.keys(items)));
             });
+        } catch (_e) {
+            resolve(null);
+        }
+    });
+    return {
+        // List key names only: the local area also holds the vault and the queue
+        // blob, and every save runs this. getKeys needs Chrome 130+, so any
+        // missing or failing getKeys falls back to reading the whole area.
+        async list() {
+            let keys = null;
+            try {
+                if (typeof chrome.storage.local.getKeys === 'function') keys = await chrome.storage.local.getKeys();
+            } catch (_e) {
+                keys = null;
+            }
+            return Array.isArray(keys) ? ledgerIds(keys) : listByReadingAll();
         },
         add(id) {
             return new Promise((resolve, reject) => {

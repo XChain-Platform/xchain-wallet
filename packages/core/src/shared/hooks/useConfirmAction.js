@@ -87,7 +87,8 @@ export function useConfirmAction() {
     const approvalBeganRef = useRef(false);
     const releaseUnlessApproving = useCallback((built) => {
         if (approvalBeganRef.current) return;
-        releaseEncoderInputs(built, releasedEncoderInputsRef.current).catch((err) => {
+        const sendRelease = optsRef.current?.releaseEncoderInputs;
+        releaseEncoderInputs(built, releasedEncoderInputsRef.current, sendRelease).catch((err) => {
             console.error('Encoder input release failed:', err);
         });
     }, []);
@@ -168,7 +169,7 @@ export function useConfirmAction() {
      * exist on this side of it.
      *
      * @param {Object} args
-     * @param {() => Promise<import('../../flows/composeActionForConfirm.js').HostComposeEnvelope>} args.compose   host compose + tamper (messaging.composeForConfirm)
+     * @param {() => Promise<import('../../flows/composeActionForConfirm.js').HostComposeWireEnvelope>} args.compose   host compose + tamper (messaging.composeForConfirm)
      * @param {(credentials: object, composed: object) => Promise<any>} args.onApprove
      * @param {string} args.chainId
      * @param {(reqOpts: { actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: string }) => Promise<object>} [args.preflight]   host preflight (messaging.preflight); omit to skip pre-flight
@@ -182,6 +183,9 @@ export function useConfirmAction() {
      *   Called only when the composed action actually attaches a native-coin
      *   fee output; a composed amount outside the fresh band interrupts
      *   instead of signing.
+     * @param {(token: string) => Promise<any>} [args.releaseEncoderInputs]
+     * Redeems the host's `releaseEncoderInputsToken` (messaging.releaseEncoderInputs)
+     *   on Reject, an aborted compose or unmount, so the encoder frees the inputs it held.
      * @param {boolean} [args.alwaysCheckInputs]    force the liveness probe regardless of PSBT age (the resume path)
      * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session] §5.4 confirm-session store
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
@@ -491,7 +495,11 @@ export function useConfirmAction() {
         setError(null);
         try {
             if (!approvalBeganRef.current) {
-                await releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
+                await releaseEncoderInputs(
+                    composedRef.current,
+                    releasedEncoderInputsRef.current,
+                    optsRef.current?.releaseEncoderInputs,
+                );
             }
         } catch (err) {
             const detail = err?.message ? ` ${err.message}` : '';
@@ -518,14 +526,40 @@ export function useConfirmAction() {
     };
 }
 
-async function releaseEncoderInputs(composed, released) {
+/**
+ * Free the inputs the encoder reserved for an abandoned compose, at most once.
+ *
+ * @param {object|null} composed
+ * @param {Set<unknown>} released  what this instance already released (a function or a token)
+ * @param {((token: string) => Promise<any>)|undefined} sendRelease  redeems a host token
+ */
+async function releaseEncoderInputs(composed, released, sendRelease) {
     const release = composed?.releaseEncoderInputs;
-    if (typeof release !== 'function' || released.has(release)) return;
-    released.add(release);
+    // In-process compose: the envelope still holds the release function itself.
+    if (typeof release === 'function') {
+        if (released.has(release)) return;
+        released.add(release);
+        try {
+            await release();
+        } catch (err) {
+            released.delete(release);
+            throw err;
+        }
+        return;
+    }
+    // Across the messaging boundary the host swapped that function for a single-use token.
+    const token = composed?.releaseEncoderInputsToken;
+    if (typeof token !== 'string' || !token || released.has(token)) return;
+    released.add(token);
+    // Say so once when the caller wired no sender: the inputs then stay held until the encoder times out.
+    if (typeof sendRelease !== 'function') {
+        console.error('useConfirmAction: confirm() got no releaseEncoderInputs sender, so the encoder keeps this compose\'s inputs reserved');
+        return;
+    }
     try {
-        await release();
+        await sendRelease(token);
     } catch (err) {
-        released.delete(release);
+        released.delete(token);
         throw err;
     }
 }

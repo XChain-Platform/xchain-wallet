@@ -205,8 +205,8 @@ assert.ok(
     discardBlock && /if \(idx >= 0\) q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(discardBlock),
     'broadcast.queue.discard persists after the splice',
 );
-// pushQueueEntry persists too (fire-and-forget so auto-enqueue paths
-// stay non-async).
+// pushQueueEntry starts a background save too, for the vault rebuild that
+// pushes in a loop; lanes needing the entry on disk await their own save.
 const pushBodyMatch = /function pushQueueEntry\([^)]*\)\s*\{([\s\S]+?)\n\s{4}\}\s*\n\s{4}return \{/.exec(engineSrc);
 assert.ok(pushBodyMatch, 'pushQueueEntry body parses');
 assert.ok(
@@ -218,8 +218,8 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(engineSrc),
-    'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);\s*pushQueueEntry\(walletId, entry\);\s*await persistQueue\(\);\s*\};/.test(engineSrc),
+    'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing and awaits the save after',
 );
 assert.ok(
     !/async \(entry\) => \{ pushQueueEntry\(/.test(bg) && !/async \(entry\) => \{ pushQueueEntry\(/.test(engineSrc),

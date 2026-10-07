@@ -48,13 +48,14 @@ import {
     probeLane,
     assertRecord,
     swapRequirement,
+    resolvedPackageEntries,
     bootstrapOsesAt,
     resolveProdFeed,
     RECORD_VERSION,
     deviceInstalledArch,
     swapExercisesLane,
 } from '../../../tools/release/rehearse.mjs';
-import { LANES } from '../../../tools/release/rehearsal-matrix.mjs';
+import { LANES, ALL_OS_TRIGGER_PACKAGES } from '../../../tools/release/rehearsal-matrix.mjs';
 import { pointerNameFor } from '../../../tools/release/update-info.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -638,6 +639,57 @@ const check = (over) => assertRecord({
             run: () => { throw new Error('not a git repo'); },
         }).requirement,
         'all-os',
+    );
+
+    // A dependency-only release: the lockfile moved and no first-party path did.
+    // The updater and shell are third-party, so their bump is judged on the
+    // resolved versions at both tags, never on the file list alone.
+    const realLock = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8');
+    const livePins = resolvedPackageEntries(realLock, ALL_OS_TRIGGER_PACKAGES);
+    assert.ok(livePins, 'the live pnpm-lock.yaml parses: electron and electron-updater both resolve');
+    for (const name of ALL_OS_TRIGGER_PACKAGES) {
+        assert.ok(livePins[name].length > 0,
+            `${name} is watched for an all-OS bump but does not resolve in pnpm-lock.yaml; a stale `
+            + 'name watches nothing');
+    }
+    const updaterVersion = livePins['electron-updater'][0];
+    const bumpedLock = realLock.split(`electron-updater@${updaterVersion}:`).join('electron-updater@0.0.1-bumped:');
+    assert.notEqual(bumpedLock, realLock, 'the fixture bump found the electron-updater entry to rewrite');
+    const lockRun = (files, locks) => (_repo, args) => (args[0] === 'show'
+        ? locks[args[1].split(':')[0]]
+        : files.join('\n'));
+    const depOnly = ['pnpm-lock.yaml', 'packages/desktop/package.json'];
+    const bump = swapRequirement({
+        repo: '.', tag: TAG, previousTag: 'v0.333.0',
+        run: lockRun(depOnly, { 'v0.333.0': realLock, [TAG]: bumpedLock }),
+    });
+    assert.equal(bump.requirement, 'all-os', 'an electron-updater bump must be rehearsed on every OS');
+    assert.match(bump.reason, /electron-updater .* -> .*0\.0\.1-bumped/, 'and the reason names the bump');
+    const viteBumped = realLock.replace(/^( {2}vite@)[^:\n]*:/m, (_m, key) => `${key}999.0.0:`);
+    assert.notEqual(viteBumped, realLock, 'the fixture bump found a vite entry to rewrite');
+    assert.equal(
+        swapRequirement({
+            repo: '.', tag: TAG, previousTag: 'v0.333.0',
+            run: lockRun(depOnly, { 'v0.333.0': realLock, [TAG]: viteBumped }),
+        }).requirement,
+        'one-os',
+        'a lockfile change that leaves every updater and shell package alone stays one-OS',
+    );
+    assert.equal(
+        swapRequirement({
+            repo: '.', tag: TAG, previousTag: 'v0.333.0',
+            run: lockRun(depOnly, { 'v0.333.0': realLock, [TAG]: 'not: a lockfile\n' }),
+        }).requirement,
+        'all-os',
+        'a lockfile that cannot be read is the strict answer, never the cheap one',
+    );
+    assert.equal(
+        swapRequirement({
+            repo: '.', tag: TAG, previousTag: 'v0.333.0',
+            run: lockRun(['packages/desktop/package.json'], {}),
+        }).requirement,
+        'one-os',
+        'the desktop manifest alone is a release version bump, not an updater change',
     );
 }
 

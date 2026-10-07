@@ -137,7 +137,7 @@ assert.ok(
 );
 // One hook builder feeds every signing route, and it pushes onto the queue.
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(engine),
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);\s*pushQueueEntry\(walletId, entry\);\s*await persistQueue\(\);\s*\};/.test(engine),
     'enqueueOnBroadcastFailure builds a hook that pushes onto the queue',
 );
 assert.ok(

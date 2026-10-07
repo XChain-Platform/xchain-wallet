@@ -427,6 +427,20 @@ assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] })
     }
 }
 
+// ---------------------------------------------------------------------------
+// Part 3: bin/ci-full.sh, the local twin of ci.yml, carries every job.
+// ---------------------------------------------------------------------------
+
+// Each ci.yml job needs a `# --- job: <name>` section in the twin, in workflow
+// order: a job with no section is a job the pre-push gate never runs.
+const ciFull = readFileSync(join(repoRoot, 'bin', 'ci-full.sh'), 'utf8');
+const twinJobs = [...ciFull.matchAll(/^# --- job: ([A-Za-z0-9_-]+) -/gm)].map((m) => m[1]);
+assert.deepEqual(twinJobs, [...jobs.keys()],
+    `bin/ci-full.sh's job sections (${twinJobs.join(', ')}) do not match ci.yml's jobs `
+    + `(${[...jobs.keys()].join(', ')}). The script prints "same set GitHub CI runs", so a job `
+    + 'it lacks gates green locally and red on GitHub. Add a `# --- job: <name>` section that '
+    + 'runs the job\'s steps, or prints SKIPPED-BY-DESIGN for each step that cannot run locally.');
+
 console.log('OK: ci master-verdict smoke (concurrency exempts refs/heads/master from '
     + 'cancel-in-progress, evaluated both ways; push-to-master trigger intact; `verdict` job waits '
     + `on all ${others.length} jobs and classifies from steps; cancelled/not-started jobs report as `

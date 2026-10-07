@@ -69,16 +69,16 @@ Electron renderer
   unchanged.
 - `renderer/bridgeMessaging.js` + `renderer/messaging.js` - bridge
   wrapper + popup/web parity helpers.
+- `renderer/signerFactories/{ledgerFactory,trezorFactory}.js` -
+  hardware-wallet pairing from the renderer. Ledger runs over WebHID
+  (`@ledgerhq/hw-transport-webhid`); Trezor runs Trezor Connect from
+  Trezor's hosted build in an isolated bridge window. `main/permissions.js`
+  grants the WebHID access. There is no native node-HID / node-usb.
 
 ## Step 16 - what's NOT here yet
 
 - **OS keychain integration** (Step 17) - Electron `safeStorage` wired
   into the unlock flow so users don't enter their password every launch.
-- **Native HW transports** (Step 18) - `@trezor/connect` (node) and
-  `@ledgerhq/hw-transport-node-hid` wired into desktop-specific
-  `pairTrezorSigner` / `pairLedgerSigner` factories. Until then,
-  PairSignerForm in the desktop renderer shows "not available in this
-  context" for both vendors.
 - **electron-builder packaging** (Step 19) - Windows Authenticode,
   macOS notarization, Linux AppImage/deb/rpm. Also URI scheme
   registration for `xchain:` + `bitcoin:` / `dogecoin:` / `litecoin:`.

@@ -1408,6 +1408,7 @@ function AppInner() {
                 return (
                     <AdvancedActionsForm
                         walletId={activeWalletId}
+                        hasDexSurface={DEX_SURFACE_ENABLED}
                         onBack={formBack}
                     />
                 );
@@ -1602,6 +1603,7 @@ function AppInner() {
                 return (
                     <BatchComposerForm
                         walletId={activeWalletId}
+                        hasDexSurface={DEX_SURFACE_ENABLED}
                         onBack={() => setUnlockedView('actions')}
                     />
                 );
@@ -1610,6 +1612,7 @@ function AppInner() {
                 return (
                     <ParallelComposer
                         walletId={activeWalletId}
+                        hasDexSurface={DEX_SURFACE_ENABLED}
                         initialRows={parallelPrefill || undefined}
                         onBack={() => {
                             setParallelPrefill(null);
