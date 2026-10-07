@@ -30,6 +30,7 @@
 import { assertSigningAllowed } from '../flows/panicMode.js';
 import { nativeFeeOutputOf, isChunkEncoding } from '../flows/nativeFeeLane.js';
 import { signerSupportsChunkReveal } from '../flows/signerCapability.js';
+import { capRbfToDescriptor } from '../flows/rbfCap.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
@@ -416,7 +417,8 @@ export async function submitWithSigner({
             encoderOpts: preflight.encoderOpts,
             onProgress,
         });
-        effectiveEncoderOpts = oraclePreflight.encoderOpts;
+        // Cap RBF to the chain's descriptor; the encoder signals it on any chain it is asked to.
+        effectiveEncoderOpts = capRbfToDescriptor(chainRegistry?.get(chainId), oraclePreflight.encoderOpts);
 
         // Step 1d: the native-fee output must be EMITTED on the
         // transaction that carries the ACTION. The indexer validates the

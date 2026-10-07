@@ -32,6 +32,7 @@
 import { normalizeSource } from './sendToken.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 import { prepareGatedSend } from './gatedSendGuard.js';
+import { capRbfToDescriptor } from './rbfCap.js';
 import {
     assertMultiSendSupported,
     assertNoGatedLegs,
@@ -158,7 +159,8 @@ export async function buildSendPsbt(opts) {
         ...(nativeOut ? { customOutputs: [nativeOut] } : {}),
         ...(opts.fee !== undefined && { fee: opts.fee }),
         ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
-        ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+        // Cap RBF to the chain's descriptor; the encoder signals it on any chain it is asked to.
+        ...(opts.rbf !== undefined && capRbfToDescriptor(descriptor, { rbf: opts.rbf })),
     });
 
     return {

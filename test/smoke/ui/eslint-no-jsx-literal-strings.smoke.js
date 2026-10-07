@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last twenty-six are component props: copy shipped through them
+// The last twenty-seven are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -69,7 +69,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
-    'what', 'prefix', 'noun', 'summary', 'error',
+    'what', 'prefix', 'noun', 'summary', 'error', 'recovery',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -428,6 +428,8 @@ const hints = () => constTable('HINTS', objectExpr(
     prop('balance', literal('Weight = token balance')),
     prop('id', literal('-')),
     prop('nested', objectExpr(prop('tone', literal('warning')))),
+    // A nested object stays silent even under a copy key: tables judge strings only.
+    prop('panel', objectExpr(prop('label', literal('Open panel')))),
 ));
 const sinkRef = (name, value) => jsxElement([jsxAttr(name, jsxExpr(value))]);
 
@@ -449,6 +451,49 @@ v = findViolations(program(hints(),
 assert.strictEqual(v.length, 2, 'each table value is judged once, however many sinks read it');
 v = findViolations(jsxElement([jsxAttr('hint', jsxExpr(member(identifier('HINTS'), 'mode', true)))]));
 assert.strictEqual(v.length, 0, 'without a Program root there are no tables and nothing changes');
+
+// 22b. Copy written as an inline object in a copy-carrying prop, the shape
+// StatusMessage's `recovery={{ label: 'Restore', onAction }}` ships in. The
+// object's own keys are judged by the same set, so `label` and `ariaLabel`
+// count and `onAction` or `details` never do.
+const recoveryAttr = (value) => jsxAttr('recovery', jsxExpr(value));
+const onAction = prop('onAction', identifier('restoreDraft'));
+v = findViolations(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)));
+assert.strictEqual(v.length, 1, 'flags a literal label in an inline recovery object');
+assert.match(v[0].message, /recovery/);
+assert.match(v[0].message, /Restore/);
+assert.strictEqual(v[0].node.type, 'ObjectExpression', 'reports the object node itself');
+v = findViolations(recoveryAttr(conditional(objectExpr(prop('label', literal('Try again')), onAction), identifier('undefined'))));
+assert.strictEqual(v.length, 1, 'flags an object held in a ternary branch, once');
+assert.match(v[0].message, /Try again/);
+v = findViolations(recoveryAttr(conditional(
+    objectExpr(prop('label', literal('Open Backup')), onAction),
+    objectExpr(prop('label', literal('Dismiss')), onAction),
+)));
+assert.strictEqual(v.length, 1, 'two object branches are one violation, not two');
+v = findViolations(recoveryAttr(objectExpr(prop('label', conditional(literal('Merging…'), literal('Merge'))), onAction)));
+assert.strictEqual(v.length, 1, 'flags ternary copy inside the label value');
+v = findViolations(recoveryAttr(objectExpr(prop('label', template('Sell ', ' per fill at ', '')), onAction)));
+assert.strictEqual(v.length, 1, 'flags template copy inside the label value');
+v = findViolations(recoveryAttr(objectExpr(prop('ariaLabel', literal('Retry the import')), prop('label', identifier('lbl')))));
+assert.strictEqual(v.length, 1, 'judges every copy key, ariaLabel included');
+v = findViolations(recoveryAttr(objectExpr({ type: 'ObjectProperty', key: identifier('label'), value: literal('Clear') })));
+assert.strictEqual(v.length, 1, 'accepts the Babel ObjectProperty shape');
+v = findViolations(recoveryAttr(objectExpr({ type: 'Property', key: literal('label'), value: literal('Clear'), computed: false })));
+assert.strictEqual(v.length, 1, 'accepts a string-literal key');
+// The must-stay-silent shapes.
+v = findViolations(recoveryAttr(objectExpr(prop('label', identifier('restoreLabel')), onAction)));
+assert.strictEqual(v.length, 0, 'a runtime label stays silent');
+v = findViolations(recoveryAttr(objectExpr(onAction, prop('id', literal('retry-btn')), prop('details', literal('stack trace text')))));
+assert.strictEqual(v.length, 0, 'keys outside the set stay silent');
+v = findViolations(recoveryAttr(objectExpr({ type: 'Property', key: identifier('kind'), value: literal('Restore'), computed: true })));
+assert.strictEqual(v.length, 0, 'a computed key stays silent');
+v = findViolations(recoveryAttr(objectExpr({ type: 'SpreadElement', argument: identifier('base') }, onAction)));
+assert.strictEqual(v.length, 0, 'a spread element stays silent');
+v = findViolations(jsxAttr('style', jsxExpr(objectExpr(prop('label', literal('red'))))));
+assert.strictEqual(v.length, 0, 'an object on a technical attribute stays silent');
+v = findViolations(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)), { allow: ['Restore'] });
+assert.strictEqual(v.length, 0, 'allowlist suppresses inline object copy');
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -582,6 +627,20 @@ assert.strictEqual(reports.length, 18, 'create() leaves value out of the set');
 visitors.ObjectPattern(objectPattern(defaulted('prefix', literal('Last synced'))));
 visitors.ObjectPattern(objectPattern(defaulted('noun', literal('Ticker'))));
 assert.strictEqual(reports.length, 20, 'create() flags the prefix and noun prop defaults');
+
+// Test 22b on the shipping side: the two attribute paths must stay in step.
+visitors.JSXAttribute(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)));
+assert.strictEqual(reports.length, 21, 'create() flags a literal label in an inline recovery object');
+visitors.JSXAttribute(recoveryAttr(conditional(objectExpr(prop('label', literal('Try again')), onAction), identifier('undefined'))));
+assert.strictEqual(reports.length, 22, 'create() flags an object held in a ternary branch, once');
+visitors.JSXAttribute(recoveryAttr(conditional(
+    objectExpr(prop('label', literal('Open Backup')), onAction),
+    objectExpr(prop('label', literal('Dismiss')), onAction),
+)));
+assert.strictEqual(reports.length, 23, 'create() reports two object branches once');
+visitors.JSXAttribute(recoveryAttr(objectExpr(prop('label', identifier('restoreLabel')), onAction)));
+visitors.JSXAttribute(jsxAttr('style', jsxExpr(objectExpr(prop('label', literal('red'))))));
+assert.strictEqual(reports.length, 23, 'create() ignores a runtime label and a technical attribute object');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

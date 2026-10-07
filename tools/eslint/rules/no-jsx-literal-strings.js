@@ -35,8 +35,8 @@
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
-//     error (the USER_FACING_ATTRS set below is the authority; keep this
-//     list in step with it). The last twenty-six are component props rather
+//     error, recovery (the USER_FACING_ATTRS set below is the authority; keep
+//     this list in step with it). The last twenty-seven are component props rather
 //     than DOM attributes: shipping components render copy through them,
 //     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -49,6 +49,10 @@
 //     English in an interpolated aria-label as invisible, so that copy
 //     never reached the translator index. Pure-interpolation templates
 //     like {`${a}/${b}`} stay silent: every static chunk is trivial.
+//   - JSXAttribute inline object  recovery={{ label: 'Restore' }}  → flagged
+//     for those same attribute names, written directly or as a ternary /
+//     `||` branch, when a property whose KEY is in the set holds copy.
+//     style={{ color: 'red' }} stays silent because `style` is not in it.
 //   - JSXExpressionContainer in JSX content, holding a Literal, a
 //     template or a ternary / `||` fallback:
 //                              <span>{'literal'}</span>          → flagged
@@ -76,7 +80,9 @@
 //   - Tables imported from another module, e.g. a `*Copy.js` file
 //     consumed as hint={RESTORE_PASSWORD_HINTS.file}.
 //   - Copy returned by a helper call, or built inside a component (a
-//     descriptor array that is filtered and mapped before it renders).
+//     descriptor array that is filtered and mapped before it renders, or
+//     a function-local `const retry = { label: 'Try again' }` passed as
+//     recovery={retry}).
 //   - Descriptor keys outside USER_FACING_ATTRS, such as `description`,
 //     wherever the copy is written.
 //   - Copy passed through a `value` prop, e.g. a row component that
@@ -238,6 +244,9 @@ const USER_FACING_ATTRS = new Set([
     // (`error={err}`, `error={x || undefined}`), which no gate reports, and no
     // ObjectPattern gives `error` a string default.
     'error',
+    // StatusMessage renders `recovery.label` as its button text and accessible
+    // name. Call sites write the copy inside an inline object, which objectCopy judges.
+    'recovery',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -327,6 +336,69 @@ function branchCopy(node, allow = [], minLength = 2) {
         const fromTemplate = templateCopy(branch, allow, minLength);
         if (fromTemplate !== null) return fromTemplate;
         const nested = branchCopy(branch, allow, minLength);
+        if (nested !== null) return nested;
+    }
+    return null;
+}
+
+/**
+ * Return the first non-trivial copy an inline object holds under a
+ * USER_FACING_ATTRS key, or null.
+ *
+ * StatusMessage takes `recovery={{ label: 'Restore', onAction }}`, so the
+ * button's English sits inside an object no other gate opens. Keys decide,
+ * as in propDefaultViolations: `label` and `ariaLabel` count, `onAction`
+ * and `details` do not. Each value is judged as a literal, a template or
+ * a ternary / `||` fallback, and only the FIRST hit is returned.
+ *
+ * @param {object} node
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {string | null}
+ */
+function objectCopy(node, allow = [], minLength = 2) {
+    if (node?.type !== 'ObjectExpression') return null;
+    for (const prop of node.properties ?? []) {
+        // Accept both parsers' property shapes; skip spreads and computed keys.
+        if (prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') continue;
+        if (prop.computed) continue;
+        const keyName = prop.key?.type === 'Identifier' ? prop.key.name
+            : prop.key?.type === 'Literal' ? prop.key.value : undefined;
+        if (!USER_FACING_ATTRS.has(keyName)) continue;
+        const value = prop.value;
+        if (value?.type === 'Literal' && typeof value.value === 'string'
+            && !isTrivialString(value.value, allow, minLength)) {
+            return value.value;
+        }
+        const fromTemplate = templateCopy(value, allow, minLength);
+        if (fromTemplate !== null) return fromTemplate;
+        const fromBranch = branchCopy(value, allow, minLength);
+        if (fromBranch !== null) return fromBranch;
+    }
+    return null;
+}
+
+/**
+ * Return the first copy an attribute's inline object carries, written
+ * directly or as a ternary / `||` branch, or null.
+ *
+ * Only the two attribute paths call this. Constant tables keep judging
+ * strings alone, so a nested object in a table stays silent as documented.
+ *
+ * @param {object} node
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {string | null}
+ */
+function inlineObjectCopy(node, allow = [], minLength = 2) {
+    const direct = objectCopy(node, allow, minLength);
+    if (direct !== null) return direct;
+    if (node?.type !== 'ConditionalExpression' && node?.type !== 'LogicalExpression') return null;
+    const branches = node.type === 'ConditionalExpression'
+        ? [node.consequent, node.alternate]
+        : [node.left, node.right];
+    for (const branch of branches) {
+        const nested = inlineObjectCopy(branch, allow, minLength);
         if (nested !== null) return nested;
     }
     return null;
@@ -560,10 +632,17 @@ export function findViolations(node, options = {}) {
                 } else if (v?.type === 'JSXExpressionContainer') {
                     // Toggle copy in a ternary / `||` fallback. See branchCopy.
                     const copy = branchCopy(v.expression, allow, minLength);
+                    // Copy inside an inline object, e.g. recovery={{ label: 'Restore' }}. See objectCopy.
+                    const objCopy = copy === null ? inlineObjectCopy(v.expression, allow, minLength) : null;
                     if (copy !== null) {
                         out.push({
                             node: v.expression,
                             message: `Inline ${attrName} branch copy "${truncate(copy)}" should use t('key').`,
+                        });
+                    } else if (objCopy !== null) {
+                        out.push({
+                            node: v.expression,
+                            message: `Inline ${attrName} object copy "${truncate(objCopy)}" should use t('key').`,
                         });
                     }
                     out.push(...tableViolations(v.expression, attrName, tables, judged, allow, minLength));
@@ -715,6 +794,13 @@ function create(context) {
             if (v?.type === 'JSXExpressionContainer'
                 && branchCopy(v.expression, allow, minLength) !== null) {
                 context.report({ node: v.expression, message: `Inline ${attrName} branch copy should use t('key')` });
+            }
+            // Copy inside an inline object, e.g. recovery={{ label: 'Restore' }}.
+            // Mirrors the findViolations branch: one report per attribute.
+            if (v?.type === 'JSXExpressionContainer'
+                && branchCopy(v.expression, allow, minLength) === null
+                && inlineObjectCopy(v.expression, allow, minLength) !== null) {
+                context.report({ node: v.expression, message: `Inline ${attrName} object copy should use t('key')` });
             }
             if (v?.type === 'JSXExpressionContainer') reportTables(v.expression, attrName);
         },

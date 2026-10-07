@@ -40,6 +40,7 @@ import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
 import { isBareNativePayment, withNativePaymentOutput } from './nativePayment.js';
 import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
 import { envelopeEncoderOpts } from './envelopeSelection.js';
+import { capRbfToDescriptor } from './rbfCap.js';
 
 // FILE v0's COMPRESSION field index in the full action string, and the encoder's
 // own field-setting rule mirrored byte for byte (pad the optional fields up to
@@ -188,10 +189,12 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @returns {Promise<ComposedAction>}
  */
 export async function composeForConfirm({
-    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: requestedEncoderOpts, source, signal, signer = null,
+    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: callerEncoderOpts, source, signal, signer = null,
 }) {
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`composeForConfirm: unknown chain "${chainId}"`);
+    // Cap RBF before anything reads the options, so the preview and the signed bytes agree.
+    const requestedEncoderOpts = capRbfToDescriptor(descriptor, callerEncoderOpts);
     const sdk = sdkRegistry.get(chainId);
     if (!sdk.encoder) {
         throw new Error('composeForConfirm: SDK encoder not initialized; call sdkRegistry.initActive([chainId]) first');
