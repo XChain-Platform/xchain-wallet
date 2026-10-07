@@ -472,12 +472,25 @@ const PINNED = loadConfig(SIGNED_ENV).mac.identity;
         assert.ok(!/^\s*CSC_LINK:/m.test(step) && !/^\s*CSC_KEY_PASSWORD:/m.test(step),
             `the mac build step '${name}' must not pass CSC_LINK or CSC_KEY_PASSWORD, which`
             + ' sends electron-builder down its broken keychain path');
-        for (const secret of NOTARIZE_VARS) {
+        // APPLE_API_KEY is the one notarization value that arrives as a path:
+        // @electron/notarize hands it to notarytool as a file, while the
+        // secret holds the .p8 contents, so a step writes it out first.
+        assert.ok(/APPLE_API_KEY:\s*\$\{\{\s*env\.XCHAIN_ASC_KEY_PATH\s*\}\}/.test(step),
+            `the mac build step '${name}' must pass APPLE_API_KEY as the written key file;`
+            + ' notarytool reads the .p8 contents as an option');
+        for (const secret of NOTARIZE_VARS.filter((v) => v !== 'APPLE_API_KEY')) {
             assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(step),
                 `the mac build step '${name}' must pass ${secret} through, or the`
                 + ' requirement it declares can never be met');
         }
     }
+
+    const keyStep = steps.find((s) => /name:\s*Write the App Store Connect key to a file/.test(s));
+    assert.ok(keyStep && /APPLE_API_KEY:\s*\$\{\{\s*secrets\.APPLE_API_KEY\s*\}\}/.test(keyStep)
+        && /XCHAIN_ASC_KEY_PATH=.*>>\s*"\$GITHUB_ENV"/.test(keyStep),
+        'a step writes the APPLE_API_KEY secret to a file and exports XCHAIN_ASC_KEY_PATH');
+    assert.ok(wf.indexOf(keyStep) < wf.indexOf(mainline[0]),
+        'the key file is written before the first mac build step');
 
     // The requirement without the values is a lane that can only fail, so the
     // keychain the build steps read must be built, from both secrets, before
