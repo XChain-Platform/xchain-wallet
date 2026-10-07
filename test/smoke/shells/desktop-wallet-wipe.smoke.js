@@ -12,20 +12,20 @@
 //
 // The shared `wipeWalletStorage` helper clears localStorage and
 // IndexedDB, and the desktop shell uses neither: its vault blob,
-// kdfParams meta, cached session key and unlock throttle are files
-// under `app.getPath('userData')`. So before this landed, both wipe
+// kdfParams meta, cached session key, unlock throttle and auto-lock
+// record are files under `app.getPath('userData')`. So before this landed, both wipe
 // paths (demo exit, Locked "forgot password") were silent no-ops on
 // desktop and the reload handed the user an unlock screen for the vault
 // they had just destroyed.
 //
 // Coverage:
 //
-//   1. wipeRuntimeStores unlinks all four stores, including the .tmp
+//   1. wipeRuntimeStores unlinks all five stores, including the .tmp
 //      siblings a crash mid-save may have left behind.
 //   2. It tears the in-memory host down first, so nothing can write a
 //      store back after the unlink.
 //   3. A store that refuses to clear is reported, not swallowed, and
-//      does not stop the other three from being cleared.
+//      does not stop the others from being cleared.
 //   4. A runtime with no throttle store (older wiring) still wipes.
 //   5. The preload publishes `xchainWalletBridge.wipeStorage` and
 //      main/index.js registers the matching channel behind the same
@@ -48,6 +48,7 @@ import { createRuntime, wipeRuntimeStores } from '../../../packages/desktop/main
 import { FileStorageBackend, vaultPathFor } from '../../../packages/desktop/main/storage.js';
 import { FileMetaBackend, metaPathFor } from '../../../packages/desktop/main/meta.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from '../../../packages/desktop/main/unlockThrottle.js';
+import { FileAutoLockStore, autoLockStatePathFor } from '../../../packages/desktop/main/autoLockState.js';
 import { sessionKeyPathFor } from '../../../packages/desktop/main/keychain.js';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
 
@@ -86,6 +87,7 @@ function seedAllStores(userData) {
         meta: metaPathFor(userData),
         session: sessionKeyPathFor(userData),
         throttle: unlockThrottlePathFor(userData),
+        autoLock: autoLockStatePathFor(userData),
     };
     for (const p of Object.values(paths)) {
         writeFileSync(p, 'seed', { mode: 0o600 });
@@ -101,6 +103,7 @@ function buildRuntime(userData, { sessionBackend } = {}) {
         metaBackend: new FileMetaBackend(metaPathFor(userData)),
         sessionBackend: sessionBackend || fakeSessionBackend(sessionKeyPathFor(userData)),
         unlockThrottleStore: new FileUnlockThrottleStore(unlockThrottlePathFor(userData)),
+        autoLockStore: new FileAutoLockStore(autoLockStatePathFor(userData)),
         chainRegistry: registryLib.defaultRegistry(),
         // createRuntime only checks the registry is present; the wipe
         // path never touches the SDK.
@@ -125,8 +128,8 @@ function buildRuntime(userData, { sessionBackend } = {}) {
         assert.equal(result.ok, true, 'wipe reports ok when every store cleared');
         assert.deepEqual(
             result.cleared.sort(),
-            ['meta', 'session', 'storage', 'unlockThrottle'],
-            'wipe clears all four desktop stores',
+            ['autoLock', 'meta', 'session', 'storage', 'unlockThrottle'],
+            'wipe clears all five desktop stores',
         );
         assert.deepEqual(result.errors, [], 'no per-store errors');
 
@@ -166,8 +169,8 @@ function buildRuntime(userData, { sessionBackend } = {}) {
         );
         assert.deepEqual(
             result.cleared.sort(),
-            ['session', 'storage', 'unlockThrottle'],
-            'one unwritable file does not strand the other three',
+            ['autoLock', 'session', 'storage', 'unlockThrottle'],
+            'one unwritable file does not strand the others',
         );
         assert.ok(!existsSync(vaultPathFor(userData)), 'vault still cleared despite the meta failure');
     } finally {
@@ -189,7 +192,7 @@ function buildRuntime(userData, { sessionBackend } = {}) {
         assert.equal(result.ok, true, 'absent optional store is skipped, not an error');
         assert.deepEqual(
             result.cleared.sort(),
-            ['meta', 'session', 'storage'],
+            ['autoLock', 'meta', 'session', 'storage'],
             'only the stores that exist are reported cleared',
         );
     } finally {

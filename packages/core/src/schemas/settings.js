@@ -102,8 +102,10 @@ export function resolveAdsChainConfig(state, descriptor) {
  * Resolve a per-chain fee entry's effective preferences the same way:
  * stored null/absent fields follow the descriptor's `feeStrategy`
  * defaults; a stored value is an explicit user override. A stored
- * rbfByDefault is honored only where the descriptor supports RBF: a chain
- * declaring `rbfSupported: false` always resolves to false.
+ * rbfByDefault is honored only where the descriptor declares
+ * `rbfSupported: true`: a chain declaring false, and an entry with no
+ * descriptor at all, always resolve to false (less capability is the
+ * harmless direction, the same reading the fee-bump flow takes).
  *
  * @param {{ strategy?: string | null, customSatsPerKb?: number | null, rbfByDefault?: boolean | null } | null | undefined} entry
  * @param {{ feeStrategy?: { defaultStrategy: string, rbfSupported: boolean } } | null | undefined} descriptor
@@ -114,8 +116,8 @@ export function resolveFeeConfig(entry, descriptor) {
     return {
         strategy: entry?.strategy ?? descriptor?.feeStrategy?.defaultStrategy ?? 'normal',
         customSatsPerKb: entry?.customSatsPerKb ?? null,
-        // Cap a stored true at the chain's capability (no RBF on a chain that cannot replace)
-        rbfByDefault: rbfSupported === false ? false : (entry?.rbfByDefault ?? rbfSupported ?? true),
+        // Cap a stored true at the chain's declared capability (no RBF on a chain that cannot replace or is unknown)
+        rbfByDefault: rbfSupported === true ? (entry?.rbfByDefault ?? true) : false,
     };
 }
 

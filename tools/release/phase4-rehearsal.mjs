@@ -235,6 +235,9 @@ export function dirtySigningPath(root = WALLET_ROOT, files = SIGNING_SCRIPTS) {
 export function classify(output) {
     if (/is not a lane declared in/.test(output)) return 'dev-mock-gate';
     if (/dev-mock gate exited 0 without saying it read anything/.test(output)) return 'gpg-key-named';
+    // Match sign.sh's own dev-mock refusal before any vocabulary test: sign.sh exits right after it,
+    // and the gate output it echoes says "missing", which the generic match below reads as lane scope.
+    if (/pre-sign dev-mock gate FAILED/.test(output)) return 'gpg-key-named';
     if (/XCHAIN_RELEASE_GPG_KEY is not set/.test(output)) return 'invoked';
     if (/unknown argument/.test(output)) return 'invoked';
     // The gpg markers are tested FIRST, because reaching them means every

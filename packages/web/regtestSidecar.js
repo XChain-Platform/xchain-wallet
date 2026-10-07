@@ -89,10 +89,11 @@ const SIDECAR_PROPERTY = /^[ \t]*\$regtestSidecar[ \t]*:[ \t]*(['"])(?:(?!\1)[^\
 /**
  * A whole-line comment: `//…`, or a `*` continuation line inside a block.
  *
- * Comment lines that MENTION the sidecar go too. Minification drops them
- * anyway, so this changes no shipped byte today; it exists so the check below
- * can be a flat "no marker anywhere" rather than "no marker except in the
- * comments", which is the kind of exception that later swallows a real one.
+ * Comment lines that MENTION the sidecar go too. An unminified store build
+ * (the extension sets `minify: false`) ships SDK comments as written, and one
+ * naming `fullnode.regtest.json` would fail the marker scan below. It also
+ * keeps that check a flat "no marker anywhere" rather than "no marker except in
+ * the comments", which is the kind of exception that later swallows a real one.
  *
  * A line that OPENS a block is excluded, and so is any line that carries a
  * block terminator anywhere, a `*` continuation that also closes the block

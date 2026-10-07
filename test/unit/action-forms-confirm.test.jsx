@@ -826,6 +826,32 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    // A refused compose shows a sentence; the composer's own text sits only in the collapsed details.
+    it('BatchComposerForm shows a refused compose in plain words, raw text only in details', async () => {
+        const raw = 'buildBatchCommand: STAKE version 1 is accepted on Bitcoin only, not on litecoin-mainnet';
+        const { messaging } = recordingMessaging({
+            buildBatchCommand: () => Promise.reject(new Error(raw)),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = render(React.createElement(MessagingProvider, { shell: 'web', messaging },
+                React.createElement(BatchComposerForm, { walletId: 'w', chainId: CHAIN, onBack() {} })));
+            await drainMicrotasks();
+        });
+        for (const step of [
+            (u) => fireEvent.change(u.getByLabelText('Action'), { target: { value: 'SEND' } }),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Review' })),
+        ]) {
+            // eslint-disable-next-line no-await-in-loop
+            await domAct(async () => { step(utils); await drainMicrotasks(); });
+        }
+        const alert = utils.getByText(/works only on Bitcoin/);
+        expect(alert.textContent).not.toMatch(/buildBatchCommand|litecoin-mainnet/);
+        const details = utils.container.querySelector('details');
+        expect(details, 'the raw refusal is kept in a collapsed disclosure').toBeTruthy();
+        expect(details.textContent).toContain(raw);
+    });
+
     it('LinkForm composes LINK and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: LinkForm,

@@ -141,9 +141,9 @@ describe('the transform, run against the SDK source that ships', { timeout: SDK_
     });
 
     it('takes the comment lines that name the sidecar with it', () => {
-        // Minification drops these anyway, so no shipped byte changes. They go
-        // so the bundle scan can be a flat "no marker anywhere" instead of
-        // carrying an exception for comments, which is how a real one hides.
+        // An unminified store build (the extension) ships these as written, so
+        // the bundle scan would refuse it without this sweep. It also keeps that
+        // scan a flat "no marker anywhere", with no comment exception to hide in.
         const { removed } = stripRegtestSidecar(SDK_SOURCES.get('index.js'));
         expect(removed).toContain('comments');
     });
@@ -185,7 +185,9 @@ describe('what the stripped registry resolves', { timeout: SDK_FIXTURE_TIMEOUT }
         // halts on its own config.
         const before = require(join(pristine, 'index.js'));
         const after = require(join(stripped, 'index.js'));
-        for (const network of ['testnet', 'regtest']) {
+        // Read the networks from the SDK, so a network pinned later is measured with no edit here.
+        expect(before.NETWORKS).toContain('mainnet');
+        for (const network of before.NETWORKS) {
             expect(after.consensusHashes(network)).toEqual(before.consensusHashes(network));
             expect(() => after.verifyConsensusPin(network)).not.toThrow();
         }

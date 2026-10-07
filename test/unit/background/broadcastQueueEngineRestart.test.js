@@ -155,6 +155,38 @@ describe('broadcast queue engine restart invariant', () => {
         expect(resolved).toBe(true);
     });
 
+    for (const pending of ['load', 'loadSettlements']) {
+        it(`a journal record made while ${pending} is in flight reaches storage`, async () => {
+            const storage = memStorage();
+            const read = storage[pending].bind(storage);
+            let release;
+            const gate = new Promise((resolve) => { release = resolve; });
+            storage[pending] = async () => { await gate; return read(); };
+            const { store, engine } = boot(storage);
+            const loading = engine.ensureQueueLoaded();
+            await new Promise((r) => setTimeout(r, 0));
+            engine.recordOwedSettlement('w1', 'p-race', 'patch', { status: 'failed' });
+            release();
+            await loading;
+            expect(store.loaded).toBe(true);
+            expect((await storage.loadSettlements()).map((s) => s.pendingTxId)).toEqual(['p-race']);
+            const next = boot(storage);
+            await next.engine.ensureQueueLoaded();
+            expect(next.store.owed.map((s) => s.pendingTxId)).toEqual(['p-race']);
+        });
+    }
+
+    it('a plain cold boot writes neither half back', async () => {
+        const storage = memStorage();
+        let journalSaves = 0;
+        const saveSettlements = storage.saveSettlements.bind(storage);
+        storage.saveSettlements = async (next) => { journalSaves += 1; return saveSettlements(next); };
+        const { engine } = boot(storage);
+        await engine.ensureQueueLoaded();
+        expect(storage.saves).toBe(0);
+        expect(journalSaves).toBe(0);
+    });
+
     it('an unreadable store keeps the load un-latched and writes nothing', async () => {
         const storage = memStorage();
         storage.load = async () => null;

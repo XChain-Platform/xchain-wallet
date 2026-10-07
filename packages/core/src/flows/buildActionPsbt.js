@@ -36,6 +36,7 @@ import { applyNativeFeePreflight } from '../sdk/nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { isChunkEncoding } from './nativeFeeLane.js';
+import { capRbfToDescriptor } from './rbfCap.js';
 
 /**
  * Thrown when a watcher-composed action needs a second, revealing transaction
@@ -138,7 +139,8 @@ export async function buildActionPsbt(opts) {
         actionData: opts.actionData,
         encoderOpts: preflight.encoderOpts,
     });
-    const encoderOpts = oraclePreflight.encoderOpts;
+    // Cap RBF to the chain's descriptor; the encoder signals it on any chain it is asked to.
+    const encoderOpts = capRbfToDescriptor(descriptor, oraclePreflight.encoderOpts);
 
     logConsole.record({
         source: 'encoder',

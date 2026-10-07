@@ -41,11 +41,14 @@ export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
  *     queue store has nothing to seal them.
  *
  * Shell-side stores (desktop, extension, native mobile): the Electron
- * shell keeps its vault blob, kdfParams meta, cached session key and
- * unlock throttle in files under `app.getPath('userData')`, and the
- * extension keeps the same four plus the cached signing secret in
- * `chrome.storage`. No renderer API reaches either, so clearing
- * localStorage + IndexedDB is a silent no-op there and the user lands
+ * shell keeps its vault blob, kdfParams meta, cached session key, unlock
+ * throttle and auto-lock record in files under `app.getPath('userData')`
+ * (the `targets` of `wipeRuntimeStores` in packages/desktop/main/runtime.js
+ * are the full list), and the extension keeps those and more in
+ * `chrome.storage` (`WALLET_LOCAL_KEYS` and the session-area clear in
+ * packages/extension/src/background/wipeExtensionStorage.js). No renderer
+ * API reaches either, so clearing localStorage + IndexedDB is a silent
+ * no-op there and the user lands
  * back on an unlock screen for the vault they just wiped. When a shell
  * publishes a `wipeStorage` hook on the bridge we hand the job to the
  * process that owns those stores.

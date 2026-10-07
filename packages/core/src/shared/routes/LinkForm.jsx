@@ -509,7 +509,7 @@ export function LinkForm({ walletId, onBack }) {
                     </>
                 ) : null}
                 <p className={styles.hint}>
-                    Once mined, both sides will thread together in History.
+                    Once mined, History shows both actions as linked.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>

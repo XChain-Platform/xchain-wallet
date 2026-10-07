@@ -1278,6 +1278,27 @@ export function __createWebVaultMultiTabHarnessForTests() {
 }
 
 /**
+ * Undo what a failed create / import / restore put into module state, and
+ * close the vault it built: Vault keeps its own copy of the master key, and
+ * only `close()` zeros it.
+ *
+ * @param {{ openedVault: any, ownPool: any, ownHost: any }} owned
+ */
+function tearDownFailedOnboarding({ openedVault, ownPool, ownHost }) {
+    if (ownHost && host === ownHost) {
+        stopNotifications();
+        host = null;
+    }
+    if (ownPool && signerPool === ownPool) {
+        try { ownPool.lockAll(); } catch (_lockErr) { /* best-effort */ }
+        signerPool = null;
+    }
+    if (!openedVault) return;
+    if (vault === openedVault) vault = null;
+    try { openedVault.close(); } catch (_closeErr) { /* best-effort */ }
+}
+
+/**
  * Create a fresh BIP39 wallet. Generates kdfParams, derives the master
  * key from `password`, opens a blank Vault, runs the core `createWallet`
  * flow, persists kdfParams to the meta slot, and leaves the host live
@@ -1302,12 +1323,17 @@ export async function createWalletLocal(req) {
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = cryptoLib.makeFreshKdfParams();
         masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
+        openedVault = v;
         await v.open();  // blank document
         const flowsNs = await getFlows();
         const result = await flowsNs.createWallet({
@@ -1325,6 +1351,7 @@ export async function createWalletLocal(req) {
         vault = v;
         await sdkBound();
         signerPool = new signersLib.SignerPool();
+        ownPool = signerPool;
         await signerPool.populate({
             vault,
             password,
@@ -1340,10 +1367,14 @@ export async function createWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
         });
+        ownHost = host;
         startNotifications();
         sessionStarted = true;
         await meta.save({ kdfParams });
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
+    } catch (err) {
+        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
@@ -1392,12 +1423,17 @@ export async function importMnemonicLocal(req) {
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = cryptoLib.makeFreshKdfParams();
         masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
+        openedVault = v;
         await v.open();
         const result = await flowsNs.importMnemonic({
             password,
@@ -1415,6 +1451,7 @@ export async function importMnemonicLocal(req) {
         vault = v;
         await sdkBound();
         signerPool = new signersLib.SignerPool();
+        ownPool = signerPool;
         await signerPool.populate({
             vault,
             password,
@@ -1430,6 +1467,7 @@ export async function importMnemonicLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
         });
+        ownHost = host;
         startNotifications();
         sessionStarted = true;
         await meta.save({ kdfParams });
@@ -1459,6 +1497,9 @@ export async function importMnemonicLocal(req) {
             walletId: result.wallet.id,
             labelSync,
         };
+    } catch (err) {
+        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
@@ -1538,6 +1579,10 @@ export async function importBackupLocal(req) {
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
@@ -1545,6 +1590,7 @@ export async function importBackupLocal(req) {
         masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
+        openedVault = v;
         await v.open();
         const common = {
             vault: v,
@@ -1567,6 +1613,7 @@ export async function importBackupLocal(req) {
         vault = v;
         await sdkBound();
         signerPool = new signersLib.SignerPool();
+        ownPool = signerPool;
         // The restored seal now opens under `password`, which is exactly why
         // the re-key had to happen first: populate would otherwise skip the
         // wallet silently and the user would meet it at their first spend.
@@ -1584,6 +1631,7 @@ export async function importBackupLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
         });
+        ownHost = host;
         startNotifications();
         sessionStarted = true;
         await meta.save({ kdfParams });
@@ -1594,6 +1642,9 @@ export async function importBackupLocal(req) {
             skipped: result.skipped,
             rekeyed: result.rekeyed,
         };
+    } catch (err) {
+        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);

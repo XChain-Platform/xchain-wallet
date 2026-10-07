@@ -846,9 +846,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         alerts.push({
             id: 'legacy-format',
             severity: 'info',
-            title: 'Legacy FreeWallet format',
-            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for wider compatibility with other wallets and stronger security.',
-            action: { label: 'Migrate to BIP39', onSelect: onMigrateToBip39 },
+            title: 'Older recovery phrase format',
+            message: 'This wallet uses the older 12-word FreeWallet recovery phrase, which many other wallets cannot restore. Upgrading creates a new wallet with a standard (BIP39) recovery phrase; your current wallet stays as it is.',
+            action: { label: 'Upgrade recovery phrase', onSelect: onMigrateToBip39 },
         });
     }
 

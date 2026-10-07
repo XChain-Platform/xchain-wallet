@@ -165,7 +165,7 @@ export function buildCommands(ctx) {
         ...(hasDex ? [
             { id: 'nav-markets', category: 'Navigate', title: 'Open DEX', subtitle: 'Markets and orders', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
             { id: 'nav-my-orders', category: 'Navigate', title: 'My orders', subtitle: 'Your open DEX orders', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
-            { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open atomic swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
+            { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
         { id: 'nav-dispensers', category: 'Navigate', title: 'Dispensers', subtitle: 'Your dispensers', keywords: ['vending', 'sell'], Icon: Icon.DollarIcon, run: go('dispensers-list') },
         // The buyer's side. 'Dispensers' above lists the ones this wallet
@@ -254,8 +254,8 @@ export function buildCommands(ctx) {
     // parallel composer, which every build has.
     list.push(
         ...(hasDex ? [
-            { id: 'trade-swap', category: 'Trade', title: 'Swap', subtitle: 'Place a DEX order', keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
-            { id: 'trade-order', category: 'Trade', title: 'Create order', subtitle: 'Place a DEX limit order', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'], Icon: Icon.MarketIcon, run: go('create-order') },
+            { id: 'trade-swap', category: 'Trade', title: 'Swap', subtitle: 'Trade one token for another, all or nothing', keywords: ['swap', 'order', 'exchange'], Icon: Icon.SwapIcon, run: go('swap') },
+            { id: 'trade-order', category: 'Trade', title: 'Create order', subtitle: 'Trade at the price you set', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'], Icon: Icon.MarketIcon, run: go('create-order') },
         ] : []),
         { id: 'trade-coinpay', category: 'Trade', title: 'Pay an order', subtitle: 'Settle a matched order', keywords: ['coinpay', 'pay', 'settle'], Icon: Icon.DollarIcon, run: go('coinpay') },
         ...(hasDex ? [
@@ -402,7 +402,7 @@ export function sitesToCommands(sites, ctx) {
 // or that duplicate a dedicated palette entry (connected-sites) are omitted.
 const SETTINGS_SECTIONS = /** @type {const} */ ([
     { id: 'this-wallet', title: 'This Wallet', keywords: ['wallet', 'rename', 'remove'] },
-    { id: 'appearance', title: 'Appearance', keywords: ['theme', 'dark', 'light', 'accent'] },
+    { id: 'appearance', title: 'Appearance', keywords: ['theme', 'dark', 'light'] },
     { id: 'display', title: 'Display', keywords: ['pinned', 'hidden', 'tokens'] },
     { id: 'keyboard', title: 'Keyboard', keywords: ['shortcuts', 'rebind', 'keys', 'hotkeys'] },
     { id: 'language-region', title: 'Language & Region', keywords: ['language', 'currency', 'fiat'] },
