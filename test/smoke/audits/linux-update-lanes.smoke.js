@@ -48,6 +48,9 @@
 //   5. The mksquashfs wrapper strips the deb lane's leftovers out of the
 //      AppImage stage tree, so the claim in (4) is also true of the bytes
 //      we ship and not only of the runtime guard.
+//   6. The deb swap drill refuses to run outside a disposable Linux host.
+//   7. The release workflow uploads the staging deb built for the Linux
+//      rehearsal, so the signing gate receives every rehearsed format.
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
@@ -68,6 +71,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const require = createRequire(import.meta.url);
 const CONFIG = join(root, 'packages/desktop/electron-builder.config.cjs');
+const RELEASE_WORKFLOW = join(root, '.github/workflows/release.yml');
 
 const SHIPPED_ARCHES = ['x64', 'arm64'];
 
@@ -351,6 +355,27 @@ const SHIPPED_ARCHES = ['x64', 'arm64'];
     // which one fires depends on where this suite is running).
     assert.ok(!runAnyway.stdout.includes('installing the starting version'),
         'the drill must never reach dpkg on a host it was not pointed at deliberately');
+}
+
+// ------------------------- 7. the Linux rehearsal upload includes the deb
+
+{
+    const workflow = readFileSync(RELEASE_WORKFLOW, 'utf8');
+    const jobStart = workflow.indexOf('\n  desktop-linux:\n');
+    assert.notEqual(jobStart, -1, 'release.yml keeps the desktop-linux job');
+    const nextJob = workflow.indexOf('\n  desktop-macos:\n', jobStart);
+    assert.notEqual(nextJob, -1, 'release.yml keeps the desktop-macos job after desktop-linux');
+    const linuxJob = workflow.slice(jobStart, nextJob);
+    const uploadSteps = linuxJob.split(/(?=^      - uses: actions\/upload-artifact@v4)/m);
+    const rehearsalUpload = uploadSteps.find((step) => (
+        /^\s+name: desktop-linux-rehearsal\s*$/m.test(step)
+    ));
+
+    assert.ok(rehearsalUpload,
+        'release.yml uploads the desktop-linux-rehearsal artifact');
+    assert.match(rehearsalUpload,
+        /^\s+packages\/desktop\/dist-staging\/\*\.deb\s*$/m,
+        'the desktop-linux rehearsal upload includes the staging .deb built by CI');
 }
 
 console.log('linux-update-lanes smoke: ok');
