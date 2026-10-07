@@ -614,12 +614,46 @@ let signerPool = null;
 // broadcast that resolves after the removal writes nothing back.
 let broadcastQueueStore = null;
 
+// Release a deferred vault lease after the last queue claim settles.
+class WebBroadcastClaims extends Set {
+    delete(claim) {
+        const removed = super.delete(claim);
+        if (removed && this.size === 0) finishDeferredWebVaultLeaseRelease();
+        return removed;
+    }
+
+    clear() {
+        const hadClaims = this.size > 0;
+        super.clear();
+        if (hadClaims) finishDeferredWebVaultLeaseRelease();
+    }
+}
+
 /** Build the page's queue store on first use, when the page's storage is known. */
 function sharedBroadcastQueueStore() {
     if (!broadcastQueueStore) {
         broadcastQueueStore = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
+        broadcastQueueStore.inFlight = new WebBroadcastClaims(broadcastQueueStore.inFlight);
     }
     return broadcastQueueStore;
+}
+
+/**
+ * Reset the load latch so the next host merges the persisted queue under its lease.
+ *
+ * @param {import('../../extension/src/background/broadcastQueueStore.js').BroadcastQueueStore | null} store
+ * @returns {Promise<boolean>} whether a persisted queue can be refreshed
+ */
+async function prepareBroadcastQueueForLease(store) {
+    if (!store || store.sealed || !store.storage) return false;
+    const previousLoad = store.loadPromise;
+    if (previousLoad) {
+        try { await previousLoad; } catch (_err) { /* the new lease retries below */ }
+    }
+    if (store.sealed) return false;
+    store.loaded = false;
+    store.loadPromise = null;
+    return true;
 }
 
 /**
@@ -670,6 +704,28 @@ const WEB_VAULT_LOCK_NAME = 'xchain-wallet:vault-session';
 let webVaultLease = null;
 /** @type {Promise<{ release: () => Promise<void> } | null> | null} */
 let webVaultLeaseAcquisition = null;
+/** @type {{ release: () => Promise<void> } | null} */
+let deferredWebVaultLeaseRelease = null;
+/** @type {Promise<void> | null} */
+let webVaultLeaseRelease = null;
+
+function beginWebVaultLeaseRelease(lease) {
+    if (webVaultLeaseRelease) return webVaultLeaseRelease;
+    const release = lease.release();
+    webVaultLeaseRelease = release;
+    void release.then(
+        () => { if (webVaultLeaseRelease === release) webVaultLeaseRelease = null; },
+        () => { if (webVaultLeaseRelease === release) webVaultLeaseRelease = null; },
+    );
+    return release;
+}
+
+function finishDeferredWebVaultLeaseRelease() {
+    const lease = deferredWebVaultLeaseRelease;
+    if (!lease || lease !== webVaultLease) return;
+    deferredWebVaultLeaseRelease = null;
+    void beginWebVaultLeaseRelease(lease).catch(() => {});
+}
 
 // Seen-state key for the governance-poll watcher (localStorage): notify-once
 // bookkeeping only (chain → open-poll ids already announced), no secrets.
@@ -1000,7 +1056,16 @@ async function acquireWebVaultLease() {
         throw new VaultCoordinationUnavailableError();
     }
     if (usingNativeVault()) return null;
-    if (webVaultLease) return null;
+    if (webVaultLeaseRelease) {
+        try { await webVaultLeaseRelease; } catch (_err) { /* acquisition retries below */ }
+    }
+    if (webVaultLease) {
+        // A same-tab re-unlock keeps the lease that has not been handed off.
+        if (deferredWebVaultLeaseRelease === webVaultLease) {
+            deferredWebVaultLeaseRelease = null;
+        }
+        return null;
+    }
     if (webVaultLeaseAcquisition) {
         const lease = await webVaultLeaseAcquisition;
         if (!lease) throw new VaultInUseError();
@@ -1009,6 +1074,7 @@ async function acquireWebVaultLease() {
 
     let resolveHold;
     const hold = new Promise((resolve) => { resolveHold = resolve; });
+    let requestCompletion = null;
     webVaultLeaseAcquisition = new Promise((resolve, reject) => {
         try {
             const request = lockManager.request(
@@ -1020,15 +1086,13 @@ async function acquireWebVaultLease() {
                         return;
                     }
                     let released = false;
-                    let resolveReleased;
-                    const releaseComplete = new Promise((done) => { resolveReleased = done; });
                     const lease = {
                         release() {
                             if (!released) {
                                 released = true;
                                 resolveHold();
                             }
-                            return releaseComplete;
+                            return requestCompletion ?? Promise.resolve();
                         },
                     };
                     webVaultLease = lease;
@@ -1037,11 +1101,11 @@ async function acquireWebVaultLease() {
                         await hold;
                     } finally {
                         if (webVaultLease === lease) webVaultLease = null;
-                        resolveReleased();
                     }
                 },
             );
-            Promise.resolve(request).catch(reject);
+            requestCompletion = Promise.resolve(request);
+            requestCompletion.catch(reject);
         } catch (err) {
             reject(err);
         }
@@ -1050,6 +1114,7 @@ async function acquireWebVaultLease() {
     try {
         const lease = await webVaultLeaseAcquisition;
         if (!lease) throw new VaultInUseError();
+        await prepareBroadcastQueueForLease(broadcastQueueStore);
         return lease;
     } finally {
         webVaultLeaseAcquisition = null;
@@ -1058,8 +1123,25 @@ async function acquireWebVaultLease() {
 
 /** @param {{ release: () => Promise<void> } | null} [lease] */
 async function releaseWebVaultLease(lease = webVaultLease) {
-    if (lease && webVaultLease === lease) await lease.release();
+    if (!lease || webVaultLease !== lease) return;
+    if (broadcastQueueStore?.inFlight?.size > 0) {
+        deferredWebVaultLeaseRelease = lease;
+        return;
+    }
+    if (deferredWebVaultLeaseRelease === lease) deferredWebVaultLeaseRelease = null;
+    await beginWebVaultLeaseRelease(lease);
 }
+
+/** Exact production seams used by the multi-tab unit harness. */
+export const __webVaultLeaseHarnessForTests = {
+    acquire: acquireWebVaultLease,
+    release: releaseWebVaultLease,
+    queueStore: sharedBroadcastQueueStore,
+    state: () => ({
+        hasLease: webVaultLease !== null,
+        releaseDeferred: deferredWebVaultLeaseRelease !== null,
+    }),
+};
 
 /**
  * Create a fresh BIP39 wallet. Generates kdfParams, derives the master
@@ -1589,6 +1671,7 @@ export function __resetForTests() {
     vault = null;
     host = null;
     broadcastQueueStore = null;
+    deferredWebVaultLeaseRelease = null;
     void releaseWebVaultLease();
 }
 
