@@ -139,6 +139,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                     }
                     if (queueStore.sealed) return false;
                 }
+                // Re-sample the journal after the reads: a record made while
+                // one was in flight had its own persist refused, so the
+                // write-back below is its only route to storage.
+                const owedAtMerge = heldOwed || queueStore.owed.length > 0;
                 mergeQueueSnapshot(snapshot);
                 mergeOwedSettlements(persistedOwed);
                 queueStore.loaded = true;
@@ -159,7 +163,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 // threw returned above before `loaded` latched, so reaching
                 // this line means the journal was read and merged; writing it
                 // back cannot erase the owed writes recorded before this boot.
-                if (heldOwed || replayedPrune) await persistOwedSettlements();
+                if (owedAtMerge || replayedPrune) await persistOwedSettlements();
                 return true;
             })();
         }

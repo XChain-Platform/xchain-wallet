@@ -89,6 +89,12 @@ function blankRow() {
     return { id: newRowId(), action: '', paramsJson: '{\n  "VERSION": "0"\n}' };
 }
 
+/** The raw error text for the collapsed details, or '' when the shown sentence already carries it. */
+function technicalDetails(err, shown) {
+    const raw = String(err?.message || '').trim();
+    return raw && !String(shown || '').includes(raw) ? raw : '';
+}
+
 /** Parse one row's params; returns { params } or { error }. */
 function parseRowParams(json) {
     if (typeof json !== 'string' || json.trim().length === 0) {
@@ -135,9 +141,11 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const [stage, setStage] = useState(/** @type {'compose'|'review'|'submitting'|'done'} */ ('compose'));
     const [composed, setComposed] = useState(/** @type {{command:string,subStrings:string[]}|null} */ (null));
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
+    const [buildErrorDetails, setBuildErrorDetails] = useState('');
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [submitErrorDetails, setSubmitErrorDetails] = useState('');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     // HwSignBlock reports `{ status, detail, refresh }`, so the raw setter
@@ -248,6 +256,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     async function goReview() {
         if (composeError) return;
         setBuildError(null);
+        setBuildErrorDetails('');
         setStage('review');
         setComposed(null);
         try {
@@ -255,7 +264,13 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             const res = await messaging.buildBatchCommand({ chainId, subActions });
             setComposed({ command: res.command, subStrings: res.subStrings || String(res.command).split(';') });
         } catch (err) {
-            setBuildError(err?.message || 'Failed to compose the batch.');
+            // Show a sentence, never the composer's own error text; that text moves to the collapsed details.
+            const shown = submitFailureMessage(err, {
+                chainId, coinTicker, verb: 'build this batch',
+                fallback: 'Couldn\'t build this batch. Check each step\'s action and parameters, then try again.',
+            });
+            setBuildError(shown);
+            setBuildErrorDetails(technicalDetails(err, shown));
         }
     }
 
@@ -279,6 +294,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
 
     async function openConfirmScreen(from, params) {
         setSubmitError(null);
+        setSubmitErrorDetails('');
         try {
             const res = await actionConfirm.run({
                 chainId,
@@ -313,6 +329,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
+        setSubmitErrorDetails('');
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -349,7 +366,11 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : (err?.message || 'Batch failed.'));
+            const shown = bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || 'Batch failed.',
+            });
+            setSubmitError(shown);
+            setSubmitErrorDetails(bad ? '' : technicalDetails(err, shown));
             setStage('review');
             if (!isWatcherMode && !isHwSource(fromAddress)) {
                 passwordRef.current?.focus();
@@ -444,7 +465,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     <dd className={styles.detailsValue}><AddressText address={fromAddress?.address} /></dd>
                 </dl>
 
-                {buildError ? <StatusMessage variant="error" className={styles.error}>{buildError}</StatusMessage> : null}
+                {buildError ? <StatusMessage variant="error" className={styles.error} details={buildErrorDetails || undefined}>{buildError}</StatusMessage> : null}
                 {!composed && !buildError ? <p className={styles.hint}>Composing…</p> : null}
                 {composed ? (
                     <>
@@ -484,7 +505,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 ) : null}
-                {submitError && (hw || isWatcherMode) ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
+                {submitError && (hw || isWatcherMode) ? <StatusMessage variant="error" className={styles.error} details={submitErrorDetails || undefined}>{submitError}</StatusMessage> : null}
 
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>

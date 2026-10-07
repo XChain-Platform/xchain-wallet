@@ -51,6 +51,7 @@ import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { humanizeError } from './humanizeError.js';
+import { actionDisplayLabel } from './actionDisplayLabel.js';
 
 /**
  * A native-coin fee refusal, recognised however it reached us.
@@ -137,6 +138,47 @@ function isCommitFeeTooLowBroadcast(err) {
         && /\b(?:min(?:imum)?[-\s]+relay[-\s]+fee|fee[-\s]+too[-\s]+low)\b/i.test(message);
 }
 
+// Read the per-chain action gates' refusals (registry/actions.js and the nested
+// BATCH check) off the message alone, since only `{ name, message }` crosses the
+// messaging boundary; the thrown text keeps the composer name and chain id for logs.
+const CHAIN_GATE_PREFIX = '^[A-Za-z][A-Za-z0-9]*: ';
+const BITCOIN_ONLY_RE = new RegExp(`${CHAIN_GATE_PREFIX}([A-Z_]+) version (\\d+) is accepted on Bitcoin only, not on \\S+$`);
+const NOT_ON_BITCOIN_RE = new RegExp(`${CHAIN_GATE_PREFIX}([A-Z_]+) version (\\d+) is not accepted on Bitcoin$`);
+const VALIDATOR_LANE_RE = new RegExp(`${CHAIN_GATE_PREFIX}validator staking actions are accepted on Bitcoin only, not on \\S+$`);
+const NESTED_VERSION_RE = new RegExp(`${CHAIN_GATE_PREFIX}([A-Z_]+) version is unreadable in a nested sub-action$`);
+
+/**
+ * The sentence for a per-chain action-gate refusal, or null for any other error.
+ *
+ * @param {unknown} err
+ * @returns {string | null}
+ */
+export function chainGateErrorMessage(err) {
+    const message = (err && typeof err === 'object')
+        ? String(/** @type {any} */ (err).message || '').trim()
+        : (typeof err === 'string' ? err.trim() : '');
+    if (!message) return null;
+    let m = BITCOIN_ONLY_RE.exec(message);
+    if (m) {
+        return `${actionDisplayLabel(m[1])} version ${m[2]} works only on Bitcoin. `
+            + 'Send it from a Bitcoin address, or remove that action.';
+    }
+    m = NOT_ON_BITCOIN_RE.exec(message);
+    if (m) {
+        return `${actionDisplayLabel(m[1])} version ${m[2]} cannot be sent from a Bitcoin address. `
+            + 'Send it from an address on another chain, or remove that action.';
+    }
+    if (VALIDATOR_LANE_RE.test(message)) {
+        return 'Validator staking works only on Bitcoin. Send it from a Bitcoin address.';
+    }
+    m = NESTED_VERSION_RE.exec(message);
+    if (m) {
+        return `A ${actionDisplayLabel(m[1])} step in this batch has no readable version. `
+            + 'Check the VERSION value in that step\'s parameters.';
+    }
+    return null;
+}
+
 /**
  * Turn a caught submit error into the sentence to show.
  *
@@ -174,6 +216,9 @@ export function submitFailureMessage(
     if (broadcastKind === null) {
         const encoderCopy = encoderErrorMessage(err, { coinTicker, requiredNative });
         if (encoderCopy) return encoderCopy;
+        // Name a per-chain gate refusal ahead of the params-builder check below.
+        const chainGateCopy = chainGateErrorMessage(err);
+        if (chainGateCopy) return chainGateCopy;
         // A params-builder refusal happens BEFORE the encoder is called at all,
         // so it can only be reached here - and it is checked after the encoder
         // for the same reason the encoder is checked after broadcast: the more

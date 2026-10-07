@@ -516,8 +516,10 @@ export function tearDownHost(runtime) {
  * from the renderer actually lands.
  *
  * The renderer's `wipeWalletStorage` can only reach localStorage and
- * IndexedDB, neither of which the desktop shell uses. Its four stores
- * are files under `app.getPath('userData')`, reachable only from main:
+ * IndexedDB, neither of which the desktop shell uses. Its stores are
+ * files under `app.getPath('userData')`, reachable only from main, and
+ * `targets` below is the list that decides what goes; a new per-wallet
+ * store added to `createRuntime` goes there too:
  *
  *   - storage        `vault.bin`            encrypted vault document
  *   - meta           `meta.json`            kdfParams: the "a wallet
@@ -528,6 +530,10 @@ export function tearDownHost(runtime) {
  *   - unlockThrottle attempt counters       a lockout inherited by the
  *                                           *next* wallet, punishing the
  *                                           user for the old one's typos
+ *   - autoLock       `autolock.json`        the idle stamp of a session
+ *                                           that no longer exists, which
+ *                                           would hand the next wallet
+ *                                           somebody else's idle clock
  *
  * The throttle is cleared deliberately. It exists to slow password
  * guessing against a vault; once that vault is gone there is nothing
@@ -538,7 +544,7 @@ export function tearDownHost(runtime) {
  * write a store back after it was unlinked.
  *
  * Per-store failures are collected rather than thrown so one unwritable
- * file cannot leave the other three behind; the caller reports `ok`.
+ * file cannot leave the others behind; the caller reports `ok`.
  *
  * @param {DesktopRuntime} runtime
  * @returns {Promise<WipeResult>}

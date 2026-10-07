@@ -132,4 +132,13 @@ describe('resolveFeeConfig follows the descriptor feeStrategy defaults', () => {
         expect(resolveFeeConfig(undefined, chainRegistry.get('dogecoin-mainnet')).rbfByDefault).toBe(false);
         expect(resolveFeeConfig({ rbfByDefault: true }, chainRegistry.get('litecoin-mainnet')).rbfByDefault).toBe(true);
     });
+
+    // A stale entry whose chain left the registry must agree with the fee-bump
+    // flow and the Fees panel: no declared capability means no RBF.
+    it('an entry with no descriptor, or no declared capability, resolves rbfByDefault false', () => {
+        expect(resolveFeeConfig(undefined, undefined).rbfByDefault).toBe(false);
+        expect(resolveFeeConfig({ rbfByDefault: true }, undefined).rbfByDefault).toBe(false);
+        expect(resolveFeeConfig({ rbfByDefault: true }, { feeStrategy: { defaultStrategy: 'normal' } }).rbfByDefault)
+            .toBe(false);
+    });
 });

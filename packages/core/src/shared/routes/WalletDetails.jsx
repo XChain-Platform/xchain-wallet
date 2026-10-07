@@ -173,7 +173,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                         onClick={onMigrateToBip39}
                         icon={<Icon.MigrateIcon />}
                     >
-                        Migrate to BIP39
+                        Upgrade recovery phrase
                     </Button>
                 </div>
             ) : null}

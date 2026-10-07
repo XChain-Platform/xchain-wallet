@@ -144,6 +144,27 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     const hostBlocked = 'launch-probe: 2 artifact(s) could NOT be probed because this host is missing a facility\n';
     assert.equal(classify(hostBlocked), 'signature-gate', 'the word "missing" in a launch-probe refusal is not lane scope');
 
+    // A dev-mock gate refusal, framed the way sign.sh prints it, means only the GPG key was named.
+    const devMockRefusal = (gateLines) => 'sign.sh: running pre-sign dev-mock gate against /tmp/stage ...\n'
+        + '  gate (tool tree): /repo/tools/build-reproduce/check-no-dev-mock.sh\n'
+        + gateLines
+        + 'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.\n';
+    const devMockRefusals = [
+        devMockRefusal('Pre-release gate FAILED - a required tool is missing.\n'),
+        devMockRefusal('Pre-release gate FAILED - it scanned NOTHING (2 target(s) absent).\n'
+            + 'A gate that could not run has not passed; sign.sh states that rule about\n'
+            + 'a missing script and it holds identically for an empty scan.\n'),
+        devMockRefusal('FAIL packages/desktop/main is missing\n'
+            + 'Pre-release gate FAILED - desktop main-process source is absent; scanned NOTHING.\n'),
+        devMockRefusal('Pre-release gate FAILED - dev-SDK stub leaked into a production bundle,\n'),
+    ];
+    for (const output of devMockRefusals) {
+        assert.equal(classify(output), 'gpg-key-named',
+            'a dev-mock gate refusal means only the GPG key was named; its word "missing" is not lane scope');
+        assert.equal(firstRefusal(output), 'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.',
+            'the blocker of a dev-mock gate refusal is sign.sh\'s own refusal line');
+    }
+
     const gpgAfterGates = 'signature gate ok (2 verified, 0 recorded-not-verified)\n'
         + 'launch probe ok (1 launched and still alive, 2 not probed on this host, 0 non-app file(s) ignored)\n'
         + 'gpg: signing failed: Inappropriate ioctl for device\n';
@@ -169,7 +190,7 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         assert.equal(classify(quiet), 'invoked', `a non-refusal gate mention claimed depth: ${quiet.split('\n')[0]}`);
     }
     assert.equal(classify('something nobody recognises\n'), 'invoked', 'unrecognised output stays conservative');
-    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates]) {
+    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates, ...devMockRefusals]) {
         assert.ok(STEPS.includes(classify(output)), 'classify returned a step STEPS does not list');
     }
 }

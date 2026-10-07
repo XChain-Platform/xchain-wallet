@@ -118,7 +118,7 @@ export function ThisWalletSection({
             {activeWallet.format === 'counterwallet-legacy' ? (
                 <Row
                     label="Upgrade recovery phrase"
-                    hint="This wallet uses an older 12-word recovery phrase format. Open your wallets, choose this wallet's details, and pick Migrate to BIP39."
+                    hint="This wallet uses an older 12-word recovery phrase format. Open your wallets, choose this wallet's details, and pick Upgrade recovery phrase."
                     actionLabel={onOpenWalletPicker ? 'Open wallets…' : null}
                     onClick={onOpenWalletPicker}
                 />

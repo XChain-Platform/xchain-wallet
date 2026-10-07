@@ -1542,7 +1542,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     </p>
                     <Input
                         label="Minimum confirmations (optional)"
-                        hint="How deep a lock of this token must be buried on this chain before the validators will sign it. Raise-only: below the platform default it has no effect. A reorg after a copy is minted cannot be undone, so this is the price you set for that risk."
+                        hint="How many blocks to wait on this chain after a transfer is locked, before its copy is created on the other chain. Waiting longer protects against this chain rewriting its recent blocks, which cannot be undone once a copy exists; the cost is slower transfers. Values below the platform default have no effect."
                         value={bridgeMinDepth}
                         onChange={(e) => setBridgeMinDepth(e.target.value)}
                         disabled={bridgeFrozen}
