@@ -1632,6 +1632,9 @@ export function createBackgroundHost(deps) {
             bip39Passphrase: req?.bip39Passphrase,
             chainRegistry,
             sdkRegistry,
+            // Queue the signed bytes on a transient broadcast failure, as the
+            // action.* routes do; the throw skips the batch clear below.
+            onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId),
         };
         const r = req?.preparation
             ? await submitLabelsPublication({

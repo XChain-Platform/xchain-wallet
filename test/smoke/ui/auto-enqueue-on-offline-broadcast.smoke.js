@@ -102,9 +102,7 @@ assert.ok(
 // Every submitAction call site forwards the hook, so a failed broadcast on
 // any action lands on the queue the confirm modal tells the user it is on.
 // A file listed here is exempt on purpose and says why.
-const FORWARD_EXEMPT = new Map([
-    ['labelSync.js', 'label publish stamps no PendingTx and has no queued-result surface'],
-]);
+const FORWARD_EXEMPT = new Map([]);
 const flowsDir = join(core, 'src', 'flows');
 const submitterNames = new Set();
 let forwardingFiles = 0;
