@@ -242,7 +242,10 @@ export async function drainQueuedBroadcast({
             // still-valid signed one loses its fee.
             const permanence = classifyBroadcastFailure(err);
             const status = permanence === 'permanent' ? 'failed' : 'queued';
-            await vault.pendingTxs.put({ ...existing, status, error: msg });
+            // A refused reveal whose commit landed stays 'broadcast', the rule submitAction applies.
+            await vault.pendingTxs.put(status === 'failed' && existing.commitLanded === true
+                ? commitLandedRecord(existing, msg)
+                : { ...existing, status, error: msg });
             const refreshed = await vault.pendingTxs.get(pendingTxId);
             return { pendingTx: refreshed, broadcast: false, error: msg, permanence };
         }
@@ -272,7 +275,7 @@ export async function drainQueuedBroadcast({
  * A claim this context is draining right now is kept: that drain settles it.
  *
  * @param {{ vault: import('../storage/Vault.js').Vault, pendingTxId: string }} opts
- * @returns {Promise<boolean>}   true if a record was removed
+ * @returns {Promise<boolean>}   true if a record left the queue (removed, or kept as commit-landed)
  */
 export async function discardQueuedBroadcast({ vault, pendingTxId }) {
     if (!vault) throw new Error('discardQueuedBroadcast: vault is required');
@@ -283,5 +286,28 @@ export async function discardQueuedBroadcast({ vault, pendingTxId }) {
     if (!existing) return false;
     if (existing.status !== 'queued' && existing.status !== 'broadcasting') return false;
     if (inFlightDrains.has(pendingTxId)) return false;
+    // Keep a discarded reveal whose commit landed, so the commit's spend stays netted.
+    if (existing.commitLanded === true) {
+        await vault.pendingTxs.put(commitLandedRecord(existing, 'reveal discarded; its commit is already on the network'));
+        return true;
+    }
     return await vault.pendingTxs.delete(pendingTxId);
+}
+
+/**
+ * Retire a queued reveal or phase-2 whose commit landed: 'broadcast' on the commit's
+ * txid, never 'failed' or deleted, since the network holds that commit's spend.
+ *
+ * @param {object} existing
+ * @param {string} error
+ * @returns {object}
+ */
+function commitLandedRecord(existing, error) {
+    return {
+        ...existing,
+        status: 'broadcast',
+        broadcastAt: existing.broadcastAt ?? new Date().toISOString(),
+        txid: existing.commitTxid ?? existing.txid,
+        error,
+    };
 }

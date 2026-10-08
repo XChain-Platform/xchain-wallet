@@ -249,6 +249,23 @@ describe('useAutoLockPolicy', () => {
         expect(reportAutoLock).not.toHaveBeenCalled();
     });
 
+    it('gives a full idle window after re-arming, however long the lock screen sat idle', async () => {
+        function Harness({ enabled, onLock }) {
+            useAutoLock(onLock, { enabled, idleMs: MINUTE });
+            return null;
+        }
+        const onLock = vi.fn();
+        const { rerender } = render(<Harness enabled onLock={onLock} />);
+        await act(async () => { rerender(<Harness enabled={false} onLock={onLock} />); });
+        await idleFor(3 * MINUTE);
+        expect(onLock).not.toHaveBeenCalled();
+        await act(async () => { rerender(<Harness enabled onLock={onLock} />); });
+        await idleFor(30 * 1000);
+        expect(onLock).not.toHaveBeenCalled();
+        await idleFor(30 * 1000);
+        expect(onLock).toHaveBeenCalledTimes(1);
+    });
+
     it('does not arm in a shell with no foreground event loop', async () => {
         const messaging = makeMessaging({ autolockMinutes: 1 });
         renderShell(<Shell messaging={messaging} />, { messaging, shell: 'headless' });

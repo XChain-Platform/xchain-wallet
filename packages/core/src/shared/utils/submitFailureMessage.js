@@ -52,6 +52,7 @@ import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
+import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
 
 /**
  * A native-coin fee refusal, recognised however it reached us.
@@ -100,7 +101,7 @@ export function isWatcherChunkLane(err) {
     // Same shape: a single-encode compose refused a TAPROOT envelope it cannot
     // carry (submitWithSigner.js#EnvelopeConfirmLaneError).
     if (e.name === 'EnvelopeConfirmLaneError') return true;
-    return /too large for one transaction: the network carries it as a/.test(String(e.message || ''));
+    return CHUNK_LANE_OPENER_RE.test(String(e.message || ''));
 }
 
 /**

@@ -56,8 +56,9 @@ import { tickerReferenceError } from './tickerGrammar.js';
  * copy under the checkbox, not a tooltip), directly beneath each other,
  * so a hint that shouts the wire name stacks two vocabularies on one
  * control ("Max supply" over "Freezes MAX_SUPPLY"). Keep the hint in the
- * label's words; a unit guard pins it. The MINT and SLEEP mentions are
- * protocol COMMAND names the user meets elsewhere, not field names.
+ * label's words; a unit guard pins it. MINT is the one protocol COMMAND
+ * name the wallet shows users (the Mint feature), so its hint may say it;
+ * token pausing is "Pause token" on screen, so that lock says "Pausing".
  */
 export const LOCK_FLAGS = [
     {
@@ -93,8 +94,8 @@ export const LOCK_FLAGS = [
     {
         key: 'sleep',
         field: 'LOCK_SLEEP',
-        label: 'Sleep',
-        hint: 'Permanently disables the SLEEP command for this token.',
+        label: 'Pausing',
+        hint: 'Permanently removes the ability to pause or resume this token.',
     },
     {
         key: 'callback',

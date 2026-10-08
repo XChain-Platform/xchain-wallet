@@ -139,19 +139,27 @@ function runPreload() {
     };
 }
 
+/** Channel constants main may register on by name, resolved to their values. */
+const KNOWN_CHANNEL_CONSTANTS = { IPC_CHANNEL };
+
+/** Resolve one registration's channel argument, refusing any expression it cannot name. */
+function resolveChannelExpression(expr) {
+    const literal = /^'([^']+)'$/.exec(expr);
+    if (literal) return literal[1];
+    if (Object.hasOwn(KNOWN_CHANNEL_CONSTANTS, expr)) return KNOWN_CHANNEL_CONSTANTS[expr];
+    throw new Error(`main registers on an unresolvable channel expression "${expr}"; add it to the resolver deliberately`);
+}
+
 /**
  * Every channel main registers a handler on, read off main's own source.
- *
- * Deliberately fails CLOSED: `ipcMain.handle(SOME_CONSTANT` contributes nothing
- * to this set, so moving a channel to a constant shrinks the set and trips the
- * subset assertion below rather than quietly passing. The two channels that are
- * already constants are imported from the modules that define them, so they are
- * checked by identity, not by string.
+ * Fails closed: an unnameable channel throws rather than hiding an orphaned handler.
+ * The signer-bridge channel is seeded because signerBridgeListener.js registers it.
  */
-function mainRegisteredChannels() {
-    const src = readFileSync(MAIN_PATH, 'utf8');
-    const channels = new Set([IPC_CHANNEL, SIGNER_BRIDGE_CHANNEL]);
-    for (const m of src.matchAll(/ipcMain\.handle\(\s*'([^']+)'/g)) channels.add(m[1]);
+function mainRegisteredChannels(src = readFileSync(MAIN_PATH, 'utf8')) {
+    const channels = new Set([SIGNER_BRIDGE_CHANNEL]);
+    for (const m of src.matchAll(/ipcMain\.(?:handle|handleOnce|on|once)\(\s*([^,]+?)\s*,/g)) {
+        channels.add(resolveChannelExpression(m[1]));
+    }
     return channels;
 }
 
@@ -267,7 +275,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
             ...pre.sends.map(([channel]) => channel),
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
-        // subset check below is vacuously true.
+        // agreement checks below are vacuously true.
         expect(used.size).toBe(8);
 
         const registered = mainRegisteredChannels();
@@ -277,6 +285,26 @@ describe('desktop preload: the renderer sandbox surface', () => {
                 `preload talks on "${channel}" but main registers no handler for it`,
             ).toBe(true);
         }
+        // Reverse direction: a privileged handler no preload world reaches is an orphan.
+        for (const channel of registered) {
+            expect(
+                used.has(channel),
+                `main registers a handler on "${channel}" but no preload world talks on it (orphaned privileged handler)`,
+            ).toBe(true);
+        }
+        expect([...registered].sort()).toEqual([...used].sort());
+    });
+
+    it('reads every registration shape off main and refuses a channel it cannot name', () => {
+        const src = readFileSync(MAIN_PATH, 'utf8');
+        const guarded = 'async (event) => { if (!isTrustedSender(event)) return null; return 1; }';
+        const withHandle = mainRegisteredChannels(`${src}\nipcMain.handle('xchain:orphan-probe', ${guarded});`);
+        expect(withHandle.has('xchain:orphan-probe')).toBe(true);
+        const withOn = mainRegisteredChannels(`${src}\nipcMain.on('xchain:orphan-on', onProbe);`);
+        expect(withOn.has('xchain:orphan-on')).toBe(true);
+        expect(mainRegisteredChannels(src).has(IPC_CHANNEL)).toBe(true);
+        expect(() => mainRegisteredChannels(`${src}\nipcMain.handle(SOME_NEW_CONSTANT, ${guarded});`))
+            .toThrow(/unresolvable channel expression "SOME_NEW_CONSTANT"/);
     });
 });
 

@@ -15,6 +15,21 @@
 import { sealBroadcastQueueStore } from './broadcastQueueStore.js';
 
 /**
+ * Carry the commit-landed marker of a queued reveal or phase-2 spend onto a queue
+ * entry, so a permanent retry verdict keeps its record 'broadcast' rather than 'failed'.
+ *
+ * @param {{ commitLanded?: unknown, commitTxid?: unknown } | null | undefined} source
+ * @returns {{ commitLanded?: true, commitTxid?: string }}
+ */
+function commitLandedFields(source) {
+    if (source?.commitLanded !== true) return {};
+    return {
+        commitLanded: true,
+        ...(typeof source.commitTxid === 'string' && source.commitTxid ? { commitTxid: source.commitTxid } : {}),
+    };
+}
+
+/**
  * @param {{
  *   store: import('./broadcastQueueStore.js').BroadcastQueueStore,
  *   importedAddressIdsFor: (vault: any, walletId: string) => Promise<Set<string>>,
@@ -529,6 +544,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 txid: record.txid,
                 pendingTxId: record.id,
                 ...(resumedClaim ? { resumedClaim: true } : {}),
+                ...commitLandedFields(record),
                 // No ADS verdict: it rode the entry, never the record, so the
                 // donation this transaction may carry is not re-derivable here.
                 // Booking nothing under-counts the accumulator; booking a guess
@@ -646,7 +662,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * had already claimed, so the banner can say the attempt was interrupted
      * and the broadcast route can read an "already known" reply as delivery.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string | null, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
@@ -665,6 +681,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 ? { pendingTxId: entry.pendingTxId }
                 : {}),
             ...(entry.resumedClaim === true ? { resumedClaim: true } : {}),
+            ...commitLandedFields(entry),
             ...(adsCommit
                 && typeof adsCommit === 'object'
                 && typeof adsCommit.chainId === 'string'

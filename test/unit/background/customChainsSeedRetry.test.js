@@ -165,12 +165,37 @@ describe('operator endpoints survive on a user-added chain', () => {
     });
 
     it('applies the override when the override read would otherwise land first', async () => {
-        const h = makeHost({ reverseReadOrder: true });
-        // Drain the construction-time best-effort pass, which runs before any
-        // seed by design and can only see the bundled set.
+        const h = makeHost({ locked: true, reverseReadOrder: true });
+        // Start locked so the construction-time pass fails and the settings.get
+        // pass alone has to hold the seed-then-overrides order.
         await flush();
+        expect(h.chainRegistry.has(CUSTOM.id)).toBe(false);
+        h.vault.locked = false;
 
         expect((await h.settingsGet()).ok).toBe(true);
+        await flush();
+
+        expect(h.chainRegistry.has(CUSTOM.id)).toBe(true);
+        h.sdkRegistry.get(CUSTOM.id);
+        expect(h.sdkCalls.at(-1).explorerUrl).toBe(OPERATOR_EXPLORER);
+    });
+});
+
+// A host can boot with no UI attached (an MV3 worker restored with the popup
+// closed, or desktop main with no renderer), so nothing ever sends settings.get.
+describe('construction-time seed with no UI attached', () => {
+    it('installs the persisted chain and its operator endpoint without any settings.get', async () => {
+        const h = makeHost();
+        await flush();
+
+        expect(h.addCustom).toHaveBeenCalledTimes(1);
+        expect(h.chainRegistry.has(CUSTOM.id)).toBe(true);
+        h.sdkRegistry.get(CUSTOM.id);
+        expect(h.sdkCalls.at(-1).explorerUrl).toBe(OPERATOR_EXPLORER);
+    });
+
+    it('keeps the operator endpoint when the construction-time override read lands first', async () => {
+        const h = makeHost({ reverseReadOrder: true });
         await flush();
 
         expect(h.chainRegistry.has(CUSTOM.id)).toBe(true);

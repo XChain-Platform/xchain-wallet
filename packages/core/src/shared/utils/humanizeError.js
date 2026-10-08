@@ -25,7 +25,7 @@
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 
 const NETWORK_ERRNO = /\b(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EPIPE|EHOSTUNREACH|ECONNABORTED)\b/i;
-const CONNECTION_FAILURE = /network request failed|request timed out|timeout of \d+ms exceeded|you are offline|fetch failed|failed to fetch|would be rejected by the network|too large for one transaction: the network carries/i;
+const CONNECTION_FAILURE = /network request failed|request timed out|timeout of \d+ms exceeded|you are offline|fetch failed|failed to fetch|would be rejected by the network/i;
 const BACKEND_SERVICE = /\b(?:utxo(?:-|\s+)tracker|decoder|indexer)\b/i;
 const BACKEND_DELAY = /\b(?:lagging|is behind|refusing to fetch|halted|resync|catching up|not synced|out of sync)\b/i;
 

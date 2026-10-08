@@ -42,7 +42,7 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
     it('rejects a nested BATCH, but a lone DEPLOY is legal (the chain accepts exactly one)', () => {
         const errs = validateBatchConstraints([{ action: 'BATCH' }, { action: 'DEPLOY' }]);
         expect(errs.some((e) => /another batch/i.test(e))).toBe(true);
-        expect(errs.some((e) => /DEPLOY/.test(e))).toBe(false);
+        expect(errs.some((e) => /at most one/i.test(e))).toBe(false);
     });
 
     it('accepts a single DEPLOY', () => {
@@ -52,12 +52,12 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
 
     it('rejects two DEPLOYs (one VM constructor run is already the most expensive command)', () => {
         const errs = validateBatchConstraints([{ action: 'DEPLOY' }, { action: 'DEPLOY' }]);
-        expect(errs.some((e) => /at most one DEPLOY/i.test(e))).toBe(true);
+        expect(errs.some((e) => /at most one Publish contract action/.test(e))).toBe(true);
     });
 
     it('enforces at most one FILE', () => {
         const errs = validateBatchConstraints([{ action: 'FILE' }, { action: 'FILE' }]);
-        expect(errs.some((e) => /at most one FILE/i.test(e))).toBe(true);
+        expect(errs.some((e) => /at most one File action/.test(e))).toBe(true);
     });
 
     it('accepts MINTs of two distinct tokens', () => {
@@ -106,7 +106,7 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
             { action: 'ISSUE', params: { TICK: 'JDOG' } },
             { action: 'ISSUE', params: { TICK: 'PEPE' } },
         ]);
-        expect(errs.some((e) => /at most one ISSUE/i.test(e))).toBe(true);
+        expect(errs.some((e) => /at most one Issue action/.test(e))).toBe(true);
     });
 
     it('rejects two caret ISSUEs: a caret TICK is never exempt even with a dot', () => {
@@ -114,7 +114,7 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
             { action: 'ISSUE', params: { TICK: '^12.1' } },
             { action: 'ISSUE', params: { TICK: '^12.2' } },
         ]);
-        expect(errs.some((e) => /at most one ISSUE/i.test(e))).toBe(true);
+        expect(errs.some((e) => /at most one Issue action/.test(e))).toBe(true);
     });
 
     it('does not treat a caret-dotted TICK as a child (classifier)', () => {
@@ -129,7 +129,7 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
             { action: 'ISSUE', params: { TICK: 'JDOG' } },
             { action: 'ISSUE', params: { TICK: '^12.1' } },
         ]);
-        expect(errs.some((e) => /at most one ISSUE/i.test(e))).toBe(true);
+        expect(errs.some((e) => /at most one Issue action/.test(e))).toBe(true);
     });
 
     it('rejects a nested BATCH amid otherwise-legal child ISSUEs and DEPLOYs, but only for the nesting and the SECOND DEPLOY', () => {
@@ -141,7 +141,7 @@ describe('validateBatchConstraints (PC-36 pre-check)', () => {
             { action: 'DEPLOY' },
         ]);
         expect(errs.some((e) => /another batch/i.test(e))).toBe(true);
-        expect(errs.some((e) => /at most one DEPLOY/i.test(e))).toBe(true);
+        expect(errs.some((e) => /at most one Publish contract action/.test(e))).toBe(true);
     });
 
     it('accepts exactly 250 commands', () => {
@@ -261,5 +261,32 @@ describe('buildBatchCommand (PC-36 compose)', () => {
     it('surfaces a missing BATCH capability', async () => {
         await expect(buildBatchCommand({ sdkRegistry: reg({}), chainId: 'c', subActions: [{ action: 'SEND' }] }))
             .rejects.toThrow(/no BATCH support/);
+    });
+});
+
+// The composer shows these sentences in the same banner as its other errors,
+// which already name actions by their display label, so a raw opcode here
+// would switch vocabulary mid-banner.
+describe('validateBatchConstraints (plain action names)', () => {
+    it('names every action by its display label, never by its wire opcode', () => {
+        const executes = Array.from({ length: 9 }, () => ({ action: 'EXECUTE' }));
+        const batches = [
+            [{ action: 'DEPLOY' }, { action: 'DEPLOY' }],
+            [{ action: 'FILE' }, { action: 'FILE' }],
+            [{ action: 'ISSUE', params: { TICK: 'JDOG' } }, { action: 'ISSUE', params: { TICK: 'PEPE' } }],
+            [{ action: 'MINT', params: { TICK: 'JDOG' } }, { action: 'MINT', params: { TICK: 'JDOG' } }],
+            [{ action: 'MINT', params: { TICK: 'JDOG' } }, { action: 'MINT', params: { TICK: '^12' } }],
+            executes,
+        ];
+        const errs = batches.flatMap((b) => validateBatchConstraints(b));
+        expect(errs).toHaveLength(batches.length);
+        const leaks = errs.filter((e) => /\b(DEPLOY|EXECUTE|XEXEC|AIRDROP|DIVIDEND|ISSUE|FILE|MINTs?)\b/.test(e));
+        expect(leaks).toEqual([]);
+    });
+
+    it('lists every heavy action in the weight message, from the weight table', () => {
+        const errs = validateBatchConstraints(Array.from({ length: 9 }, () => ({ action: 'EXECUTE' })));
+        expect(errs[0]).toMatch(/\(Publish contract, Contract call, Cross-chain execution\) weigh 30 each/);
+        expect(errs[0]).toMatch(/\(Airdrop, Dividend\) weigh 25 each/);
     });
 });
