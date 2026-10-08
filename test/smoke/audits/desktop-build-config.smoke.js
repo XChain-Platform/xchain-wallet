@@ -169,22 +169,33 @@ function loadConfig(env = {}) {
         'with no subject set the classic config carries no certificateSubjectName');
 }
 
-// ------------------------------------------- eSigner release lane
+// --------------------------------------------- Azure release lane
 
 {
     const wf = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
-    const winJob = wf.slice(wf.indexOf('Install and register the eSigner CKA'));
-    for (const name of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', 'WIN_CSC_SUBJECT_NAME']) {
+    const preflightName = 'Require every Azure Trusted Signing secret';
+    const winJob = wf.slice(wf.indexOf(preflightName));
+    const azureNames = [...Object.keys(AZURE_VARS),
+        'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET'];
+    assert.ok(wf.indexOf(preflightName) >= 0,
+        'the Windows lane checks the Azure environment before building');
+    for (const name of azureNames) {
         assert.ok(winJob.includes(`${name}: \${{ secrets.${name} }}`),
-            `the eSigner install step reads ${name} from the secrets`);
+            `the Azure preflight reads ${name} from the secrets`);
     }
-    assert.ok(!wf.includes('AZURE_'), 'release.yml carries no Azure signing variable');
+    for (const retired of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET']) {
+        assert.ok(!wf.includes(retired), `release.yml no longer carries retired eSigner variable ${retired}`);
+    }
     assert.ok(!/^\s+CSC_LINK:.*WIN/m.test(wf), 'no Windows CSC_LINK path remains in release.yml');
     const builds = winJob.split('- name:').filter((b) => b.includes('dist --win'));
     assert.ok(builds.length >= 3, 'every Windows build step is present');
     for (const b of builds) {
-        assert.ok(b.includes('WIN_CSC_SUBJECT_NAME: ${{ secrets.WIN_CSC_SUBJECT_NAME }}'),
-            'every Windows build step selects the eSigner certificate by subject');
+        for (const name of azureNames) {
+            assert.ok(b.includes(`${name}: \${{ secrets.${name} }}`),
+                `every Windows build step passes ${name}`);
+        }
+        assert.ok(!b.includes('WIN_CSC_SUBJECT_NAME:'),
+            'no Windows build step selects the retired subject path');
     }
 }
 
