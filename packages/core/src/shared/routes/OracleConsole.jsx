@@ -53,7 +53,7 @@ function countdown(targetSec, nowSec) {
 }
 
 /**
- * The operator's own betting markets: what each one is waiting for, and the two
+ * The operator's own betting markets: what each one is waiting for, and the
  * actions only its oracle can take.
  *
  * Resolve is only legal between the deadline and the end of the refund window,
@@ -79,6 +79,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     const [nowSec, setNowSec] = useState(Math.floor(Date.now() / 1000));
     const [active, setActive] = useState(/** @type {any} */ (null));
     const [outcome, setOutcome] = useState(/** @type {number | null} */ (null));
+    const [allowList, setAllowList] = useState('');
+    const [blockList, setBlockList] = useState('');
     const [password, setPassword] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {{mode: string, feedIndex: string, txid: string | null, queued: boolean} | null} */ (null));
@@ -148,6 +150,14 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         messaging, isHw, signerId: fromAddress?.signerId, passwordRef: passwordValueRef,
         software: 'cancelMarketAction', hardware: 'cancelMarketActionHw',
     });
+    const editMessaging = useMemo(() => ({
+        editBetFeedListsAction: (opts) => messaging.sendMessage('action.editBetFeedLists', opts),
+        editBetFeedListsActionHw: (opts) => messaging.sendMessage('action.editBetFeedLists.hw', opts),
+    }), [messaging]);
+    const submitEdit = useConfirmSubmit({
+        messaging: editMessaging, isHw, signerId: fromAddress?.signerId, passwordRef: passwordValueRef,
+        software: 'editBetFeedListsAction', hardware: 'editBetFeedListsActionHw',
+    });
 
     const outcomesOf = useMemo(() => (feed) => outcomeLabelsOf(feed), []);
 
@@ -162,12 +172,12 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         };
     }
 
-    // Both flows compose through the SDK's own builder host-side, so the confirm
+    // Every flow composes through the SDK host-side, so the confirm
     // screen decodes what was actually composed. Params are derived once per
     // flow and handed to both compose and submit.
     //
-    // No native-fee lane here on purpose: resolve (v3) and cancel (v1)
-    // are FREE by protocol design, because every credit they emit was pre-funded
+    // No native-fee lane here on purpose: edit (v4), resolve (v3), and cancel
+    // (v1) are FREE by protocol design. Resolve and cancel credits were pre-funded
     // when the bet was placed. Only the two fee-bearing formats carry the toggle
     // (create in CreateBetFeedForm, place in BetFeedDetail); adding it here would
     // ask a user to pay a fee the chain never charges.
@@ -186,25 +196,28 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     walletId, chainId: feed.chainId, from, params, prebuiltPsbt,
                 }),
             });
-            // The two most consequential actions in betting reported NOTHING on
+            // The oracle actions once reported NOTHING on
             // success: the list simply reloaded, so publishing a result that pays
             // out an entire pot looked exactly like a click that did nothing. The
             // txid matters most on the losing side of a race - a resolve broadcast
             // as the refund window ends is judged by the block it lands in - and
             // without it there is no handle to look the attempt up by.
             setResult({
-                mode: builder === 'cancelMarketParams' ? 'cancel' : 'resolve',
+                mode: builder === 'cancelMarketParams' ? 'cancel'
+                    : builder === 'editFeedListsParams' ? 'edit' : 'resolve',
                 feedIndex: String(feed.action_index),
                 txid: res?.txid || res?.tx_hash || null,
                 queued: !!res?.queued,
             });
             setActive(null);
             setOutcome(null);
+            setAllowList('');
+            setBlockList('');
             setPassword('');
             load();
         } catch (err) {
             if (isUserRejection(err)) return;
-            // Resolve and cancel are not fee-bearing, so this form has
+            // These oracle actions are not fee-bearing, so this form has
             // no native-fee lane to describe - but it can still be handed an SDK
             // params-builder refusal, and those read as log lines until they go
             // through the shared mapper (D-118).
@@ -215,7 +228,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     const header = <PageHeader onBack={onBack} title="My markets" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
-    // Resolve and cancel both settle real money, so they go through the same
+    // Every oracle mutation goes through the same
     // confirm page every other action form uses. Without this branch
     // `actionConfirm.run` opens a phase nothing draws: the oracle action never
     // reaches Approve, and the held confirm singleton makes every other form's
@@ -270,12 +283,14 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             for a transaction still sitting in the queue would wait out its own
                             refund window, which costs it the market. */}
                         {result.queued
-                            ? `Signed, but the ${result.mode === 'cancel' ? 'cancel' : 'result'} for market `
+                            ? `Signed, but the ${result.mode === 'cancel' ? 'cancel' : result.mode === 'edit' ? 'list edit' : 'result'} for market `
                               + `#${result.feedIndex} could not reach the network just now. It is waiting in the `
                               + 'queued-transactions banner and only goes out when you broadcast it from there; '
                               + 'the wallet reminds you when the network is back. Do not submit it again.'
                             : result.mode === 'cancel'
                                 ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open bet is refunded in full.`
+                                : result.mode === 'edit'
+                                    ? `List edit sent for market #${result.feedIndex}. Once the network records it, the new lists apply to future bets.`
                                 : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the bets settle.`}
                     </p>
                     {result.queued ? null : (
@@ -294,6 +309,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     // refund window ends; cancel only before a terminal state.
                     const canResolve = f.feed_status === 'closed' && Number(f.expire_at) > nowSec;
                     const canCancel = f.feed_status === 'open' || f.feed_status === 'closed';
+                    const canEdit = f.feed_status === 'open'
+                        && String(f.source || '') === String(f.owner?.address || '');
                     const isActive = active && `${active.chainId}:${active.action_index}` === key;
                     return (
                         <div key={key} className={styles.card}>
@@ -315,16 +332,27 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 {onOpenMarket ? (
                                     <Button variant="ghost" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>
                                 ) : null}
-                                {/* A market cannot be edited, so fixing wrong terms means
-                                    cancelling and opening a corrected copy. This is that
-                                    path: it pre-fills the create form from these terms. */}
+                                {/* Terms stay immutable. This path copies them into a new market. */}
                                 {onDuplicate ? (
                                     <Button variant="ghost" onClick={() => onDuplicate(f.chainId, f.action_index)}>Copy to a new market</Button>
                                 ) : null}
                             </div>
 
-                            {!isWatcherMode && (canResolve || canCancel) ? (
+                            {!isWatcherMode && (canResolve || canCancel || canEdit) ? (
                                 <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                                    {canEdit ? (
+                                        <Button
+                                            variant="ghost"
+                                            onClick={() => {
+                                                setActive({ ...f, mode: 'edit' });
+                                                setOutcome(null);
+                                                setAllowList('');
+                                                setBlockList('');
+                                            }}
+                                        >
+                                            Edit lists
+                                        </Button>
+                                    ) : null}
                                     {canResolve ? (
                                         <Button variant="primary" onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>Resolve</Button>
                                     ) : null}
@@ -339,10 +367,45 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 no reason given, and the cost of not knowing is real: an
                                 unresolved market refunds every bet at expiry and earns no fee.
                                 CreateBetFeedForm already says this plainly for its own case. */}
-                            {isWatcherMode && (canResolve || canCancel) ? (
+                            {isWatcherMode && (canResolve || canCancel || canEdit) ? (
                                 <div className={styles.hint}>
-                                    This wallet is in watcher mode, so it cannot resolve or cancel this market.
-                                    Both need the key that opened it.
+                                    This wallet is in watcher mode, so it cannot edit, resolve, or cancel this market.
+                                    It cannot resolve or cancel, or edit its lists, without the key that opened it.
+                                </div>
+                            ) : null}
+
+                            {isActive && active.mode === 'edit' ? (
+                                <div style={{ marginTop: '0.5rem' }}>
+                                    <p className={styles.hint}>
+                                        Leave a field blank to keep its current list, enter 0 to detach it, or enter
+                                        a list action index to replace it. Changes affect future bets only.
+                                    </p>
+                                    <Input
+                                        label="New allow-list index"
+                                        value={allowList}
+                                        placeholder={f.allow_list ? `Current: ${f.allow_list}` : 'No current allow list'}
+                                        onChange={(e) => setAllowList(e.target.value)}
+                                    />
+                                    <Input
+                                        label="New block-list index"
+                                        value={blockList}
+                                        placeholder={f.block_list ? `Current: ${f.block_list}` : 'No current block list'}
+                                        onChange={(e) => setBlockList(e.target.value)}
+                                    />
+                                    {!isHw && !signerReady ? (
+                                        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                    ) : null}
+                                    <Button
+                                        variant="primary"
+                                        disabled={!allowList.trim() && !blockList.trim()}
+                                        onClick={() => runOracleAction(f, 'editFeedListsParams', submitEdit, {
+                                            feedActionIndex: f.action_index,
+                                            allowList: allowList.trim(),
+                                            blockList: blockList.trim(),
+                                        })}
+                                    >
+                                        Review list edit
+                                    </Button>
                                 </div>
                             ) : null}
 

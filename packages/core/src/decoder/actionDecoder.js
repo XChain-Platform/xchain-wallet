@@ -864,7 +864,7 @@ function decodeCallback(p, chainSuffix) {
 }
 
 /**
- * BET decoder (§11.3 signing). One action name over four formats, so the
+ * BET decoder (§11.3 signing). One action name over five formats, so the
  * summary must name WHICH one is being signed: approving a resolve is not
  * remotely the same act as approving a stake.
  *
@@ -892,6 +892,27 @@ function decodeBet(p, chainSuffix) {
     const memoWarn = memo && /[|;]/.test(memo)
         ? ['Memo contains | or ;: the protocol will reject this transaction.']
         : [];
+
+    // v4 edit an open market's membership-list references
+    if (version === '4') {
+        const describeList = (value) => (value === '' ? 'Retain current' : value === '0' ? 'Detach' : value);
+        const allowList = pick('allowList', 'ALLOW_LIST');
+        const blockList = pick('blockList', 'BLOCK_LIST');
+        return {
+            summary: `Edit membership lists for market ${feedRef || '?'}${chainSuffix}`,
+            details: [
+                { label: 'Market', value: feedRef },
+                { label: 'Allow list', value: describeList(allowList) },
+                { label: 'Block list', value: describeList(blockList) },
+                ...(memo ? [{ label: 'Memo', value: memo }] : []),
+            ],
+            warnings: [
+                'Only the market creator can make this edit, and only while the market is open.',
+                'The new membership lists affect future bets only. Existing bets are unchanged.',
+                ...memoWarn,
+            ],
+        };
+    }
 
     // v2 place a bet
     if (version === '2') {
@@ -975,7 +996,7 @@ function decodeBet(p, chainSuffix) {
             ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
-            'Markets cannot be edited after this. To change any term you must cancel and create a new one.',
+            'Market terms cannot be edited after this. Only allow and block list references can change while the market is open.',
             'You are the oracle: if you never resolve it, bettors are refunded after the refund window, and your address carries that record publicly.',
             ...(outcomeList.length < 2 ? ['A market needs at least two outcomes.'] : []),
             ...memoWarn,
