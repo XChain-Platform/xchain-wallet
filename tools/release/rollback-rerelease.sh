@@ -127,15 +127,16 @@ echo "  good tag:    $GOOD_TAG ($GOOD_COMMIT)" >&2
 # fatal if missing (a tag can predate the record-keeping, or the record
 # lives somewhere this script was not told to look), but worth surfacing
 # rather than assuming silently.
-#
-# Anchored to THIS script's checkout, not to --repo. The records live in
-# the platform repo one level above the wallet repo, and --repo is
-# expected to point at a throwaway clone during a real rollback (step 2
-# of the recipe below says to make one), which has no platform repo above
-# it. Anchored to --repo, this check would report "NOT found" for every
-# tag in exactly the situation it exists to serve.
-RELEASE_RECORD="$HERE/../../../claude/reports/wallet-releases/${GOOD_TAG}.md"
-if [[ -f "$RELEASE_RECORD" ]]; then
+RELEASE_RECORD_TOOL="$HERE/release-record.mjs"
+RELEASE_RECORD=""
+if [[ -f "$RELEASE_RECORD_TOOL" ]]; then
+    RELEASE_RECORD="$(node "$RELEASE_RECORD_TOOL" path --tag "$GOOD_TAG" 2>/dev/null || true)"
+fi
+if [[ -z "$RELEASE_RECORD" ]]; then
+    echo "  release record: location could not be determined" >&2
+    echo "    Not fatal, but confirm '$GOOD_TAG' really was a published," >&2
+    echo "    reviewed release before re-releasing its content as new." >&2
+elif [[ -f "$RELEASE_RECORD" ]]; then
     echo "  release record: found ($RELEASE_RECORD)" >&2
 else
     echo "  release record: NOT found at $RELEASE_RECORD" >&2

@@ -417,7 +417,7 @@ One key, one ceremony, one thing to rotate. See
 | `XCHAIN_RELEASE_LANES` | Default `--lane` value, comma-separated: signs a PARTIAL release covering only those lanes, whose globs come from `shipped-lanes.txt`. Inside that scope the artifact-set gate is stricter than the full list, not weaker, and the manifest records `coverage: partial` in its signed header. | `sign.sh` |
 | `GNUPGHOME` | Optional override for the GPG home directory. | both |
 | `SIGN_SKIP_DEV_MOCK_CHECK` | Set to `1` to skip the pre-sign dev-mock gate. Recorded in the signed header. Release runs never set it, and a set signed with it cannot ship through the desktop updater, `cws-upload.mjs` or `deploy-web.sh`, which all refuse a gate that is not `enforced`; `verify.sh` only warns. | `sign.sh` |
-| `XCHAIN_WALLET_RELEASE_RECORDS` | Where the §6 release records live. Defaults to `../claude/reports/wallet-releases` beside this checkout. It relocates the records; it does not waive them, and there is no variable that does. | `release-record.mjs`, `publish.sh` |
+| `XCHAIN_WALLET_RELEASE_RECORDS` | Optional override for where the §6 release records live. `release-record.mjs path --tag vX.Y.Z` prints the resolved location. The override relocates the records; it does not waive them, and there is no variable that does. | `release-record.mjs`, `publish.sh` |
 
 **One-shot pnpm wrappers.** The root `package.json` exposes
 `pnpm release:sign` and `pnpm release:verify`, which target
