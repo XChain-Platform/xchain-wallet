@@ -395,7 +395,7 @@ function ipcGuardCensus(src) {
         [],
         `index.js: these ipcMain handlers must check isTrustedSender(event) as their first statement: ${failures.join(', ')}`,
     );
-    assert.ok(count >= 6, `the ipcMain census found ${count} handlers, fewer than the 6 index.js registers, so it may check nothing`);
+    assert.ok(count >= 7, `the ipcMain census found ${count} handlers, fewer than the 7 index.js registers, so it may check nothing`);
 
     // Negative controls: the census must flag each of these shapes.
     for (const [probe, why] of [

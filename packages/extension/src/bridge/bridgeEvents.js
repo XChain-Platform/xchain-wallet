@@ -12,7 +12,7 @@
 // FOLLOWUP 1).
 //
 // The provider's listener side is wired (content script relays
-// `chrome.runtime.onMessage({ type: 'bridge.event', event, payload })`
+// `chrome.runtime.onMessage({ type: 'bridge.event', event, payload, origin })`
 // to the page via postMessage; the inject script dispatches to
 // subscribers registered through `provider.on(...)`). This module is
 // the background-side sender. Bridge handlers call

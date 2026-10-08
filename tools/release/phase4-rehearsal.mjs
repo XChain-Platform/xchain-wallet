@@ -32,7 +32,8 @@
 // each got wrong in turn. A Phase 4 signing run reads from TWO trees at once:
 //
 //   the SCRIPT side  - sign.sh, verify.sh and lib.sh come from the checkout
-//                      the operator invokes.
+//                      the operator invokes, and so do the files lib.sh
+//                      loads from its own directory.
 //   the REPO side    - shipped-lanes.txt comes from the tree passed to
 //                      --repo, which is the TAG's copy.
 //
@@ -87,9 +88,16 @@ export const EXECUTABLE_GATES = [
     'tools/release/launch-probe.mjs',
 ];
 
+// List the files lib.sh loads from its own directory (`$here/...`), always the invoking checkout's copy.
+export const LIB_SH_DEPENDENCIES = [
+    'tools/release/update-info.mjs',
+    'tools/release/store-profile-status.txt',
+];
+
 // Read a pin with no pinFormat with the fixed legacy split, which is what recorded it.
-// Format 3 adds the executable gates; formats 1 and 2 keep the lists they were recorded with.
-export const PIN_FORMAT = 3;
+// Format 3 adds the executable gates and format 4 lib.sh's own-directory files;
+// older formats keep the lists they were recorded with.
+export const PIN_FORMAT = 4;
 
 /**
  * The script-side and repo-side files for a release set, mirroring lib.sh's
@@ -99,6 +107,9 @@ export const PIN_FORMAT = 3;
  * From format 3 the executable gates join the repo side, because the tag's copy
  * wins. A gate named in `gateFallback` moves to the script side instead: sign.sh
  * ran this checkout's copy, so those are the bytes to hash and gate.
+ *
+ * From format 4 the files lib.sh loads from its own directory join the script
+ * side for both release sets, since lib.sh is always the invoking checkout's.
  *
  * @param {string} releaseSet  'release' or 'staging'
  * @param {number} [pinFormat] the pin format to read; below 2 is the fixed legacy split
@@ -117,8 +128,9 @@ export function signingPathFiles(releaseSet, pinFormat = PIN_FORMAT, { gateFallb
         ? { script: [...SIGNING_SCRIPTS, ...SIGNING_CONTROLS], repo: [LANE_ROSTER] }
         : { script: SIGNING_SCRIPTS, repo: [LANE_ROSTER, ...SIGNING_CONTROLS] };
     if (pinFormat < 3) return split;
+    const ownDir = pinFormat < 4 ? [] : LIB_SH_DEPENDENCIES;
     return {
-        script: [...split.script, ...EXECUTABLE_GATES.filter((p) => gateFallback.includes(p))],
+        script: [...split.script, ...ownDir, ...EXECUTABLE_GATES.filter((p) => gateFallback.includes(p))],
         repo: [...split.repo, ...EXECUTABLE_GATES.filter((p) => !gateFallback.includes(p))],
     };
 }

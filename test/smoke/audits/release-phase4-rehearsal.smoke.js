@@ -42,7 +42,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
     announcedGateFallback, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
-    gateFallbackMismatch, PIN_FORMAT, PIN_PATH, pinPathFiles, signingPathFiles, STEPS, uncoveredByPin,
+    gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, signingPathFiles, STEPS,
+    uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
 
 assert.ok(existsSync(PIN_PATH),
@@ -198,7 +199,7 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
 // The executable gates are tracked from format 3: tag side by default, script side (hashed and gated)
 // where the tag predated a gate and sign.sh ran this checkout's copy. Formats 1 and 2 never list them.
 {
-    assert.equal(PIN_FORMAT, 3, 'the gates entered the tracked set at pin format 3');
+    assert.ok(PIN_FORMAT >= 3, 'the gates entered the tracked set at pin format 3');
     for (const set of ['release', 'staging']) {
         const now = signingPathFiles(set);
         assert.ok(EXECUTABLE_GATES.every((g) => now.repo.includes(g) && !now.script.includes(g)),
@@ -228,7 +229,9 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
 
     const legacy = uncoveredByPin({ releaseSet: 'release' });
     assert.ok(EXECUTABLE_GATES.every((g) => legacy.includes(g)), 'check must name the gates a legacy pin never covered');
-    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 3, gateFallback: [] }), []);
+    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 3, gateFallback: [] }),
+        LIB_SH_DEPENDENCIES, 'a format-3 pin predates exactly the files lib.sh loads from its own directory');
+    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 4, gateFallback: [] }), []);
 
     const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
     const work = mkdtempSync(join(tmpdir(), 'phase4-gates-'));
@@ -254,6 +257,53 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         const stale = drift({ pinFile });
         assert.ok(!stale.ok && stale.moved.some((m) => m.path === probeGate),
             'a pin must go STALE when a fallback gate, which the run executed from this checkout, moves');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// Every file lib.sh loads from its own directory is script side from format 4, for both release
+// sets, because lib.sh is always the invoking checkout's copy. Formats 1 to 3 never list them.
+{
+    const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const libText = readFileSync(join(walletRoot, 'tools', 'release', 'lib.sh'), 'utf8');
+    const loaded = [...new Set([...libText.matchAll(/\$here\/([A-Za-z0-9._-]+)/g)]
+        .map((m) => `tools/release/${m[1]}`))];
+    assert.ok(loaded.length > 0, 'found no $here/ reference in lib.sh, so this guard scans nothing');
+    for (const set of ['release', 'staging']) {
+        for (const gateFallback of [[], ['tools/release/launch-probe.mjs']]) {
+            const now = signingPathFiles(set, 4, { gateFallback });
+            const untracked = loaded.filter((p) => !now.script.includes(p) || now.repo.includes(p));
+            assert.deepEqual(untracked, [],
+                `lib.sh loads ${untracked.join(', ')} from its own directory, so a ${set} run reads the `
+                + 'invoking checkout\'s copy; untracked, `check` cannot see it drift.');
+        }
+        for (const fmt of [1, 2, 3]) {
+            const old = signingPathFiles(set, fmt);
+            assert.ok(LIB_SH_DEPENDENCIES.every((p) => !old.script.includes(p) && !old.repo.includes(p)),
+                `format ${fmt} must keep the file lists it was recorded with`);
+        }
+    }
+
+    const head = spawnSync('git', ['-C', walletRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    const files = signingPathFiles('release', 4);
+    const hashes = Object.fromEntries(files.script.map((p) => [p,
+        createHash('sha256').update(readFileSync(join(walletRoot, p))).digest('hex')]));
+    const work = mkdtempSync(join(tmpdir(), 'phase4-libdeps-'));
+    try {
+        const pinFile = join(work, 'pin.json');
+        const write = (scriptPath) => writeFileSync(pinFile, JSON.stringify({
+            pinFormat: 4, releaseSet: 'release', gateFallback: [], tag: 'v0.0.0',
+            reached: 'manifest-written', scriptRef: head, repoRef: head, scriptPath, repoPath: {},
+        }));
+        write(hashes);
+        assert.ok(drift({ pinFile }).ok, 'a format-4 pin of today\'s bytes must read clean');
+        for (const p of LIB_SH_DEPENDENCIES) {
+            write({ ...hashes, [p]: 'f'.repeat(64) });
+            const stale = drift({ pinFile });
+            assert.ok(!stale.ok && stale.moved.some((m) => m.path === p),
+                `a format-4 pin must go STALE when ${p}, which lib.sh loads on the signing path, moves`);
+        }
     } finally {
         rmSync(work, { recursive: true, force: true });
     }

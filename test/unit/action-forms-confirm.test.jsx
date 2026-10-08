@@ -684,7 +684,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: AirdropForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-            actionLabel: /^Sign LIST/,
+            actionLabel: /^Sign address list/,
             steps: [
                 (utils) => {
                     setValue(utils, /^Per-recipient amount/, '5');
@@ -730,7 +730,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     }]),
                 },
             },
-            actionLabel: /^Sign AIRDROP/,
+            actionLabel: /^Sign airdrop/,
         });
         expectSingleEncode(calls, {
             action: 'AIRDROP',

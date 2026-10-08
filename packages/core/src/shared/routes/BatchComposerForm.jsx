@@ -56,7 +56,9 @@ import { preferredSourceId } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AUTHORABLE_ACTIONS, isActionDataOfferedInBuild, isActionOfferedInBuild } from '../../registry/actions.js';
+import {
+    AUTHORABLE_ACTIONS, isActionDataOfferedInBuild, isActionOfferedInBuild, isActionOfferedOnChain,
+} from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -234,6 +236,11 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             const pr = parsedRows[i];
             if (!pr.row.action) return `Step ${i + 1}: pick an action.`;
             if (pr.error) return `Step ${i + 1}: ${pr.error}`;
+            // Recheck the chain here, since a chain switch keeps the rows already queued.
+            if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
+                const chainName = chainRegistry.get(chainId)?.displayName || chainId;
+                return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on ${chainName}.`;
+            }
             if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
                 return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
             }
@@ -247,7 +254,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
         const constraintErrors = flowsLib.validateBatchConstraints(subActions);
         return constraintErrors.length > 0 ? constraintErrors[0] : null;
-    }, [parsedRows, hasDexSurface]);
+    }, [parsedRows, hasDexSurface, chainId]);
 
     const updateRow = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     const addRow = () => setRows((rs) => [...rs, blankRow()]);
@@ -584,7 +591,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                                     onChange={(e) => updateRow(i, { action: e.target.value })}
                                 >
                                     <option value="">Select action</option>
-                                    {actionsList.map((a) => (
+                                    {/* One SDK list serves every chain; drop what the picked chain refuses at every version. */}
+                                    {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, chainId, a)).map((a) => (
                                         <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
                                     ))}
                                 </select>

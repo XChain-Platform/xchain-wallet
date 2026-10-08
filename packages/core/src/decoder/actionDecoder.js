@@ -1796,7 +1796,7 @@ function collectLockFlags(p) {
         ['LOCK_MINT', 'minting'],
         ['LOCK_MINT_SUPPLY', 'mint-supply'],
         ['LOCK_DESCRIPTION', 'description'],
-        ['LOCK_SLEEP', 'sleep'],
+        ['LOCK_SLEEP', 'pausing'],
         ['LOCK_CALLBACK', 'callback'],
     ];
     const active = [];

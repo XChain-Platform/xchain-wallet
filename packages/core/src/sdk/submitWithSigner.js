@@ -40,6 +40,7 @@ import {
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
 import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
+import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
 
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
 
@@ -104,12 +105,10 @@ export class BroadcastFailedError extends Error {
 export class HardwareChunkLaneError extends Error {
     /** @param {{ action: string, encoding: string, signerKind?: string }} fields */
     constructor({ action, encoding, signerKind }) {
-        super(`This ${action} is too large for one transaction: the network carries it as a `
-            + `${encoding} pair, a commit plus a revealing transaction signed after the first `
-            + `is broadcast. ${signerKind ? `A ${signerKind} signer` : 'This signer'} cannot sign `
-            + 'that revealing transaction, and broadcasting only the first would spend coin into '
-            + 'a script that nothing can open and record no action at all. Use a software wallet '
-            + 'key for this action.');
+        super(`${chunkLaneOpener(action)}, and the second is signed after the first is `
+            + `broadcast. ${signerSubject(signerKind)} cannot sign that second transaction, and `
+            + 'broadcasting only the first would spend coin into a script that nothing can open '
+            + 'and record no action at all. Use a software wallet key for this action.');
         this.name = 'HardwareChunkLaneError';
         this.userFacing = true;
         this.action = action;
@@ -134,16 +133,14 @@ export class EnvelopeConfirmLaneError extends Error {
      *   commitMismatch: the signed commit is not the one the reveal spends
      */
     constructor({ action, encoding, commitMismatch = false }) {
-        super(`This ${action} is too large for one transaction: the network carries it as a `
-            + `${encoding} pair, a commit plus a revealing transaction that must be signed before `
-            + 'the first is broadcast. '
+        super(`${chunkLaneOpener(action)}, and both must be signed before the first is broadcast. `
             + (commitMismatch
-                ? 'The commit that was signed is not the transaction its revealing transaction '
-                  + 'spends, and broadcasting it would spend coin into a script that nothing can '
-                  + 'open and record no action at all, so nothing was broadcast. '
-                : 'The revealing transaction or its recovery record did not '
-                  + 'arrive with the commit, and broadcasting only the first would spend coin into a '
-                  + 'script that nothing can open and record no action at all, so nothing was signed. ')
+                ? 'The first transaction that was signed is not the one the second spends, and '
+                  + 'broadcasting it would spend coin into a script that nothing can open and record '
+                  + 'no action at all, so nothing was broadcast. '
+                : 'The second transaction or its recovery record did not arrive with the first, '
+                  + 'and broadcasting only the first would spend coin into a script that nothing can '
+                  + 'open and record no action at all, so nothing was signed. ')
             + 'Try again.');
         this.name = 'EnvelopeConfirmLaneError';
         this.userFacing = true;
@@ -194,7 +191,7 @@ export function isCompleteEnvelope(built) {
 export function assertCompleteEnvelope(built, action) {
     if (isEnvelopePair(built) && !isCompleteEnvelope(built)) {
         throw new EnvelopeConfirmLaneError({
-            action: action || 'action',
+            action,
             encoding: typeof built.encoding === 'string' ? built.encoding : 'TAPROOT',
         });
     }

@@ -35,8 +35,9 @@
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
-//     error, recovery (the USER_FACING_ATTRS set below is the authority; keep
-//     this list in step with it). The last twenty-seven are component props rather
+//     error, recovery, feeText, emptyActionLabel, warningNoun (the
+//     USER_FACING_ATTRS set below is the authority; keep this list in step
+//     with it). The last thirty are component props rather
 //     than DOM attributes: shipping components render copy through them,
 //     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -49,6 +50,9 @@
 //     English in an interpolated aria-label as invisible, so that copy
 //     never reached the translator index. Pure-interpolation templates
 //     like {`${a}/${b}`} stay silent: every static chunk is trivial.
+//   - A ternary or `||` branch holding a literal or template wrapped in
+//     `.trim()`, `.trimStart()` or `.trimEnd()` is judged as the bare
+//     value:  feeText={fee ? `Network fee: ${fee}`.trim() : undefined}.
 //   - JSXAttribute inline object  recovery={{ label: 'Restore' }}  → flagged
 //     for those same attribute names, written directly or as a ternary /
 //     `||` branch, when a property whose KEY is in the set holds copy.
@@ -226,10 +230,14 @@ const USER_FACING_ATTRS = new Set([
     // out of both gates' reach. `value` still stays out of the set, because
     // CopyButton takes its clipboard payload under that name.
     //
-    // The style guide's `kicker` and `note` are deliberately NOT here: both
-    // occur only under packages/web/src/style-guide, a developer surface no
-    // route outside that directory mounts, so their prose documents
-    // components rather than addressing a wallet user. If that surface is
+    // The style guide's `kicker` and `note` are deliberately NOT here: as
+    // JSX attributes both are kept to packages/web/src/style-guide, a
+    // developer surface no route outside that directory mounts, so their
+    // prose documents components rather than addressing a wallet user. A
+    // shipped component that renders copy through a prop uses a name in
+    // this set instead (MultisigCosignerShare's row takes `hint`), and the
+    // smoke test fails on a `note=` or `kicker=` attribute outside the style
+    // guide, so this paragraph cannot go stale silently. If that surface is
     // ever meant to be in scope, the lever is the set AND a decision about
     // translating developer documentation, not one without the other.
     'what',
@@ -247,6 +255,16 @@ const USER_FACING_ATTRS = new Set([
     // StatusMessage renders `recovery.label` as its button text and accessible
     // name. Call sites write the copy inside an inline object, which objectCopy judges.
     'recovery',
+    // ConfirmActionModal renders `feeText` verbatim as the fee line, and the
+    // forms write it as a `Network fee: …` template; no prop default or
+    // attribute uses the name technically (the same-named locals are plain consts).
+    'feeText',
+    // BalanceList forwards `emptyActionLabel` to EmptyState's button text,
+    // the one-hop-earlier shape of `emptyBody`.
+    'emptyActionLabel',
+    // SignApproval interpolates `warningNoun` into the sentence under the
+    // signed text, the same shape as `noun` and `what`.
+    'warningNoun',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -301,6 +319,29 @@ export function templateCopy(node, allow = [], minLength = 2) {
     return null;
 }
 
+const TRIM_METHODS = new Set(['trim', 'trimStart', 'trimEnd']);
+
+/**
+ * Return the literal or template a bare `.trim()` / `.trimStart()` /
+ * `.trimEnd()` call wraps, or the node itself for any other shape.
+ *
+ * The forms trim their `Network fee: …` template inside a ternary branch.
+ * Any other call stays in the documented "copy returned by a helper call" blind spot.
+ *
+ * @param {object} node
+ * @returns {object}
+ */
+function unwrapTrim(node) {
+    if (node?.type !== 'CallExpression' || (node.arguments ?? []).length !== 0) return node;
+    const callee = node.callee;
+    if (callee?.type !== 'MemberExpression' || callee.computed) return node;
+    if (!TRIM_METHODS.has(callee.property?.name)) return node;
+    const receiver = callee.object;
+    const isCopyShape = receiver?.type === 'TemplateLiteral'
+        || (receiver?.type === 'Literal' && typeof receiver.value === 'string');
+    return isCopyShape ? receiver : node;
+}
+
 /**
  * Return the first non-trivial copy carried by a ternary or a `||` / `??`
  * fallback, or null.
@@ -328,7 +369,8 @@ function branchCopy(node, allow = [], minLength = 2) {
     const branches = node.type === 'ConditionalExpression'
         ? [node.consequent, node.alternate]
         : [node.left, node.right];
-    for (const branch of branches) {
+    for (const raw of branches) {
+        const branch = unwrapTrim(raw);
         if (branch?.type === 'Literal' && typeof branch.value === 'string'
             && !isTrivialString(branch.value, allow, minLength)) {
             return branch.value;

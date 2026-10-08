@@ -74,7 +74,7 @@ describe('submitWithSigner chunk-lane capability gate', () => {
     it('fails closed on a signer with no kind at all (P2WSH too)', async () => {
         const h = harness({ encoding: 'P2WSH' });
         const signer = { signPsbt: vi.fn(async () => ({ txHex: 'x', txid: 'y' })) };
-        await expect(call(h, signer)).rejects.toThrow(/cannot sign that revealing transaction/);
+        await expect(call(h, signer)).rejects.toThrow(/This signer cannot sign that second transaction/);
         expect(signer.signPsbt).not.toHaveBeenCalled();
         expect(h.encoder.broadcastTx).not.toHaveBeenCalled();
     });
@@ -101,6 +101,14 @@ describe('submitWithSigner chunk-lane capability gate', () => {
         expect(err.userFacing).toBe(true);
         expect(isWatcherChunkLane(err)).toBe(true);
         expect(submitFailureMessage(err, { fallback: 'Deploy failed.' })).toBe(err.message);
-        expect(err.message).toMatch(/A ledger signer cannot sign that revealing transaction/);
+        expect(err.message).toMatch(/A Ledger cannot sign that second transaction/);
+        expect(err.message).toMatch(/^This Publish contract action is too large for one transaction/);
+        expect(err.message).not.toMatch(/DEPLOY|P2SH/);
+    });
+
+    it('is recognised from the message alone, if even the name is lost', () => {
+        const err = new HardwareChunkLaneError({ action: 'FILE', encoding: 'P2WSH', signerKind: 'trezor' });
+        expect(err.message).toMatch(/A Trezor cannot sign/);
+        expect(isWatcherChunkLane({ message: err.message })).toBe(true);
     });
 });

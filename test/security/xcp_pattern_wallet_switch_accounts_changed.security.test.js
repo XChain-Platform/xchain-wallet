@@ -95,7 +95,11 @@ describe('wallet switch bridge notification', () => {
         const runtime = fakeRuntime(WALLETS, [
             { origin: 'https://wildcard.example', permissions: { accounts: [] } },
         ]);
-        runtime.sendMessage = (message, callback) => callback(undefined);
+        const lookups = [];
+        runtime.sendMessage = (message, callback) => {
+            lookups.push(message.type);
+            callback(undefined);
+        };
         const sends = [];
         createBridgeEventBroadcaster({
             runtime,
@@ -105,7 +109,10 @@ describe('wallet switch bridge notification', () => {
 
         expect(runtime.select('first')).toBe(false);
         expect(runtime.select('second')).toBe(false);
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        // The switch handler runs on promises alone, so one timer turn lets it reach its bail-out.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        // Prove the handler actually ran both lookups, so "nothing sent" is a real result.
+        expect(lookups).toEqual(['account.list', 'sites.list']);
         expect(sends).toEqual([]);
     });
 });

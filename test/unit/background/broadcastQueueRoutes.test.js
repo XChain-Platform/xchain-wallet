@@ -1145,3 +1145,52 @@ describe('the broadcast route claims its record before the bytes go out', () => 
         });
     });
 });
+
+describe('the host queue keeps a reveal whose commit landed out of failed', () => {
+    const A_ADDR = 'bcrt1qwallet-a';
+    const landedRecord = (id) => ({
+        id, chain: 'bitcoin', network: 'regtest', fromAddress: A_ADDR, status: 'queued',
+        txHex: `hex-${id}`, txid: 'reveal-txid', error: 'ETIMEDOUT',
+        commitLanded: true, commitTxid: 'commit-txid', createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const landed = { pendingTxId: 'p1', txid: 'reveal-txid', commitLanded: true, commitTxid: 'commit-txid' };
+
+    it('a permanent retry verdict keeps the record broadcast on the commit txid and names the error permanent', async () => {
+        const h = makeHost({
+            entries: [entry('A', landed)],
+            broadcastTx: vi.fn(async () => { throw new Error('missing inputs'); }),
+        });
+        await h.vault.pendingTxs.put(landedRecord('p1'));
+        const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect(res.ok).toBe(false);
+        expect(res.error.name).toBe('BroadcastFailedPermanentError');
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({
+            status: 'broadcast', txid: 'commit-txid', error: 'missing inputs',
+        });
+        expect(await h.list()).toEqual([]);
+    });
+
+    it('a discard keeps the commit-landed record instead of deleting it', async () => {
+        const h = makeHost({ entries: [entry('A', landed)], broadcastTx: vi.fn() });
+        await h.vault.pendingTxs.put(landedRecord('p1'));
+        const res = await h.call('broadcast.queue.discard', { walletId: W, id: 'A' });
+        expect(res.result).toEqual({ discarded: true });
+        expect(await h.vault.pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'commit-txid' });
+    });
+
+    it('a reload rebuilds the commit-landed marker onto the queue entry', async () => {
+        const records = memCollection();
+        await records.put(landedRecord('p1'));
+        const h = makeHost({
+            entries: [],
+            pendingTxs: records,
+            broadcastTx: vi.fn(),
+            wallets: { list: async () => [{ id: W }], get: async (id) => ({ id, importedKeys: [] }) },
+            accounts: { findBy: async (key, value) => (key === 'walletId' ? [{ id: `acct-${value}`, walletId: value }] : []) },
+            addresses: { list: async () => [{ id: 'addr-a', accountId: `acct-${W}`, address: A_ADDR }] },
+        });
+        const listed = await h.list();
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).toMatchObject({ pendingTxId: 'p1', commitLanded: true, commitTxid: 'commit-txid' });
+    });
+});

@@ -531,6 +531,14 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
         const hint = await airdropReviewHint(false);
         expect(hint.textContent).toMatch(/enter your password twice/);
     });
+
+    it('AirdropForm names both steps in plain words, not opcodes', async () => {
+        const hint = await airdropReviewHint(false);
+        expect(hint.textContent).toMatch(/broadcasts the address list/);
+        expect(hint.textContent).toMatch(/step 2 signs the airdrop/);
+        expect(hint.textContent).not.toMatch(/AIRDROP|indexed/);
+        expect(screen.getByRole('button', { name: /^Sign address list/ })).toBeTruthy();
+    });
 });
 
 describe('ListCreateForm chain default', () => {
