@@ -8,27 +8,61 @@
 
 import { describe, expect, it } from 'vitest';
 import { createConnectedTabRegistry } from '../../packages/extension/src/background/connectedTabs.js';
+import { createBackgroundHost } from '../../packages/extension/src/background/createBackgroundHost.js';
 import { createBridgeEventBroadcaster } from '../../packages/extension/src/bridge/bridgeEvents.js';
+import { isMessageAllowedFromSender } from '../../packages/extension/src/bridge/publicSurface.js';
 
-function fakeRuntime(accountByWallet, sites) {
-    let listener = null;
+const EXTENSION_ID = 'wallet-extension';
+
+// Chrome never hands a worker's own sendMessage back to it, so this runtime
+// answers nothing and records every listener and self-send for the asserts.
+function chromeLikeRuntime() {
+    const listeners = [];
+    const selfSends = [];
     return {
-        id: 'wallet-extension',
-        getURL: (path) => `chrome-extension://wallet-extension/${path}`,
-        onMessage: { addListener(fn) { listener = fn; } },
+        id: EXTENSION_ID,
+        getURL: (path) => `chrome-extension://${EXTENSION_ID}/${path}`,
+        onMessage: { addListener(fn) { listeners.push(fn); } },
         sendMessage(message, callback) {
-            const result = message.type === 'account.list'
-                ? accountByWallet[message.request.walletId]
-                : sites;
-            callback({ ok: true, result });
+            selfSends.push(message?.type);
+            if (typeof callback === 'function') callback(undefined);
         },
-        select(walletId, senderId = 'wallet-extension') {
-            return listener(
-                { type: 'account.list', request: { walletId } },
-                { id: senderId, url: 'chrome-extension://wallet-extension/popup.html' },
-            );
-        },
+        listeners,
+        selfSends,
     };
+}
+
+function fakeVault(sites) {
+    const accounts = Object.entries(WALLETS).flatMap(([walletId, list]) => (
+        list.map((account, index) => ({ ...account, walletId, index }))
+    ));
+    return {
+        settings: { get: async () => ({}) },
+        wallets: {
+            list: async () => Object.keys(WALLETS).map((id) => ({ id, name: id })),
+            get: async (id) => (WALLETS[id] ? { id, name: id } : null),
+        },
+        accounts: { findBy: async (field, value) => accounts.filter((a) => a[field] === value) },
+        connectedSites: { list: async () => sites },
+    };
+}
+
+function hostWith(bridgeEvents, sites) {
+    return createBackgroundHost({
+        broadcastQueueStorage: null,
+        signThrottleStorage: null,
+        logConsoleStorage: null,
+        approvals: { request: async () => ({ approved: true }) },
+        bridgeEvents,
+        getDiagnosticContext: () => ({}),
+        vault: fakeVault(sites),
+        chainRegistry: { get: () => null, list: () => [] },
+        sdkRegistry: { for: () => ({}) },
+    });
+}
+
+function extensionPage(path) {
+    return { id: EXTENSION_ID, url: `chrome-extension://${EXTENSION_ID}/${path}` };
 }
 
 function fakeTabs(onSend) {
@@ -55,64 +89,97 @@ const WALLETS = {
     ],
 };
 
+const SITES = [
+    { origin: 'https://partial.example', permissions: { accounts: ['account-first', 'second-a'] } },
+    { origin: 'https://other-wallet.example', permissions: { accounts: ['account-first'] } },
+    { origin: 'https://wildcard.example', permissions: { accounts: [] } },
+];
+
+function connectedRegistry() {
+    const registry = createConnectedTabRegistry({ sessionArea: null });
+    registry.record(7, 'https://partial.example');
+    registry.record(8, 'https://other-wallet.example');
+    registry.record(9, 'https://wildcard.example');
+    registry.record(10, 'https://stale.example');
+    return registry;
+}
+
+function broadcasterFor(runtime, sends) {
+    return createBridgeEventBroadcaster({
+        runtime,
+        connectedTabs: connectedRegistry(),
+        tabs: fakeTabs((send) => sends.push(send)),
+    });
+}
+
 describe('wallet switch bridge notification', () => {
     it('sends each connected site only the new wallet accounts it was granted', async () => {
-        const registry = createConnectedTabRegistry({ sessionArea: null });
-        registry.record(7, 'https://partial.example');
-        registry.record(8, 'https://other-wallet.example');
-        registry.record(9, 'https://wildcard.example');
-        registry.record(10, 'https://stale.example');
-        const runtime = fakeRuntime(WALLETS, [
-            { origin: 'https://partial.example', permissions: { accounts: ['account-first', 'second-a'] } },
-            { origin: 'https://other-wallet.example', permissions: { accounts: ['account-first'] } },
-            { origin: 'https://wildcard.example', permissions: { accounts: [] } },
-        ]);
+        const runtime = chromeLikeRuntime();
         const sends = [];
-        const wildcardDelivered = new Promise((resolve) => {
-            createBridgeEventBroadcaster({
-                runtime,
-                connectedTabs: registry,
-                tabs: fakeTabs((send) => {
-                    sends.push(send);
-                    if (send.tabId === 9) resolve();
-                }),
-            });
-        });
+        const host = hostWith(broadcasterFor(runtime, sends), SITES);
 
-        expect(runtime.select('first')).toBe(false);
-        expect(runtime.select('second')).toBe(false);
-        await wildcardDelivered;
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        const reply = await host.handle({ type: 'wallet.setActive', request: { walletId: 'second' } });
+
+        expect(reply.ok).toBe(true);
         expect(sends).toEqual([
             accountsChangedTo(7, 'https://partial.example', [{ id: 'second-a', name: 'Second A' }]),
             accountsChangedTo(9, 'https://wildcard.example', WALLETS.second),
         ]);
+        // The data came from the vault, not from the worker messaging itself.
+        expect(runtime.selfSends).toEqual([]);
     });
 
     it('sends nothing when the account lookup gets no answer', async () => {
-        const registry = createConnectedTabRegistry({ sessionArea: null });
-        registry.record(9, 'https://wildcard.example');
-        const runtime = fakeRuntime(WALLETS, [
-            { origin: 'https://wildcard.example', permissions: { accounts: [] } },
-        ]);
-        const lookups = [];
-        runtime.sendMessage = (message, callback) => {
-            lookups.push(message.type);
-            callback(undefined);
-        };
         const sends = [];
-        createBridgeEventBroadcaster({
-            runtime,
-            connectedTabs: registry,
-            tabs: fakeTabs((send) => sends.push(send)),
-        });
+        const events = broadcasterFor(chromeLikeRuntime(), sends);
 
-        expect(runtime.select('first')).toBe(false);
-        expect(runtime.select('second')).toBe(false);
-        // The switch handler runs on promises alone, so one timer turn lets it reach its bail-out.
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        // Prove the handler actually ran both lookups, so "nothing sent" is a real result.
-        expect(lookups).toEqual(['account.list', 'sites.list']);
+        await events.walletSwitched(undefined, SITES);
+        await events.walletSwitched(WALLETS.second, null);
         expect(sends).toEqual([]);
+
+        // Control: the same broadcaster does deliver once both lists are present.
+        await events.walletSwitched(WALLETS.second, [SITES[2]]);
+        expect(sends).toEqual([accountsChangedTo(9, 'https://wildcard.example', WALLETS.second)]);
+    });
+
+    it('adds no runtime message listener and never messages its own worker', async () => {
+        const runtime = chromeLikeRuntime();
+        const sends = [];
+        broadcasterFor(runtime, sends);
+        broadcasterFor(runtime, sends);
+
+        // One listener per unlock used to pile up here and guess switches from lookups.
+        expect(runtime.listeners).toEqual([]);
+        expect(runtime.selfSends).toEqual([]);
+    });
+
+    it('treats an account lookup for another wallet as no switch', async () => {
+        const sends = [];
+        const host = hostWith(broadcasterFor(chromeLikeRuntime(), sends), SITES);
+
+        const reply = await host.handle({ type: 'account.list', request: { walletId: 'second' } });
+
+        expect(reply.ok).toBe(true);
+        expect(sends).toEqual([]);
+    });
+
+    it('refuses a wallet id the vault does not hold and notifies no one', async () => {
+        const sends = [];
+        const host = hostWith(broadcasterFor(chromeLikeRuntime(), sends), SITES);
+
+        const unknown = await host.handle({ type: 'wallet.setActive', request: { walletId: 'gone' } });
+        const missing = await host.handle({ type: 'wallet.setActive', request: {} });
+
+        expect(unknown.ok).toBe(false);
+        expect(missing.ok).toBe(false);
+        expect(sends).toEqual([]);
+    });
+
+    it('accepts wallet.setActive from every wallet page and refuses it from a web page', () => {
+        for (const path of ['popup.html', 'sidepanel.html', 'popup.html?uri=x']) {
+            expect(isMessageAllowedFromSender('wallet.setActive', extensionPage(path), EXTENSION_ID)).toBe(true);
+        }
+        const webPage = { id: EXTENSION_ID, url: 'https://evil.example/', origin: 'https://evil.example', tab: { id: 3 } };
+        expect(isMessageAllowedFromSender('wallet.setActive', webPage, EXTENSION_ID)).toBe(false);
     });
 });

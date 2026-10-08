@@ -41,6 +41,10 @@
 // Send failures are swallowed; a tab may have closed between lookup and send,
 // and the event is best-effort anyway.
 //
+// Wallet switches arrive as an explicit `wallet.setActive` host message whose
+// handler reads the vault and calls `walletSwitched`; the worker cannot ask
+// itself, since Chrome never delivers a `runtime.sendMessage` to its sender.
+//
 // Without a `chrome.tabs.sendMessage` surface, or without a registry (Node
 // smokes, web/desktop shells that expose no extension APIs), every method
 // becomes a no-op. The wallet can still mutate state without crashing.
@@ -48,7 +52,6 @@
 import { connectedOrigins } from '../background/connectedTabs.js';
 
 const EVENT_MESSAGE_TYPE = 'bridge.event';
-const activeWalletByRuntime = new WeakMap();
 
 /**
  * @param {{
@@ -124,46 +127,24 @@ export function createBridgeEventBroadcaster(deps = {}) {
         async disconnect(origin, reason) {
             await fanOut(origin, 'disconnect', reason ?? 'user-requested');
         },
+        /**
+         * Tell every connected site about the newly selected wallet. The host's
+         * `wallet.setActive` handler calls this with vault data it read itself.
+         *
+         * @param {Array<{ id: string, name?: string }>} accounts
+         * @param {Array<{ origin: string, permissions?: { accounts?: string[] } }>} sites
+         */
+        async walletSwitched(accounts, sites) {
+            await notifyWalletSwitch({ connectedTabs, events }, accounts, sites);
+        },
     };
-    attachWalletSwitchObserver({ runtime, connectedTabs, events });
     return events;
 }
 
-function attachWalletSwitchObserver({ runtime, connectedTabs, events }) {
-    if (typeof runtime?.onMessage?.addListener !== 'function') return;
-    if (typeof runtime?.sendMessage !== 'function') return;
-    runtime.onMessage.addListener((message, sender) => {
-        if (!isWalletSelection(message, sender, runtime)) return false;
-        if (!walletDidChange(runtime, message.request.walletId)) return false;
-        void notifyWalletSwitch({ runtime, connectedTabs, events }, message.request.walletId);
-        return false;
-    });
-}
-
-function walletDidChange(runtime, walletId) {
-    const previous = activeWalletByRuntime.get(runtime);
-    activeWalletByRuntime.set(runtime, walletId);
-    return previous !== undefined && previous !== walletId;
-}
-
-function isWalletSelection(message, sender, runtime) {
-    if (!runtime.id || sender?.id !== runtime.id) return false;
-    if (typeof runtime.getURL === 'function' && sender?.url !== runtime.getURL('popup.html')) {
-        return false;
-    }
-    if (message?.type !== 'account.list') return false;
-    if (message?.request?.walletSwitchProbe === true) return false;
-    return typeof message?.request?.walletId === 'string' && message.request.walletId.length > 0;
-}
-
-async function notifyWalletSwitch(deps, walletId) {
-    const accounts = await runtimeRequest(deps.runtime, 'account.list', {
-        walletId,
-        walletSwitchProbe: true,
-    });
-    const sites = await runtimeRequest(deps.runtime, 'sites.list', { walletSwitchProbe: true });
-    const connected = new Set(await connectedOrigins(deps.connectedTabs));
+async function notifyWalletSwitch(deps, accounts, sites) {
+    // Skip a lookup that returned no list rather than guessing an empty one.
     if (!Array.isArray(accounts) || !Array.isArray(sites)) return;
+    const connected = new Set(await connectedOrigins(deps.connectedTabs));
     for (const site of sites) {
         if (!connected.has(site?.origin)) continue;
         // Send each site only the accounts it was granted; skip a site left with none.
@@ -185,19 +166,6 @@ function eventAccounts(accounts) {
         .map((account) => ({ id: account.id, name: account.name }));
 }
 
-function runtimeRequest(runtime, type, request) {
-    return new Promise((resolve) => {
-        try {
-            runtime.sendMessage({ type, request }, (response) => {
-                void runtime.lastError;
-                resolve(response?.ok === true ? response.result : null);
-            });
-        } catch {
-            resolve(null);
-        }
-    });
-}
-
 /**
  * Fire-and-forget no-op broadcaster used when bridge handlers run
  * without a chrome.tabs surface (smokes, web/desktop shells, default
@@ -207,6 +175,7 @@ export const noopBridgeEvents = {
     async accountsChanged() { /* no-op */ },
     async chainChanged() { /* no-op */ },
     async disconnect() { /* no-op */ },
+    async walletSwitched() { /* no-op */ },
 };
 
 /**

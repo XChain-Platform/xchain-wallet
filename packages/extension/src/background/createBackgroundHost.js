@@ -741,6 +741,28 @@ function permanentReleasePatch(entry, failure) {
     };
 }
 
+/**
+ * Read the selected wallet's accounts and the connected sites straight from
+ * the vault and hand both to the bridge broadcaster.
+ */
+async function announceWalletSwitch(req, vault, bridgeEvents) {
+    const walletId = req?.walletId;
+    // Refuse a missing or unknown wallet id instead of announcing nothing as a switch.
+    if (typeof walletId !== 'string' || !walletId) {
+        throw new Error('wallet.setActive: walletId is required');
+    }
+    if ((await vault.wallets.get(walletId)) === null) {
+        throw new Error('wallet.setActive: unknown walletId');
+    }
+    // Shells with no dApp bridge (web, desktop) have nothing to notify.
+    if (typeof bridgeEvents?.walletSwitched !== 'function') return { ok: true };
+    const accounts = [...(await vault.accounts.findBy('walletId', walletId))]
+        .sort((a, b) => a.index - b.index);
+    const sites = await vault.connectedSites.list();
+    await bridgeEvents.walletSwitched(accounts, sites);
+    return { ok: true };
+}
+
 function toSafeWallet(w) {
     return {
         schemaVersion: w.schemaVersion,
@@ -1060,6 +1082,10 @@ export function createBackgroundHost(deps) {
         if (typeof id !== 'string' || !id) return { exists: false };
         return { exists: (await vault.wallets.get(id)) !== null };
     });
+
+    // The wallet UI names the wallet the user just selected, so connected
+    // sites can get accountsChanged with that wallet's granted accounts.
+    host.register('wallet.setActive', (req, { vault }) => announceWalletSwitch(req, vault, bridgeEvents));
 
     // Add a wallet to an already-open vault; the Add Wallet create and import
     // screens both land here. `wallet.create` / `wallet.import` are not
