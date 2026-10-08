@@ -27,6 +27,10 @@ import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
+import {
+    buildEditFeedListsParams,
+    editBetFeedListsAction,
+} from '@xchain-wallet/core/flows/betActions.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
@@ -3471,6 +3475,7 @@ export function createBackgroundHost(deps) {
     registerHwHandler('action.placeBet.hw', placeBetAction);
     registerHwHandler('action.resolveMarket.hw', resolveMarketAction);
     registerHwHandler('action.cancelMarket.hw', cancelMarketAction);
+    registerHwHandler('action.editBetFeedLists.hw', editBetFeedListsAction);
     registerHwHandler('action.clearVoteDelegation.hw', clearVoteDelegationAction);
     registerHwHandler('action.contractStake.hw', contractStakeAction);
 
@@ -4087,7 +4092,11 @@ export function createBackgroundHost(deps) {
         return cancelMarketAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
     });
 
-    // Compose a BET through the SDK's own builder HOST-side, so the confirm page
+    host.register('action.editBetFeedLists', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
+        return editBetFeedListsAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+    });
+
+    // Compose a BET through the SDK HOST-side, so the confirm page
     // decodes what the host actually composed rather than a client-side wire
     // mirror (the rule the vote route already follows).
     host.register('action.bet.composeForConfirm', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
@@ -4097,18 +4106,20 @@ export function createBackgroundHost(deps) {
         }
         const builder = req?.builder;
         // Allow-listed: `builder` crosses the messaging boundary, so it must
-        // never be able to name an arbitrary sdk.betting method.
-        const BET_BUILDERS = ['createMarketParams', 'placeBetParams', 'resolveMarketParams', 'cancelMarketParams'];
+        // never be able to name an arbitrary SDK method.
+        const BET_BUILDERS = ['createMarketParams', 'placeBetParams', 'resolveMarketParams', 'cancelMarketParams', 'editFeedListsParams'];
         if (!BET_BUILDERS.includes(builder)) {
             throw new Error(`action.bet.composeForConfirm: unknown builder "${builder}"`);
         }
         const sdk = sdkRegistry.get(chainId);
-        if (typeof sdk?.betting?.[builder] !== 'function') {
+        if (builder !== 'editFeedListsParams' && typeof sdk?.betting?.[builder] !== 'function') {
             throw new Error(`action.bet.composeForConfirm: sdk.betting.${builder} is unavailable`);
         }
         const source = normalizeSource(req?.from, 'action.bet.composeForConfirm');
         // Throws on bad input BEFORE the confirm page opens.
-        const params = sdk.betting[builder](req?.params);
+        const params = builder === 'editFeedListsParams'
+            ? buildEditFeedListsParams(sdk, req?.params)
+            : sdk.betting[builder](req?.params);
 
         const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
