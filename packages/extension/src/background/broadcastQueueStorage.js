@@ -37,7 +37,7 @@ const STORAGE_KEY = BROADCAST_QUEUE_STORAGE_KEY;
  * Internal entry shape (mirrors what createBackgroundHost pushes). The optional
  * `pendingTxId`, `resumedClaim` and `adsCommit` tie an entry to its vault record and
  * its ADS verdict, so `coerceSnapshot` must keep them.
- * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
+ * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
  */
 
 /**

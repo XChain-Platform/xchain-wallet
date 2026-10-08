@@ -132,10 +132,9 @@
         }
     });
 
-    // Step 3 (future): forward background-initiated events (accountsChanged
-    // etc.) to the page via `window.postMessage({ source: EVENT_SOURCE, … })`.
-    // Left wired for the UI layer to surface events when wallet state
-    // changes; no sender in Phase 1 emits them yet.
+    // Relay the background's live dApp events (accountsChanged and the rest,
+    // sent by bridge/bridgeEvents.js with account ids and names) to the page.
+    // The origin check below is a required trust gate, never dead code.
     if (chrome.runtime?.onMessage?.addListener) {
         chrome.runtime.onMessage.addListener((message) => {
             if (!message || message.type !== 'bridge.event') return;

@@ -233,7 +233,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         expect(mintRow.disabled).toBe(true);
 
         // An unrelated flag stays freely checkable.
-        const sleepRow = screen.getByLabelText(/^Sleep$/);
+        const sleepRow = screen.getByLabelText(/^Pausing$/);
         expect(sleepRow.disabled).toBe(false);
     });
 });

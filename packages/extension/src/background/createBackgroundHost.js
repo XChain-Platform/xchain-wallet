@@ -722,6 +722,47 @@ function pickHubUrlFromRegistry(chainRegistry) {
     return null;
 }
 
+/**
+ * The PendingTx patch a permanent queue-retry verdict writes: 'failed', unless the
+ * entry is a reveal or phase-2 whose commit landed, which stays 'broadcast' on the
+ * commit's txid (the rule submitAction applies, so the commit's spend stays netted).
+ *
+ * @param {{ commitLanded?: boolean, commitTxid?: string, txid?: string }} entry
+ * @param {string} failure
+ * @returns {object}
+ */
+function permanentReleasePatch(entry, failure) {
+    if (entry?.commitLanded !== true) return { status: 'failed', error: failure };
+    return {
+        status: 'broadcast',
+        broadcastAt: new Date().toISOString(),
+        txid: entry.commitTxid ?? entry.txid ?? null,
+        error: failure,
+    };
+}
+
+/**
+ * Read the selected wallet's accounts and the connected sites straight from
+ * the vault and hand both to the bridge broadcaster.
+ */
+async function announceWalletSwitch(req, vault, bridgeEvents) {
+    const walletId = req?.walletId;
+    // Refuse a missing or unknown wallet id instead of announcing nothing as a switch.
+    if (typeof walletId !== 'string' || !walletId) {
+        throw new Error('wallet.setActive: walletId is required');
+    }
+    if ((await vault.wallets.get(walletId)) === null) {
+        throw new Error('wallet.setActive: unknown walletId');
+    }
+    // Shells with no dApp bridge (web, desktop) have nothing to notify.
+    if (typeof bridgeEvents?.walletSwitched !== 'function') return { ok: true };
+    const accounts = [...(await vault.accounts.findBy('walletId', walletId))]
+        .sort((a, b) => a.index - b.index);
+    const sites = await vault.connectedSites.list();
+    await bridgeEvents.walletSwitched(accounts, sites);
+    return { ok: true };
+}
+
 function toSafeWallet(w) {
     return {
         schemaVersion: w.schemaVersion,
@@ -1041,6 +1082,10 @@ export function createBackgroundHost(deps) {
         if (typeof id !== 'string' || !id) return { exists: false };
         return { exists: (await vault.wallets.get(id)) !== null };
     });
+
+    // The wallet UI names the wallet the user just selected, so connected
+    // sites can get accountsChanged with that wallet's granted accounts.
+    host.register('wallet.setActive', (req, { vault }) => announceWalletSwitch(req, vault, bridgeEvents));
 
     // Add a wallet to an already-open vault; the Add Wallet create and import
     // screens both land here. `wallet.create` / `wallet.import` are not
@@ -2929,11 +2974,13 @@ export function createBackgroundHost(deps) {
                 // to 'queued', the status both this surface and the reload
                 // recovery read as "signed, never sent".
                 let releasePatch = { status: 'queued', error: failure };
+                let permanent = false;
                 if (flows.classifyBroadcastFailure(err) === 'permanent') {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
-                    releasePatch = { status: 'failed', error: failure };
+                    permanent = true;
+                    releasePatch = permanentReleasePatch(entry, failure);
                 }
                 if (await settleQueuedPendingTx(vault, entry, releasePatch) === 'unreachable') {
                     recordOwedSettlement(walletId, entry.pendingTxId, 'patch', releasePatch);
@@ -2943,8 +2990,8 @@ export function createBackgroundHost(deps) {
                 // banner has nothing but the encoder's own text and cannot say
                 // whether the entry is still waiting or was just removed, so a
                 // permanent rejection deletes the row and explains it with
-                // "Encoder RPC error: ...". Derived from releasePatch rather than
-                // re-classified, so the sentence can never contradict the splice.
+                // "Encoder RPC error: ...". Derived from the verdict that drove the
+                // splice rather than re-classified, so the sentence never contradicts it.
                 // submitAction.js does the same thing at the same point for the
                 // confirm path. Strictly last: the queue, the persist and the
                 // settlement are all done, only the name changes, and a frozen or
@@ -2952,7 +2999,7 @@ export function createBackgroundHost(deps) {
                 // different one.
                 if (err && typeof err === 'object') {
                     try {
-                        err.name = releasePatch.status === 'failed'
+                        err.name = permanent
                             ? flows.BROADCAST_FAILED_PERMANENT_NAME
                             : flows.BROADCAST_FAILED_TRANSIENT_NAME;
                     } catch { /* a frozen error keeps its own name */ }
@@ -4498,8 +4545,9 @@ export function createBackgroundHost(deps) {
     // PC-36: assemble a BATCH's COMMAND string from queued sub-actions (read-
     // only compose; no signing). The composer previews this, then signs the
     // BATCH via the generic action.advanced path with { action:'BATCH', params:{ COMMAND } }.
-    host.register('batch.buildCommand', async (req, { sdkRegistry }) => {
-        return buildBatchCommand({ ...req, sdkRegistry });
+    // Pass the chain registry so core gates every nested action per chain.
+    host.register('batch.buildCommand', async (req, { sdkRegistry, chainRegistry }) => {
+        return buildBatchCommand({ ...req, sdkRegistry, chainRegistry });
     });
 
     host.register('sdk.listActions', async (req, { sdkRegistry }) => {

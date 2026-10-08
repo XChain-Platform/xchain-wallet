@@ -49,6 +49,7 @@
 // time.
 
 import { CHAIN_GATED_ACTIONS, assertActionAllowedOnChain } from '../registry/actions.js';
+import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 
 /** Actions a BATCH can never contain (SDK BatchBuilder + validator). */
 export const BATCH_FORBIDDEN_ACTIONS = ['BATCH'];
@@ -149,6 +150,20 @@ export function batchEntryWeight(entry) {
     if (weight === undefined) return 1;
     if (action === 'DEPLOY' && entryFormatVersion(entry) === 4) return 1;
     return (Number.isInteger(weight) && weight >= 1) ? weight : 1;
+}
+
+/**
+ * Display labels of every action at one weight, in table order, so the
+ * over-budget message names the same set the weights charge.
+ *
+ * @param {number} weight
+ * @returns {string}
+ */
+function labelsAtWeight(weight) {
+    return Object.keys(BATCH_COMMAND_WEIGHTS)
+        .filter((action) => BATCH_COMMAND_WEIGHTS[action] === weight)
+        .map(actionDisplayLabel)
+        .join(', ');
 }
 
 /**
@@ -254,8 +269,8 @@ export function validateBatchConstraints(subActions) {
         const weight = batchQueueWeight(list);
         if (weight > BATCH_WEIGHT_BUDGET) {
             errors.push(`These ${list.length} actions have a combined cost weight of ${weight}, `
-                + `over the batch budget of ${BATCH_WEIGHT_BUDGET}. Contract actions (DEPLOY, EXECUTE) `
-                + `weigh 30 each and mass-distribution actions (AIRDROP, DIVIDEND) weigh 25 each; `
+                + `over the batch budget of ${BATCH_WEIGHT_BUDGET}. Contract actions (${labelsAtWeight(30)}) `
+                + `weigh 30 each and mass-distribution actions (${labelsAtWeight(25)}) weigh 25 each; `
                 + `every other action weighs 1. Remove some heavy actions or split the batch.`);
         }
     }
@@ -274,14 +289,14 @@ export function validateBatchConstraints(subActions) {
     }
     for (const action of BATCH_SINGLETON_ACTIONS) {
         if (counts[action] > 1) {
-            errors.push(`A batch can contain at most one ${action} action (found ${counts[action]}).`);
+            errors.push(`A batch can contain at most one ${actionDisplayLabel(action)} action (found ${counts[action]}).`);
         }
     }
     const mint = mintTickCounts(mintEntries);
     if (mint.ambiguous) {
-        errors.push('Some of these MINTs name a token by its ID number instead of its name, so we cannot tell whether that is the same token as another MINT in this batch. Please spell every token by name and try again.');
+        errors.push('Some of these mints name a token by its ID number instead of its name, so we cannot tell whether that is the same token as another mint in this batch. Please spell every token by name and try again.');
     } else if (mint.maxCount > 1) {
-        errors.push(`A batch can mint each token at most once (found ${mint.maxCount} MINTs for the same token).`);
+        errors.push(`A batch can mint each token at most once (found ${mint.maxCount} mints for the same token).`);
     }
     return errors;
 }

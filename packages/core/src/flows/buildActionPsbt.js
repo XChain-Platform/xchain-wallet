@@ -37,6 +37,7 @@ import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { isChunkEncoding } from './nativeFeeLane.js';
 import { capRbfToDescriptor } from './rbfCap.js';
+import { chunkLaneOpener } from '../shared/utils/chunkLaneCopy.js';
 
 /**
  * Thrown when a watcher-composed action needs a second, revealing transaction
@@ -48,19 +49,16 @@ import { capRbfToDescriptor } from './rbfCap.js';
 export class WatcherChunkLaneError extends Error {
     /** @param {{ action: string, encoding: string }} fields */
     constructor({ action, encoding }) {
-        super(`This ${action} is too large for one transaction: the network carries it as a `
-            + `${encoding} pair, a commit plus a revealing transaction that must be built and `
-            + 'signed after the first is confirmed. A watch-only wallet cannot complete that '
-            + 'sequence, and broadcasting only the first would spend coin into a script that '
-            + 'nothing can open and record no action at all. Compose it from the wallet holding '
-            + 'the key.');
+        super(`${chunkLaneOpener(action)}, and the second can only be built and signed after `
+            + 'the first is confirmed. A watch-only wallet cannot complete that sequence, and '
+            + 'broadcasting only the first would spend coin into a script that nothing can open '
+            + 'and record no action at all. Compose it from the wallet holding the key.');
         this.name = 'WatcherChunkLaneError';
         // D-160: `submitFailureMessage` already has a branch for this, but the
         // six forms behind `useActionForm` build their `fallback` by calling
-        // `humanizeError` FIRST - and this message's own words ("the network
-        // carries it as a P2SH pair") match that helper's `network` keyword.
-        // The marker makes the sentence safe on any path, not only the one
-        // that happens to classify it first.
+        // `humanizeError` FIRST, whose keyword chain once read this sentence
+        // as a connection failure. The marker makes the sentence safe on any
+        // path, not only the one that happens to classify it first.
         this.userFacing = true;
         this.action = action;
         this.encoding = encoding;

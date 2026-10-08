@@ -154,6 +154,16 @@ export function listAccounts(walletId) {
     return /** @type {any} */ (sendMessage('account.list', { walletId }));
 }
 
+/**
+ * Tell the host which wallet the user just selected, so connected dApps get
+ * accountsChanged for it.
+ *
+ * @param {string} walletId
+ */
+export function setActiveWallet(walletId) {
+    return /** @type {any} */ (sendMessage('wallet.setActive', { walletId }));
+}
+
 /** @param {object} opts */
 export function createAccount(opts) {
     return /** @type {any} */ (sendMessage('account.create', opts));

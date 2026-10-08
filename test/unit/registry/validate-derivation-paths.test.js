@@ -29,6 +29,7 @@ import {
     FAMILY_MAINNET_COIN_TYPE_SLOT,
     FAMILY_NETWORK_WIF_BYTE,
     FAMILY_RBF_SUPPORTED,
+    FAMILY_FEE_UNIT,
 } from '../../../packages/core/src/registry/index.js';
 
 const btcMainnet = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-mainnet');
@@ -235,6 +236,35 @@ describe('validateChainDescriptor: family RBF capability pin', () => {
             expect(d.feeStrategy.rbfSupported, d.id).toBe(FAMILY_RBF_SUPPORTED[d.coin]);
         }
         expect(FAMILY_RBF_SUPPORTED.dogecoin).toBe(false);
+    });
+});
+
+describe('validateChainDescriptor: family fee-unit pin', () => {
+    const withUnit = (d, unit) => ({ ...d, feeStrategy: { ...d.feeStrategy, unit } });
+
+    it('rejects a dogecoin descriptor that declares sats-per-vbyte', () => {
+        const res = validateChainDescriptor(withUnit(dogeMainnet, 'sats-per-vbyte'));
+        expect(res.ok).toBe(false);
+        expect(res.errors.join(' ')).toMatch(/feeStrategy\.unit/);
+    });
+
+    it('refuses a remote sync that flips a dogecoin descriptor to sats-per-vbyte', () => {
+        const reg = new ChainRegistry();
+        expect(() => reg.applyRemoteDescriptors([withUnit(dogeMainnet, 'sats-per-vbyte')]))
+            .toThrow(/feeStrategy\.unit/);
+    });
+
+    it('leaves bitcoin free to declare sats-per-kbyte', () => {
+        const res = validateChainDescriptor(withUnit(btcMainnet, 'sats-per-kbyte'));
+        expect(res.ok, res.errors?.join('; ')).toBe(true);
+    });
+
+    it('the fee-unit map matches the bundled descriptors', () => {
+        for (const d of BUNDLED_DESCRIPTORS) {
+            if (!(d.coin in FAMILY_FEE_UNIT)) continue;
+            expect(d.feeStrategy.unit, d.id).toBe(FAMILY_FEE_UNIT[d.coin]);
+        }
+        expect(FAMILY_FEE_UNIT.dogecoin).toBe('sats-per-kbyte');
     });
 });
 

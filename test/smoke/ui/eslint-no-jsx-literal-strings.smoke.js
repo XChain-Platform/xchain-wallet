@@ -13,7 +13,7 @@
 // eslint dependency, just static analysis of the rule's own logic.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last twenty-seven are component props: copy shipped through them
+// The last thirty are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -70,6 +70,7 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
     'what', 'prefix', 'noun', 'summary', 'error', 'recovery',
+    'feeText', 'emptyActionLabel', 'warningNoun',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -408,6 +409,53 @@ assert.match(v[0].message, /Inline JSX text/, 'and reports it as JSX text, not a
 v = findViolations(jsxAttr('value', literal('bc1qexampleaddress')));
 assert.strictEqual(v.length, 0, 'value stays out of the set (CopyButton clipboard payload)');
 
+// 19d. Three copy props written one hop before their sink. HomeTabs passes
+// 'Clear filter' as emptyActionLabel, SignApproval passes warningNoun literals,
+// and the forms pass feeText a `Network fee: …` template wrapped in .trim().
+const callOn = (receiver, method) => ({
+    type: 'CallExpression', arguments: [],
+    callee: { type: 'MemberExpression', computed: false, object: receiver, property: identifier(method) },
+});
+const trimmedFee = callOn(template('Network fee: ', ' ', ''), 'trim');
+v = findViolations(jsxAttr('warningNoun', literal('message')));
+assert.strictEqual(v.length, 1, 'flags a warningNoun literal');
+assert.match(v[0].message, /warningNoun/);
+v = findViolations(jsxAttr('emptyActionLabel', jsxExpr(conditional(literal('Clear filter'), identifier('undefined')))));
+assert.strictEqual(v.length, 1, 'flags emptyActionLabel branch copy');
+v = findViolations(jsxAttr('feeText', jsxExpr(conditional(trimmedFee, identifier('undefined')))));
+assert.strictEqual(v.length, 1, 'flags a trimmed template in a feeText ternary branch');
+assert.match(v[0].message, /Network fee/);
+v = findViolations(jsxAttr('aria-label', jsxExpr(logical(identifier('custom'), callOn(literal('Pin to top'), 'trimEnd')))));
+assert.strictEqual(v.length, 1, 'flags a trimmed literal in a fallback branch');
+v = findViolations(jsxAttr('feeText', jsxExpr(conditional(callOn(template('', ' ', ''), 'trim'), identifier('undefined')))));
+assert.strictEqual(v.length, 0, 'a trimmed pure-interpolation template stays silent');
+v = findViolations(jsxAttr('feeText', jsxExpr(conditional(callOn(template('Network fee: ', ''), 'toUpperCase'), identifier('undefined')))));
+assert.strictEqual(v.length, 0, 'only the three trim methods unwrap; another call stays a blind spot');
+v = findViolations(jsxAttr('feeText', jsxExpr(identifier('feeText'))));
+assert.strictEqual(v.length, 0, 'a runtime feeText value stays silent');
+
+// 19e. The style guide's note and kicker stay out of the set only while no
+// shipped file passes them as an attribute; this walk keeps that true.
+const STYLE_GUIDE_DIR = join('packages', 'web', 'src', 'style-guide');
+const NOTE_OR_KICKER_ATTR = /(^|\s)(note|kicker)=["'{]/m;
+function sourceFiles(dir) {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) return full.endsWith(STYLE_GUIDE_DIR) ? [] : sourceFiles(full);
+        return /\.[jt]sx?$/.test(entry.name) ? [full] : [];
+    });
+}
+const packageSrcDirs = readdirSync(join(root, 'packages'))
+    .map((pkg) => join(root, 'packages', pkg, 'src'))
+    .filter((dir) => existsSync(dir));
+const stray = packageSrcDirs.flatMap(sourceFiles)
+    .filter((file) => NOTE_OR_KICKER_ATTR.test(readFileSync(file, 'utf8')));
+assert.ok(packageSrcDirs.length > 0, 'the note/kicker walk reaches package sources');
+assert.deepStrictEqual(stray, [], 'no note= or kicker= attribute outside the style guide');
+assert.ok(sourceFiles(join(root, 'packages', 'web', 'src')).length > 0, 'the walk still reads the web package');
+assert.ok(NOTE_OR_KICKER_ATTR.test('<Row value={x} note={y} />'), 'the note/kicker pattern matches an attribute');
+assert.ok(!NOTE_OR_KICKER_ATTR.test('<div role="note" />'), 'the note/kicker pattern ignores role="note"');
+
 // 22. Copy hoisted into a module-scope constant table reaches a sink
 // through an identifier, which the four inline gates read as invisible.
 // The sink decides: an unread table, a technical attribute and a
@@ -641,6 +689,12 @@ assert.strictEqual(reports.length, 23, 'create() reports two object branches onc
 visitors.JSXAttribute(recoveryAttr(objectExpr(prop('label', identifier('restoreLabel')), onAction)));
 visitors.JSXAttribute(jsxAttr('style', jsxExpr(objectExpr(prop('label', literal('red'))))));
 assert.strictEqual(reports.length, 23, 'create() ignores a runtime label and a technical attribute object');
+
+// Test 19d on the shipping side.
+visitors.JSXAttribute(jsxAttr('warningNoun', literal('sign-in')));
+visitors.JSXAttribute(jsxAttr('emptyActionLabel', jsxExpr(conditional(literal('Clear filter'), identifier('undefined')))));
+visitors.JSXAttribute(jsxAttr('feeText', jsxExpr(conditional(trimmedFee, identifier('undefined')))));
+assert.strictEqual(reports.length, 26, 'create() flags the three one-hop copy props, a trimmed fee template included');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

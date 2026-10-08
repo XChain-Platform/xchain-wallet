@@ -122,6 +122,16 @@ export function listAccounts(walletId) {
 }
 
 /**
+ * Tell the host which wallet the user just selected, so connected dApps get
+ * accountsChanged for it.
+ *
+ * @param {string} walletId
+ */
+export function setActiveWallet(walletId) {
+    return /** @type {any} */ (sendMessage('wallet.setActive', { walletId }));
+}
+
+/**
  * Create the next BIP44 account under a wallet (max(index)+1). When
  * `opts.signerId` names a paired hardware signer (§17.6 / G023), the
  * account's first addresses are derived by that device.

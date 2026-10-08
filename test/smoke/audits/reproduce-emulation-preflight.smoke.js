@@ -222,6 +222,18 @@ check('10. every reproduce lane runs the preflight before its first docker build
     }
 });
 
+check('10b. an unknown option exits 2, and both the header and --help document every exit code', () => {
+    const bad = spawnSync('bash', [PREFLIGHT, '--bogus'], { encoding: 'utf8' });
+    assert.equal(bad.status, 2, `${bad.stdout}${bad.stderr}`);
+    const help = spawnSync('bash', [PREFLIGHT, '--help'], { encoding: 'utf8' });
+    assert.equal(help.status, 0, help.stderr);
+    for (const code of ['0', '2', '3']) {
+        assert.match(help.stdout, new RegExp(`^\\s+${code}\\s+\\w+:`, 'm'), `--help omits exit ${code}`);
+    }
+    const header = readFileSync(PREFLIGHT, 'utf8').split('\n').find((l) => /^# Exit 0 /.test(l)) ?? '';
+    assert.match(header, /exit 2 usage/, `the header exit line omits exit 2: ${header}`);
+});
+
 check('11. the published doc names the trap and the routes that work', () => {
     if (!docsAvailable('reproduce-emulation-preflight')) return;
     const doc = readDoc('reproducible-builds.md');

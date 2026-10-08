@@ -84,7 +84,7 @@ export function sendDeltaFromAction(actionData) {
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
  */
 
 /**
@@ -188,6 +188,8 @@ export async function submitAction({
 
     // Set once phase 1 is on the network: submitWithSigner emits these phases only after it lands.
     let phase1Landed = false;
+    // The landed commit's txid, kept apart from the record's txid, which a queued reveal overwrites.
+    let commitTxid = null;
 
     // Chain the caller's onProgress with our lifecycle-tracking callback
     // so both fire for every phase.
@@ -196,6 +198,8 @@ export async function submitAction({
         if (phase === 'envelope_revealing' || phase === 'p2sh_spending' || phase === 'waiting') {
             phase1Landed = true;
         }
+        const landedTxid = data?.commitTxid ?? data?.phase1Txid;
+        if (typeof landedTxid === 'string' && landedTxid) commitTxid = landedTxid;
         if (onProgress) {
             try {
                 onProgress(phase, data);
@@ -364,15 +368,20 @@ export async function submitAction({
                     // Do NOT invoke onBroadcastFailure: there is nothing to
                     // queue. The caller sees the thrown error and re-composes.
                 } else {
+                    // Mark a queued reveal or phase-2 whose commit landed, so a later
+                    // permanent retry verdict keeps it 'broadcast' as the branch above does.
+                    const commitMark = phase1Landed ? { commitLanded: true, commitTxid } : {};
                     await stampPending({
                         status: 'queued',
                         txid: err.txid,
                         txHex: err.signedTxHex,
                         error: err && err.message ? String(err.message) : String(err),
+                        ...commitMark,
                     });
                     if (typeof onBroadcastFailure === 'function') {
                         try {
                             await onBroadcastFailure({
+                                ...commitMark,
                                 signedTxHex: err.signedTxHex,
                                 txid: err.txid,
                                 chainId: err.chainId,

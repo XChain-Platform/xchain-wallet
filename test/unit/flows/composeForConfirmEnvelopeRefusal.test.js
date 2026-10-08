@@ -73,7 +73,9 @@ describe('composeForConfirm carries a complete TAPROOT envelope', () => {
     it('refuses an envelope-only answer with no revealPsbt', async () => {
         const h = composeHarness({ psbt: 'COMMIT', encoding: 'TAPROOT', envelope: { ...ENVELOPE } });
         await expect(composeForConfirm(h.args)).rejects.toBeInstanceOf(EnvelopeConfirmLaneError);
-        await expect(composeForConfirm(h.args)).rejects.toThrow(/TAPROOT pair/);
+        await expect(composeForConfirm(h.args)).rejects.toThrow(/too large for one transaction/);
+        const err = await composeForConfirm(h.args).catch((e) => e);
+        expect(err.message).not.toMatch(/TAPROOT|P2SH|P2WSH/);
     });
 
     it('refuses a reveal that arrives without its recovery record', async () => {

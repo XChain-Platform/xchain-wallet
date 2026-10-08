@@ -408,12 +408,24 @@ fi
 # one value in this repo that only an observed signing run can write.
 PIN_FILE="$HERE/../../docs/release-key-pin.json"
 PIN_SOURCE="--key"
-if [[ -z "$EXPECT_KEY" && -f "$PIN_FILE" ]]; then
-    EXPECT_KEY="$(sed -n 's/.*"fingerprint"[[:space:]]*:[[:space:]]*"\([0-9A-Fa-f]\{40\}\)".*/\1/p' \
+PIN_FPR=""
+PIN_SUBKEY=""
+PIN_PUBLIC_KEY=""
+if [[ -f "$PIN_FILE" ]]; then
+    PIN_FPR="$(sed -n 's/.*"fingerprint"[[:space:]]*:[[:space:]]*"\([0-9A-Fa-f]\{40\}\)".*/\1/p' \
         "$PIN_FILE" | head -1)"
+    PIN_SUBKEY="$(sed -n 's/.*"signingSubkey"[[:space:]]*:[[:space:]]*"\([0-9A-Fa-f]\{40\}\)".*/\1/p' \
+        "$PIN_FILE" | head -1)"
+    PIN_PUBLIC_KEY="$(sed -n 's/.*"publicKey"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        "$PIN_FILE" | head -1)"
+fi
+if [[ -z "$EXPECT_KEY" && -f "$PIN_FILE" ]]; then
+    EXPECT_KEY="$PIN_FPR"
     PIN_SOURCE="docs/release-key-pin.json"
 fi
 EXPECT_KEY="$(printf '%s' "$EXPECT_KEY" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+PIN_FPR="$(printf '%s' "$PIN_FPR" | tr '[:lower:]' '[:upper:]')"
+PIN_SUBKEY="$(printf '%s' "$PIN_SUBKEY" | tr '[:lower:]' '[:upper:]')"
 if [[ -z "$EXPECT_KEY" ]]; then
     echo "verify.sh: no expected signing key, so the signature cannot be attributed." >&2
     echo "  A good signature from an unknown key is not a verification: this" >&2
@@ -435,6 +447,95 @@ fi
 echo "verify.sh: verifying GPG signature on $MANIFEST ..." >&2
 echo "verify.sh: signature must come from $EXPECT_KEY (via $PIN_SOURCE)" >&2
 
+GPG_TIMEOUT_SECONDS="${XCHAIN_VERIFY_GPG_TIMEOUT_SECONDS:-15}"
+if [[ ! "$GPG_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "verify.sh: XCHAIN_VERIFY_GPG_TIMEOUT_SECONDS must be a positive integer." >&2
+    exit 2
+fi
+if ! command -v perl >/dev/null 2>&1; then
+    echo "verify.sh: perl is required to enforce the GPG verification time limit." >&2
+    exit 2
+fi
+
+run_gpg_bounded() {
+    perl -MPOSIX=:sys_wait_h -e '
+        my $seconds = shift;
+        my $pid = fork();
+        exit 127 unless defined $pid;
+        if ($pid == 0) {
+            POSIX::setpgid(0, 0);
+            exec @ARGV;
+            exit 127;
+        }
+        my $timed_out = 0;
+        $SIG{ALRM} = sub { $timed_out = 1; kill 9, -$pid; kill 9, $pid; };
+        alarm $seconds;
+        waitpid($pid, 0);
+        my $status = $?;
+        alarm 0;
+        exit 124 if $timed_out;
+        exit WEXITSTATUS($status) if WIFEXITED($status);
+        exit 128 + WTERMSIG($status) if WIFSIGNALED($status);
+        exit 1;
+    ' "$GPG_TIMEOUT_SECONDS" "$@"
+}
+
+VERIFY_GNUPGHOME="$SNAP_DIR/gnupg"
+mkdir -m 700 "$VERIFY_GNUPGHOME"
+KEY_MATERIAL="$SNAP_DIR/release-signing-key.gpg"
+IMPORT_KEY=1
+
+if [[ "$EXPECT_KEY" == "$PIN_FPR" || "$EXPECT_KEY" == "$PIN_SUBKEY" ]]; then
+    if [[ -z "$PIN_PUBLIC_KEY" ]]; then
+        echo "verify.sh: docs/release-key-pin.json does not name its public key." >&2
+        exit 1
+    fi
+    PIN_PUBLIC_KEY="$(dirname "$PIN_FILE")/$PIN_PUBLIC_KEY"
+    if [[ ! -f "$PIN_PUBLIC_KEY" ]]; then
+        echo "verify.sh: pinned public key '$PIN_PUBLIC_KEY' was not found." >&2
+        exit 1
+    fi
+    cp "$PIN_PUBLIC_KEY" "$KEY_MATERIAL"
+else
+    if GPG_VERSION="$(run_gpg_bounded gpg --version 2>/dev/null)" \
+        && [[ "$GPG_VERSION" == "gpg (GnuPG)"* ]]; then
+        if run_gpg_bounded gpg --batch --no-options --no-autostart --export > "$KEY_MATERIAL"; then
+            :
+        else
+            result=$?
+            if [[ "$result" -eq 124 ]]; then
+                echo "verify.sh: timed out after ${GPG_TIMEOUT_SECONDS}s reading the requested key." >&2
+            else
+                echo "verify.sh: could not read the requested key from the caller's keyring." >&2
+            fi
+            exit 1
+        fi
+    else
+        result=$?
+        if [[ "$result" -eq 124 ]]; then
+            echo "verify.sh: timed out after ${GPG_TIMEOUT_SECONDS}s starting gpg." >&2
+            exit 1
+        fi
+        IMPORT_KEY=0
+    fi
+fi
+
+if [[ "$IMPORT_KEY" -eq 1 ]]; then
+    if run_gpg_bounded env GNUPGHOME="$VERIFY_GNUPGHOME" \
+        gpg --batch --no-options --no-autostart --quiet \
+        --import-options import-minimal --import "$KEY_MATERIAL"; then
+        :
+    else
+        result=$?
+        if [[ "$result" -eq 124 ]]; then
+            echo "verify.sh: timed out after ${GPG_TIMEOUT_SECONDS}s importing the release key." >&2
+        else
+            echo "verify.sh: could not import the release key into the isolated keyring." >&2
+        fi
+        exit 1
+    fi
+fi
+
 # --status-fd rather than the human output, because "Good signature from
 # <uid>" is a name and names are not the check. VALIDSIG carries the
 # signing key's fingerprint as its first field and the PRIMARY key's as
@@ -443,10 +544,19 @@ echo "verify.sh: signature must come from $EXPECT_KEY (via $PIN_SOURCE)" >&2
 # fingerprint a user reads on the published channel never appears as the
 # signer. Either half may be named by --key; a mismatch on both is a
 # wrong key. The human output still goes to stderr for the operator.
-GPG_STATUS="$(gpg --status-fd 3 --verify "$SNAP_SIG" "$SNAP_MANIFEST" 3>&1 1>&2)" || {
-    echo "verify.sh: gpg could not verify the signature on $MANIFEST" >&2
+if GPG_STATUS="$(run_gpg_bounded env GNUPGHOME="$VERIFY_GNUPGHOME" \
+    gpg --batch --no-options --no-autostart --trust-model always --status-fd 3 \
+    --verify "$SNAP_SIG" "$SNAP_MANIFEST" 3>&1 1>&2)"; then
+    :
+else
+    result=$?
+    if [[ "$result" -eq 124 ]]; then
+        echo "verify.sh: GPG verification timed out after ${GPG_TIMEOUT_SECONDS}s." >&2
+    else
+        echo "verify.sh: gpg could not verify the signature on $MANIFEST" >&2
+    fi
     exit 1
-}
+fi
 
 SIGNER_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($3); exit}')"
 PRIMARY_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($NF); exit}')"

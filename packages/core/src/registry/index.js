@@ -277,6 +277,7 @@ export {
     FAMILY_MAINNET_COIN_TYPE_SLOT,
     FAMILY_NETWORK_WIF_BYTE,
     FAMILY_RBF_SUPPORTED,
+    FAMILY_FEE_UNIT,
 } from './validate.js';
 export {
     COMMON_ACTIONS,

@@ -176,7 +176,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const locks = [
                 ['Max mint per transaction', 'LOCK_MAX_MINT'],
                 ['Mint supply now', 'LOCK_MINT_SUPPLY'],
-                ['Sleep', 'LOCK_SLEEP'],
+                ['Pausing', 'LOCK_SLEEP'],
                 ['Callback', 'LOCK_CALLBACK'],
             ];
             for (const [label, field] of locks) {
