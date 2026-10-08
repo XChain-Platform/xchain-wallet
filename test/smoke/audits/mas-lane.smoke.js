@@ -252,7 +252,7 @@ assert.ok(
 
 const masStaging = loadConfig({
     XCHAIN_BUILD_MAS: '1',
-    XCHAIN_STAGING_FEED_URL: 'https://staging.example.invalid/feed/',
+    XCHAIN_STAGING_FEED_URL: 'https://staging.example.invalid/wallet/desktop/',
 });
 assert.ok(
     !names(masStaging).includes('mas'),

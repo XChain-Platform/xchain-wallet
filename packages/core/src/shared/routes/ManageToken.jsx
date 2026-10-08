@@ -22,6 +22,7 @@ import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { RANGES as CHART_RANGES } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { extractHolderRows } from '../utils/holderRows.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
@@ -187,7 +188,7 @@ export function ManageToken({
         let cancelled = false;
         messaging.getHoldersForToken({ chainId, tick })
             .then((resp) => { if (!cancelled) setHolders(extractHolderRows(resp)); })
-            .catch((err) => { if (!cancelled) setHoldersError(err?.message || 'Failed to load holders.'); });
+            .catch((err) => { if (!cancelled) setHoldersError(readFailureMessage(err, 'load the holders')); });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick]);
 
@@ -282,7 +283,7 @@ export function ManageToken({
                 setListings(open);
             })
             .catch((err) => {
-                if (!cancelled) setListingsError(err?.message || 'Failed to load listings.');
+                if (!cancelled) setListingsError(readFailureMessage(err, 'load your listings'));
             });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId, tick]);
@@ -313,7 +314,7 @@ export function ManageToken({
                     : null);
                 if (!cancelled) setOrders(enriched.filter((row) => isOpenOffer(row)));
             })
-            .catch((err) => { if (!cancelled) setOrdersError(err?.message || 'Failed to load orders.'); });
+            .catch((err) => { if (!cancelled) setOrdersError(readFailureMessage(err, 'load the orders')); });
         return () => { cancelled = true; };
     }, [activeTab, orders, messaging, chainId, tick]);
 
@@ -332,7 +333,7 @@ export function ManageToken({
                     : null);
                 if (!cancelled) setSwaps(enriched);
             })
-            .catch((err) => { if (!cancelled) setSwapsError(err?.message || 'Failed to load swaps.'); });
+            .catch((err) => { if (!cancelled) setSwapsError(readFailureMessage(err, 'load the swaps')); });
         return () => { cancelled = true; };
     }, [activeTab, swaps, messaging, chainId, tick]);
 
@@ -388,7 +389,7 @@ export function ManageToken({
                 const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
                 setActivity(rows);
             })
-            .catch((err) => { if (!cancelled) setActivityError(err?.message || 'Failed to load activity.'); });
+            .catch((err) => { if (!cancelled) setActivityError(readFailureMessage(err, 'load the activity')); });
         return () => { cancelled = true; };
     }, [activeTab, activity, messaging, chainId, tick]);
 

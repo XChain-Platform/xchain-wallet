@@ -355,6 +355,26 @@ describe('LedgerSigner.signPsbt', () => {
         signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
     });
 
+    it('hands the device no redeemScript for a wrapped-segwit input', async () => {
+        const mockSdk = signPsbtSdk();
+        const [inp] = mockSdk.wallet.decomposePsbt().inputs;
+        mockSdk.wallet.decomposePsbt.mockReturnValue({
+            inputs: [{ ...inp, scriptType: 'p2sh-p2wpkh', redeemScriptHex: '0014' + 'bb'.repeat(20) }],
+            outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
+            locktime: 0,
+        });
+        const app = makeApp();
+        const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
+        await s.signPsbt({
+            psbtHex: 'cafe',
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [{ inputIndex: 0, path: "m/49'/0'/0'/0/0" }],
+        });
+        const call = app.createPaymentTransaction.mock.calls[0][0];
+        expect(call.inputs[0][2]).toBeUndefined();
+        expect(call.segwit).toBe(true);
+    });
+
     it('calls splitTransaction with the v10 four-argument signature', async () => {
         const mockSdk = signPsbtSdk();
         const app = makeApp();

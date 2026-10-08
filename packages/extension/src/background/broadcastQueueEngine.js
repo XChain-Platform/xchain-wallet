@@ -640,9 +640,21 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         if (typeof walletId !== 'string' || !walletId) return undefined;
         return async (entry) => {
             await ensureQueueLoaded();
-            pushQueueEntry(walletId, entry);
+            // A first list in the gap after the 'queued' stamp may have rebuilt
+            // these bytes already; give that entry the verdict instead of a twin.
+            const twin = liveTwinOf(walletId, entry);
+            if (twin) adoptSnapshotVerdict(twin, entry);
+            else pushQueueEntry(walletId, entry);
             await persistQueue();
         };
+    }
+    // Find the live entry for the same PendingTx and the same signed bytes.
+    function liveTwinOf(walletId, entry) {
+        const pendingTxId = entry?.pendingTxId;
+        if (typeof pendingTxId !== 'string' || !pendingTxId) return null;
+        return getQueue(walletId).find(
+            (e) => e.pendingTxId === pendingTxId && e.signedTxHex === entry.signedTxHex,
+        ) ?? null;
     }
     /**
      * Push a signed-but-unbroadcast tx onto the per-walletId queue.

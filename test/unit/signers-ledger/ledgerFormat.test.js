@@ -470,4 +470,26 @@ describe('toLedgerCreatePayment', () => {
         });
         expect(payload.lockTime).toBe(750000);
     });
+
+    // The legacy app signs a string in tuple slot 2 as the scriptCode, so the
+    // 0014 program must never reach it; both library paths rebuild it from the pubkey.
+    for (const chainId of ['litecoin-mainnet', 'bitcoin-mainnet']) {
+        it(`withholds the wrapped-segwit redeemScript from the device payload on ${chainId}`, () => {
+            const d = makeDecomposed('p2sh-p2wpkh');
+            d.inputs[0].redeemScriptHex = '0014' + 'b'.repeat(40);
+            const paths = [{ inputIndex: 0, path: "m/49'/2'/0'/0/0" }];
+            const payload = toLedgerCreatePayment({ decomposed: d, chainId, signingPaths: paths });
+            expect(payload.inputs[0].redeemScriptHex).toBe(null);
+            expect(payload.segwit).toBe(true);
+            expect(payload.additionals).toEqual([]);
+        });
+    }
+
+    it('still forwards a redeemScript for a script type other than wrapped segwit', () => {
+        const d = makeDecomposed('p2pkh');
+        d.inputs[0].nonWitnessUtxoHex = '0100000001' + 'aa'.repeat(41) + '00000000';
+        d.inputs[0].redeemScriptHex = 'abcd';
+        const payload = toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths });
+        expect(payload.inputs[0].redeemScriptHex).toBe('abcd');
+    });
 });

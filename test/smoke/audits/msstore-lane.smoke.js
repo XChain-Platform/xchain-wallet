@@ -96,7 +96,7 @@ const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : 
 {
     const staging = loadConfig({
         XCHAIN_BUILD_APPX: '1',
-        XCHAIN_STAGING_FEED_URL: 'https://staging.invalid/feed/',
+        XCHAIN_STAGING_FEED_URL: 'https://staging.invalid/wallet/desktop/',
     });
     assert.ok(!targets(staging).includes('appx'),
         'a staging build must never emit a store package');

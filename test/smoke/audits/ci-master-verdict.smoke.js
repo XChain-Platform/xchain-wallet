@@ -427,6 +427,25 @@ assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] })
     }
 }
 
+// Run the CLI through a symlinked directory: a silent exit 0 there reads as
+// "no finding" from a classifier that never ran.
+{
+    const { spawnSync } = await import('node:child_process');
+    const { mkdtempSync, symlinkSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const work = mkdtempSync(join(tmpdir(), 'run-verdict-link-'));
+    try {
+        const linked = join(work, 'release');
+        symlinkSync(join(repoRoot, 'tools', 'release'), linked, 'dir');
+        const run = spawnSync(process.execPath, [join(linked, 'run-verdict.mjs'), '--help'], { encoding: 'utf8' });
+        assert.match(run.stdout, /Usage:/,
+            `run-verdict.mjs invoked through a symlink printed no usage (exit ${run.status}); `
+            + 'its entry-point check must compare realpaths, or the CLI is silently skipped.');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Part 3: bin/ci-full.sh, the local twin of ci.yml, carries every job.
 // ---------------------------------------------------------------------------

@@ -79,7 +79,31 @@ const PROD_CHANNEL = 'stable';
 // mean the last build silently wins and a staging binary could be signed and
 // published as the real one.
 const STAGING_FEED_URL = process.env.XCHAIN_STAGING_FEED_URL || null;
+assertStagingFeedUrlShape(STAGING_FEED_URL);
 const isStaging = Boolean(STAGING_FEED_URL);
+
+/**
+ * Refuse a staging feed URL that is not `https://<host>/<path>/desktop/`.
+ * (The updater, the install gate, publish.sh and rehearse.mjs all rebuild
+ * pointer and manifest URLs as `<base>desktop/`, so any other shape bakes a
+ * rehearsal build whose every install fails as a 404 at the pointer fetch.)
+ *
+ * @param {string | null} url
+ */
+function assertStagingFeedUrlShape(url) {
+    if (url === null) return;
+    const problems = [];
+    if (!url.startsWith('https://')) problems.push('it is not https://');
+    if (!url.endsWith('/desktop/')) problems.push('it does not end in /desktop/');
+    if (problems.length === 0) return;
+    const err = new Error(
+        `XCHAIN_STAGING_FEED_URL is malformed: ${problems.join(' and ')}. `
+        + 'The required shape is https://<host>/<path>/desktop/ (installers and channel '
+        + 'pointers live at <base>desktop/, signed manifests at <base>RELEASE_HASHES/).',
+    );
+    err.name = 'StagingFeedUrlMalformed';
+    throw err;
+}
 
 // Every architecture we ship (§2 matrix). No 32-bit anywhere: win-ia32 is
 // declined by policy (its only audience is 32-bit Windows 10, out of

@@ -850,8 +850,8 @@ export function createBackgroundHost(deps) {
         getAssetUrl,
         // Cluster G FOLLOWUP 2: pluggable broadcast-queue persistence.
         // Default adapter picks chrome.storage.local (extension SW) or
-        // localStorage (web/desktop renderers); pass `null` explicitly
-        // to opt out (in-memory only, the v0.292.0 behaviour).
+        // localStorage (web renderer), and finds neither in desktop main;
+        // pass `null` explicitly to opt out (in-memory only, the v0.292.0 behaviour).
         broadcastQueueStorage = createBroadcastQueueStorage(),
         // Shell-wide queue store, so a locked host cannot clobber its successor's.
         broadcastQueueStore,

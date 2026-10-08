@@ -28,7 +28,8 @@
 // need to know about web-only chrome. Auto-hides when `window.xchain`
 // isn't injected, or when the user dismisses it for the session.
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
@@ -79,7 +80,6 @@ import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
-const APP_COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -356,6 +356,14 @@ function AppInner() {
     // historically owned, and so flipping the filter on TokenDetail
     // affects Home and vice-versa.
     const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
+    // Header filter coins come from the live registry, so custom and
+    // hub-synced chains appear without a restart (regtest stays dev-only).
+    const supportedChains = useSupportedChains(APP_CHAIN_REGISTRY);
+    const developerMode = Boolean(settings?.developerMode);
+    const headerCoinFamilies = useMemo(
+        () => registryLib.coinFamiliesForUser(supportedChains, { developerMode }),
+        [supportedChains, developerMode],
+    );
     // Free-text token filter: lifted alongside the network filter so the
     // AppHeader popover and Home's HomeTabs share one source of truth.
     // The Send and Receive pickers keep their own search text: sharing this
@@ -2763,7 +2771,7 @@ function AppInner() {
                                     walletNonDefault={headerWalletNonDefault}
                                     accountNonDefault={headerAccountNonDefault}
                                     chainRegistry={APP_CHAIN_REGISTRY}
-                                    coinFamilies={APP_COIN_FAMILIES}
+                                    coinFamilies={headerCoinFamilies}
                                     networkFilter={globalNetworkFilter}
                                     onNetworkFilterChange={setGlobalNetworkFilter}
                                     // Cross-site navigation for the *.xchain.io family.

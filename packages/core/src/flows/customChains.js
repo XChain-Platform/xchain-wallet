@@ -82,6 +82,14 @@ export async function listCustomChains({ vault }) {
 }
 
 /**
+ * Result of addCustomChain and of the chainRegistry.addCustomChain route.
+ * @typedef {object} AddCustomChainResult
+ * @property {object} descriptor  The registered descriptor (the stored row when `restored`).
+ * @property {true} [restored]    A valid stored same-id row was registered instead; nothing written.
+ * @property {true} [replaced]    Invalid stored same-id rows were replaced by the pasted descriptor.
+ */
+
+/**
  * Validate, persist, and register a user-supplied ChainDescriptor.
  *
  * When the id is already persisted but not registered, the first stored row
@@ -90,7 +98,7 @@ export async function listCustomChains({ vault }) {
  * (`replaced: true`). Either way the vault and the registry agree.
  *
  * @param {{ vault: any, chainRegistry: any, descriptor: object, sdkRegistry?: any }} args
- * @returns {Promise<{ descriptor: object, restored?: true, replaced?: true }>}
+ * @returns {Promise<AddCustomChainResult>}
  */
 export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegistry }) {
     if (!descriptor || typeof descriptor !== 'object') {

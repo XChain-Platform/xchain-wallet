@@ -201,6 +201,63 @@ assert.ok(
     'BrowserWindow is hardened: contextIsolation + no nodeIntegration + sandbox',
 );
 
+// Scope the hardening pin to createWindow, the preload-bearing window.
+// (index.js holds a second webPreferences block, the Trezor bridge override,
+// whose flags alone satisfy the whole-file regexes above.)
+const MAIN_WINDOW_REQUIRED = [
+    /contextIsolation:\s*true/, /nodeIntegration:\s*false/, /sandbox:\s*true/,
+    /preload:\s*join\(here,\s*'\.\.',\s*'preload\.cjs'\)/,
+];
+const MAIN_WINDOW_FORBIDDEN = [/contextIsolation:\s*false/, /nodeIntegration:\s*true/, /sandbox:\s*false/];
+
+/** Slice createWindow's options up to its loadFile; null when an anchor moved. */
+function createWindowSlice(src) {
+    const start = src.indexOf('function createWindow(');
+    const end = start === -1 ? -1 : src.indexOf('win.loadFile(', start);
+    return end === -1 ? null : src.slice(start, end);
+}
+
+/** List hardening failures in createWindow; fails closed on a missing anchor. */
+function mainWindowHardeningFailures(src) {
+    const slice = createWindowSlice(src);
+    if (slice === null) return ['createWindow or its win.loadFile anchor not found'];
+    return [
+        ...MAIN_WINDOW_REQUIRED.filter((re) => !re.test(slice)).map((re) => `missing ${re.source}`),
+        ...MAIN_WINDOW_FORBIDDEN.filter((re) => re.test(slice)).map((re) => `contradicted by ${re.source}`),
+    ];
+}
+
+/** Rewrite only the createWindow slice of src. */
+function mutateCreateWindow(src, from, to) {
+    const slice = createWindowSlice(src);
+    return src.replace(slice, slice.replace(from, to));
+}
+
+assert.deepEqual(
+    mainWindowHardeningFailures(mainIndex), [],
+    'createWindow webPreferences carry the preload plus contextIsolation, no nodeIntegration and sandbox',
+);
+for (const [from, to, why] of [
+    [/\n\s*sandbox:\s*true,/, '', 'a dropped sandbox flag'],
+    [/\n\s*contextIsolation:\s*true,/, '', 'a dropped contextIsolation flag'],
+    ['nodeIntegration: false', 'nodeIntegration: true', 'nodeIntegration turned on'],
+    [/\n\s*preload:[^\n]*/, '', 'a dropped preload path'],
+]) {
+    const mutated = mutateCreateWindow(mainIndex, from, to);
+    assert.notEqual(mutated, mainIndex, `the createWindow probe for ${why} changed the source`);
+    assert.ok(mainWindowHardeningFailures(mutated).length > 0, `the createWindow hardening check catches ${why}`);
+}
+const unsandboxed = mutateCreateWindow(mainIndex, /\n\s*sandbox:\s*true,/, '');
+assert.ok(
+    /sandbox:\s*true/.test(unsandboxed),
+    'the Trezor override alone still satisfies a whole-file sandbox regex, which is why the check is scoped',
+);
+assert.deepEqual(
+    mainWindowHardeningFailures(mainIndex.replace('function createWindow(', 'function makeWindow(')),
+    ['createWindow or its win.loadFile anchor not found'],
+    'the createWindow hardening check fails closed when its anchor moves',
+);
+
 assert.equal(IPC_CHANNEL, 'xchain-wallet:message', 'IPC channel name is namespaced');
 
 // --- 4. FileStorageBackend round-trip ---------------------------------

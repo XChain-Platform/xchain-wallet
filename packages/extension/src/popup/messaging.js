@@ -2717,7 +2717,7 @@ export function listCustomChains() {
     return /** @type {Promise<{ descriptors: object[] }>} */ (sendMessage('chainRegistry.listCustomChains'));
 }
 export function addCustomChain(req) {
-    return /** @type {Promise<{ descriptor: object }>} */ (sendMessage('chainRegistry.addCustomChain', req));
+    return /** @type {Promise<import('@xchain-wallet/core/flows/customChains.js').AddCustomChainResult>} */ (sendMessage('chainRegistry.addCustomChain', req));
 }
 export function removeCustomChain(req) {
     return /** @type {Promise<{ removed: boolean }>} */ (sendMessage('chainRegistry.removeCustomChain', req));

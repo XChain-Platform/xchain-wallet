@@ -398,7 +398,9 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
         return {
             prevTxHex: prevTxHexForInput(inp),
             vout: inp.prevTxIndex,
-            redeemScriptHex: inp.redeemScriptHex ?? null,
+            // Withhold the wrapped-segwit 0014 program: the legacy app signs slot 2
+            // as the scriptCode, and both library paths rebuild it from the pubkey.
+            redeemScriptHex: inp.scriptType === 'p2sh-p2wpkh' ? null : (inp.redeemScriptHex ?? null),
             sequence: inp.sequence,
         };
     });

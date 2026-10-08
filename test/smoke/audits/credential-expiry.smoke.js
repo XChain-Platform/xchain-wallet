@@ -100,6 +100,18 @@ assert.equal(k1.signingSubkey, keyPin.signingSubkey, 'the K1 row names the pinne
 assert.ok(existsSync(resolveVerifyFrom(k1.verifyFrom)),
     `K1's verifyFrom (${k1.verifyFrom}) resolves to the committed public key`);
 
+// The tag-signing key gates every release run, so its row is pinned to the
+// fingerprint and key path the release workflow's verify-tag step reads.
+const tagKey = declared.credentials.find((c) => c.id === 'TAG-KEY');
+assert.ok(tagKey, 'TAG-KEY, the release tag-signing key, must stay on the clock');
+const tagFpr = readFileSync(join(root, 'tools/release/tag-signing-fingerprint.txt'), 'utf8').replace(/[\s]/g, '');
+assert.equal(tagKey.fingerprint, tagFpr, 'the TAG-KEY row names the pinned tag-signing fingerprint');
+assert.ok(existsSync(resolveVerifyFrom(tagKey.verifyFrom)),
+    `TAG-KEY's verifyFrom (${tagKey.verifyFrom}) resolves to the committed public key`);
+assert.ok(readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
+    .includes(`KEY="${tagKey.verifyFrom.replace(/^\.\//, '')}"`),
+'the TAG-KEY row names the key file the verify-tag step imports');
+
 // --- the calendar branches -------------------------------------------------
 
 {
@@ -301,8 +313,12 @@ if (spawnSync('gpg', ['--version'], { encoding: 'utf8' }).status === 0) {
     assert.ok(real.date, `gpg could not read the committed K1 key: ${real.reason}`);
     assert.ok(Math.abs(real.date.getTime() - Date.parse(k1.expires)) <= 1000,
         `the committed K1 key carries ${real.date.toISOString()}, the row declares ${k1.expires}`);
+    const tag = readActualExpiry(resolveVerifyFrom(tagKey.verifyFrom), { fingerprint: tagKey.fingerprint });
+    assert.ok(tag.date, `gpg could not read the committed tag-signing key: ${tag.reason}`);
+    assert.ok(Math.abs(tag.date.getTime() - Date.parse(tagKey.expires)) <= 1000,
+        `the committed tag-signing key carries ${tag.date.toISOString()}, the row declares ${tagKey.expires}`);
 } else {
-    console.log('credential-expiry smoke: gpg is not installed, so the real read of the committed K1 key '
+    console.log('credential-expiry smoke: gpg is not installed, so the real reads of the committed K1 and tag-signing keys '
         + 'did not run (the fake-gpg cases above still did).');
 }
 

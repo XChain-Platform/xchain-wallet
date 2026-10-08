@@ -14,20 +14,18 @@
 // lives as an in-memory `Map<walletId, entry[]>` in the queue store
 // (broadcastQueueStore.js) that createBackgroundHost serves from; this
 // module rehydrates that map at boot and writes it back on
-// every mutation so a service-worker restart (extension), a tab refresh
-// (web), or an Electron app relaunch (desktop) doesn't lose the user's
-// signed-but-unbroadcast txs.
+// every mutation so a service-worker restart (extension) or a tab refresh
+// (web) doesn't lose the user's signed-but-unbroadcast txs.
 //
-// One adapter handles all three shells:
+// One adapter handles the shells whose host has a storage API:
 //   - Extension SW    → `chrome.storage.local` (no localStorage in MV3)
 //   - Web renderer    → `localStorage`
-//   - Desktop renderer → `localStorage` (Chromium has both; localStorage
-//                                       is simpler than wiring electron-
-//                                       store across the IPC boundary)
 //
-// When neither API is available (Node tests, ad-hoc smoke harness),
-// `createBroadcastQueueStorage` returns null and createBackgroundHost
-// falls back to in-memory only (the prior v0.292.0 behavior).
+// When neither API is available (the desktop host in Electron MAIN, Node
+// tests, ad-hoc smoke harness), `createBroadcastQueueStorage` returns null
+// and the queue is in-memory only (the prior v0.292.0 behavior). Desktop
+// still shares one store across its hosts, so a lock keeps the queue; a
+// relaunch does not.
 
 import { BROADCAST_QUEUE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 

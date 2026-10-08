@@ -33,6 +33,12 @@ describe('shared/actionDisplayLabel', () => {
         expect(actionDisplayLabel('crosschain')).toBe('Cross-chain');
     });
 
+    it('names SLEEP by what it does to the address or token, never as a delay', () => {
+        expect(actionDisplayLabel('SLEEP')).toBe('Lock, pause or resume');
+        expect(actionDisplayLabel('sleep')).toBe('Lock, pause or resume');
+        expect(actionDisplayLabel('SLEEP')).not.toMatch(/delay/i);
+    });
+
     it('maps ADDRESS, VOTE, and DEPLOY to humanized phrases (not the bare opcode)', () => {
         expect(actionDisplayLabel('ADDRESS')).toBe('Messaging setup');
         expect(actionDisplayLabel('VOTE')).toBe('Vote');
@@ -124,6 +130,10 @@ describe('shared/psbtActionSummary', () => {
         expect(psbtActionSummary({ action: 'XBRIDGE', version: 2 })).toBe('Carries an XChain Bridge transfer action');
         expect(psbtActionSummary({ action: 'MINT', version: '1' })).toBe('Carries an XChain Mint action');
         expect(psbtActionSummary({ action: 'SEND' })).toBe('Carries an XChain Send action');
+    });
+
+    it('summarizes a SLEEP action as a lock or pause', () => {
+        expect(psbtActionSummary({ action: 'SLEEP', version: 1 })).toBe('Carries an XChain Lock, pause or resume action');
     });
 
     it('reads cleanly when the action name is missing', () => {

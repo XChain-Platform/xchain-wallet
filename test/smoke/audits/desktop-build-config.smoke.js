@@ -323,6 +323,27 @@ function loadConfig(env = {}) {
     }
 }
 
+// Refuse a staging feed URL whose shape the pointer and manifest lookups
+// cannot rebuild: every consumer derives `<base>desktop/` from it.
+{
+    for (const bad of [
+        'https://staging.invalid/wallet/feed/',
+        'https://staging.invalid/wallet/',
+        'https://staging.invalid/wallet/desktop',
+        'http://staging.invalid/wallet/desktop/',
+    ]) {
+        assert.throws(() => loadConfig({ XCHAIN_STAGING_FEED_URL: bad }),
+            (e) => e.name === 'StagingFeedUrlMalformed' && !e.message.includes(bad),
+            `a malformed staging feed URL is refused at config load without echoing it (${bad})`);
+    }
+    for (const env of [{}, { XCHAIN_STAGING_FEED_URL: '' }]) {
+        const cfg = loadConfig(env);
+        assert.equal(cfg.publish[0].url, 'https://downloads.xchain.io/wallet/desktop/',
+            'an unset or empty staging feed URL still loads as a production build');
+        assert.equal(cfg.publish[0].channel, 'stable');
+    }
+}
+
 // A production build must be untouched by any of that. This is the
 // §7.5 rule that production carries no feed-override affordance: the
 // staging variable is a BUILD-TIME input, and with it unset the config is

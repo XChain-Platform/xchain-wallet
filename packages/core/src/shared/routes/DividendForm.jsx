@@ -38,6 +38,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -226,7 +227,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     setHolders({
                         loading: false,
                         rows: null,
-                        error: err?.message || 'Failed to load holders.',
+                        error: readFailureMessage(err, 'load the holders'),
                     });
                 });
         }, 400);
@@ -967,7 +968,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             {tick.trim() ? (
                 <p className={styles.hint}>
                     {holders.loading ? 'Counting holders…'
-                        : holders.error ? `Couldn't load holders: ${holders.error}`
+                        : holders.error ? holders.error
                             : holders.rows ? `${preview?.eligibleCount ?? 0} eligible holder${(preview?.eligibleCount ?? 0) === 1 ? '' : 's'}`
                                 : ''}
                     {preview?.total

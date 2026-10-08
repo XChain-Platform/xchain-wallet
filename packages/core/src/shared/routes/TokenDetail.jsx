@@ -35,6 +35,7 @@ import {
     decimalFromBaseUnits,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -161,7 +162,7 @@ export function TokenDetail({
             })
             .catch((err) => {
                 if (cancelled) return;
-                setHoldersError(err?.message || 'Failed to load holders.');
+                setHoldersError(readFailureMessage(err, 'load the holders'));
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
@@ -185,7 +186,7 @@ export function TokenDetail({
             })
             .catch((err) => {
                 if (cancelled) return;
-                setGatedError(err?.message || 'Failed to load gated content.');
+                setGatedError(readFailureMessage(err, 'load the gated content'));
             })
             .finally(() => { if (!cancelled) setGatedLoading(false); });
         return () => { cancelled = true; };

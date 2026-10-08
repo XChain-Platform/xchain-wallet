@@ -184,6 +184,26 @@ describe('satsFromNativeDecimal', () => {
             expect(satsFromNativeDecimal(bad)).toBe(null);
         }
     });
+
+    it('answers null for sub-satoshi precision instead of truncating it', () => {
+        expect(satsFromNativeDecimal('0.040000009')).toBe(null);
+        expect(satsFromNativeDecimal('0.000000001')).toBe(null);
+    });
+
+    it('still converts trailing zeros past 8 dp exactly', () => {
+        expect(satsFromNativeDecimal('0.0400000000')).toBe(4000000);
+    });
+});
+
+describe('compareNativeFeeQuote with a sub-satoshi band floor', () => {
+    it('falls back to the rounded-up tolerance floor, so a payment one satoshi short refuses', () => {
+        const cmp = compareNativeFeeQuote({
+            composed: composedTwoHundredth,
+            fresh: quote({ requiredFeeSats: 2105264, minAcceptable: '0.020000001', maxAcceptable: '0.02315790' }),
+        });
+        expect(cmp.minSats).toBe(2000001);
+        expect(cmp.verdict).toBe('short');
+    });
 });
 
 describe('nativeFeeRequoteMessage', () => {

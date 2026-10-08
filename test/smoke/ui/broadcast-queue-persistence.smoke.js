@@ -12,9 +12,10 @@
 // persistence across reload. The queue lives in-memory inside
 // createBackgroundHost; v0.293.0 adds a pluggable storage adapter that
 // rehydrates the in-memory map at host construction and writes back on
-// every mutation, so a service-worker restart (extension), a tab refresh
-// (web), or an Electron app relaunch (desktop) doesn't lose the user's
-// signed-but-unbroadcast txs.
+// every mutation, so a service-worker restart (extension) or a tab refresh
+// (web) doesn't lose the user's signed-but-unbroadcast txs. The desktop
+// host runs in Electron main, where the picker finds no storage, so its
+// queue survives a lock (one shared store) but not a relaunch.
 //
 // Verifies:
 //   1. broadcastQueueStorage.js exports createBroadcastQueueStorage;
@@ -218,7 +219,7 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);\s*pushQueueEntry\(walletId, entry\);\s*await persistQueue\(\);\s*\};/.test(engineSrc),
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);[\s\S]*?\bpushQueueEntry\(walletId, entry\);\s*await persistQueue\(\);\s*\};/.test(engineSrc),
     'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing and awaits the save after',
 );
 assert.ok(

@@ -67,7 +67,7 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: 'Preview', exact: true }).click();
 
             await expect(main).toContainText('This locks your own address.');
-            await main.getByLabel('Type SLEEP to confirm').fill('SLEEP');
+            await main.getByLabel('Type LOCK to confirm').fill('LOCK');
             const approve = main.getByRole('button', {
                 name: `Lock address on ${REGTEST_CHAIN_LABEL}`,
             });

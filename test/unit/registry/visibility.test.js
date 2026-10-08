@@ -15,13 +15,16 @@ import { describe, it, expect } from 'vitest';
 import {
     filterChainsForUser,
     isChainVisibleToUser,
+    coinFamiliesForUser,
 } from '../../../packages/core/src/registry/visibility.js';
+import { ChainRegistry } from '../../../packages/core/src/registry/index.js';
 
 const CHAINS = [
     { networkKind: 'mainnet', id: 'BTC' },
     { networkKind: 'testnet', id: 'TBTC' },
     { networkKind: 'regtest', id: 'RBTC' },
 ];
+const CHAINS_WITH_COIN = CHAINS.map((d) => ({ ...d, coin: 'bitcoin' }));
 
 describe('registry/visibility', () => {
     describe('filterChainsForUser', () => {
@@ -62,6 +65,30 @@ describe('registry/visibility', () => {
 
         it('handles a null descriptor without throwing (off mode)', () => {
             expect(isChainVisibleToUser(null, null)).toBe(true);
+        });
+    });
+
+    describe('coinFamiliesForUser', () => {
+        it('lists the bundled coins in bitcoin, litecoin, dogecoin order, not bundle order', () => {
+            const out = coinFamiliesForUser(new ChainRegistry().supportedChains(), { developerMode: false });
+            expect(out).toEqual(['bitcoin', 'litecoin', 'dogecoin']);
+        });
+
+        it('appends a custom coin family after the canonical three', () => {
+            const reg = new ChainRegistry();
+            const base = reg.supportedChains().find((d) => d.coin === 'bitcoin' && d.networkKind === 'mainnet');
+            reg.addCustom({ ...base, id: 'forkcoin-mainnet', coin: 'forkcoin', name: 'Forkcoin' });
+            expect(coinFamiliesForUser(reg.supportedChains(), null)).toEqual(['bitcoin', 'litecoin', 'dogecoin', 'forkcoin']);
+        });
+
+        it('hides a coin whose only chain is regtest unless developer mode is on', () => {
+            const chains = [...CHAINS_WITH_COIN, { networkKind: 'regtest', coin: 'devcoin' }];
+            expect(coinFamiliesForUser(chains, { developerMode: false })).toEqual(['bitcoin']);
+            expect(coinFamiliesForUser(chains, { developerMode: true })).toEqual(['bitcoin', 'devcoin']);
+        });
+
+        it('lists a coin once across its networks', () => {
+            expect(coinFamiliesForUser(CHAINS_WITH_COIN, { developerMode: true })).toEqual(['bitcoin']);
         });
     });
 });

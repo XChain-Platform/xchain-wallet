@@ -273,13 +273,18 @@ export function exitCodeFor(verdict) {
 // classifier above stays importable by tests with no side effects.
 // ---------------------------------------------------------------------------
 
-// Compared as resolved paths rather than as a `file://` string, so a checkout
-// under a path with a space still imports cleanly instead of silently running
-// the CLI inside a test process.
-const { fileURLToPath } = await import('node:url');
-const { resolve } = await import('node:path');
-const isEntryPoint = Boolean(process.argv[1])
-    && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+// Compare against argv[1]'s realpath as a URL: import.meta.url is resolved and
+// percent-encoded, argv[1] is neither, so a symlinked or spaced checkout would skip the CLI and exit 0.
+const { pathToFileURL } = await import('node:url');
+const { realpathSync } = await import('node:fs');
+const isEntryPoint = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
 
 if (isEntryPoint) {
     const { readFileSync, appendFileSync } = await import('node:fs');

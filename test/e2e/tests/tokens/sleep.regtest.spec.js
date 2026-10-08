@@ -13,7 +13,7 @@
 //
 // v1 pauses and resumes a token from Manage Token (shared confirm screen).
 // v0 locks the signing address from Token Actions (legacy review stage with
-// a typed SLEEP confirm); it runs last because a slept address cannot sign.
+// a typed LOCK confirm); it runs last because a slept address cannot sign.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
@@ -233,10 +233,10 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             await expect(page.getByText('This locks your own address.', { exact: false }))
                 .toBeVisible({ timeout: 30_000 });
             const sign = main.getByRole('button', { name: `Lock address on ${REGTEST_CHAIN_LABEL}`, exact: true });
-            await expect(sign, 'Sign is live before SLEEP was typed').toBeDisabled();
+            await expect(sign, 'Sign is live before LOCK was typed').toBeDisabled();
             const password = main.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByLabel('Type SLEEP to confirm').fill('SLEEP');
+            await main.getByLabel('Type LOCK to confirm').fill('LOCK');
             await expect(sign).toBeEnabled({ timeout: 15_000 });
             await sign.click();
 

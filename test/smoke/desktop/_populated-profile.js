@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 import { webcrypto } from 'node:crypto';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
@@ -140,8 +140,17 @@ export async function seedPopulatedProfile(userDataDir) {
     }
 }
 
-const invokedPath = process.argv[1] && resolve(process.argv[1]);
-if (invokedPath === fileURLToPath(import.meta.url)) {
+// Compare against argv[1]'s realpath as a URL, so a symlinked or spaced checkout still seeds.
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+}
+
+if (invokedDirectly()) {
     const userDataDir = process.argv[2];
     if (!userDataDir) throw new Error('Usage: node _populated-profile.js <dir>');
     await seedPopulatedProfile(userDataDir);

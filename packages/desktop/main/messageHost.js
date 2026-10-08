@@ -34,6 +34,7 @@ import { createBackgroundHost } from '@xchain-wallet/extension/src/background/cr
  * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]  PC-16: pre-unlocked signers so session flows + auto-pay can sign without a per-op password
  * @property {import('@xchain-wallet/extension/src/bridge/Approvals.js').Approvals} [approvals]
  * @property {(settings: object, ctx: { sdkRegistry: object }) => Promise<void>} [onPrivacySettingsChanged]  Desktop-only: re-applies egress routing after a settings.update touching `privacy`
+ * @property {ReturnType<typeof import('@xchain-wallet/extension/src/background/broadcastQueueStore.js').createBroadcastQueueStore>} [broadcastQueueStore]  the runtime's one store, shared by every host it builds
  *
  * @typedef {{ type: string, request?: unknown }} IpcMessage
  * @typedef {import('@xchain-wallet/extension/src/background/MessageHost.js').MessageResponse} IpcResponse   the host's own envelope, so the error's code and THROTTLED hints stay declared across IPC

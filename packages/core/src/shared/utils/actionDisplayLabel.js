@@ -42,7 +42,9 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     CROSSCHAIN: 'Cross-chain',
     LIST: 'Recipient list',
     PRICE: 'Price',
-    SLEEP: 'Scheduled delay',
+    // Name SLEEP by all three things it does (lock an address, pause a token,
+    // resume a paused token): a History row cannot tell them apart by name.
+    SLEEP: 'Lock, pause or resume',
     COLLECT: 'Collect rewards',
     DELEGATE: 'Delegate',
     DEPLOY: 'Publish contract',
