@@ -53,7 +53,7 @@ function countdown(targetSec, nowSec) {
 }
 
 /**
- * The operator's own betting markets: what each one is waiting for, and the two
+ * The operator's own betting markets: what each one is waiting for, and the
  * actions only its oracle can take.
  *
  * Resolve is only legal between the deadline and the end of the refund window,
@@ -370,7 +370,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             {isWatcherMode && (canResolve || canCancel || canEdit) ? (
                                 <div className={styles.hint}>
                                     This wallet is in watcher mode, so it cannot edit, resolve, or cancel this market.
-                                    Those actions need the key that opened it.
+                                    It cannot resolve or cancel, or edit its lists, without the key that opened it.
                                 </div>
                             ) : null}
 
