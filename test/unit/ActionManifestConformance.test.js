@@ -71,6 +71,15 @@ describe('ACTION manifest conformance: wallet walletForm set @regression', () =>
         }
     });
 
+    it('settlement anchors stay explorer-only', () => {
+        for (const action of ['XPOLICY', 'LIST_SHARE']) {
+            expect(MANIFEST.actions[action]).toEqual({
+                category: 'settlement-anchor',
+                explorerRender: true,
+            });
+        }
+    });
+
     // IDENTITY: vendored copy must match canonical.
     it('vendored test/fixtures/action-manifest.json is byte-identical to canonical', (ctx) => {
         const docsRoot = process.env.XCHAIN_ACTION_MANIFEST_ROOT || process.env.XCHAIN_DOCS_ROOT;
