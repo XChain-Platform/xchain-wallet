@@ -1269,6 +1269,15 @@ export function getTokenInfo(req) {
     return /** @type {any} */ (sendMessage('token.info', req));
 }
 
+/**
+ * Supply-over-time series for one issued token, for TokenDetail's chart.
+ *
+ * @param {{ chainId: string, tick: string, opts?: object }} req
+ */
+export function getSupplyHistory(req) {
+    return /** @type {any} */ (sendMessage('token.supplyHistory', req));
+}
+
 /** @param {{ chainId: string, query: string, limit?: number }} req */
 export function searchTokens(req) {
     return /** @type {any} */ (sendMessage('tokens.search', req));

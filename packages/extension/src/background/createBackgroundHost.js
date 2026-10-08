@@ -26,6 +26,7 @@ import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
+import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
@@ -4210,6 +4211,14 @@ export function createBackgroundHost(deps) {
 
     host.register('tokens.owned', async (req, { sdkRegistry }) => {
         return listOwnedTokens({ ...req, sdkRegistry });
+    });
+
+    // Backs TokenDetail's supply-over-time chart. The renderer reads a
+    // `data` list of { height, supply } points, so the folded series is
+    // handed back under `data` with each point's block index as its height.
+    host.register('token.supplyHistory', async (req, { sdkRegistry }) => {
+        const history = await supplyHistoryFor({ ...req, sdkRegistry });
+        return { ...history, data: history.points.map((p) => ({ ...p, height: p.blockIndex })) };
     });
 
     host.register('token.info', async (req, { sdkRegistry, vault }) => {

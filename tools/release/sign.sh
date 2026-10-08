@@ -270,7 +270,8 @@ sign.sh: XCHAIN_RELEASE_GPG_KEY is not set.
 
 This says nothing about whether a key exists - only that this run was
 not told which one to use. K1 was generated on 2026-08-05; its
-fingerprint and current publication status are documented in SECURITY.md.
+fingerprint and current publication status are documented in SECURITY.md
+(G180, the release-key publication gate).
 
 Path forward:
   1. Point GNUPGHOME at the keystore holding the release key

@@ -1957,6 +1957,15 @@ export function getTokenInfo(req) {
 }
 
 /**
+ * Supply-over-time series for one issued token, for TokenDetail's chart.
+ *
+ * @param {{ chainId: string, tick: string, opts?: object }} req
+ */
+export function getSupplyHistory(req) {
+    return /** @type {any} */ (sendMessage('token.supplyHistory', req));
+}
+
+/**
  * Substring search for tokens that exist on the platform. Drives
  * ReceivePicker's "On the platform" discovery section so the user
  * can receive a token they've never held before in one tap.
