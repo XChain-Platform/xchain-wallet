@@ -60,10 +60,12 @@ const PACK_PATH = 'components/wallet/release/extension/chrome-web-store.md';
 const POLICY_PATH = 'components/wallet/privacy/privacy-policy.md';
 const MANIFEST_PATH = 'packages/extension/manifest.json';
 const ASSET_DIR = 'packages/extension/docs/listing-assets';
+const CAPTURE_SCRIPT_PATH = 'packages/extension/scripts/capture-listing-screenshots.mjs';
 
 assert.ok(existsSync(join(root, MANIFEST_PATH)), `${MANIFEST_PATH} exists`);
 
 const manifest = JSON.parse(read(MANIFEST_PATH));
+const captureScript = read(CAPTURE_SCRIPT_PATH);
 const packRaw = readFileSync(docsPath('release', 'extension', 'chrome-web-store.md'), 'utf8');
 const policyRaw = readFileSync(docsPath('privacy', 'privacy-policy.md'), 'utf8');
 
@@ -258,6 +260,15 @@ assert.ok(nameLine, `${PACK_PATH} has no "**Name:**" row`);
 assert.equal(nameLine[1].trim(), manifest.name,
     `${PACK_PATH} names the listing "${nameLine[1].trim()}" but manifest.json ships name `
     + `"${manifest.name}". The store takes the listing title from the package, so these cannot differ.`);
+
+const platformLead = 'The wallet for the XChain Platform';
+const currentSupport = 'Currently supports BTC, DOGE &amp; LTC';
+assert.ok(captureScript.includes(platformLead),
+    `${CAPTURE_SCRIPT_PATH} promo tile must lead with "${platformLead}"`);
+assert.ok(captureScript.includes(currentSupport),
+    `${CAPTURE_SCRIPT_PATH} promo tile must describe BTC, DOGE, and LTC as current support`);
+assert.ok(!/Bitcoin, Dogecoin &(?:amp;)? Litecoin wallet/.test(captureScript),
+    `${CAPTURE_SCRIPT_PATH} promo tile must not define the product as a three-coin wallet`);
 
 // --- 5. The single purpose is one statement, not two -------------------
 //
