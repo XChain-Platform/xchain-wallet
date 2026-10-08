@@ -277,4 +277,14 @@ describe('envelopeEncoderOpts', () => {
         expect(envelopeEncoderOpts(args({ signer: { source: 'ledger' } }))).toBeNull();
         expect(envelopeEncoderOpts(args({ signer: null }))).toBeNull();
     });
+
+    it('accepts a live software signer and rejects live device signers', () => {
+        expect(envelopeEncoderOpts(args({ signer: { kind: 'software' } }))).toEqual({
+            encoding: 'AUTO', options: { signerSupportsTapscript: true }, compressedPubKey: PUBKEY,
+        });
+        expect(envelopeEncoderOpts(args({ signer: { kind: 'trezor' } }))).toBeNull();
+        expect(envelopeEncoderOpts(args({
+            signer: { get kind() { throw new Error('unavailable'); } },
+        }))).toBeNull();
+    });
 });

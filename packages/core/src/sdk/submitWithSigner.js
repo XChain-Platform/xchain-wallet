@@ -40,6 +40,7 @@ import {
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
 import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
+import { compiledPayloadByteLen, envelopeEncoderOpts } from '../flows/envelopeSelection.js';
 import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
 
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
@@ -379,6 +380,21 @@ export async function submitWithSigner({
         bareNativePayment = isBareNativePayment(actionData, chainRegistry?.get(chainId));
         createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
 
+        const envelopeRequest = createResult
+            ? envelopeEncoderOpts({
+                descriptor: chainRegistry?.get(chainId),
+                signer,
+                encoderOpts,
+                compiledBytes: compiledPayloadByteLen(
+                    createResult.actionString,
+                    encoderOpts.rawData,
+                ),
+            })
+            : null;
+        const requestedEncoderOpts = envelopeRequest
+            ? { ...encoderOpts, ...envelopeRequest }
+            : encoderOpts;
+
         // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
         // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
         // a transaction that can't be safely priced. A failed native-fee action forfeits the fee.
@@ -386,7 +402,7 @@ export async function submitWithSigner({
         preflight = await applyNativeFeePreflight({
             sdk,
             actionData,
-            encoderOpts,
+            encoderOpts: requestedEncoderOpts,
             // Who is SPENDING, which the dry run behind this quote resolves the
             // holder and the balance from. `sourceAddress` is the address the SDK
             // funds from and is that spender on every flow that sets it; `change`
@@ -401,7 +417,7 @@ export async function submitWithSigner({
             // rotated address - unfunded, holding none of the token - and the
             // indexer's `valid:false` surfaced as a NativeFeeForfeitError on a
             // transaction that was perfectly fundable.
-            source: encoderOpts.sourceAddress || encoderOpts.change,
+            source: requestedEncoderOpts.sourceAddress || requestedEncoderOpts.change,
             onProgress,
         });
         // Step 1c: PRICE v1 oracle usage fee. A Mode B dispenser must pay its oracle

@@ -17,21 +17,55 @@
 // means no action (a long broadcast, a large list) fails at build time on a
 // chain and signer that could have carried it because its form never opted in.
 
-import { MAX_COMPILED_ACTION_BYTES } from './fileSizeLimits.js';
-import { encoderSignerOptions, signerSupportsTapscript } from './signerCapability.js';
+import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
+import { signerSupportsTapscript } from './signerCapability.js';
+
+function liveSignerSupportsTapscript(signer) {
+    if (!signer || typeof signer !== 'object') return false;
+    try {
+        return signer.kind === 'software';
+    } catch {
+        return false;
+    }
+}
+
+function byteLen(value) {
+    const string = String(value);
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(string).length;
+    if (typeof Buffer !== 'undefined') return Buffer.byteLength(string, 'utf8');
+    return string.length;
+}
+
+function rawDataByteLen(rawData) {
+    if (rawData == null) return 0;
+    if (typeof rawData.byteLength === 'number') return rawData.byteLength;
+    return String(rawData).length;
+}
+
+/**
+ * @param {string} actionString
+ * @param {unknown} rawData
+ * @returns {number}
+ */
+export function compiledPayloadByteLen(actionString, rawData) {
+    const actionBytes = byteLen(actionString);
+    if (rawData == null) return actionBytes + pushPrefixSize(actionBytes);
+    const rawBytes = rawDataByteLen(rawData);
+    return actionBytes + pushPrefixSize(actionBytes) + rawBytes + pushPrefixSize(rawBytes);
+}
 
 /**
  * Whether this chain and signer can carry a Taproot envelope at all.
  *
  * @param {{ addressTypes?: string[] }|null|undefined} descriptor  chain descriptor
- * @param {{ source?: string }|null|undefined} signer               the spending Address record
+ * @param {{ source?: string, kind?: string }|null|undefined} signer the spending Address record or live Signer
  * @returns {boolean}
  */
 export function envelopeAvailableFor(descriptor, signer) {
     // The chain half: `p2tr` is the descriptor's own statement that it does Taproot.
     if (!Array.isArray(descriptor?.addressTypes) || !descriptor.addressTypes.includes('p2tr')) return false;
     // The signer half: a reveal nobody can sign would strand the commit.
-    return signerSupportsTapscript(signer);
+    return signerSupportsTapscript(signer) || liveSignerSupportsTapscript(signer);
 }
 
 // The envelope internal key the encoder requires: a compressed secp256k1 key.
@@ -51,7 +85,7 @@ const COMPRESSED_PUBKEY_RE = /^(02|03)[0-9a-fA-F]{64}$/;
  *
  * @param {object} args
  * @param {{ addressTypes?: string[] }|null|undefined} args.descriptor
- * @param {{ source?: string }|null|undefined} args.signer
+ * @param {{ source?: string, kind?: string }|null|undefined} args.signer
  * @param {object} args.encoderOpts           the request's encoder options, pubkey included
  * @param {number} args.compiledBytes         compiled action-plus-data size, uncompressed
  * @returns {{ encoding: string, options: object, compressedPubKey: string } | null}
@@ -71,7 +105,7 @@ export function envelopeEncoderOpts({ descriptor, signer, encoderOpts, compiledB
     if (!internalKey) return null;
     return {
         encoding: requested ?? 'AUTO',
-        options: { ...(encoderOpts?.options || {}), ...encoderSignerOptions(signer) },
+        options: { ...(encoderOpts?.options || {}), signerSupportsTapscript: true },
         compressedPubKey: internalKey,
     };
 }
