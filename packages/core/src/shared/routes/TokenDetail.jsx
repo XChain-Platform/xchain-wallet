@@ -121,6 +121,8 @@ export function TokenDetail({
     // CoinGecko entry).
     const nativePrice = useNativePrice(isNative ? chainId : null, { includeSparkline: true });
 
+    const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
+
     const [holdersOpen, setHoldersOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
@@ -458,6 +460,12 @@ export function TokenDetail({
                     </div>
                 ) : null}
 
+                {!isNative && supplyHistory.length >= 2 ? (
+                    <div className={styles.infoCard}>
+                        <SupplyChart points={supplyHistory} divisibility={divisibility} tick={tick} />
+                    </div>
+                ) : null}
+
                 {isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null ? (
                     <NativePriceAlertEntry
                         walletId={walletId}
@@ -485,6 +493,12 @@ export function TokenDetail({
                         <button type="button" className={styles.quickAction} onClick={onBuy}>
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
                             <span>Markets</span>
+                        </button>
+                    ) : null}
+                    {onBuy && !isNative && safeBigInt(quantity) > 0n ? (
+                        <button type="button" className={styles.quickAction} onClick={onBuy}>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                            <span>Sell on DEX</span>
                         </button>
                     ) : null}
                     <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
@@ -620,6 +634,62 @@ export function TokenDetail({
  * @param {number} props.currentPrice
  * @param {string} props.fiatCurrency
  */
+/**
+ * Supply-over-time points for an issued token. The lookup is optional on the
+ * messaging surface; a missing method, a failure or an empty answer yields
+ * no points and the chart stays hidden.
+ */
+function useSupplyHistory({ messaging, chainId, tick, skip }) {
+    const [points, setPoints] = useState([]);
+    useEffect(() => {
+        if (skip || typeof messaging?.getSupplyHistory !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve(messaging.getSupplyHistory({ chainId, tick }))
+            .then((resp) => {
+                if (cancelled) return;
+                const list = Array.isArray(resp) ? resp : Array.isArray(resp?.data) ? resp.data : [];
+                const clean = list
+                    .map((p) => ({ at: p?.timestamp ?? p?.height ?? null, supply: Number(p?.supply) }))
+                    .filter((p) => Number.isFinite(p.supply));
+                setPoints(clean);
+            })
+            .catch(() => { if (!cancelled) setPoints([]); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick, skip]);
+    return points;
+}
+
+function SupplyChart({ points, divisibility, tick }) {
+    const W = 300;
+    const H = 80;
+    const values = points.map((p) => p.supply);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min || 1;
+    const path = points
+        .map((p, i) => {
+            const x = (i / (points.length - 1)) * W;
+            const y = H - ((p.supply - min) / span) * H;
+            return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+        })
+        .join(' ');
+    const latest = formatAmount(String(Math.round(points[points.length - 1].supply)), divisibility);
+    return (
+        <section aria-label="Supply over time">
+            <h3 className={styles.sectionTitle}>Supply over time</h3>
+            <svg
+                className={styles.supplyChart}
+                viewBox={`0 0 ${W} ${H}`}
+                role="img"
+                aria-label={`Supply of ${tick} over time, latest ${latest}`}
+                preserveAspectRatio="none"
+            >
+                <path d={path} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+            </svg>
+        </section>
+    );
+}
+
 function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }) {
     const { supported, addAlert } = usePriceAlerts(walletId);
     const [open, setOpen] = useState(false);
