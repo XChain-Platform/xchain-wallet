@@ -1,6 +1,6 @@
 {
     "_comment": "Written by tools/release/phase4-rehearsal.mjs from a run it just watched. Records how deep a ceremony Phase 4 rehearsal got and against which two trees. Do not hand-edit: the value of this file is that only an observation can set it. A `reached` short of \"signature\" is the NORMAL case, not a defect - the signature needs K1 at a pinentry and no automated run can supply it.",
-    "pinFormat": 3,
+    "pinFormat": 4,
     "tag": "v0.339.0",
     "lane": "mac,linux",
     "releaseSet": "release",
@@ -10,12 +10,14 @@
     "reached": "manifest-written",
     "reachedSignature": false,
     "blocker": "sign.sh: signing manifest with key 1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7 ...",
-    "scriptRef": "e518a92afacbcace8572577ce9b92899572a5255",
+    "scriptRef": "786ce0790d1f94f0aef3d054d7510bc4e5bca1c7",
     "repoRef": "797ae4598aff0dfcfd5c6f247ea4f034b9778c18",
     "scriptPath": {
-        "tools/release/sign.sh": "b96304bbcb921e9871aa9f1c87d8bf75c52c35700eb86dfda7bff204b48d48df",
-        "tools/release/verify.sh": "17bc355050085a4fe190811b6895f1ec188c4f94876f3b1534eeb5dd60edca82",
-        "tools/release/lib.sh": "246275bea676532ff48aa6260ea78db69cf809423d9cf8c4be21b970b67c3ad2",
+        "tools/release/sign.sh": "3208f8e4efe133a315c1afdc6f3c06cc62bf15c0cdd6772a6df5cfe274ffcb2d",
+        "tools/release/verify.sh": "3784c1e03ea25f9d9ddc01fe8dc69b95d0d50c6dc3ec59d5d02becebe49907ce",
+        "tools/release/lib.sh": "dc3555a8a4918405a637042107190b097f4a93f8a1602f937b4c76ff04d77a2b",
+        "tools/release/update-info.mjs": "3e8c08ad2fe7dbc4f12a94ce68a682bc2094200040e2e75fdea61bcb0513c73f",
+        "tools/release/store-profile-status.txt": "e9c6db30b1090c71ed52755651f1ff3efd3ef1b11f893a8d10d44de69eede5dd",
         "tools/release/launch-probe.mjs": "7b2b0e6d840e608449c86666121962e1db9025d99ca4591cc950b2ec5b22c555"
     },
     "repoPath": {
@@ -24,5 +26,5 @@
         "tools/build-reproduce/check-no-dev-mock.sh": "19e9c5aa0f12bbe1586a2a4dd06fd35e77f2d681b7a28f5c8a6c1f6b547fd7c6",
         "tools/release/verify-signatures.mjs": "5f29efd1bc67102d4075af291aa9456159dcd7be6779862d69ddb80b436e0ee6"
     },
-    "observedAt": "2026-10-06T19:41:43.959Z"
+    "observedAt": "2026-10-08T12:46:09.442Z"
 }
