@@ -269,10 +269,8 @@ if [[ -z "${XCHAIN_RELEASE_GPG_KEY:-}" ]]; then
 sign.sh: XCHAIN_RELEASE_GPG_KEY is not set.
 
 This says nothing about whether a key exists - only that this run was
-not told which one to use. K1 was generated on 2026-08-05 and its
-fingerprint is published in SECURITY.md; see G180 in
-claude/reports/xchain-wallet/SPEC_GAPS.md for what remains of that gate
-(publication reaching readers, which is a deploy rather than a key).
+not told which one to use. K1 was generated on 2026-08-05; its
+fingerprint and current publication status are documented in SECURITY.md.
 
 Path forward:
   1. Point GNUPGHOME at the keystore holding the release key
