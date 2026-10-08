@@ -195,6 +195,19 @@ describe('OracleConsole owner-only open-feed editor', () => {
         expect(compose.args.params).toEqual({
             feedActionIndex: '42', allowList: '81', blockList: '',
         });
+
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Password'), { target: { value: 'test password' } });
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drain();
+        });
+        const submit = calls.find((call) => call.method === 'action.editBetFeedLists');
+        expect(submit.args.password).toBe('test password');
+        expect(submit.args.params).toEqual(compose.args.params);
+        expect(submit.args.prebuiltPsbt).toBeTruthy();
     });
 
     it('keeps the editor unavailable in watcher mode', async () => {

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BET (parimutuel betting) composers. The wire-level BET action has four
+// BET (parimutuel betting) composers. The wire-level BET action has five
 // formats (spec: xchain-documentation/protocol/actions/BET.md):
 //   v0: create a market   v1: cancel a market
 //   v2: place a bet       v3: resolve a market to its winning outcome
@@ -40,7 +40,7 @@ import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {object} params            UI-level camelCase params for the matching sdk.betting builder
+ * @property {object} params            UI-level camelCase params for the selected BET format
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
