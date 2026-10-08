@@ -15,7 +15,7 @@
 // transaction whose COMPILED ACTION push exceeds 8192 bytes
 // (MAX_ACTION_DATA_LENGTH, xchain-documentation/protocol/constants.js),
 // and the encoder enforces the same ceiling at encode time
-// (MAX_COMPILED_ACTION_DATA_LENGTH, xchain-encoder/src/validator.js).
+// (MAX_COMPILED_ACTION_DATA_LENGTH, xchain-encoder/src/common/validator/constants.js).
 // The embedding (OP_RETURN vs P2SH vs P2WSH) changes how the push rides
 // the transaction, not this ceiling; the encoder auto-selects P2SH for
 // anything past the 80-byte OP_RETURN lane, so file-sized payloads are

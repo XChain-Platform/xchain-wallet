@@ -1047,3 +1047,10 @@
         color: var(--xc-on-accent);
     }
 }
+
+.supplyChart {
+    display: block;
+    width: 100%;
+    height: 80px;
+    color: var(--xc-accent, currentColor);
+}
