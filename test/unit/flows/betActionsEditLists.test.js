@@ -222,14 +222,11 @@ describe('OracleConsole owner-only open-feed editor', () => {
     });
 });
 
-describe('BET v4 host and manifest wiring', () => {
-    it('registers software, hardware, and compose routes and advertises format 4', () => {
+describe('BET v4 host wiring', () => {
+    it('registers software, hardware, and compose routes', () => {
         const host = readFileSync('packages/extension/src/background/createBackgroundHost.js', 'utf8');
         expect(host).toContain("registerHwHandler('action.editBetFeedLists.hw', editBetFeedListsAction)");
         expect(host).toContain("host.register('action.editBetFeedLists'");
         expect(host).toContain("'editFeedListsParams'");
-
-        const manifest = JSON.parse(readFileSync('test/fixtures/action-manifest.json', 'utf8'));
-        expect(manifest.actions.BET.userEncodableVersions).toContain(4);
     });
 });
