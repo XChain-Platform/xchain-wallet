@@ -218,6 +218,72 @@ export function createBroadcastQueueStore({ storage = null, prunedLedger } = {})
 }
 
 /**
+ * Replace a dormant store from persistence after its shell acquires an
+ * exclusive writer lease. Both halves are read before live state changes, so
+ * an unreadable queue or journal leaves the cache intact and writes gated.
+ *
+ * @param {BroadcastQueueStore | null} store
+ * @returns {Promise<boolean>} whether the persisted state replaced the cache
+ */
+export async function refreshBroadcastQueueStore(store) {
+    if (!store || store.sealed || !store.storage) return false;
+    const previousLoad = store.loadPromise;
+    if (previousLoad) {
+        try { await previousLoad; } catch (_err) { /* retry from storage below */ }
+    }
+    if (store.sealed) return false;
+
+    store.loaded = false;
+    store.loadPromise = (async () => {
+        let snapshot;
+        let settlements = [];
+        try {
+            snapshot = await store.storage.load();
+            if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false;
+            if (typeof store.storage.loadSettlements === 'function') {
+                settlements = await store.storage.loadSettlements();
+                if (!Array.isArray(settlements)) return false;
+            }
+        } catch (_err) {
+            return false;
+        }
+        if (store.sealed) return false;
+
+        const pruned = store.prunedWallets;
+        store.queues.clear();
+        for (const [walletId, entries] of Object.entries(snapshot)) {
+            if (pruned?.has(walletId) || !Array.isArray(entries) || entries.length === 0) continue;
+            const restorable = entries.filter((entry) => entry && typeof entry === 'object');
+            if (restorable.length > 0) store.queues.set(walletId, restorable);
+        }
+        store.owed = settlements
+            .filter((entry) => entry && typeof entry === 'object')
+            .filter((entry) => !entry.walletId || !pruned?.has(entry.walletId))
+            .map((entry) => ({ ...entry }));
+        store.loaded = true;
+
+        if (pruned?.size > 0) {
+            const queues = {};
+            for (const [walletId, entries] of store.queues.entries()) queues[walletId] = [...entries];
+            try {
+                await store.storage.save(queues);
+                if (typeof store.storage.saveSettlements === 'function') {
+                    await store.storage.saveSettlements(store.owed.map((entry) => ({ ...entry })));
+                }
+                pruned.clear();
+            } catch (_err) {
+                // Live state is complete; the durable prune ledger keeps the retry safe.
+            }
+        }
+        return true;
+    })();
+
+    const refreshed = await store.loadPromise;
+    if (!refreshed) store.loadPromise = null;
+    return refreshed;
+}
+
+/**
  * End a store for good before a wallet wipe removes the stored key.
  *
  * The flag stops later writers, emptying the map and journal stops a route
