@@ -25,11 +25,13 @@
 // day it is written. Against the commit before the sweep only Send.jsx passes.
 
 import { afterEach, describe, it, expect } from 'vitest';
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
 import {
     BROADCAST_FAILED_TRANSIENT_NAME,
     BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
@@ -100,6 +102,17 @@ describe('useConfirmAction preserves the queue durability verdict', () => {
                 error: { name, message: 'node unreachable' },
             });
             expect(settled).toEqual(approved);
+
+            const panel = render(createElement(QueuedResultPanel, { onDone: () => {} }));
+            if (expectedUnsaved) {
+                expect(screen.getByRole('alert').textContent).toMatch(/only in this window/i);
+                fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+                panel.unmount();
+                render(createElement(QueuedResultPanel, { onDone: () => {} }));
+                expect(screen.queryByRole('alert')).toBeNull();
+            } else {
+                expect(screen.queryByRole('alert')).toBeNull();
+            }
         });
     }
 });

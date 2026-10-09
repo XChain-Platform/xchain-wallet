@@ -37,6 +37,10 @@ import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
 import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
 import { isHardPreflightFinding, preflightFindingKey } from '../utils/preflightFindingKey.js';
+import {
+    clearQueuedResultHandoff,
+    setQueuedResultHandoff,
+} from '../utils/submitFailureMessage.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -212,6 +216,7 @@ export function useConfirmAction() {
     const confirm = useCallback((args) => {
         if (activeInstanceId !== null) return Promise.reject(new ConfirmActionBusyError());
         activeInstanceId = instanceId;
+        clearQueuedResultHandoff();
 
         const controller = new AbortController();
         abortRef.current = controller;
@@ -478,6 +483,7 @@ export function useConfirmAction() {
                     unsaved: err?.name === BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
                     error: { name: err?.name, message: err?.message },
                 };
+                setQueuedResultHandoff(queuedResult);
                 settleResolve(queuedResult);
                 return queuedResult;
             }

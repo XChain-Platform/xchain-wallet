@@ -169,8 +169,12 @@ for (const [rel, dontRepeat] of QUEUED_SURFACES) {
 
 const queuedResultPanel = readFileSync(join(shared, 'components', 'QueuedResultPanel.jsx'), 'utf8');
 assert.ok(
-    /unsaved\s*===\s*true[\s\S]{0,180}?role="alert"/.test(queuedResultPanel),
-    'QueuedResultPanel renders the unsaved warning as an alert only for an explicit true flag',
+    /readQueuedResultHandoff\(\)\?\.unsaved\s*===\s*true/.test(queuedResultPanel),
+    'QueuedResultPanel reads the hook result when its existing callers omit the optional prop',
+);
+assert.ok(
+    /showUnsaved[\s\S]{0,180}?role="alert"/.test(queuedResultPanel),
+    'QueuedResultPanel renders the integrated unsaved verdict as an alert',
 );
 
 const confirmModal = readFileSync(join(shared, 'components', 'ConfirmActionModal.jsx'), 'utf8');
