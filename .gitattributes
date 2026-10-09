@@ -1,1 +1,1 @@
-claude/reports/*.patch -diff
+/claude/reports/*.patch -diff
