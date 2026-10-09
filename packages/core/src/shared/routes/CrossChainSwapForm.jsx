@@ -521,7 +521,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and the success
         // copy below would report an escrow that is not open yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain swap" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain swap" unsaved={result.unsaved} />);
         }
         return wrap(
             <>
