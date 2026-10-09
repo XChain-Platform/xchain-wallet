@@ -36,6 +36,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { allowInlineScriptHash } from './src/csp.js';
 
 /** Hash algorithm for the integrity attribute. sha384 is the SRI default. */
 export const SRI_ALGORITHM = 'sha384';
@@ -133,6 +134,54 @@ export function addIntegrityAttributes(html, lookup) {
 }
 
 /**
+ * The import map that pins every emitted script, lazy chunks included.
+ *
+ * Integrity attributes on index.html tags cover only what index.html names. A
+ * chunk reached through `import()` (the xchain-sdk signing code among them) has
+ * no tag, so the browser fetched it with no pin. An import map's `integrity`
+ * table is consulted for those fetches too.
+ *
+ * @param {Record<string, string | Uint8Array>} files emitted script url (e.g. "/assets/sdk-a1b2.js") to its bytes
+ * @returns {{ integrity: Record<string, string> }}
+ */
+export function buildIntegrityImportMap(files) {
+    const integrity = {};
+    for (const url of Object.keys(files).sort()) {
+        integrity[url] = integrityFor(files[url]);
+    }
+    return { integrity };
+}
+
+/**
+ * Insert the integrity import map into an index.html ahead of its first script
+ * (an import map is ignored once a module has started resolving), and admit that
+ * one inline script in the page's meta CSP by hash.
+ *
+ * @param {string} html
+ * @param {Record<string, string | Uint8Array>} files
+ * @returns {{ html: string, mapped: number }}
+ */
+export function injectIntegrityImportMap(html, files) {
+    const map = buildIntegrityImportMap(files);
+    const mapped = Object.keys(map.integrity).length;
+    if (mapped === 0) return { html, mapped };
+
+    const body = JSON.stringify(map);
+    const tag = `<script type="importmap">${body}</script>`;
+    const firstScript = html.search(/<script\b/i);
+    const at = firstScript >= 0 ? firstScript : html.search(/<\/head>/i);
+    if (at < 0) return { html, mapped: 0 };
+
+    const withMap = html.slice(0, at) + tag + html.slice(at);
+    const hash = integrityFor(body);
+    const out = withMap.replace(
+        /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")([^"]*)(")/i,
+        (_m, open, policy, close) => open + allowInlineScriptHash(policy, hash) + close,
+    );
+    return { html: out, mapped };
+}
+
+/**
  * Vite plugin: inject SRI hashes into the built HTML.
  *
  * Build-only. In dev, assets are served by Vite's HMR pipeline and rewritten on
@@ -152,12 +201,16 @@ export function addIntegrityAttributes(html, lookup) {
 export function sriPlugin() {
     let outDir = 'dist';
     let logger = console;
+    let base = '/';
     return {
         name: 'xchain-sri',
         apply: 'build',
         enforce: 'post',
         configResolved(config) {
             if (config?.logger) logger = config.logger;
+            if (typeof config?.base === 'string' && config.base.startsWith('/')) {
+                base = config.base.endsWith('/') ? config.base : `${config.base}/`;
+            }
             if (config?.build?.outDir) {
                 outDir = resolve(config.root ?? process.cwd(), config.build.outDir);
             }
@@ -179,11 +232,18 @@ export function sriPlugin() {
                     return readFileSync(assetPath);
                 };
 
-                const { html, hashed, skippedExternal, skippedLocal } = addIntegrityAttributes(
-                    readFileSync(htmlPath, 'utf8'),
-                    lookup,
-                );
+                const tagged = addIntegrityAttributes(readFileSync(htmlPath, 'utf8'), lookup);
+                const { hashed, skippedExternal, skippedLocal } = tagged;
+
+                const scripts = {};
+                for (const [name, entry] of Object.entries(bundle)) {
+                    if (entry.type !== 'chunk' || !name.endsWith('.js')) continue;
+                    const bytes = lookup(`/${name}`);
+                    if (bytes !== undefined) scripts[`${base}${name}`] = bytes;
+                }
+                const { html, mapped } = injectIntegrityImportMap(tagged.html, scripts);
                 writeFileSync(htmlPath, html);
+                logger.info(`sri: ${htmlFile}: ${mapped} script chunk(s) pinned in the import map`);
 
                 // Say what was covered. A silent SRI pass that hashed nothing is
                 // indistinguishable from no SRI at all, which is the failure mode
