@@ -644,7 +644,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             // these bytes already; give that entry the verdict instead of a twin.
             const twin = liveTwinOf(walletId, entry);
             if (twin) adoptSnapshotVerdict(twin, entry);
-            else pushQueueEntry(walletId, entry, { persist: false });
+            else pushQueueEntry(walletId, entry);
             return persistQueue();
         };
     }
@@ -675,10 +675,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * and the broadcast route can read an "already known" reply as delivery.
      *
      * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string | null, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
-     * @param {{ persist?: boolean }} [opts]
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
-    function pushQueueEntry(walletId, entry, { persist = true } = {}) {
+    function pushQueueEntry(walletId, entry) {
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const adsCommit = entry.adsCommit;
         const stored = {
@@ -703,7 +702,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 : {}),
         };
         getQueue(walletId).push(stored);
-        if (persist) void persistQueue();
+        // Start a background save for the vault rebuild, which pushes in a loop.
+        // Callers that need the entry on disk (the onBroadcastFailure hook and
+        // the renderer enqueue route) await their own persistQueue() after this.
+        void persistQueue();
         return stored;
     }
     /**

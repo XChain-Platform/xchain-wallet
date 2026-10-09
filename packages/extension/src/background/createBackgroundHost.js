@@ -2835,8 +2835,10 @@ export function createBackgroundHost(deps) {
             summary: req?.summary,
             signedAt: req?.signedAt,
             txid: req?.txid,
-        }, { persist: false });
-        // Renderer enqueues name no PendingTx, so the blob is their only durable copy.
+        });
+        // This lane names no PendingTx, so the blob is its only durable copy:
+        // reply after the write settles, saying whether it landed (a caller
+        // seeing `persisted: false` warns the bytes will not survive a restart).
         const persisted = await persistQueue();
         // Copy: `stored` is the live entry, and a flag on it would ride the next save.
         return { ...stored, persisted };

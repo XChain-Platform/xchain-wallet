@@ -1228,7 +1228,7 @@ export function __createWebVaultMultiTabHarnessForTests() {
             },
             async enqueue(walletId, entry) {
                 await queue.ensureQueueLoaded();
-                const queued = queue.pushQueueEntry(walletId, entry, { persist: false });
+                const queued = queue.pushQueueEntry(walletId, entry);
                 await queue.persistQueue();
                 return copy(queued);
             },
