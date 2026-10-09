@@ -439,11 +439,10 @@ rmSync(work, { recursive: true, force: true });
 // ES module is evaluated once per specifier, and BUILD_PROFILE is read at
 // module scope, so a second plain import would hand back the first profile's
 // answer and the assertion would pass for the wrong reason.
-const viteConfigFor = async (pkg, profile) => {
+const importViteConfig = async (url, profile) => {
     const before = process.env.XCHAIN_BUILD_PROFILE;
     if (profile === undefined) delete process.env.XCHAIN_BUILD_PROFILE;
     else process.env.XCHAIN_BUILD_PROFILE = profile;
-    const url = `${pathToFileURL(join(repo, 'packages', pkg, 'vite.config.js')).href}?profile=${profile ?? 'default'}`;
     try {
         return (await import(url)).default;
     } finally {
@@ -451,6 +450,10 @@ const viteConfigFor = async (pkg, profile) => {
         else process.env.XCHAIN_BUILD_PROFILE = before;
     }
 };
+const viteConfigFor = (pkg, profile) => importViteConfig(
+    `${pathToFileURL(join(repo, 'packages', pkg, 'vite.config.js')).href}?profile=${profile ?? 'default'}`,
+    profile,
+);
 
 assert.equal(
     (await viteConfigFor('web', 'store')).build.sourcemap,
@@ -473,8 +476,6 @@ for (const pkg of ['desktop', 'extension']) {
 }
 
 // The reviewed surface roster currently ships everything in both profiles.
-// Keep the compile-out registry and fail-shut guard wired for a future ruling,
-// but prove that neither profile activates it today.
 const {
     HIDDEN_SURFACES,
     SURFACES,
@@ -523,6 +524,99 @@ const guardContext = (id) => {
         error(msg) { throw new Error(msg); },
     };
 };
+
+// Exercise the retained compile-out path against the real Vite config even
+// though D2 makes both committed profiles inert. The fixture changes only the
+// registry input to the future state `store: ['dex']`; copying the plugin into
+// this test would let its implementation and this assertion drift together.
+const repoTmp = join(repo, 'tmp');
+mkdirSync(repoTmp, { recursive: true });
+const hiddenConfigWork = mkdtempSync(join(repoTmp, 'release-profile-hidden-'));
+const hiddenRegistry = join(hiddenConfigWork, 'registry.js');
+const hiddenViteConfig = join(hiddenConfigWork, 'vite.config.js');
+const registryPath = join(repo, 'packages', 'web', 'src', 'surfaces', 'registry.js');
+const storeRoster = 'store: Object.freeze([]),';
+const registryCspImport = "from '../csp.js'";
+let registrySource = readFileSync(registryPath, 'utf8');
+assert.equal(
+    registrySource.split(storeRoster).length - 1,
+    1,
+    'the synthetic hidden-surface fixture must mutate exactly the committed store roster',
+);
+assert.equal(
+    registrySource.split(registryCspImport).length - 1,
+    1,
+    'the synthetic hidden-surface fixture must redirect exactly one CSP import',
+);
+registrySource = registrySource.replace(
+    storeRoster,
+    "store: Object.freeze(['dex']),",
+).replace(
+    registryCspImport,
+    `from ${JSON.stringify(pathToFileURL(join(repo, 'packages', 'web', 'src', 'csp.js')).href)}`,
+);
+writeFileSync(hiddenRegistry, registrySource);
+
+let hiddenConfigSource = readFileSync(join(repo, 'packages', 'web', 'vite.config.js'), 'utf8');
+const configImports = [
+    ['./src/csp.js', join(repo, 'packages', 'web', 'src', 'csp.js')],
+    ['./buildProfile.js', join(repo, 'packages', 'web', 'buildProfile.js')],
+    ['./src/surfaces/registry.js', hiddenRegistry],
+    ['./regtestSidecar.js', join(repo, 'packages', 'web', 'regtestSidecar.js')],
+    ['./sri.js', join(repo, 'packages', 'web', 'sri.js')],
+];
+for (const [specifier, target] of configImports) {
+    const needle = `from '${specifier}'`;
+    assert.equal(
+        hiddenConfigSource.split(needle).length - 1,
+        1,
+        `the hidden-surface fixture must redirect exactly one ${specifier} import`,
+    );
+    hiddenConfigSource = hiddenConfigSource.replace(
+        needle,
+        `from ${JSON.stringify(pathToFileURL(target).href)}`,
+    );
+}
+writeFileSync(hiddenViteConfig, hiddenConfigSource);
+
+let hiddenStoreGuard;
+try {
+    hiddenStoreGuard = surfaceGuardOf(await importViteConfig(
+        `${pathToFileURL(hiddenViteConfig).href}?profile=store-hidden-dex`,
+        'store',
+    ));
+} finally {
+    rmSync(hiddenConfigWork, { recursive: true, force: true });
+}
+assert.ok(hiddenStoreGuard, 'the synthetic hidden-surface config registers the guard');
+assert.equal(hiddenStoreGuard.enforce, 'pre', 'the active hidden-surface guard runs before Vite resolves');
+
+const hitCtx = guardContext(`/repo/packages/core/src/${hiddenModule}?import`);
+await assert.rejects(
+    hiddenStoreGuard.resolveId.call(
+        hitCtx,
+        './stray.jsx',
+        '/repo/src/stray-importer.jsx',
+        {},
+    ),
+    (err) => err.message.includes(hiddenModule)
+        && err.message.includes('/repo/src/stray-importer.jsx')
+        && err.message.includes('"store"')
+        && err.message.includes('"dex"'),
+    'an active guard rejects a hidden route and diagnoses its profile, surface, module, and importer',
+);
+assert.equal(hitCtx.calls[0]?.skipSelf, true, 'the active guard resolves with skipSelf to avoid recursion');
+assert.equal(
+    await hiddenStoreGuard.resolveId.call(
+        guardContext('/repo/packages/core/src/shared/routes/Receive.jsx'),
+        './Receive.jsx',
+        '/repo/src/a.jsx',
+        {},
+    ),
+    null,
+    'the active guard passes a resolved module outside the hidden-surface matcher',
+);
+
 for (const [profile, guard] of [
     ['store', storeGuard],
     ['default', surfaceGuardOf(await viteConfigFor('web', undefined))],
@@ -549,6 +643,7 @@ console.log(
     + ' to stage a web bundle that is not the store profile. §5: a `store` web'
     + ' bundle emits no sourcemaps, resolved from the config rather than grepped, while the'
     + ' hosted shell keeps them and desktop/extension stay as they were; every profile'
-    + ' enables every declared product surface, while the dormant compile-out registry'
-    + ' and hidden-surface guard remain wired for a future reviewed ruling)',
+    + ' enables every declared product surface, while a synthetic hidden-surface registry'
+    + ' proves the retained pre-resolve guard rejects matching route modules with a diagnostic'
+    + ' and skipSelf resolution, and passes modules outside its matcher)',
 );
