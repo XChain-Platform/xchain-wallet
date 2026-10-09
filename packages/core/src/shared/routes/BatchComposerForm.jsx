@@ -438,7 +438,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // resolves a transient broadcast failure that way, and "Batch
         // broadcast" would report N sub-actions as sent when none are.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="batch" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="batch" unsaved={result?.unsaved} />,
+            );
         }
         return wrap(
             <>
