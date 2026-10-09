@@ -642,22 +642,12 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
         });
     });
 
-    // UNFINISHED, AND `test.fixme` FOR THAT REASON ALONE.
+    // This proof stays separate from the first-contact tests above because it
+    // needs three broadcasts, including a first spend whose public key must be
+    // indexed before either encrypted method can be exercised. A failure here
+    // must not erase the independently established first-contact behavior.
     //
-    // IT PINS NO DEFECT AND MAKES NO CLAIM ABOUT THE WALLET. The body below is
-    // written out in full and every selector in it was read off the product
-    // source, but it has never been run, and an assertion that has never passed
-    // is a guess about the screen rather than a specification of it. Do not
-    // read anything here as a finding until it is green once.
-    //
-    // It is separated from the two tests above deliberately, because bundling
-    // bundled with them, and because it is the most expensive leg by far (three
-    // broadcasts, two of them behind a pubkey that must first be indexed) its
-    // failure is what left the first-contact question unanswered for a whole
-    // session. Whatever happens to this test now, that question is answered
-    // above and stays answered.
-    //
-    // WHAT IT WOULD PROVE, and why it has to prove it this way. Neither the wire
+    // WHAT IT PROVES, and why it has to prove it this way. Neither the wire
     // nor the UI distinguishes ECIES from ECDH-session: a v2 MESSAGE has no
     // ENCRYPTION_METHOD field, so the indexer stamps `encryption_method=1` on
     // every v2 row regardless (`xchain-indexer/src/actions/message.js`), and the
@@ -677,12 +667,9 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
     // address has spent once. That first send is the leg most likely to make
     // this test slow or flaky on a shared venue, and it is the first thing to
     // cut if this has to be reduced to something that finishes.
-    // Tracked rather than left as an unowned red: this is the one
-    // deliberate `test.fixme` in the suite that named no item, which is the
-    // second clause of the campaign's whole-suite acceptance test. It marks
-    // ABSENT COVERAGE, not a known defect - nothing else establishes that the
-    // two encrypted methods differ on the wire.
-    test.fixme('ECDH-session and ECIES are wire-distinct on chain for the same plaintext', async ({ page }) => {
+    // This is the coverage that establishes the two encrypted methods differ
+    // on the wire instead of trusting the method selected in the UI.
+    test('ECDH-session and ECIES are wire-distinct on chain for the same plaintext', async ({ page }) => {
         const txids = trackBroadcastTxids(page);
         let ownAddress;
         const probeBytes = Buffer.byteLength(PROBE_TEXT, 'utf8');
