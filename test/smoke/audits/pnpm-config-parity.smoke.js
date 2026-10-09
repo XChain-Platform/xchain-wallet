@@ -152,6 +152,9 @@ const npmrc = parseNpmrc(read('.npmrc'));
             `override "${k}" is "${spec}": an uncapped >= lets a future major in silently`);
     }
 
+    assert.equal(a['ip-address'], '^10.5.1',
+        'ip-address is pinned at the first release that fixes the advisory');
+
     // Third witness: what pnpm actually resolved with.
     const live = lock.overrides ?? {};
     assert.deepEqual(Object.keys(live).sort(), Object.keys(a).sort(),
