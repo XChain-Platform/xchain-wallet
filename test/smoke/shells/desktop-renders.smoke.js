@@ -39,6 +39,7 @@
 
 import { strict as assert } from 'node:assert';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +64,15 @@ if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND
         + 'WAYLAND_DISPLAY. Invoke this gate through xvfb-run on a headless Linux host.');
     process.exit(1);
 }
+
+// Electron downloads its runtime on first require. Resolve it before Playwright
+// starts the launch timeout, so a fresh install gets the full boot interval.
+const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
+const electronExecutable = requireFromDesktop('electron');
+assert.ok(
+    existsSync(electronExecutable),
+    `Electron reported an executable that does not exist: ${electronExecutable}`,
+);
 
 const { _electron: electron } = await import('@playwright/test');
 
