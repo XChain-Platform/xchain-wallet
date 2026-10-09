@@ -491,7 +491,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // A queued result is signed and NOT broadcast, so "Minted"
         // would claim the one thing that has not happened yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="mint" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="mint" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

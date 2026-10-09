@@ -506,7 +506,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         // Signed but never broadcast. "List published... is on its
         // way" is the one thing that did not happen.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="list" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="list" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

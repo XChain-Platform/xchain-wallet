@@ -138,7 +138,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     // A leg that was SIGNED but never reached the network. The confirm
     // lane resolves that case rather than throwing, and the next leg is
     // keyed on this one's action index, so the flow stops here.
-    const [queuedLeg, setQueuedLeg] = useState(false);
+    const [queuedResult, setQueuedResult] = useState(
+        /** @type {{ unsaved?: boolean } | null} */ (null),
+    );
     const [tx1Txid, setTx1Txid] = useState(/** @type {string | null} */ (null));
     const [intermediateIndex, setIntermediateIndex] = useState(/** @type {string | null} */ (null));
     const [tx2Txid, setTx2Txid] = useState(/** @type {string | null} */ (null));
@@ -435,7 +437,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             // Signed but never broadcast: the next leg is keyed on this
             // one's action index, so the chain cannot continue and telling
             // the user it did would be the worse of the two wrong answers.
-            if (res?.queued) { setQueuedLeg(true); return; }
+            if (res?.queued) { setQueuedResult(res); return; }
             onBroadcast(res);
         } catch (err) {
             if (isUserRejection(err)) return;
@@ -627,8 +629,10 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     // A leg signed but not broadcast stops the chain: the shared panel
     // says so and deliberately offers no retry (re-signing while a signed
     // copy is queued is the double-broadcast trap).
-    if (queuedLeg) {
-        return wrap(<QueuedResultPanel onDone={onBack} what="list fork" />);
+    if (queuedResult) {
+        return wrap(
+            <QueuedResultPanel onDone={onBack} what="list fork" unsaved={queuedResult.unsaved} />,
+        );
     }
 
     // Confirm page for whichever leg is in flight, rendered in place of the
