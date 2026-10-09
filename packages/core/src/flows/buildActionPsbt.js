@@ -38,6 +38,71 @@ import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { isChunkEncoding } from './nativeFeeLane.js';
 import { capRbfToDescriptor } from './rbfCap.js';
 import { chunkLaneOpener } from '../shared/utils/chunkLaneCopy.js';
+import { applyAdsPlanToEncoderOpts } from './ads.js';
+
+/**
+ * Defer ADS output insertion until `createTx`, after the shared submit pipeline
+ * has appended its native and oracle fee outputs. The caller supplies a
+ * `customOutputs` array so the in-place append remains visible to the
+ * two-transaction lane when it carries the same outputs onto the reveal.
+ *
+ * @param {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
+ * @param {import('../schemas/settings.js').Settings | null} settingsSnapshot
+ * @param {string} chainId
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {{ get: (requestedChainId: string) => import('../sdk/XChainSDK.js').XChainSDK }}
+ */
+export function withAdsPlanAtEncode(sdkRegistry, settingsSnapshot, chainId, chainRegistry) {
+    let wrappedSdk = null;
+    let adsApplied = false;
+
+    return {
+        get(requestedChainId) {
+            const sdk = sdkRegistry.get(requestedChainId);
+            if (requestedChainId !== chainId || !sdk?.encoder) return sdk;
+            if (wrappedSdk) return wrappedSdk;
+
+            const wrappedEncoder = new Proxy(sdk.encoder, {
+                get(encoder, property) {
+                    if (property === 'createTx') {
+                        return async (encoderOpts) => {
+                            let finalEncoderOpts = encoderOpts;
+                            if (!adsApplied) {
+                                const applied = applyAdsPlanToEncoderOpts(
+                                    settingsSnapshot,
+                                    chainId,
+                                    chainRegistry,
+                                    encoderOpts,
+                                ).encoderOpts;
+                                const sharedOutputs = encoderOpts.customOutputs;
+                                if (applied !== encoderOpts && Array.isArray(sharedOutputs)) {
+                                    const additions = applied.customOutputs.slice(sharedOutputs.length);
+                                    sharedOutputs.push(...additions);
+                                    finalEncoderOpts = { ...applied, customOutputs: sharedOutputs };
+                                } else {
+                                    finalEncoderOpts = applied;
+                                }
+                                adsApplied = true;
+                            }
+                            return Reflect.apply(encoder.createTx, encoder, [finalEncoderOpts]);
+                        };
+                    }
+                    const value = Reflect.get(encoder, property, encoder);
+                    return typeof value === 'function' ? value.bind(encoder) : value;
+                },
+            });
+
+            wrappedSdk = new Proxy(sdk, {
+                get(target, property) {
+                    if (property === 'encoder') return wrappedEncoder;
+                    const value = Reflect.get(target, property, target);
+                    return typeof value === 'function' ? value.bind(target) : value;
+                },
+            });
+            return wrappedSdk;
+        },
+    };
+}
 
 /**
  * Thrown when a watcher-composed action needs a second, revealing transaction

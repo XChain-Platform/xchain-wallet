@@ -37,6 +37,7 @@ import {
 import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js';
 import { resolveChangeAddress } from './changeAddress.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
+import { withAdsPlanAtEncode } from './buildActionPsbt.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -130,9 +131,9 @@ export async function submitAction({
     if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
 
     // §36.3 ADS: resolve the donation plan ONCE up front against the
-    // current settings snapshot. If `canSubmit`, inject a customOutput
-    // into encoderOpts so the encoder builds the donation into the
-    // same transaction. After a successful broadcast we call
+    // current settings snapshot. If `canSubmit`, schedule a customOutput
+    // for the encoder so it builds the donation into the same transaction.
+    // After a successful broadcast we call
     // `commitAdsStep` with the resolved `donationIncluded` so the
     // accumulator resets / lifetimeDonatedSats advances correctly.
     //
@@ -142,8 +143,26 @@ export async function submitAction({
     // reflect the actual tx that was broadcast, regardless of whether
     // the donation fired.
     const adsSettingsSnapshot = await vault.settings.get();
-    const { encoderOpts: effectiveEncoderOpts, adsPlan, adsEnabledForChain } =
+    const { encoderOpts: encoderOptsWithAds, adsPlan, adsEnabledForChain } =
         applyAdsPlanToEncoderOpts(adsSettingsSnapshot, chainId, chainRegistry, encoderOpts);
+
+    // Confirmation composition runs fee preflights before ADS, so its output
+    // order is caller outputs, protocol fees, then donation. Atomic submission
+    // reaches the same preflights inside submitWithSigner; defer its donation
+    // fold to the encoder boundary so both routes build byte-identical output
+    // order. Seed a shared array because a chunk-lane reveal reads the same
+    // options after createTx returns.
+    const effectiveEncoderOpts = !prebuiltPsbt && adsPlan.canSubmit
+        ? {
+            ...encoderOpts,
+            customOutputs: Array.isArray(encoderOpts?.customOutputs)
+                ? encoderOpts.customOutputs.slice()
+                : [],
+        }
+        : encoderOptsWithAds;
+    const effectiveSdkRegistry = !prebuiltPsbt && adsPlan.canSubmit
+        ? withAdsPlanAtEncode(sdkRegistry, adsSettingsSnapshot, chainId, chainRegistry)
+        : sdkRegistry;
 
     // Which verdict the accounting books. On the prebuilt path the donation was
     // decided and folded at COMPOSE time, and one background host serves every
@@ -286,7 +305,7 @@ export async function submitAction({
     try {
         try {
             result = await submitWithSigner({
-                sdkRegistry,
+                sdkRegistry: effectiveSdkRegistry,
                 chainRegistry,
                 chainId,
                 actionData,
