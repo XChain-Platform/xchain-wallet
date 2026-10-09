@@ -125,6 +125,17 @@ assert.ok(
     /need an\s*\n?\s*address on a chain that supports them/.test(listSrc),
     'ContractsList explains the no-address state without naming a single coin',
 );
+// Action labels are names, not sentence parts: a parenthesised list of them or
+// a label with "-only" glued on reads as jargon once rendered.
+assert.ok(
+    !/\(\{actionDisplayLabel\('DEPLOY'\)\}/.test(listSrc)
+        && !/\{actionDisplayLabel\('EXECUTE'\)\}-only/.test(listSrc),
+    'ContractsList does not build its explanatory sentences out of action labels',
+);
+assert.ok(
+    /Contract calls that don&apos;t move funds aren&apos;t listed/.test(listSrc),
+    'ContractsList says in plain words that fund-neutral calls are not listed yet',
+);
 assert.ok(
     /No contracts deployed from this chain/.test(listSrc),
     'ContractsList surfaces the empty "My contracts" state per chain',

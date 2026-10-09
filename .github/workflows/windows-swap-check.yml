@@ -88,7 +88,7 @@ jobs:
 
       # The TO build: the same tree, one patch up. Only the desktop package's
       # version is touched, and only on this throwaway checkout - version
-      # lockstep across the other fifteen declarations is a release concern,
+      # lockstep across the other declarations is a release concern,
       # and this job publishes nothing.
       - name: Bump the desktop package one patch and rebuild
         shell: bash

@@ -92,7 +92,9 @@ const ARTIFACTS = {
     [`xchain-wallet-setup-${VERSION}-arm64.exe`]: 'win-arm64-bytes',
     [`xchain-wallet-${VERSION}-x64-mac.zip`]: 'mac-x64-bytes',
     [`xchain-wallet-${VERSION}-arm64-mac.zip`]: 'mac-arm64-bytes',
-    [`xchain-wallet-${VERSION}.AppImage`]: 'linux-x64-bytes',
+    // The forced AppImage artifactName gives the x64 build its `x86_64`
+    // token; an un-suffixed AppImage is one the signing gate refuses.
+    [`xchain-wallet-${VERSION}-x86_64.AppImage`]: 'linux-x64-bytes',
     [`xchain-wallet-${VERSION}-arm64.AppImage`]: 'linux-arm64-bytes',
     // The debs are lanes too (§5, corrected 2026-08-02): DebUpdater
     // selects them out of these same two pointers and installs them with
@@ -102,6 +104,15 @@ const ARTIFACTS = {
     [`xchain-wallet_${VERSION}_amd64.deb`]: 'linux-x64-deb-bytes',
     [`xchain-wallet_${VERSION}_arm64.deb`]: 'linux-arm64-deb-bytes',
 };
+
+// Spelled out by hand, but read through the signing gate's own arch rule, so
+// a fixture name the gate would refuse to attribute fails here, not later.
+for (const [name, label] of Object.entries(ARTIFACTS)) {
+    const arch = execFileSync('bash', ['-c', 'lib="$1"; shift; . "$lib" && xr_artifact_arch "$1"',
+        'arch-check', join(root, 'tools/release/lib.sh'), name], { encoding: 'utf8' }).trim();
+    assert.equal(arch, label.split('-')[1],
+        `fixture ${name} must carry the arch token lib.sh xr_artifact_arch reads (got '${arch}')`);
+}
 
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
 
@@ -165,7 +176,7 @@ function makeFeed(name, { mutate = () => {}, tamper = () => {} } = {}) {
         // 2026-08-02): one pointer serves the AppImage lane and the deb
         // lane, and the two are told apart by extension, not by arch.
         [`${CHANNEL}-linux.yml`]: pointerBody([
-            `xchain-wallet-${VERSION}.AppImage`,
+            `xchain-wallet-${VERSION}-x86_64.AppImage`,
             `xchain-wallet_${VERSION}_amd64.deb`,
         ]),
         [`${CHANNEL}-linux-arm64.yml`]: pointerBody([
@@ -252,12 +263,13 @@ const good = makeFeed('feed-good');
     // lanes resolving to the same file.
     const selected = results.map((r) => r.selected);
     assert.equal(new Set(selected).size, 8, 'no two lanes resolve to the same artifact');
+    // Linux x64 spells its arch per format: `x86_64` on the AppImage, Debian's
+    // `amd64` on the deb, and neither contains the string `x64`.
+    const LINUX_X64_TOKEN = { 'linux-x64-appimage': 'x86_64', 'linux-x64-deb': 'amd64' };
     for (const r of results) {
-        const expected = r.arch === 'x64' && r.os === 'linux' ? null : r.arch;
-        if (expected) {
-            assert.ok(r.selected.includes(expected),
-                `${r.id} resolved ${r.selected}, which does not carry ${expected}`);
-        }
+        const expected = LINUX_X64_TOKEN[r.id] ?? r.arch;
+        assert.ok(r.selected.includes(expected),
+            `${r.id} resolved ${r.selected}, which does not carry ${expected}`);
     }
 
     // The two multi-arch pointers must have resolved BY NAME. If either
@@ -393,7 +405,7 @@ const good = makeFeed('feed-good');
     // is the entire reason the S5 gate is in the loop.
     const feed = makeFeed('feed-consistent-lie', {
         tamper: ({ files, pointers }) => {
-            const name = `xchain-wallet-${VERSION}.AppImage`;
+            const name = `xchain-wallet-${VERSION}-x86_64.AppImage`;
             files[name] = 'attacker-payload';
             // Rewritten to match, so the feed is internally consistent.
             // The deb entry is left honest, so this case also shows the

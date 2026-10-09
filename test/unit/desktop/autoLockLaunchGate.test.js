@@ -273,7 +273,7 @@ describe('desktop auto-lock record', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, ()
     });
 });
 
-describe('desktop autolock.report IPC', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
+describe('desktop session.autolock IPC', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
     it('arms the record from the renderer without reaching the shared pre-host dispatcher', async () => {
         const runtime = await runtimeWithCachedKey();
         const res = await handleIpcMessage(runtime, {

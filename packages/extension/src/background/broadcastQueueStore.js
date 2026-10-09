@@ -34,16 +34,130 @@ import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/
  *   PendingTx writes a closed or refusing vault could not take yet
  * @property {boolean} loaded  the stored blob has been read into `queues`
  * @property {boolean} sealed  a wallet wipe ended this store; nothing writes again
+ * @property {boolean} dormant  the shell gave up its writer lease; nothing loads
+ *   or writes until `refreshBroadcastQueueStore` runs under the next lease
+ * @property {PersistedRecord} persisted  what the stored key is known to hold
  * @property {Promise<boolean> | null} loadPromise  the single-flight rehydrate
- * @property {Set<string>} inFlight  `walletId:entryId` claims of broadcasts on the network
+ * @property {Set<string>} inFlight  `walletId:entryId` claims of broadcasts on the network,
+ *   plus the web shell's claims for routes that can queue signed bytes
  * @property {Set<string>} prunedWallets  walletIds removed before `loaded` latched,
  *   which the rehydrate merge skips and its write-back drops from the blob;
  *   each add is also written to a durable ledger so a worker evicted before
  *   the read recovers still drops the wallet on the next boot
  */
 
+/**
+ * The entry ids per wallet and the journal record keys the last load or save
+ * that resolved found in, or wrote to, the stored key. Each update replaces
+ * both fields with new objects, so a reader that captures them before a read
+ * still holds what was known before it.
+ *
+ * @typedef {Object} PersistedRecord
+ * @property {Map<string, Set<string>>} queues
+ * @property {Set<string>} owed
+ */
+
 // Core owns the prefix so both wipe paths sweep exactly the keys written here.
 const PRUNED_PREFIX = BROADCAST_QUEUE_PRUNED_PREFIX;
+
+/** Journal length cap, shared by the engine and the lease reload. */
+export const OWED_SETTLEMENT_LIMIT = 50;
+
+/**
+ * The key a journal record is known by in a `PersistedRecord`.
+ *
+ * @param {{ id?: unknown, pendingTxId?: unknown }} record
+ * @returns {string}
+ */
+export function owedRecordKey(record) {
+    return typeof record?.id === 'string' && record.id ? record.id : `pending:${String(record?.pendingTxId)}`;
+}
+
+/**
+ * Whether a live entry never reached the stored key, judged against what was
+ * known before the read now being folded in. Only such an entry may survive a
+ * snapshot that lacks it; an entry the key held was removed by its other writer.
+ *
+ * @param {Map<string, Set<string>> | undefined} known
+ * @param {string} walletId
+ * @param {any} entry
+ */
+export function isMemoryOnlyEntry(known, walletId, entry) {
+    if (typeof entry?.id !== 'string' || !entry.id) return false;
+    return !known?.get(walletId)?.has(entry.id);
+}
+
+function queueKeysOf(snapshot) {
+    /** @type {Map<string, Set<string>>} */
+    const keys = new Map();
+    for (const [walletId, entries] of Object.entries(snapshot)) {
+        if (!Array.isArray(entries)) continue;
+        const ids = new Set(entries.map((e) => e?.id).filter((id) => typeof id === 'string' && id));
+        if (ids.size > 0) keys.set(walletId, ids);
+    }
+    return keys;
+}
+
+function owedKeysOf(owed) {
+    return new Set((Array.isArray(owed) ? owed : []).filter(Boolean).map(owedRecordKey));
+}
+
+// Track what the key holds from the calls that resolved. Either save writes
+// the pair (the half it was given plus the adapter's cached other half), so
+// `pair` follows the halves the next write would carry. A refused save leaves
+// the record alone, and a call that resolves after a later one does not
+// overwrite the newer record.
+function withPersistedRecord(storage, persisted) {
+    const wrapped = Object.create(storage);
+    const pair = { queues: persisted.queues, owed: persisted.owed };
+    let issued = 0;
+    let applied = 0;
+    const commit = (ticket, queues, owed) => {
+        if (ticket <= applied) return;
+        applied = ticket;
+        persisted.queues = queues;
+        persisted.owed = owed;
+    };
+    wrapped.load = async () => {
+        const ticket = ++issued;
+        const snapshot = await storage.load();
+        if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+            pair.queues = queueKeysOf(snapshot);
+            commit(ticket, pair.queues, persisted.owed);
+        }
+        return snapshot;
+    };
+    wrapped.save = async (snapshot) => {
+        const ticket = ++issued;
+        const queues = queueKeysOf(snapshot);
+        const owed = pair.owed;
+        pair.queues = queues;
+        await storage.save(snapshot);
+        commit(ticket, queues, owed);
+    };
+    if (typeof storage.loadSettlements === 'function') {
+        wrapped.loadSettlements = async () => {
+            const ticket = ++issued;
+            const owed = await storage.loadSettlements();
+            if (Array.isArray(owed)) {
+                pair.owed = owedKeysOf(owed);
+                commit(ticket, persisted.queues, pair.owed);
+            }
+            return owed;
+        };
+    }
+    if (typeof storage.saveSettlements === 'function') {
+        wrapped.saveSettlements = async (records) => {
+            const ticket = ++issued;
+            const owed = owedKeysOf(records);
+            const queues = pair.queues;
+            pair.owed = owed;
+            await storage.saveSettlements(records);
+            commit(ticket, queues, owed);
+        };
+    }
+    return wrapped;
+}
 
 function chromeLedger() {
     const settle = (resolve, reject) => () => (chrome.runtime?.lastError ? reject(new Error('pruned ledger write refused')) : resolve());
@@ -205,36 +319,101 @@ function withLedger(storage, pruned) {
 export function createBroadcastQueueStore({ storage = null, prunedLedger } = {}) {
     const ledger = storage ? (prunedLedger === undefined ? defaultLedger() : prunedLedger) : null;
     const prunedWallets = new PrunedWallets(ledger);
+    /** @type {PersistedRecord} */
+    const persisted = { queues: new Map(), owed: new Set() };
+    const backing = ledger ? withLedger(storage, prunedWallets) : storage;
     return {
-        storage: ledger ? withLedger(storage, prunedWallets) : storage,
+        storage: backing ? withPersistedRecord(backing, persisted) : backing,
         queues: new Map(),
         owed: [],
         loaded: false,
         sealed: false,
+        dormant: false,
+        persisted,
         loadPromise: null,
         inFlight: new Set(),
         prunedWallets,
     };
 }
 
+// Fold a fresh read into the live map and journal in place: the stored copy
+// wins for everything the key held, and only what never reached it is carried
+// over. Arrays and journal objects keep their identity, because routes splice
+// the arrays `getQueue` handed them and the journal flush retires by identity.
+// Returns whether anything was carried over, which the key now lacks.
+function adoptStoredState(store, snapshot, settlements, known) {
+    const pruned = store.prunedWallets;
+    let carried = false;
+    const wallets = new Set([...store.queues.keys(), ...Object.keys(snapshot)]);
+    for (const walletId of wallets) {
+        if (pruned?.has(walletId)) {
+            store.queues.delete(walletId);
+            continue;
+        }
+        const stored = Array.isArray(snapshot[walletId])
+            ? snapshot[walletId].filter((entry) => entry && typeof entry === 'object')
+            : [];
+        const storedIds = new Set(stored.map((entry) => entry.id));
+        const storedTxs = new Set(stored.map((entry) => entry.pendingTxId).filter(Boolean));
+        const live = store.queues.get(walletId);
+        const kept = (live ?? []).filter((entry) => isMemoryOnlyEntry(known.queues, walletId, entry)
+            && !storedIds.has(entry.id)
+            && !(entry.pendingTxId && storedTxs.has(entry.pendingTxId)));
+        if (kept.length > 0) carried = true;
+        if (live) live.splice(0, live.length, ...stored, ...kept);
+        else if (stored.length > 0) store.queues.set(walletId, stored);
+    }
+
+    const storedOwed = settlements
+        .filter((entry) => entry && typeof entry === 'object')
+        .filter((entry) => !entry.walletId || !pruned?.has(entry.walletId));
+    const storedKeys = new Set(storedOwed.map(owedRecordKey));
+    const liveByKey = new Map(store.owed.map((entry) => [owedRecordKey(entry), entry]));
+    const carriedOwed = store.owed.filter((entry) => !known.owed?.has(owedRecordKey(entry))
+        && !storedKeys.has(owedRecordKey(entry))
+        && !(entry.walletId && pruned?.has(entry.walletId)));
+    if (carriedOwed.length > 0) carried = true;
+    // One record per PendingTx: a carried record is the later write.
+    const carriedTxs = new Set(carriedOwed.map((entry) => entry.pendingTxId));
+    store.owed = [
+        ...storedOwed
+            .filter((entry) => !carriedTxs.has(entry.pendingTxId))
+            .map((entry) => liveByKey.get(owedRecordKey(entry)) ?? { ...entry }),
+        ...carriedOwed,
+    ].slice(-OWED_SETTLEMENT_LIMIT);
+    return carried;
+}
+
 /**
- * Replace a dormant store from persistence after its shell acquires an
- * exclusive writer lease. Both halves are read before live state changes, so
- * an unreadable queue or journal leaves the cache intact and writes gated.
+ * Reload a dormant store from persistence after its shell acquires an
+ * exclusive writer lease, and end its dormancy. Both halves are read before
+ * live state changes, so an unreadable queue or journal leaves the cache
+ * intact and `loaded` false; the engine's next load then folds the read in
+ * by the same persisted record, so what another writer removed stays removed.
+ * Entries and journal records whose save was refused, or that were made while
+ * dormant, survive the reload and are written back under the lease.
  *
  * @param {BroadcastQueueStore | null} store
- * @returns {Promise<boolean>} whether the persisted state replaced the cache
+ * @returns {Promise<boolean>} whether the persisted state was folded in
  */
 export async function refreshBroadcastQueueStore(store) {
-    if (!store || store.sealed || !store.storage) return false;
+    if (!store || store.sealed) return false;
+    if (!store.storage) {
+        store.dormant = false;
+        return false;
+    }
     const previousLoad = store.loadPromise;
     if (previousLoad) {
         try { await previousLoad; } catch (_err) { /* retry from storage below */ }
     }
     if (store.sealed) return false;
 
+    // Cleared with `loaded` in one step: no write can run on the cache the
+    // dormant tab held, and the lease makes this store the writer again.
     store.loaded = false;
+    store.dormant = false;
     store.loadPromise = (async () => {
+        const known = { queues: store.persisted?.queues, owed: store.persisted?.owed };
         let snapshot;
         let settlements = [];
         try {
@@ -250,29 +429,23 @@ export async function refreshBroadcastQueueStore(store) {
         if (store.sealed) return false;
 
         const pruned = store.prunedWallets;
-        store.queues.clear();
-        for (const [walletId, entries] of Object.entries(snapshot)) {
-            if (pruned?.has(walletId) || !Array.isArray(entries) || entries.length === 0) continue;
-            const restorable = entries.filter((entry) => entry && typeof entry === 'object');
-            if (restorable.length > 0) store.queues.set(walletId, restorable);
-        }
-        store.owed = settlements
-            .filter((entry) => entry && typeof entry === 'object')
-            .filter((entry) => !entry.walletId || !pruned?.has(entry.walletId))
-            .map((entry) => ({ ...entry }));
+        const carried = adoptStoredState(store, snapshot, settlements, known);
         store.loaded = true;
 
-        if (pruned?.size > 0) {
+        if (carried || pruned?.size > 0) {
             const queues = {};
-            for (const [walletId, entries] of store.queues.entries()) queues[walletId] = [...entries];
+            for (const [walletId, entries] of store.queues.entries()) {
+                if (entries.length > 0) queues[walletId] = [...entries];
+            }
             try {
                 await store.storage.save(queues);
                 if (typeof store.storage.saveSettlements === 'function') {
                     await store.storage.saveSettlements(store.owed.map((entry) => ({ ...entry })));
                 }
-                pruned.clear();
+                pruned?.clear();
             } catch (_err) {
-                // Live state is complete; the durable prune ledger keeps the retry safe.
+                // Live state is complete; the durable prune ledger keeps the
+                // retry safe, and carried items stay unrecorded for the next save.
             }
         }
         return true;

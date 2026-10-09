@@ -638,6 +638,24 @@ class WebBroadcastClaims extends Set {
     }
 }
 
+// Signing routes hand their flow a hook that queues the signed bytes when the
+// broadcast fails, so the lease has to outlive that network call the way the
+// queue routes' own claims make it outlive theirs.
+const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$)/;
+let routeClaimSeq = 0;
+
+async function runRouteHoldingLease(store, type, run) {
+    const claims = typeof type === 'string' && QUEUE_WRITING_ROUTE.test(type) ? store?.inFlight : null;
+    // A NUL prefix cannot equal the walletId:entryId claims the queue routes check.
+    const claim = claims ? `\u0000route:${++routeClaimSeq}` : null;
+    if (claim) claims.add(claim);
+    try {
+        return await run();
+    } finally {
+        if (claim) claims.delete(claim);
+    }
+}
+
 /** Build the page's queue store on first use, when the page's storage is known. */
 function sharedBroadcastQueueStore() {
     if (!broadcastQueueStore) {
@@ -707,6 +725,10 @@ function createWebVaultLeaseCoordinator({ getLockManager, getQueueStore, isNativ
 
     function beginRelease(heldLease) {
         if (releaseCompletion) return releaseCompletion;
+        // Fence the store before another tab can take the key; the next
+        // lease's reload lifts it.
+        const store = getQueueStore();
+        if (store) store.dormant = true;
         const completion = heldLease.release();
         releaseCompletion = completion;
         void completion.then(
@@ -1250,6 +1272,12 @@ export function __createWebVaultMultiTabHarnessForTests() {
                 store.inFlight.delete(claim);
                 await coordinator.whenReleased();
             },
+            failureHook: (walletId) => queue.enqueueOnBroadcastFailure(walletId),
+            recordOwed(walletId, pendingTxId) {
+                queue.recordOwedSettlement(walletId, pendingTxId, 'patch', { status: 'broadcast' });
+            },
+            dispatch: (type, run) => runRouteHoldingLease(store, type, run),
+            whenReleased: () => coordinator.whenReleased(),
             state: coordinator.state,
         };
     }
@@ -1816,7 +1844,8 @@ export async function sendMessage(type, request) {
     if (!host) {
         throw Object.assign(new Error('wallet is locked'), { name: 'VaultClosedError' });
     }
-    const response = await host.handle({ type, request });
+    const active = host;
+    const response = await runRouteHoldingLease(broadcastQueueStore, type, () => active.handle({ type, request }));
     if (response.ok) return response.result;
     // Keeps `code` and the THROTTLED hints the envelope now carries; rebuilding
     // with name+message alone dropped them.

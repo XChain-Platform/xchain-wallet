@@ -35,7 +35,7 @@
  * @property {string} appName
  * @property {string} [appIcon]
  * @property {string[]} [requestedChains]
- * @property {string[]} [requestedAccounts]
+ * @property {Array<{ id: string, name: string }>} [accountOptions]  the wallet's accounts, primary first; never page input
  */
 
 /**

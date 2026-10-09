@@ -64,7 +64,7 @@ const DESKTOP = [
     `xchain-wallet-setup-${V}-arm64.exe`,
     `xchain-wallet-${V}-x64-win.zip`,
     `xchain-wallet-${V}-arm64-win.zip`,
-    `xchain-wallet-${V}.AppImage`,
+    `xchain-wallet-${V}-x86_64.AppImage`,
     `xchain-wallet-${V}-arm64.AppImage`,
     `xchain-wallet_${V}_amd64.deb`,
     `xchain-wallet_${V}_arm64.deb`,

@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { clearLockoutState } from '../../flows/lockoutTracking.js';
+
 /** Key a renderer-hosted broadcast queue persists under; core owns it so the wipe and the store agree. */
 export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
 
@@ -39,6 +41,12 @@ export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
  *     (BROADCAST_QUEUE_PRUNED_PREFIX): the walletIds of that queue's
  *     pruned-wallet ledger, swept by prefix since a page that never built a
  *     queue store has nothing to seal them.
+ *   - localStorage `xchain-wallet:lockout` (LOCKOUT_STORAGE_KEY in
+ *     flows/lockoutTracking.js, or the injected guard slot on native): the
+ *     Locked screen's failed-unlock ladder. An inherited ladder would punish
+ *     the next wallet's user for the old one's typos, the same reason the
+ *     shells clear their own unlock throttle. It goes only after the shell
+ *     wipe succeeds, so a failed wipe keeps the throttle on a surviving vault.
  *
  * Shell-side stores (desktop, extension, native mobile): the Electron
  * shell keeps its vault blob, kdfParams meta, cached session key, unlock
@@ -75,6 +83,8 @@ export async function wipeWalletStorage() {
         globalThis.localStorage?.removeItem(BROADCAST_QUEUE_STORAGE_KEY);
     } catch { /* ignore */ }
     sweepLocalStoragePrefix(BROADCAST_QUEUE_PRUNED_PREFIX);
+    // Same ordering for the unlock ladder: a failed wipe leaves a vault it still guards.
+    clearLockoutState();
 }
 
 /**

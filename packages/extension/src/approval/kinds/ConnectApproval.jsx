@@ -26,6 +26,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * Defaults favour the user:
  *   - Chains pre-select the dApp's requested set if present; otherwise
  *     an empty selection (user must opt in to each chain).
+ *   - Accounts come from the wallet, never the page: only the primary
+ *     account starts ticked, and the grant is exactly what the user ticks.
  *   - Message-signing permission defaults to OFF. dApps that want it
  *     can still request signMessage later, which triggers a per-request
  *     approval the first time (and a per-origin "always allow" opt-in).
@@ -44,9 +46,12 @@ export function ConnectApproval({ id, payload, onReject }) {
         () => (Array.isArray(payload?.requestedChains) ? payload.requestedChains : []),
         [payload],
     );
-    const requestedAccounts = Array.isArray(payload?.requestedAccounts)
-        ? payload.requestedAccounts
-        : [];
+    const accountOptions = useMemo(
+        () => (Array.isArray(payload?.accountOptions)
+            ? payload.accountOptions.filter((a) => a && typeof a.id === 'string' && a.id)
+            : []),
+        [payload],
+    );
 
     // §9.7 Developer Mode: user-added chains live in settings.customChains
     // and the background host seeds only ITS registry instance, so this
@@ -90,6 +95,9 @@ export function ConnectApproval({ id, payload, onReject }) {
         for (const id of fresh) preSelected.current.add(id);
         setApprovedChains((prev) => [...prev, ...fresh.filter((id) => !prev.includes(id))]);
     }, [supported, requestedChains]);
+    const [approvedAccounts, setApprovedAccounts] = useState(
+        /** @type {() => string[]} */ (() => (accountOptions[0] ? [accountOptions[0].id] : [])),
+    );
     const [canSignMessage, setCanSignMessage] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -102,15 +110,27 @@ export function ConnectApproval({ id, payload, onReject }) {
         );
     }
 
+    function toggleAccount(accountId) {
+        setApprovedAccounts((prev) =>
+            prev.includes(accountId)
+                ? prev.filter((a) => a !== accountId)
+                : [...prev, accountId],
+        );
+    }
+
+    // With options on screen the user must share at least one account; with
+    // none (the account read failed) the background grants the primary one.
+    const accountsMissing = accountOptions.length > 0 && approvedAccounts.length === 0;
+
     async function handleApprove() {
-        if (busy || approvedChains.length === 0) return;
+        if (busy || approvedChains.length === 0 || accountsMissing) return;
         setBusy(true);
         setError(null);
         try {
             await resolveApproval(id, {
                 approved: true,
                 chains: approvedChains,
-                accounts: requestedAccounts,
+                accounts: approvedAccounts,
                 canSignMessage,
                 canSignAction: {},
             });
@@ -142,7 +162,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                         block
                         onClick={handleApprove}
                         loading={busy}
-                        disabled={approvedChains.length === 0}
+                        disabled={approvedChains.length === 0 || accountsMissing}
                     >
                         Connect
                     </Button>
@@ -186,6 +206,39 @@ export function ConnectApproval({ id, payload, onReject }) {
                         );
                     })}
                 </ul>
+            </fieldset>
+
+            <fieldset className={styles.fieldset}>
+                <legend className={styles.legend}>Accounts</legend>
+                {accountOptions.length > 0 ? (
+                    <>
+                        <p className={styles.hint}>
+                            Pick which accounts this site can see.
+                        </p>
+                        <ul className={styles.chainList}>
+                            {accountOptions.map((a) => {
+                                const name = neutralizeControlText(a.name || a.id, { maxLength: 80 });
+                                return (
+                                    <li key={a.id} className={styles.chainRow}>
+                                        <label className={styles.chainLabel}>
+                                            <input
+                                                type="checkbox"
+                                                checked={approvedAccounts.includes(a.id)}
+                                                onChange={() => toggleAccount(a.id)}
+                                                aria-label={`Share ${name}`}
+                                            />
+                                            <span>{name}</span>
+                                        </label>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </>
+                ) : (
+                    <p className={styles.hint}>
+                        This site will see your wallet's primary account.
+                    </p>
+                )}
             </fieldset>
 
             <label className={shared.toggleRow}>

@@ -33,8 +33,8 @@
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,6 +102,40 @@ assert.equal(
         assert.equal(JSON.parse(readFileSync(out, 'utf8'))['builder-util-runtime'], builderUtilRuntime,
             'a capture taken from outside the repo reports this checkout\'s builder-util-runtime');
     } finally {
+        rmSync(away, { recursive: true, force: true });
+    }
+}
+
+// --listen must route a packaged build in through a route the build accepts.
+// It once said to bake XCHAIN_STAGING_FEED_URL at its plain-HTTP origin,
+// which the build config refuses (https://.../desktop/ only), so the
+// authoritative capture was unreachable as printed.
+{
+    const away = mkdtempSync(join(tmpdir(), 'xc-capture-listen-'));
+    const out = join(away, 'capture.json');
+    const child = spawn(process.execPath,
+        [join(root, 'tools', 'release', 'capture-update-check.mjs'), '--listen', '--port', '0', '--out', out],
+        { cwd: away, stdio: ['ignore', 'ignore', 'pipe'] });
+    try {
+        const said = await new Promise((resolve, reject) => {
+            let text = '';
+            const timer = setTimeout(() => reject(new Error(`--listen printed no instructions: ${text}`)), 15000);
+            child.stderr.on('data', (chunk) => {
+                text += chunk;
+                if (text.includes('Ctrl-C when done')) { clearTimeout(timer); resolve(text); }
+            });
+            child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`--listen exited ${code}: ${text}`)); });
+        });
+        const port = /listening on http:\/\/127\.0\.0\.1:(\d+)\//.exec(said)?.[1];
+        assert.ok(port, `--listen did not report its bound port: ${said}`);
+        assert.ok(!said.includes('XCHAIN_STAGING_FEED_URL'),
+            '--listen must not route a build in through XCHAIN_STAGING_FEED_URL, which the build '
+            + `config refuses for a plain-HTTP origin: ${said}`);
+        assert.ok(said.includes('provider: generic') && said.includes(`url: http://127.0.0.1:${port}/desktop/`),
+            `--listen must print the app-update.yml that points a packaged build at port ${port}: ${said}`);
+        assert.ok(!existsSync(out), '--listen wrote a capture before any request arrived');
+    } finally {
+        child.kill();
         rmSync(away, { recursive: true, force: true });
     }
 }

@@ -25,10 +25,13 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { defaultRegistry, BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
 
-const shim = vi.hoisted(() => ({ getSettings: async () => ({}) }));
+const shim = vi.hoisted(() => ({
+    getSettings: async () => ({}),
+    resolveApproval: async () => ({ approved: true }),
+}));
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     getSettings: (...args) => shim.getSettings(...args),
-    resolveApproval: async () => ({ approved: true }),
+    resolveApproval: (...args) => shim.resolveApproval(...args),
 }));
 
 const { ConnectApproval } = await import(
@@ -53,6 +56,7 @@ function mount(requestedChains) {
 afterEach(() => {
     cleanup();
     shim.getSettings = async () => ({});
+    shim.resolveApproval = async () => ({ approved: true });
 });
 
 describe('ConnectApproval chain checklist', () => {
@@ -115,5 +119,64 @@ describe('ConnectApproval chain checklist', () => {
 
         expect((await screen.findByLabelText(label(added))).checked).toBe(true);
         expect(screen.getByLabelText(label(bundled)).checked).toBe(false);
+    });
+});
+
+describe('ConnectApproval account checklist', () => {
+    const ACCOUNTS = [
+        { id: 'acct-1', name: 'Account 1' },
+        { id: 'acct-2', name: 'Account 2' },
+    ];
+
+    // A resolved approval closes its window; jsdom would tear the document
+    // down for every later case, so the close is recorded instead.
+    let closeSpy;
+    afterEach(() => { closeSpy?.mockRestore(); closeSpy = undefined; });
+
+    function mountWithAccounts(accountOptions) {
+        closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+        return render(
+            <ConnectApproval
+                id="req-accounts"
+                payload={{
+                    origin: 'https://dapp.test',
+                    appName: 'Test dApp',
+                    requestedChains: [bundled.id],
+                    accountOptions,
+                }}
+                onReject={() => {}}
+            />,
+        );
+    }
+
+    it('ticks only the primary account and submits what the user ticks', async () => {
+        const submitted = [];
+        shim.resolveApproval = async (_id, decision) => { submitted.push(decision); return { approved: true }; };
+        mountWithAccounts(ACCOUNTS);
+
+        expect(screen.getByLabelText('Share Account 1').checked).toBe(true);
+        expect(screen.getByLabelText('Share Account 2').checked).toBe(false);
+
+        fireEvent.click(screen.getByLabelText('Share Account 2'));
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Connect' })); });
+
+        expect(submitted).toHaveLength(1);
+        expect(submitted[0].accounts).toEqual(['acct-1', 'acct-2']);
+    });
+
+    it('disables Connect while no account is ticked', () => {
+        mountWithAccounts(ACCOUNTS);
+        fireEvent.click(screen.getByLabelText('Share Account 1'));
+        expect(screen.getByRole('button', { name: 'Connect' }).disabled).toBe(true);
+    });
+
+    it('says the primary account is shared when no options arrive', async () => {
+        const submitted = [];
+        shim.resolveApproval = async (_id, decision) => { submitted.push(decision); return { approved: true }; };
+        mountWithAccounts(undefined);
+
+        expect(screen.getByText(/primary account/)).toBeTruthy();
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Connect' })); });
+        expect(submitted[0].accounts).toEqual([]);
     });
 });

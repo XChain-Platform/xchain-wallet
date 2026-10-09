@@ -264,8 +264,8 @@ export async function composeForConfirm({
     // and are unchanged. The output is added to the SAME customOutputs the tamper
     // matcher reads below, so the built PSBT and the expected set stay in sync.
     // Skip an output the caller already supplied, as the atomic path does, so a
-    // pre-supplied payment is paid once rather than twice. Unlike that path this
-    // is not gated on a bare payment: a native SEND carrying a MEMO still pays.
+    // pre-supplied payment is paid once rather than twice. Neither path gates
+    // this on a bare payment: a native SEND carrying a MEMO still pays.
     const withNativeOut = withNativePaymentOutput({ actionData, descriptor, encoderOpts: encoderOptsWithAds });
 
     // 3c. The protocol fee must ride the transaction that carries the

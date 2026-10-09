@@ -273,6 +273,43 @@ export function classify(output) {
     return 'invoked';
 }
 
+// The variables sign.sh reads in place of an absent flag. A rehearsal's scope
+// comes from its arguments alone, so `probe` never inherits these.
+export const SCOPE_ENV = [
+    'XCHAIN_RELEASE_LANES',
+    'XCHAIN_RELEASE_TAG',
+    'XCHAIN_RELEASE_DIR',
+    'XCHAIN_RELEASE_REPO',
+    'SIGN_SKIP_DEV_MOCK_CHECK',
+];
+
+/** The environment `probe` hands sign.sh: `base` without SCOPE_ENV, then the caller's explicit overrides. */
+export function probeEnv(base, overrides = {}) {
+    const env = { ...base };
+    for (const k of SCOPE_ENV) delete env[k];
+    return { ...env, ...overrides };
+}
+
+/**
+ * Where sign.sh's own output says the run's scope differs from what `pin` records.
+ * (sign.sh reads XCHAIN_RELEASE_LANES only when no --lane was given, so a
+ * PARTIAL line is a mismatch only when no lane was requested.)
+ *
+ * @param {{ output: string, lane: string | null }} args
+ * @returns {string[]} reasons, empty when consistent
+ */
+export function scopeMismatch({ output, lane }) {
+    const reasons = [];
+    const partial = /PARTIAL release - gating against lane\(s\): ([^\n]*)/.exec(String(output))?.[1];
+    if (partial && !lane) {
+        reasons.push(`sign.sh gated a PARTIAL release (${partial.trim()}) although no --lane was given`);
+    }
+    if (/dev-mock gate SKIPPED/.test(String(output))) {
+        reasons.push('sign.sh skipped the dev-mock gate, so the depth recorded past it was never gated');
+    }
+    return reasons;
+}
+
 /**
  * Drive sign.sh's preconditions and report how deep they got.
  * Never writes anything; `pin` is what records an observation.
@@ -306,7 +343,7 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
         // signature step is expected to be unreachable here and that is the
         // honest outcome, not a failure of this tool.
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, ...env },
+        env: probeEnv(process.env, env),
     });
     const output = `${r.stdout || ''}${r.stderr || ''}`;
     const reached = r.status === 0 ? 'signature' : classify(output);
@@ -399,6 +436,14 @@ function cmdPin(argv) {
             + `tree than this tool expected: ${mismatched.join(', ')}. The tag tree's copy should win `
             + 'wherever it exists, and this checkout\'s copy should run only where the tag predates the gate. '
             + 'Bring gateFallbackFor() back in line with sign.sh gate_script first.');
+        return 1;
+    }
+    // Refuse when sign.sh says it ran a different scope than the one this pin would record.
+    const scope = scopeMismatch({ output: result.output, lane });
+    if (scope.length) {
+        console.error('[phase4-rehearsal] refusing to pin: sign.sh ran a different scope than requested:');
+        for (const reason of scope) console.error(`  ${reason}`);
+        console.error('\n  Pass the scope explicitly (--lane) and keep it out of the environment, then re-drive.');
         return 1;
     }
     // The commit that last touched the SIGNING PATH, not bare HEAD.

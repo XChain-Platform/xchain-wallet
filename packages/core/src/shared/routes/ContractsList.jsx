@@ -311,8 +311,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     if (vmChainsWithAddresses.length === 0) {
         return wrap(
             <p className={styles.entryDescription}>
-                Contracts ({actionDisplayLabel('DEPLOY')} / {actionDisplayLabel('EXECUTE')} /
-                {' '}{actionDisplayLabel('DEPOSIT')} / {actionDisplayLabel('WITHDRAW')}) need an
+                To use contracts, you need an
                 address on a chain that supports them. Use Receive to generate one first.
             </p>,
         );
@@ -370,9 +369,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     reason (SDK getExecutions is contract-scoped today) lives in
                     the header comment at the top of this file. */}
                 <p className={styles.entryDescription}>
-                    {actionDisplayLabel('EXECUTE')}-only interactions (method
-                    calls that don&apos;t move funds) aren&apos;t listed here
-                    yet. Open a contract to see its call history.
+                    Contract calls that don&apos;t move funds aren&apos;t listed
+                    here yet. Open a contract to see its call history.
                 </p>
             </Section>
             <Section title="Browse all contracts">

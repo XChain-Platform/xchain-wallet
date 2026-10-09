@@ -26,6 +26,23 @@ import {
     handleWalletUnlock,
     UnlockThrottledError,
 } from '../../../packages/extension/src/background/walletUnlock.js';
+import { delayForAttempts } from '../../../packages/core/src/flows/lockoutTracking.js';
+
+// The two ladders differ below the cap (see both files' schedule comments);
+// this pins only the shared cap so one cannot drift alone.
+describe('background unlock gate and Locked screen ladder share a cap', () => {
+    it('caps both at 15 minutes', () => {
+        const CAP = 15 * 60 * 1000;
+        for (const n of [50, 1000]) {
+            expect(
+                computeBackoffMs(n),
+                'unlockThrottle.js CAP_MS must equal lockoutTracking.js MAX_DELAY_SECONDS * 1000; '
+                    + 'changing one means updating both files and this test',
+            ).toBe(delayForAttempts(n) * 1000);
+            expect(computeBackoffMs(n)).toBe(CAP);
+        }
+    });
+});
 
 describe('unlockThrottle pure logic', () => {
     it('gives FREE_ATTEMPTS mistypes with no delay, then escalates', () => {

@@ -32,6 +32,12 @@
 // A successful unlock clears all state. An unlock attempt that throws
 // anything other than InvalidPasswordError is treated as a bug, not a
 // bad guess, and does NOT increment the counter.
+//
+// This ladder is UI-level and bypassable. The authoritative pre-KDF gate on
+// extension and desktop is packages/extension/src/background/unlockThrottle.js,
+// whose schedule is looser below the cap (5 free, then 15 s doubling).
+// MAX_DELAY_SECONDS must stay equal to its CAP_MS; that module's unit test
+// pins it.
 
 const STORAGE_KEY = 'xchain-wallet:lockout';
 

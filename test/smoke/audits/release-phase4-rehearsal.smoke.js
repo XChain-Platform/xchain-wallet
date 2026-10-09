@@ -42,8 +42,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
     announcedGateFallback, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
-    gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, signingPathFiles, STEPS,
-    uncoveredByPin,
+    gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probeEnv, scopeMismatch,
+    signingPathFiles, STEPS, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
 
 assert.ok(existsSync(PIN_PATH),
@@ -307,6 +307,32 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     } finally {
         rmSync(work, { recursive: true, force: true });
     }
+}
+
+// A pin records its scope from its own arguments, so sign.sh must not take a
+// different one from the operator's environment, and a run that did anyway
+// must not be pinned.
+{
+    const env = probeEnv({
+        XCHAIN_RELEASE_LANES: 'mac,linux', SIGN_SKIP_DEV_MOCK_CHECK: '1',
+        XCHAIN_RELEASE_GPG_KEY: 'K', PATH: '/bin',
+    });
+    assert.ok(!('XCHAIN_RELEASE_LANES' in env) && !('SIGN_SKIP_DEV_MOCK_CHECK' in env),
+        'probe must not hand sign.sh an inherited lane scope or dev-mock skip');
+    assert.equal(env.XCHAIN_RELEASE_GPG_KEY, 'K', 'probe must keep the signing key sign.sh requires');
+    assert.equal(env.PATH, '/bin', 'probe must keep the rest of the environment');
+    assert.equal(probeEnv({}, { SIGN_SKIP_DEV_MOCK_CHECK: '1' }).SIGN_SKIP_DEV_MOCK_CHECK, '1',
+        'an override the caller passes explicitly still reaches sign.sh');
+
+    const partial = 'sign.sh: PARTIAL release - gating against lane(s): mac linux\n';
+    assert.equal(scopeMismatch({ output: partial, lane: null }).length, 1,
+        'a PARTIAL run with no --lane must not be pinned as a full release');
+    assert.deepEqual(scopeMismatch({ output: partial, lane: 'mac,linux' }), [],
+        'a PARTIAL run the operator asked for is consistent');
+    assert.equal(scopeMismatch({ output: 'sign.sh: SIGN_SKIP_DEV_MOCK_CHECK=1 - dev-mock gate SKIPPED.\n', lane: null })
+        .length, 1, 'a run that skipped the dev-mock gate must not be pinned');
+    assert.deepEqual(scopeMismatch({ output: 'sign.sh: hashing artifacts in <input> ...\n', lane: null }), [],
+        'a full-scope run with the gate in place is consistent');
 }
 
 const d = drift();

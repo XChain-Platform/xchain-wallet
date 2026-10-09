@@ -17,9 +17,8 @@ import {
     replaceFromHistoryEntry,
     cancelUndoSnapshot,
     undoCancel,
-    RbfNotSupportedError,
-    RbfInvalidEntryError,
 } from '../../flows/rbfReplace.js';
+import { rbfFailureMessage } from '../utils/rbfFailureMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -1662,18 +1661,14 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                 const undone = await undoCancel({ messaging, snapshot });
                                 setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'pending'}`);
                             } catch (undoErr) {
-                                setRbfError(undoErr?.message || 'Could not undo the cancellation.');
+                                setRbfError(rbfFailureMessage(undoErr, 'Could not undo the cancellation.'));
                             }
                         },
                     });
                 }
             }
         } catch (err) {
-            if (err instanceof RbfNotSupportedError || err instanceof RbfInvalidEntryError) {
-                setRbfError(err.message);
-            } else {
-                setRbfError(err?.message || 'Replacement failed.');
-            }
+            setRbfError(rbfFailureMessage(err, "Couldn't speed up or cancel this transaction. Try again later."));
         } finally {
             setRbfBusy(null);
         }

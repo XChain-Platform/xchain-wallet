@@ -32,8 +32,13 @@ const histCss = readFileSync(
 
 assert.match(
     histSrc,
-    /import \{[\s\S]*isEntryReplaceable[\s\S]*replaceFromHistoryEntry[\s\S]*RbfNotSupportedError[\s\S]*RbfInvalidEntryError[\s\S]*\} from '\.\.\/\.\.\/flows\/rbfReplace\.js'/,
+    /import \{[\s\S]*isEntryReplaceable[\s\S]*replaceFromHistoryEntry[\s\S]*\} from '\.\.\/\.\.\/flows\/rbfReplace\.js'/,
     'imports the rbfReplace flow primitives',
+);
+assert.match(
+    histSrc,
+    /import \{ rbfFailureMessage \} from '\.\.\/utils\/rbfFailureMessage\.js'/,
+    'imports the plain-language RBF failure helper',
 );
 
 // --- DetailCard wires the gate ----------------------------------------
@@ -73,8 +78,15 @@ assert.match(
 
 // --- error + done states -----------------------------------------------
 
-assert.match(histSrc, /RbfNotSupportedError/, 'distinguishes not-supported errors');
-assert.match(histSrc, /RbfInvalidEntryError/, 'distinguishes invalid-entry errors');
+// The flow's error text is written for developers, so every RBF failure the
+// card shows goes through the helper and none reaches the screen raw.
+assert.match(histSrc, /setRbfError\(rbfFailureMessage\(err,/, 'speed-up and cancel failures read in plain words');
+assert.match(histSrc, /setRbfError\(rbfFailureMessage\(undoErr,/, 'undo failures read in plain words');
+assert.doesNotMatch(
+    histSrc,
+    /setRbfError\(\s*(?:err|undoErr)\??\.message/,
+    'no RBF failure shows the raw error message',
+);
 assert.match(histSrc, /role="alert"/, 'errors carry alert role');
 assert.match(histSrc, /role="status"/, 'success carries status role');
 

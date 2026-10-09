@@ -21,11 +21,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { WALLET_LOCAL_KEYS } from '../../../packages/extension/src/background/wipeExtensionStorage.js';
+import {
+    getLockoutState,
+    __resetLockoutPersistenceForTests,
+} from '../../../packages/core/src/flows/lockoutTracking.js';
 
 const META_KEY = 'xchain-wallet:vault-meta';
 const QUEUE_KEY = 'xchain.broadcastQueue';
 // Literal, not the exported constant, so a renamed prefix fails here.
 const PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
+// Literal for the same reason: the Locked screen's failed-unlock ladder.
+const LOCKOUT_KEY = 'xchain-wallet:lockout';
+const HIGH_LADDER = JSON.stringify({ failedAttempts: 7, lockedUntilMs: Date.now() + 900_000 });
 
 /** Minimal stand-in for the IndexedDB delete request handshake. */
 function stubIndexedDB(outcome = 'onsuccess') {
@@ -44,6 +51,7 @@ function stubIndexedDB(outcome = 'onsuccess') {
 beforeEach(() => {
     globalThis.localStorage?.clear?.();
     delete globalThis.xchainWalletBridge;
+    __resetLockoutPersistenceForTests();
 });
 
 afterEach(() => {
@@ -88,6 +96,15 @@ describe('wipeWalletStorage on renderer-backed shells', () => {
         expect(globalThis.localStorage.getItem(`${PRUNED_PREFIX}w-a`)).toBe(null);
         expect(globalThis.localStorage.getItem(`${PRUNED_PREFIX}w-b`)).toBe(null);
         expect(globalThis.localStorage.getItem('unrelated.pref')).toBe('keep');
+    });
+
+    // An inherited ladder would put the next wallet's first typo at the cap.
+    it('clears the Locked screen failed-unlock ladder so the next wallet starts at zero', async () => {
+        globalThis.localStorage.setItem(LOCKOUT_KEY, HIGH_LADDER);
+        stubIndexedDB();
+        await wipeWalletStorage();
+        expect(globalThis.localStorage.getItem(LOCKOUT_KEY)).toBe(null);
+        expect(getLockoutState()).toEqual({ failedAttempts: 0, lockedUntilMs: 0 });
     });
 
     it('resolves where there is no IndexedDB at all', async () => {
@@ -141,6 +158,22 @@ describe('wipeWalletStorage on a shell that owns its own store (desktop)', () =>
         globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: false, error: 'EPERM' }) };
         await expect(wipeWalletStorage()).rejects.toThrow(/EPERM/);
         expect(globalThis.localStorage.getItem(`${PRUNED_PREFIX}w-a`)).toBe('1');
+    });
+
+    it('clears the failed-unlock ladder once the shell wipe succeeds', async () => {
+        globalThis.localStorage.setItem(LOCKOUT_KEY, HIGH_LADDER);
+        stubIndexedDB();
+        globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: true }) };
+        await wipeWalletStorage();
+        expect(globalThis.localStorage.getItem(LOCKOUT_KEY)).toBe(null);
+    });
+
+    it('keeps the failed-unlock ladder when the shell wipe fails, since the vault it guards survives', async () => {
+        globalThis.localStorage.setItem(LOCKOUT_KEY, HIGH_LADDER);
+        stubIndexedDB();
+        globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: false, error: 'EPERM' }) };
+        await expect(wipeWalletStorage()).rejects.toThrow(/EPERM/);
+        expect(globalThis.localStorage.getItem(LOCKOUT_KEY)).toBe(HIGH_LADDER);
     });
 
     it('throws when the shell call itself rejects', async () => {

@@ -35,7 +35,7 @@ import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
 import {
-    isBareNativePayment, withNativePaymentOutput, hasNativePaymentOutput,
+    isBareNativePayment, withNativePaymentOutput, hasNativePaymentOutput, nativePaymentOutput,
 } from '../flows/nativePayment.js';
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
@@ -457,21 +457,29 @@ export async function submitWithSigner({
         // `advancedAction` route forwards pubkey/sourceAddress/change/fee opts
         // and nothing else, so a native SEND through the parallel composer built
         // a transaction with no OP_RETURN and no payment. Idempotent, so the
-        // callers that pre-supply it keep their bytes.
-        if (bareNativePayment) {
-            effectiveEncoderOpts = withNativePaymentOutput({
-                actionData,
-                descriptor: chainRegistry?.get(chainId),
-                encoderOpts: effectiveEncoderOpts,
-            });
-            // Fail closed rather than sign a send that pays nobody. The fold
-            // above makes this unreachable today; it is here so the next route
-            // that skips it fails loudly instead of broadcasting.
-            if (!hasNativePaymentOutput(actionData, chainRegistry?.get(chainId), effectiveEncoderOpts)) {
-                throw new Error(
-                    'submitWithSigner: a native-coin send must carry its destination payment output',
-                );
-            }
+        // callers that pre-supply it keep their bytes. Not gated on a bare
+        // payment, exactly like composeForConfirm: a native SEND carrying a
+        // MEMO keeps its action string and still pays the recipient.
+        const paymentDescriptor = chainRegistry?.get(chainId);
+        effectiveEncoderOpts = withNativePaymentOutput({
+            actionData,
+            descriptor: paymentDescriptor,
+            encoderOpts: effectiveEncoderOpts,
+        });
+        // Fail closed rather than sign a native send that pays nobody. The
+        // fold above makes this unreachable today; it is here so the next
+        // route that skips it fails loudly instead of broadcasting.
+        const paymentParams = actionData?.params || {};
+        const owedPayment = nativePaymentOutput({
+            tick: paymentParams.TICK,
+            amount: paymentParams.AMOUNT,
+            destination: paymentParams.DESTINATION,
+            descriptor: paymentDescriptor,
+        });
+        if (owedPayment && !hasNativePaymentOutput(actionData, paymentDescriptor, effectiveEncoderOpts)) {
+            throw new Error(
+                'submitWithSigner: a native-coin send must carry its destination payment output',
+            );
         }
 
         // Step 2: encode to PSBT via the encoder service.

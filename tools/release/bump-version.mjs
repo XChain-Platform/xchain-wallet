@@ -13,9 +13,10 @@
 // place that declares it, in one pass (§6 step 1).
 //
 // WHY THIS EXISTS, and it is the half of the lockstep rule that was never
-// built. `test/smoke/audits/version-lockstep.smoke.js` CHECKS that sixteen
-// places agree; nothing PRODUCED that agreement, so every release bump has
-// been sixteen hand edits made from a list held in somebody's head. It has
+// built. `test/smoke/audits/version-lockstep.smoke.js` CHECKS that every
+// place declaring the version agrees; nothing PRODUCED that agreement, so
+// every release bump was a hand edit to each of those places, made from a
+// list held in somebody's head. It has
 // already gone wrong the expensive way: a signed `v0.335.0` tag was once
 // cut against a tree in which every file still declared 0.334.0, caught
 // only by release.yml's tag-versus-package.json gate at the cost of a red
@@ -136,7 +137,7 @@ if (current === target) {
 //
 // Version lives on its own line in these files and is rewritten by a
 // targeted replacement rather than by JSON.stringify, which would reflow
-// key order and indentation across ten files and bury the one-line change
+// key order and indentation across every package.json and bury the one-line change
 // this commit is supposed to be.
 
 const packageFiles = ['package.json'];

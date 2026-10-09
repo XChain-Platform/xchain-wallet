@@ -155,7 +155,7 @@ function makeFakeWindows() {
         origin: 'https://dapp.example',
         appName: 'DApp',
         requestedChains: ['bitcoin-mainnet', 'dogecoin-mainnet'],
-        requestedAccounts: [],
+        accountOptions: [{ id: 'acct-1', name: 'Account 1' }],
     });
     await Promise.resolve();
     await Promise.resolve();

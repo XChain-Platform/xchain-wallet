@@ -135,18 +135,13 @@ Smokes pin specific call shapes (e.g. `messaging.importMnemonic({ password, mnem
 
 ## Versioning
 
-All packages in this repository (root, `packages/core`, `packages/extension`, `packages/web`, `packages/desktop`, `packages/bridge-spec`, `packages/test-dapp`) **ship at the same version number**. Sub-package `package.json` files track the root in lockstep. The `WALLET_VERSION` constant in `packages/core/src/buildInfo.js` is bumped alongside every release.
+The root and every package under `packages/` **ship at the same version number**; a package is in scope the moment it exists. The lockstep set also covers `packages/extension/manifest.json` (`version` and `version_name`), `WALLET_VERSION` in `packages/core/src/buildInfo.js`, the README's version badge and Status line, and a `CHANGELOG.md` section for the version. See [README.md#versioning](README.md#versioning).
 
-When you ship a change worth a version bump:
+When you ship a change worth a version bump, write the `## [Unreleased]` entries first, then:
 
 ```bash
-# bump every package.json + buildInfo.js together
-for f in package.json packages/core/package.json packages/extension/package.json \
-         packages/web/package.json packages/desktop/package.json \
-         packages/bridge-spec/package.json packages/test-dapp/package.json; do
-  sed -i 's/"version": "0\.OLD\.0"/"version": "0.NEW.0"/' "$f"
-done
-sed -i "s/WALLET_VERSION = '0\.OLD\.0'/WALLET_VERSION = '0.NEW.0'/" packages/core/src/buildInfo.js
+node tools/release/bump-version.mjs <version>      # refuses while ## [Unreleased] is empty
+node test/smoke/audits/version-lockstep.smoke.js  # verify
 ```
 
 Skip `test/e2e/package.json`; it does not participate in the release version.

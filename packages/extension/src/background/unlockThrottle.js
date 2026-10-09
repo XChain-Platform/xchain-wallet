@@ -23,6 +23,13 @@
 //
 // Policy: FREE_ATTEMPTS mistypes with no delay, then an exponential backoff
 // per additional consecutive failure, capped. A correct unlock clears it.
+//
+// This is looser than the Locked screen's G066 ladder in
+// packages/core/src/flows/lockoutTracking.js (2 free, then 5 s, 15 s, 60 s,
+// 5 min, cap at failure 7): here 5 are free, then 15 s doubling, cap at
+// failure 12. Desktop main uses this same schedule, and it is the only one a
+// direct `wallet.unlock` caller meets. CAP_MS must equal that ladder's
+// MAX_DELAY_SECONDS * 1000; test/unit/background/unlockThrottle.test.js pins it.
 
 export const FREE_ATTEMPTS = 5;
 const BASE_MS = 15 * 1000;          // first penalty once past the free attempts

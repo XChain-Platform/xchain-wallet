@@ -182,7 +182,25 @@ describe('CoSignerPolicyEditor per-action limit actions', () => {
     });
 
     it('refuses a limit on a real action the agent is not allowed to sign', () => {
-        expect(buildPolicyDraft(withLimit('SEND', 'ISSUE')).error).toMatch(/ISSUE.*allowed action/);
+        const error = buildPolicyDraft(withLimit('SEND', 'ISSUE')).error;
+        expect(error).toMatch(/Issue.*allowed action/);
+        expect(error).not.toContain('ISSUE');
+    });
+
+    it('names a known action by its picker label when its limit has no amount', () => {
+        const error = buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'EXECUTE',
+            maxPerAction: [{ action: 'EXECUTE', tick: '*', cap: '' }],
+        }).error;
+        expect(error).toContain(actionDisplayLabel('EXECUTE'));
+        expect(error).not.toContain('EXECUTE');
+    });
+
+    it('gives the empty action list hint in picker words', () => {
+        const error = buildPolicyDraft(emptyPolicyDraft()).error;
+        expect(error).toContain(actionDisplayLabel('SEND'));
+        expect(error).not.toContain('SEND');
     });
 
     it('keeps the protocol name as the stored limit key', () => {

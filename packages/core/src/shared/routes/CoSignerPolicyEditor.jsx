@@ -135,7 +135,7 @@ export function draftFromAccount(account) {
 export function buildPolicyDraft(draft) {
     const allowedActions = parseActions(draft.allowedActionsText);
     if (allowedActions.length === 0) {
-        return { error: 'Add at least one allowed action (for example SEND).' };
+        return { error: `Tick at least one allowed action (for example ${actionDisplayLabel('SEND')}).` };
     }
 
     // maxPerAction: { ACTION: { TICK: cap } }. Skip blank rows; a cap must be
@@ -147,11 +147,11 @@ export function buildPolicyDraft(draft) {
         const cap = String(row.cap || '').trim();
         if (!action && !cap) continue;
         if (!action) return { error: 'A per-action limit is missing its action name.' };
-        if (!cap) return { error: `Per-action limit for ${action} is missing an amount.` };
+        if (!cap) return { error: `Per-action limit for ${actionMessageName(action)} is missing an amount.` };
         // Refuse a limit on an action the agent may not sign, such as a typo like SENDD
         // (the co-signer matches caps by exact name, so that limit would never apply).
         if (!allowedActions.includes(action)) {
-            return { error: `The limit for ${action} doesn't match any allowed action, so it would never be enforced. Choose one of the allowed actions or remove the limit.` };
+            return { error: `The limit for ${actionMessageName(action)} doesn't match any allowed action, so it would never be enforced. Choose one of the allowed actions or remove the limit.` };
         }
         maxPerAction = maxPerAction || Object.create(null);
         maxPerAction[action] = maxPerAction[action] || Object.create(null);
@@ -247,6 +247,12 @@ const fieldsetStyle = {
 // nothing connecting the two vocabularies. The editor offers each action by
 // that same label and writes the raw key behind it, so the owner never types a code.
 const KNOWN_ACTIONS = new Set(BITCOIN_ACTIONS);
+
+// Name an action in an error message by the label the picker shows; an unknown key stays raw
+// so a typo is not dressed up as a real action (the same rule previewActions follows).
+function actionMessageName(key) {
+    return KNOWN_ACTIONS.has(key) ? actionDisplayLabel(key) : key;
+}
 
 // List the pickable actions alphabetically by the label the owner reads.
 const ACTION_CHOICES = BITCOIN_ACTIONS
