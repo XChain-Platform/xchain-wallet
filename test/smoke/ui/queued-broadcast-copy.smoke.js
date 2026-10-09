@@ -100,7 +100,11 @@ for (const file of scanned) {
 
 // Imported rather than regexed out of the file: these two are what the
 // surfaces actually render.
-const { SIGNED_NOT_BROADCAST_TITLE, SIGNED_NOT_BROADCAST_MESSAGE } =
+const {
+    SIGNED_NOT_BROADCAST_TITLE,
+    SIGNED_NOT_BROADCAST_MESSAGE,
+    SIGNED_NOT_BROADCAST_UNSAVED_WARNING,
+} =
     await import(join(shared, 'utils', 'submitFailureMessage.js'));
 
 assert.equal(
@@ -115,6 +119,17 @@ for (const [label, pattern] of [
 ]) {
     assert.ok(pattern.test(SIGNED_NOT_BROADCAST_MESSAGE), `SIGNED_NOT_BROADCAST_MESSAGE ${label}`);
 }
+for (const [label, pattern] of [
+    ['says the queue write failed', /could not be saved to the queue/i],
+    ['names the current-window lifetime', /only in this window/i],
+    ['warns that closing loses the signed bytes', /lost if the window closes/i],
+    ['offers a way to preserve the transaction', /copy the signed bytes/i],
+]) {
+    assert.ok(pattern.test(SIGNED_NOT_BROADCAST_UNSAVED_WARNING),
+        `SIGNED_NOT_BROADCAST_UNSAVED_WARNING ${label}`);
+}
+assert.doesNotMatch(SIGNED_NOT_BROADCAST_UNSAVED_WARNING, /automatically|retry/i,
+    'the unsaved warning does not promise a retry that cannot survive the window');
 
 // --- 3. Every queued done screen says the same thing ---------------------
 
@@ -151,6 +166,12 @@ for (const [rel, dontRepeat] of QUEUED_SURFACES) {
         `${rel} still warns against authorising a second copy (§5.3.4)`,
     );
 }
+
+const queuedResultPanel = readFileSync(join(shared, 'components', 'QueuedResultPanel.jsx'), 'utf8');
+assert.ok(
+    /unsaved\s*===\s*true[\s\S]{0,180}?role="alert"/.test(queuedResultPanel),
+    'QueuedResultPanel renders the unsaved warning as an alert only for an explicit true flag',
+);
 
 const confirmModal = readFileSync(join(shared, 'components', 'ConfirmActionModal.jsx'), 'utf8');
 assert.ok(

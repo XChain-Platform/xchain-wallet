@@ -29,7 +29,10 @@
 // `user-rejected`) so forms can skip error toasts on Reject.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import {
+    broadcastFailureKindFromError,
+    BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
+} from '../../flows/broadcastPermanence.js';
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
 import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
@@ -199,10 +202,12 @@ export function useConfirmAction() {
      * @param {object} [args.resumeRequest]         the compose request, stored alongside for display/rehydration
      * @returns {Promise<any>}   resolves with onApprove's own return value; EXCEPT on a
      *   TRANSIENT post-sign broadcast failure (§5.3.4), where it resolves with
-     *   `{ queued: true, broadcast: 'queued', error }` - the tx is signed and handed to the
-     *   broadcast queue, so callers must render "Signed. Not broadcast yet." (the
+     *   `{ queued: true, broadcast: 'queued', unsaved, error }` - the tx is signed and handed
+     *   to the broadcast queue, so callers must render "Signed. Not broadcast yet." (the
      *   queue is drained by the user from QueuedBroadcastBanner, never automatically), not
-     *   an error. A PERMANENT broadcast failure rejects (re-compose required).
+     *   an error. `unsaved` is true when neither durable store accepted the signed bytes, so
+     *   the queued result must also warn that closing the current window loses them. A
+     *   PERMANENT broadcast failure rejects (re-compose required).
      */
     const confirm = useCallback((args) => {
         if (activeInstanceId !== null) return Promise.reject(new ConfirmActionBusyError());
@@ -467,7 +472,12 @@ export function useConfirmAction() {
                 // broadcast yet", and RESOLVE so callers don't render an error.
                 setPhase('signed-not-broadcast');
                 setError(null);
-                const queuedResult = { queued: true, broadcast: 'queued', error: { name: err?.name, message: err?.message } };
+                const queuedResult = {
+                    queued: true,
+                    broadcast: 'queued',
+                    unsaved: err?.name === BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
+                    error: { name: err?.name, message: err?.message },
+                };
                 settleResolve(queuedResult);
                 return queuedResult;
             }

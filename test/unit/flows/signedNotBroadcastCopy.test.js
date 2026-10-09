@@ -24,10 +24,18 @@
 // `result?.queued` first. Derived from the tree rather than a list, so a new form is covered the
 // day it is written. Against the commit before the sweep only Send.jsx passes.
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import {
+    BROADCAST_FAILED_TRANSIENT_NAME,
+    BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
+} from '../../../packages/core/src/flows/broadcastPermanence.js';
+
+afterEach(() => cleanup());
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SHARED = join(HERE, '..', '..', '..', 'packages', 'core', 'src', 'shared');
@@ -49,6 +57,52 @@ function confirmDoneScreens() {
     }
     return out;
 }
+
+describe('useConfirmAction preserves the queue durability verdict', () => {
+    const composed = {
+        actionString: 'SEND|0|TEST|1|destination',
+        action: 'SEND',
+        version: 0,
+        psbt: 'signed-psbt',
+        encoding: 'OP_RETURN',
+        expectedOutputs: { addressed: [], encoding: 'OP_RETURN' },
+        tamperVerified: true,
+    };
+
+    for (const [name, expectedUnsaved] of [
+        [BROADCAST_FAILED_TRANSIENT_NAME, false],
+        [BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME, true],
+    ]) {
+        it(`resolves ${name} with unsaved=${expectedUnsaved}`, async () => {
+            const { result } = renderHook(() => useConfirmAction());
+            const error = Object.assign(new Error('node unreachable'), { name });
+            let pending;
+            await act(async () => {
+                pending = result.current.confirm({
+                    compose: async () => composed,
+                    onApprove: async () => { throw error; },
+                    chainId: 'bitcoin-regtest',
+                });
+            });
+            await waitFor(() => expect(result.current.phase).toBe('ready'));
+
+            let approved;
+            let settled;
+            await act(async () => {
+                approved = await result.current.approve({});
+                settled = await pending;
+            });
+
+            expect(approved).toMatchObject({
+                queued: true,
+                broadcast: 'queued',
+                unsaved: expectedUnsaved,
+                error: { name, message: 'node unreachable' },
+            });
+            expect(settled).toEqual(approved);
+        });
+    }
+});
 
 describe('A signed-but-not-broadcast result never renders as done', () => {
     const forms = confirmDoneScreens();

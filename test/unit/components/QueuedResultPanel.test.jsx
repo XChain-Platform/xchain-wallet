@@ -11,6 +11,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
+import {
+    SIGNED_NOT_BROADCAST_UNSAVED_WARNING,
+} from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 
 afterEach(() => cleanup());
 
@@ -39,6 +42,22 @@ describe('QueuedResultPanel', () => {
         render(<QueuedResultPanel onDone={() => {}} />);
         expect(screen.getByText(/queued-transactions banner/i)).toBeTruthy();
         expect(screen.getByText(/don't submit this again/i)).toBeTruthy();
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('warns when the signed bytes were not saved to durable storage', () => {
+        render(<QueuedResultPanel onDone={() => {}} unsaved />);
+        const alerts = screen.getAllByRole('alert');
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0].textContent).toBe(SIGNED_NOT_BROADCAST_UNSAVED_WARNING);
+        expect(alerts[0].textContent).toMatch(/only in this window/i);
+        expect(alerts[0].textContent).toMatch(/lost if the window closes/i);
+        expect(alerts[0].textContent).toMatch(/copy the signed bytes/i);
+    });
+
+    it('does not warn when durable storage accepted the signed bytes', () => {
+        render(<QueuedResultPanel onDone={() => {}} unsaved={false} />);
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('names the action when the form supplies one', () => {
