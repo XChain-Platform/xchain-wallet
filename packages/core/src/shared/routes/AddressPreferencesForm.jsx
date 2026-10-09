@@ -261,7 +261,15 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} what="address preferences" />);
+        if (result?.queued) {
+            return wrap(
+                <QueuedResultPanel
+                    onDone={onBack}
+                    what="address preferences"
+                    unsaved={result?.unsaved}
+                />,
+            );
+        }
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,

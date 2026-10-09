@@ -482,7 +482,13 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             );
         }
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="bridge transfer" />);
+            return wrap(
+                <QueuedResultPanel
+                    onDone={onBack}
+                    what="bridge transfer"
+                    unsaved={result?.unsaved}
+                />,
+            );
         }
         return wrap(
             <BridgePendingPanel

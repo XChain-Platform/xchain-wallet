@@ -469,7 +469,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         // Signed but not broadcast, so nothing is on its way to
         // confirming and no holder is being paid yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="callback" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="callback" unsaved={result?.unsaved} />,
+            );
         }
         return wrap(
             <>

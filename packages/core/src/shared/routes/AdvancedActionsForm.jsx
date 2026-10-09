@@ -574,7 +574,13 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         // Signed but not broadcast. "sent" is the claim this case
         // cannot make.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what={actionDisplayLabel(action).toLowerCase()} />);
+            return wrap(
+                <QueuedResultPanel
+                    onDone={onBack}
+                    what={actionDisplayLabel(action).toLowerCase()}
+                    unsaved={result?.unsaved}
+                />,
+            );
         }
         return wrap(
             <>
