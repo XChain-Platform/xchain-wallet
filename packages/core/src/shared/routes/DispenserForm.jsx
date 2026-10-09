@@ -1055,7 +1055,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         }
         // Signed but not broadcast, so no dispenser is open yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="dispenser" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="dispenser" unsaved={result.unsaved} />);
         }
         return wrap(
             <>

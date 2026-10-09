@@ -423,7 +423,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         // the auto-pay note below would be describing a thing that is not
         // on the chain.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="order" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="order" unsaved={result.unsaved} />);
         }
         const autopayNote = autopayArm
             ? (result?.autopayArmed === false

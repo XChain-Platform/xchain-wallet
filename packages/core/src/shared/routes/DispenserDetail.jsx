@@ -1336,7 +1336,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // A watcher build or a signed-but-queued broadcast is not a success:
     // nothing reached the chain yet, so neither gets the "submitted" copy.
     const ownerPendingPanel = (res, onDone) => {
-        if (res?.queued) return wrap(<QueuedResultPanel onDone={onDone} what="dispenser update" />);
+        if (res?.queued) {
+            return wrap(<QueuedResultPanel onDone={onDone} what="dispenser update" unsaved={res.unsaved} />);
+        }
         if (res?.psbtHex && !(res.txid || res.broadcast?.txid)) {
             return wrap(<WatcherResultPanel result={res} onDone={onDone} />);
         }

@@ -404,7 +404,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         }
         // Signed but not broadcast. Nothing has been destroyed yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="destroy" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="destroy" unsaved={result.unsaved} />);
         }
         return wrap(
             <>

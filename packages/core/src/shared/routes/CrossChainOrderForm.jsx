@@ -383,7 +383,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain order" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain order" unsaved={result.unsaved} />);
         }
         return wrap(
             <>
