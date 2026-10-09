@@ -195,7 +195,9 @@ function usePublisherSubmission({ messaging, walletId, chainId, coinTicker, from
 }
 
 function publisherResultPanel(result, clearResult) {
-    if (result?.queued) return <QueuedResultPanel onDone={clearResult} what="oracle value" />;
+    if (result?.queued) {
+        return <QueuedResultPanel onDone={clearResult} what="oracle value" unsaved={result.unsaved} />;
+    }
     if (result?.psbtHex && !(result.txid || result.broadcast?.txid)) {
         return <WatcherResultPanel result={result} onBuildAnother={clearResult} onDone={clearResult} />;
     }
