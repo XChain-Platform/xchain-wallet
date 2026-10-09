@@ -219,8 +219,8 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);[\s\S]*?\bpushQueueEntry\(walletId, entry\);\s*await persistQueue\(\);\s*\};/.test(engineSrc),
-    'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing and awaits the save after',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*else pushQueueEntry\(walletId, entry\);\s*return persistQueue\(\);\s*\};/.test(engineSrc),
+    'the shared onBroadcastFailure hook loads, deduplicates, and returns the save verdict',
 );
 assert.ok(
     !/async \(entry\) => \{ pushQueueEntry\(/.test(bg) && !/async \(entry\) => \{ pushQueueEntry\(/.test(engineSrc),
