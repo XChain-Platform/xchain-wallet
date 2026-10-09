@@ -2835,7 +2835,7 @@ export function createBackgroundHost(deps) {
             summary: req?.summary,
             signedAt: req?.signedAt,
             txid: req?.txid,
-        });
+        }, { persist: false });
         // This lane names no PendingTx, so the blob is its only durable copy:
         // reply after the write settles, saying whether it landed (a caller
         // seeing `persisted: false` warns the bytes will not survive a restart).
