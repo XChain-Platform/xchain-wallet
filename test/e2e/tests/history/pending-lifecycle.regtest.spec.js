@@ -57,8 +57,9 @@
 //     the transactions it serves: a pending regtest send has no action index
 //     for the XChain link and regtest has no third-party explorer. A fixture
 //     that hands the component an entry with links attached never sees that.
-//     What the buttons DO is deliberately not asserted - no shell registers a
-//     `replaceTx` handler, so there is no replacement engine in any build.
+//     What the buttons DO is deliberately not asserted here. The shared web
+//     and mobile SPA wiring in `packages/web/src/messaging.js` has a focused
+//     unit contract; this lifecycle test stops before a second broadcast.
 //
 // A DEFECT THIS FILE PINS RATHER THAN HIDES, stated here because it explains
 // the shape of everything below. The wallet builds against the PUBLISHED
@@ -373,10 +374,9 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             // feature serves. That gate is fixed, and nothing until now had
             // driven the fixed path against a REAL pending entry.
             //
-            // Nothing here asserts what the buttons DO. There is no
-            // replacement engine in any build: no shell registers a
-            // `replaceTx` handler, so pressing Speed up raises
-            // `RbfNotSupportedError` by design. The offer is the claim.
+            // Nothing here asserts what the buttons DO. The web and mobile SPA
+            // transport is covered by `test/unit/shells/replaceTxWeb.test.js`;
+            // the offer on a real pending entry is this test's claim.
             const options = page.getByRole('group', { name: 'Action options' });
             await expect(options, 'the pending entry renders no action options at all, which is '
                 + 'the exact shape the explorer-link gate used to produce on a regtest send')
