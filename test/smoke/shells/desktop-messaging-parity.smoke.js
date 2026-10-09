@@ -69,6 +69,7 @@ const SHELL_ONLY = new Map([
     // window has to bound it). Plain web keeps the key in memory only, so a
     // closed tab is already locked and there is nothing to report to.
     ['reportAutoLock', ['popup', 'desktop']],
+    ['replaceTx', ['desktop']],
 ]);
 
 /**
@@ -263,9 +264,6 @@ const CORE_PENDING = new Map([
     // flows/feeEstimate.js: the shell-side fee estimator is a future hook;
     // core falls back to its own fee table while no shell registers one.
     ['estimateFee', 'future shell fee estimator; core uses its fee table meanwhile'],
-    // flows/rbfReplace.js: the replacement engine is pending, and core throws
-    // a typed not-supported error while no shell exports it.
-    ['replaceTx', 'replacement engine pending; core refuses with a typed error'],
 ]);
 
 /** Blank out comments, keeping strings and line numbers, so prose never counts as a call. */
