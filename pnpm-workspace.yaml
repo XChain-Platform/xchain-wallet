@@ -123,6 +123,7 @@ overrides:
   ip-address: ^10.5.1
   # GHSA-6qxp-vccf-f47h: high advisory in the MCP SDK that xchain-sdk pulls in; patched in 1.31.0.
   '@modelcontextprotocol/sdk': ^1.31.0
+  'undici@7': ^7.29.1
 
 # "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall

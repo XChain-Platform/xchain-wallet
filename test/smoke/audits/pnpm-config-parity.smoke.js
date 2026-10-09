@@ -160,6 +160,20 @@ const npmrc = parseNpmrc(read('.npmrc'));
     assert.deepEqual(Object.keys(live).sort(), Object.keys(a).sort(),
         'pnpm-lock.yaml resolved with exactly this override set '
         + '(if this fails, the lockfile predates the config change: re-run pnpm install)');
+
+    assert.equal(a['undici@7'], '^7.29.1',
+        'undici 7.x is floored at the first release containing the security fix');
+    assert.equal(live['undici@7'], a['undici@7'],
+        'pnpm-lock.yaml resolved with the undici 7.x security override');
+
+    const undici7 = [...read('pnpm-lock.yaml').matchAll(/^  undici@(7\.\d+\.\d+):$/gm)]
+        .map((match) => match[1]);
+    assert.ok(undici7.length > 0, 'pnpm-lock.yaml contains an undici 7.x resolution');
+    for (const version of undici7) {
+        const [, minor, patch] = version.split('.').map(Number);
+        assert.ok(minor > 29 || (minor === 29 && patch >= 1),
+            `pnpm-lock.yaml resolves vulnerable undici ${version}`);
+    }
 }
 
 // ------------------------------------------------- onlyBuiltDependencies
