@@ -205,11 +205,16 @@ export async function signMultisigLocally(opts) {
         }
 
         // P2SH / P2WSH single round.
-        const { sig } = await signer.signMultisigClassical({
-            chainId:  session.chainId,
-            path:     localCosigner.derivationPath,
-            msgHash:  session.msgHash,
-        });
+        let sig;
+        try {
+            ({ sig } = await signer.signMultisigClassical({
+                chainId:  session.chainId,
+                path:     localCosigner.derivationPath,
+                msgHash:  session.msgHash,
+            }));
+        } catch (err) {
+            throw tagHardwareDeferral(signer, err);
+        }
         const updated = await contributeMultisigSignatureLocal({
             vault:        opts.vault,
             sessionId:    session.id,
@@ -227,6 +232,22 @@ export async function signMultisigLocally(opts) {
             signer.lock();
         }
     }
+}
+
+// A hardware signer that cannot yet do classical multisig throws a plain
+// Error whose message says so; callers branch on err.code, so give that
+// specific deferral a stable one. Coded errors, software-signer failures
+// and any other hardware failure (user reject, transport) stay untouched.
+export const HW_SIGNER_DEFERRED = 'HW_SIGNER_DEFERRED';
+
+const HW_DEFERRAL_MESSAGE = /classical multisig signing on \w+ is not yet wired/;
+
+function tagHardwareDeferral(signer, err) {
+    if (!err || typeof err !== 'object' || err.code) return err;
+    if (signer.kind === 'software') return err;
+    if (!HW_DEFERRAL_MESSAGE.test(String(err.message))) return err;
+    err.code = HW_SIGNER_DEFERRED;
+    return err;
 }
 
 // Local-only thin wrappers that re-import via dynamic require to
