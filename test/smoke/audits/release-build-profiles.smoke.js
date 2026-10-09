@@ -10,12 +10,12 @@
 
 // Build profiles in the release manifest (; rails §3, §5).
 //
-// A build profile is WHICH FEATURE SET was compiled in. v1 has two:
-// `default` (web, desktop, extension) and `store` (the mobile builds, which
-// compile out the surfaces app-store review posture hides). Two artifacts of
-// one tag can therefore hold different code, and before this the manifest -
-// the record whose entire job is to prove what shipped - could not say which
-// was which.
+// A build profile records which build configuration produced an artifact. v1
+// has two: `default` (web, desktop, extension) and `store` (the mobile builds,
+// with store-specific CSP, sourcemaps, packaging, and a signed profile stamp).
+// Two artifacts of one tag can therefore hold different code, and before this
+// the manifest - the record whose entire job is to prove what shipped - could
+// not say which was which.
 //
 // This runs the REAL tools/release/lib.sh against a staged directory rather
 // than asserting on their source, because every bug this found was a parsing
@@ -121,12 +121,11 @@ for (const [name, profile] of ARTIFACTS) {
         `${name} must be declared as profile ${profile}`,
     );
 }
-// The direct APK is `store`, and that is a fact about what users get: it is
-// built from the same AAB, so anything compiled out for review is missing
-// from the direct download too (§6).
+// The direct APK is `store`, and that is a fact about how it was built: it is
+// derived from the same store-profile AAB and carries the same build controls.
 assert.ok(
     profileLines.includes('# profile store: ./xchain-wallet-v0.333.1.apk'),
-    'the direct APK carries the store feature set, not the default one',
+    'the direct APK carries the store build configuration, not the default one',
 );
 
 // --- 3. verify.sh accepts it, including one artifact at a time ----------
@@ -241,10 +240,9 @@ assert.match(res.out, /matches globs declaring both/, 'and the message must name
 
 // --- 6. A label the build cannot earn is refused ------------------------
 //
-// Recording a profile is not producing one. Until the §2.3 compile-time
-// flags exist, a `store` label in a signed record would be a FALSE claim: a
-// verifier would read it as "the review-hidden surfaces are absent" from a
-// build that still contains them. That is worse than saying nothing.
+// Recording a profile is not producing one. Until the compile-time profile
+// mechanism exists, a `store` label in a signed record would be a false claim
+// about the CSP, sourcemap posture, packaging inputs, and profile stamp.
 
 const statusFile = join(repo, 'tools', 'release', 'store-profile-status.txt');
 const statusNow = readFileSync(statusFile, 'utf8');
@@ -359,9 +357,9 @@ assert.ok(
 // the obvious way did NOT fail the gate. It resolved to `store`, silently,
 // because both names matched one glob declaring one profile - so there was
 // nothing ambiguous for `xr_profile_for` to report. A verifier reads `store`
-// as "the review-hidden surfaces are absent" from the one build that still
-// contains them, which is the false claim in a signed, append-only record
-// that this whole mechanism exists to prevent.
+// as a different build configuration from the artifact that actually contains
+// it, which is the false claim in a signed, append-only record that this whole
+// mechanism exists to prevent.
 //
 // Driven against the REAL committed declaration, not a fixture: a fixture
 // here would only re-ask the question the declaration is the answer to.
@@ -474,15 +472,34 @@ for (const pkg of ['desktop', 'extension']) {
     );
 }
 
-// The hidden-surface guard is the fail-shut half of the store compile-out, and
-// it fails OPEN when weakened: as anything but `enforce: 'pre'`, Vite's own
-// resolver answers resolveId first and the guard never sees an import, so a
-// store build SUCCEEDS with a DEX route inside while its labels say otherwise.
-// Checked on the resolved plugin object, so dropping it from the array, moving
-// the flag or gutting the matcher all turn this red.
-const { SURFACE_MODULES } = await import(
+// The reviewed surface roster currently ships everything in both profiles.
+// Keep the compile-out registry and fail-shut guard wired for a future ruling,
+// but prove that neither profile activates it today.
+const {
+    HIDDEN_SURFACES,
+    SURFACES,
+    SURFACE_MODULES,
+    hiddenSurfacesFor,
+    isSurfaceEnabled,
+} = await import(
     pathToFileURL(join(repo, 'packages', 'web', 'src', 'surfaces', 'registry.js')).href
 );
+assert.ok(SURFACES.includes('dex'), 'the DEX remains a declared surface');
+assert.deepEqual(HIDDEN_SURFACES.store, [], 'the store profile hides no product surface');
+for (const profile of ['default', 'store']) {
+    assert.deepEqual(
+        hiddenSurfacesFor(profile),
+        [],
+        `${profile} must ship every declared product surface`,
+    );
+    for (const surface of SURFACES) {
+        assert.equal(
+            isSurfaceEnabled(surface, profile),
+            true,
+            `${profile} must enable the ${surface} surface`,
+        );
+    }
+}
 const surfaceGuardOf = (config) => config.plugins
     .flat(Infinity)
     .find((p) => p && p.name === 'xchain-hidden-surface-guard');
@@ -491,11 +508,10 @@ assert.ok(storeGuard, 'the `store` web config registers the xchain-hidden-surfac
 assert.equal(
     storeGuard.enforce,
     'pre',
-    'the hidden-surface guard must be `enforce: \'pre\'`: otherwise its resolveId never runs,'
-    + ' the guard fails OPEN, and a store build ships a hidden surface its manifest says is absent',
+    'the dormant hidden-surface guard stays `enforce: \'pre\'` so a future ruling fails shut',
 );
 const hiddenModule = SURFACE_MODULES.dex[0];
-assert.ok(hiddenModule, 'the registry names at least one dex route module for the guard to match');
+assert.ok(hiddenModule, 'the retained registry names at least one DEX route module');
 const guardContext = (id) => {
     const calls = [];
     return {
@@ -507,26 +523,18 @@ const guardContext = (id) => {
         error(msg) { throw new Error(msg); },
     };
 };
-const hitCtx = guardContext(`/repo/packages/core/src/${hiddenModule}?import`);
-await assert.rejects(
-    storeGuard.resolveId.call(hitCtx, './stray.jsx', '/repo/src/stray-importer.jsx', {}),
-    (err) => err.message.includes(hiddenModule) && err.message.includes('/repo/src/stray-importer.jsx'),
-    'the guard refuses a hidden route module and names the module and its importer',
-);
-assert.equal(hitCtx.calls[0]?.skipSelf, true, 'the guard resolves with skipSelf, or it recurses into itself');
-assert.equal(
-    await storeGuard.resolveId.call(guardContext('/repo/packages/core/src/shared/routes/Receive.jsx'), './Receive.jsx', '/repo/src/a.jsx', {}),
-    null,
-    'the guard passes a module no hidden surface owns',
-);
-const hostedGuard = surfaceGuardOf(await viteConfigFor('web', undefined));
-const hostedCtx = guardContext(`/repo/packages/core/src/${hiddenModule}`);
-assert.equal(
-    await hostedGuard.resolveId.call(hostedCtx, './MarketsList.jsx', '/repo/src/a.jsx', {}),
-    null,
-    'the hosted profile hides nothing, so its guard is inert',
-);
-assert.equal(hostedCtx.calls.length, 0, 'the inert guard does not even resolve');
+for (const [profile, guard] of [
+    ['store', storeGuard],
+    ['default', surfaceGuardOf(await viteConfigFor('web', undefined))],
+]) {
+    const ctx = guardContext(`/repo/packages/core/src/${hiddenModule}?import`);
+    assert.equal(
+        await guard.resolveId.call(ctx, './MarketsList.jsx', '/repo/src/a.jsx', {}),
+        null,
+        `${profile} ships DEX, so its hidden-surface guard is inert`,
+    );
+    assert.equal(ctx.calls.length, 0, `${profile}'s inert guard does not resolve the import`);
+}
 
 console.log(
     'OK: release build-profile smoke (manifest-version 2 carries one'
@@ -540,7 +548,7 @@ console.log(
     + ' lib.sh and csp.js agree on the profile names, and a release build refuses'
     + ' to stage a web bundle that is not the store profile. §5: a `store` web'
     + ' bundle emits no sourcemaps, resolved from the config rather than grepped, while the'
-    + ' hosted shell keeps them and desktop/extension stay as they were; the store'
-    + ' config registers the hidden-surface guard as `enforce: \'pre\'` and its resolveId'
-    + ' refuses a hidden route module while the hosted profile\'s guard stays inert)',
+    + ' hosted shell keeps them and desktop/extension stay as they were; every profile'
+    + ' enables every declared product surface, while the dormant compile-out registry'
+    + ' and hidden-surface guard remain wired for a future reviewed ruling)',
 );

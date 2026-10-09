@@ -8,16 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Which SURFACES a build profile carries (; §2.3, §7).
+// Which SURFACES a build profile carries (§2.3, §7).
 //
-// The `store` profile is the mobile app-store build. §2.3 requires the
-// screens app-store review posture hides to be COMPILED OUT of it, not hidden
-// at runtime: a store-hidden surface that some switch can turn back on is an
-// App Review guideline 2.3.1 hidden-feature violation, and the penalty there is
-// developer-account termination, which takes every Apple surface with it (iOS
-// AND the desktop Developer ID notarization). So this file is data read at
-// BUILD time by vite.config.js, and the hiding mechanism is module-graph
-// surgery, not a boolean the app evaluates:
+// The 2026-10-09 review decision is to ship every product surface in every
+// profile, including every store build. A store profile still differs in CSP,
+// sourcemaps, packaging, and its signed profile stamp; it does not mean a
+// reduced product.
+//
+// The compile-out mechanism stays available for a future reviewed decision.
+// If a surface is listed below, this file is data read at BUILD time by
+// vite.config.js, and the hiding mechanism is module-graph surgery, not a
+// boolean the app evaluates:
 //
 //   vite aliases `surfaces/<name>.jsx` -> `surfaces/<name>.hidden.jsx`, whose
 //   twin imports NOTHING. The route components of a hidden surface never enter
@@ -48,10 +49,6 @@
 //        `betting` entry in HIDDEN_SURFACES plus a `surfaces/betting.jsx`
 //        twin pair - the mechanism does not change.
 //
-// D2 (§9) is still open: submit v1 WITH the DEX surface and defend it,
-// or hide it preemptively. The spec recommends hiding, which is what the table
-// below does. Answering D2 the other way is deleting one line here.
-
 /** Profile names are owned by `src/csp.js`; imported so the two cannot drift. */
 import { BUILD_PROFILES, DEFAULT_BUILD_PROFILE } from '../csp.js';
 
@@ -69,7 +66,7 @@ export const SURFACES = Object.freeze(['dex']);
  */
 export const HIDDEN_SURFACES = Object.freeze({
     default: Object.freeze([]),
-    store: Object.freeze(['dex']),
+    store: Object.freeze([]),
 });
 
 /**
@@ -126,10 +123,9 @@ export const SURFACE_MODULES = Object.freeze({
  * Is `surface` compiled into a build of `profile`?
  *
  * Throws on an unknown profile or surface rather than answering, on the same
- * reasoning as `resolveBuildProfile`: a typo that quietly answers "enabled"
- * ships a surface a store build was supposed to drop, and a typo that quietly
- * answers "hidden" ships a web build missing its DEX. Neither is discoverable
- * by looking at the running app.
+ * reasoning as `resolveBuildProfile`: a typo that quietly answers either way
+ * makes the built surface set disagree with the reviewed registry. That is not
+ * reliably discoverable by looking at the running app.
  *
  * @param {string} surface
  * @param {string} [profile]
