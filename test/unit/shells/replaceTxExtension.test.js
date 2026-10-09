@@ -6,7 +6,6 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-import { existsSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sendRbfRequest } from '../../../packages/core/src/flows/rbfReplace.js';
 import { attachChromeRuntime } from '../../../packages/extension/src/background/ChromeRuntimeAdapter.js';
@@ -26,10 +25,6 @@ const reply = {
     broadcastedAt: '2026-10-09T12:00:00.000Z',
     feeIncrease: '0.00001',
 };
-
-const hasReplacementEngine = existsSync(
-    new URL('../../../packages/core/src/flows/rbfPlan.js', import.meta.url),
-);
 
 let previousChrome;
 
@@ -89,7 +84,7 @@ describe('extension popup replace transaction messaging', () => {
         await expect(sendRbfRequest({ messaging: popup, request })).resolves.toBe(reply);
     });
 
-    it.runIf(hasReplacementEngine)('reaches the registered tx.replace background route', async () => {
+    it('reaches the registered tx.replace background route', async () => {
         const runtime = createRuntime();
         const host = createHost();
         const detach = attachChromeRuntime(host, runtime);
