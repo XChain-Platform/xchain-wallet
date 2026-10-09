@@ -38,7 +38,9 @@
 // vault.
 
 import { strict as assert } from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +65,19 @@ if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND
         + 'WAYLAND_DISPLAY. Invoke this gate through xvfb-run on a headless Linux host.');
     process.exit(1);
 }
+
+// Complete Electron's installer before Playwright starts the launch timeout.
+// The installer is a no-op when the matching runtime is already present.
+const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
+const electronPackageDir = dirname(requireFromDesktop.resolve('electron/package.json'));
+execFileSync(process.execPath, [join(electronPackageDir, 'install.js')], {
+    stdio: 'inherit',
+});
+const electronExecutable = requireFromDesktop('electron');
+assert.ok(
+    existsSync(electronExecutable),
+    `Electron reported an executable that does not exist: ${electronExecutable}`,
+);
 
 const { _electron: electron } = await import('@playwright/test');
 
