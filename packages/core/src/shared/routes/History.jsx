@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     isEntryReplaceable,
+    isReplaceCallAvailable,
     replaceFromHistoryEntry,
     cancelUndoSnapshot,
     undoCancel,
@@ -1693,7 +1694,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     // an allowlisted action), so the offer has to be withdrawn here.
     // Replacing a replacement bumps the fee on a transaction the network
     // has already dropped, spends a fee, and moves nothing.
-    if (replaceable.ok && !entry.pending?.replaced) {
+    if (isReplaceCallAvailable(messaging) && replaceable.ok && !entry.pending?.replaced) {
         moreOptions.push({
             id: 'rbf-speedup',
             label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',

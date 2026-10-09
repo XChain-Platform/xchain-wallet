@@ -231,6 +231,7 @@ export {
 } from './feeEstimate.js';
 export {
     isEntryReplaceable,
+    isReplaceCallAvailable,
     sendRbfRequest,
     replaceFromHistoryEntry,
     cancelUndoSnapshot,
