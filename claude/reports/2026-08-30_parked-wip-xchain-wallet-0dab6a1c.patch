@@ -1,0 +1,1044 @@
+diff --git a/packages/core/src/flows/messageAction.js b/packages/core/src/flows/messageAction.js
+index 3ec3540b..dacf8259 100644
+--- a/packages/core/src/flows/messageAction.js
++++ b/packages/core/src/flows/messageAction.js
+@@ -305,6 +305,17 @@ export async function messageAction(opts) {
+         actionData: { action: 'MESSAGE', params },
+         encoderOpts: {
+             pubkey: source.publicKey,
++            // Why a send worked while the handshake below did not, when
++            // neither used to name a change address: the compose surface
++            // routes sends through the confirm pipeline, where
++            // composeForConfirm supplies `sourceAddress` and `change` itself
++            // and hands back a prebuilt PSBT, so these options never reached
++            // the encoder. The legacy review stage (a locked wallet sending
++            // ECDH) and any direct caller build LIVE, and on that lane the
++            // encoder refuses to compose without a change sink. Supplying the
++            // pair here covers both; on the prebuilt lane it is inert.
++            sourceAddress: source.address,
++            change: source.address,
+             ...(opts.fee !== undefined && { fee: opts.fee }),
+             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+@@ -378,6 +389,18 @@ export async function handshakeAction(opts) {
+         actionData: { action: 'MESSAGE', params },
+         encoderOpts: {
+             pubkey: source.publicKey,
++            // The handshake is built LIVE: the compose surface calls this flow
++            // directly, never through the confirm pipeline, so nothing else
++            // supplies the funding address or the change sink. Without
++            // `change` the encoder refused every key request with "Transaction
++            // would burn significant satoshis as fees. Please provide a change
++            // address." (the guard is right: with no change output the whole
++            // funding UTXO beyond the data outputs would be miner fee), and
++            // first contact with an address the chain has never seen was
++            // impossible. `submitAction` only rotates a change address that is
++            // already present. Same defect shape as labelSync's publish.
++            sourceAddress: source.address,
++            change: source.address,
+             ...(opts.fee !== undefined && { fee: opts.fee }),
+             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+             ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+diff --git a/packages/core/src/shared/routes/DeployContractForm.jsx b/packages/core/src/shared/routes/DeployContractForm.jsx
+index aabae8cb..45212675 100644
+--- a/packages/core/src/shared/routes/DeployContractForm.jsx
++++ b/packages/core/src/shared/routes/DeployContractForm.jsx
+@@ -81,7 +81,8 @@ function coinLabel(c) {
+  *
+  * Hex-encoding of the source happens inside the SDK validator chain;
+  * callers pass raw UTF-8 as `params.CODE`. GAS_LIMIT is a decimal
+- * string per the protocol. NAME + CONSTRUCTOR_PARAMS are optional.
++ * string per the protocol. CONSTRUCTOR_PARAMS is optional; Name is a
++ * screen-only label and never reaches the encoder (XC-1778).
+  *
+  * @param {object} props
+  * @param {string} props.walletId
+@@ -265,7 +266,11 @@ export function DeployContractForm({ walletId, onBack }) {
+             CODE: code,
+             GAS_LIMIT: String(gasLimit || suggestedGas || ''),
+         };
+-        if (name.trim()) p.NAME = name.trim();
++        // XC-1778: `name` is deliberately NOT here. No DEPLOY version has a
++        // NAME slot (the Name input's own hint says so), and the SDK's
++        // formatSelector refuses any leg field the format cannot place, so
++        // putting the label on the wire made a filled-in optional field
++        // block its own action. The label lives in `displayName` below.
+         // PC-38: CONSTRUCTOR_PARAMS is a REST field on the non-stakeable
+         // formats (`...CONSTRUCTOR_PARAMS` on v0/v2), so the wire wants the
+         // ARRAY and emits one segment per entry. Sending the raw pipe-delimited
+@@ -285,7 +290,10 @@ export function DeployContractForm({ walletId, onBack }) {
+             p.SLASH_DESTINATION = slashDestination.trim() || 'BURN';
+         }
+         return p;
+-    }, [code, gasLimit, suggestedGas, name, constructorParams, cooldownBlocks, slashDestination]);
++    }, [code, gasLimit, suggestedGas, constructorParams, cooldownBlocks, slashDestination]);
++
++    // Screen-only label for the review step; never part of actionParams.
++    const displayName = name.trim();
+ 
+     // PC-38: load the template list + any resumable run once the chain is known.
+     useEffect(() => {
+@@ -696,7 +704,7 @@ export function DeployContractForm({ walletId, onBack }) {
+         return wrap(
+             <form onSubmit={handleSubmit} noValidate>
+                 <p className={styles.summary}>
+-                    Deploy contract {actionParams.NAME ? `"${actionParams.NAME}"` : ''} to{' '}
++                    Deploy contract {displayName ? `"${displayName}"` : ''} to{' '}
+                     {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
+                 </p>
+                 <dl className={styles.detailsList}>
+@@ -709,7 +717,7 @@ export function DeployContractForm({ walletId, onBack }) {
+                         <AddressText address={fromAddress.address} />
+                     </dd>
+                     <dt className={styles.detailsLabel}>Name</dt>
+-                    <dd className={styles.detailsValue}>{actionParams.NAME || '(unnamed)'}</dd>
++                    <dd className={styles.detailsValue}>{displayName || '(unnamed)'}</dd>
+                     <dt className={styles.detailsLabel}>Code</dt>
+                     <dd className={styles.detailsValue}>
+                         {sizeInfo ? `${sizeInfo.bytes} bytes` : `${new Blob([code]).size} bytes`}
+diff --git a/packages/desktop/package.json b/packages/desktop/package.json
+index 987159d4..132dbe23 100644
+--- a/packages/desktop/package.json
++++ b/packages/desktop/package.json
+@@ -30,7 +30,7 @@
+         "react": "^18.3.0",
+         "react-dom": "^18.3.0",
+         "undici": "^8.9.0",
+-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.10.0"
++        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.11.1"
+     },
+     "devDependencies": {
+         "@vitejs/plugin-react": "^4.3.0",
+diff --git a/packages/extension/package.json b/packages/extension/package.json
+index e6c5f353..847520c8 100644
+--- a/packages/extension/package.json
++++ b/packages/extension/package.json
+@@ -20,7 +20,7 @@
+         "qrcode": "^1.5.4",
+         "react": "^18.3.0",
+         "react-dom": "^18.3.0",
+-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.10.0"
++        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.11.1"
+     },
+     "devDependencies": {
+         "@vitejs/plugin-react": "^4.3.0",
+diff --git a/packages/web/package.json b/packages/web/package.json
+index 7c1f8f24..4de0af59 100644
+--- a/packages/web/package.json
++++ b/packages/web/package.json
+@@ -21,7 +21,7 @@
+         "qrcode": "^1.5.4",
+         "react": "^18.3.0",
+         "react-dom": "^18.3.0",
+-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.10.0"
++        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.11.1"
+     },
+     "devDependencies": {
+         "@vitejs/plugin-basic-ssl": "^1.1.0",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 90543089..29eee7ad 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -176,8 +176,8 @@ importers:
+         specifier: ^8.9.0
+         version: 8.9.0
+       xchain-sdk:
+-        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
+-        version: '@dankest-llc/xchain-sdk@0.10.0'
++        specifier: npm:@dankest-llc/xchain-sdk@0.11.1
++        version: '@dankest-llc/xchain-sdk@0.11.1'
+     devDependencies:
+       '@vitejs/plugin-react':
+         specifier: ^4.3.0
+@@ -222,8 +222,8 @@ importers:
+         specifier: ^18.3.0
+         version: 18.3.1(react@18.3.1)
+       xchain-sdk:
+-        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
+-        version: '@dankest-llc/xchain-sdk@0.10.0'
++        specifier: npm:@dankest-llc/xchain-sdk@0.11.1
++        version: '@dankest-llc/xchain-sdk@0.11.1'
+     devDependencies:
+       '@vitejs/plugin-react':
+         specifier: ^4.3.0
+@@ -298,8 +298,8 @@ importers:
+         specifier: ^18.3.0
+         version: 18.3.1(react@18.3.1)
+       xchain-sdk:
+-        specifier: npm:@dankest-llc/xchain-sdk@0.10.0
+-        version: '@dankest-llc/xchain-sdk@0.10.0'
++        specifier: npm:@dankest-llc/xchain-sdk@0.11.1
++        version: '@dankest-llc/xchain-sdk@0.11.1'
+     devDependencies:
+       '@vitejs/plugin-basic-ssl':
+         specifier: ^1.1.0
+@@ -606,10 +606,9 @@ packages:
+     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
+     engines: {node: '>=18'}
+ 
+-  '@dankest-llc/xchain-sdk@0.10.0':
+-    resolution: {integrity: sha512-jWNsVPkZ6UQBUShYjz+aihIgTz922Vnq7FrTg6W5VnB80Cq6vF5oCuiDqCH38/vHb8A7gp+i3Qi/tP0VrcHeXA==}
++  '@dankest-llc/xchain-sdk@0.11.1':
++    resolution: {integrity: sha512-9s3TQwFiadltaKYPo42FyR/EJUA7oUDOM+1D2FKL7tuou2i3yy3Vxs7hT2Q3aARbPe+ED/eNtyAEGQXS2HwYNw==}
+     engines: {node: '>=22.0.0'}
+-    deprecated: superseded by the platform version stream; install 0.10.0 or later
+ 
+   '@electron-internal/extract-zip@1.0.5':
+     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
+@@ -4612,7 +4611,7 @@ snapshots:
+ 
+   '@csstools/css-tokenizer@3.0.4': {}
+ 
+-  '@dankest-llc/xchain-sdk@0.10.0':
++  '@dankest-llc/xchain-sdk@0.11.1':
+     dependencies:
+       '@bitcoinerlab/secp256k1': 1.2.0
+       '@brandonblack/musig': 0.0.1-alpha.1
+diff --git a/test/e2e/fixtures/priceSeed.js b/test/e2e/fixtures/priceSeed.js
+index 32322ce5..d00c5c76 100644
+--- a/test/e2e/fixtures/priceSeed.js
++++ b/test/e2e/fixtures/priceSeed.js
+@@ -366,6 +366,93 @@ export function planSeedRows({ regtestCoin, existingRounds = {}, chainTime, wall
+     ];
+ }
+ 
++/**
++ * Reads a `/api/feequote` body and says whether it is a VERDICT, a body worth
++ * asking again for, or something that must never be handed to a spec as a
++ * quote.
++ *
++ * The distinction this draws is the one that cost tokens/ticker-grammar four
++ * driven runs of wrong conclusions (XC-1786/XC-1787). A verdict is a body whose
++ * `status` is a string: `valid`, or `invalid: <named reason>`. The venue never
++ * answers a refusal without naming it, so a body with NO `status` is not the
++ * chain refusing anything; it is the explorer or the indexer failing to answer
++ * (a rate limit, an upstream timeout, a busy quote engine, an indexer that is
++ * not ready) or the quote path dying before the dry-run produced a verdict. A
++ * caller that does `String(quote.status)` on such a body reads the literal
++ * "undefined", compares it against 'valid', and records a refusal the chain
++ * never gave.
++ *
++ * Three kinds come out:
++ *   - `verdict`:    `status` is a string; `status` is carried on the result.
++ *   - `retry`:      the venue is still working (busy) or the hop blipped
++ *                   (UPSTREAM_ERROR, RATE_LIMITED, no body); ask again.
++ *   - `unreadable`: a body that is neither, which the caller must FAIL on,
++ *                   naming what came back, rather than return as a quote.
++ *
++ * `priceLapsed` flags the one unreadable body whose remedy is known: an error
++ * naming a missing or stale oracle price, which a re-seed repairs.
++ *
++ * @param {any} body the parsed `/api/feequote` response, or null on transport failure
++ * @returns {{ kind: 'verdict', status: string }
++ *         | { kind: 'retry', reason: string }
++ *         | { kind: 'unreadable', reason: string, priceLapsed: boolean }}
++ */
++export function readQuote(body) {
++    if (!body || typeof body !== 'object') {
++        return { kind: 'retry', reason: 'the explorer returned no fee quote at all' };
++    }
++    if (typeof body.status === 'string') {
++        return { kind: 'verdict', status: body.status };
++    }
++    if (body.busy === true || body.code === 'UPSTREAM_ERROR' || body.code === 'RATE_LIMITED') {
++        return { kind: 'retry', reason: body.error || body.code || 'the venue is still working' };
++    }
++    const error = typeof body.error === 'string' ? body.error : '';
++    return {
++        kind: 'unreadable',
++        reason: error || (body.code ? `the explorer answered ${body.code}` : 'the venue returned no verdict'),
++        priceLapsed: /no current oracle price|stale beyond/i.test(error),
++    };
++}
++
++/**
++ * The message a spec's operator should get when `/api/feequote` gave no
++ * verdict, even after the venue price was re-seeded and the question re-asked.
++ *
++ * Its whole job is to make sure the failure reads as VENUE state and names
++ * the price, so that the next reader does not write "the venue refuses this
++ * class" into a spec header. Everything that was learned along the way rides
++ * on it: what the explorer answered both times, and what the re-seed found.
++ *
++ * @param {{ action: string, params?: string, first: object, retry: object,
++ *           reseed: object|null, reseedError?: string|null }} args
++ */
++export function noVerdictMessage({ action, params, first, retry, reseed, reseedError = null }) {
++    const lines = [
++        `/api/feequote returned NO VERDICT for ${action}${params !== undefined ? ` (${params})` : ''}: `
++            + `${retry.reason}.`,
++        '',
++        'This is NOT a refusal and must never be recorded as one. A genuine refusal',
++        'always carries a named reason in `status` (`invalid: TICK (length)`,',
++        '`invalid: issued by another address`); a body with no `status` is the venue',
++        'failing to answer, and the usual cause is the seeded venue price having lapsed',
++        `mid-run: it lives ${ORACLE_MAX_PRICE_AGE_SECONDS}s of CHAIN time and every driven`,
++        'action mines blocks that burn it. The tell is which steps fail: early ones pass',
++        'and late ones "get refused", which is a clock, not a rule.',
++    ];
++    if (retry.priceLapsed || first.priceLapsed) {
++        lines.push('', 'The body names the price itself, so this IS that case.');
++    }
++    if (reseedError) {
++        lines.push('', `Re-seeding the price was attempted and FAILED: ${reseedError}`);
++    } else if (reseed) {
++        const margin = Number.isFinite(reseed.marginSeconds) ? `${reseed.marginSeconds}s of chain life left` : 'margin unknown';
++        lines.push('', `Re-seed result: ${reseed.seeded ? 'wrote a fresh price' : `did not write (${reseed.reason})`}, ${margin}.`);
++    }
++    lines.push('', `First body: ${JSON.stringify(first.body)}`, `Body after re-seed: ${JSON.stringify(retry.body)}`);
++    return lines.join('\n');
++}
++
+ /**
+  * Reads a `/api/feequote` body and says whether the venue can price an action
+  * right now.
+diff --git a/test/e2e/fixtures/regtest.js b/test/e2e/fixtures/regtest.js
+index 3114c99a..5a380f8a 100644
+--- a/test/e2e/fixtures/regtest.js
++++ b/test/e2e/fixtures/regtest.js
+@@ -67,8 +67,10 @@ import {
+     XCHAIN_PAIR,
+     XCHAIN_USD_PRICE,
+     VENUE_PRICE,
++    noVerdictMessage,
+     planSeedRows,
+     priceVerdict,
++    readQuote,
+     readStateScript,
+     seedMarginSeconds,
+     settlePrice,
+@@ -806,9 +808,30 @@ export async function warmPreflight({ action, params, source }, timeoutMs = 120_
+  * price this action" and sends the next session hunting a price-seed problem
+  * that is not there.
+  *
++ * WHAT IT PROMISES. The body it returns ALWAYS carries a string `status`: the
++ * chain's verdict, `valid` or `invalid: <named reason>`. It never hands back a
++ * statusless body as though it were a quote. That contract exists because the
++ * old version did exactly that (XC-1787): once the seeded venue price lapsed
++ * mid-run, `/api/feequote` answered with an error body and no `status`, this
++ * returned it, and every caller doing `String(quote?.status)` read the literal
++ * "undefined" as the chain REFUSING the action. tokens/ticker-grammar wrote
++ * four ticker classes up as venue refusals that way. A refusal is always
++ * named; "undefined" is never a verdict.
++ *
++ * So a statusless body is classified (`readQuote`): the transient ones
++ * (busy engine, UPSTREAM_ERROR, RATE_LIMITED, no body) are re-asked inside the
++ * budget, and anything else gets ONE repair, a `seedPrices()` that probes the
++ * price and re-seeds it only if it is thin, followed by one more ask. If that
++ * still yields no verdict, this THROWS, naming the price and quoting both
++ * bodies, so the failure reads as venue state and never as a verdict string.
++ *
++ * `valid: false` on a body that does carry `status` is still returned as-is:
++ * that is the venue saying it cannot price a VALID action (a stale oracle at
++ * the pricing stage), which is a different problem the spec asserts on.
++ *
+  * @param {{ action: string, params: string, source?: string, feeOutputSats?: string }} q
+  * @param {number} [timeoutMs]
+- * @returns {Promise<any>} the parsed quote, once it comes back valid
++ * @returns {Promise<any>} the parsed quote; `status` is always a string
+  */
+ export async function warmFeeQuote({ action, params, source, feeOutputSats }, timeoutMs = 60_000) {
+     const q = new URLSearchParams({ action });
+@@ -817,29 +840,49 @@ export async function warmFeeQuote({ action, params, source, feeOutputSats }, ti
+     if (feeOutputSats !== undefined) q.set('feeOutputSats', String(feeOutputSats));
+     const url = `${EXPLORER_URL}/${REGTEST_COIN}/api/feequote?${q.toString()}`;
+ 
+-    const deadline = Date.now() + timeoutMs;
+-    let last = null;
+-    while (Date.now() < deadline) {
++    const ask = async () => {
++        let body = null;
+         try {
+             const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+-            last = await res.json();
+-            // `valid` is the only success signal that matters: a 200 carrying
+-            // `valid: false` means the venue really cannot price this action
+-            // (a stale oracle), which is a different problem and must NOT be
+-            // retried into a timeout - so return it and let the spec assert.
+-            if (last && last.valid === true) return last;
+-            if (last && last.code !== 'UPSTREAM_ERROR') return last;
++            body = await res.json();
+         } catch {
+-            // Transport-level blip; same treatment as an UPSTREAM_ERROR.
++            // Transport-level blip; `readQuote(null)` classifies it as a retry.
+         }
++        return { body, ...readQuote(body) };
++    };
++
++    const deadline = Date.now() + timeoutMs;
++    let last = null;
++    while (Date.now() < deadline) {
++        last = await ask();
++        if (last.kind === 'verdict') return last.body;
++        if (last.kind === 'unreadable') break;
+         await new Promise((r) => setTimeout(r, 1_000));
+     }
+-    throw new Error(
+-        `fee quote for ${action} never came back valid within ${timeoutMs}ms. Every attempt was `
+-        + `UPSTREAM_ERROR (the explorer's 5s indexer-hop timeout,) rather than an`
+-        + `invalid quote, so this is venue state and not a wallet defect - last: `
+-        + `${JSON.stringify(last)}`,
+-    );
++    if (!last || last.kind === 'retry') {
++        throw new Error(
++            `fee quote for ${action} never came back with a verdict within ${timeoutMs}ms. Every `
++            + `attempt was transient (${last ? last.reason : 'no attempt completed'}: the explorer's `
++            + '5s indexer-hop timeout, a rate limit or a busy quote engine) rather than a verdict, '
++            + `so this is venue state and not a wallet defect - last: ${JSON.stringify(last && last.body)}`,
++        );
++    }
++
++    // No verdict and not transient. The one repair a spec can make is the
++    // price: `seedPrices` probes first and only writes if the margin is thin,
++    // so it is safe to call from any spec, and its result (or its failure) is
++    // part of what the operator needs to read.
++    const first = last;
++    let reseed = null;
++    let reseedError = null;
++    try {
++        reseed = await seedPrices();
++    } catch (err) {
++        reseedError = err && err.message ? err.message : String(err);
++    }
++    const retry = await ask();
++    if (retry.kind === 'verdict') return retry.body;
++    throw new Error(noVerdictMessage({ action, params, first, retry, reseed, reseedError }));
+ }
+ 
+ /**
+diff --git a/test/e2e/tests/betting/bet-deadline-race.regtest.spec.js b/test/e2e/tests/betting/bet-deadline-race.regtest.spec.js
+index 548d6d4e..7cf49511 100644
+--- a/test/e2e/tests/betting/bet-deadline-race.regtest.spec.js
++++ b/test/e2e/tests/betting/bet-deadline-race.regtest.spec.js
+@@ -543,7 +543,7 @@ test.describe('BET deadline race', () => {
+             // took: `false` here means the indexer refuses the bet, which is the
+             // only reason the panel below has anything to say.
+             const quote = await warmBet(punter, feedIndex, false);
+-            expect(String(quote.status), 'the indexer refuses the bet for the reason this spec '
++            expect(quote.status, 'the indexer refuses the bet for the reason this spec '
+                 + 'asserts on screen').toMatch(/feed not open/i);
+ 
+             await page.getByTestId('confirm-approve').click();
+diff --git a/test/e2e/tests/contracts/deploy-execute.regtest.spec.js b/test/e2e/tests/contracts/deploy-execute.regtest.spec.js
+index aa7d2e7d..e45e07ef 100644
+--- a/test/e2e/tests/contracts/deploy-execute.regtest.spec.js
++++ b/test/e2e/tests/contracts/deploy-execute.regtest.spec.js
+@@ -208,21 +208,23 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
+     // the pinned action version has no slot for, which
+     // `xchain-sdk/formatSelector.js` then correctly refuses:
+     //
+-    //   XC-1778  DEPLOY / NAME. `DeployContractForm.jsx:268` puts the
+-    //            `Name (optional)` input - whose own hint says it is a label
+-    //            for that screen only - into the action params, so filling in
+-    //            an optional field as offered makes the action unsubmittable.
+-    //            This spec fills it, so it is that defect's ready-made proof,
+-    //            and this is where it stops first (`:258`).
++    //   XC-1778  DEPLOY / NAME. FIXED 2026-08-28. `DeployContractForm.jsx`
++    //            used to put the `Name (optional)` input - whose own hint
++    //            says it is a label for that screen only - into the action
++    //            params, so filling in an optional field as offered made the
++    //            action unsubmittable. This spec fills it, and driven on RLTC
++    //            with the fix it now clears the deploy leg (confirm modal,
++    //            broadcast, and the four-segment wire assertion below) and
++    //            stops at "call a method on it" on XC-1784.
+     //   XC-1784  EXECUTE / GAS_LIMIT. `ExecuteContractForm.jsx:357` sets
+     //            `GAS_LIMIT` on EVERY compose while EXECUTE v0's wire format
+     //            has no gas slot at all, so EXECUTE is broken end to end on
+     //            every chain. That is the wall waiting behind the DEPLOY fix,
+     //            and it is separately pinned by `deploy-chunked-lane`.
+     //
+-    // Un-fixme it when XC-1778 lands, expect it to stop again on XC-1784, and
+-    // un-fixme it for good when both are fixed. Both claims below are right as
+-    // written; it is the product that has to move.
++    // Un-fixme it for good when XC-1784 lands; the deploy half is already
++    // proven. Both claims below are right as written; it is the product
++    // that has to move.
+     test.fixme('a contract deployed from the wallet accepts a method call from the wallet', async ({ page }) => {
+         let deployer;
+         let contractIndex;
+diff --git a/test/e2e/tests/messaging/handshake-and-methods.regtest.spec.js b/test/e2e/tests/messaging/handshake-and-methods.regtest.spec.js
+index 41519635..f90f6f33 100644
+--- a/test/e2e/tests/messaging/handshake-and-methods.regtest.spec.js
++++ b/test/e2e/tests/messaging/handshake-and-methods.regtest.spec.js
+@@ -496,48 +496,25 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
+         });
+     });
+ 
+-    // XC-1769 IS FIXED AND THIS TEST IS HOW WE KNOW: un-fixme'd and driven
+-    // 2026-08-27 (sixth run), it now fails with the venue's own words on screen
+-    // where it used to fail against a blank surface. The page snapshot carries
+-    // `alert: "Encoder RPC error: Transaction would burn significant satoshis
+-    // as fees. Please provide a change address."` - the exact sentence this
+-    // file was written to make visible.
++    // UN-FIXME'D 2026-08-28 FOR XC-1820. The cause it pinned is measured, not
++    // guessed: a send from this screen goes through the confirm pipeline, where
++    // composeForConfirm supplies `sourceAddress` and `change` itself and hands
++    // back a prebuilt PSBT, so messageAction's own encoderOpts never reached
++    // the encoder. The handshake is called directly (`messaging.sendHandshake`
++    // -> `handshakeAction`) and built LIVE, with encoderOpts of
++    // `{ pubkey, fee?, feePerKb?, rbf? }` and no change sink, and
++    // `submitAction` only ROTATES a change address that is already present.
++    // That is why the plaintext fallback in test 1 landed on chain while this
++    // button reported "Encoder RPC error: Transaction would burn significant
++    // satoshis as fees. Please provide a change address." Both messaging flows
++    // now name the pair, the same fix XC-1076 gave labelSync (whose entry had
++    // claimed publishLabelsNow was the only flow that omitted them).
+     //
+-    // RE-FIXME'D AGAINST WHAT IT UNCOVERED, **XC-1820**, which is a different
+-    // defect one layer down: the key request cannot compose at all.
+-    // `handshakeAction` (flows/messageAction.js:378) builds
+-    // `encoderOpts: { pubkey, fee?, feePerKb?, rbf? }` with no `change` and no
+-    // `sourceAddress`, and `submitAction` only ROTATES a change address that is
+-    // already there (`submitAction.js:241`), it never supplies one. Same shape
+-    // as XC-1076, the label-sync publish, whose own defect entry claimed
+-    // `publishLabelsNow` was "the only action flow in the wallet that omits
+-    // them" - it is not.
+-    //
+-    // WHAT IS NOT PROVEN, and the next session should not assume it: why the
+-    // SEND path in this same file succeeds (row 33 drove the plaintext fallback
+-    // green on chain) while the handshake does not, when neither sets `change`
+-    // literally. That difference is the thing to measure first, and guessing at
+-    // it is how this campaign has produced wrong causes before.
+-    //
+-    // The assertions below are right and should stay exactly as written.
+-    // Superseded header follows.
+-    // FIXME'd 2026-08-27 BECAUSE IT PINS A REAL DEFECT THAT IS NOT FIXED YET,
+-    // not because it is unfinished. Registered as **XC-1769**.
+-    //
+-    // Driven centrally on Litecoin, this went red after 2.4 minutes with the
+-    // message this file already predicted from source: the handshake never
+-    // confirmed, and the compose surface reports the failure NOWHERE.
+-    // `handleRequestSession` writes every failure into `submitError`, the form
+-    // stage renders `submitError` nowhere at all, and the same function returns
+-    // early with "Enter your password to send the key request." when the signer
+-    // pool is not ready, on a stage that has no password field. So the button
+-    // does nothing, silently, with no way for the user to learn why or to
+-    // comply.
+-    //
+-    // The claim below is right and should stay exactly as written; it is the
+-    // product that has to move. Un-fixme it when that fix lands, and expect this
+-    // test to be how you know it landed.
+-    test.fixme('the handshake publishes OUR key to an address the chain has never seen', async ({ page }) => {
++    // History, kept because each layer was found by the one before it:
++    // XC-1769 (2026-08-27) made the failure VISIBLE (the compose stage rendered
++    // the handshake error nowhere, so the button did nothing), and that is what
++    // exposed XC-1820 one layer down. The assertions below never changed.
++    test('the handshake publishes OUR key to an address the chain has never seen', async ({ page }) => {
+         const txids = trackBroadcastTxids(page);
+         let ownAddress;
+         let main;
+diff --git a/test/e2e/tests/tokens/edition-mint-window.regtest.spec.js b/test/e2e/tests/tokens/edition-mint-window.regtest.spec.js
+index e14e922a..a1117f08 100644
+--- a/test/e2e/tests/tokens/edition-mint-window.regtest.spec.js
++++ b/test/e2e/tests/tokens/edition-mint-window.regtest.spec.js
+@@ -65,6 +65,7 @@ import {
+     switchToRegtest,
+     tokenBalance,
+     unlockAfterReload,
++    warmFeeQuote,
+     expectConfirmModal as sharedConfirmModal,
+ } from '../../fixtures/regtest.js';
+ 
+@@ -121,13 +122,10 @@ async function chainTip() {
+  * independent control rather than a second opinion from the same source.
+  */
+ async function feeQuote(amount, source, tick = TICK) {
+-    const url = new URL(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote`);
+-    url.searchParams.set('action', 'MINT');
+-    url.searchParams.set('params', `0|${tick}|${amount}`);
+-    url.searchParams.set('source', source);
+-    const res = await fetch(url);
+-    if (!res.ok) throw new Error(`feequote MINT ${tick} ${amount} -> ${res.status}`);
+-    return res.json();
++    // `warmFeeQuote` rather than a bare fetch: it retries the explorer's
++    // cold-path 502 and, more to the point, never returns a body without a
++    // string `status` (XC-1787), so every verdict read below is the chain's.
++    return warmFeeQuote({ action: 'MINT', params: `0|${tick}|${amount}`, source });
+ }
+ 
+ /**
+@@ -446,7 +444,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
+             // that what follows is attributable to the window and not to the
+             // wallet agreeing with itself.
+             const quote = await feeQuote(PER_TX, source);
+-            expect(String(quote.status)).toMatch(/MINT_START_BLOCK/i);
++            expect(quote.status).toMatch(/MINT_START_BLOCK/i);
+ 
+             const footer = await composeMint(page, PER_TX);
+ 
+@@ -515,7 +513,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
+ 
+         await test.step('PAST the address cap: refused again, and the footer still offers a full transaction', async () => {
+             const quote = await feeQuote(PER_TX, source);
+-            expect(String(quote.status)).toMatch(/MINT_ADDRESS_MAX/i);
++            expect(quote.status).toMatch(/MINT_ADDRESS_MAX/i);
+ 
+             const footer = await composeMint(page, PER_TX);
+ 
+@@ -571,7 +569,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
+             // Exhausted, and the chain says so - the control that makes the
+             // next step mean something.
+             const quote = await feeQuote(PER_TX, issuer, TICK_CLOSING);
+-            expect(String(quote.status)).toMatch(/MINT_ADDRESS_MAX/i);
++            expect(quote.status).toMatch(/MINT_ADDRESS_MAX/i);
+         });
+ 
+         await test.step('a SECOND address mints the same token in the same window', async () => {
+@@ -586,7 +584,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
+             // same window, same amount, 20 already minted - the only thing that
+             // changes is who is asking, and the answer flips.
+             const quote = await feeQuote(PER_TX, second, TICK_CLOSING);
+-            expect(String(quote.status),
++            expect(quote.status,
+                 'the venue refuses a fresh address too, so the cap is not per-address at all')
+                 .toBe('valid');
+ 
+@@ -611,7 +609,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
+             await waitForIndexedHeight(stopBlock + 1);
+ 
+             const quote = await feeQuote(PER_TX, second, TICK_CLOSING);
+-            expect(String(quote.status)).toMatch(/MINT_STOP_BLOCK/i);
++            expect(quote.status).toMatch(/MINT_STOP_BLOCK/i);
+ 
+             // Deliberately the SECOND address: it has minted 10 of its 20, so
+             // nothing about its own allowance stops it. The only thing that
+diff --git a/test/e2e/tests/tokens/genesis-locks.regtest.spec.js b/test/e2e/tests/tokens/genesis-locks.regtest.spec.js
+index 55156e91..17c3a3c5 100644
+--- a/test/e2e/tests/tokens/genesis-locks.regtest.spec.js
++++ b/test/e2e/tests/tokens/genesis-locks.regtest.spec.js
+@@ -53,6 +53,7 @@ import {
+     selectVenueChain,
+     switchToRegtest,
+     unlockAfterReload,
++    warmFeeQuote,
+     expectConfirmModal as sharedConfirmModal,
+ } from '../../fixtures/regtest.js';
+ 
+@@ -98,13 +99,9 @@ const explorerJson = async (path) => {
+  * off, so the chain's answer has to be asked for directly.
+  */
+ async function describeQuote(description, source, tick = TICK) {
+-    const url = new URL(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote`);
+-    url.searchParams.set('action', 'ISSUE');
+-    url.searchParams.set('params', `1|${tick}|${description}`);
+-    url.searchParams.set('source', source);
+-    const res = await fetch(url);
+-    if (!res.ok) throw new Error(`feequote ISSUE v1 -> ${res.status}`);
+-    return res.json();
++    // `warmFeeQuote` never returns a body without a string `status`
++    // (XC-1787), so the verdict read off it is the chain's own.
++    return warmFeeQuote({ action: 'ISSUE', params: `1|${tick}|${description}`, source });
+ }
+ 
+ async function mineIfPending() {
+@@ -359,7 +356,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
+             // The chain's own answer first, so the wallet's refusal below is
+             // being checked against something rather than believed.
+             const quote = await describeQuote(NEW_DESCRIPTION, source);
+-            expect(String(quote.status),
++            expect(quote.status,
+                 'the venue would ACCEPT a new description for a token whose LOCK_DESCRIPTION is set')
+                 .toMatch(/DESCRIPTION \(locked\)/i);
+ 
+@@ -494,12 +491,10 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
+         await test.step('and minting, which the lock says nothing about, still works', async () => {
+             // The chain first: LOCK_DESCRIPTION and MINT are unrelated rules,
+             // and `mint.js` never consults the former.
+-            const url = new URL(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote`);
+-            url.searchParams.set('action', 'MINT');
+-            url.searchParams.set('params', `0|${MINTABLE_TICK}|${EDITION_PER_TX}`);
+-            url.searchParams.set('source', source);
+-            const quote = await (await fetch(url)).json();
+-            expect(String(quote.status),
++            const quote = await warmFeeQuote({
++                action: 'MINT', params: `0|${MINTABLE_TICK}|${EDITION_PER_TX}`, source,
++            });
++            expect(quote.status,
+                 'the chain refuses to mint a token whose only lock is on its description')
+                 .toBe('valid');
+ 
+@@ -587,12 +582,10 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
+         });
+ 
+         await test.step('the chain now refuses every mint, permanently', async () => {
+-            const url = new URL(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote`);
+-            url.searchParams.set('action', 'MINT');
+-            url.searchParams.set('params', `0|${LOCKMINT_TICK}|${EDITION_PER_TX}`);
+-            url.searchParams.set('source', source);
+-            const quote = await (await fetch(url)).json();
+-            expect(String(quote.status),
++            const quote = await warmFeeQuote({
++                action: 'MINT', params: `0|${LOCKMINT_TICK}|${EDITION_PER_TX}`, source,
++            });
++            expect(quote.status,
+                 'the chain still accepts mints on a token whose LOCK_MINT is set')
+                 .toMatch(/LOCK_MINT/i);
+         });
+diff --git a/test/e2e/tests/tokens/subtoken-depth.regtest.spec.js b/test/e2e/tests/tokens/subtoken-depth.regtest.spec.js
+index 6d9bd5cb..fbe3b92c 100644
+--- a/test/e2e/tests/tokens/subtoken-depth.regtest.spec.js
++++ b/test/e2e/tests/tokens/subtoken-depth.regtest.spec.js
+@@ -71,6 +71,7 @@ import {
+     switchToRegtest,
+     tokenBalance,
+     unlockAfterReload,
++    warmFeeQuote,
+     expectConfirmModal as sharedConfirmModal,
+ } from '../../fixtures/regtest.js';
+ 
+@@ -110,13 +111,9 @@ const explorerJson = async (path) => {
+  * elsewhere.
+  */
+ async function feeQuote(tick, source) {
+-    const url = new URL(`${EXPLORER_URL}/${REGTEST_COIN}/api/feequote`);
+-    url.searchParams.set('action', 'ISSUE');
+-    url.searchParams.set('params', `0|${tick}`);
+-    url.searchParams.set('source', source);
+-    const res = await fetch(url);
+-    if (!res.ok) throw new Error(`feequote ${tick} -> ${res.status}`);
+-    return res.json();
++    // `warmFeeQuote` never returns a body without a string `status`
++    // (XC-1787), so the verdict read off it is the chain's own.
++    return warmFeeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
+ }
+ 
+ /** Spendable coin at `address`, in satoshis, off the encoder's own utxo view. */
+@@ -399,7 +396,7 @@ test.describe(`subtoken depth on ${REGTEST_CHAIN_LABEL}`, () => {
+ 
+         await test.step('level 2: an ordinary subtoken, so level 3 has a dotted parent to hang off', async () => {
+             const quote = await feeQuote(childTick, owner);
+-            expect(String(quote.status), `the venue will not price ${childTick}`).toBe('valid');
++            expect(quote.status, `the venue will not price ${childTick}`).toBe('valid');
+             await issueSubtokenAndSettle(page, {
+                 parent: PARENT,
+                 child: CHILD,
+@@ -468,7 +465,7 @@ test.describe(`subtoken depth on ${REGTEST_CHAIN_LABEL}`, () => {
+             // grandchild. Every assertion above would still be green.
+             const absentParent = `${PARENT}.${ABSENT}`;
+             const quote = await feeQuote(`${absentParent}.${GRAND}`, owner);
+-            expect(String(quote.status),
++            expect(quote.status,
+                 'the venue accepts a child under a middle level that was never issued, so this '
+                 + 'step cannot tell truncation from correctness')
+                 .toMatch(/parent unknown/i);
+diff --git a/test/e2e/tests/tokens/ticker-grammar.regtest.spec.js b/test/e2e/tests/tokens/ticker-grammar.regtest.spec.js
+index d921ca6f..35f3e060 100644
+--- a/test/e2e/tests/tokens/ticker-grammar.regtest.spec.js
++++ b/test/e2e/tests/tokens/ticker-grammar.regtest.spec.js
+@@ -193,45 +193,15 @@ const SINGLE_CHAR_CANDIDATES = (() => {
+  * own header).
+  */
+ async function chainVerdict(tick, source) {
+-    const quote = await warmFeeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
+-
+     // AN ABSENT STATUS IS NOT A VERDICT, AND CONFLATING THE TWO COST THIS SPEC
+-    // FOUR RUNS OF WRONG CONCLUSIONS.
+-    //
+-    // `String(quote?.status)` used to hand back the literal "undefined" here,
+-    // which every caller then compared against 'valid' and reported as
+-    // "the venue refuses the <class> class". Four ticker classes were written up
+-    // that way, and one of them escalated into a claim that the indexer's own
+-    // config constants do not describe what this venue admits. Probed directly
+-    // on 2026-08-27, every one of those classes reads `status: valid`, and a
+-    // genuine refusal always carries a NAMED reason (`invalid: TICK (length)`,
+-    // `invalid: issued by another address`). The venue never answers
+-    // `undefined`.
+-    //
+-    // What produces it is the VENUE PRICE LAPSING MID-RUN. A seeded price lives
+-    // `ORACLE_MAX_PRICE_AGE_SECONDS` (1800s) of CHAIN time, this spec's budget
+-    // is 2400s of wall time, and every wizard action it drives mines blocks that
+-    // burn that chain time - so a long run outlives its own price and
+-    // `warmFeeQuote` starts returning an error body with a `code` and no
+-    // `status`. The tell is which steps fail: the early classes pass and the
+-    // late ones "get refused", which is a clock, not a grammar rule.
+-    //
+-    // So: re-seed once and ask again, because a lapsed price is a venue state
+-    // this spec can repair rather than a fact about the wallet. If it is still
+-    // unreadable after that, throw loudly and quote what came back. A spec that
+-    // cannot read the chain's answer must say so rather than answer for it.
+-    if (!quote || typeof quote.status !== 'string') {
+-        await seedPrices();
+-        const retry = await warmFeeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
+-        if (retry && typeof retry.status === 'string') return retry.status;
+-        throw new Error(
+-            `the venue returned no verdict for ISSUE of "${tick}" - this is NOT a refusal and must `
+-            + 'never be recorded as one. The usual cause is the seeded venue price having lapsed '
+-            + `mid-run (it lives ${'1800'}s of CHAIN time and every action here mines blocks), which `
+-            + 'makes the action unpriceable rather than invalid. Re-seed the price and re-run. '
+-            + `Raw quote: ${JSON.stringify(quote)}`,
+-        );
+-    }
++    // FOUR RUNS OF WRONG CONCLUSIONS. `String(quote?.status)` used to hand back
++    // the literal "undefined" here once the seeded venue price lapsed mid-run,
++    // and every caller compared it against 'valid' and reported "the venue
++    // refuses the <class> class". The guarantee now lives in `warmFeeQuote`
++    // itself (XC-1787): the body it returns always carries a string `status`,
++    // and a venue that gives no verdict fails there, naming the price. This
++    // helper only has to read it.
++    const quote = await warmFeeQuote({ action: 'ISSUE', params: `0|${tick}`, source });
+     return quote.status;
+ }
+ 
+@@ -750,7 +720,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
+ 
+         await test.step('the venue prices this ISSUE in XCHAIN, and that is the figure to check', async () => {
+             const quote = await warmFeeQuote({ action: 'ISSUE', params: `0|${TICK}`, source });
+-            expect(String(quote?.status),
++            expect(quote.status,
+                 'the venue cannot price a plain ISSUE from this address').toBe('valid');
+             expect(Number(quote?.xchainFee),
+                 'the quote carries no XCHAIN fee, so there is no figure to measure the balance '
+diff --git a/test/unit/action-forms-confirm.test.jsx b/test/unit/action-forms-confirm.test.jsx
+index a9159356..dde62ad4 100644
+--- a/test/unit/action-forms-confirm.test.jsx
++++ b/test/unit/action-forms-confirm.test.jsx
+@@ -523,6 +523,31 @@ describe('Action forms confirm via the single-encode pipeline', () => {
+         expectSingleEncode(calls, { action: 'DEPLOY', submitMethod: 'deployAction' });
+     });
+ 
++    // XC-1778: the optional Name input is a label for the screen only (its
++    // own hint says so, and no DEPLOY version has a NAME slot; the SDK's
++    // formatSelector throws LEG_FIELD_NOT_IN_FORMAT on one). Filling it in
++    // used to put NAME on the wire, so composing never returned and the
++    // confirm modal never opened. Pin that the filled field stays off the
++    // wire and that the deploy still reaches Approve.
++    it('DeployContractForm keeps a filled-in Name off the wire', async () => {
++        const { calls } = await driveThroughConfirm({
++            Form: DeployContractForm,
++            props: {},
++            actionLabel: 'Deploy',
++            fill: (u) => {
++                const code = u.container.querySelector('textarea');
++                if (!code) throw new Error('no contract-code textarea');
++                fireEvent.change(code, { target: { value: 'export function main() {}' } });
++                setValue(u, 'Gas limit', '100000');
++                setValue(u, 'Name (optional)', ' Counter ');
++            },
++        });
++        expectSingleEncode(calls, { action: 'DEPLOY', submitMethod: 'deployAction' });
++        const compose = calls.find((c) => c.method === 'composeForConfirm');
++        expect(compose.args.actionData.params).not.toHaveProperty('NAME');
++        expect(Object.keys(compose.args.actionData.params).sort()).toEqual(['CODE', 'GAS_LIMIT', 'VERSION']);
++    });
++
+     it('TokenAdminForm composes ISSUE and signs the prebuilt PSBT', async () => {
+         const { calls } = await driveThroughConfirm({
+             Form: TokenAdminForm,
+diff --git a/test/unit/e2e-price-seed.test.js b/test/unit/e2e-price-seed.test.js
+index a632bc4f..5b468b8b 100644
+--- a/test/unit/e2e-price-seed.test.js
++++ b/test/unit/e2e-price-seed.test.js
+@@ -27,9 +27,11 @@ import {
+     VENUE_PRICE,
+     XCHAIN_PAIR,
+     XCHAIN_USD_PRICE,
++    noVerdictMessage,
+     planPairRows,
+     planSeedRows,
+     priceVerdict,
++    readQuote,
+     readStateScript,
+     seedMarginSeconds,
+     selectedSnapshot,
+@@ -206,6 +208,98 @@ describe('e2e price seed', () => {
+         });
+     });
+ 
++    // XC-1787: `warmFeeQuote` used to return whatever non-UPSTREAM body the
++    // explorer gave it, so a statusless error body reached specs as a "quote"
++    // and `String(quote?.status)` read "undefined" as a refusal. These pin the
++    // classification the helper now stands on: only a string `status` is a
++    // verdict, transients are re-asked, and everything else is unreadable.
++    describe('readQuote', () => {
++        it('reads a string status as the verdict, valid or named-invalid', () => {
++            expect(readQuote({ status: 'valid', valid: true })).toEqual({ kind: 'verdict', status: 'valid' });
++            expect(readQuote({ status: 'invalid: TICK (length)', valid: false }))
++                .toEqual({ kind: 'verdict', status: 'invalid: TICK (length)' });
++        });
++
++        it('keeps a valid verdict the venue cannot PRICE as a verdict, not a retry', () => {
++            // The dry-run passed and the pricing stage found the oracle stale.
++            // `status` is there, so the spec asserts on it; the price problem
++            // is carried in `valid`/`error`, which the spec reads separately.
++            const r = readQuote({
++                status: 'valid', valid: false, xchainFee: '1.00000000',
++                error: 'no current oracle price for LTC/USD (missing or stale beyond 1800s)',
++            });
++            expect(r).toEqual({ kind: 'verdict', status: 'valid' });
++        });
++
++        it('re-asks the transient shapes instead of returning them', () => {
++            expect(readQuote(null).kind).toBe('retry');
++            expect(readQuote(undefined).kind).toBe('retry');
++            expect(readQuote('not json').kind).toBe('retry');
++            expect(readQuote({ error: 'fee quote upstream error', code: 'UPSTREAM_ERROR', retryable: true }).kind)
++                .toBe('retry');
++            expect(readQuote({ error: 'Too many fee requests', code: 'RATE_LIMITED' }).kind).toBe('retry');
++            expect(readQuote({ busy: true, retryable: true, error: 'fee quote busy (8 quotes already pending)' }).kind)
++                .toBe('retry');
++        });
++
++        it('never reads an absent, null or non-string status as a verdict', () => {
++            // The shape that produced four runs of wrong conclusions: a body
++            // with a code and no status.
++            expect(readQuote({ error: 'indexer not ready' })).toEqual({
++                kind: 'unreadable', reason: 'indexer not ready', priceLapsed: false,
++            });
++            expect(readQuote({ error: 'unknown coin', code: 'UNKNOWN_COIN' }).kind).toBe('unreadable');
++            expect(readQuote({ code: 'INDEXER_NOT_CONFIGURED' }).reason).toMatch(/INDEXER_NOT_CONFIGURED/);
++            expect(readQuote({ status: null, valid: false, error: 'handler threw: boom' }).kind).toBe('unreadable');
++            expect(readQuote({ status: 200 }).kind).toBe('unreadable');
++            expect(readQuote({}).kind).toBe('unreadable');
++            expect(readQuote({}).reason).toMatch(/no verdict/);
++        });
++
++        it('flags the one unreadable body whose remedy is a re-seed', () => {
++            const r = readQuote({
++                error: 'invalid: no current oracle price for RLTC/USD (missing or stale beyond 1800s)',
++            });
++            expect(r).toMatchObject({ kind: 'unreadable', priceLapsed: true });
++            expect(readQuote({ error: 'handler threw: boom' }).priceLapsed).toBe(false);
++        });
++    });
++
++    describe('noVerdictMessage', () => {
++        const first = { kind: 'unreadable', reason: 'indexer not ready', priceLapsed: false, body: { error: 'indexer not ready' } };
++        const retry = { kind: 'unreadable', reason: 'indexer not ready', priceLapsed: false, body: { error: 'indexer not ready' } };
++
++        it('names the price, says it is not a refusal, and quotes both bodies', () => {
++            const msg = noVerdictMessage({
++                action: 'ISSUE', params: '0|abc', first, retry,
++                reseed: { seeded: true, reason: 'seeded', marginSeconds: 1795 },
++            });
++            expect(msg).toMatch(/NO VERDICT for ISSUE \(0\|abc\)/);
++            expect(msg).toMatch(/NOT a refusal/);
++            expect(msg).toMatch(new RegExp(`${ORACLE_MAX_PRICE_AGE_SECONDS}s of CHAIN time`));
++            expect(msg).toMatch(/wrote a fresh price, 1795s of chain life left/);
++            expect(msg).toMatch(/First body: \{"error":"indexer not ready"\}/);
++            expect(msg).toMatch(/Body after re-seed:/);
++            // The word every wrong write-up contained must not be a value here.
++            expect(msg).not.toMatch(/"undefined"/);
++        });
++
++        it('carries a failed re-seed and a skipped one so the reader knows what was tried', () => {
++            expect(noVerdictMessage({ action: 'MINT', first, retry, reseed: null, reseedError: 'ssh: Host key verification failed' }))
++                .toMatch(/Re-seeding the price was attempted and FAILED: ssh: Host key/);
++            expect(noVerdictMessage({
++                action: 'MINT', first, retry,
++                reseed: { seeded: false, reason: 'venue already priced', marginSeconds: 1500 },
++            })).toMatch(/did not write \(venue already priced\), 1500s of chain life left/);
++        });
++
++        it('says so outright when the body itself names the lapsed price', () => {
++            const lapsed = { ...retry, priceLapsed: true, reason: 'no current oracle price for RLTC/USD' };
++            expect(noVerdictMessage({ action: 'ISSUE', first, retry: lapsed, reseed: null }))
++                .toMatch(/this IS that case/);
++        });
++    });
++
+     describe('container scripts', () => {
+         const rows = planSeedRows({ regtestCoin: 'RLTC', chainTime: CHAIN, wallTime: WALL });
+ 
+diff --git a/test/unit/flows/messageActionChangeAddress.test.js b/test/unit/flows/messageActionChangeAddress.test.js
+new file mode 100644
+index 00000000..b6ac8f0b
+--- /dev/null
++++ b/test/unit/flows/messageActionChangeAddress.test.js
+@@ -0,0 +1,97 @@
++// Copyright © 2025-2026 Dankest, LLC
++// Based on XChain Platform by Dankest, LLC - https://dankest.llc
++//
++// SPDX-License-Identifier: AGPL-3.0-or-later
++//
++// This file is part of XChain Platform. Licensed under the GNU Affero
++// General Public License v3.0 or later; see LICENSE.md. A commercial
++// license (without AGPL source-disclosure terms) is available -
++// contact legal@dankest.llc.
++
++// The messaging flows must name the funding address and the change sink
++// themselves. Neither used to, and it only showed on the handshake: a send
++// goes through the confirm pipeline, where composeForConfirm supplies the
++// pair and hands back a prebuilt PSBT, so the encoder never saw the send's
++// own encoderOpts. The handshake is called directly and built live, so the
++// encoder refused it ("Transaction would burn significant satoshis as fees.
++// Please provide a change address.") and first contact with an address the
++// chain had never seen was impossible. `submitAction` only rotates a change
++// address that is already there; it never supplies one, so this is the only
++// layer that can.
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++
++vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
++    submitAction: vi.fn(async () => ({ txid: 'msg-tx-1' })),
++}));
++
++import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
++import { handshakeAction, messageAction } from '../../../packages/core/src/flows/messageAction.js';
++
++const FROM = 'bcrt1qfromaddr00000000000000000000000000000000';
++const DESTINATION = 'bcrt1qdestaddr000000000000000000000000000000';
++const DESCRIPTOR = { coin: 'bitcoin', addressTypes: ['p2wpkh', 'p2pkh'] };
++
++function baseOpts(extra = {}) {
++    return {
++        vault: {},
++        walletId: 'w1',
++        password: 'pw',
++        chainRegistry: { get: () => DESCRIPTOR },
++        sdkRegistry: { get: () => ({}) },
++        chainId: 'bitcoin-regtest',
++        from: {
++            address: FROM,
++            publicKey: '02' + 'cd'.repeat(32),
++            derivationPath: "m/84'/1'/0'/0/0",
++        },
++        destination: DESTINATION,
++        ...extra,
++    };
++}
++
++function submittedEncoderOpts() {
++    expect(submitAction).toHaveBeenCalledTimes(1);
++    return vi.mocked(submitAction).mock.calls[0][0].encoderOpts;
++}
++
++describe('messaging flows supply a change address (XC-1820)', () => {
++    beforeEach(() => {
++        vi.mocked(submitAction).mockClear();
++    });
++
++    it('handshakeAction funds from the source and returns change to it', async () => {
++        await handshakeAction(baseOpts({ version: 0 }));
++        const encoderOpts = submittedEncoderOpts();
++        expect(encoderOpts.sourceAddress).toBe(FROM);
++        expect(encoderOpts.change).toBe(FROM);
++        expect(encoderOpts.pubkey).toBe('02' + 'cd'.repeat(32));
++    });
++
++    it('handshakeAction keeps change equal to sourceAddress so submitAction can rotate it', async () => {
++        // submitAction rotates only the self-change default (change ===
++        // sourceAddress); a handshake has no reason to point change elsewhere.
++        await handshakeAction(baseOpts({ version: 1 }));
++        const encoderOpts = submittedEncoderOpts();
++        expect(encoderOpts.change).toBe(encoderOpts.sourceAddress);
++    });
++
++    it('a plaintext messageAction built live carries the same pair', async () => {
++        await messageAction(baseOpts({ message: 'hello', method: null }));
++        const encoderOpts = submittedEncoderOpts();
++        expect(encoderOpts.sourceAddress).toBe(FROM);
++        expect(encoderOpts.change).toBe(FROM);
++        expect(vi.mocked(submitAction).mock.calls[0][0].prebuiltPsbt).toBeUndefined();
++    });
++
++    it('a prebuilt-PSBT messageAction still passes the pair, and the PSBT it must sign byte-identically', async () => {
++        await messageAction(baseOpts({
++            prebuiltParams: { VERSION: '3', COIN: 'BTC', DESTINATION, PLAINTEXT_MESSAGE: 'hi' },
++            prebuiltPsbt: 'cHNidP8BAA==',
++        }));
++        const call = vi.mocked(submitAction).mock.calls[0][0];
++        expect(call.prebuiltPsbt).toBe('cHNidP8BAA==');
++        expect(call.encoderOpts.change).toBe(FROM);
++        expect(call.encoderOpts.sourceAddress).toBe(FROM);
++    });
++});
