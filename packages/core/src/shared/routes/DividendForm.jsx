@@ -694,7 +694,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         // means signed and NOT broadcast; "Dividend sent" told a user whose
         // node was briefly unreachable that their holders had been paid.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="dividend" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="dividend" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

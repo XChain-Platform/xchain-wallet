@@ -582,7 +582,9 @@ export function IssueTokenForm({ walletId, onBack }) {
         }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="issuance" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="issuance" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

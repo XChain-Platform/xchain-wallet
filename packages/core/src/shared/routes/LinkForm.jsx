@@ -497,7 +497,9 @@ export function LinkForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and the copy
         // below would report a link that is not on any chain yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="link" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="link" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>
