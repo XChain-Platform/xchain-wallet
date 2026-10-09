@@ -20,6 +20,8 @@ import { createHash } from 'node:crypto';
 import {
     SRI_ALGORITHM,
     addIntegrityAttributes,
+    buildIntegrityImportMap,
+    injectIntegrityImportMap,
     integrityFor,
 } from '../../../packages/web/sri.js';
 
@@ -189,5 +191,47 @@ describe('addIntegrityAttributes', () => {
             expect(skippedLocal).toEqual([]);
             expect(skippedExternal).toEqual(['//cdn.example.com/x.js']);
         });
+    });
+});
+
+describe('buildIntegrityImportMap', () => {
+    it('pins every supplied script, lazy chunks included, in sorted key order', () => {
+        const map = buildIntegrityImportMap({
+            '/assets/xchain-sdk-9f.js': 'signing()',
+            '/assets/app.js': 'main()',
+        });
+        expect(Object.keys(map.integrity)).toEqual(['/assets/app.js', '/assets/xchain-sdk-9f.js']);
+        expect(map.integrity['/assets/xchain-sdk-9f.js']).toBe(sha384('signing()'));
+    });
+
+    it('is empty for no scripts', () => {
+        expect(buildIntegrityImportMap({})).toEqual({ integrity: {} });
+    });
+});
+
+describe('injectIntegrityImportMap', () => {
+    const page = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; object-src \'none\'" />'
+        + '<script type="module" src="/assets/app.js"></script></head></html>';
+    const files = { '/assets/app.js': 'main()', '/assets/xchain-sdk-9f.js': 'signing()' };
+
+    it('places the import map before the first script', () => {
+        const { html, mapped } = injectIntegrityImportMap(page, files);
+        expect(mapped).toBe(2);
+        expect(html.indexOf('type="importmap"')).toBeLessThan(html.indexOf('type="module"'));
+        const body = html.match(/<script type="importmap">(.*?)<\/script>/)[1];
+        expect(JSON.parse(body).integrity['/assets/xchain-sdk-9f.js']).toBe(sha384('signing()'));
+    });
+
+    it('admits exactly the generated map in script-src by hash', () => {
+        const { html } = injectIntegrityImportMap(page, files);
+        const body = html.match(/<script type="importmap">(.*?)<\/script>/)[1];
+        const policy = html.match(/content="([^"]*)"/)[1];
+        expect(policy).toContain(`script-src 'self' '${sha384(body)}'`);
+        expect(policy).toContain("object-src 'none'");
+        expect(policy).not.toContain('unsafe-inline');
+    });
+
+    it('leaves the page untouched when there is nothing to pin', () => {
+        expect(injectIntegrityImportMap(page, {})).toEqual({ html: page, mapped: 0 });
     });
 });

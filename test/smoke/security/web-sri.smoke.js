@@ -24,7 +24,7 @@
 
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,6 +62,9 @@ assert.doesNotMatch(
     /entry\.type === 'chunk' \? entry\.code/,
     'SRI must not hash the in-memory chunk (sourcemap comment makes it differ from the served file)',
 );
+
+assert.match(sriSrc, /export function buildIntegrityImportMap\(/, 'SRI builds an import map integrity table');
+assert.match(sriSrc, /injectIntegrityImportMap\(/, 'the plugin injects the import map');
 
 // --- 2. If a build exists, its hashes must be correct ---------------------
 
@@ -126,5 +129,29 @@ assert.ok(
     + 'page entirely, this assertion is what needs updating; if the tag is there without an '
     + 'integrity attribute, the public-dir file was not on disk when sriPlugin ran and the wallet '
     + 'is shipping an unhashed same-origin script.',
+);
+// Lazy chunks have no tag, so the import map is the only pin they get.
+const mapMatch = html.match(/<script type="importmap">([^<]*)<\/script>/);
+assert.ok(mapMatch, 'dist/index.html carries no integrity import map; lazy chunks ship unpinned');
+const { integrity: pinned } = JSON.parse(mapMatch[1]);
+const pinnedUrls = Object.keys(pinned);
+assert.ok(pinnedUrls.length > 0, 'the integrity import map is empty');
+for (const url of pinnedUrls) {
+    const file = join(webDir, 'dist', url.replace(/^\/+/, ''));
+    assert.ok(existsSync(file), `import map pins a missing file: ${url}`);
+    assert.equal(
+        pinned[url],
+        `sha384-${createHash('sha384').update(readFileSync(file)).digest('base64')}`,
+        `import map integrity for ${url} does not match the bytes on disk`,
+    );
+}
+const assetsDir = join(webDir, 'dist', 'assets');
+for (const f of readdirSync(assetsDir).filter((n) => n.endsWith('.js'))) {
+    assert.ok(pinned[`/assets/${f}`], `emitted chunk /assets/${f} is not pinned in the import map`);
+}
+const cspMeta = (html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) ?? [])[1] ?? '';
+assert.ok(
+    cspMeta.includes(`'sha384-${createHash('sha384').update(mapMatch[1]).digest('base64')}'`),
+    'the meta CSP does not admit the import map by hash; the browser would drop it',
 );
 console.log(`web-sri smoke OK (${checked} built asset(s) hash-verified against dist/)`);

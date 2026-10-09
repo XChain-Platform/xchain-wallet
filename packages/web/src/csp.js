@@ -155,3 +155,20 @@ export const CONTENT_SECURITY_POLICY = contentSecurityPolicyFor(DEFAULT_BUILD_PR
 export function cspMetaTag(profile = DEFAULT_BUILD_PROFILE) {
     return `<meta http-equiv="Content-Security-Policy" content="${metaContentSecurityPolicyFor(profile)}" />`;
 }
+
+/**
+ * Allow one inline script, identified by its digest, in a policy string's
+ * script-src. Used for the generated import map, the only inline script the
+ * page carries; a hash admits exactly those bytes and nothing else.
+ *
+ * @param {string} policy a policy string from contentSecurityPolicyFor / metaContentSecurityPolicyFor
+ * @param {string} hash   a CSP hash source body, e.g. "sha384-AbC..."
+ * @returns {string}
+ */
+export function allowInlineScriptHash(policy, hash) {
+    const source = `'${hash}'`;
+    return policy
+        .split('; ')
+        .map((d) => (d.startsWith('script-src ') && !d.split(' ').includes(source) ? `${d} ${source}` : d))
+        .join('; ');
+}
