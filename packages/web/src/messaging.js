@@ -1331,6 +1331,14 @@ export function getPendingTxsForAddress(req) {
 }
 
 /**
+ * @param {import('@xchain-wallet/core/src/flows/rbfReplace.js').RbfRequest} req
+ * @returns {Promise<import('@xchain-wallet/core/src/flows/rbfReplace.js').RbfResult>}
+ */
+export function replaceTx(req) {
+    return /** @type {any} */ (sendMessage('tx.replace', req));
+}
+
+/**
  * Remove a FAILED local send from History. The host refuses any record that
  * is not `failed`, so this can never hide a send that is on the network.
  *
