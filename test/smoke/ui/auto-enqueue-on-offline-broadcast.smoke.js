@@ -133,8 +133,6 @@ assert.ok(
     /host\.register\('broadcast\.queue\.enqueue'/.test(bg),
     'createBackgroundHost registers broadcast.queue.enqueue',
 );
-// One hook builder feeds every signing route, collapses a vault-restored twin,
-// otherwise pushes onto the queue, and returns the persistence verdict.
 assert.ok(
     /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*else pushQueueEntry\(walletId, entry\);\s*return persistQueue\(\);\s*\};/.test(engine),
     'enqueueOnBroadcastFailure deduplicates restored entries and returns the queue persistence verdict',
