@@ -634,7 +634,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * before submitAction re-throws.
      *
      * @param {string | undefined} walletId
-     * @returns {((entry: any) => Promise<void>) | undefined}
+     * @returns {((entry: any) => Promise<boolean>) | undefined}
      */
     function enqueueOnBroadcastFailure(walletId) {
         if (typeof walletId !== 'string' || !walletId) return undefined;
@@ -645,7 +645,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             const twin = liveTwinOf(walletId, entry);
             if (twin) adoptSnapshotVerdict(twin, entry);
             else pushQueueEntry(walletId, entry);
-            await persistQueue();
+            return persistQueue();
         };
     }
     // Find the live entry for the same PendingTx and the same signed bytes.

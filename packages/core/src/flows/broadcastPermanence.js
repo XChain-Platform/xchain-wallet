@@ -92,6 +92,7 @@ const TRANSIENT_PATTERNS = [
 // these before rethrowing; the confirm hook reads it back.
 export const BROADCAST_FAILED_PERMANENT_NAME = 'BroadcastFailedPermanentError';
 export const BROADCAST_FAILED_TRANSIENT_NAME = 'BroadcastFailedTransientError';
+export const BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME = 'BroadcastFailedTransientUnsavedError';
 
 /**
  * Recover the broadcast-failure permanence from an error that may have
@@ -103,7 +104,8 @@ export const BROADCAST_FAILED_TRANSIENT_NAME = 'BroadcastFailedTransientError';
 export function broadcastFailureKindFromError(err) {
     const name = err && /** @type {any} */ (err).name;
     if (name === BROADCAST_FAILED_PERMANENT_NAME) return 'permanent';
-    if (name === BROADCAST_FAILED_TRANSIENT_NAME) return 'transient';
+    if (name === BROADCAST_FAILED_TRANSIENT_NAME
+        || name === BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME) return 'transient';
     return null;
 }
 
