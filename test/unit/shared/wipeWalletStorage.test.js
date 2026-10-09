@@ -25,6 +25,17 @@ import {
     getLockoutState,
     __resetLockoutPersistenceForTests,
 } from '../../../packages/core/src/flows/lockoutTracking.js';
+import {
+    activatePanicMode,
+    clearPanicModeState,
+    getPanicModeState,
+} from '../../../packages/core/src/flows/panicMode.js';
+import {
+    __resetDuressPersistenceForTests,
+    clearDuressPassphrase,
+    isDuressMatch,
+    setDuressPassphrase,
+} from '../../../packages/core/src/flows/duressPassphrase.js';
 
 const META_KEY = 'xchain-wallet:vault-meta';
 const QUEUE_KEY = 'xchain.broadcastQueue';
@@ -32,6 +43,8 @@ const QUEUE_KEY = 'xchain.broadcastQueue';
 const PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
 // Literal for the same reason: the Locked screen's failed-unlock ladder.
 const LOCKOUT_KEY = 'xchain-wallet:lockout';
+const PANIC_KEY = 'xchain-wallet:panic';
+const DURESS_KEY = 'xchain-wallet:duress';
 const HIGH_LADDER = JSON.stringify({ failedAttempts: 7, lockedUntilMs: Date.now() + 900_000 });
 
 /** Minimal stand-in for the IndexedDB delete request handshake. */
@@ -52,9 +65,14 @@ beforeEach(() => {
     globalThis.localStorage?.clear?.();
     delete globalThis.xchainWalletBridge;
     __resetLockoutPersistenceForTests();
+    clearPanicModeState();
+    __resetDuressPersistenceForTests();
 });
 
 afterEach(() => {
+    clearPanicModeState();
+    clearDuressPassphrase();
+    __resetDuressPersistenceForTests();
     delete globalThis.indexedDB;
     delete globalThis.xchainWalletBridge;
 });
@@ -168,12 +186,42 @@ describe('wipeWalletStorage on a shell that owns its own store (desktop)', () =>
         expect(globalThis.localStorage.getItem(LOCKOUT_KEY)).toBe(null);
     });
 
+    it('erases the panic freeze record once the shell wipe succeeds', async () => {
+        activatePanicMode({ nowMs: Date.now() });
+        setDuressPassphrase('wipe me too');
+        stubIndexedDB();
+        globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: true }) };
+
+        await wipeWalletStorage();
+
+        expect(globalThis.localStorage.getItem(PANIC_KEY)).toBe(null);
+        expect(globalThis.localStorage.getItem(DURESS_KEY)).toBe(null);
+        expect(getPanicModeState().expiresAt).toBe(0);
+        expect(isDuressMatch('wipe me too')).toBe(false);
+    });
+
     it('keeps the failed-unlock ladder when the shell wipe fails, since the vault it guards survives', async () => {
         globalThis.localStorage.setItem(LOCKOUT_KEY, HIGH_LADDER);
         stubIndexedDB();
         globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: false, error: 'EPERM' }) };
         await expect(wipeWalletStorage()).rejects.toThrow(/EPERM/);
         expect(globalThis.localStorage.getItem(LOCKOUT_KEY)).toBe(HIGH_LADDER);
+    });
+
+    it('keeps the panic freeze and the duress password when the shell wipe fails', async () => {
+        activatePanicMode({ nowMs: Date.now() });
+        setDuressPassphrase('still armed');
+        const panicRecord = globalThis.localStorage.getItem(PANIC_KEY);
+        const duressRecord = globalThis.localStorage.getItem(DURESS_KEY);
+        stubIndexedDB();
+        globalThis.xchainWalletBridge = { wipeStorage: async () => ({ ok: false, error: 'EPERM' }) };
+
+        await expect(wipeWalletStorage()).rejects.toThrow(/EPERM/);
+
+        expect(globalThis.localStorage.getItem(PANIC_KEY)).toBe(panicRecord);
+        expect(globalThis.localStorage.getItem(DURESS_KEY)).toBe(duressRecord);
+        expect(getPanicModeState().expiresAt).toBeGreaterThan(Date.now());
+        expect(isDuressMatch('still armed')).toBe(true);
     });
 
     it('throws when the shell call itself rejects', async () => {

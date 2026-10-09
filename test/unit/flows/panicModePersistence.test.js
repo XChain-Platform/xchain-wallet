@@ -23,6 +23,7 @@ import {
     getPanicModeState,
     isSigningFrozen,
     clearPanicModeState,
+    __resetPanicModePersistenceForTests,
     emptyPanicModeState,
     PanicModeActiveError,
     DEFAULT_DURATION_MS,
@@ -41,6 +42,7 @@ function activeState(nowMs = Date.now()) {
 
 afterEach(() => {
     clearPanicModeState();
+    __resetPanicModePersistenceForTests();
 });
 
 describe('panic-mode persistence', () => {
@@ -129,5 +131,25 @@ describe('panic-mode persistence', () => {
         expect(isSigningFrozen()).toBe(true);
 
         clearPanicModeState();
+    });
+
+    it('clears the persisted freeze without detaching the configured backend', async () => {
+        const saved = [];
+        let cleared = 0;
+        const store = {
+            load: async () => emptyPanicModeState(),
+            save: async (state) => { saved.push(state); },
+            clear: async () => { cleared += 1; },
+        };
+        await configurePanicModePersistence(store);
+
+        activatePanicMode();
+        clearPanicModeState();
+
+        expect(cleared).toBe(1);
+        expect(getPanicModeState()).toEqual(emptyPanicModeState());
+
+        activatePanicMode();
+        expect(saved).toHaveLength(2);
     });
 });
