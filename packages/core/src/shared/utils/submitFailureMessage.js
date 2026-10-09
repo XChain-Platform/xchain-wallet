@@ -137,6 +137,20 @@ export const SIGNED_NOT_BROADCAST_UNSAVED_WARNING =
     + 'and will be lost if the window closes. Broadcast it now from the queued-transactions '
     + 'banner, or copy the signed bytes first.';
 
+let queuedResultHandoff = null;
+
+export function setQueuedResultHandoff(result) {
+    queuedResultHandoff = result;
+}
+
+export function readQueuedResultHandoff() {
+    return queuedResultHandoff;
+}
+
+export function clearQueuedResultHandoff() {
+    queuedResultHandoff = null;
+}
+
 const NETWORK_FEE_TOO_LOW_MESSAGE =
     'The network rejected this transaction because its fee is too low.';
 

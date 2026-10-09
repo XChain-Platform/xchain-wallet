@@ -29,8 +29,11 @@
 // reminder is all the wallet does - the queue drains only when the user
 // presses "Broadcast now" in QueuedBroadcastBanner.
 
+import { useState } from 'react';
 import { Button } from '../../ui/index.js';
 import {
+    clearQueuedResultHandoff,
+    readQueuedResultHandoff,
     SIGNED_NOT_BROADCAST_TITLE,
     SIGNED_NOT_BROADCAST_UNSAVED_WARNING,
 } from '../utils/submitFailureMessage.js';
@@ -41,20 +44,28 @@ import styles from './QueuedResultPanel.module.css';
  * @param {() => void} props.onDone            back to wherever the form was launched from
  * @param {string} [props.title]               heading; defaults to the action-neutral sentence
  * @param {string} [props.what]                what was signed, e.g. 'dividend' - used in the hint
- * @param {boolean} [props.unsaved]             signed bytes are held only in the current window
+ * @param {boolean} [props.unsaved]             signed bytes are held only in the current window;
+ *   omitted by existing result screens, which consume the result handed off by useConfirmAction
  */
 export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, what, unsaved }) {
     const noun = what ? `Your ${what}` : 'Your transaction';
+    const [showUnsaved] = useState(() => (unsaved === undefined
+        ? readQueuedResultHandoff()?.unsaved === true
+        : unsaved === true));
+    const handleDone = () => {
+        clearQueuedResultHandoff();
+        onDone();
+    };
     return (
         <>
             <div className={styles.queuedCard} role="status" aria-live="polite">
                 <div className={styles.queuedIcon} aria-hidden="true">⏳</div>
                 <h2 className={styles.queuedTitle}>{title}</h2>
-                {unsaved === true && (
+                {showUnsaved ? (
                     <p className={styles.unsavedWarning} role="alert">
                         {SIGNED_NOT_BROADCAST_UNSAVED_WARNING}
                     </p>
-                )}
+                ) : null}
                 <p className={styles.queuedHint}>
                     {noun} is signed but couldn&apos;t reach the network just now. It&apos;s
                     waiting in the queued-transactions banner and only goes out when you
@@ -63,7 +74,7 @@ export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, 
                 </p>
             </div>
             <div className={styles.actions}>
-                <Button variant="primary" onClick={onDone}>Done</Button>
+                <Button variant="primary" onClick={handleDone}>Done</Button>
             </div>
         </>
     );
