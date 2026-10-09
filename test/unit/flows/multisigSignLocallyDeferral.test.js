@@ -48,11 +48,18 @@ describe('signMultisigLocally hardware deferral', () => {
     beforeEach(() => unlock.mockReset());
 
     it('tags an uncoded hardware failure with HW_SIGNER_DEFERRED', async () => {
-        unlock.mockResolvedValue(signerThrowing('ledger', new Error('not yet wired')));
+        unlock.mockResolvedValue(signerThrowing('ledger', new Error('LedgerSigner.signMultisigClassical: classical multisig signing on Ledger is not yet wired.')));
         await expect(signMultisigLocally(opts())).rejects.toMatchObject({
-            code: HW_SIGNER_DEFERRED, message: 'not yet wired',
+            code: HW_SIGNER_DEFERRED, message: expect.stringContaining('not yet wired'),
         });
         expect(HW_SIGNER_DEFERRED).toBe('HW_SIGNER_DEFERRED');
+    });
+
+    it('leaves other uncoded hardware failures untagged', async () => {
+        unlock.mockResolvedValue(signerThrowing('ledger', new Error('device disconnected')));
+        const err = await signMultisigLocally(opts()).catch((e) => e);
+        expect(err.message).toBe('device disconnected');
+        expect(err.code).toBeUndefined();
     });
 
     it('keeps an existing code on a hardware failure', async () => {

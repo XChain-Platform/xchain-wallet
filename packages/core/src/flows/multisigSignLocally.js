@@ -235,13 +235,17 @@ export async function signMultisigLocally(opts) {
 }
 
 // A hardware signer that cannot yet do classical multisig throws a plain
-// Error; callers branch on err.code, so give that deferral a stable one
-// while leaving coded errors and software-signer failures untouched.
+// Error whose message says so; callers branch on err.code, so give that
+// specific deferral a stable one. Coded errors, software-signer failures
+// and any other hardware failure (user reject, transport) stay untouched.
 export const HW_SIGNER_DEFERRED = 'HW_SIGNER_DEFERRED';
+
+const HW_DEFERRAL_MESSAGE = /classical multisig signing on \w+ is not yet wired/;
 
 function tagHardwareDeferral(signer, err) {
     if (!err || typeof err !== 'object' || err.code) return err;
     if (signer.kind === 'software') return err;
+    if (!HW_DEFERRAL_MESSAGE.test(String(err.message))) return err;
     err.code = HW_SIGNER_DEFERRED;
     return err;
 }
