@@ -38,6 +38,7 @@
 // vault.
 
 import { strict as assert } from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -65,9 +66,13 @@ if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND
     process.exit(1);
 }
 
-// Electron downloads its runtime on first require. Resolve it before Playwright
-// starts the launch timeout, so a fresh install gets the full boot interval.
+// Complete Electron's installer before Playwright starts the launch timeout.
+// The installer is a no-op when the matching runtime is already present.
 const requireFromDesktop = createRequire(join(desktopDir, 'package.json'));
+const electronPackageDir = dirname(requireFromDesktop.resolve('electron/package.json'));
+execFileSync(process.execPath, [join(electronPackageDir, 'install.js')], {
+    stdio: 'inherit',
+});
 const electronExecutable = requireFromDesktop('electron');
 assert.ok(
     existsSync(electronExecutable),
