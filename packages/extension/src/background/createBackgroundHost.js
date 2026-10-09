@@ -304,6 +304,7 @@ const {
     getDividendRecipients,
     getAirdropRecipients,
     createSignThrottle,
+    planRbfReplacement,
 } = flows;
 
 /**
@@ -744,6 +745,100 @@ function permanentReleasePatch(entry, failure) {
         txid: entry.commitTxid ?? entry.txid ?? null,
         error: failure,
     };
+}
+
+async function retainReplacementPlan(vault, result, fallbackPsbtHex, rbf) {
+    const pendingTxId = result?.pendingTxId;
+    const psbtHex = result?.signed?.signedPsbtHex || fallbackPsbtHex;
+    if (typeof pendingTxId !== 'string' || !pendingTxId
+        || typeof psbtHex !== 'string' || !psbtHex
+        || typeof vault?.pendingTxs?.get !== 'function') return result;
+    try {
+        const record = await vault.pendingTxs.get(pendingTxId);
+        if (record) await vault.pendingTxs.put({
+            ...record,
+            psbtHex,
+            ...(typeof rbf === 'boolean' ? { rbf } : {}),
+        });
+    } catch { /* non-critical after a successful broadcast */ }
+    return result;
+}
+
+function assertReplacementPsbt({ replacement, plan, actionString, decodeActionStringFromPsbt, psbtHex }) {
+    const exact = (value, label) => {
+        if (typeof value === 'bigint' && value >= 0n) return value;
+        if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
+        if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
+        throw new Error(`tx.replace: replacement ${label} is not an exact satoshi amount`);
+    };
+    if (!replacement || !Array.isArray(replacement.inputs) || !Array.isArray(replacement.outputs)) {
+        throw new Error('tx.replace: replacement PSBT could not be inspected');
+    }
+    const expectedInputs = plan.encoderOpts.utxos;
+    if (replacement.inputs.length !== expectedInputs.length) {
+        throw new Error('tx.replace: encoder changed the replacement input count');
+    }
+    for (let i = 0; i < expectedInputs.length; i += 1) {
+        const got = replacement.inputs[i];
+        const want = expectedInputs[i];
+        if (String(got?.prevTxHash || '').toLowerCase() !== want.txid
+            || Number(got?.prevTxIndex) !== want.vout
+            || exact(got?.value, `input ${i}`) !== exact(want.value, `planned input ${i}`)
+            || String(got?.scriptPubKeyHex || '').toLowerCase() !== want.scriptPubKey
+            || !Number.isInteger(got?.sequence)
+            || got.sequence >= 0xfffffffe) {
+            throw new Error(`tx.replace: encoder changed replacement input ${i}`);
+        }
+    }
+
+    const consumed = new Set();
+    for (const wanted of plan.encoderOpts.customOutputs) {
+        const index = replacement.outputs.findIndex((output, candidate) => (
+            !consumed.has(candidate)
+            && output?.address === wanted.address
+            && exact(output?.value, `output ${candidate}`) === exact(wanted.value, 'planned output')
+        ));
+        if (index < 0) throw new Error('tx.replace: encoder changed a replacement payment');
+        consumed.add(index);
+    }
+    let changeTotal = 0n;
+    let changeCount = 0;
+    let carrierCount = 0;
+    for (let i = 0; i < replacement.outputs.length; i += 1) {
+        if (consumed.has(i)) continue;
+        const output = replacement.outputs[i];
+        const value = exact(output?.value, `output ${i}`);
+        const carrier = actionString && value === 0n
+            && String(output?.scriptPubKeyHex || '').toLowerCase().startsWith('6a');
+        if (carrier) {
+            carrierCount += 1;
+            continue;
+        }
+        if (output?.address !== plan.encoderOpts.change) {
+            throw new Error(`tx.replace: encoder added unexpected output ${i}`);
+        }
+        changeCount += 1;
+        changeTotal += value;
+    }
+
+    const inputTotal = expectedInputs.reduce((sum, input) => sum + exact(input.value, 'planned input'), 0n);
+    const fixedTotal = plan.encoderOpts.customOutputs
+        .reduce((sum, output) => sum + exact(output.value, 'planned output'), 0n);
+    const expectedChange = inputTotal - fixedTotal - BigInt(plan.replacementFeeSats);
+    const expectedChangeCount = expectedChange > 0n ? 1 : 0;
+    if (changeTotal !== expectedChange || changeCount !== expectedChangeCount) {
+        throw new Error('tx.replace: encoder changed the replacement fee or change amount');
+    }
+    if (actionString) {
+        if (carrierCount !== 1) {
+            throw new Error('tx.replace: encoder changed the replacement action carrier');
+        }
+        const decoded = decodeActionStringFromPsbt(psbtHex);
+        const encodedAction = typeof decoded === 'string' ? decoded : decoded?.actionString;
+        if (decoded?.ok === false || encodedAction !== actionString) {
+            throw new Error('tx.replace: encoder changed the replacement action');
+        }
+    }
 }
 
 /**
@@ -2232,7 +2327,7 @@ export function createBackgroundHost(deps) {
 
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return sendToken({
+        const result = await sendToken({
             ...req,
             signer: await sessionSigner(req, vault, signerPool),
             vault,
@@ -2242,6 +2337,7 @@ export function createBackgroundHost(deps) {
             // vanish, and the queue lets the user retry from the banner.
             onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId),
         });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     // §20 / G040: watcher-mode helper: encode-only path that returns
@@ -2842,6 +2938,225 @@ export function createBackgroundHost(deps) {
         const persisted = await persistQueue();
         // Copy: `stored` is the live entry, and a flag on it would ride the next save.
         return { ...stored, persisted };
+    });
+
+    host.register('tx.replace', async (req, {
+        vault, chainRegistry, sdkRegistry, signerPool,
+    }) => {
+        const chainId = req?.chainId;
+        const walletId = req?.walletId;
+        const originalTxHash = req?.originalTxHash;
+        const strategy = req?.strategy;
+        if (typeof chainId !== 'string' || !chainId) throw new Error('tx.replace: chainId is required');
+        if (typeof walletId !== 'string' || !walletId) throw new Error('tx.replace: walletId is required');
+        if (typeof originalTxHash !== 'string' || !originalTxHash) {
+            throw new Error('tx.replace: originalTxHash is required');
+        }
+        if (!['speedup', 'cancel', 'restore'].includes(strategy)) {
+            throw new Error(`tx.replace: unknown strategy "${String(strategy)}"`);
+        }
+        if (strategy === 'restore' && (typeof req?.restoreTxHash !== 'string' || !req.restoreTxHash)) {
+            throw new Error('tx.replace: restoreTxHash is required for the restore strategy');
+        }
+
+        const descriptor = chainRegistry.get(chainId);
+        if (!descriptor) throw new Error(`tx.replace: unknown chain "${chainId}"`);
+        if (descriptor.feeStrategy?.rbfSupported !== true) {
+            throw new Error(`tx.replace: fee bumping is not supported on ${descriptor.displayName || chainId}`);
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.wallet?.decomposePsbt !== 'function') {
+            throw new Error(`tx.replace: SDK for "${chainId}" lacks wallet.decomposePsbt`);
+        }
+        if (typeof sdk?.encoder?.createTx !== 'function'
+            || typeof sdk?.encoder?.broadcastTx !== 'function') {
+            throw new Error(`tx.replace: SDK for "${chainId}" lacks replacement encoder methods`);
+        }
+
+        const accounts = await vault.accounts.findBy('walletId', walletId);
+        const accountIds = new Set(accounts.map((account) => account.id));
+        const addresses = await vault.addresses.list();
+        const importedAddressIds = await importedAddressIdsFor(vault, walletId);
+        const walletAddresses = addresses.filter((address) => (
+            accountIds.has(address.accountId) || importedAddressIds.has(address.id)
+        ));
+        const records = await vault.pendingTxs.list();
+        const lowerHash = (value) => String(value || '').toLowerCase();
+        const recordFor = (txid) => records.find((record) => (
+            lowerHash(record?.txid) === lowerHash(txid)
+            && record.chain === descriptor.coin
+            && record.network === descriptor.networkKind
+            && walletAddresses.some((address) => address.address === record.fromAddress)
+        ));
+        const conflictRecord = recordFor(originalTxHash);
+        if (!conflictRecord) throw new Error('tx.replace: transaction is not a pending transaction in this wallet');
+        if (!['broadcast', 'broadcasting'].includes(conflictRecord.status)) {
+            throw new Error('tx.replace: transaction is no longer replaceable');
+        }
+        if (conflictRecord.rbf !== true) {
+            throw new Error('tx.replace: transaction did not signal replaceability');
+        }
+        const templateRecord = strategy === 'restore' ? recordFor(req.restoreTxHash) : conflictRecord;
+        if (!templateRecord) throw new Error('tx.replace: restore transaction is not available in this wallet');
+        if (typeof conflictRecord.psbtHex !== 'string' || !conflictRecord.psbtHex) {
+            throw new Error('tx.replace: original signing plan is unavailable');
+        }
+        if (typeof templateRecord.psbtHex !== 'string' || !templateRecord.psbtHex) {
+            throw new Error('tx.replace: restore signing plan is unavailable');
+        }
+
+        const source = walletAddresses.find((address) => address.address === conflictRecord.fromAddress);
+        if (!source || typeof source.publicKey !== 'string' || !source.publicKey) {
+            throw new Error('tx.replace: source address is not signable by this wallet');
+        }
+        const conflict = sdk.wallet.decomposePsbt(conflictRecord.psbtHex);
+        const template = sdk.wallet.decomposePsbt(templateRecord.psbtHex);
+        const transactionBytes = typeof conflictRecord.txHex === 'string' && conflictRecord.txHex
+            ? Math.ceil(conflictRecord.txHex.length / 2)
+            : 10 + (conflict.inputs.length * 148) + (conflict.outputs.length * 34);
+        const plan = planRbfReplacement({
+            strategy,
+            conflict,
+            template,
+            sourceAddress: source.address,
+            ownAddresses: walletAddresses.map((address) => address.address),
+            feeRate: req?.feeRate,
+            transactionBytes,
+        });
+
+        let actionString = null;
+        if (strategy !== 'cancel') {
+            const carriesData = template.outputs.some((output) => (
+                output?.scriptType === 'nulldata' || output?.address == null
+            ));
+            if (carriesData) {
+                if (typeof sdk?.decoder?.decodeActionStringFromPsbt !== 'function') {
+                    throw new Error(`tx.replace: SDK for "${chainId}" cannot recover the original action`);
+                }
+                const decoded = sdk.decoder.decodeActionStringFromPsbt(templateRecord.psbtHex);
+                actionString = typeof decoded === 'string' ? decoded : decoded?.actionString;
+                if (decoded?.ok === false || typeof actionString !== 'string' || !actionString) {
+                    throw new Error('tx.replace: original action could not be recovered');
+                }
+            }
+        }
+
+        const signer = await sessionSigner(
+            source.signerId ? { ...req, signerId: source.signerId } : req,
+            vault,
+            signerPool,
+        );
+        if (!signer) throw new Error('tx.replace: wallet must be unlocked before replacing a transaction');
+        const encoded = await sdk.encoder.createTx({
+            ...(actionString ? { data: actionString } : {}),
+            pubkey: source.publicKey,
+            sourceAddress: source.address,
+            ...plan.encoderOpts,
+            ...((source.source === 'ledger' || source.source === 'trezor') ? { attachPrevTx: true } : {}),
+        });
+        if (typeof encoded?.psbt !== 'string' || !encoded.psbt) {
+            throw new Error('tx.replace: encoder did not return a PSBT');
+        }
+        const replacement = sdk.wallet.decomposePsbt(encoded.psbt);
+        assertReplacementPsbt({
+            replacement,
+            plan,
+            actionString,
+            decodeActionStringFromPsbt: (psbtHex) => sdk.decoder.decodeActionStringFromPsbt(psbtHex),
+            psbtHex: encoded.psbt,
+        });
+        const signingSource = typeof source.derivationPath === 'string' && source.derivationPath
+            ? { path: source.derivationPath }
+            : { addressId: source.id };
+        const signingPaths = replacement.inputs.map((_input, inputIndex) => ({
+            inputIndex,
+            ...signingSource,
+        }));
+        const signed = await signPsbtFlow({
+            vault,
+            walletId,
+            signer,
+            chainRegistry,
+            sdkRegistry,
+            chainId,
+            psbtHex: encoded.psbt,
+            signingPaths,
+        });
+        if (typeof signed?.txHex !== 'string' || !signed.txHex || typeof signed?.txid !== 'string' || !signed.txid) {
+            throw new Error('tx.replace: signer did not return a complete transaction');
+        }
+
+        let pending = schemas.createPendingTx({
+            chain: descriptor.coin,
+            network: descriptor.networkKind,
+            fromAddress: source.address,
+            toAddress: strategy === 'cancel' ? source.address : templateRecord.toAddress,
+            action: templateRecord.action,
+            actionSummary: strategy === 'cancel'
+                ? `Cancel ${templateRecord.actionSummary}`
+                : `${strategy === 'restore' ? 'Restore' : 'Speed up'} ${templateRecord.actionSummary}`,
+            psbtHex: encoded.psbt,
+            rbf: true,
+        });
+        pending = {
+            ...pending,
+            status: 'broadcasting',
+            txid: signed.txid,
+            txHex: signed.txHex,
+        };
+        await vault.pendingTxs.put(pending);
+
+        let broadcast;
+        try {
+            broadcast = await sdk.encoder.broadcastTx(signed.txHex);
+        } catch (err) {
+            await vault.pendingTxs.put({
+                ...pending,
+                status: 'failed',
+                error: err?.message ? String(err.message) : String(err),
+            });
+            throw err;
+        }
+        const replacementTxHash = typeof broadcast === 'string'
+            ? broadcast
+            : (broadcast?.txid ?? broadcast?.tx_hash ?? null);
+        if (typeof replacementTxHash !== 'string' || !replacementTxHash) {
+            await vault.pendingTxs.put({
+                ...pending,
+                status: 'failed',
+                error: 'SDK did not return a txid',
+            });
+            throw new Error('tx.replace: SDK did not return a txid');
+        }
+        if (lowerHash(replacementTxHash) !== lowerHash(signed.txid)) {
+            await vault.pendingTxs.put({
+                ...pending,
+                status: 'failed',
+                error: 'broadcast txid did not match signed transaction',
+            });
+            throw new Error('tx.replace: broadcast txid did not match signed transaction');
+        }
+
+        const broadcastedAt = new Date().toISOString();
+        await vault.pendingTxs.put({
+            ...pending,
+            status: 'broadcast',
+            txid: replacementTxHash,
+            broadcastAt: broadcastedAt,
+        });
+        await vault.pendingTxs.put({
+            ...conflictRecord,
+            status: 'rbf-replaced',
+            rbfReplacement: replacementTxHash,
+        });
+        const feeIncreaseSats = BigInt(plan.feeIncreaseSats);
+        const whole = feeIncreaseSats / 100000000n;
+        const fraction = String(feeIncreaseSats % 100000000n).padStart(8, '0').replace(/0+$/, '');
+        return {
+            replacementTxHash,
+            broadcastedAt,
+            feeIncrease: fraction ? `${whole}.${fraction}` : String(whole),
+        };
     });
     // The two node answers that mean "these exact bytes are already on the
     // network". They are narrow on purpose: every other rejection the shared
@@ -3508,7 +3823,8 @@ export function createBackgroundHost(deps) {
     host.register('action.sweep', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         // reservationLedger: PC-34 force-close interplay (ORDERS=1 releases
         // the swept address's auto-pay holds alongside its consents).
-        return sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, reservationLedger, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        const result = await sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, reservationLedger, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     // PC-34: API-derived indicative preview of what a SWEEP would move
@@ -3596,7 +3912,8 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return dispenserAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        const result = await dispenserAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     // §41.3.4 ORDER / §41.3.5 CANCEL: DEX signing lanes.
@@ -3978,15 +4295,18 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.execute', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return executeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        const result = await executeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     host.register('action.deposit', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return depositAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        const result = await depositAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     host.register('action.withdraw', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return withdrawAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        const result = await withdrawAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     // §42.7 Staking: four read-only explorer passthroughs backing
@@ -4403,7 +4723,8 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return dividendAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        const result = await dividendAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     host.register('holders.forTick', async (req, { sdkRegistry }) => {
@@ -4420,7 +4741,8 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        return airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        const result = await airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
     });
 
     host.register('actions.byTxid', async (req, { sdkRegistry }) => {
