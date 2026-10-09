@@ -62,7 +62,7 @@ export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, 
                 <div className={styles.queuedIcon} aria-hidden="true">⏳</div>
                 <h2 className={styles.queuedTitle}>{title}</h2>
                 {showUnsaved ? (
-                    <p className={styles.queuedHint} role="alert">
+                    <p className={styles.unsavedWarning} role="alert">
                         {SIGNED_NOT_BROADCAST_UNSAVED_WARNING}
                     </p>
                 ) : null}
