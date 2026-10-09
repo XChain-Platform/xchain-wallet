@@ -128,6 +128,15 @@ export const SIGNED_NOT_BROADCAST_MESSAGE =
     + 'queued-transactions banner and only goes out when you broadcast it from there; the '
     + 'wallet reminds you when the network is back. Do not submit this again.';
 
+/**
+ * The warning for a signed transaction that could not be saved to the queue
+ * and exists only in the current window until the user preserves it.
+ */
+export const SIGNED_NOT_BROADCAST_UNSAVED_WARNING =
+    'Your signed transaction could not be saved to the queue. It is held only in this window '
+    + 'and will be lost if the window closes. Broadcast it now from the queued-transactions '
+    + 'banner, or copy the signed bytes first.';
+
 const NETWORK_FEE_TOO_LOW_MESSAGE =
     'The network rejected this transaction because its fee is too low.';
 
