@@ -596,7 +596,7 @@ export function SweepForm({
         // Signed but not broadcast. None of the post-sweep effects
         // below (auto-pay disarmed, dispensers closing) have happened.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="sweep" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="sweep" unsaved={result.unsaved} />);
         }
         const forceClose = result?.forceClose;
         return wrap(

@@ -379,7 +379,13 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         // Signed but not broadcast, which is the exact opposite of
         // what "<noun> broadcast" claims.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what={titleNoun.toLowerCase()} />);
+            return wrap(
+                <QueuedResultPanel
+                    onDone={onBack}
+                    what={titleNoun.toLowerCase()}
+                    unsaved={result.unsaved}
+                />,
+            );
         }
         return wrap(
             <>
