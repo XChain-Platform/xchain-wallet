@@ -39,6 +39,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBroadcastQueueEngine } from '../../../packages/extension/src/background/broadcastQueueEngine.js';
+import { createBroadcastQueueStore } from '../../../packages/extension/src/background/broadcastQueueStore.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -255,6 +256,55 @@ assert.ok(
     });
     assert.equal(persisted, true, 'the auto-enqueue reports the awaited save verdict');
     assert.equal(saves, 1, 'the auto-enqueue writes exactly one queue snapshot');
+}
+
+{
+    let releaseFirstSave;
+    let signalFirstSave;
+    let activeSaves = 0;
+    let maxActiveSaves = 0;
+    let persisted = {};
+    const firstSaveStarted = new Promise((resolve) => { signalFirstSave = resolve; });
+    const firstSaveGate = new Promise((resolve) => { releaseFirstSave = resolve; });
+    const snapshots = [];
+    const store = createBroadcastQueueStore({
+        storage: {
+            async load() { return {}; },
+            async save(snapshot) {
+                activeSaves += 1;
+                maxActiveSaves = Math.max(maxActiveSaves, activeSaves);
+                const copy = structuredClone(snapshot);
+                snapshots.push(copy);
+                if (snapshots.length === 1) {
+                    signalFirstSave();
+                    await firstSaveGate;
+                }
+                persisted = copy;
+                activeSaves -= 1;
+            },
+        },
+        prunedLedger: null,
+    });
+    const queue = createBroadcastQueueEngine({
+        store,
+        importedAddressIdsFor: async () => new Set(),
+        discardQueuedBroadcast: async () => {},
+    });
+    await queue.ensureQueueLoaded();
+    queue.pushQueueEntry('wallet-1', { chainId: 'bitcoin-regtest', signedTxHex: 'signed-1' });
+    await firstSaveStarted;
+    queue.pushQueueEntry('wallet-1', { chainId: 'bitcoin-regtest', signedTxHex: 'signed-2' });
+    const finalSave = queue.persistQueue();
+    await Promise.resolve();
+    assert.equal(snapshots.length, 1, 'a blocked queue save holds later snapshots behind it');
+    releaseFirstSave();
+    assert.equal(await finalSave, true, 'the final serialized snapshot reaches storage');
+    assert.equal(maxActiveSaves, 1, 'queue snapshots never overlap in storage');
+    assert.deepEqual(
+        persisted['wallet-1'].map((entry) => entry.signedTxHex),
+        ['signed-1', 'signed-2'],
+        'an older delayed save cannot replace the newest queue snapshot',
+    );
 }
 
 // --- 6. Eager load at construction -------------------------------------

@@ -42,6 +42,22 @@ import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/
  *   the read recovers still drops the wallet on the next boot
  */
 
+function serializeStorageWrites(storage) {
+    if (!storage) return storage;
+    let tail = Promise.resolve();
+    const enqueue = (write) => {
+        const run = tail.then(write);
+        tail = run.catch(() => {});
+        return run;
+    };
+    const wrapped = Object.create(storage);
+    for (const method of ['save', 'saveSettlements', 'clear']) {
+        if (typeof storage[method] !== 'function') continue;
+        wrapped[method] = (...args) => enqueue(() => storage[method](...args));
+    }
+    return wrapped;
+}
+
 // Core owns the prefix so both wipe paths sweep exactly the keys written here.
 const PRUNED_PREFIX = BROADCAST_QUEUE_PRUNED_PREFIX;
 
@@ -205,8 +221,9 @@ function withLedger(storage, pruned) {
 export function createBroadcastQueueStore({ storage = null, prunedLedger } = {}) {
     const ledger = storage ? (prunedLedger === undefined ? defaultLedger() : prunedLedger) : null;
     const prunedWallets = new PrunedWallets(ledger);
+    const serializedStorage = serializeStorageWrites(storage);
     return {
-        storage: ledger ? withLedger(storage, prunedWallets) : storage,
+        storage: ledger ? withLedger(serializedStorage, prunedWallets) : serializedStorage,
         queues: new Map(),
         owed: [],
         loaded: false,
