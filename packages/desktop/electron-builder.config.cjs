@@ -973,31 +973,10 @@ const config = {
     appx: {
         artifactName: 'xchain-wallet-${version}-${arch}-appx.${ext}',
 
-        // IDENTITY IS ASSIGNED BY PARTNER CENTER, AND EVERY DEFAULT HERE
-        // IS WRONG IN A DIFFERENT WAY.
-        //
-        // `identityName` defaults to the package.json name, which is
-        // `@xchain-wallet/desktop`. AppX identity must be alphanumeric,
-        // period and dash only, 3-50 characters, so that default fails the
-        // manifest write outright - the same shape as the Linux
-        // `executableName` defect in §5, and the same good failure mode.
-        //
-        // `publisher` is worse, because its default SUCCEEDS. With no
-        // code-signing certificate present, `computePublisherName` returns
-        // the literal string `CN=ms` and logs "AppX is not signed"; with a
-        // certificate present but no explicit publisher, it uses that
-        // CERTIFICATE's subject, which is the Authenticode identity and
-        // not necessarily the Store one. Either way the package builds and
-        // is then rejected at ingestion for an identity mismatch, which is
-        // the expensive place to learn it.
-        //
-        // Both are env-driven because both are account-specific values
-        // nobody holds yet (ceremony A). The defaults below are valid
-        // shapes so a local smoke can build; they are NOT submission
-        // values, and §15 says so in the same words.
-        identityName: process.env.APPX_IDENTITY_NAME || 'DankestLLC.XChainWallet',
-        publisher: process.env.APPX_PUBLISHER || null,
-        publisherDisplayName: 'Dankest, LLC',
+        // AppX identity values must match the Microsoft Partner Center reservation.
+        identityName: process.env.APPX_IDENTITY_NAME || '61007DankestLLC.XChainWallet',
+        publisher: process.env.APPX_PUBLISHER || 'CN=FCB33573-3137-45EC-AE57-9AC66E6DE49A',
+        publisherDisplayName: 'Dankest LLC',
         applicationId: 'XChainWallet',
         languages: ['en-US'],
 
