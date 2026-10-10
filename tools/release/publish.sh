@@ -563,12 +563,12 @@ for rel in "${BINARIES[@]}"; do
     fi
 done
 
-# THE DIRECT FEED POINTER, staging only. It names this version to every
-# install that reads it, so it goes up LAST and only beside exactly one APK
-# per direct lane: a feed naming a version nobody can download is an alarm
-# with no exit.
+# THE DIRECT FEED POINTER. It names this version to every install that reads
+# it, so both production and staging publish it LAST and only beside exactly
+# one APK per direct lane: a feed naming a version nobody can download is an
+# alarm with no exit.
 DIRECT_POINTERS=()
-if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
+if [[ "$COVERAGE_DIRECT" == "yes" ]]; then
     apk_count=0
     for rel in "${BINARIES[@]}"; do
         if [[ "${rel#./}" == *.apk ]]; then apk_count=$((apk_count + 1)); fi
@@ -581,10 +581,10 @@ if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
         [[ " ${DIRECT_POINTERS[*]-} " == *" $feed "* ]] || DIRECT_POINTERS+=("$feed")
     done <<< "$DIRECT_FEEDS"
     if [[ "$apk_count" -ne "$direct_count" || ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "publish.sh: refusing to stage a direct feed for $TAG over $apk_count .apk file(s)" \
+        echo "publish.sh: refusing to publish a direct feed for $TAG over $apk_count .apk file(s)" \
              "for $direct_count direct lane(s)." >&2
         echo "  Each direct lane is exactly one universal APK, and its feed names a" >&2
-        echo "  plain vMAJOR.MINOR.PATCH; anything else stages a notice for a" >&2
+        echo "  plain vMAJOR.MINOR.PATCH; anything else publishes a notice for a" >&2
         echo "  download that is not there." >&2
         exit 1
     fi
@@ -809,7 +809,7 @@ for rel in "${YMLS[@]}"; do
     copy_to "$INPUT_DIR/$name" "$BASE/desktop/$name"
 done
 
-# --- Phase 3b: the direct feed pointer, LAST (staging only) -------------
+# --- Phase 3b: the direct feed pointer, LAST ----------------------------
 #
 # The one field the shipped client reads. Written world-readable before the
 # copy, because copy_to preserves mode and mktemp creates 0600.

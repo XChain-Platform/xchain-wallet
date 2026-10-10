@@ -18,11 +18,10 @@
 // original tx's UTXOs at a higher fee (Speed up) or routes them to a
 // self-controlled output (Cancel).
 //
-// Until that engine wiring lands, this flow probes for a host-side
-// `tx.replace` handler via the shell's messaging layer. Shells that
-// haven't registered the handler (which is all of them at the time
-// of writing) surface a clear, honest "RBF not yet supported in this
-// build" error instead of pretending success.
+// Until that engine wiring lands, the UI probes for a host-side
+// `replaceTx` call through the shell's messaging layer and withholds the
+// controls when it is absent. Direct callers still receive a typed error
+// instead of pretending success.
 //
 // Output shape: `{ replacementTxHash, broadcastedAt, feeIncrease }`.
 // matches what the eventual handler will return; UI written against
@@ -40,6 +39,16 @@ export class RbfInvalidEntryError extends Error {
         super(reason);
         this.name = 'RbfInvalidEntryError';
     }
+}
+
+/**
+ * Whether the active shell exposes the replacement call used by this flow.
+ *
+ * @param {{ replaceTx?: unknown } | null | undefined} messaging
+ * @returns {boolean}
+ */
+export function isReplaceCallAvailable(messaging) {
+    return typeof messaging?.replaceTx === 'function';
 }
 
 /**
@@ -120,7 +129,7 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
  * @returns {Promise<RbfResult>}
  */
 export async function sendRbfRequest({ messaging, request } = {}) {
-    if (!messaging || typeof messaging.replaceTx !== 'function') {
+    if (!isReplaceCallAvailable(messaging)) {
         throw new RbfNotSupportedError(
             'Replacement engine pending; track §44.4 / §44.5 for the SDK + encoder work.',
         );

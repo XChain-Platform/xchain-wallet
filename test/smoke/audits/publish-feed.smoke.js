@@ -681,8 +681,14 @@ const ABSENT_RECORD = join(work, 'REHEARSAL-never-written.json');
     assert.ok(existsSync(join(target, 'android', APK_NAME)), 'the APK still routes to android/');
     assert.equal(existsSync(join(target, 'android', 'xchain-wallet-android-v0.333.1.aab')), false,
         'and the store-bound .aab is still refused');
-    assert.equal(existsSync(join(target, 'android', 'latest.json')), false,
-        'a production publish leaves the direct feed pointer to the release owner');
+    const feedFile = join(target, 'android', 'latest.json');
+    assert.deepEqual(JSON.parse(readFileSync(feedFile, 'utf8')), { version: '0.333.1' },
+        'the production feed advances to the APK version');
+    assert.equal(statSync(feedFile).mode & 0o044, 0o044,
+        'the production feed pointer is world-readable');
+    assert.ok(r.out.indexOf('android/latest.json naming')
+        > r.out.indexOf('uploading the signed manifest'),
+    'the production feed advances after the APK and signed manifest are in place');
 }
 
 {

@@ -39,7 +39,7 @@
 //    interesting was proven. XCHAIN is free-mintable on regtest, so the spec
 //    mints its own.
 //
-// 3. ASSERTIONS READ THE EXPLORER, NOT THE SCREEN. "Contract deployed" is the
+// 3. ASSERTIONS READ THE EXPLORER, NOT THE SCREEN. "Contract published" is the
 //    wallet reporting on itself. The contract row, the execution row, the gas
 //    actually burned and the state key the method wrote are the chain reporting
 //    on the wallet - and a signed-but-wrong action (wrong method name, wrong
@@ -130,7 +130,7 @@ async function gotoPalette(page, title) {
 
 async function gotoDeployForm(page) {
     await gotoPalette(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: '+ Deploy new contract' });
+    const deploy = page.getByRole('button', { name: '+ Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
     await expect(page.getByRole('main').getByLabel('Code source')).toBeVisible({ timeout: 30_000 });
@@ -283,10 +283,10 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
 
             await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
-            await main.getByRole('button', { name: 'Deploy', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish', exact: true }).click();
             await approveConfirm(page);
 
-            await expect(main.getByText(/Contract deployed\./)).toBeVisible({ timeout: 120_000 });
+            await expect(main.getByText(/Contract published\./)).toBeVisible({ timeout: 120_000 });
             const txid = await readDoneTxid(page);
             deployTxid = txid;
 
@@ -349,7 +349,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // the name alone (every run deploys the same source) is not.
             //
             // `.first()` because the list renders the same contract twice on
-            // purpose - once under "My contracts (deployed by me)", once under
+            // purpose - once under "My contracts (published by me)", once under
             // "Browse all contracts" - and the first is the one that proves the
             // wallet recognises the deploy as its own.
             await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();

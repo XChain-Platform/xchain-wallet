@@ -254,7 +254,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         });
 
         await test.step('submit in FULL mode and record which lane runs', async () => {
-            const submit = main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first();
+            const submit = main.getByRole('button', { name: 'Preview', exact: true }).first();
             const label = (await submit.textContent() || '').trim();
             await submit.click();
 
@@ -262,7 +262,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // the plan was honoured: it is the chunked lane's entry point, and in
             // full mode it renders the signing credentials that lane needs.
             const confirm = page.getByTestId('confirm-modal');
-            const review = page.getByRole('button', { name: /^Deploy on / });
+            const review = page.getByRole('button', { name: /^Publish on / });
             const chunkProgress = page.getByText(/chunk \d+ of \d+|chunking/i);
             const refusal = page.getByRole('alert').filter({ hasText: /\S/ });
             await expect(confirm.or(review).or(chunkProgress).or(refusal).first(),
@@ -306,7 +306,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         await test.step('the chunked run actually starts from that screen', async () => {
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeEnabled({ timeout: 30_000 });
 
             // Each leg must be CONFIRMED and indexed before the next is built, and
@@ -354,7 +354,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
     // waiting for the previous to confirm AND index before it is built.
     //
     // ASKED OF THE CHAIN, NOT THE SCREEN. The wallet's done screen says
-    // "Contract deployed" as soon as the assembling transaction is broadcast,
+    // "Contract published" as soon as the assembling transaction is broadcast,
     // which is true and not the question - the assembler can still index invalid
     // (a missing chunk, a hash mismatch, unpaid gas) and leave the user with
     // three paid-for transactions and no contract. What has to be true is that
@@ -407,14 +407,14 @@ test.describe('§11.3: the chunked deploy lane', () => {
         let doneTxid = null;
 
         await test.step('run all three legs', async () => {
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
 
             // The review screen is identified by its SUBMIT button, not by the
             // password field: SignCredentials renders no password box when the
             // vault is already unlocked for the session, and asserting on it
             // cost this spec its first run - a wallet that is behaving
             // correctly simply had nothing to type into.
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go, 'the review screen that starts a chunked run never appeared')
                 .toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
@@ -450,7 +450,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 // The terminal screen, or the refusal that explains why there is
                 // none. Budgeted for three sequential confirm-and-index waits on
                 // a shared venue.
-                const done = page.getByText(/Contract deployed/i);
+                const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
                 // confirm screen carries a correct informational disclosure
@@ -609,8 +609,8 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 'the padded counter no longer crosses the inline cap')
                 .toBeVisible({ timeout: 60_000 });
 
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go, 'the review screen never appeared').toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
@@ -620,7 +620,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
                 await go.click();
-                const done = page.getByText(/Contract deployed/i);
+                const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
                 // confirm screen carries a correct informational disclosure
@@ -797,8 +797,8 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await main.getByLabel('Gas limit').fill(GAS_LIMIT);
             await expect(main.getByText(/too large for one transaction/i)).toBeVisible({ timeout: 60_000 });
 
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
@@ -836,7 +836,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
         await test.step('the form offers to finish it, and says what is already paid for', async () => {
             main = await openDeployForm(page);
-            const banner = main.getByText(/Unfinished deploy/i).first();
+            const banner = main.getByText(/Unfinished publish/i).first();
             await expect(banner, 'the resume banner never appeared, so the paid-for chunk is unreachable')
                 .toBeVisible({ timeout: 60_000 });
             const text = (await banner.textContent()) || '';
@@ -877,8 +877,8 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // regression by supplying the value the wallet was supposed to keep.
             expect(resumedGas, 'nothing to submit with').toBe(GAS_LIMIT);
 
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
@@ -886,7 +886,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
                 await go.click();
-                const done = page.getByText(/Contract deployed/i);
+                const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
                 // confirm screen carries a correct informational disclosure
