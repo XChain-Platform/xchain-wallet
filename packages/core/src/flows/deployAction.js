@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// deployAction: DEPLOY composer for the §42.6 "Deploy new contract"
+// deployAction: DEPLOY composer for the §42.6 "Publish contract"
 // form. Mirrors broadcastAction / dispenserAction: takes vault +
 // registries + chain + source address + DEPLOY params, forwards to
 // submitAction.
@@ -80,7 +80,7 @@ export async function deployAction(opts) {
     const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
         fromAddress: source.address,
         toAddress: null,
-        actionSummary: `Deploy contract "${name}" (gas ${opts.params.GAS_LIMIT})`,
+        actionSummary: `Publish contract "${name}" (gas ${opts.params.GAS_LIMIT})`,
     };
 
     return submitAction({

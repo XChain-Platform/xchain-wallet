@@ -793,7 +793,7 @@ export async function deployChunkedRun(opts) {
                 totalChunks: plan.totalChunks,
                 part: plan.parts[i],
             }),
-            `Deploy chunk ${i + 1} of ${plan.totalChunks}`,
+            `Publish chunk ${i + 1} of ${plan.totalChunks}`,
             i,
         );
         const actionIndex = indexedActionIndex(res);
@@ -817,7 +817,7 @@ export async function deployChunkedRun(opts) {
 
     // Phase 2: assemble. Every carrier now sits at a lower action_index.
     progress('assemble-start', { totalChunks: plan.totalChunks });
-    const deployRes = await submitLeg(assemble, `Deploy contract "${contractName || '(unnamed)'}" (assembling ${plan.totalChunks} chunks)`);
+    const deployRes = await submitLeg(assemble, `Publish contract "${contractName || '(unnamed)'}" (assembling ${plan.totalChunks} chunks)`);
     const assemblerIndex = indexedActionIndex(deployRes);
     // The contract is not necessarily at the assembler's own index - see
     // `resolveDeployedContractIndex`. Recording the leg's index without asking

@@ -120,7 +120,7 @@ export function ContractDetail({
                 if (deployIdx) {
                     messaging.getActionByIndex({ chainId, actionIndex: String(deployIdx) })
                         .then((a) => { if (!cancelled) setDeployAction(extractSingle(a)); })
-                        .catch((e) => { if (!cancelled) setDeployError(readFailureMessage(e, 'load the deploy details')); });
+                        .catch((e) => { if (!cancelled) setDeployError(readFailureMessage(e, 'load the publication details')); });
                 }
             })
             .catch((e) => { if (!cancelled) setContractError(readFailureMessage(e, 'load this contract')); });
@@ -224,7 +224,7 @@ export function ContractDetail({
                                 ? <><AddressText address={String(owner)} />{isOwner ? ' (you)' : ''}</>
                                 : '(unknown)'}
                         </div>
-                        <div><strong>Deployed:</strong> block {deployBlock}</div>
+                        <div><strong>Published:</strong> block {deployBlock}</div>
                         <div><strong>Gas limit:</strong> {gasLimit}</div>
                         <div><strong>Status:</strong> {status}</div>
                         <div><strong>Code hash:</strong> {String(codeHash)}</div>
@@ -234,7 +234,7 @@ export function ContractDetail({
                                 <div><strong>Slash destination:</strong>{' '}
                                     {slashDestinationAddr
                                         ? <AddressText address={String(slashDestinationAddr)} />
-                                        : '(set at deploy)'}
+                                        : '(set when published)'}
                                 </div>
                             </>
                         ) : null}
