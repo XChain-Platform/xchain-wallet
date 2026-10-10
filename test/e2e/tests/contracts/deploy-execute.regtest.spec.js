@@ -130,7 +130,7 @@ async function gotoPalette(page, title) {
 
 async function gotoDeployForm(page) {
     await gotoPalette(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: '+ Deploy new contract' });
+    const deploy = page.getByRole('button', { name: '+ Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
     await expect(page.getByRole('main').getByLabel('Code source')).toBeVisible({ timeout: 30_000 });
@@ -349,7 +349,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // the name alone (every run deploys the same source) is not.
             //
             // `.first()` because the list renders the same contract twice on
-            // purpose - once under "My contracts (deployed by me)", once under
+            // purpose - once under "My contracts (published by me)", once under
             // "Browse all contracts" - and the first is the one that proves the
             // wallet recognises the deploy as its own.
             await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();

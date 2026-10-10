@@ -208,8 +208,8 @@ assert.ok(/\[props\.onDeploy\]/.test(listSrc) || /props\.onDeploy/.test(listSrc)
     'ContractsList documents the onDeploy prop');
 assert.ok(/onDeploy\s*\}/.test(listSrc),
     'ContractsList destructures onDeploy');
-assert.ok(/onDeploy \?\s*\(?\s*<Button[\s\S]*?onClick=\{onDeploy\}[\s\S]*?\+ Deploy new contract/.test(listSrc),
-    'ContractsList renders the + Deploy new contract button only when onDeploy is passed');
+assert.ok(/onDeploy \?\s*\(?\s*<Button[\s\S]*?onClick=\{onDeploy\}[\s\S]*?\+ Publish contract/.test(listSrc),
+    'ContractsList renders the + Publish contract button only when onDeploy is passed');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],

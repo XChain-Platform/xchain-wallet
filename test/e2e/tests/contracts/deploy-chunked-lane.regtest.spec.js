@@ -262,7 +262,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // the plan was honoured: it is the chunked lane's entry point, and in
             // full mode it renders the signing credentials that lane needs.
             const confirm = page.getByTestId('confirm-modal');
-            const review = page.getByRole('button', { name: /^Deploy on / });
+            const review = page.getByRole('button', { name: /^Publish on / });
             const chunkProgress = page.getByText(/chunk \d+ of \d+|chunking/i);
             const refusal = page.getByRole('alert').filter({ hasText: /\S/ });
             await expect(confirm.or(review).or(chunkProgress).or(refusal).first(),
@@ -306,7 +306,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         await test.step('the chunked run actually starts from that screen', async () => {
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeEnabled({ timeout: 30_000 });
 
             // Each leg must be CONFIRMED and indexed before the next is built, and
@@ -414,7 +414,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // vault is already unlocked for the session, and asserting on it
             // cost this spec its first run - a wallet that is behaving
             // correctly simply had nothing to type into.
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go, 'the review screen that starts a chunked run never appeared')
                 .toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
@@ -610,7 +610,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 .toBeVisible({ timeout: 60_000 });
 
             await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go, 'the review screen never appeared').toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
@@ -798,7 +798,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await expect(main.getByText(/too large for one transaction/i)).toBeVisible({ timeout: 60_000 });
 
             await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
@@ -836,7 +836,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
         await test.step('the form offers to finish it, and says what is already paid for', async () => {
             main = await openDeployForm(page);
-            const banner = main.getByText(/Unfinished deploy/i).first();
+            const banner = main.getByText(/Unfinished publish/i).first();
             await expect(banner, 'the resume banner never appeared, so the paid-for chunk is unreachable')
                 .toBeVisible({ timeout: 60_000 });
             const text = (await banner.textContent()) || '';
@@ -878,7 +878,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             expect(resumedGas, 'nothing to submit with').toBe(GAS_LIMIT);
 
             await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
-            const go = page.getByRole('button', { name: /^Deploy on / });
+            const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);

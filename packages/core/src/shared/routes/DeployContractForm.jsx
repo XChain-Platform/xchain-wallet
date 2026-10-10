@@ -694,7 +694,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: err?.message || 'Deploy failed.',
+                fallback: err?.message || 'Publish failed.',
             }));
         }
     }
@@ -788,7 +788,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         chainId,
                         coinTicker,
                         mandatory: nativeFee.mandatory,
-                        fallback: err?.message || 'Deploy failed.',
+                        fallback: err?.message || 'Publish failed.',
                     }),
             );
             setChunkProgress(null);
@@ -845,8 +845,8 @@ export function DeployContractForm({ walletId, onBack }) {
         <PageHeader
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review deploy'
-                    : `Deploy contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
+                    ? 'Review publish'
+                    : `Publish contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
         />
     );
     const wrap = (children) => (
@@ -909,7 +909,7 @@ export function DeployContractForm({ walletId, onBack }) {
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Deploy contract {metaName ? `"${metaName}"` : ''} to{' '}
+                    Publish contract {metaName ? `"${metaName}"` : ''} to{' '}
                     {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
                 </p>
                 <dl className={styles.detailsList}>
@@ -1047,7 +1047,7 @@ export function DeployContractForm({ walletId, onBack }) {
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Deploy on ${descriptor.displayName}` : 'Deploy')}
+                                : (descriptor ? `Publish on ${descriptor.displayName}` : 'Publish')}
                     </Button>
                 </div>
             </form>,
@@ -1176,7 +1176,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         return (
                             <div key={r.id} className={styles.warning}>
                                 <p>
-                                    Unfinished deploy{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
+                                    Unfinished publish{r.name ? ` of "${r.name}"` : ''}: {done} of{' '}
                                     {r.totalChunks} chunk transactions have already been sent. Finishing
                                     costs only the remaining ones; starting over pays for all of them again.
                                 </p>

@@ -489,7 +489,7 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
 async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     await seedPrices();
     await gotoPalette(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: '+ Deploy new contract' });
+    const deploy = page.getByRole('button', { name: '+ Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
 

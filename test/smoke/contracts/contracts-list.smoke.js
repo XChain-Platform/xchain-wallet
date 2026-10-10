@@ -13,7 +13,7 @@
 //
 // Asserts:
 //   1. ContractsList.jsx exists and is a single-component named export.
-//   2. Three sections render: "My contracts (deployed by me)",
+//   2. Three sections render: "My contracts (published by me)",
 //      "My interactions (deposits / withdrawals)", "Browse all contracts".
 //   3. Wiring uses messaging.getContractsForSource per BTC address,
 //      getDepositsForAddress + getWithdrawalsForAddress for the
@@ -63,7 +63,7 @@ assert.equal(
 
 // --- 2. Three sections ------------------------------------------------
 
-assert.ok(/My contracts \(deployed by me\)/.test(listSrc), 'My contracts section title');
+assert.ok(/My contracts \(published by me\)/.test(listSrc), 'My contracts section title');
 assert.ok(/My interactions \(deposits \/ withdrawals\)/.test(listSrc), 'My interactions section title');
 assert.ok(/Browse all contracts/.test(listSrc), 'Browse all section title');
 
@@ -137,7 +137,7 @@ assert.ok(
     'ContractsList says in plain words that fund-neutral calls are not listed yet',
 );
 assert.ok(
-    /No contracts deployed from this chain/.test(listSrc),
+    /No contracts published from this chain/.test(listSrc),
     'ContractsList surfaces the empty "My contracts" state per chain',
 );
 assert.ok(
