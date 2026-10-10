@@ -1396,7 +1396,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !code.trim() || actionConfirm.composing}
                 >
-                    {singleEncode ? 'Deploy' : 'Preview'}
+                    {singleEncode ? 'Publish' : 'Preview'}
                 </Button>
             </div>
         </form>,

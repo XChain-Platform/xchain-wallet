@@ -254,7 +254,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         });
 
         await test.step('submit in FULL mode and record which lane runs', async () => {
-            const submit = main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first();
+            const submit = main.getByRole('button', { name: 'Preview', exact: true }).first();
             const label = (await submit.textContent() || '').trim();
             await submit.click();
 
@@ -407,7 +407,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         let doneTxid = null;
 
         await test.step('run all three legs', async () => {
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
 
             // The review screen is identified by its SUBMIT button, not by the
             // password field: SignCredentials renders no password box when the
@@ -609,7 +609,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 'the padded counter no longer crosses the inline cap')
                 .toBeVisible({ timeout: 60_000 });
 
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
             const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go, 'the review screen never appeared').toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
@@ -797,7 +797,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await main.getByLabel('Gas limit').fill(GAS_LIMIT);
             await expect(main.getByText(/too large for one transaction/i)).toBeVisible({ timeout: 60_000 });
 
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
             const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
@@ -877,7 +877,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // regression by supplying the value the wallet was supposed to keep.
             expect(resumedGas, 'nothing to submit with').toBe(GAS_LIMIT);
 
-            await main.getByRole('button', { name: /^(Deploy|Preview)$/ }).first().click();
+            await main.getByRole('button', { name: 'Preview', exact: true }).first().click();
             const go = page.getByRole('button', { name: /^Publish on / });
             await expect(go).toBeVisible({ timeout: 60_000 });
             const password = page.getByLabel('Password', { exact: true });
