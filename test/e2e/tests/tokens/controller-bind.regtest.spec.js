@@ -506,7 +506,7 @@ async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     await main.getByRole('button', { name: 'Validate code' }).click();
     await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
-    await main.getByRole('button', { name: 'Publish', exact: true }).click();
+    await main.getByRole('button', { name: 'Deploy', exact: true }).click();
 
     await expectConfirmModal(page);
     const deployed = await waitForIndexedAction(await approveAndGetTxid(page));

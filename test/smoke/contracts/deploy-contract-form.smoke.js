@@ -99,8 +99,8 @@ assert.ok(/Contracts can only be deployed on \$\{where\}/.test(formSrc),
 for (const label of ['Validate code', 'Estimate size', 'Suggest gas']) {
     assert.ok(formSrc.includes(label), `DeployContractForm renders "${label}" button`);
 }
-assert.ok(/singleEncode \? 'Publish' : 'Preview'/.test(formSrc),
-    'DeployContractForm labels the publish and preview actions without legacy deploy wording');
+assert.ok(/singleEncode \? 'Deploy' : 'Preview'/.test(formSrc),
+    'DeployContractForm keeps the DEPLOY protocol action label for a single-transaction publish');
 
 // --- 4. Review + HW branching ----------------------------------------
 
