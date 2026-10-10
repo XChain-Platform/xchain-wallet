@@ -283,7 +283,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
 
             await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
-            await main.getByRole('button', { name: 'Deploy', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish', exact: true }).click();
             await approveConfirm(page);
 
             await expect(main.getByText(/Contract deployed\./)).toBeVisible({ timeout: 120_000 });
