@@ -8,18 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Store-hidden surfaces (; §2.3).
+// Build-profile surfaces (§2.3).
 //
-// The `store` profile is what a mobile app-store build is cut from, and its
-// defining property is not a label: the review-hidden surfaces are COMPILED
-// OUT, so there is nothing in the artifact to switch back on. (A surface that
-// could be switched back on is an App Review guideline 2.3.1 hidden feature,
-// and the penalty is developer-account termination across every Apple surface
-// we have, iOS AND desktop notarization.)
+// The 2026-10-09 review decision ships the DEX in every profile. The
+// compile-out switch remains available for a future reviewed decision, so its
+// twin and module-graph invariants remain tested even though no current profile
+// selects it.
 //
 // Three things can break that quietly, and each has a test below:
-//   1. the twin drifting from the real module, so a store build calls an
-//      export that does not exist - on the shell with the least coverage;
+//   1. the twin drifting from the real module, so a profile that selects it
+//      calls an export that does not exist;
 //   2. the twin importing something, which would put the surface back in the
 //      bundle while every label still said it was gone;
 //   3. a second importer of a DEX route component appearing anywhere in the
@@ -68,26 +66,24 @@ function webSourceFiles(dir = webSrc, out = []) {
 describe('the surface registry', () => {
     it('describes every profile the build system knows about', () => {
         // A profile missing from the table would silently mean "hides
-        // nothing", which for a store build is exactly the wrong default.
+        // nothing", making the artifact drift from the reviewed registry.
         for (const profile of BUILD_PROFILES) {
             expect(Object.keys(HIDDEN_SURFACES)).toContain(profile);
         }
         expect(HIDDEN_SURFACES[DEFAULT_BUILD_PROFILE]).toEqual([]);
     });
 
-    it('hides the DEX surface in `store` and nothing in `default`', () => {
-        // D2 (§9) is still open; this is the spec's recommendation,
-        // and answering it the other way is deleting one line in the registry.
-        expect(hiddenSurfacesFor('store')).toEqual(['dex']);
-        expect(hiddenSurfacesFor('default')).toEqual([]);
-        expect(isSurfaceEnabled('dex', 'default')).toBe(true);
-        expect(isSurfaceEnabled('dex', 'store')).toBe(false);
+    it('ships the DEX surface in every profile and keeps the hide switch', () => {
+        expect(SURFACES).toContain('dex');
+        for (const profile of BUILD_PROFILES) {
+            expect(hiddenSurfacesFor(profile)).toEqual([]);
+            expect(isSurfaceEnabled('dex', profile)).toBe(true);
+        }
     });
 
     it('refuses an unknown surface or profile instead of guessing', () => {
-        // Guessing "enabled" ships a surface the store build was meant to drop;
-        // guessing "hidden" ships a web build with no DEX. Neither is visible
-        // by looking at the running app, so both fail loudly at build time.
+        // Either guess can make the built surface set disagree with the
+        // reviewed registry, so both fail loudly at build time.
         expect(() => isSurfaceEnabled('dexx', 'store')).toThrow(/unknown surface/);
         expect(() => isSurfaceEnabled('dex', 'mobile')).toThrow(/unknown build profile/);
     });
@@ -105,8 +101,8 @@ describe('the surface registry', () => {
 
 describe('the hidden twin', () => {
     it('exports exactly what the real module exports', () => {
-        // The twin is what a store build RUNS. A name added on one side only
-        // is an undefined at runtime, in the shell nobody smoke-runs locally.
+        // A profile that selects the twin runs it. A name added on one side
+        // only would become undefined at runtime.
         expect(Object.keys(hiddenDex).sort()).toEqual(Object.keys(realDex).sort());
     });
 
@@ -121,9 +117,9 @@ describe('the hidden twin', () => {
     });
 
     it('imports nothing, which is the entire mechanism', () => {
-        // An import here would drag the surface back into the store bundle
-        // while every label still said it was absent - the false claim in a
-        // signed manifest that that gate exists to prevent.
+        // An import here would drag the surface back into a hidden-profile
+        // bundle while every label still said it was absent - the false claim
+        // in a signed manifest that that gate exists to prevent.
         const src = readFileSync(join(surfacesDir, 'dex.hidden.jsx'), 'utf8');
         expect(src).not.toMatch(/^\s*import\s/m);
         expect(src).not.toMatch(/\bimport\s*\(/);
@@ -170,7 +166,8 @@ describe('the DEX route components', () => {
     it('are every import of the surface module, bar the allowlisted shared ones', () => {
         // The reverse direction: a route imported here but missing from
         // SURFACE_MODULES.dex is watched by no guard, so a later second
-        // importer would put it back in the store bundle with the build green.
+        // importer would put it back in a hidden-profile bundle with the build
+        // green.
         const specifiers = importSpecifiers(dexCode());
         expect(specifiers.length).toBeGreaterThan(0);
         const listed = [...SURFACE_MODULES.dex, ...DEX_SHARED_IMPORTS];

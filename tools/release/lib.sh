@@ -37,15 +37,16 @@
 #     <sha256>  ./xchain-wallet-web-v0.333.1.tar.gz
 #     ...
 #
-# Version 2 added the profile lines. A build profile is which
-# SET OF FEATURES was compiled in, and v1 has exactly two: `default`
-# (web, desktop, extension) and `store` (the mobile store builds, which
-# compile OUT the surfaces the app-store review posture hides, per
-# §2.3). Two artifacts of one tag can therefore contain different code,
-# and a record whose whole job is to prove what shipped could not say
-# which was which. The mapping is one profile per artifact, taken from
-# the same committed expected-artifacts.txt that gates the set, so it is
-# a property of the declared release rather than of the machine.
+# Version 2 added the profile lines. A build profile records which build
+# configuration produced an artifact, and v1 has exactly two: `default`
+# (web, desktop, extension) and `store` (the mobile store builds, with
+# store-specific CSP, sourcemaps, packaging, and a signed profile stamp).
+# The 2026-10-09 review decision ships every product surface in both profiles;
+# a profile name does not imply a reduced surface set. Two artifacts of one tag
+# can still contain different build controls, and a record whose whole job is
+# to prove what shipped must say which was which. The mapping is one profile
+# per artifact, taken from the same committed expected-artifacts.txt that gates
+# the set, so it is a property of the declared release rather than of the machine.
 #
 # There is no version-1 compatibility branch: nothing has been published
 # yet (RELEASE_HASHES/ holds no manifests), so a v1 reader would be dead
@@ -410,13 +411,12 @@ xr_profile_for() {
 # Refuse a release that labels an artifact `store` before the store build
 # profile exists as a build mechanism.
 #
-# Recording a profile is not producing one. The compile-time flags that
-# make a `store` build differ from a `default` one are not written yet
-# (§2.3), so writing `store` into a
-# signed, append-only record today would be a FALSE claim: a verifier would
-# read it as "the review-hidden surfaces are absent" from a build that
-# still contains them. That is worse than saying nothing, so it fails shut
-# and the status file says how to open it.
+# Recording a profile is not producing one. Until the compile-time profile
+# mechanism exists, writing `store` into a signed, append-only record would be
+# a false claim about the CSP, sourcemap posture, packaging inputs, and profile
+# stamp carried by the artifact. That is worse than saying nothing, so this
+# fails shut and the status file says how to open it. Surface membership is
+# governed independently by packages/web/src/surfaces/registry.js.
 # Args: dir expected_file
 xr_assert_store_profile_buildable() {
     local dir="$1" expected="$2" here status name has_store=0
