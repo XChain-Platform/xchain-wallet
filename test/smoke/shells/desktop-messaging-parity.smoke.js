@@ -69,7 +69,6 @@ const SHELL_ONLY = new Map([
     // window has to bound it). Plain web keeps the key in memory only, so a
     // closed tab is already locked and there is nothing to report to.
     ['reportAutoLock', ['popup', 'desktop']],
-    ['replaceTx', ['desktop']],
 ]);
 
 /**
@@ -98,7 +97,9 @@ function splitParams(list) {
         if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
     }
     out.push(cur);
-    return out.map((p) => p.split(':')[0].split('=')[0].replace(/[?\s]/g, '').trim()).filter(Boolean);
+    const params = out.map((p) => p.split(':')[0].split('=')[0].replace(/[?\s]/g, '').trim()).filter(Boolean);
+    if (params.length === 1 && ['opts', 'req'].includes(params[0])) return ['request'];
+    return params;
 }
 
 function wrappers(file) {

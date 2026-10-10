@@ -77,7 +77,7 @@ assert.match(form, /plan\.single === false/, 'form routes over-cap sources into 
 assert.match(form, /transactions plus 1 assembling transaction/, 'form states the real transaction count');
 assert.match(form, /plan\.totalChunks \+ 1/, 'form totals the legs the user actually pays for');
 assert.match(form, /A watch-only wallet cannot/, 'watcher mode is refused for the chunked lane, not half-served');
-assert.match(form, /Resume this deploy/, 'resume banner offered for interrupted runs');
+assert.match(form, /Resume publishing/, 'resume banner offered for interrupted runs');
 assert.match(form, /already on chain/, 'resume copy states the chunks are already paid for');
 assert.match(form, /deployChunkedHw/, 'hardware lane wired');
 
