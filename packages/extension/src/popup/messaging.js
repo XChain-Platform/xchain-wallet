@@ -1722,6 +1722,17 @@ export function dismissFailedPendingTx(req) {
 }
 
 /**
+ * Replace an unconfirmed transaction with a higher-fee speedup, cancel, or
+ * restore transaction.
+ *
+ * @param {import('@xchain-wallet/core/flows/rbfReplace.js').RbfRequest} req
+ * @returns {Promise<import('@xchain-wallet/core/flows/rbfReplace.js').RbfResult>}
+ */
+export function replaceTx(req) {
+    return /** @type {any} */ (sendMessage('tx.replace', req));
+}
+
+/**
  * List LINK actions where `address` is the source. Backs the §23.5
  * cross-chain thread rendering : a LINK row pairs (coin1,
  * coin1_action_index) with (coin2, coin2_action_index), and the
