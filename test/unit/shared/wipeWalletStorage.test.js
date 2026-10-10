@@ -22,9 +22,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { WALLET_LOCAL_KEYS } from '../../../packages/extension/src/background/wipeExtensionStorage.js';
 import {
+    delayForAttempts,
     getLockoutState,
     __resetLockoutPersistenceForTests,
 } from '../../../packages/core/src/flows/lockoutTracking.js';
+import {
+    computeBackoffMs,
+    FREE_ATTEMPTS,
+} from '../../../packages/extension/src/background/unlockThrottle.js';
 import {
     activatePanicMode,
     clearPanicModeState,
@@ -46,6 +51,17 @@ const LOCKOUT_KEY = 'xchain-wallet:lockout';
 const PANIC_KEY = 'xchain-wallet:panic';
 const DURESS_KEY = 'xchain-wallet:duress';
 const HIGH_LADDER = JSON.stringify({ failedAttempts: 7, lockedUntilMs: Date.now() + 900_000 });
+
+describe('authoritative unlock throttle policy', () => {
+    it('matches the G066 ladder in the required row verification run', () => {
+        const expectedMs = [0, 0, 0, 5_000, 15_000, 60_000, 300_000, 900_000, 900_000];
+        expect(FREE_ATTEMPTS).toBe(2);
+        expectedMs.forEach((delayMs, failures) => {
+            expect(computeBackoffMs(failures)).toBe(delayMs);
+            expect(delayForAttempts(failures) * 1000).toBe(delayMs);
+        });
+    });
+});
 
 /** Minimal stand-in for the IndexedDB delete request handshake. */
 function stubIndexedDB(outcome = 'onsuccess') {
