@@ -10,22 +10,15 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sendRbfRequest } from '../../../packages/core/src/flows/rbfReplace.js';
+import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import {
+    __resetForTests,
+    __setHostForTests,
+} from '../../../packages/web/src/hostBridge.js';
 
-const { sendMessage } = vi.hoisted(() => ({ sendMessage: vi.fn() }));
-
-vi.mock('../../../packages/web/src/hostBridge.js', () => ({
-    sendMessage,
-    getSessionStatus: vi.fn(),
-    unlockWalletLocal: vi.fn(),
-    lockWalletLocal: vi.fn(),
-    createWalletLocal: vi.fn(),
-    importMnemonicLocal: vi.fn(),
-    importBackupLocal: vi.fn(),
-}));
-
-const webMessaging = await import('../../../packages/web/src/messaging.js');
+import * as webMessaging from '../../../packages/web/src/messaging.js';
 
 const mobilePackage = JSON.parse(readFileSync(
     resolve('packages/mobile/package.json'),
@@ -46,8 +39,26 @@ const request = {
 };
 
 beforeEach(() => {
-    sendMessage.mockReset();
+    __resetForTests();
 });
+
+afterEach(() => {
+    __resetForTests();
+});
+
+function createHost(chainRegistry = { get: () => null, list: () => [] }) {
+    return createBackgroundHost({
+        vault: { settings: { get: async () => ({}) } },
+        chainRegistry,
+        sdkRegistry: { get: () => null, for: () => null },
+        approvals: { request: async () => ({ approved: true }) },
+        bridgeEvents: { emit() {} },
+        getDiagnosticContext: () => ({}),
+        broadcastQueueStorage: null,
+        signThrottleStorage: null,
+        logConsoleStorage: null,
+    });
+}
 
 describe('web and mobile SPA replacement messaging', () => {
     it('exports replaceTx from the web SPA and forwards the request to tx.replace unchanged', async () => {
@@ -56,13 +67,14 @@ describe('web and mobile SPA replacement messaging', () => {
             broadcastedAt: '2026-10-09T12:00:00.000Z',
             feeIncrease: '0.00001',
         };
-        sendMessage.mockResolvedValue(result);
+        const handle = vi.fn(async () => ({ ok: true, result }));
+        __setHostForTests({ handle });
 
         expect(webMessaging.replaceTx).toBeTypeOf('function');
         await expect(sendRbfRequest({ messaging: webMessaging, request })).resolves.toBe(result);
 
-        expect(sendMessage).toHaveBeenCalledOnce();
-        expect(sendMessage).toHaveBeenCalledWith('tx.replace', request);
+        expect(handle).toHaveBeenCalledOnce();
+        expect(handle).toHaveBeenCalledWith({ type: 'tx.replace', request });
     });
 
     it('preserves a rejection from the in-page host', async () => {
@@ -70,9 +82,29 @@ describe('web and mobile SPA replacement messaging', () => {
             name: 'ReplacementRejectedError',
             code: 'REPLACEMENT_REJECTED',
         });
-        sendMessage.mockRejectedValue(error);
+        __setHostForTests({
+            handle: async () => ({
+                ok: false,
+                error: { name: error.name, message: error.message, code: error.code },
+            }),
+        });
 
-        await expect(webMessaging.replaceTx(request)).rejects.toBe(error);
+        await expect(webMessaging.replaceTx(request)).rejects.toMatchObject({
+            name: error.name,
+            message: error.message,
+            code: error.code,
+        });
+    });
+
+    it('web in-page host answers tx.replace', async () => {
+        const getChain = vi.fn(() => null);
+        const host = createHost({ get: getChain, list: () => [] });
+        __setHostForTests(host);
+
+        expect(host.types()).toContain('tx.replace');
+        await expect(webMessaging.replaceTx(request))
+            .rejects.toThrow('tx.replace: unknown chain "btc"');
+        expect(getChain).toHaveBeenCalledWith(request.chainId);
     });
 
     it('ships the same messaging export in mobile by staging the web SPA verbatim', () => {
