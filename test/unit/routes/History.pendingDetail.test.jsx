@@ -31,8 +31,8 @@ const SEEN_HASH = 'aa11bb22cc33dd44ee55ff6677889900aabbccddeeff00112233445566778
 const LOCAL_HASH = '1122334455667788990011223344556677889900aabbccddeeff001122334455';
 const REPLACEMENT_HASH = 'ffeeddccbbaa99887766554433221100ffeeddccbbaa998877665544332211ff';
 
-function stubMessaging({ mempool = [], pendingTxs = [], history = [] } = {}) {
-    return {
+function stubMessaging({ mempool = [], pendingTxs = [], history = [], replaceTx } = {}) {
+    const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: OURS }] }),
         getAddressHistory: vi.fn().mockResolvedValue(history),
         getLinksForAddress: vi.fn().mockResolvedValue([]),
@@ -44,6 +44,8 @@ function stubMessaging({ mempool = [], pendingTxs = [], history = [] } = {}) {
         listContacts: vi.fn().mockResolvedValue([]),
         getActionByIndex: vi.fn().mockResolvedValue(null),
     };
+    if (replaceTx) messaging.replaceTx = replaceTx;
+    return messaging;
 }
 
 function mountHistory(fixtures) {
@@ -244,11 +246,22 @@ describe('History pending detail branch', () => {
 });
 
 describe('History offers replacement only where it can still work', () => {
-    it('offers Speed up on an eligible pending entry with no explorer links', async () => {
+    it('withholds Speed up on an eligible pending entry when the shell cannot replace it', async () => {
         // Regtest pending: no action index for the XChain link and no
-        // third-party explorer, which is precisely the transaction Speed
-        // up exists for.
+        // third-party explorer. Eligibility alone must not expose controls
+        // that this shell cannot execute.
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()] });
+        const region = await openRow(view, 'not-seen');
+        expect(within(region).queryByRole('group', { name: 'Action options' })).toBeNull();
+        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Cancel transaction')).toBeNull();
+    });
+
+    it('offers Speed up on an eligible pending entry when the shell can replace it', async () => {
+        const { view } = mountHistory({
+            pendingTxs: [staleLocalSend()],
+            replaceTx: vi.fn(),
+        });
         const region = await openRow(view, 'not-seen');
         fireEvent.click(within(region).getByText('More'));
         expect(within(region).getByText('Speed up')).toBeTruthy();
@@ -261,6 +274,7 @@ describe('History offers replacement only where it can still work', () => {
                 status: 'rbf-replaced',
                 rbfReplacement: REPLACEMENT_HASH,
             })],
+            replaceTx: vi.fn(),
         });
         const region = await openRow(view, 'replaced');
         // The follow-up menu only renders when something is on offer, so
