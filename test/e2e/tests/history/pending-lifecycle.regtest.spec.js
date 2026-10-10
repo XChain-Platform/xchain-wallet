@@ -51,15 +51,10 @@
 //     something neither of them made up; a screen-only assertion would pass on
 //     a wallet that renders "pending" off its own optimism.
 //
-//   - "Speed up and Cancel are offered" (CLAIM 3B) is a claim about a REAL
-//     pending entry and cannot be made anywhere else. The offer was once gated
-//     on the entry having an explorer link, so it was withdrawn from precisely
-//     the transactions it serves: a pending regtest send has no action index
-//     for the XChain link and regtest has no third-party explorer. A fixture
-//     that hands the component an entry with links attached never sees that.
-//     What the buttons DO is deliberately not asserted here. The shared web
-//     and mobile SPA wiring in `packages/web/src/messaging.js` has a focused
-//     unit contract; this lifecycle test stops before a second broadcast.
+//   - "Speed up and Cancel are withheld" (CLAIM 3B) is checked on a REAL
+//     pending entry. The web shell module at packages/web/src/messaging.js
+//     exposes no `replaceTx` call, so offering controls that can only throw is
+//     a false promise even though the entry itself is replaceable.
 //
 // A DEFECT THIS FILE PINS RATHER THAN HIDES, stated here because it explains
 // the shape of everything below. The wallet builds against the PUBLISHED
@@ -359,36 +354,23 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
                 'the pending panel is missing from the detail view').toBeVisible();
         });
 
-        await test.step('CLAIM 3B: the pending entry still OFFERS Speed up and Cancel', async () => {
-            // M2 acceptance test 4's list-side half, driven here because this
-            // is the surface a real user reaches: every shell wires
-            // `onSelectEntry` to navigate, and the standalone page renders the
-            // SAME `DetailCard`, so the offer proven here is the offer proven
-            // for both surfaces.
-            //
-            // Why a venue test and not a unit test: gating the offer
-            // on the entry having an explorer link, which withdrew it from
-            // exactly the transactions it exists for - a pending regtest send
-            // has no action index for the XChain link, and regtest has no
-            // third-party explorer, so the gate closed on every row this
-            // feature serves. That gate is fixed, and nothing until now had
-            // driven the fixed path against a REAL pending entry.
-            //
-            // Nothing here asserts what the buttons DO. The web and mobile SPA
-            // transport is covered by `test/unit/shells/replaceTxWeb.test.js`;
-            // the offer on a real pending entry is this test's claim.
+        await test.step('CLAIM 3B: a shell without replaceTx WITHHOLDS Speed up and Cancel', async () => {
+            // This drives the shared DetailCard through the real web shell.
+            // The pending send is eligible for replacement, but the shell has
+            // no callable replacement transport, so neither dead control may
+            // be offered.
             const options = page.getByRole('group', { name: 'Action options' });
-            await expect(options, 'the pending entry renders no action options at all, which is '
-                + 'the exact shape the explorer-link gate used to produce on a regtest send')
+            await expect(options, 'the pending entry has no action options from which to verify the shell gate')
                 .toBeVisible({ timeout: 30_000 });
 
             await options.getByRole('button', { name: 'More' }).click();
             const menu = options.getByRole('menu');
             await expect(menu.getByRole('menuitem', { name: 'Speed up' }),
-                'Speed up is not offered on a pending, replaceable SEND')
-                .toBeVisible({ timeout: 15_000 });
+                'Speed up is offered even though the web shell cannot replace a transaction')
+                .toHaveCount(0);
             await expect(menu.getByRole('menuitem', { name: 'Cancel transaction' }),
-                'Cancel is not offered on a pending, replaceable SEND').toBeVisible();
+                'Cancel is offered even though the web shell cannot replace a transaction')
+                .toHaveCount(0);
 
             // Closed again on purpose: an open menu carries a click-outside
             // handler that would eat CLAIM 4's first interaction.
@@ -396,7 +378,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             await expect(menu, 'the More menu stayed open').toHaveCount(0);
 
             expect(await blocksMined(), 'a block was mined while the miner was supposed to be '
-                + 'parked, so the offer above was not measured against an unconfirmed transaction')
+                + 'parked, so the shell gate above was not measured against an unconfirmed transaction')
                 .toBe(heldBlocks);
         });
 
