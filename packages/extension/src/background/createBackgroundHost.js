@@ -3447,8 +3447,8 @@ export function createBackgroundHost(deps) {
         // Audit invariant (matches the submitAction path, §11.3.8): persist a
         // PendingTx record BEFORE the irreversible broadcast so a spend through
         // this route always leaves a local trace in history / the tx-status
-        // timeline, and fail closed if it cannot be recorded. We only have
-        // chainId + txHex here, so fromAddress/toAddress are recorded as unknown.
+        // timeline, and fail closed if it cannot be recorded. The signing
+        // address keeps a queued record attributable during vault recovery.
         if (!vault) {
             throw new Error('broadcast.signedTx: vault is required to record the broadcast');
         }
