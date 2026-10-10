@@ -275,8 +275,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     // §20 / G040 FOLLOWUP 1: capture the broadcastable txHex + txid from
     // the sign result so the result page can offer in-wallet broadcast.
     const [signedTxHex, setSignedTxHex] = useState(/** @type {string} */ (''));
+    const [signedTxid, setSignedTxid] = useState(/** @type {string} */ (''));
     const [broadcastState, setBroadcastState] = useState(
-        /** @type {'idle' | 'broadcasting' | 'broadcast' | 'error'} */ ('idle'),
+        /** @type {'idle' | 'broadcasting' | 'broadcast' | 'queued' | 'error'} */ ('idle'),
     );
     const [broadcastTxid, setBroadcastTxid] = useState(/** @type {string} */ (''));
     const [broadcastError, setBroadcastError] = useState(/** @type {string | null} */ (null));
@@ -640,6 +641,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             });
             setSignedPsbtHex(result?.signedPsbtHex || '');
             setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
+            setSignedTxid(typeof result?.txid === 'string' ? result.txid : '');
             setBroadcastState('idle');
             setBroadcastTxid('');
             setBroadcastError(null);
@@ -710,6 +712,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 });
             setSignedPsbtHex(result?.signedPsbtHex || '');
             setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
+            setSignedTxid(typeof result?.txid === 'string' ? result.txid : '');
             setBroadcastState('idle');
             setBroadcastTxid('');
             setBroadcastError(null);
@@ -807,6 +810,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         }}>{broadcastTxid}</code>
                         <CopyButton value={broadcastTxid} label="Copy txid" />
                     </div>
+                ) : broadcastState === 'queued' ? (
+                    <div role="status" aria-live="polite" style={{ color: 'var(--xc-text-muted)' }}>
+                        The network could not take the transaction yet. Its signed bytes are saved in the
+                        queued-transactions banner, where you can retry without signing again.
+                    </div>
                 ) : broadcastState === 'error' ? (
                     <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)' }}>
                         {broadcastError}
@@ -827,7 +835,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     </p>
                 )}
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    {broadcastState !== 'broadcast' ? (
+                    {broadcastState !== 'broadcast' && broadcastState !== 'queued' ? (
                         <Button
                             variant="primary"
                             block
@@ -845,11 +853,18 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 setBroadcastError(null);
                                 try {
                                     const res = await messaging.broadcastSignedTxRequest({
+                                        walletId,
                                         chainId,
                                         txHex: signedTxHex,
+                                        txid: signedTxid || undefined,
+                                        fromAddress: selectedAddress?.address || undefined,
                                     });
-                                    setBroadcastTxid(res?.txid || '');
-                                    setBroadcastState('broadcast');
+                                    if (res?.queued === true) {
+                                        setBroadcastState('queued');
+                                    } else {
+                                        setBroadcastTxid(res?.txid || signedTxid);
+                                        setBroadcastState('broadcast');
+                                    }
                                 } catch (err) {
                                     setBroadcastError(broadcastFailureMessage(err));
                                     setBroadcastState('error');
@@ -865,6 +880,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         onClick={() => {
                             setSignedPsbtHex(null);
                             setSignedTxHex('');
+                            setSignedTxid('');
                             setBroadcastState('idle');
                             setBroadcastTxid('');
                             setBroadcastError(null);

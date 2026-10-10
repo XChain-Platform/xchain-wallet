@@ -2884,6 +2884,7 @@ export function createBackgroundHost(deps) {
         restoreQueueFromVault,
         reconcileRestoredEntries,
         enqueueOnBroadcastFailure,
+        enqueueSignedBroadcast,
         pushQueueEntry,
         settleQueuedPendingTx,
     } = createBroadcastQueueEngine({
@@ -3419,13 +3420,13 @@ export function createBackgroundHost(deps) {
     // §30.4 / G088: read-only PSBT decompose. The form pastes hex/base64
     // before any auth, so this handler doesn't touch vault: purely
     // sdkRegistry. Caller normalizes hex before sending.
-    // §20 / G040 FOLLOWUP 1: broadcast a signed transaction (extracted
-    // from a signed PSBT by the renderer-side `auth.signPsbt` flow). No
-    // vault required; this is purely an SDK encoder call. The PsbtSignForm
-    // result page wires this so a Full-mode wallet can broadcast PSBTs
-    // round-tripped from a Watcher / Signer pair without the user having
-    // to copy-paste the txHex out to a block explorer.
+    // §20 / G040 FOLLOWUP 1: broadcast a signed transaction extracted
+    // from a signed PSBT by the renderer-side `auth.signPsbt` flow. The
+    // PsbtSignForm result page wires this so a Full-mode wallet can broadcast
+    // PSBTs round-tripped from a Watcher / Signer pair without copy-pasting
+    // the txHex into a block explorer.
     host.register('broadcast.signedTx', async (req, { sdkRegistry, vault, chainRegistry }) => {
+        let walletId = req?.walletId;
         const chainId = req?.chainId;
         const txHex = req?.txHex;
         if (typeof chainId !== 'string' || !chainId) {
@@ -3446,13 +3447,17 @@ export function createBackgroundHost(deps) {
         // Audit invariant (matches the submitAction path, §11.3.8): persist a
         // PendingTx record BEFORE the irreversible broadcast so a spend through
         // this route always leaves a local trace in history / the tx-status
-        // timeline, and fail closed if it cannot be recorded (an unauditable
-        // irreversible effector must not fire). We only have chainId + txHex
-        // here, so fromAddress/toAddress are recorded as unknown; the descriptor
-        // supplies coin/network and the record is transitioned to broadcast /
-        // failed once the SDK returns.
+        // timeline, and fail closed if it cannot be recorded. The signing
+        // address keeps a queued record attributable during vault recovery.
         if (!vault) {
             throw new Error('broadcast.signedTx: vault is required to record the broadcast');
+        }
+        if (typeof walletId !== 'string' || !walletId) {
+            const wallets = await vault.wallets?.list?.();
+            walletId = Array.isArray(wallets) && wallets.length === 1 ? wallets[0]?.id : null;
+        }
+        if (typeof walletId !== 'string' || !walletId) {
+            throw new Error('broadcast.signedTx: walletId is required');
         }
         const descriptor = chainRegistry?.get?.(chainId);
         if (!descriptor) {
@@ -3461,13 +3466,20 @@ export function createBackgroundHost(deps) {
         let pending = schemas.createPendingTx({
             chain: descriptor.coin,
             network: descriptor.networkKind,
-            fromAddress: 'unknown',
+            fromAddress: typeof req?.fromAddress === 'string' && req.fromAddress
+                ? req.fromAddress
+                : 'unknown',
             toAddress: 'unknown',
             action: 'BROADCAST_SIGNED_TX',
             actionSummary: 'Raw signed transaction broadcast via broadcast.signedTx',
             psbtHex: '',
         });
-        pending = { ...pending, status: 'broadcasting', txHex };
+        pending = {
+            ...pending,
+            status: 'broadcasting',
+            txHex,
+            ...(typeof req?.txid === 'string' && req.txid ? { txid: req.txid } : {}),
+        };
         await vault.pendingTxs.put(pending);
 
         let result;
@@ -3475,8 +3487,48 @@ export function createBackgroundHost(deps) {
             result = await sdk.encoder.broadcastTx(txHex);
         } catch (err) {
             const msg = err && err.message ? String(err.message) : String(err);
-            await vault.pendingTxs.put({ ...pending, status: 'failed', error: msg });
-            throw err;
+            if (saysAlreadyOnNetwork(err)) {
+                const deliveredPatch = {
+                    status: 'broadcast',
+                    broadcastAt: new Date().toISOString(),
+                    txid: pending.txid,
+                    error: null,
+                };
+                if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, deliveredPatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, pending.id, 'patch', deliveredPatch);
+                }
+                await flushOwedSettlements(vault);
+                return { txid: pending.txid, alreadyOnNetwork: true };
+            }
+            if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                const failedPatch = { status: 'failed', error: msg };
+                if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, failedPatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, pending.id, 'patch', failedPatch);
+                }
+                if (err && typeof err === 'object') {
+                    try { err.name = flows.BROADCAST_FAILED_PERMANENT_NAME; } catch { /* keep immutable error */ }
+                }
+                throw err;
+            }
+            const queuedPatch = { status: 'queued', error: msg };
+            if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, queuedPatch) === 'unreachable') {
+                recordOwedSettlement(walletId, pending.id, 'patch', queuedPatch);
+            }
+            const queued = await enqueueSignedBroadcast(walletId, {
+                chainId,
+                signedTxHex: txHex,
+                summary: 'Signed transaction waiting to broadcast',
+                txid: pending.txid,
+                pendingTxId: pending.id,
+            });
+            await flushOwedSettlements(vault);
+            return {
+                queued: true,
+                broadcast: 'queued',
+                queueId: queued.entry.id,
+                pendingTxId: pending.id,
+                persisted: queued.persisted,
+            };
         }
         // Encoder result shape varies by chain (some return { txid }, some
         // return the txid string directly). Normalize so the caller always
@@ -3485,15 +3537,38 @@ export function createBackgroundHost(deps) {
             ? result
             : (result?.txid ?? result?.tx_hash ?? null);
         if (typeof txid !== 'string' || !txid) {
-            await vault.pendingTxs.put({ ...pending, status: 'failed', error: 'SDK did not return a txid' });
-            throw new Error('broadcast.signedTx: SDK did not return a txid');
+            const queuedPatch = { status: 'queued', error: 'SDK did not return a txid' };
+            if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, queuedPatch) === 'unreachable') {
+                recordOwedSettlement(walletId, pending.id, 'patch', queuedPatch);
+            }
+            const queued = await enqueueSignedBroadcast(walletId, {
+                chainId,
+                signedTxHex: txHex,
+                summary: 'Signed transaction with an unconfirmed broadcast',
+                txid: pending.txid,
+                pendingTxId: pending.id,
+                resumedClaim: true,
+            });
+            await flushOwedSettlements(vault);
+            return {
+                queued: true,
+                broadcast: 'queued',
+                queueId: queued.entry.id,
+                pendingTxId: pending.id,
+                persisted: queued.persisted,
+                uncertain: true,
+            };
         }
-        await vault.pendingTxs.put({
-            ...pending,
+        const landedPatch = {
             status: 'broadcast',
             broadcastAt: new Date().toISOString(),
             txid,
-        });
+            error: null,
+        };
+        if (await settleQueuedPendingTx(vault, { pendingTxId: pending.id }, landedPatch) === 'unreachable') {
+            recordOwedSettlement(walletId, pending.id, 'patch', landedPatch);
+        }
+        await flushOwedSettlements(vault);
         return { txid };
     });
 
