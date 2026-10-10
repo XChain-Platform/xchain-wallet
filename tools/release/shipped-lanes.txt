@@ -54,6 +54,13 @@
 #          COLUMN below; globs are matched against artifact basenames,
 #          exactly as in expected-artifacts.txt, and must be declared there too.
 
+# D2 (decided 2026-10-09): ship everything on every store lane.
+# A store-only feed says where updates come from, not that the artifact carries
+# fewer product surfaces. Every store lane ships the same product surfaces as
+# the direct lanes. The build-profile distinction remains for store packaging,
+# CSP, sourcemaps, and the signed profile stamp, and the compile-out mechanism
+# remains available if a later reviewed decision names a surface to hide.
+
 # Android. The pair is ONE build: the ceremony signs the AAB with
 # K9 and derives the universal APK from that same bundle with K10, so a
 # release carrying one and not the other means the ceremony was
