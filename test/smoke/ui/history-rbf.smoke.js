@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §29 Send/Receive, Step 6: History.jsx wires RBF
-// Speed up + Cancel actions.
+// Smoke for §29 Send/Receive, Step 6: History.jsx only wires RBF
+// Speed up + Cancel actions when the shell supplies the replacement call.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -32,7 +32,7 @@ const histCss = readFileSync(
 
 assert.match(
     histSrc,
-    /import \{[\s\S]*isEntryReplaceable[\s\S]*replaceFromHistoryEntry[\s\S]*\} from '\.\.\/\.\.\/flows\/rbfReplace\.js'/,
+    /import \{[\s\S]*isEntryReplaceable[\s\S]*isReplaceCallAvailable[\s\S]*replaceFromHistoryEntry[\s\S]*\} from '\.\.\/\.\.\/flows\/rbfReplace\.js'/,
     'imports the rbfReplace flow primitives',
 );
 assert.match(
@@ -50,8 +50,8 @@ assert.match(
 );
 assert.match(
     histSrc,
-    /if \(replaceable\.ok\b/,
-    'RBF menu options only added for replaceable entries',
+    /if \(isReplaceCallAvailable\(messaging\) && replaceable\.ok && !entry\.pending\?\.replaced\)/,
+    'RBF menu options require a shell replacement call and a replaceable entry',
 );
 
 // --- RbfActions component shape --------------------------------------
