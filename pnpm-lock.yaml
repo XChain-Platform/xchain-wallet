@@ -182,8 +182,8 @@ importers:
         specifier: ^8.10.2
         version: 8.11.2
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.21.3
-        version: '@dankest-llc/xchain-sdk@0.21.3'
+        specifier: npm:@dankest-llc/xchain-sdk@0.22.4
+        version: '@dankest-llc/xchain-sdk@0.22.4'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -228,8 +228,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.21.3
-        version: '@dankest-llc/xchain-sdk@0.21.3'
+        specifier: npm:@dankest-llc/xchain-sdk@0.22.4
+        version: '@dankest-llc/xchain-sdk@0.22.4'
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.0
@@ -304,8 +304,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       xchain-sdk:
-        specifier: npm:@dankest-llc/xchain-sdk@0.21.3
-        version: '@dankest-llc/xchain-sdk@0.21.3'
+        specifier: npm:@dankest-llc/xchain-sdk@0.22.4
+        version: '@dankest-llc/xchain-sdk@0.22.4'
     devDependencies:
       '@vitejs/plugin-basic-ssl':
         specifier: ^1.1.0
@@ -608,8 +608,8 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@dankest-llc/xchain-sdk@0.21.3':
-    resolution: {integrity: sha512-OhlRi5cTCIaV/lmiXIF/DmND0oU1D0rBGO5ADOcaSaKDO5QnfmxSSpRjS/nOkFlIDa9tQsq+Nd/v/BFoNkHoiw==}
+  '@dankest-llc/xchain-sdk@0.22.4':
+    resolution: {integrity: sha512-uKstZEh7+gg5DvkjkhWVZCZf7JBv000pFEpg8NGJqd5KlBV8gcShurcC4cAw7bE1MtaErHUJN+w6pyz7u+P13A==}
     engines: {node: '>=22.0.0'}
 
   '@electron-internal/extract-zip@1.0.5':
@@ -4593,7 +4593,7 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@dankest-llc/xchain-sdk@0.21.3':
+  '@dankest-llc/xchain-sdk@0.22.4':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       '@brandonblack/musig': 0.0.1-alpha.1
