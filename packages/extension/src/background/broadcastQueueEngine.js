@@ -672,15 +672,25 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      */
     function enqueueOnBroadcastFailure(walletId) {
         if (typeof walletId !== 'string' || !walletId) return undefined;
-        return async (entry) => {
-            await ensureQueueLoaded();
-            // A first list in the gap after the 'queued' stamp may have rebuilt
-            // these bytes already; give that entry the verdict instead of a twin.
-            const twin = liveTwinOf(walletId, entry);
-            if (twin) adoptSnapshotVerdict(twin, entry);
-            else pushQueueEntry(walletId, entry);
-            return persistQueue();
-        };
+        return async (entry) => (await enqueueSignedBroadcast(walletId, entry)).persisted;
+    }
+    /**
+     * Add one signed transaction to the live queue and wait for its durable
+     * snapshot. Direct broadcasters use the returned entry to report the
+     * handoff without duplicating the queue's rehydrate and twin rules.
+     *
+     * @param {string} walletId
+     * @param {any} entry
+     * @returns {Promise<{ entry: import('./broadcastQueueStorage.js').QueueEntry, persisted: boolean }>}
+     */
+    async function enqueueSignedBroadcast(walletId, entry) {
+        await ensureQueueLoaded();
+        // A first list in the gap after the 'queued' stamp may have rebuilt
+        // these bytes already; give that entry the verdict instead of a twin.
+        const twin = liveTwinOf(walletId, entry);
+        if (twin) adoptSnapshotVerdict(twin, entry);
+        const stored = twin ?? pushQueueEntry(walletId, entry);
+        return { entry: stored, persisted: await persistQueue() };
     }
     // Find the live entry for the same PendingTx and the same signed bytes.
     function liveTwinOf(walletId, entry) {
@@ -820,6 +830,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         restoreQueueFromVault,
         reconcileRestoredEntries,
         enqueueOnBroadcastFailure,
+        enqueueSignedBroadcast,
         pushQueueEntry,
         settleQueuedPendingTx,
         applyPendingTxPatch,
