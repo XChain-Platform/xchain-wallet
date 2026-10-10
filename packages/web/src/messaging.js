@@ -248,6 +248,17 @@ export function sendToken(opts) {
 }
 
 /**
+ * Replace an unconfirmed transaction with a higher-fee speedup, cancel, or
+ * restore transaction.
+ *
+ * @param {import('@xchain-wallet/core/flows/rbfReplace.js').RbfRequest} req
+ * @returns {Promise<import('@xchain-wallet/core/flows/rbfReplace.js').RbfResult>}
+ */
+export function replaceTx(req) {
+    return /** @type {any} */ (sendMessage('tx.replace', req));
+}
+
+/**
  * §20 / G040: Watcher-mode helper: encode an unsigned PSBT for a SEND
  * action without unlocking the wallet, signing, or broadcasting.
  *

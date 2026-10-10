@@ -134,8 +134,12 @@ assert.ok(
     'createBackgroundHost registers broadcast.queue.enqueue',
 );
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*else pushQueueEntry\(walletId, entry\);\s*return persistQueue\(\);\s*\};/.test(engine),
-    'enqueueOnBroadcastFailure deduplicates restored entries and returns the queue persistence verdict',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \(await enqueueSignedBroadcast\(walletId, entry\)\)\.persisted;/.test(engine),
+    'enqueueOnBroadcastFailure returns the shared queue persistence verdict',
+);
+assert.ok(
+    /async function enqueueSignedBroadcast\(walletId, entry\) \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*const stored = twin \?\? pushQueueEntry\(walletId, entry\);\s*return \{ entry: stored, persisted: await persistQueue\(\) \};/.test(engine),
+    'the shared enqueue path loads, deduplicates, and persists signed broadcasts',
 );
 assert.ok(
     /host\.register\('action\.send'[^\n]*\n(?:(?!host\.register)[\s\S])*?onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)/.test(bg),
@@ -148,7 +152,7 @@ assert.ok(
 );
 // Every software-signer route that runs a submitting flow wires it too.
 let softwareRoutes = 0;
-for (const m of bg.matchAll(/return (\w+)\(\{ \.\.\.req, signer: await sessionSigner\(req, vault, signerPool\)[^\n]*/g)) {
+for (const m of bg.matchAll(/(?:return|const result = await) (\w+)\(\{ \.\.\.req, signer: await sessionSigner\(req, vault, signerPool\)[^\n]*/g)) {
     if (!submitterNames.has(m[1])) continue;
     assert.ok(
         m[0].includes('onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId)'),

@@ -219,8 +219,12 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*else pushQueueEntry\(walletId, entry\);\s*return persistQueue\(\);\s*\};/.test(engineSrc),
-    'the shared onBroadcastFailure hook loads, deduplicates, and returns the save verdict',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \(await enqueueSignedBroadcast\(walletId, entry\)\)\.persisted;/.test(engineSrc),
+    'the shared onBroadcastFailure hook returns the queue save verdict',
+);
+assert.ok(
+    /async function enqueueSignedBroadcast\(walletId, entry\) \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*const stored = twin \?\? pushQueueEntry\(walletId, entry\);\s*return \{ entry: stored, persisted: await persistQueue\(\) \};/.test(engineSrc),
+    'the shared enqueue path loads, deduplicates, and persists signed broadcasts',
 );
 assert.ok(
     !/async \(entry\) => \{ pushQueueEntry\(/.test(bg) && !/async \(entry\) => \{ pushQueueEntry\(/.test(engineSrc),
