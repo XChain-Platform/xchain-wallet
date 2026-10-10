@@ -84,7 +84,7 @@ describe('concurrent wallet.unlock attempts', () => {
     beforeEach(() => { throttle = makeThrottleStore(); });
 
     it('charges every concurrent wrong password to the ladder', async () => {
-        const attempts = FREE_ATTEMPTS + 2;   // 7: six charged, the seventh gated
+        const attempts = FREE_ATTEMPTS + 2;   // 4: three charged, the fourth gated
         const settled = await Promise.allSettled(
             Array.from({ length: attempts }, () => handleWalletUnlock(
                 { password: 'wrong' }, makeDeps(throttle),
@@ -93,8 +93,8 @@ describe('concurrent wallet.unlock attempts', () => {
 
         const names = settled.map((r) => r.reason?.name);
         expect(settled.every((r) => r.status === 'rejected')).toBe(true);
-        // Six reached the vault and were counted; the seventh was refused by
-        // the gate the sixth failure closed. Before serialization, all seven
+        // Three reached the vault and were counted; the fourth was refused by
+        // the gate the third failure closed. Before serialization, all four
         // passed the gate and the store held failCount 1.
         expect(names.filter((n) => n === 'InvalidPasswordError')).toHaveLength(FREE_ATTEMPTS + 1);
         expect(names.filter((n) => n === 'UnlockThrottledError')).toHaveLength(1);

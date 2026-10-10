@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 import { clearLockoutState } from '../../flows/lockoutTracking.js';
+import { clearDuressPassphrase } from '../../flows/duressPassphrase.js';
+import { clearPanicModeState } from '../../flows/panicMode.js';
 
 /** Key a renderer-hosted broadcast queue persists under; core owns it so the wipe and the store agree. */
 export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
@@ -47,6 +49,10 @@ export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
  *     the next wallet's user for the old one's typos, the same reason the
  *     shells clear their own unlock throttle. It goes only after the shell
  *     wipe succeeds, so a failed wipe keeps the throttle on a surviving vault.
+ *   - localStorage `xchain-wallet:panic` and `xchain-wallet:duress` (or their
+ *     injected stores): the signing freeze and the configured duress password.
+ *     Both belong to the erased wallet, so a successful wipe removes them and
+ *     a failed shell wipe keeps them guarding the wallet that survived.
  *
  * Shell-side stores (desktop, extension, native mobile): the Electron
  * shell keeps its vault blob, kdfParams meta, cached session key, unlock
@@ -83,8 +89,10 @@ export async function wipeWalletStorage() {
         globalThis.localStorage?.removeItem(BROADCAST_QUEUE_STORAGE_KEY);
     } catch { /* ignore */ }
     sweepLocalStoragePrefix(BROADCAST_QUEUE_PRUNED_PREFIX);
-    // Same ordering for the unlock ladder: a failed wipe leaves a vault it still guards.
+    // The guards belong to this wallet. A failed wipe leaves the vault they still guard.
     clearLockoutState();
+    clearPanicModeState();
+    clearDuressPassphrase();
 }
 
 /**
