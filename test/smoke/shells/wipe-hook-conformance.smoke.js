@@ -135,6 +135,15 @@ assert.ok(
     /sweepLocalStoragePrefix\(BROADCAST_QUEUE_PRUNED_PREFIX\)/.test(coreWipe),
     'core\'s renderer wipe sweeps the pruned-wallet ledger prefix',
 );
+for (const [record, clearCall] of [
+    ['panic freeze', 'clearPanicModeState()'],
+    ['duress password', 'clearDuressPassphrase()'],
+]) {
+    assert.ok(
+        coreWipe.includes(clearCall),
+        `core's renderer wipe clears the ${record} after the shell wipe succeeds`,
+    );
+}
 assert.ok(
     /session\.clear\(\)/.test(wipeModule),
     'the wipe clears chrome.storage.session wholesale (master key + cached password)',
