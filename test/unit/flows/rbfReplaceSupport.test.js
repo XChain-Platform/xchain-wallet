@@ -24,4 +24,13 @@ describe('isReplaceCallAvailable', () => {
     it('accepts a shell that exposes replaceTx', () => {
         expect(isReplaceCallAvailable({ replaceTx() {} })).toBe(true);
     });
+
+    it('refuses a shell-shaped module that exposes other calls but not replaceTx', () => {
+        const messaging = {
+            getAddressHistory() {},
+            getAddressMempool() {},
+            getPendingTxsForAddress() {},
+        };
+        expect(isReplaceCallAvailable(messaging)).toBe(false);
+    });
 });
