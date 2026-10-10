@@ -611,7 +611,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DeployContractForm,
             props: {},
-            actionLabel: 'Deploy',
+            actionLabel: 'Publish',
             fill: (utils) => {
                 const code = utils.container.querySelector('textarea');
                 if (!code) throw new Error('no contract-code textarea');

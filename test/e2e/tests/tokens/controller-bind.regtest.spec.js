@@ -489,7 +489,7 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
 async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     await seedPrices();
     await gotoPalette(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: '+ Deploy new contract' });
+    const deploy = page.getByRole('button', { name: '+ Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
 
@@ -506,7 +506,7 @@ async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     await main.getByRole('button', { name: 'Validate code' }).click();
     await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
-    await main.getByRole('button', { name: 'Deploy', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish', exact: true }).click();
 
     await expectConfirmModal(page);
     const deployed = await waitForIndexedAction(await approveAndGetTxid(page));
