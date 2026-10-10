@@ -257,8 +257,8 @@ export function DeployContractForm({ walletId, onBack }) {
                     // sentence stays true the day that list grows.
                     const where = deployChainCoins.join(' or ');
                     setLoadError(
-                        `Contracts can only be deployed on ${where}. Use Receive on one of those `
-                        + 'networks to generate an address before deploying.',
+                        `Contracts can only be published on ${where}. Use Receive on one of those `
+                        + 'networks to generate an address before publishing.',
                     );
                     return;
                 }
@@ -580,7 +580,7 @@ export function DeployContractForm({ walletId, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!chainId || !fromAddress) {
-            setFormError('No address available to deploy from on this chain.');
+            setFormError('No address available to publish from on this chain.');
             return;
         }
         if (!code.trim()) {
@@ -598,7 +598,7 @@ export function DeployContractForm({ walletId, onBack }) {
         }
         if (metaAbsent) {
             setFormError('This contract exports no meta.name and meta.description, so the network '
-                + `would reject the deploy (${CONTRACT_META_REQUIRED}) after you paid for it. `
+                + `would reject the publication (${CONTRACT_META_REQUIRED}) after you paid for it. `
                 + 'Add a meta block to the source and try again.');
             return;
         }
@@ -733,7 +733,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     throw new Error(
                         `This contract needs ${plan.totalChunks} chunk transactions plus an assembling one, `
                         + 'each signed only after the previous is confirmed. A watch-only wallet cannot '
-                        + 'complete that sequence; deploy it from the wallet holding the key.',
+                        + 'complete that sequence; publish it from the wallet holding the key.',
                     );
                 }
                 const chunkedBase = {
@@ -884,7 +884,7 @@ export function DeployContractForm({ walletId, onBack }) {
         return wrap(
             <>
                 <p className={styles.summary}>
-                    Contract deployed. The transaction was broadcast; the network will record it shortly.
+                    Contract published. The transaction was broadcast; the network will record it shortly.
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
@@ -1021,7 +1021,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     pendingDeploy record the resume banner reads. */}
                 {chunkProgress ? (
                     <p className={styles.summary} role="status">
-                        Deploying {chunkProgress.total} chunk transactions, then the assembling one.
+                        Publishing {chunkProgress.total} chunk transactions, then the assembling one.
                         Each waits for confirmation before the next is signed, so this takes a
                         few minutes. Leave the wallet open; if it is interrupted you can resume
                         without re-paying for the chunks already sent.
@@ -1146,13 +1146,13 @@ export function DeployContractForm({ walletId, onBack }) {
             {metaRead && metaRead.status === 'undecidable' ? (
                 <p className={styles.hint}>
                     This contract&apos;s name is computed rather than written out, so it can only be
-                    read once the network evaluates it at deploy.
+                    read once the network evaluates it during publishing.
                 </p>
             ) : null}
             {metaAbsent ? (
                 <StatusMessage variant="error" className={styles.error}>
-                    This contract exports no name or description. The network rejects a deploy
-                    without them, so add a meta block to the source before deploying.
+                    This contract exports no name or description. The network rejects publication
+                    without them, so add a meta block to the source before publishing.
                 </StatusMessage>
             ) : null}
 
@@ -1199,7 +1199,7 @@ export function DeployContractForm({ walletId, onBack }) {
                                             restoreAssembleFields(r.assembleParams);
                                         }}
                                     >
-                                        Resume this deploy
+                                        Resume publishing
                                     </Button>
                                     <Button
                                         type="button"
@@ -1236,7 +1236,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         ))}
                     </div>
                     <p className={styles.hint}>
-                        Loading a template replaces the source below. Review and customize it before deploying.
+                        Loading a template replaces the source below. Review and customize it before publishing.
                     </p>
                 </div>
             ) : null}
@@ -1285,7 +1285,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 <p className={plan.single ? styles.summary : styles.warning}>
                     {plan.single
                         ? 'Fits in a single transaction.'
-                        : `Too large for one transaction: deploys as ${plan.totalChunks} chunk `
+                        : `Too large for one transaction: publishing requires ${plan.totalChunks} chunk `
                           + `transactions plus 1 assembling transaction (${plan.totalChunks + 1} total, `
                           + 'each paying its own network fee). They are signed one at a time, and each '
                           + 'must confirm before the next is built, so keep the wallet open until it finishes. '
@@ -1337,7 +1337,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Gas limit"
-                hint="Upper bound of VM gas the deployer and subsequent calls may consume."
+                hint="Upper bound of VM gas publishing and subsequent calls may consume."
                 inputMode="numeric"
                 value={gasLimit}
                 onChange={(e) => setGasLimit(e.target.value)}
@@ -1363,7 +1363,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Slash destination (optional)"
-                hint='Where slashed tokens go. Enter an address or "BURN" to route to the chain burn address. Defaults to BURN when cooldown is set. Locked at deploy and cannot change later.'
+                hint='Where slashed tokens go. Enter an address or "BURN" to route to the chain burn address. Defaults to BURN when cooldown is set. Locked when published and cannot change later.'
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
                 autoComplete="off"

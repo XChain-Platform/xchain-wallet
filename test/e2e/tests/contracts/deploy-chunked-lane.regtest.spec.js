@@ -354,7 +354,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
     // waiting for the previous to confirm AND index before it is built.
     //
     // ASKED OF THE CHAIN, NOT THE SCREEN. The wallet's done screen says
-    // "Contract deployed" as soon as the assembling transaction is broadcast,
+    // "Contract published" as soon as the assembling transaction is broadcast,
     // which is true and not the question - the assembler can still index invalid
     // (a missing chunk, a hash mismatch, unpaid gas) and leave the user with
     // three paid-for transactions and no contract. What has to be true is that
@@ -450,7 +450,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 // The terminal screen, or the refusal that explains why there is
                 // none. Budgeted for three sequential confirm-and-index waits on
                 // a shared venue.
-                const done = page.getByText(/Contract deployed/i);
+                const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
                 // confirm screen carries a correct informational disclosure
@@ -620,7 +620,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
                 await go.click();
-                const done = page.getByText(/Contract deployed/i);
+                const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
                 // confirm screen carries a correct informational disclosure
@@ -886,7 +886,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
                 await go.click();
-                const done = page.getByText(/Contract deployed/i);
+                const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
                 // confirm screen carries a correct informational disclosure

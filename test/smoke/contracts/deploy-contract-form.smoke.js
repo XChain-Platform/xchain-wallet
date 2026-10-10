@@ -92,7 +92,7 @@ assert.ok(/supportedActions\.includes\('DEPLOY'\)/.test(formSrc),
     'DeployContractForm derives its chain list from supportedActions, not a pinned coin');
 assert.ok(!/VM_COIN/.test(formSrc),
     'DeployContractForm keeps no second hard-coded copy of the contract chain gate');
-assert.ok(/Contracts can only be deployed on \$\{where\}/.test(formSrc),
+assert.ok(/Contracts can only be published on \$\{where\}/.test(formSrc),
     'DeployContractForm names the allowed chains from the registry in the no-address state');
 
 // Action buttons
@@ -101,6 +101,8 @@ for (const label of ['Validate code', 'Estimate size', 'Suggest gas']) {
 }
 assert.ok(/singleEncode \? 'Publish' : 'Preview'/.test(formSrc),
     'DeployContractForm labels a single-transaction action as Publish');
+assert.ok(formSrc.includes('Contract published.'),
+    'DeployContractForm confirms a successful publication');
 
 // --- 4. Review + HW branching ----------------------------------------
 

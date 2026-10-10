@@ -39,7 +39,7 @@
 //    interesting was proven. XCHAIN is free-mintable on regtest, so the spec
 //    mints its own.
 //
-// 3. ASSERTIONS READ THE EXPLORER, NOT THE SCREEN. "Contract deployed" is the
+// 3. ASSERTIONS READ THE EXPLORER, NOT THE SCREEN. "Contract published" is the
 //    wallet reporting on itself. The contract row, the execution row, the gas
 //    actually burned and the state key the method wrote are the chain reporting
 //    on the wallet - and a signed-but-wrong action (wrong method name, wrong
@@ -286,7 +286,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             await main.getByRole('button', { name: 'Publish', exact: true }).click();
             await approveConfirm(page);
 
-            await expect(main.getByText(/Contract deployed\./)).toBeVisible({ timeout: 120_000 });
+            await expect(main.getByText(/Contract published\./)).toBeVisible({ timeout: 120_000 });
             const txid = await readDoneTxid(page);
             deployTxid = txid;
 
