@@ -35,9 +35,8 @@
 //
 // This ladder is UI-level and bypassable. The authoritative pre-KDF gate on
 // extension and desktop is packages/extension/src/background/unlockThrottle.js,
-// whose schedule is looser below the cap (5 free, then 15 s doubling).
-// MAX_DELAY_SECONDS must stay equal to its CAP_MS; that module's unit test
-// pins it.
+// which follows this same schedule. Its unit test pins the two implementations
+// together at every step.
 
 const STORAGE_KEY = 'xchain-wallet:lockout';
 
