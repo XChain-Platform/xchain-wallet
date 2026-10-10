@@ -1874,6 +1874,11 @@ export function __resetForTests() {
     void releaseWebVaultLease();
 }
 
+/** Test hook: install a host without opening a persisted vault. */
+export function __setHostForTests(nextHost) {
+    host = nextHost;
+}
+
 // Only a GCM tag mismatch is a wrong password. Matching error TEXT instead
 // turned any backend message containing "auth" (or "tag" inside a word such
 // as "staging") into an invalid-password error; core's aead now types the
