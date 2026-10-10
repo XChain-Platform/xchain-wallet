@@ -95,6 +95,7 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     // cancels their own order reads the result in their own History.
     BET: 'Bet',
     BET_EXPIRE: 'Bet expired',
+    BET_EDIT: 'Bet updated',
     COINPAY_EXPIRE: 'Coin payment expired',
     DISPENSER_CANCEL: 'Dispenser cancelled',
     DISPENSER_CLOSE: 'Dispenser closed',
