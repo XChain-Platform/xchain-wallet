@@ -240,6 +240,7 @@ export {
     RbfNotSupportedError,
     RbfInvalidEntryError,
 } from './rbfReplace.js';
+export { planRbfReplacement, RbfPlanError } from './rbfPlan.js';
 export {
     getFiatRate,
     refreshFiatRates,

@@ -238,6 +238,14 @@ export function sendToken(opts) {
 }
 
 /**
+ * @param {import('@xchain-wallet/core/flows/rbfReplace.js').RbfRequest} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/rbfReplace.js').RbfResult>}
+ */
+export function replaceTx(opts) {
+    return /** @type {any} */ (sendMessage('tx.replace', opts));
+}
+
+/**
  * §20 / G040: Watcher-mode encode-only helper.
  * @param {object} opts
  */

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit: a build that compiled the DEX surface out (the mobile store profile)
+// Unit: a build profile that compiles the DEX surface out
 // offers no ORDER or SWAP in the generic composers, on the SDK list and the
 // registry fallback alike, while every other build keeps them.
 
