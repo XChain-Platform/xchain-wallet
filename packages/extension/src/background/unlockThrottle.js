@@ -21,19 +21,26 @@
 // gate, so this bounds sustained in-process hammering rather than replacing
 // the KDF.
 //
-// Policy: FREE_ATTEMPTS mistypes with no delay, then an exponential backoff
-// per additional consecutive failure, capped. A correct unlock clears it.
+// Policy: FREE_ATTEMPTS mistypes with no delay, then the published delay
+// ladder per additional consecutive failure, capped. A correct unlock clears it.
 //
-// This is looser than the Locked screen's G066 ladder in
-// packages/core/src/flows/lockoutTracking.js (2 free, then 5 s, 15 s, 60 s,
-// 5 min, cap at failure 7): here 5 are free, then 15 s doubling, cap at
-// failure 12. Desktop main uses this same schedule, and it is the only one a
-// direct `wallet.unlock` caller meets. CAP_MS must equal that ladder's
-// MAX_DELAY_SECONDS * 1000; test/unit/background/unlockThrottle.test.js pins it.
+// This matches the Locked screen's G066 ladder in
+// packages/core/src/flows/lockoutTracking.js: 2 free, then 5 s, 15 s, 60 s,
+// 5 min, and a 15 min cap from failure 7. Desktop main uses this same policy,
+// and it is the only one a direct `wallet.unlock` caller meets. The unit test
+// pins both implementations together at every ladder step.
 
-export const FREE_ATTEMPTS = 5;
-const BASE_MS = 15 * 1000;          // first penalty once past the free attempts
-const CAP_MS = 15 * 60 * 1000;      // 15 minutes maximum lockout
+export const FREE_ATTEMPTS = 2;
+const BACKOFF_MS = /** @type {const} */ ([
+    0,                  // N=0
+    0,                  // N=1
+    0,                  // N=2
+    5 * 1000,           // N=3
+    15 * 1000,          // N=4
+    60 * 1000,          // N=5
+    5 * 60 * 1000,      // N=6
+]);
+const CAP_MS = 15 * 60 * 1000; // N >= 7
 
 /**
  * @typedef {Object} UnlockThrottleState
@@ -49,9 +56,10 @@ const CAP_MS = 15 * 60 * 1000;      // 15 minutes maximum lockout
  * @returns {number}
  */
 export function computeBackoffMs(failCount) {
-    if (!Number.isFinite(failCount) || failCount <= FREE_ATTEMPTS) return 0;
-    const over = failCount - FREE_ATTEMPTS;             // 1, 2, 3, ...
-    return Math.min(CAP_MS, BASE_MS * 2 ** (over - 1)); // 15s, 30s, 60s, ...
+    if (!Number.isFinite(failCount) || failCount < 0) return 0;
+    const n = Math.floor(failCount);
+    if (n < BACKOFF_MS.length) return BACKOFF_MS[n];
+    return CAP_MS;
 }
 
 /**
