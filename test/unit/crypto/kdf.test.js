@@ -135,6 +135,31 @@ describe('crypto/kdf', () => {
             });
             expect(p.iterations).toBe(2);
         });
+
+        it('sizes iterations from one single-pass probe', () => {
+            // 120 ms per pass against a 1000 ms target needs 9 passes; the
+            // probe runs once, so a slow phone pays one pass, not the floor.
+            const ticks = [0, 120];
+            const spy = vi.spyOn(performance, 'now').mockImplementation(() => ticks.shift() ?? 120);
+            try {
+                const p = calibrateKdfParams({ targetMs: 1000, memory: 8, minIterations: 3, maxIterations: 32 });
+                expect(p.iterations).toBe(9);
+                expect(ticks).toEqual([]);
+            } finally {
+                spy.mockRestore();
+            }
+        });
+
+        it('keeps the floor when one pass already overshoots the target', () => {
+            const ticks = [0, 5000];
+            const spy = vi.spyOn(performance, 'now').mockImplementation(() => ticks.shift() ?? 5000);
+            try {
+                const p = calibrateKdfParams({ targetMs: 1000, memory: 8, minIterations: 3 });
+                expect(p.iterations).toBe(3);
+            } finally {
+                spy.mockRestore();
+            }
+        });
     });
 
     describe('base64 helpers', () => {

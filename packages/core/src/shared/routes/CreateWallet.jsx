@@ -15,6 +15,7 @@ import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
+import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -154,6 +155,16 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         if (!mnemonic || !saved || stage === 'persisting') return;
         setStage('persisting');
         setPersistError(null);
+        // The key stretching below runs on the UI thread and holds it for
+        // up to a minute on a slow phone. Let the "Creating your wallet"
+        // screen paint first, or the old verify form sits there frozen.
+        await new Promise((resolve) => {
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => setTimeout(resolve, 0));
+            } else {
+                setTimeout(resolve, 0);
+            }
+        });
         try {
             const passphraseArg = showPassphrase && bip39Passphrase.length > 0
                 ? bip39Passphrase
@@ -175,16 +186,11 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             if (createdWalletId) {
                 try { flowsLib.markBackupVerified(createdWalletId); } catch { /* best-effort */ }
             }
-            // §36.1 ADS notice: one-time screen during wallet creation.
-            // It informs; it does not ask. ADS_DEFAULT_ENABLED already
-            // holds, so there is nothing to write here. Amounts,
-            // frequency and the off switch live in Settings -> ADS,
-            // the same shape FreeWallet desktop uses (operator ruling
-            // 2026-10-12).
+            // §36.1: end onboarding on the ADS notice (AdsNotice.jsx).
             setStage('ads-notice');
         } catch (err) {
             setPersistError(err?.message || 'Failed to create wallet.');
-            setStage('mnemonic');
+            setStage('verify');
         }
     }
 
@@ -212,49 +218,14 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     if (stage === 'ads-notice') {
         const noticeBody = (
-            <>
-                <header className={headClass}>
-                    <h1 className={titleClass}>Automatic Donation System</h1>
-                    <p className={subtitleClass}>
-                        XChain Wallet includes an Automatic Donation System (ADS) that
-                        supports continued development of the XChain Platform.
-                    </p>
-                </header>
-                <ul style={{
-                    margin: 0,
-                    padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-2) var(--xc-space-5)',
-                    background: 'var(--xc-surface-raised)',
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-md)',
-                    fontSize: 'var(--xc-text-sm)',
-                    color: 'var(--xc-text-muted)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 'var(--xc-space-1)',
-                }}>
-                    <li>
-                        ADS is on by default. It sets aside a small amount when you send a
-                        transaction and sends it as one donation once it adds up.
-                    </li>
-                    <li>You do not need to donate to use this wallet.</li>
-                    <li>
-                        How much, how often, and whether to donate at all are yours to set
-                        under Settings &rarr; Automatic Donation System, where ADS can also
-                        be turned off entirely.
-                    </li>
-                </ul>
-                <div className={actionsClass}>
-                    <Button
-                        variant="primary"
-                        onClick={onCreated}
-                        block={!isFull}
-                        size={isFull ? undefined : 'sm'}
-                        icon={<Icon.CheckIcon />}
-                    >
-                        Continue
-                    </Button>
-                </div>
-            </>
+            <AdsNotice
+                onContinue={onCreated}
+                isFull={isFull}
+                headClass={headClass}
+                titleClass={titleClass}
+                subtitleClass={subtitleClass}
+                actionsClass={actionsClass}
+            />
         );
         return (
             <Screen variant={variant} header={screenHeader}>
@@ -263,7 +234,25 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
     }
 
-    if (stage === 'verify' || stage === 'persisting') {
+    if (stage === 'persisting') {
+        const persistingBody = (
+            <div className={styles.persisting} role="status" aria-live="polite">
+                <span className={styles.persistingSpinner} aria-hidden="true" />
+                <h1 className={titleClass}>Creating your wallet</h1>
+                <p className={subtitleClass}>
+                    Encrypting your wallet with your password. On some phones this
+                    takes a minute or two. Keep the app open until it finishes.
+                </p>
+            </div>
+        );
+        return (
+            <Screen variant={variant} header={screenHeader}>
+                {isFull ? <div className={styles.card}>{persistingBody}</div> : persistingBody}
+            </Screen>
+        );
+    }
+
+    if (stage === 'verify') {
         const verifyBody = (
             <>
                 <header className={headClass}>
@@ -280,7 +269,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <ol className={styles.quizList}>
                         {quizPositions.map((p) => (
                             <li key={p} className={styles.quizRow}>
-                                <span className={styles.quizIndex}>#{p}</span>
                                 <Input
                                     label={`Word ${p}`}
                                     value={quizAnswers[p] || ''}

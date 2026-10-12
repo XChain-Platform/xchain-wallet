@@ -170,18 +170,7 @@
     gap: var(--xc-space-2);
 }
 
-.quizIndex {
-    flex: 0 0 48px;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-variant-numeric: tabular-nums;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding-bottom: 12px;
-    text-align: end;
-}
-
-.quizRow > :global(*):not(.quizIndex) {
+.quizRow > :global(*) {
     flex: 1;
 }
 
@@ -207,4 +196,35 @@
     text-align: center;
     font-weight: 500;
     line-height: 1.4;
+}
+
+/* Shown while the wallet is encrypted. The spinner animates only
+   transform, which the compositor keeps running even while the key
+   stretching holds the UI thread. */
+.persisting {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-6) var(--xc-space-3);
+}
+
+.persistingSpinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 3px solid var(--xc-border-strong);
+    border-top-color: var(--xc-accent-primary);
+    animation: persisting-spin 0.9s linear infinite;
+}
+
+@keyframes persisting-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .persistingSpinner {
+        animation: none;
+    }
 }

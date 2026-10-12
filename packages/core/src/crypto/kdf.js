@@ -156,9 +156,15 @@ export function makeFreshKdfParams(overrides = {}) {
 }
 
 /**
- * Run a short calibration to find the smallest `iterations` that hits
- * `targetMs` on this device, holding memory and parallelism fixed.
- * Called once at wallet creation to populate per-device params.
+ * Pick the `iterations` that hits `targetMs` on this device, holding
+ * memory and parallelism fixed. Called once at wallet creation to
+ * populate per-device params.
+ *
+ * Argon2id time is linear in its pass count, so one single-pass probe is
+ * enough to size the real run. Probing at the full floor instead cost a
+ * whole extra KDF on slow phones, where the floor alone overshoots the
+ * target: about a third of the two-minute wallet creation on an LG K51
+ * (2026-10-12).
  *
  * @param {Object} [opts]
  * @param {number} [opts.targetMs]       default 1000
@@ -179,23 +185,21 @@ export function calibrateKdfParams(opts = {}) {
     crypto.getRandomValues(probeSalt);
     const probePassword = new TextEncoder().encode('calibration-probe');
 
-    // Increment only when we're going to probe again, so on exit `iterations`
-    // holds the value actually measured, capped at maxIterations rather than
-    // the post-increment maxIterations+1 a `for (; i <= max; i++)` would leave.
-    let iterations = minIterations;
-    let lastMs = 0;
-    for (;;) {
-        const start = performance.now();
-        argon2id(probePassword, probeSalt, {
-            t: iterations,
-            m: memory,
-            p: parallelism,
-            dkLen: KDF_KEY_LENGTH,
-        });
-        lastMs = performance.now() - start;
-        if (lastMs >= targetMs || iterations >= maxIterations) break;
-        iterations++;
-    }
+    const start = performance.now();
+    argon2id(probePassword, probeSalt, {
+        t: 1,
+        m: memory,
+        p: parallelism,
+        dkLen: KDF_KEY_LENGTH,
+    });
+    const msPerPass = performance.now() - start;
+
+    // A probe too fast for the clock to see says nothing about scale: it
+    // meets a zero target and can never meet a positive one.
+    let iterations;
+    if (msPerPass > 0) iterations = Math.ceil(targetMs / msPerPass);
+    else iterations = targetMs > 0 ? maxIterations : minIterations;
+    iterations = Math.min(maxIterations, Math.max(minIterations, iterations));
 
     const saltOut = new Uint8Array(16);
     crypto.getRandomValues(saltOut);
