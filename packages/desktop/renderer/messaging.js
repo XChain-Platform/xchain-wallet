@@ -232,7 +232,7 @@ export function generateDispenserAddress(opts) {
     return /** @type {any} */ (sendMessage('dispenser.getAddress', opts));
 }
 
-/** @param {object} opts */
+/** @param {object & { holdId?: string, undoSeconds?: number }} opts */
 export function sendToken(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }

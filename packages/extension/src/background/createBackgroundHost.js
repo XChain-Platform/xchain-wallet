@@ -40,7 +40,10 @@ import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createBroadcastQueueStore } from './broadcastQueueStore.js';
 import { createBroadcastQueueEngine } from './broadcastQueueEngine.js';
-import { createSendHold } from './sendHold.js';
+import {
+    createHoldBeforeBroadcast,
+    createSendHoldRegistry,
+} from './sendHold.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
@@ -966,13 +969,23 @@ export function createBackgroundHost(deps) {
         // bridge: never `console`) so arbitrary console.* args from
         // third-party content-script code can't reach disk.
         logConsoleStorage = createLogConsoleStorage(),
-        // One host-level send hold. Injected so tests (and later the registry
-        // that feeds beforeBroadcast) share the same instance as the cancel route.
+        // One host-level send hold shared by beforeBroadcast and the cancel route.
+        // Injectable so timer and cancellation behavior can be tested without delays.
         sendHold: injectedSendHold,
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
-    const sendHold = injectedSendHold ?? createSendHold();
+    const sendHold = injectedSendHold ?? createSendHoldRegistry();
+
+    async function sendWithHold(req, flowDeps) {
+        const opts = { ...req, ...flowDeps };
+        const beforeBroadcast = createHoldBeforeBroadcast({
+            sendHold,
+            holdId: opts.holdId,
+            undoSeconds: opts.undoSeconds,
+        });
+        return sendToken({ ...opts, beforeBroadcast });
+    }
 
     // ONE reservation ledger per host, shared across every
     // approval window. A single background SW serves all popup windows, so
@@ -2344,9 +2357,10 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const result = await sendToken({
+        const result = await sendWithHold({
             ...req,
             signer: await sessionSigner(req, vault, signerPool),
+        }, {
             vault,
             chainRegistry,
             sdkRegistry,
@@ -3845,7 +3859,7 @@ export function createBackgroundHost(deps) {
         });
     }
 
-    registerHwHandler('action.send.hw', sendToken);
+    registerHwHandler('action.send.hw', sendWithHold);
     registerHwHandler('action.sweep.hw', sweepToken);
     registerHwHandler('action.issue.hw', issueToken);
     registerHwHandler('action.mint.hw', mintToken);

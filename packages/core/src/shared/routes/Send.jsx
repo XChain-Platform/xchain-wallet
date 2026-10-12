@@ -52,6 +52,7 @@ import {
     resolveFeeConfig,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
+import { createUndoSendRequest } from '../../flows/undoSend.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
@@ -1551,6 +1552,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             // real multi-recipient send so a single send composes the identical
             // v0 bytes it always has.
             ...(isMultiSend ? { legs: sendLegs } : {}),
+            ...(createUndoSendRequest(settings) || {}),
         };
         setSubmitError(null);
         setSubmitErrorDetail(null);
@@ -1690,6 +1692,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 // PC-52: multi-recipient legs, on the watcher and HW paths too
                 // (buildSendPsbt and the HW send handler take the same shape).
                 ...(isMultiSend ? { legs: sendLegs } : {}),
+                ...(!isWatcherMode ? (createUndoSendRequest(settings) || {}) : {}),
             };
             // §20 / G040: watcher mode encodes only. No password, no signer,
             // no broadcast. The result envelope carries `psbtHex` instead of
