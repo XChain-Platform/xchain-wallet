@@ -152,6 +152,20 @@ export function buildIntegrityImportMap(files) {
     return { integrity };
 }
 
+// The character references a serializer can use inside a double-quoted
+// attribute value, decoded so the policy is edited as the browser reads it.
+const ATTRIBUTE_ENTITIES = { '&#39;': "'", '&#x27;': "'", '&apos;': "'", '&quot;': '"', '&amp;': '&' };
+
+function decodeAttribute(value) {
+    return value.replace(/&#39;|&#x27;|&apos;|&quot;|&amp;/gi, (e) => ATTRIBUTE_ENTITIES[e.toLowerCase()]);
+}
+
+// Single quotes stay literal: the value sits inside double quotes, where an
+// apostrophe needs no escaping, and a plain policy is easier to read and test.
+function encodeAttribute(value) {
+    return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
 /**
  * Insert the integrity import map into an index.html ahead of its first script
  * (an import map is ignored once a module has started resolving), and admit that
@@ -182,10 +196,13 @@ export function injectIntegrityImportMap(html, files) {
     const out = withMap.replace(
         /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")([^"]*)(")/i,
         (_m, open, policy, close) => {
-            const next = allowInlineScriptHash(policy, hash);
+            // Vite writes the attribute with each quote as `&#39;`, and that
+            // entity ends in a semicolon, so splitting the raw text on "; "
+            // cut 'self' in half and made the next source a directive name.
+            const next = allowInlineScriptHash(decodeAttribute(policy), hash);
             admitted = next.split('; ')
                 .some((d) => d.startsWith('script-src ') && d.split(' ').includes(`'${hash}'`));
-            return open + next + close;
+            return open + encodeAttribute(next) + close;
         },
     );
     return { html: out, mapped, admitted };
