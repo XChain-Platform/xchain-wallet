@@ -175,3 +175,11 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-danger);
 }
+
+.unlockingNote {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    text-align: center;
+    line-height: 1.4;
+}

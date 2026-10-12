@@ -31,6 +31,7 @@ import { useHaptic } from '../hooks/useHaptic.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
+import { nextPaint } from '../utils/nextPaint.js';
 import styles from './Locked.module.css';
 
 /**
@@ -294,6 +295,7 @@ export function Locked({ onUnlocked }) {
         if (busy || password.length === 0 || isLockedOut) return;
         setBusy(true);
         setError(null);
+        await nextPaint();
         try {
             const reply = await messaging.unlockWallet(password);
             afterUnlock(reply, password);
@@ -333,6 +335,7 @@ export function Locked({ onUnlocked }) {
         setError(null);
         try {
             const unwrapped = await unlockWithBiometric();
+            await nextPaint();
             // Biometrics unwrap the password, never the passphrase, so this
             // path reaches step 2 exactly like a typed unlock does.
             const reply = await messaging.unlockWallet(unwrapped);
@@ -458,6 +461,11 @@ export function Locked({ onUnlocked }) {
             >
                 {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
             </Button>
+            {busy && !inCaptureStep ? (
+                <p className={styles.unlockingNote} role="status">
+                    Unlocking. On some phones this takes up to a minute.
+                </p>
+            ) : null}
             {biometricAvailable ? (
                 <Button
                     type="button"

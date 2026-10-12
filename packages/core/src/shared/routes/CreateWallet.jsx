@@ -17,6 +17,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
+import { nextPaint } from '../utils/nextPaint.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -155,16 +156,9 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         if (!mnemonic || !saved || stage === 'persisting') return;
         setStage('persisting');
         setPersistError(null);
-        // The key stretching below runs on the UI thread and holds it for
-        // up to a minute on a slow phone. Let the "Creating your wallet"
-        // screen paint first, or the old verify form sits there frozen.
-        await new Promise((resolve) => {
-            if (typeof requestAnimationFrame === 'function') {
-                requestAnimationFrame(() => setTimeout(resolve, 0));
-            } else {
-                setTimeout(resolve, 0);
-            }
-        });
+        // Paint "Creating your wallet" before the key stretching holds the
+        // UI thread, or the old verify form sits there frozen.
+        await nextPaint();
         try {
             const passphraseArg = showPassphrase && bip39Passphrase.length > 0
                 ? bip39Passphrase
