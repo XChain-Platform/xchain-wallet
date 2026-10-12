@@ -169,14 +169,12 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
             title="My Lists"
-            trailing={(onCreateList || onCreateUnionList || onOpenSharedLists) ? (
+            // Only the round + belongs in the header: PageHeader styles every
+            // trailing button as a 38px circle, and the two text actions
+            // squeezed into circles spilled across the title at phone width.
+            // They live in the body's action row instead.
+            trailing={onCreateList ? (
                 <>
-                    {onOpenSharedLists ? (
-                        <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
-                    ) : null}
-                    {onCreateUnionList ? (
-                        <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
-                    ) : null}
                     {onCreateList ? (
                         <button
                             type="button"
@@ -192,9 +190,23 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             ) : undefined}
         />
     );
+    const secondaryActions = (onOpenSharedLists || onCreateUnionList) ? (
+        <div className={local.actions}>
+            {onOpenSharedLists ? (
+                <Button variant="secondary" size="sm" onClick={() => onOpenSharedLists()}>Shared lists</Button>
+            ) : null}
+            {onCreateUnionList ? (
+                <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create union list</Button>
+            ) : null}
+        </div>
+    ) : null;
+
+    // Every state of the screen carries the secondary actions, as the
+    // header did before they moved out of it.
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <div className={isFull ? local.wrapFull : local.wrapPopup}>
+                {secondaryActions}
                 {children}
             </div>
         </Screen>

@@ -352,6 +352,16 @@ body {
     box-sizing: border-box;
 }
 
+/* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
+ * to shrink below its widest child. One long <option> then pushes the whole
+ * group, and the form around it, past the screen edge: Create multisig's
+ * cosigner card ran 67px off a 411px phone (2026-10-12). Let fieldsets
+ * shrink like any other block. */
+fieldset {
+    min-inline-size: 0;
+    min-width: 0;
+}
+
 .sr-only {
     position: absolute;
     width: 1px;

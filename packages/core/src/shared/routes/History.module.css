@@ -216,6 +216,9 @@
    the left, Grouped / Flat seg group anchored to the right. */
 .filterFooter {
     display: flex;
+    /* Wraps, so the Grouped / Flat switch drops to its own line instead of
+       being clipped to "Fl" at 360px (2026-10-12). */
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
 }

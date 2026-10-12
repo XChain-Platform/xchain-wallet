@@ -235,7 +235,7 @@ export function AboutSection() {
                 )}
             </Row>
             <Row label="Diagnostics">
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
                     <Button
                         size="sm"
                         variant="ghost"

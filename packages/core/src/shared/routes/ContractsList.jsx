@@ -319,7 +319,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
     return wrap(
         <>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+            {/* Centre-aligned: with the default stretch, the search box and
+                the button grew to the tallest item on their wrapped line and
+                drew as 150px-tall blocks at phone width (2026-10-12). */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <ChainFilterBar
                     chains={vmChainsWithAddresses}
                     value={chainFilter}
@@ -334,7 +337,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     style={{ flex: '1 1 200px', minWidth: 0 }}
                 />
                 {onDeploy ? (
-                    <Button variant="primary" onClick={onDeploy}>
+                    <Button variant="primary" onClick={onDeploy} style={{ flex: '0 0 auto' }}>
                         + Publish contract
                     </Button>
                 ) : null}

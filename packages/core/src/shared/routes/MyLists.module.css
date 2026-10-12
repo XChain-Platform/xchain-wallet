@@ -15,6 +15,14 @@
     flex-direction: column;
 }
 
+/* Secondary list actions, under the header rather than in it. */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
+}
+
 .toolbar {
     display: flex;
     flex-direction: row;

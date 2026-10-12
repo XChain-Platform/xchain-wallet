@@ -730,14 +730,21 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             autoCorrect="off"
                         />
                     </label>
-                    <div className={styles.fromLine}>
+                    {/* Wraps, and drives a hidden file input from a real
+                        button: the browser's own picker is unstyled and,
+                        beside the Contacts button, ran off a phone screen. */}
+                    <div className={styles.fromLine} style={{ flexWrap: 'wrap' }}>
                         <input
                             ref={fileInputRef}
                             type="file"
                             accept=".csv,.txt,text/csv,text/plain"
                             onChange={handleFile}
                             aria-label="Upload CSV of addresses"
+                            hidden
                         />
+                        <Button type="button" variant="ghost" onClick={() => fileInputRef.current?.click()}>
+                            Upload CSV
+                        </Button>
                         <Button type="button" variant="ghost" onClick={() => setContactPickerOpen(true)}>
                             Add from Contacts
                         </Button>

@@ -106,17 +106,18 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
         <PageHeader
             onBack={onBack}
             title="Payments due"
+            // Icon only: the header's trailing slot draws every button as a
+            // 38px circle, and the word "Refresh" ran off the screen edge.
             trailing={(
-                <Button
-                    variant="ghost"
-                    size="sm"
+                <button
+                    type="button"
                     onClick={refresh}
                     disabled={scanning}
-                    icon={<Icon.RefreshIcon />}
                     aria-label="Refresh payments"
+                    title="Refresh payments"
                 >
-                    Refresh
-                </Button>
+                    <Icon.RefreshIcon />
+                </button>
             )}
         />
     );

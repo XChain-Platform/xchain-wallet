@@ -2221,12 +2221,18 @@ function AutoShrinkText({ children }) {
             i.style.transform = 'scale(1)';
             const cw = c.clientWidth;
             const iw = i.scrollWidth;
-            if (iw <= 0 || cw <= 0) { setScale(1); return; }
             // 2px safety margin absorbs subpixel rounding in transform
             // scaling; without it the trailing glyph can clip by a
             // fraction of a pixel ("USD" → "US", "BTC" → "BT+half C").
             const target = Math.max(0, cw - 2);
-            setScale(iw > target ? target / iw : 1);
+            const next = (iw <= 0 || cw <= 0 || iw <= target) ? 1 : target / iw;
+            // Write the result back here too. The reset above is imperative,
+            // and when `next` equals the scale already in state React skips
+            // the re-render, so the reset stuck: every re-measure (fonts
+            // settling, a resize) left a long balance unscaled and its ticker
+            // clipped by up to 53px (2026-10-12).
+            i.style.transform = `scale(${next})`;
+            setScale(next);
         };
         measure();
         // First layout often runs before the mono webfont has loaded;

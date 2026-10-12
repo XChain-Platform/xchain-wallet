@@ -24,7 +24,11 @@
     appearance: none;
     background: transparent;
     border: none;
-    padding: var(--xc-space-3) var(--xc-space-3);
+    /* Side padding tightens on narrow windows so all five tabs fit: at the
+       desktop app's 360px minimum the strip overflowed by 11px and hid half
+       of "Activity" behind a scrollbar the strip deliberately does not show
+       (2026-10-12). Full padding from about 480px up. */
+    padding: var(--xc-space-3) clamp(6px, 2.5vw, var(--xc-space-3));
     font-size: var(--xc-text-sm);
     font-weight: 600;
     color: var(--xc-text-muted);

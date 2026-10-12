@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
+import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import { PlatformSwitcher } from './PlatformSwitcher.jsx';
 import styles from './AppHeader.module.css';
 
@@ -187,6 +188,10 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
         { id: 'view', label: 'View address', Icon: Icon.EyeIcon, handler: onViewAddress },
     ].filter((it) => typeof it.handler === 'function');
 
+    // Kept on screen like the settings panel: on a 375px phone the menu
+    // hung 9px past the edge of the content area (2026-10-12).
+    const clamp = useViewportClamp(open);
+
     if (items.length === 0) return null;
 
     return (
@@ -203,7 +208,7 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
                 <Icon.ScanIcon />
             </button>
             {open ? (
-                <div className={styles.scanMenu} role="menu" aria-label="Scan and addresses">
+                <div ref={clamp.ref} style={clamp.style} className={styles.scanMenu} role="menu" aria-label="Scan and addresses">
                     {items.map(({ id, label, Icon: ItemIcon, handler }) => (
                         <button
                             key={id}
