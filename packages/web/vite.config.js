@@ -25,6 +25,7 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import { colorMixFallback } from './cssFallbacks.js';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { metaContentSecurityPolicyFor } from './src/csp.js';
@@ -345,6 +346,13 @@ export default defineConfig({
     optimizeDeps: process.env.VITE_XCHAIN_REAL_SDK === '1'
         ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js'] }
         : { include: ['xchain-sdk/src/wallet.js'], exclude: ['xchain-sdk'] },
+    // Old-but-capable WebViews (below the soft floor in
+    // src/platform/webviewFloor.js) drop any declaration that uses
+    // `color-mix()`; this appends an `@supports not (...)` copy of each
+    // such rule with the mixes flattened, which only those engines read.
+    css: {
+        postcss: { plugins: [colorMixFallback()] },
+    },
     build: {
         outDir: 'dist',
         emptyOutDir: true,

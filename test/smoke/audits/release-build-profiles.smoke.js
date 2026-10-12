@@ -561,6 +561,7 @@ let hiddenConfigSource = readFileSync(join(repo, 'packages', 'web', 'vite.config
 const configImports = [
     ['./src/csp.js', join(repo, 'packages', 'web', 'src', 'csp.js')],
     ['./buildProfile.js', join(repo, 'packages', 'web', 'buildProfile.js')],
+    ['./cssFallbacks.js', join(repo, 'packages', 'web', 'cssFallbacks.js')],
     ['./src/surfaces/registry.js', hiddenRegistry],
     ['./regtestSidecar.js', join(repo, 'packages', 'web', 'regtestSidecar.js')],
     ['./sri.js', join(repo, 'packages', 'web', 'sri.js')],
