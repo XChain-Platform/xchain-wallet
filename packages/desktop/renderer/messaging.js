@@ -1029,6 +1029,14 @@ export function cancelMarketActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.cancelMarket.hw', opts));
 }
 
+export function editBetFeedListsAction(opts) {
+    return /** @type {any} */ (sendMessage('action.editBetFeedLists', opts));
+}
+
+export function editBetFeedListsActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.editBetFeedLists.hw', opts));
+}
+
 /**
  * Compose a BET action through the allow-listed sdk.betting.*Params builder
  * host-side, so the confirm page previews the wire params the encoder will see.
@@ -1930,4 +1938,13 @@ export function listBlocklistAuditLog() {
 
 export function clearBlocklistAuditLog() {
     return /** @type {Promise<{ cleared: number }>} */ (sendMessage('sites.auditLog.clear'));
+}
+
+/**
+ * Cancel a held send before its hold window elapses.
+ * @param {string} holdId
+ * @returns {Promise<{ cancelled: boolean }>}
+ */
+export function sendHoldCancel(holdId) {
+    return /** @type {any} */ (sendMessage('send.holdCancel', { holdId }));
 }

@@ -24,7 +24,7 @@
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { NETWORKS, NETWORK_DEFAULT } from '../../../schemas/settings.js';
-import { ROW, SELECT, Status } from './_settingsPrimitives.jsx';
+import { ROW, SELECT, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const NETWORK_OPTIONS = /** @type {const} */ ([
     { value: 'mainnet', label: 'Mainnet' },
@@ -38,7 +38,7 @@ export function NetworkSection({ activeWallet } = {}) {
     const walletId = activeWallet?.id;
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const current = NETWORKS.includes(settings.activeNetwork)

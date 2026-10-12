@@ -321,6 +321,7 @@ describe('TrezorSigner.signPsbt', () => {
                     value: 900,
                 }],
                 locktime: 0,
+                txVersion: 2,
             }),
             txidOf: vi.fn().mockReturnValue('deadbeef'),
         },

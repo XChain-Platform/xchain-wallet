@@ -34,7 +34,7 @@ import { useEffect, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
-import { INPUT, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { INPUT, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -78,7 +78,7 @@ const ACTION_PRIMARY = {
 export function NetworkEndpointsSection() {
     const { settings, loading, error, update } = useSettings();
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const descriptors = registryLib.filterChainsForUser(chainRegistry.supportedChains(), settings)

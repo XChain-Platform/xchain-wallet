@@ -38,7 +38,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
-import { bridgeChainsList, coinDisplay as bridgeCoinDisplay } from './BridgeTick.js';
+import { bridgeChainsList, isReachableBridgeChain, coinDisplay as bridgeCoinDisplay } from './BridgeTick.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { LOCK_FLAGS } from '../utils/issueAdvancedFields.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -495,9 +495,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         () => bridgeDestinations.filter((c) => bridgeChainPicks[c]),
         [bridgeDestinations, bridgeChainPicks],
     );
+    // The entries a lock can reach: a stored lower-case entry checks no box and opens no chain.
+    const reachableBridgeChains = useMemo(
+        () => (currentBridgeChains || []).filter(isReachableBridgeChain),
+        [currentBridgeChains],
+    );
     const bridgeChanged = mode === 'bridge-settings' && (
         bridgeLock
-        || pickedBridgeChains.join(',') !== (currentBridgeChains || []).join(',')
+        || pickedBridgeChains.join(',') !== reachableBridgeChains.join(',')
         || String(bridgeMinDepth).trim() !== String(assetInfo?.minDepth ?? assetInfo?.min_depth ?? '')
     );
 
@@ -1520,6 +1525,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                             nothing below is pre-filled. Applying will set it to exactly what
                             you check here.
                         </p>
+                    ) : null}
+                    {currentBridgeChains && reachableBridgeChains.length < currentBridgeChains.length ? (
+                        <StatusMessage variant="status">
+                            {`The current setting names ${currentBridgeChains.filter((c) => !isReachableBridgeChain(c)).map((c) => `"${c}"`).join(', ')}, `
+                                + 'a spelling the network does not accept, so it opens no chain. '
+                                + (bridgeFrozen
+                                    ? 'The settings are frozen, so it cannot be corrected.'
+                                    : 'Check the chains you mean and apply to correct it.')}
+                        </StatusMessage>
                     ) : null}
                     <span className={styles.pickerLabel}>Destination chains</span>
                     {bridgeDestinations.map((coin) => (

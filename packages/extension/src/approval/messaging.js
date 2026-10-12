@@ -67,14 +67,14 @@ export function getAddressBalances(chainId, address) {
  * Fetch normalized token info for a ticker reference (name or `^<id>`). Routes
  * to the same `token.info` host handler the popup uses. The dApp approval
  * screen uses the returned `canonicalTick` to display a readable token name in
- * place of a `^<id>` compaction reference.
+ * place of a `^<id>` compaction reference. Takes the same request object as the
+ * popup helper of the same name.
  *
- * @param {string} chainId
- * @param {string} tick   ticker name or `^<id>` reference
+ * @param {{ chainId: string, tick: string }} req  tick is a ticker name or `^<id>` reference
  * @returns {Promise<any>}
  */
-export function getTokenInfo(chainId, tick) {
-    return /** @type {any} */ (sendMessage('token.info', { chainId, tick }));
+export function getTokenInfo(req) {
+    return /** @type {any} */ (sendMessage('token.info', req));
 }
 
 /**
@@ -84,10 +84,11 @@ export function getTokenInfo(chainId, tick) {
  * the wallet pick the active address).
  *
  * @param {string} walletId
+ * @param {string} [accountId]   when supplied, restrict to a single BIP44 account
  * @returns {Promise<Record<string, Array<{ address: string }>>>}
  */
-export function getAddressesByChain(walletId) {
-    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId }));
+export function getAddressesByChain(walletId, accountId) {
+    return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));
 }
 
 /**

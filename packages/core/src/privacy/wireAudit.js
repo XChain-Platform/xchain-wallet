@@ -143,7 +143,7 @@ export const WIRE_AUDIT = Object.freeze([
         host: 'downloads.xchain.io',
         party: 'first',
         why: 'update notice for installs no store keeps current (the desktop feed, and the direct Android APK)',
-        carries: 'the requesting IP and the running version, at most once a day; no addresses, no identifiers',
+        carries: 'the requesting IP only, at most once a day; the running version is not sent (the comparison happens on the device); no addresses, no identifiers',
         control: 'Settings › About › check for new versions (direct Android APK); Settings › Privacy (desktop). Never requested by a Play-installed or App Store build, on any setting',
         shells: ['desktop', 'mobile'],
         source: 'packages/web/src/update/directUpdateCheck.js, packages/web/src/update/directUpdateProvider.js',

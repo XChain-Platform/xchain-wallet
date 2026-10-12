@@ -150,12 +150,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         messaging, isHw, signerId: fromAddress?.signerId, passwordRef: passwordValueRef,
         software: 'cancelMarketAction', hardware: 'cancelMarketActionHw',
     });
-    const editMessaging = useMemo(() => ({
-        editBetFeedListsAction: (opts) => messaging.sendMessage('action.editBetFeedLists', opts),
-        editBetFeedListsActionHw: (opts) => messaging.sendMessage('action.editBetFeedLists.hw', opts),
-    }), [messaging]);
     const submitEdit = useConfirmSubmit({
-        messaging: editMessaging, isHw, signerId: fromAddress?.signerId, passwordRef: passwordValueRef,
+        messaging, isHw, signerId: fromAddress?.signerId, passwordRef: passwordValueRef,
         software: 'editBetFeedListsAction', hardware: 'editBetFeedListsActionHw',
     });
 

@@ -520,6 +520,11 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      *     can reach are exactly the ones no live call owns.
      *   - no owed settlement names it. A journaled write belongs to an entry
      *     whose broadcast or discard already happened.
+     * The last two are sampled before the vault reads as well as after, and an
+     * id held at either moment is skipped. A route drops its entry only after
+     * the record is terminal or journaled, and the journal drops a record only
+     * once its write lands, so a record read stale mid-scan is still named by
+     * the first sample.
      *
      * @param {any} vault
      * @param {any} chainRegistry
@@ -527,6 +532,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      */
     async function restoreQueueFromVault(vault, chainRegistry, walletId) {
         if (recoveredWallets.has(walletId)) return;
+        const heldBeforeReads = heldPendingTxIds(walletId);
         let owned;
         let queued;
         let claimed = [];
@@ -553,9 +559,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             ...(Array.isArray(claimed) ? claimed.map((record) => ({ record, resumedClaim: true })) : []),
         ];
         if (candidates.length === 0) return;
-        const live = getQueue(walletId);
-        const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
-        for (const owed of queueStore.owed) held.add(owed.pendingTxId);
+        const held = heldPendingTxIds(walletId);
+        for (const id of heldBeforeReads) held.add(id);
         const restorable = candidates
             .filter(({ record: r }) => r
                 && typeof r.txHex === 'string' && r.txHex
@@ -586,6 +591,13 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 adsCommit: null,
             });
         }
+    }
+    // PendingTx ids a live queue entry or an owed settlement names right now.
+    function heldPendingTxIds(walletId) {
+        const live = queuedBroadcasts.get(walletId) ?? [];
+        const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
+        for (const owed of queueStore.owed) held.add(owed.pendingTxId);
+        return held;
     }
     // Wallets whose rehydrated entries this process has already judged against
     // the durable half. Left un-latched when the vault could not answer, so the

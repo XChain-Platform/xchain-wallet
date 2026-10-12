@@ -38,7 +38,7 @@ function legacyDecomposed() {
         txVersion: 2,
         locktime: 0,
         network: 'bitcoin-mainnet',
-        inputs: [{ prevTxHash: A, prevTxIndex: 3 }],
+        inputs: [{ prevTxHash: A, prevTxIndex: 3, sequence: 0xfffffffd }],
         outputs: [
             { address: '1x', scriptPubKeyHex: '76a914' + '44'.repeat(20) + '88ac', scriptType: 'p2pkh', value: 123456 },
             { address: null, scriptPubKeyHex: '6a1a58434841494e' + 'ab'.repeat(20), scriptType: 'op_return', value: 0 },
@@ -108,7 +108,7 @@ describe('assertSignedTxMatchesPsbt', () => {
         expect(() => verify(SEGWIT, {
             txVersion: 2,
             locktime: 800000,
-            inputs: [{ prevTxHash: A, prevTxIndex: 0 }, { prevTxHash: B, prevTxIndex: 7 }],
+            inputs: [{ prevTxHash: A, prevTxIndex: 0, sequence: 0xffffffff }, { prevTxHash: B, prevTxIndex: 7, sequence: 0xfffffffe }],
             outputs: [
                 { scriptPubKeyHex: '0014' + '66'.repeat(20), value: 5000000000 },
                 { scriptPubKeyHex: '5120' + '77'.repeat(32), value: 546 },
@@ -119,8 +119,8 @@ describe('assertSignedTxMatchesPsbt', () => {
 
     it('ignores the transaction version, which no converter forwards', () => {
         // hw-app-btc picks the version itself and the Trezor payload carries
-        // none, so a version comparison would refuse every legitimate hardware
-        // send. Pinned so nobody "tightens" it back into a false-refusal.
+        // none, so a 1-for-2 swap with no relative timelock must pass. Pinned so
+        // nobody tightens the allowance into a refusal of every hardware send.
         const d = legacyDecomposed();
         d.txVersion = 1;
         expect(() => verify(LEGACY_TX, d)).not.toThrow();
@@ -139,7 +139,7 @@ describe('assertSignedTxMatchesPsbt', () => {
         expect(() => verify(SEGWIT, {
             txVersion: 2,
             locktime: 0,
-            inputs: [{ prevTxHash: A, prevTxIndex: 0 }, { prevTxHash: B, prevTxIndex: 7 }],
+            inputs: [{ prevTxHash: A, prevTxIndex: 0, sequence: 0xffffffff }, { prevTxHash: B, prevTxIndex: 7, sequence: 0xfffffffe }],
             outputs: [
                 { scriptPubKeyHex: '0014' + '66'.repeat(20), value: 5000000000 },
                 { scriptPubKeyHex: '5120' + '77'.repeat(32), value: 546 },
@@ -198,5 +198,74 @@ describe('assertSignedTxMatchesPsbt', () => {
         const d = legacyDecomposed();
         d.outputs[0].value = 1;
         expect(() => verify(LEGACY_TX, d)).toThrow(/Nothing was broadcast/);
+    });
+});
+
+// LEGACY_TX carries version 2 and one input at sequence 0xfffffffd; these swap
+// those fields in place so each reply differs from it in exactly one way.
+const asVersion = (hex, v) => `0${v}000000${hex.slice(8)}`;
+const withSequence = (hex, seqLE) => hex.replace('fdffffff', seqLE);
+
+describe('assertSignedTxMatchesPsbt: sequence', () => {
+    it('refuses a reply whose input sequence differs from the PSBT', () => {
+        const d = legacyDecomposed();
+        d.inputs[0].sequence = 0xfffffffe;
+        expect(() => verify(LEGACY_TX, d))
+            .toThrow(/input 0 has sequence 0xfffffffd, the PSBT asked for 0xfffffffe/);
+    });
+
+    it('refuses a finalised reply that would void the timelock the PSBT kept', () => {
+        // Once every sequence is final, consensus ignores the locktime, and
+        // the locktime comparison alone cannot see a reply heading there.
+        expect(() => verify(SEGWIT, {
+            txVersion: 2,
+            locktime: 800000,
+            inputs: [
+                { prevTxHash: A, prevTxIndex: 0, sequence: 0xfffffffe },
+                { prevTxHash: B, prevTxIndex: 7, sequence: 0xfffffffe },
+            ],
+            outputs: [
+                { scriptPubKeyHex: '0014' + '66'.repeat(20), value: 5000000000 },
+                { scriptPubKeyHex: '5120' + '77'.repeat(32), value: 546 },
+                { scriptPubKeyHex: 'a914' + '88'.repeat(20) + '87', value: 999 },
+            ],
+        })).toThrow(/input 0 has sequence 0xffffffff, the PSBT asked for 0xfffffffe/);
+    });
+
+    it('refuses an approved input with no sequence instead of assuming one', () => {
+        const d = legacyDecomposed();
+        delete d.inputs[0].sequence;
+        expect(() => verify(LEGACY_TX, d)).toThrow(/input 0 sequence undefined is not a valid nSequence/);
+    });
+});
+
+describe('assertSignedTxMatchesPsbt: version', () => {
+    it('passes a version 1 reply for a version 2 PSBT with no relative timelock', () => {
+        expect(() => verify(asVersion(LEGACY_TX, 1), legacyDecomposed())).not.toThrow();
+    });
+
+    it('refuses a version swap when an input holds a relative timelock', () => {
+        const d = legacyDecomposed();
+        d.inputs[0].sequence = 10;
+        const reply = asVersion(withSequence(LEGACY_TX, '0a000000'), 1);
+        expect(() => verify(reply, d)).toThrow(/input 0's relative timelock depends on the version/);
+    });
+
+    it('passes a relative timelock when the reply keeps the PSBT version', () => {
+        const d = legacyDecomposed();
+        d.inputs[0].sequence = 10;
+        expect(() => verify(withSequence(LEGACY_TX, '0a000000'), d)).not.toThrow();
+    });
+
+    it('refuses a version 2 reply for a version 3 PSBT', () => {
+        const d = legacyDecomposed();
+        d.txVersion = 3;
+        expect(() => verify(LEGACY_TX, d)).toThrow(/it has version 2, the PSBT asked for 3/);
+    });
+
+    it('refuses an approved PSBT with no version', () => {
+        const d = legacyDecomposed();
+        delete d.txVersion;
+        expect(() => verify(LEGACY_TX, d)).toThrow(/version undefined is not a number/);
     });
 });

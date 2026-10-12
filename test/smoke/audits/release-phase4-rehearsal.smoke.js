@@ -170,6 +170,24 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         + 'launch probe ok (1 launched and still alive, 2 not probed on this host, 0 non-app file(s) ignored)\n'
         + 'gpg: signing failed: Inappropriate ioctl for device\n';
     assert.equal(classify(gpgAfterGates), 'manifest-written', 'gpg evidence still outranks both gates');
+    assert.equal(firstRefusal(gpgAfterGates), 'gpg: signing failed: Inappropriate ioctl for device',
+        'the blocker of a gpg stop is gpg\'s own refusal line');
+
+    // sign.sh runs gpg under set -e and says nothing after a gpg failure, so its last own line is progress.
+    const gpgStop = 'release/lib.sh: artifact-set gate ok (5 artifact(s))\n'
+        + 'sign.sh: hashing artifacts in /tmp/stage ...\n'
+        + 'sign.sh: signing manifest with key ABCDEF0123456789 ...\n'
+        + 'gpg: skipped "ABCDEF0123456789": Inappropriate ioctl for device\n'
+        + 'gpg: signing failed: Inappropriate ioctl for device\n';
+    assert.equal(classify(gpgStop), 'manifest-written', 'a gpg stop after the manifest reached manifest-written');
+    assert.equal(firstRefusal(gpgStop), 'gpg: signing failed: Inappropriate ioctl for device',
+        'the blocker of a gpg stop is gpg\'s last line, never sign.sh\'s "signing manifest" progress line');
+    assert.doesNotMatch(firstRefusal(gpgStop), /signing manifest with key/,
+        'a progress line was pinned as the blocker of a gpg stop');
+    assert.equal(firstRefusal('gpg: WARNING: unsafe ownership on homedir\n'
+        + 'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.\n'),
+    'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.',
+    'a later sign.sh refusal still outranks an earlier gpg line: the last refusal wins');
 
     assert.equal(classify('launch probe ok (1 launched and still alive)\nsign.sh: hashing artifacts in x ...\n'),
         'launch-probe', 'a passed launch probe with no later evidence reached the launch-probe step');

@@ -89,6 +89,7 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
+ * @property {(transactions: { signed: object, revealSigned: object | null }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
  * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1; passes through to submitAction.
  */
 
@@ -204,6 +205,7 @@ export async function sendToken(opts) {
         waitForTxid: opts.waitForTxid,
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
+        beforeBroadcast: opts.beforeBroadcast,
         onBroadcastFailure: opts.onBroadcastFailure,
     });
 }

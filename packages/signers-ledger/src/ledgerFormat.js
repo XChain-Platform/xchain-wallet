@@ -29,11 +29,22 @@
 // the right vout. The caller passes the resulting `inputs[i].prevTxHex`
 // to the signer, which runs `app.splitTransaction` on it at call time.
 
+import {
+    enablesRelativeLock, isDeviceTxVersion, isValidSequence,
+} from '../../core/src/signers/verifySignedTx.js';
+
 // The sighash every signer here signs under. A `signingPaths` entry may carry
 // a `sighashType` override (Signer.js SigningPathEntry, bridge-spec
 // PsbtSigningPath); this seam REFUSES a non-default one rather than dropping
 // it, see the guard in toLedgerCreatePayment.
 const SIGHASH_ALL = 1;
+
+// Name the refused networks the way the UI does ("Bitcoin testnet"), never by
+// chainId; trezorFormat.js keeps the same two labels so the wording matches.
+const REFUSED_NETWORK_LABELS = Object.freeze({
+    'bitcoin-testnet': 'Bitcoin testnet',
+    'bitcoin-regtest': 'Bitcoin regtest',
+});
 
 /**
  * The refusal for bitcoin-testnet and bitcoin-regtest, worded like Trezor's
@@ -48,8 +59,11 @@ const SIGHASH_ALL = 1;
  * @returns {Error}
  */
 export function unsupportedBitcoinNetworkError(chainId) {
+    const label = Object.prototype.hasOwnProperty.call(REFUSED_NETWORK_LABELS, chainId)
+        ? REFUSED_NETWORK_LABELS[chainId]
+        : 'this network';
     return new Error(
-        `This hardware device can't be used on ${chainId} - use a software wallet for this network. `
+        `This hardware device can't be used on ${label} - use a software wallet for this network. `
         + '(On this network the device would derive a different set of addresses than the '
         + 'rest of the wallet, so any funds would appear missing.)',
     );
@@ -349,7 +363,7 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
         pathByIndex.set(sp.inputIndex, sp);
     }
 
-    // Validate every input BEFORE anything is derived from it. Both guards
+    // Validate every input BEFORE anything is derived from it. The guards
     // below key off the decomposed PSBT rather than the signingPaths entry,
     // which is what the guard in the loop above could not see.
     decomposed.inputs.forEach((inp, idx) => {
@@ -373,6 +387,21 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
                 + 'Re-request the signature without a sighash override.',
             );
         }
+        // The device picks the version, and the version decides whether a
+        // sequence with the BIP68 disable bit clear is a relative timelock,
+        // so such an input is refused rather than signed with its lock in doubt.
+        if (!isValidSequence(inp.sequence)) {
+            throw new Error(
+                `toLedgerCreatePayment: PSBT input ${idx} has no valid sequence (${String(inp.sequence)})`,
+            );
+        }
+        if (enablesRelativeLock(inp.sequence)) {
+            throw new Error(
+                `toLedgerCreatePayment: PSBT input ${idx} sets a relative timelock `
+                + `(sequence 0x${inp.sequence.toString(16)}); this signer cannot promise the `
+                + 'transaction version that lock depends on. Re-request the signature without one.',
+            );
+        }
     });
 
     // Refuse mixed script types: createPaymentTransaction signs every input
@@ -387,6 +416,16 @@ export function toLedgerCreatePayment({ decomposed, chainId, signingPaths, lockT
             );
         }
     });
+
+    // REFUSE a version outside 1 and 2: hw-app-btc picks 1 (legacy protocol) or 2
+    // at runtime, so no other comes back as approved (verifySignedTx.js header).
+    if (!isDeviceTxVersion(decomposed.txVersion)) {
+        throw new Error(
+            `toLedgerCreatePayment: PSBT asks for transaction version ${String(decomposed.txVersion)}; `
+            + 'this signer can sign only version 1 or 2. '
+            + 'Re-request the signature at version 2.',
+        );
+    }
 
     const segwit = decomposed.inputs.every((i) => isSegwitScriptType(i.scriptType));
     const anyNative = decomposed.inputs.some((i) => i.scriptType === 'p2wpkh');

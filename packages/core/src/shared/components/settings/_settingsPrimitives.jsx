@@ -15,6 +15,8 @@
 // Underscore prefix marks this as internal to `components/settings/`;
 // other directories shouldn't import from here.
 
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
+
 export const ROW = {
     display: 'flex',
     flexDirection: 'row',
@@ -118,4 +120,30 @@ export function Status({ text, tone }) {
             {text}
         </div>
     );
+}
+
+export const SETTINGS_LOAD_FALLBACK = 'Settings could not be loaded. Close and reopen the wallet, then try again.';
+
+/**
+ * The settings-load failure as copy a user can read. Copy written for a user
+ * passes through; developer or runtime text is logged and replaced.
+ *
+ * @param {unknown} error
+ * @returns {string}
+ */
+export function settingsLoadErrorText(error) {
+    const text = userFacingMessage(error, SETTINGS_LOAD_FALLBACK);
+    if (text !== SETTINGS_LOAD_FALLBACK) return `Settings unavailable: ${text}`;
+    // Keep the raw cause diagnosable without showing it to the user.
+    if (error) console.warn(`[settings] load failed: ${error instanceof Error ? error.message : String(error)}`);
+    return SETTINGS_LOAD_FALLBACK;
+}
+
+/**
+ * The status block every Settings section shows when its settings fail to load.
+ *
+ * @param {{ error: unknown }} props
+ */
+export function SettingsLoadError({ error }) {
+    return <Status text={settingsLoadErrorText(error)} tone="error" />;
 }

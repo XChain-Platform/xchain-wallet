@@ -637,6 +637,22 @@ elif [[ ${#YMLS[@]} -eq 0 ]]; then
     exit 1
 fi
 
+# Every pointer must be one the client will install: its version is this tag's,
+# and every file it names is in this release's signed manifest. A stale pointer
+# freezes its fleet on the old version, and an uncovered one is downloaded,
+# refused and deleted by every client; both would otherwise publish green.
+# The set must also be exactly what the signed header's lanes need: a missing
+# per-arch pointer leaves that fleet on the old release with nothing logged.
+if [[ ${#YMLS[@]} -gt 0 ]]; then
+    if ! node "$HERE/pointer-gate.mjs" "$INPUT_DIR" --tag "$TAG" --manifest "$MANIFEST" \
+            --channel "$EXPECT_CHANNEL" --lanes "$LANES" >&2; then
+        echo "publish.sh: refusing to publish $TAG: the channel pointer(s) above are stale," >&2
+        echo "  uncovered, missing or unexpected. Nothing was uploaded. Collect exactly the" >&2
+        echo "  pointers this build emitted for $TAG and sign again if anything else changed." >&2
+        exit 1
+    fi
+fi
+
 # The plan used to print the manifest's artifact count as if every one of
 # them landed on the feed. For an Android release that is wrong by half:
 # the .aab is refused by name in Phase 1 below, so a plan reading

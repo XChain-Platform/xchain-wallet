@@ -94,6 +94,7 @@ import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
+import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
 import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
@@ -801,24 +802,13 @@ function AppInner() {
     // reaching into that effect's control flow.
     const headerAccounts = useAccountList(activeWalletId);
 
-    // Wallet-level alerts surfaced in the pancake menu's Alerts panel.
-    // Mirrors Home.jsx's `alerts` array so the web MenuRoute shows the
-    // same signals (the menu lives at the App level here, not in Home).
-    // Computed each render from walletList; future alerts append here.
+    // Build the pancake menu's Alerts panel from the shared list in core
+    // (walletAlerts.js); the menu lives at the App level here, not in Home.
     const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
-    const menuAlerts = [];
-    if (activeWallet?.format === 'counterwallet-legacy') {
-        menuAlerts.push({
-            id: 'legacy-format',
-            severity: 'info',
-            title: 'Older recovery phrase format',
-            message: 'This wallet uses the older 12-word FreeWallet recovery phrase, which many other wallets cannot restore. Upgrading creates a new wallet with a standard (BIP39) recovery phrase; your current wallet stays as it is.',
-            action: {
-                label: 'Upgrade recovery phrase',
-                onSelect: () => setUnlockedView('migrate-bip39'),
-            },
-        });
-    }
+    const menuAlerts = buildWalletAlerts({ activeWallet, messagingUnread }, {
+        onMessaging: () => { setMessagingThread(null); setUnlockedView('messaging'); },
+        onMigrateToBip39: () => setUnlockedView('migrate-bip39'),
+    });
 
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;

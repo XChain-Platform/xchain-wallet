@@ -34,7 +34,7 @@ import {
     parseBinding,
     resolveBindings,
 } from '../../keyboard/shortcuts.js';
-import { ROW, ROW_LABEL, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW, ROW_LABEL, STACK, Status, settingsLoadErrorText } from './_settingsPrimitives.jsx';
 
 const GROUP_HEADER = {
     fontSize: 'var(--xc-text-sm)',
@@ -154,7 +154,7 @@ export function KeyboardSection() {
     };
 
     if (loading) return <p style={ROW_LABEL}>Loading…</p>;
-    if (error) return <p role="alert" style={ROW_LABEL}>{error.message || 'Failed to load settings.'}</p>;
+    if (error) return <p role="alert" style={ROW_LABEL}>{settingsLoadErrorText(error)}</p>;
 
     return (
         <div style={STACK}>

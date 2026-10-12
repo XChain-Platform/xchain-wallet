@@ -124,8 +124,8 @@
 
 /* Quick-actions row sits between the total-balance hero and the
    tab strip. Send / Receive / Exchange / More, one equal column each.
-   Sized by child count rather than a fixed 4, because a store build
-   drops Exchange and can drop More too, and a
+   Sized by child count rather than a fixed 4, because a build that hides
+   the DEX drops Exchange and can drop More too, and a
    fixed 4-column track left the row hanging off the leading edge.
    The HomeTabs wrap is a flex column with `gap: var(--xc-space-3)`;
    negative top-margin shrinks the hero→actions gap to match the

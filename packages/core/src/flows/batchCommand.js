@@ -90,11 +90,11 @@ export const BATCH_COMMAND_WEIGHTS = Object.freeze({
 });
 
 /**
- * Wire aliases the chain expands before weighing (the SDK decoder's
- * ACTION_ALIASES). Load-bearing for the weights: a DROP is an AIRDROP to
- * the chain, so it must cost 25 here too, not the default 1.
+ * Wire aliases the chain expands before weighing (the action manifest's
+ * aliases map, held equal to it by test). Load-bearing for the weights: a DROP
+ * is an AIRDROP to the chain, so it must cost 25 here too, not the default 1.
  */
-const BATCH_ACTION_ALIASES = Object.freeze({
+export const BATCH_ACTION_ALIASES = Object.freeze({
     TRANSFER: 'SEND',
     ADDR:     'ADDRESS',
     DROP:     'AIRDROP',

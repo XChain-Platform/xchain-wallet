@@ -26,6 +26,7 @@ import {
     PROTOCOL_ONLY_ACTIONS,
     BITCOIN_ACTIONS,
 } from '../../packages/core/src/registry/actions.js';
+import { BATCH_ACTION_ALIASES } from '../../packages/core/src/flows/batchCommand.js';
 import MANIFEST from '../fixtures/action-manifest.json';
 
 // Resolve from this file, not cwd, so the guard holds wherever vitest is launched.
@@ -68,6 +69,18 @@ describe('ACTION manifest conformance: wallet walletForm set @regression', () =>
     it('descriptor supportedActions include the protocol-only actions', () => {
         for (const a of PROTOCOL_ONLY_ACTIONS) {
             expect(BITCOIN_ACTIONS, a).toContain(a);
+        }
+    });
+
+    // Hold the BATCH weight pre-check's alias table to the manifest, since an
+    // alias it misses is charged the default weight instead of its target's.
+    it('BATCH_ACTION_ALIASES exactly equals the manifest aliases map', () => {
+        expect({ ...BATCH_ACTION_ALIASES },
+            'packages/core/src/flows/batchCommand.js BATCH_ACTION_ALIASES drifted from action-manifest.json aliases; ' +
+            'update the wallet table to match the manifest.'
+        ).toEqual(MANIFEST.aliases);
+        for (const target of Object.values(MANIFEST.aliases)) {
+            expect(MANIFEST.actions, target).toHaveProperty(target);
         }
     });
 

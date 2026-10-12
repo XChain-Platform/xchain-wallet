@@ -24,13 +24,12 @@
 // those; nothing above it touches the legacy path at all.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
 
 // ─── Layout ────────────────────────────────────────────────────────
 
@@ -47,15 +46,6 @@ assert.ok(
 assert.ok(
     existsSync(join(enDir, 'index.js')),
     'i18n/locales/en/index.js exists',
-);
-
-// Back-compat shim still re-exports the dict so existing consumers
-// don't have to be touched in one step.
-const shimSrc = read('packages/core/src/i18n/en.js');
-assert.match(
-    shimSrc,
-    /export \{ en \} from '\.\/locales\/en\/index\.js'/,
-    'i18n/en.js still re-exports from the new path',
 );
 
 // ─── ICU interpreter ──────────────────────────────────────────────

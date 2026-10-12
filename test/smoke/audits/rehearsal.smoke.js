@@ -35,7 +35,7 @@
 
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -50,6 +50,7 @@ import {
     swapRequirement,
     resolvedPackageEntries,
     bootstrapOsesAt,
+    previousPublishedTag,
     resolveProdFeed,
     RECORD_VERSION,
     deviceInstalledArch,
@@ -742,9 +743,52 @@ const check = (over) => assertRecord({
     assert.equal(oldest.status, 0);
     assert.match(oldest.stdout, /^bootstrap/, 'the genuinely-first release is bootstrap');
 
-    const normal = cli('requirement', '--repo', repo, '--tag', 'v0.2.0');
-    assert.equal(normal.status, 0);
+    // A production feed in this process, so the CLI runs async: it answers which tags were published.
+    const publishedTags = new Map([['v0.1.0', 200], ['v0.2.0', 200]]);
+    const feed = createServer((req, res) => {
+        const t = /^\/RELEASE_HASHES\/(v[^/]+)\.txt$/.exec(req.url)?.[1];
+        const status = publishedTags.get(t) ?? 404;
+        res.writeHead(status);
+        res.end(status === 200 ? `# tag: ${t}\n${'0'.repeat(64)}  ./xchain-wallet-${t}-mac-arm64.zip\n` : '');
+    });
+    await new Promise((ok) => feed.listen(0, '127.0.0.1', ok));
+    const feedBase = `http://127.0.0.1:${feed.address().port}`;
+    const cliAsync = (...args) => new Promise((ok) => {
+        const child = spawn(process.execPath, [join(root, 'tools/release/rehearse.mjs'), ...args]);
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d) => { stdout += d; });
+        child.stderr.on('data', (d) => { stderr += d; });
+        child.on('close', (status) => ok({ status, stdout, stderr }));
+    });
+
+    const normal = await cliAsync('requirement', '--repo', repo, '--tag', 'v0.2.0', '--prod-feed', feedBase);
+    assert.equal(normal.status, 0, normal.stderr);
     assert.match(normal.stdout, /^one-os/, 'a release with a predecessor needs a real swap');
+
+    const noFeed = cli('requirement', '--repo', repo, '--tag', 'v0.2.0');
+    assert.equal(noFeed.status, 1, 'with earlier tags and no feed, which one was published is unknown');
+    assert.match(noFeed.stderr, /--prod-feed/);
+
+    // An unpublished tag between this one and the last publish must not become the diff base or waive the swap.
+    mkdirSync(join(repo, 'packages/desktop/main'), { recursive: true });
+    writeFileSync(join(repo, 'packages/desktop/main/updater.js'), 'updater\n');
+    git('add', '.');
+    git('commit', '-qm', 'updater change');
+    git('-c', 'tag.gpgsign=false', 'tag', 'v0.2.1');
+    writeFileSync(join(repo, 'b'), 'y');
+    git('add', 'b');
+    git('commit', '-qm', 'unrelated change');
+    git('-c', 'tag.gpgsign=false', 'tag', 'v0.3.0');
+    const skipping = await cliAsync('requirement', '--repo', repo, '--tag', 'v0.3.0', '--prod-feed', feedBase);
+    assert.equal(skipping.status, 0, skipping.stderr);
+    assert.match(skipping.stdout, /^all-os/,
+        'the updater change since the last PUBLISHED tag demands every OS; a git-order base would read one-os');
+    assert.match(skipping.stderr, /previous release is v0\.2\.0; skipped 1 unpublished tag\(s\)[^\n]*v0\.2\.1/,
+        'the skipped unpublished tag is named');
+    const explicit = cli('requirement', '--repo', repo, '--tag', 'v0.3.0', '--previous-tag', 'v0.2.1');
+    assert.match(explicit.stdout, /^one-os/, 'control: an explicit --previous-tag is still the operator\'s override');
+    feed.close();
 
     const unknown = cli('requirement', '--repo', repo, '--tag', 'v9.9.9');
     assert.equal(unknown.status, 1, 'an untagged release must not resolve to bootstrap');
@@ -919,6 +963,70 @@ const check = (over) => assertRecord({
     // silently bootstrap the world.
     assert.equal(resolveProdFeed(root), 'https://downloads.xchain.io/wallet',
         'resolveProdFeed must return the feed root, with the desktop directory dropped');
+
+    // The previous release is the newest earlier tag the feed PUBLISHED, so an unpublished tag between is skipped.
+    const tagsRun = (list) => (repo, args) => {
+        assert.deepEqual(args.slice(0, 2), ['tag', '--list'], 'only the tag listing is read');
+        return `${list.join('\n')}\n`;
+    };
+    const byTag = (answers) => async (url) => {
+        const t = /RELEASE_HASHES\/(v[^/]+)\.txt$/.exec(url)?.[1];
+        const a = answers[t];
+        if (a instanceof Error) throw a;
+        if (!a) throw new Error(`unexpected fetch for ${url}`);
+        return stub(a[0], a[1] ?? '')();
+    };
+    const macLinux = manifest(['xchain-wallet-0.2.0-x64-mac.zip', 'xchain-wallet-0.2.0-x86_64.AppImage']);
+    const threeTags = tagsRun(['v0.3.0', 'v0.2.1', 'v0.2.0']);
+
+    const walked = await previousPublishedTag({
+        repo: '.', tag: 'v0.3.0', prodFeedBase: base, run: threeTags,
+        fetchImpl: byTag({ 'v0.2.1': [404], 'v0.2.0': [200, macLinux] }),
+    });
+    assert.equal(walked.previousTag, 'v0.2.0', 'a 404 tag is skipped, never read as the previous release');
+    assert.deepEqual(walked.skipped, ['v0.2.1'], 'and the skipped tag is named');
+
+    const direct = await previousPublishedTag({
+        repo: '.', tag: 'v0.3.0', prodFeedBase: base, run: threeTags,
+        fetchImpl: byTag({ 'v0.2.1': [200, macLinux] }),
+    });
+    assert.equal(direct.previousTag, 'v0.2.1', 'a published previous tag is used as it is');
+    assert.deepEqual(direct.skipped, []);
+
+    const first = await previousPublishedTag({
+        repo: '.', tag: 'v0.2.0', prodFeedBase: null, run: threeTags,
+        fetchImpl: async () => { throw new Error('the oldest tag reads no feed'); },
+    });
+    assert.equal(first.previousTag, null, 'the genuinely-first tag is bootstrap, with no feed read');
+
+    for (const [label, args] of [
+        ['a 500 on a walked tag', { fetchImpl: byTag({ 'v0.2.1': [404], 'v0.2.0': [500, 'upstream'] }) }],
+        ['a network failure on a walked tag', { fetchImpl: byTag({ 'v0.2.1': new Error('fetch failed') }) }],
+        ['no production feed base', { prodFeedBase: null, fetchImpl: byTag({}) }],
+        ['every earlier tag unpublished', { fetchImpl: byTag({ 'v0.2.1': [404], 'v0.2.0': [404] }) }],
+    ]) {
+        await assert.rejects(previousPublishedTag({
+            repo: '.', tag: 'v0.3.0', prodFeedBase: base, run: threeTags, ...args,
+        }), /--previous-tag/, `${label} must stop the run and name the override, never guess a predecessor`);
+    }
+
+    // The seam: the git-order base waived every OS and passed an empty one-os record; the published base demands a swap.
+    const oneOs = (bootstrap) => assertRecord({
+        record: {
+            'record-version': RECORD_VERSION, tag: 'v0.3.0', 'prod-manifest-sha256': 'm',
+            'swap-requirement': 'one-os', 'requirement-reason': 'test', 'pinned-key-override': null,
+            lanes: LANES.map((l) => ({ id: l.id, ok: true })), swaps: [], 'automated-checks': [],
+            'swap-bootstrap-oses': bootstrap.oses, 'swap-bootstrap-reason': bootstrap.reason,
+        },
+        tag: 'v0.3.0', prodManifestSha256: 'm',
+    });
+    const gitOrder = await bootstrapOsesAt({ previousTag: 'v0.2.1', prodFeedBase: base, fetchImpl: stub(404, '') });
+    assert.ok(oneOs(gitOrder).ok, 'control: the unpublished git-order base waives every swap');
+    const published = await bootstrapOsesAt({
+        previousTag: walked.previousTag, prodFeedBase: base, fetchImpl: stub(200, macLinux),
+    });
+    assert.match(oneOs(published).problems.join(' '), /no observed swap on any OS/,
+        'with the published predecessor the release still owes an observed swap');
 }
 
 server.close();

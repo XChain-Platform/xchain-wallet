@@ -153,6 +153,9 @@ export const HID_VENDOR_ALLOWLIST = Object.freeze({
 
 const ALLOWED_VENDOR_IDS = new Set(Object.values(HID_VENDOR_ALLOWLIST));
 
+// List the device permissions the Trezor Connect bridge session refuses on the check path.
+const BRIDGE_DENIED_DEVICE_CLASSES = new Set(['hid', 'usb', 'serial']);
+
 /**
  * Session-wide record of which webContents have been seen hosting a
  * subframe. Consulted by the device-permission handler, which is handed an
@@ -334,7 +337,8 @@ export function attachHidPermissions(session, opts) {
  * safe by omission; a bridge session that never calls this function could
  * hand a paired Ledger or Trezor straight to whatever hosted script runs
  * inside it. Every handler Electron offers for `hid` is wired here to
- * refuse explicitly instead.
+ * refuse explicitly instead, and the WebUSB and Web Serial device classes
+ * are refused the same way on the check path and at their pickers.
  *
  * @param {import('electron').Session} session
  */
@@ -363,8 +367,10 @@ export function attachHidDenial(session) {
         callback(false);
     });
 
-    // Braces: the handler Electron 43 actually consults for `hid`.
-    session.setPermissionCheckHandler((_webContents, permission) => permission !== 'hid');
+    // Braces: the handler Electron 43 actually consults for `hid`. Refuse
+    // every device class (WebHID, WebUSB, Web Serial); other permissions stay
+    // granted here, as narrowing them needs a live Trezor pairing to measure.
+    session.setPermissionCheckHandler((_webContents, permission) => !BRIDGE_DENIED_DEVICE_CLASSES.has(permission));
 
     // Refuses every device outright, regardless of vendor, origin or
     // frame - the handler `setDevicePermissionHandler` consults once a
@@ -379,6 +385,18 @@ export function attachHidDenial(session) {
     session.on('select-hid-device', (event, _details, callback) => {
         event.preventDefault();
         callback();
+    });
+
+    // Cancel the WebUSB and Web Serial pickers explicitly too, so the bridge
+    // never depends on how Electron treats an unhandled chooser. No argument
+    // cancels a USB pick; an empty port id cancels a serial pick.
+    session.on('select-usb-device', (event, _details, callback) => {
+        event.preventDefault();
+        callback();
+    });
+    session.on('select-serial-port', (event, _portList, _webContents, callback) => {
+        event.preventDefault();
+        callback('');
     });
 }
 

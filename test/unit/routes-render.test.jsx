@@ -441,7 +441,7 @@ function recordingMessaging({ walletMode = 'full' } = {}) {
         destroyAssetHw: record('destroyAssetHw'),
         buildActionPsbtRequest: record('buildActionPsbtRequest'),
         // single-encode confirm pipeline (the actionForms-slice
-        // default path): compose resolves a ComposedAction envelope, the
+        // default path): compose resolves a HostComposeWireEnvelope, the
         // preflight report is clean so Approve enables.
         composeForConfirm: (args) => {
             calls.push({ method: 'composeForConfirm', args });

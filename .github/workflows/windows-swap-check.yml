@@ -18,9 +18,10 @@
 # attestation on the Parallels VM stays required for both Windows lanes.
 #
 # WHY IT BUILDS ITS OWN PAIR rather than updating from the last release. A
-# swap needs a build to update FROM. The staging set is K1-signed and K1 does
-# not exist yet (ceremony A), so there is no published predecessor to point
-# at, and waiting for one would leave this unrun. Building the tree twice, one
+# swap needs a build to update FROM. A runner never holds K1, so it cannot
+# produce a K1-manifested predecessor of its own, and tying this check to a
+# published Windows release would leave it unrun until one exists (the lane is
+# NOT-SHIPPED in shipped-lanes.txt). Building the tree twice, one
 # patch apart, exercises the same installer, the same updater and the same
 # replacement of the same binary. What it does NOT exercise is Authenticode
 # publisher matching: these two builds are unsigned, so electron-updater skips

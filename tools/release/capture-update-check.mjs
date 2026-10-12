@@ -74,8 +74,8 @@
 // locally built bundle, not in this tool. The cheapest next probes: read
 // the updater events the app already broadcasts to its windows
 // (`broadcastToWindows('xchain:updater', ...)`) via devtools, or simply
-// take the capture against a CI-produced, Developer-ID-signed build once
-// ceremony A lands - which is the authoritative artifact anyway.
+// take the capture against a CI-produced, Developer-ID-signed build from
+// the release pipeline - which is the authoritative artifact anyway.
 //
 // THE DIFFERENCE BETWEEN THE MODES IS THE TRANSPORT, and it is stated in
 // the capture itself rather than left for a reader to infer. In a

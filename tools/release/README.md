@@ -26,8 +26,10 @@ appear in it is not prose: it is declared in
 [`expected-artifacts.txt`](expected-artifacts.txt), which `sign.sh`
 enforces before it writes a manifest. Each declared artifact also names
 its **build profile** - `default` (web, desktop, extension) or `store`
-(the mobile builds, which compile out the surfaces app-store review
-posture hides) - and that mapping is written into the signed manifest,
+(the mobile builds, which differ in CSP, sourcemaps, packaging and the
+signed profile stamp; which product surfaces a profile hides is the
+`HIDDEN_SURFACES` table in `packages/web/src/surfaces/registry.js`, empty
+for every profile today) - and that mapping is written into the signed manifest,
 one `# profile <name>: <artifact>` line each, so two artifacts of one
 tag holding different code are distinguishable in the record (rails §3).
 The manifest format itself is documented at the top of
@@ -100,7 +102,8 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `verify.sh` | Verify a manifest: hashes, header anchor, and GPG signature. Mirrors [https://docs.xchain.io/components/wallet/release/verify-release](https://docs.xchain.io/components/wallet/release/verify-release). A manifest whose tag is `<release>-resign<N>` anchors to `<release>` and is reported as a re-signature superseding what was published under that name; the reverse does not hold, so the superseded original cannot answer a request for the correction. | Live |
 | `prepare-resign-tag.sh` | Cut a tag a published release can be RE-SIGNED from, when the defect was in the gate the tag itself supplies. Clones the release tag into a throwaway directory, replaces `tools/build-reproduce/check-no-dev-mock.sh` with the committed copy from this checkout (one file, and it refuses if the diff is wider), tags `<release>-resign<N>`, and PROVES it by running the new tag's own gate against the staged artifacts and requiring the receipt `sign.sh` requires. Refuses a source whose gate cannot read a staged bundle - measured behaviourally, since the gate that shipped with v0.336.0 does not reject `--artifacts`, it ignores it - and refuses a name whose X.Y.Z core is not the release's. Exits 0 cut and proved / 1 refused / 2 caller error / 3 nothing to prepare. Never pushes, never signs, never touches the checkout it runs from. | Live; driven end to end against the real v0.336.0 android set 2026-08-12 |
 | `publish.sh` | §6 step 5: upload a signed release to the feed, channel pointers last, with an edge check between the two and a cache purge after. An Android partial writes `android/latest.json` last in both production and staging; the production pointer notifies installed wallets, while `rehearse.mjs run --lane android-direct` reads the staging pointer. | Live (host pending) |
-| `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names. | Live (host pending) |
+| `pointer-gate.mjs` | Run by `publish.sh` before any upload: refuses a desktop channel pointer the client would refuse, one whose version is not the tag's or that names a file the signed manifest does not cover. It also refuses a pointer set that is not exactly what the signed header's lanes need (`# rehearsal-os:`, else `# lanes:`, else every `updater` lane in `shipped-lanes.txt`), so a missing per-arch pointer cannot strand that fleet. The lane-to-pointer mapping is its exported `DESKTOP_POINTER_LANES`, which `verify-edge-cache.mjs` probes too. | Live |
+| `feed-sweep.mjs` | Runs on the feed host by cron: validates every published object against the union of the signed manifests, and every channel pointer against the bytes it names and its own version's manifest. | Live (host pending) |
 | `rehearse.mjs` | §7.5: probes every shipped update lane against the staging feed (pointer, per-arch selection, download, sha512, signed manifest), records human-attested swaps, and gates the production publish on the result. Covers the direct Android lane too, by a second probe that drives the SHIPPED `directUpdateCheck.js` against the published `latest.json` in both directions and proves the APK its notice sends a user to is the one K1 signed. | Live (host pending) |
 | `rehearsal-matrix.mjs` | The shipped update lanes and the named hardware each is smoked on (DD4). Two sets: `LANES` (electron-updater) and `DIRECT_LANES` (the sideloaded store and full APKs, one lane each selected by its own glob, whose shared feed carries a notice and no installer). Data, not code; `--direct-lanes-for` answers publish.sh's question of which direct lanes a partial release's lanes ship for. | Live |
 | `release-record.mjs` | The §6 release record, opened and enforced. `open --tag vX.Y.Z` instantiates `wallet-releases/vX.Y.Z.md` (platform tree) from `TEMPLATE.md` with the identity fields filled (store integers asked of `packages/mobile/scripts/version.js`, never recomputed from §2's formula) and never overwrites an existing record. `assert --tag` is the gate `publish.sh` runs before a production publish; an untouched copy of the template does not count. `coverage` checks that every `v*` tag AND the version the working tree declares have a record, and is run by `test/smoke/audits/release-record.smoke.js` inside `pnpm ci`. Exits 0 covered / 1 missing / 3 the records directory is not in this checkout. Tags whose commit declares a different version are reported, not failed: `release.yml`'s verify-tag refuses those, so they never produced a release. | Live, and gating since 2026-08-04 |
@@ -485,6 +488,11 @@ The authoritative checklist is §6 of
    named waiver (device cannot witness, operator hardware decision owed)
    rather than a red, and darwin's swap comes from `mac-arm64`. `rehearse.mjs requirement` says whether this release needs
    one OS or all of them, from the diff rather than from judgement.
+   Both `run` and `requirement` diff against the newest earlier tag whose
+   manifest the production feed serves, name any unpublished tag they skip,
+   and refuse when the feed cannot say; `--previous-tag` overrides that.
+   `run` exits 1 only for a failed lane the release ships; a failure on a
+   lane it carries no artifact for is printed as not demanded.
    No production pointer goes up before this passes, and step 5 refuses
    without the record.
 

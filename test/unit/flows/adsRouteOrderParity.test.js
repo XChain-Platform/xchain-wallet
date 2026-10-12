@@ -170,3 +170,81 @@ describe('ADS output order parity', () => {
             .toEqual([EXISTING, NATIVE_FEE, ORACLE_FEE, DONATION]);
     });
 });
+
+const PAYEE = { address: 'bcrt1qpayee', value: '50000000' };
+const NATIVE_SEND = {
+    action: 'SEND',
+    params: { TICK: 'BTC', AMOUNT: '0.5', DESTINATION: PAYEE.address },
+};
+const NATIVE_SEND_WITH_MEMO = {
+    action: 'SEND',
+    params: { ...NATIVE_SEND.params, MEMO: 'rent' },
+};
+
+function nativeOpts(extra = {}) {
+    return {
+        pubkey: '02'.padEnd(66, '1'),
+        sourceAddress: SOURCE,
+        change: SOURCE,
+        ...extra,
+    };
+}
+
+async function atomicOutputsFor(actionData, opts) {
+    const h = harness();
+    await submitAction({
+        ...h,
+        walletId: 'wallet-1',
+        chainId: CHAIN_ID,
+        actionData,
+        encoderOpts: opts,
+        signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
+        signer: {
+            kind: 'software',
+            signPsbt: vi.fn(async () => ({
+                signedPsbtHex: '70736274ff',
+                txHex: '02000000',
+                txid: 'a'.repeat(64),
+            })),
+        },
+    });
+    return h.createTx.mock.calls[0][0].customOutputs;
+}
+
+async function composedOutputsFor(actionData, opts) {
+    const h = harness();
+    await composeForConfirm({
+        ...h,
+        chainId: CHAIN_ID,
+        actionData,
+        encoderOpts: opts,
+        source: SOURCE,
+    });
+    return h.createTx.mock.calls[0][0].customOutputs;
+}
+
+describe('native-coin payment order parity', () => {
+    it('pays a bare native send before the ADS donation on every route', async () => {
+        // The in-wallet Send composes with no caller outputs.
+        const composed = await composedOutputsFor(NATIVE_SEND, nativeOpts());
+        // The dApp bridge (sendToken) seeds the payment as a caller output.
+        const bridged = await atomicOutputsFor(NATIVE_SEND, nativeOpts({ customOutputs: [{ ...PAYEE }] }));
+        // The generic advanced route hands over no outputs at all.
+        const advanced = await atomicOutputsFor(NATIVE_SEND, nativeOpts());
+
+        expect(composed).toEqual([PAYEE, DONATION]);
+        expect(bridged).toEqual(composed);
+        expect(advanced).toEqual(composed);
+    });
+
+    it('keeps the payment at the caller position ahead of a native protocol fee', async () => {
+        const composed = await composedOutputsFor(
+            NATIVE_SEND_WITH_MEMO, nativeOpts({ payFeeInNativeCoin: true }));
+        const bridged = await atomicOutputsFor(
+            NATIVE_SEND_WITH_MEMO,
+            nativeOpts({ payFeeInNativeCoin: true, customOutputs: [{ ...PAYEE }] }));
+
+        expect(composed).toEqual([PAYEE, NATIVE_FEE, DONATION]);
+        expect(bridged).toEqual(composed);
+    });
+});

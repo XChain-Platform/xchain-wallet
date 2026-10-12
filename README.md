@@ -20,7 +20,7 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 
 ## Features
 
-- **Four shells, one codebase:** `@xchain-wallet/web` (Vite SPA), `@xchain-wallet/extension` (Chrome MV3 popup + full-screen + service worker), `@xchain-wallet/desktop` (Electron with main-process signing isolation), `@xchain-wallet/mobile` (Capacitor shell wrapping the same web build, Android now with iOS to follow); all share `@xchain-wallet/core` for routes, components, flows, and signers
+- **Four shells, one codebase:** `@xchain-wallet/web` (Vite SPA), `@xchain-wallet/extension` (Chrome MV3 popup + full-screen + service worker), `@xchain-wallet/desktop` (Electron with main-process signing isolation), `@xchain-wallet/mobile` (Capacitor shell wrapping the same web build, Android shipped, iOS pending App Store release); all share `@xchain-wallet/core` for routes, components, flows, and signers
 - **All 29 XChain ACTIONs:** SEND, ISSUE, MINT, DESTROY, ORDER, DISPENSER, DIVIDEND, SWEEP, SWAP, AIRDROP, MESSAGE, LIST, LINK, BROADCAST, PRICE, VOTE, BATCH, DEPLOY, EXECUTE, DEPOSIT, WITHDRAW, COINPAY, STAKE, UNSTAKE, DELEGATE, COLLECT, CALLBACK, SLEEP, FILE
 - **Self-custodial key management:** BIP39 mnemonic + optional 25th-word passphrase, BIP32 HD derivation per chain, AES-256-GCM vault encrypted with an Argon2id-derived master key (calibrated per device), Counterwallet legacy mnemonic import
 - **Pluggable signer interface:** `SoftwareSigner` (in-vault keys), `TrezorSigner` (Trezor Connect, all current models), `LedgerSigner` (WebHID, all current models), `RemoteSigner` (cross-shell pairing), `MultisigSigner` (classical n-of-m + MuSig2 sessions)
@@ -154,7 +154,7 @@ xchain-wallet/
 │   ├── web/                     browser SPA shell (Vite)
 │   ├── extension/               Chrome MV3 extension shell (popup + full-screen + service worker)
 │   ├── desktop/                 Electron desktop shell (Windows / macOS / Linux)
-│   ├── mobile/                  Capacitor mobile shell (Android now, iOS to follow); wraps the web build
+│   ├── mobile/                  Capacitor mobile shell (Android shipped, iOS pending App Store release); wraps the web build
 │   ├── signers-ledger/          LedgerSigner vendor implementation, extracted from core
 │   ├── signers-trezor/          TrezorSigner vendor implementation, extracted from core
 │   ├── bridge-spec/             window.xchain TypeScript type definitions

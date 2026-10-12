@@ -15,14 +15,18 @@
 // trust silently: whoever can swap a JS bundle gets to run code in a page that
 // holds the user's decrypted seed.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
     SRI_ALGORITHM,
     addIntegrityAttributes,
     buildIntegrityImportMap,
     injectIntegrityImportMap,
     integrityFor,
+    sriPlugin,
 } from '../../../packages/web/sri.js';
 
 const sha384 = (s) => `sha384-${createHash('sha384').update(Buffer.from(s)).digest('base64')}`;
@@ -232,6 +236,64 @@ describe('injectIntegrityImportMap', () => {
     });
 
     it('leaves the page untouched when there is nothing to pin', () => {
-        expect(injectIntegrityImportMap(page, {})).toEqual({ html: page, mapped: 0 });
+        expect(injectIntegrityImportMap(page, {})).toEqual({ html: page, mapped: 0, admitted: false });
+    });
+
+    it('reports the map admitted when its hash lands in script-src', () => {
+        expect(injectIntegrityImportMap(page, files).admitted).toBe(true);
+    });
+
+    it('reports the map not admitted when the meta tag puts content before http-equiv', () => {
+        const reordered = page.replace(
+            /<meta http-equiv="Content-Security-Policy" content="([^"]*)" \/>/,
+            '<meta content="$1" http-equiv="Content-Security-Policy" />',
+        );
+        const { html, mapped, admitted } = injectIntegrityImportMap(reordered, files);
+        expect(mapped).toBe(2);
+        expect(admitted).toBe(false);
+        const body = html.match(/<script type="importmap">(.*?)<\/script>/)[1];
+        expect(html).not.toContain(sha384(body));
+    });
+
+    it('reports the map not admitted when the policy has no script-src directive', () => {
+        const noScriptSrc = page.replace("script-src 'self'; ", '');
+        expect(injectIntegrityImportMap(noScriptSrc, files).admitted).toBe(false);
+    });
+
+    it('reports the map not admitted when the page has nowhere to insert it', () => {
+        const { mapped, admitted } = injectIntegrityImportMap('<p>no head, no script</p>', files);
+        expect(mapped).toBe(0);
+        expect(admitted).toBe(false);
+    });
+});
+
+describe('sriPlugin import map warning', () => {
+    const csp = "default-src 'self'; script-src 'self'; object-src 'none'";
+    const build = (meta) => {
+        const dir = mkdtempSync(join(tmpdir(), 'xchain-sri-plugin-'));
+        mkdirSync(join(dir, 'assets'));
+        writeFileSync(join(dir, 'assets', 'app.js'), 'main()');
+        writeFileSync(join(dir, 'index.html'),
+            `<html><head>${meta}<script type="module" src="/assets/app.js"></script></head></html>`);
+        const logger = { info: vi.fn(), warn: vi.fn() };
+        const plugin = sriPlugin();
+        plugin.configResolved({ logger, root: dir, base: '/', build: { outDir: dir } });
+        plugin.writeBundle({}, { 'index.html': { type: 'asset' }, 'assets/app.js': { type: 'chunk' } });
+        rmSync(dir, { recursive: true, force: true });
+        return logger;
+    };
+    const mapWarnings = (logger) => logger.warn.mock.calls.filter(([m]) => /import map/.test(m));
+
+    it('warns when the page CSP does not admit the injected import map', () => {
+        const logger = build(`<meta content="${csp}" http-equiv="Content-Security-Policy" />`);
+        expect(mapWarnings(logger)).toHaveLength(1);
+        expect(logger.info.mock.calls.some(([m]) => /pinned in the import map/.test(m))).toBe(false);
+    });
+
+    it('stays quiet about the import map when the page CSP admits it', () => {
+        const logger = build(`<meta http-equiv="Content-Security-Policy" content="${csp}" />`);
+        expect(mapWarnings(logger)).toEqual([]);
+        expect(logger.info.mock.calls.some(([m]) => /1 script chunk\(s\) pinned in the import map/.test(m)))
+            .toBe(true);
     });
 });

@@ -386,6 +386,53 @@ export function swapExercisesLane(swap) {
     return deviceInstalledArch(lane) === lane.arch;
 }
 
+/** Whether a lane's named device installs another lane's artifact, so `attest` refuses it for this lane. */
+export function laneDeviceCannotWitness(lane) {
+    return Boolean(lane?.device) && deviceInstalledArch(lane) !== lane.arch;
+}
+
+// Say why the human half is still owed elsewhere, in the words `coverage` uses for the same waiver.
+function cannotWitnessReason(lane) {
+    return `this lane's named device cannot witness it (it installs the ${deviceInstalledArch(lane)} `
+        + `artifact); operator hardware decision owed: name a native ${lane.arch} device in `
+        + 'tools/release/rehearsal-matrix.mjs';
+}
+
+/** Whether a release whose OS set is `releaseOses` demands this lane; null means every lane is demanded. */
+export function laneShippedIn(releaseOses, lane) {
+    return releaseOses === null || releaseOses.has(lane.os);
+}
+
+/**
+ * Split a run's failed lanes into the ones the release demands and notes for the rest, by `assertRecord`'s rule.
+ *
+ * @param {{lanes: object[], directLanes: object[], releaseArtifacts: string[]}} args
+ * @returns {{demanded: object[], notes: string[]}}
+ */
+export function splitLaneFailures({ lanes, directLanes, releaseArtifacts }) {
+    const releaseOses = osesInRelease(releaseArtifacts);
+    const { directLanes: directIds } = lanesInRelease(releaseArtifacts);
+    const demanded = [];
+    const notes = [];
+    for (const entry of lanes.filter((l) => !l.ok)) {
+        const declared = laneById(entry.id);
+        if (declared && !laneShippedIn(releaseOses, declared)) {
+            notes.push(`lane ${entry.id} failed, and is not demanded: this release carries no ${declared.os} artifact`);
+        } else {
+            demanded.push(entry);
+        }
+    }
+    for (const entry of directLanes.filter((l) => !l.ok)) {
+        if (directIds.includes(entry.id)) {
+            demanded.push(entry);
+        } else {
+            notes.push(`lane ${entry.id} failed, and is not demanded: this release carries no `
+                + `${laneById(entry.id)?.artifact ?? 'artifact for it'}`);
+        }
+    }
+    return { demanded, notes };
+}
+
 // ------------------------------------------------------------- the probe
 
 /**
@@ -1014,7 +1061,9 @@ export function coverageDemand({ lanesText, releaseArtifacts }) {
  * clean 404, NOTHING is treated as bootstrap and every OS keeps its swap
  * requirement. A network blip must never be the sentence that waives a
  * gate. A 404 is not a blip: it is the feed saying the tag published no
- * manifest, which is the bootstrap case itself.
+ * manifest, which is the bootstrap case itself. `run` resolves the previous
+ * tag with `previousPublishedTag`, so an unpublished tag reaches this only
+ * when an operator names it with --previous-tag.
  *
  * @returns {Promise<{oses: string[], reason: string}>}
  */
@@ -1227,7 +1276,7 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
     // listing could not be read, and null keeps the historical every-lane
     // behaviour rather than waiving anything.
     const releaseOses = osesInRelease(releaseArtifacts);
-    const laneShipsHere = (lane) => releaseOses === null || releaseOses.has(lane.os);
+    const laneShipsHere = (lane) => laneShippedIn(releaseOses, lane);
 
     const lanes = Array.isArray(record.lanes) ? record.lanes : [];
     if (desktopInRelease) {
@@ -1281,6 +1330,16 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
     const automated = Array.isArray(record['automated-checks']) ? record['automated-checks'] : [];
     for (const auto of automated) {
         const valid = validateSwapCheck(auto);
+        // Report, never demand, a check on a desktop lane this release carries no artifact for, as the lanes loop does.
+        const scoped = LANES.find((l) => l.id === auto?.lane);
+        if (scoped && !laneShipsHere(scoped)) {
+            const said = !valid.ok
+                ? `an unusable entry (${valid.reason})`
+                : `${auto.result}${auto.notes?.length ? `: ${auto.notes.join('; ')}` : ''}`;
+            notes.push(`the automated swap check on ${auto.lane} is not demanded: this release carries no `
+                + `${scoped.os} artifact. It reported ${said}`);
+            continue;
+        }
         if (!valid.ok) {
             problems.push(`automated swap check for lane "${auto?.lane}": ${valid.reason}`);
             continue;
@@ -1291,7 +1350,9 @@ export function assertRecord({ record, tag, prodManifestSha256, releaseArtifacts
                 `${auto.lane}: an automated swap check PASSED on ${auto.runner}`
                 + `${auto.silicon ? ` (${auto.silicon})` : ''}, ${auto.from} -> ${auto.to}. `
                 + 'That is a machine result and not an attestation: §7.5 still requires a person '
-                + `to watch the swap on ${lane.device}.`,
+                + (laneDeviceCannotWitness(lane)
+                    ? `to watch the swap, and ${cannotWitnessReason(lane)}.`
+                    : `to watch the swap on ${lane.device}.`),
             );
         } else {
             problems.push(
@@ -1462,10 +1523,12 @@ function short(v) {
 const USAGE = `usage: rehearse.mjs <command> [args]
 
   run --feed <url> --tag <vX.Y.Z> --channel <name> --prod-input <dir>
-      [--repo <dir>] [--previous-tag <vX.Y.Z>] [--out <file>]
+      [--repo <dir>] [--previous-tag <vX.Y.Z>] [--prod-feed <url>] [--out <file>]
       [--pinned-key <file> --pinned-fingerprint <hex>] [--lane <id>]...
-      Probe every shipped lane against the staging feed and write the
-      rehearsal record. Exits 1 if any lane fails. Each direct lane
+      Probe every desktop lane against the staging feed and write the
+      rehearsal record. Exits 1 if a lane the release ships fails; a failed
+      lane it carries no artifact for is reported as not demanded, the same
+      way \`assert\` reads the record. Each direct lane
       (android-direct, android-full) is probed when the release contains
       the APK its own glob names, or when named with --lane.
 
@@ -1488,9 +1551,12 @@ const USAGE = `usage: rehearse.mjs <command> [args]
       demands is read from the release directory, so an APK-only release
       is asked for the direct lane and not for eight desktop ones.
 
-  requirement --repo <dir> --tag <vX.Y.Z> [--previous-tag <vX.Y.Z>]
+  requirement --repo <dir> --tag <vX.Y.Z> [--previous-tag <vX.Y.Z>] [--prod-feed <url>]
       Print whether this release needs a swap on one OS or on all of
-      them, and why.
+      them, and why. Without --previous-tag, run and requirement diff
+      against the newest earlier tag the production feed (--prod-feed, or
+      the builder config's) has a manifest for, naming any unpublished
+      tag skipped on the way, and refuse when the feed cannot say.
 
   coverage [--records <dir>] [--prod-input <dir>] [--lanes-file <path>]
       Which lanes have ever had an observed swap. Exits 1 if any lane
@@ -1516,10 +1582,15 @@ function flags(argv, name) {
     return out;
 }
 
-/** `previousTagOf`, with its ambiguous cases turned into a hard stop. */
-function resolvePrevious(repo, tag) {
+/** `previousPublishedTag`, naming any unpublished tag it skipped and turning its refusals into a hard stop. */
+async function resolvePrevious(repo, tag, prodFeedBase) {
     try {
-        return previousTagOf(repo, tag);
+        const { previousTag, skipped } = await previousPublishedTag({ repo, tag, prodFeedBase });
+        if (skipped.length) {
+            process.stderr.write(`rehearse.mjs: previous release is ${previousTag}; skipped ${skipped.length} `
+                + `unpublished tag(s) with no manifest on the production feed: ${skipped.join(', ')}\n`);
+        }
+        return previousTag;
     } catch (err) {
         return fail(String(err?.message || err));
     }
@@ -1559,7 +1630,8 @@ async function main(argv) {
     if (command === 'requirement') {
         const repo = flag(argv, '--repo') || process.cwd();
         const tag = flag(argv, '--tag') || fail('requirement needs --tag');
-        const previousTag = flag(argv, '--previous-tag') ?? resolvePrevious(repo, tag);
+        const previousTag = flag(argv, '--previous-tag')
+            ?? await resolvePrevious(repo, tag, flag(argv, '--prod-feed') || resolveProdFeed(repo));
         const r = swapRequirement({ repo, tag, previousTag });
         process.stdout.write(`${r.requirement}\n${r.reason}\n`);
         if (r.paths) for (const p of r.paths) process.stdout.write(`  ${p}\n`);
@@ -1589,14 +1661,14 @@ async function main(argv) {
             );
         }
 
-        const previousTag = flag(argv, '--previous-tag') ?? resolvePrevious(repo, tag);
-        const requirement = swapRequirement({ repo, tag, previousTag });
         // The PRODUCTION feed, which is where a previous release's manifest
         // lives - deliberately not `--feed`, which is the staging one this
         // rehearsal probes. Read from the builder config rather than kept as
         // a second literal here, because the config is what the shipped app
         // bakes and a copy would be free to drift from it.
         const prodFeedBase = flag(argv, '--prod-feed') || resolveProdFeed(repo);
+        const previousTag = flag(argv, '--previous-tag') ?? await resolvePrevious(repo, tag, prodFeedBase);
+        const requirement = swapRequirement({ repo, tag, previousTag });
         const bootstrap = await bootstrapOsesAt({ previousTag, prodFeedBase });
 
         const lanes = [];
@@ -1657,9 +1729,13 @@ async function main(argv) {
         await writeFile(out, `${JSON.stringify(record, null, 2)}\n`);
         process.stderr.write(`rehearse.mjs: record written to ${out}\n`);
 
-        const bad = [...lanes, ...directLanes].filter((l) => !l.ok);
-        if (bad.length) {
-            process.stderr.write(`rehearse.mjs: ${bad.length} lane(s) failed; nothing may be published.\n`);
+        // Judge failures by the gate's rule: a lane this release does not ship is reported, never demanded.
+        const { demanded, notes: undemanded } = splitLaneFailures({
+            lanes, directLanes, releaseArtifacts: releaseArtifactsIn(prodInput),
+        });
+        for (const note of undemanded) process.stderr.write(`rehearse.mjs: ${note}\n`);
+        if (demanded.length) {
+            process.stderr.write(`rehearse.mjs: ${demanded.length} lane(s) failed; nothing may be published.\n`);
             return 1;
         }
         if (requirement.requirement !== 'bootstrap') {
@@ -1807,10 +1883,11 @@ async function main(argv) {
         // Said on the way out, every time, because the whole risk of having
         // this command at all is that its output starts reading as the
         // rehearsal it stands beside.
-        process.stderr.write(
-            `rehearse.mjs: this is NOT an attestation. ${result.lane} still owes an observed swap `
-            + `on ${lane.device}, watched by a person (rehearse.mjs attest).\n`,
-        );
+        process.stderr.write(laneDeviceCannotWitness(lane)
+            ? `rehearse.mjs: this is NOT an attestation. ${result.lane} still owes a swap watched by a `
+              + `person, and ${cannotWitnessReason(lane)}.\n`
+            : `rehearse.mjs: this is NOT an attestation. ${result.lane} still owes an observed swap `
+              + `on ${lane.device}, watched by a person (rehearse.mjs attest).\n`);
         return result.result === 'pass' ? 0 : 1;
     }
 
@@ -1909,7 +1986,7 @@ async function main(argv) {
                 const installs = deviceInstalledArch(lane);
                 // A named device that installs another lane's artifact can never witness this one,
                 // so the lane is a named waiver awaiting the operator's hardware decision, not a red.
-                const cannot = Boolean(lane.device) && installs !== lane.arch;
+                const cannot = laneDeviceCannotWitness(lane);
                 const why = lane.device ? `device ${lane.device}, never rehearsed` : `NO DEVICE NAMED (${dd})`;
                 const waiver = demand.waived.get(lane.id);
                 if (waiver) waivedIds.push(lane.id);
@@ -1954,11 +2031,11 @@ async function main(argv) {
 }
 
 /**
- * The tag before this one, by version order, or null if this really is
- * the first release.
+ * The tags older than this one, newest first, or an empty list if this
+ * really is the first release.
  *
- * THROWS rather than returning null when it cannot tell, and that
- * distinction is load-bearing. A null answer means `bootstrap`, and
+ * THROWS rather than returning an empty list when it cannot tell, and that
+ * distinction is load-bearing. An empty answer means `bootstrap`, and
  * `bootstrap` WAIVES the swap requirement entirely - correctly, because
  * a first release has no earlier build to update from. But every other
  * reason this function could come back empty (the tag has not been
@@ -1971,10 +2048,10 @@ async function main(argv) {
  *
  * A caller who genuinely knows better passes `--previous-tag`.
  */
-function previousTagOf(repo, tag) {
+function earlierTagsOf(repo, tag, run = gitRun) {
     let tags;
     try {
-        tags = gitRun(repo, ['tag', '--list', 'v*', '--sort=-v:refname'])
+        tags = run(repo, ['tag', '--list', 'v*', '--sort=-v:refname'])
             .split('\n').map((s) => s.trim()).filter(Boolean);
     } catch (err) {
         throw new Error(
@@ -1982,7 +2059,7 @@ function previousTagOf(repo, tag) {
             + '--previous-tag explicitly; guessing here would waive the swap requirement.',
         );
     }
-    if (tags.length === 0) return null;
+    if (tags.length === 0) return [];
     const i = tags.indexOf(tag);
     if (i === -1) {
         throw new Error(
@@ -1992,7 +2069,44 @@ function previousTagOf(repo, tag) {
             + '  first (§6 step 2), or pass --previous-tag if you know better.',
         );
     }
-    return tags[i + 1] ?? null;
+    return tags.slice(i + 1);
+}
+
+/**
+ * The previous PUBLISHED release: the newest earlier tag whose manifest the production feed serves.
+ *
+ * An unpublished tag's 404 must never read as "nothing to update from", so a 404 is skipped and
+ * named, and any other answer that cannot name a published tag THROWS rather than waive the swap.
+ *
+ * @returns {Promise<{previousTag: string|null, skipped: string[]}>}
+ */
+export async function previousPublishedTag({ repo, tag, prodFeedBase, fetchImpl = fetch, run = gitRun }) {
+    const earlier = earlierTagsOf(repo, tag, run);
+    if (earlier.length === 0) return { previousTag: null, skipped: [] };
+    const override = 'Pass --previous-tag <the last published release>; guessing here would waive the swap requirement.';
+    if (!prodFeedBase) {
+        throw new Error(`no production feed base was resolved, so which of the ${earlier.length} earlier `
+            + `tag(s) was published is unknown. Pass --prod-feed <feed root>, or:\n  ${override}`);
+    }
+    const skipped = [];
+    for (const candidate of earlier) {
+        const url = `${String(prodFeedBase).replace(/\/+$/, '')}/RELEASE_HASHES/${candidate}.txt`;
+        let res;
+        try {
+            res = await fetchImpl(url);
+        } catch (err) {
+            throw new Error(`could not read ${url} (${String(err?.message || err)}).\n  ${override}`);
+        }
+        if (res.status === 404) {
+            skipped.push(candidate);
+            continue;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}.\n  ${override}`);
+        return { previousTag: candidate, skipped };
+    }
+    throw new Error(`none of the ${earlier.length} earlier tag(s) has a manifest on ${prodFeedBase}. `
+        + 'Check --prod-feed; if no release was ever published, say which tag to diff against.\n'
+        + `  ${override}`);
 }
 
 const invokedDirectly = (() => {

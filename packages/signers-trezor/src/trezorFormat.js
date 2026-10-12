@@ -19,6 +19,10 @@
 // PSBT; each entry is `{ inputIndex, path, sighashType? }`. This
 // converter pairs paths with decomposed inputs by index.
 
+import {
+    enablesRelativeLock, isDeviceTxVersion, isValidSequence,
+} from '../../core/src/signers/verifySignedTx.js';
+
 /**
  * Convert a BIP32 path string into Trezor's `address_n` integer
  * array form. Hardened components (`"0'"`) get the top bit set.
@@ -145,6 +149,17 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
         );
     }
 
+    // REFUSE a version outside 1 and 2. The payload carries no version key
+    // either, for the same reason as the locktime, so the firmware picks one;
+    // verifySignedTx.js accepts a 1-for-2 swap after signing and nothing else.
+    if (!isDeviceTxVersion(decomposed.txVersion)) {
+        throw new Error(
+            `toTrezorSignTransaction: PSBT asks for transaction version ${String(decomposed.txVersion)}; `
+            + 'this signer can sign only version 1 or 2. '
+            + 'Re-request the signature at version 2.',
+        );
+    }
+
     /** @type {Map<number, { path: string, sighashType?: number }>} */
     const pathByIndex = new Map();
     for (const sp of signingPaths) {
@@ -201,6 +216,21 @@ export function toTrezorSignTransaction({ decomposed, coin, signingPaths }) {
                 `toTrezorSignTransaction: PSBT input ${idx} requests sighashType ${inp.sighashType}; `
                 + `this signer supports only the default SIGHASH_ALL (${SIGHASH_ALL}). `
                 + 'Re-request the signature without a sighash override.',
+            );
+        }
+        // The firmware picks the version, and the version decides whether a
+        // sequence with the BIP68 disable bit clear is a relative timelock,
+        // so such an input is refused rather than signed with its lock in doubt.
+        if (!isValidSequence(inp.sequence)) {
+            throw new Error(
+                `toTrezorSignTransaction: PSBT input ${idx} has no valid sequence (${String(inp.sequence)})`,
+            );
+        }
+        if (enablesRelativeLock(inp.sequence)) {
+            throw new Error(
+                `toTrezorSignTransaction: PSBT input ${idx} sets a relative timelock `
+                + `(sequence 0x${inp.sequence.toString(16)}); this signer cannot promise the `
+                + 'transaction version that lock depends on. Re-request the signature without one.',
             );
         }
         return {
@@ -284,6 +314,13 @@ export const CHAIN_ID_TO_TREZOR_COIN = {
     'dogecoin-mainnet': 'doge',
 };
 
+// Name the refused networks the way the UI does ("Bitcoin testnet"), never by
+// chainId; ledgerFormat.js keeps the same two labels so the wording matches.
+const REFUSED_NETWORK_LABELS = Object.freeze({
+    'bitcoin-testnet': 'Bitcoin testnet',
+    'bitcoin-regtest': 'Bitcoin regtest',
+});
+
 /**
  * Map an XChain chainId to Trezor's coin short name. Shared between
  * the signer class (for `signMessage`) and format converter (for
@@ -298,7 +335,7 @@ export function chainIdToTrezorCoin(chainId) {
     if (!coin) {
         if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') {
             throw new Error(
-                `This hardware device can't be used on ${chainId} - use a software `
+                `This hardware device can't be used on ${REFUSED_NETWORK_LABELS[chainId]} - use a software `
                 + 'wallet for this network. (On this network the device would derive a '
                 + 'different set of addresses than the rest of the wallet, so any funds '
                 + 'would appear missing.)',

@@ -27,7 +27,7 @@ import { useCallback, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
-import { ROW, ROW_HINT, ROW_LABEL, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const SECTION_HEADER = {
     fontSize: 'var(--xc-text-sm)',
@@ -123,7 +123,7 @@ export function DisplaySection() {
     }, []);
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const showPinAffordance = settings?.showPinAffordance === true;
