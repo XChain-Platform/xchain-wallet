@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { planCpfpChild } from './cpfpPlan.js';
+
 export class RbfPlanError extends Error {
     constructor(message) {
         super(message);
@@ -205,5 +207,48 @@ export function planRbfReplacement({
         originalFeeSats: String(originalFee),
         replacementFeeSats: String(fee),
         feeIncreaseSats: String(fee - originalFee),
+    };
+}
+
+/**
+ * True when every input of the pending transaction signals BIP-125.
+ */
+export function signalsReplaceability(tx) {
+    return Array.isArray(tx?.inputs) && tx.inputs.length > 0
+        && tx.inputs.every((input) => {
+            const sequence = Number(input?.sequence);
+            return Number.isInteger(sequence) && sequence < RBF_SEQUENCE_LIMIT;
+        });
+}
+
+/**
+ * Speed up a pending send: replace it when it is RBF-flagged, otherwise offer
+ * a CPFP child on its wallet-owned change at a feeRate covering parent plus
+ * child. Cancel and restore stay RBF-only because a child cannot evict.
+ *
+ * @returns {{ method: 'rbf'|'cpfp', plan: object }}
+ */
+export function planSpeedUp({
+    conflict, parentTxid, sourceAddress, ownAddresses, feeRate, transactionBytes, childVbytes,
+} = {}) {
+    if (signalsReplaceability(conflict)) {
+        return {
+            method: 'rbf',
+            plan: planRbfReplacement({
+                strategy: 'speedup', conflict, sourceAddress, ownAddresses, feeRate, transactionBytes,
+            }),
+        };
+    }
+    return {
+        method: 'cpfp',
+        plan: planCpfpChild({
+            parentTxid,
+            parent: conflict,
+            sourceAddress,
+            ownAddresses,
+            feeRate,
+            parentVbytes: transactionBytes,
+            childVbytes,
+        }),
     };
 }
