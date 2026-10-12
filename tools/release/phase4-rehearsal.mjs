@@ -364,10 +364,12 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
 // first one pinned a progress message as the blocker. A refusal is the last
 // thing a run says before it stops. The two executable gates refuse under their
 // own prefixes, so those count too (hyphenated `launch-probe:`, never the spaced progress line).
+// gpg's own `gpg:` line counts as well: sign.sh runs gpg under set -e and prints
+// nothing after a gpg failure, so its last `sign.sh:` line there is the "signing manifest" progress line.
 export function firstRefusal(output) {
     const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
     for (let i = lines.length - 1; i >= 0; i -= 1) {
-        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe):/.test(lines[i])) return lines[i];
+        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe|gpg):/.test(lines[i])) return lines[i];
     }
     return lines[lines.length - 1] || null;
 }

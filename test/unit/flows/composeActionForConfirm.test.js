@@ -4,7 +4,7 @@
 // composeActionForConfirm (§5.3): the HOST half of the single-encode
 // pipeline. Wraps composeForConfirm and runs the tamper check host-side
 // (decomposePsbt + decodeActionFromPsbt live here), returning a serializable,
-// already-verified ComposedAction. A tamper throws.
+// already-verified HostComposeEnvelope. A tamper throws.
 
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';

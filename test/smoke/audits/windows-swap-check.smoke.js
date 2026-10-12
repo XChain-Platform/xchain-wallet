@@ -46,7 +46,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 
 import {
-    assertRecord, makeSwapCheck, validateSwapCheck, inCi, RECORD_VERSION, SWAP_CHECK_VERSION,
+    assertRecord, makeSwapCheck, validateSwapCheck, inCi, osesInRelease, RECORD_VERSION, SWAP_CHECK_VERSION,
 } from '../../../tools/release/rehearse.mjs';
 import {
     pairFromArtifacts, siliconOf, disposabilityVerdict, positionalOf,
@@ -280,6 +280,49 @@ const passing = makeSwapCheck({
     const malformed = check({ 'automated-checks': [{ lane: 'win-x64', result: 'pass' }] });
     assert.match(malformed.problems.join(' '), /automated swap check for lane "win-x64"/);
 
+    // A check on a lane whose OS the release does not carry is reported, never demanded, like a failed lane.
+    const macLinux = ['xchain-wallet-0.337.1-mac-arm64.zip', 'xchain-wallet-0.337.1-x86_64.AppImage'];
+    assert.deepEqual([...osesInRelease(macLinux)].sort(), ['darwin', 'linux'],
+        'the partial-release artifact list must scope to exactly darwin and linux');
+    const scopedCheck = (over, releaseArtifacts) => assertRecord({
+        record: { ...baseRecord, ...over }, tag: TAG, prodManifestSha256: MANIFEST_SHA, releaseArtifacts,
+    });
+    const winFail = makeSwapCheck({
+        lane: 'win-x64', from: '0.337.0', to: '0.337.1', result: 'fail',
+        runner: 'GitHub-hosted windows-latest runner (X64)', notes: ['the app is still 0.337.0'],
+    });
+    const partialFail = scopedCheck({ 'automated-checks': [winFail] }, macLinux);
+    assert.doesNotMatch(partialFail.problems.join(' '), /automated swap check/,
+        'a failing win-x64 check must not block a release that carries no Windows artifact');
+    assert.match(partialFail.notes.join(' '), /win-x64.*not demanded.*win32.*the app is still 0\.337\.0/,
+        'the unshipped lane\'s failing check is still reported, with its reason');
+    const partialMalformed = scopedCheck({ 'automated-checks': [{ lane: 'win-x64', result: 'pass' }] }, macLinux);
+    assert.doesNotMatch(partialMalformed.problems.join(' '), /automated swap check/,
+        'a malformed check on an unshipped lane is a note, not a problem');
+    assert.match(partialMalformed.notes.join(' '), /win-x64.*not demanded.*check-version/,
+        'and the note keeps the validation reason, so the entry is never silently dropped');
+    const unknownLane = scopedCheck({ 'automated-checks': [{ lane: 'win-x99', result: 'pass' }] }, macLinux);
+    assert.match(unknownLane.problems.join(' '), /automated swap check for lane "win-x99"/,
+        'a check on an unknown lane has no knowable scope and stays a problem');
+    const withWindows = scopedCheck({ 'automated-checks': [winFail] },
+        [...macLinux, 'xchain-wallet-setup-0.337.1-x64.exe']);
+    assert.match(withWindows.problems.join(' '), /automated swap check on win-x64 reported fail/,
+        'a release that ships Windows is still stopped by a failing win-x64 check');
+
+    // A passing mac-x64 check must not send the operator to the Rosetta device `attest` refuses.
+    const macX64Pass = check({
+        'automated-checks': [makeSwapCheck({
+            lane: 'mac-x64', from: '0.337.0', to: '0.337.1', result: 'pass',
+            runner: 'GitHub-hosted macos-13 runner (X64)', silicon: 'native x64',
+        })],
+    });
+    const macNote = macX64Pass.notes.join(' ');
+    assert.match(macNote, /not an attestation/i);
+    assert.match(macNote, /cannot witness/);
+    assert.match(macNote, /operator hardware decision owed/);
+    assert.ok(!macNote.includes(laneById('mac-x64').device),
+        'the mac-x64 note must not name the Rosetta device as the place to attest');
+
     // The last door: an attestation whose witness is a CI system. `attest`
     // refuses to produce one, so this can only arrive by hand, and the gate
     // that runs at publish time refuses it too.
@@ -339,6 +382,24 @@ const passing = makeSwapCheck({
         'a check never lands in swaps, whatever it says about itself');
     assert.match(filed.stderr, /NOT an attestation/,
         'and it says so on every invocation, because that is the confusable part');
+
+    // A mac-x64 check is told its named device cannot witness the lane, never pointed at `attest`.
+    fresh();
+    const macResultPath = join(work, 'mac-x64-check-result.json');
+    writeFileSync(macResultPath, `${JSON.stringify(makeSwapCheck({
+        lane: 'mac-x64', from: '0.337.0', to: '0.337.1', result: 'pass',
+        runner: 'GitHub-hosted macos-13 runner (X64)', silicon: 'native x64',
+    }), null, 2)}\n`);
+    const macFiled = cli(['check', '--record', recordPath, '--from-result', macResultPath]);
+    assert.equal(macFiled.status, 0, `mac-x64 check failed: ${macFiled.stderr}`);
+    assert.match(macFiled.stderr, /NOT an attestation/);
+    assert.match(macFiled.stderr, /cannot witness/);
+    assert.doesNotMatch(macFiled.stderr, /rehearse\.mjs attest/,
+        'the mac-x64 check must not point at an attestation `attest` refuses for that lane');
+    assert.ok(!macFiled.stderr.includes(laneById('mac-x64').device),
+        'the mac-x64 check must not name the Rosetta device as the place to attest');
+    assert.match(filed.stderr, /rehearse\.mjs attest/,
+        'a lane whose device can witness is still pointed at `attest`');
 
     // The flag form refuses `--by` outright rather than ignoring it, so
     // somebody reaching for the attestation vocabulary is told where it went.

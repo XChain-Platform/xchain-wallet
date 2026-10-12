@@ -58,7 +58,8 @@ for (const theme of schemaThemes) {
 // ─── 3. Loading / error / no-settings status surfaces ────────────────
 
 assert.match(src, /loading\)\s*return\s*<Status/, 'loading state renders Status');
-assert.match(src, /error\)\s*return\s*<Status/, 'error state renders Status');
+assert.match(src, /error\)\s*return\s*<SettingsLoadError error=\{error\}/, 'error state renders Status');
+assert.doesNotMatch(src, /error\.message/, 'error state never shows the raw error message');
 
 // ─── 4. Reduced motion is live (schema v2); no accent row until it exists
 

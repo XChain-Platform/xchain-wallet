@@ -162,10 +162,10 @@ assert.ok(
 );
 assert.ok(
     broadcastBlock
-        && /=== 'permanent'\)\s*\{\s*\n\s*const cur = q\.findIndex\(\(e\) => e\.id === id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
+        && /const permanent = flows\.classifyBroadcastFailure\(err\) === 'permanent';/.test(broadcastBlock)
+        && /if \(permanent\)\s*\{\s*\n\s*const cur = q\.findIndex\(\(e\) => e\.id === id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
     'a PERMANENT failure drops the entry from the queue and persists that',
-);
-assert.ok(
+);assert.ok(
     broadcastBlock && /\}\s*\n\s*throw err;/.test(broadcastBlock),
     'the failure still propagates to the caller, permanent or not',
 );
@@ -203,8 +203,12 @@ assert.ok(
 
 const discardBlock = sliceRouteBody(bg, 'broadcast.queue.discard');
 assert.ok(
-    discardBlock && /if \(idx >= 0\) q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(discardBlock),
+    discardBlock && /const cur = q\.findIndex\(\(e\) => e\.id === req\?\.id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/.test(discardBlock),
     'broadcast.queue.discard persists after the splice',
+);
+assert.ok(
+    discardBlock.indexOf('flows.discardQueuedBroadcast(') < discardBlock.indexOf('q.splice('),
+    'broadcast.queue.discard retires or journals the record before the entry leaves the queue',
 );
 // pushQueueEntry starts a background save too, for the vault rebuild that
 // pushes in a loop; lanes needing the entry on disk await their own save.

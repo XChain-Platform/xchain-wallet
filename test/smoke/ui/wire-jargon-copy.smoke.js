@@ -87,7 +87,7 @@ for (const file of COPY_FILES) {
 assert.deepEqual(hits, [], 'user-facing copy carries wire jargon:\n' + hits.join('\n'));
 
 // The en dictionary follows its own pending-block convention: "the network", never the mempool.
-const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'en.js'));
+const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
 assert.ok('pending.detail.seen' in en, 'the jargon sweep reads the pending block');
 const mempoolKeys = Object.keys(en).filter((key) => /mempool/i.test(String(en[key])));
 assert.deepEqual(mempoolKeys, [], 'en copy names the mempool; say "the network" instead');

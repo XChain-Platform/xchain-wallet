@@ -34,8 +34,8 @@
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -221,6 +221,32 @@ assert.ok(readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
         at('2026-08-08T00:00:00Z'), 60, io);
     assert.equal(f.state, 'current');
     assert.equal(f.measured, true);
+}
+
+// --- an unparseable artifact date is unmeasured, never a measurement --------
+
+{
+    // An Invalid Date is truthy: read as a date it would skip the drift check and
+    // pass --require-measured on the declared date alone.
+    const garbage = { run: () => 'notAfter=not a date at all\n', home: '/' };
+    const row = { id: 'GARBLED', what: 'x', expires: '2027-02-01T22:12:15Z', verifyFrom: DECL, breaks: 'x' };
+    const loose = assessOne(row, at('2026-08-08T00:00:00Z'), 60, garbage);
+    assert.equal(loose.measured, false, 'an unparseable notAfter is not a measurement');
+    assert.match(loose.reason, /unparseable/);
+    const strict = assessOne(row, at('2026-08-08T00:00:00Z'), 60, { ...garbage, requireMeasured: true });
+    assert.equal(strict.state, 'unmeasured');
+    assert.equal(readActualExpiry(DECL, { run: () => 'notAfter=garbage\n' }).date, null);
+
+    const dir = mkdtempSync(join(tmpdir(), 'credential-expiry-smoke-'));
+    try {
+        const file = join(dir, 'x.provisionprofile');
+        writeFileSync(file, '');
+        const profile = readActualExpiry(file, { run: () => '<key>ExpirationDate</key><date>garbage</date>' });
+        assert.equal(profile.date, null, 'an unparseable profile ExpirationDate is not a measurement');
+        assert.match(profile.reason, /unparseable/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 }
 
 // --- the two artifact shapes are read differently --------------------------

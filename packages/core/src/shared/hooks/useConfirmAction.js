@@ -13,7 +13,8 @@
 // Drives the single-encode confirm pipeline. All SDK work is HOST-side
 // (the React tree only reaches the host over `messaging`): the injected
 // `compose` runs composeForConfirm + the tamper check in the background
-// and resolves with an already-verified ComposedAction; `preflight` runs
+// and resolves with an already-verified HostComposeWireEnvelope (see
+// ../../flows/composeActionForConfirm.js); `preflight` runs
 // sdk.preflight in the background. The hook itself is a pure UI state
 // machine: compose PRE-OPEN, open the modal, stream pre-flight, and on
 // Approve re-check staleness (and,, the native-coin protocol fee this

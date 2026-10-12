@@ -62,7 +62,9 @@ describe('chainIdToLedgerCurrency', () => {
     it.each(['bitcoin-testnet', 'bitcoin-regtest'])('throws the Trezor parity message for %s', (chainId) => {
         expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/software wallet/);
         expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/funds would appear missing/);
-        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(`can't be used on ${chainId}`);
+        const label = chainId === 'bitcoin-testnet' ? 'Bitcoin testnet' : 'Bitcoin regtest';
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(`can't be used on ${label} - `);
+        expect(() => chainIdToLedgerCurrency(chainId)).not.toThrow(chainId);
         expect(() => chainIdToLedgerCurrency(chainId)).not.toThrow(/Litecoin|Dogecoin/);
         const messageOf = (fn) => { try { fn(); } catch (e) { return e.message; } return null; };
         expect(messageOf(() => chainIdToLedgerCurrency(chainId)))
@@ -221,6 +223,7 @@ describe('toLedgerCreatePayment', () => {
                 address: 'bc1qrecipient',
             }],
             locktime: 0,
+            txVersion: 2,
         };
     }
 
@@ -248,6 +251,37 @@ describe('toLedgerCreatePayment', () => {
             chainId: 'bitcoin-mainnet',
             signingPaths: [{ inputIndex: 99, path: "m/84'/0'/0'/0/0" }],
         })).toThrow(/no signingPath for input index 0/);
+    });
+
+    // createPaymentTransaction takes no version, so the PSBT cannot choose
+    // the one the device signs; these are refused before the device is asked.
+    it.each([3, 0, undefined])('refuses a PSBT at transaction version %s', (txVersion) => {
+        const d = makeDecomposed();
+        d.txVersion = txVersion;
+        expect(() => toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toThrow(/only version 1 or 2/);
+    });
+
+    it('refuses an input whose sequence sets a relative timelock', () => {
+        const d = makeDecomposed();
+        d.inputs[0].sequence = 10;
+        expect(() => toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toThrow(/input 0 sets a relative timelock \(sequence 0xa\)/);
+    });
+
+    it('refuses an input with no sequence rather than letting the library pick one', () => {
+        const d = makeDecomposed();
+        delete d.inputs[0].sequence;
+        expect(() => toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths }))
+            .toThrow(/input 0 has no valid sequence/);
+    });
+
+    it('forwards a version 1 PSBT whose input signals RBF', () => {
+        const d = makeDecomposed();
+        d.txVersion = 1;
+        d.inputs[0].sequence = 0xfffffffd;
+        const payload = toLedgerCreatePayment({ decomposed: d, chainId: 'bitcoin-mainnet', signingPaths });
+        expect(payload.inputs[0].sequence).toBe(0xfffffffd);
     });
 
     // The device takes the outpoint from the prev tx it is handed, so a

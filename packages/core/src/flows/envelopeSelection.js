@@ -29,6 +29,9 @@ function liveSignerSupportsTapscript(signer) {
     }
 }
 
+// UTF-8 byte length of a string, portable across the host (Node) and any
+// worker/browser build of core. A MEMO or FILE payload can be multi-byte, and
+// undercounting would size a legitimate payload below its real carrier cost.
 function byteLen(value) {
     const string = String(value);
     if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(string).length;
@@ -36,21 +39,37 @@ function byteLen(value) {
     return string.length;
 }
 
-function rawDataByteLen(rawData) {
+/**
+ * Byte length of rawData as the encoder reads it (Buffer.from(raw, 'binary')):
+ * one byte per character, never UTF-8, which would loosen the carrier allowance.
+ *
+ * @param {unknown} rawData
+ * @returns {number}
+ */
+export function rawDataByteLen(rawData) {
     if (rawData == null) return 0;
     if (typeof rawData.byteLength === 'number') return rawData.byteLength;
     return String(rawData).length;
 }
 
 /**
- * @param {string} actionString
+ * Size of script.compile([actionString, rawData]), the one sizer the confirm lane
+ * and the atomic submit path share. A compression report's stored length may
+ * only shrink rawData, since the encoder is what the carrier allowance polices.
+ *
+ * @param {string|null|undefined} actionString  null counts as no action bytes
  * @param {unknown} rawData
+ * @param {{ compressed?: boolean, storedLength?: number|string }|null} [compression]
  * @returns {number}
  */
-export function compiledPayloadByteLen(actionString, rawData) {
-    const actionBytes = byteLen(actionString);
+export function compiledPayloadByteLen(actionString, rawData, compression = null) {
+    const actionBytes = actionString == null ? 0 : byteLen(actionString);
     if (rawData == null) return actionBytes + pushPrefixSize(actionBytes);
-    const rawBytes = rawDataByteLen(rawData);
+    let rawBytes = rawDataByteLen(rawData);
+    const stored = compression && compression.compressed === true
+        ? Number(compression.storedLength)
+        : NaN;
+    if (Number.isFinite(stored) && stored >= 0) rawBytes = Math.min(rawBytes, stored);
     return actionBytes + pushPrefixSize(actionBytes) + rawBytes + pushPrefixSize(rawBytes);
 }
 

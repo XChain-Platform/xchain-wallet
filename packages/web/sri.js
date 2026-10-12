@@ -157,28 +157,38 @@ export function buildIntegrityImportMap(files) {
  * (an import map is ignored once a module has started resolving), and admit that
  * one inline script in the page's meta CSP by hash.
  *
+ * `admitted` is true only when the map's hash ended up inside the meta CSP's
+ * script-src. A meta tag this regex does not match, or a policy with no
+ * script-src, leaves the map in the page but blocked, and the caller must say so.
+ *
  * @param {string} html
  * @param {Record<string, string | Uint8Array>} files
- * @returns {{ html: string, mapped: number }}
+ * @returns {{ html: string, mapped: number, admitted: boolean }}
  */
 export function injectIntegrityImportMap(html, files) {
     const map = buildIntegrityImportMap(files);
     const mapped = Object.keys(map.integrity).length;
-    if (mapped === 0) return { html, mapped };
+    if (mapped === 0) return { html, mapped, admitted: false };
 
     const body = JSON.stringify(map);
     const tag = `<script type="importmap">${body}</script>`;
     const firstScript = html.search(/<script\b/i);
     const at = firstScript >= 0 ? firstScript : html.search(/<\/head>/i);
-    if (at < 0) return { html, mapped: 0 };
+    if (at < 0) return { html, mapped: 0, admitted: false };
 
     const withMap = html.slice(0, at) + tag + html.slice(at);
     const hash = integrityFor(body);
+    let admitted = false;
     const out = withMap.replace(
         /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")([^"]*)(")/i,
-        (_m, open, policy, close) => open + allowInlineScriptHash(policy, hash) + close,
+        (_m, open, policy, close) => {
+            const next = allowInlineScriptHash(policy, hash);
+            admitted = next.split('; ')
+                .some((d) => d.startsWith('script-src ') && d.split(' ').includes(`'${hash}'`));
+            return open + next + close;
+        },
     );
-    return { html: out, mapped };
+    return { html: out, mapped, admitted };
 }
 
 /**
@@ -241,9 +251,19 @@ export function sriPlugin() {
                     const bytes = lookup(`/${name}`);
                     if (bytes !== undefined) scripts[`${base}${name}`] = bytes;
                 }
-                const { html, mapped } = injectIntegrityImportMap(tagged.html, scripts);
+                const { html, mapped, admitted } = injectIntegrityImportMap(tagged.html, scripts);
                 writeFileSync(htmlPath, html);
-                logger.info(`sri: ${htmlFile}: ${mapped} script chunk(s) pinned in the import map`);
+                const chunks = Object.keys(scripts).length;
+                if (chunks > 0 && !admitted) {
+                    // Same warn-not-throw rule as the LOCAL-asset warning below.
+                    logger.warn(
+                        `sri: ${htmlFile}: the import map for ${chunks} script chunk(s) was not admitted `
+                        + 'by the page CSP (or could not be inserted), so the browser blocks it and lazy '
+                        + 'chunks load with no integrity pin',
+                    );
+                } else {
+                    logger.info(`sri: ${htmlFile}: ${mapped} script chunk(s) pinned in the import map`);
+                }
 
                 // Say what was covered. A silent SRI pass that hashed nothing is
                 // indistinguishable from no SRI at all, which is the failure mode

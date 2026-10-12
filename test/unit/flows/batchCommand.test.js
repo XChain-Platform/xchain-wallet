@@ -25,6 +25,7 @@ import {
     BATCH_MAX_COMMANDS,
     BATCH_WEIGHT_BUDGET,
     BATCH_COMMAND_WEIGHTS,
+    BATCH_ACTION_ALIASES,
 } from '../../../packages/core/src/flows/batchCommand.js';
 
 describe('validateBatchConstraints (PC-36 pre-check)', () => {
@@ -194,6 +195,13 @@ describe('validateBatchConstraints (weighted cost budget)', () => {
         expect(validateBatchConstraints(airdrops)).toEqual([]);
         const over = validateBatchConstraints([...airdrops, { action: 'DROP' }]);
         expect(over.some((e) => /cost weight of 275/.test(e))).toBe(true);
+    });
+
+    it('weighs every wire alias exactly as its target action', () => {
+        for (const [alias, target] of Object.entries(BATCH_ACTION_ALIASES)) {
+            expect(batchEntryWeight({ action: alias }), alias).toBe(batchEntryWeight({ action: target }));
+        }
+        expect(batchEntryWeight({ action: 'DROP' })).toBe(BATCH_COMMAND_WEIGHTS.AIRDROP);
     });
 
     it('discounts a format-4 DEPLOY (chunk carrier) to weight 1', () => {

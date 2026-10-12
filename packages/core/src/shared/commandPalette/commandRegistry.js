@@ -140,7 +140,7 @@ export function buildCommands(ctx) {
         throw new TypeError('buildCommands: ctx.navigate is required');
     }
     const go = (view) => () => navigate(view);
-    // Defaults to true: every shell but a surface-stripped store build has it,
+    // Defaults to true: every shell has it unless its profile hides the DEX,
     // and a shell that forgets to pass the flag should keep its DEX rather than
     // silently lose them.
     const hasDex = ctx.hasDexSurface !== false;
@@ -158,8 +158,9 @@ export function buildCommands(ctx) {
             { id: 'nav-receive', category: 'Navigate', title: 'Receive', subtitle: 'Show a receive address', keywords: ['address', 'deposit', 'qr'], Icon: Icon.ReceiveIcon, run: go('receive') },
         ]),
         // The DEX rows are gated on the surface EXISTING in this build,
-        // not on anything about the wallet: a store build compiles those routes
-        // out, so the command would land the user on Home with no explanation.
+        // not on anything about the wallet: a build that hides the DEX compiles
+        // those routes out, so the command would land the user on Home with no
+        // explanation.
         // Spread in place rather than pushed later, so the display order every
         // other build has stays exactly as it was.
         ...(hasDex ? [

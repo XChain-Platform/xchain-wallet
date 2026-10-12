@@ -27,6 +27,7 @@ import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
 import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
+import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
     buildEditFeedListsParams,
     editBetFeedListsAction,
@@ -747,7 +748,9 @@ function permanentReleasePatch(entry, failure) {
     };
 }
 
-async function retainReplacementPlan(vault, result, fallbackPsbtHex, rbf) {
+async function retainReplacementPlan(vault, result, fallbackPsbtHex, requestedRbf, descriptor) {
+    // Record the RBF the encoder was allowed to signal, not the one the caller asked for.
+    const rbf = capRbfToDescriptor(descriptor, { rbf: requestedRbf }).rbf;
     const pendingTxId = result?.pendingTxId;
     const psbtHex = result?.signed?.signedPsbtHex || fallbackPsbtHex;
     if (typeof pendingTxId !== 'string' || !pendingTxId
@@ -2337,7 +2340,7 @@ export function createBackgroundHost(deps) {
             // vanish, and the queue lets the user retry from the banner.
             onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId),
         });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     // §20 / G040: watcher-mode helper: encode-only path that returns
@@ -2361,7 +2364,8 @@ export function createBackgroundHost(deps) {
     // ONE PSBT the ConfirmActionModal previews and the signer signs, resolve
     // fee + ADS, and run the tamper check HOST-side (decomposePsbt +
     // decodeActionFromPsbt live here). Returns a serializable, already-
-    // tamper-verified ComposedAction; a tamper failure throws and crosses
+    // tamper-verified HostComposeEnvelope (see
+    // core/flows/composeActionForConfirm.js); a tamper failure throws and crosses
     // the boundary as an error the invoking form renders. No signer, no
     // password, no broadcast: this is the pre-modal compose step only.
     //
@@ -3260,9 +3264,6 @@ export function createBackgroundHost(deps) {
                 // because an earlier attempt ended ambiguously, and retiring it as
                 // 'failed' invites a re-compose, the one action here that can double spend.
                 if (saysAlreadyOnNetwork(err)) {
-                    const landed = q.findIndex((e) => e.id === id);
-                    if (landed >= 0) q.splice(landed, 1);
-                    await persistQueue();
                     const deliveredPatch = {
                         status: 'broadcast',
                         broadcastAt: new Date().toISOString(),
@@ -3272,6 +3273,9 @@ export function createBackgroundHost(deps) {
                     if (await settleQueuedPendingTx(vault, entry, deliveredPatch) === 'unreachable') {
                         recordOwedSettlement(walletId, entry.pendingTxId, 'patch', deliveredPatch);
                     }
+                    const landed = q.findIndex((e) => e.id === id);
+                    if (landed >= 0) q.splice(landed, 1);
+                    await persistQueue();
                     await flushOwedSettlements(vault);
                     // Book ADS only for a never-claimed entry: its failed first attempt booked
                     // nothing, while an interrupted claim may already have booked its verdict.
@@ -3294,17 +3298,17 @@ export function createBackgroundHost(deps) {
                 // netting and offers a re-compose, and a transient one returns it
                 // to 'queued', the status both this surface and the reload
                 // recovery read as "signed, never sent".
-                let releasePatch = { status: 'queued', error: failure };
-                let permanent = false;
-                if (flows.classifyBroadcastFailure(err) === 'permanent') {
+                const permanent = flows.classifyBroadcastFailure(err) === 'permanent';
+                const releasePatch = permanent
+                    ? permanentReleasePatch(entry, failure)
+                    : { status: 'queued', error: failure };
+                if (await settleQueuedPendingTx(vault, entry, releasePatch) === 'unreachable') {
+                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', releasePatch);
+                }
+                if (permanent) {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
-                    permanent = true;
-                    releasePatch = permanentReleasePatch(entry, failure);
-                }
-                if (await settleQueuedPendingTx(vault, entry, releasePatch) === 'unreachable') {
-                    recordOwedSettlement(walletId, entry.pendingTxId, 'patch', releasePatch);
                 }
                 // Carry the verdict this catch just ACTED on across the messaging
                 // boundary, which keeps only { name, message }. Without it the
@@ -3327,9 +3331,6 @@ export function createBackgroundHost(deps) {
                 }
                 throw err;
             }
-            const cur = q.findIndex((e) => e.id === id);
-            if (cur >= 0) q.splice(cur, 1);
-            await persistQueue();
             // Encoder result shape varies by chain, same as `broadcast.signedTx`
             // below: normalize so the caller always sees { txid }.
             const txid = typeof result === 'string' ? result : (result?.txid ?? result?.tx_hash ?? null);
@@ -3339,9 +3340,15 @@ export function createBackgroundHost(deps) {
                 txid: txid ?? entry.txid ?? null,
                 error: null,
             };
+            // Every exit settles or journals the record BEFORE the entry leaves
+            // the queue: a vault rebuild on another host treats a 'broadcasting'
+            // record that neither the queue nor the journal names as orphaned.
             if (await settleQueuedPendingTx(vault, entry, landedPatch) === 'unreachable') {
                 recordOwedSettlement(walletId, entry.pendingTxId, 'patch', landedPatch);
             }
+            const cur = q.findIndex((e) => e.id === id);
+            if (cur >= 0) q.splice(cur, 1);
+            await persistQueue();
             await flushOwedSettlements(vault);
             // §36.3 / §5.3.4: the queued tx is what donates, so its ADS verdict is
             // booked here, after the bytes landed and after the entry left the
@@ -3380,20 +3387,22 @@ export function createBackgroundHost(deps) {
             const q = getQueue(req?.walletId);
             const idx = q.findIndex((entry) => entry.id === req?.id);
             const entry = idx >= 0 ? q[idx] : null;
-            if (idx >= 0) q.splice(idx, 1);
-            await persistQueue();
-            // Retire the PendingTx half too, through the same idempotent helper the
+            // Retire the PendingTx half first, through the same idempotent helper the
             // core lane's Discard uses (it deletes a record still 'queued', or one
-            // an interrupted claim left at 'broadcasting').
+            // an interrupted claim left at 'broadcasting'), so the record is gone or
+            // journaled before the entry leaves the queue.
             if (typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
                 try {
                     await flows.discardQueuedBroadcast({ vault, pendingTxId: entry.pendingTxId });
                 } catch (_e) {
-                    // The vault refused the delete. The queue half is already gone,
-                    // so the journal is the only route left back to the record.
+                    // The vault refused the delete, and the queue half is about to
+                    // go, so the journal is the route back to the record.
                     recordOwedSettlement(req?.walletId, entry.pendingTxId, 'discard');
                 }
             }
+            const cur = q.findIndex((e) => e.id === req?.id);
+            if (cur >= 0) q.splice(cur, 1);
+            await persistQueue();
             await flushOwedSettlements(vault);
             return { discarded: idx >= 0 };
         } finally {
@@ -3899,7 +3908,7 @@ export function createBackgroundHost(deps) {
         // reservationLedger: PC-34 force-close interplay (ORDERS=1 releases
         // the swept address's auto-pay holds alongside its consents).
         const result = await sweepToken({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, reservationLedger, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     // PC-34: API-derived indicative preview of what a SWEEP would move
@@ -3988,7 +3997,7 @@ export function createBackgroundHost(deps) {
 
     host.register('action.dispenser', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const result = await dispenserAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     // §41.3.4 ORDER / §41.3.5 CANCEL: DEX signing lanes.
@@ -4371,17 +4380,17 @@ export function createBackgroundHost(deps) {
 
     host.register('action.execute', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const result = await executeAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     host.register('action.deposit', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const result = await depositAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     host.register('action.withdraw', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const result = await withdrawAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     // §42.7 Staking: four read-only explorer passthroughs backing
@@ -4799,7 +4808,7 @@ export function createBackgroundHost(deps) {
 
     host.register('action.dividend', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const result = await dividendAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     host.register('holders.forTick', async (req, { sdkRegistry }) => {
@@ -4817,7 +4826,7 @@ export function createBackgroundHost(deps) {
 
     host.register('action.airdrop', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const result = await airdropAction({ ...req, signer: await sessionSigner(req, vault, signerPool), vault, chainRegistry, sdkRegistry, onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId) });
-        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf);
+        return retainReplacementPlan(vault, result, req?.prebuiltPsbt?.psbtHex, req?.rbf, chainRegistry?.get?.(req?.chainId));
     });
 
     host.register('actions.byTxid', async (req, { sdkRegistry }) => {

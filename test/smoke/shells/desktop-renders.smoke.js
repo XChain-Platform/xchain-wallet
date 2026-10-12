@@ -92,10 +92,15 @@ const app = await electron.launch({
     cwd: desktopDir,
 });
 const pageErrors = [];
+const settingsLoadFailures = [];
 let win;
 try {
     win = await app.firstWindow();
     win.on('pageerror', (err) => pageErrors.push(String(err)));
+    // Collect the raw cause the Settings sections log instead of showing.
+    win.on('console', (msg) => {
+        if (msg.text().includes('[settings] load failed')) settingsLoadFailures.push(msg.text());
+    });
     await win.waitForURL((url) => url.protocol === 'file:', { timeout: 30_000 });
     await win.waitForLoadState('domcontentloaded');
 
@@ -172,15 +177,18 @@ try {
     // rather than for the healthy one: a bare wait on the Network panel
     // reports the defect as an anonymous 30s locator timeout, and the whole
     // point of this phase is to name what broke. Driven both ways.
+    // The sections show fixed copy for a load failure and log the raw cause to
+    // the renderer console, so the walk keys on that copy.
+    const LOAD_FAILED = 'Settings could not be loaded';
     const networkPanel = win.getByLabel('Active network');
-    const unavailable = win.getByText('is not available in this shell').first();
+    const unavailable = win.getByText(LOAD_FAILED).first();
     await networkPanel.or(unavailable).first().waitFor({ state: 'visible', timeout: 30_000 });
 
     const settingsText = await win.evaluate(() => document.body.innerText);
     assert.ok(
-        !settingsText.includes('is not available in this shell'),
-        'the desktop Settings screen reports a missing messaging wrapper: '
-        + `${(/[^\n]*is not available in this shell[^\n]*/.exec(settingsText) || [''])[0]}. `
+        !settingsText.includes(LOAD_FAILED) && !settingsText.includes('is not available in this shell'),
+        'the desktop Settings screen could not load its settings, most often because a messaging '
+        + `wrapper is missing. Logged cause: ${settingsLoadFailures[0] || '(none logged)'}. `
         + 'The main process answers these message types already (main/messageHost.js wires the same '
         + 'createBackgroundHost the extension does); the renderer bridge in '
         + 'packages/desktop/renderer/messaging.js is what is missing the wrapper.',

@@ -28,6 +28,7 @@ import {
     isHardPreflightFinding,
     preflightFindingKey,
 } from '../utils/preflightFindingKey.js';
+import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -367,11 +368,21 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
             {warnings.length > 0 ? (
                 <ul className={styles.warnings}>
-                    {warnings.map((f, i) => (
-                        <li key={`${f.code}-${i}`} className={`${styles.finding} ${styles.findingWarning}`}>
-                            {f.message}
-                        </li>
-                    ))}
+                    {warnings.map((f, i) => {
+                        const { headline, detail } = warningText(f);
+                        return (
+                            <li
+                                key={`${f.code}-${i}`}
+                                className={`${styles.finding} ${styles.findingWarning}`}
+                                data-testid={`preflight-warning-${f.code}`}
+                            >
+                                <span className={styles.findingMsg}>{headline}</span>
+                                {detail ? (
+                                    <span className={styles.noticeDetail}>{detail}</span>
+                                ) : null}
+                            </li>
+                        );
+                    })}
                 </ul>
             ) : null}
 
@@ -399,7 +410,17 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                 <details className={styles.unverifiedList}>
                     <summary>Could not verify ({report.unverified.length})</summary>
                     <ul>
-                        {report.unverified.map((u, i) => (<li key={`${u.check}-${i}`}>{u.reason}</li>))}
+                        {report.unverified.map((u, i) => {
+                            const { headline, detail } = unverifiedText(u);
+                            return (
+                                <li key={`${u.check}-${i}`} data-testid={`preflight-unverified-${u.check}`}>
+                                    <span className={styles.findingMsg}>{headline}</span>
+                                    {detail ? (
+                                        <span className={styles.noticeDetail}>{detail}</span>
+                                    ) : null}
+                                </li>
+                            );
+                        })}
                     </ul>
                 </details>
             ) : null}

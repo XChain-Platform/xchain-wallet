@@ -76,20 +76,18 @@ const ARTIFACTS = {
     'xchain-wallet-0.333.1-arm64.AppImage': 'appimage-bytes-arm64',
 };
 
+// The Windows and macOS builds a full release also carries, one each, so every
+// one of the four desktop pointers names a file the signed manifest covers.
+const OTHER_DESKTOP = {
+    'xchain-wallet-0.333.1-setup.exe': 'exe-bytes',
+    'xchain-wallet-0.333.1-arm64-mac.zip': 'mac-zip-bytes',
+};
+
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
 
-/** A signed release directory whose pointers belong to `channel`. */
-function makeRelease(name, channel, extra = {}) {
-    const dir = join(work, name);
-    mkdirSync(dir, { recursive: true });
-    const all = { ...ARTIFACTS, ...extra };
-    for (const [file, body] of Object.entries(all)) writeFileSync(join(dir, file), body);
-
-    // The channel pointer stays a DESKTOP concern: `extra` exists for artifacts
-    // that ship beside the desktop ones without an electron-updater feed, which
-    // is exactly what the Android pair is.
-    const entries = Object.entries(ARTIFACTS);
-    const yml = [
+/** An update-info pointer at 0.333.1 naming `entries` ([file, body] pairs). */
+function pointerYml(entries) {
+    return [
         'version: 0.333.1',
         'files:',
         ...entries.flatMap(([file, body]) => [
@@ -102,7 +100,26 @@ function makeRelease(name, channel, extra = {}) {
         "releaseDate: '2026-07-31T00:00:00.000Z'",
         '',
     ].join('\n');
-    writeFileSync(join(dir, `${channel}-linux.yml`), yml);
+}
+
+/** A signed full release directory whose four pointers belong to `channel`. */
+function makeRelease(name, channel, extra = {}) {
+    const dir = join(work, name);
+    mkdirSync(dir, { recursive: true });
+    const all = { ...ARTIFACTS, ...OTHER_DESKTOP, ...extra };
+    for (const [file, body] of Object.entries(all)) writeFileSync(join(dir, file), body);
+
+    // The channel pointers stay a DESKTOP concern: `extra` exists for artifacts
+    // that ship beside the desktop ones without an electron-updater feed, which
+    // is exactly what the Android pair is. A full release needs all four, the
+    // set publish.sh's pointer gate demands.
+    const entries = Object.entries(ARTIFACTS);
+    const other = Object.entries(OTHER_DESKTOP);
+    writeFileSync(join(dir, `${channel}-linux.yml`), pointerYml(entries));
+    writeFileSync(join(dir, `${channel}-linux-arm64.yml`),
+        pointerYml(entries.filter(([file]) => file.endsWith('-arm64.AppImage'))));
+    writeFileSync(join(dir, `${channel}.yml`), pointerYml(other.filter(([file]) => file.endsWith('.exe'))));
+    writeFileSync(join(dir, `${channel}-mac.yml`), pointerYml(other.filter(([file]) => file.endsWith('mac.zip'))));
 
     // Written through lib.sh, not hand-rolled, so the fixture is the same
     // shape sign.sh produces - including the artifact/pointer split, which
@@ -393,6 +410,73 @@ writeRehearsalRecord(prodRelease);
     const r = await run(['--input', dir, '--tag', TAG, '--target', target]);
     assert.equal(r.status, 1, 'one directory holding both channels is refused');
     assert.match(r.out, /\[stable, staging\]/, 'and both channels are named in the error');
+}
+
+// ------------------------------------- pointers the client would refuse
+//
+// The client installs only a pointer whose version is the one being published
+// and whose every file is in that release's signed manifest. Pointers sit
+// outside the manifest, so rewriting one after signing leaves the signature
+// good and only the pointer gate can see it.
+
+{
+    const target = makeTarget('feed-pointer-ok');
+    const r = await run(['--input', prodRelease, '--tag', TAG, '--target', target, '--dry-run']);
+    assert.equal(r.status, 0, `the fixture's own pointers pass the gate:\n${r.out}`);
+    assert.match(r.out, /pointer-gate: 4 channel pointer\(s\) name 0\.333\.1/);
+}
+
+// The set itself. A full release needs all four desktop pointers: one missing
+// leaves that fleet reading the previous release's pointer, which still
+// matches the previous manifest, so no later check would notice.
+for (const [label, change, reason] of [
+    ['a full release missing its linux arm64 pointer',
+        (dir) => rmSync(join(dir, 'stable-linux-arm64.yml')),
+        /stable-linux-arm64\.yml: missing, and lane\(s\) [a-z ]*linux[a-z ]* \(a full release\) need it/],
+    ['a full release carrying a pointer no lane ships',
+        (dir) => writeFileSync(join(dir, 'stable-linux-arm.yml'),
+            readFileSync(join(dir, 'stable-linux-arm64.yml'))),
+        /stable-linux-arm\.yml: unexpected/],
+]) {
+    const dir = makeRelease(`release-set-${label.length}`, 'stable');
+    change(dir);
+    const target = makeTarget(`feed-set-${label.length}`);
+    const dry = await run(['--input', dir, '--tag', TAG, '--target', target, '--dry-run']);
+    assert.equal(dry.status, 1, `${label} is refused on a dry run too:\n${dry.out}`);
+    assert.match(dry.out, reason);
+
+    const r = await run(['--input', dir, '--tag', TAG, '--target', target]);
+    assert.equal(r.status, 1, `${label} is refused:\n${r.out}`);
+    assert.match(r.out, reason);
+    assert.equal(existsSync(join(target, 'desktop')), false, `${label}: nothing was uploaded`);
+    assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
+        `${label}: the manifest was not uploaded either`);
+}
+
+for (const [label, edit, reason] of [
+    ['a stale pointer from an earlier build', (y) => y.replace('version: 0.333.1', 'version: 0.333.0'),
+        /describes version 0\.333\.0, not 0\.333\.1/],
+    ['a pointer naming a file the manifest does not cover',
+        (y) => y.replace('url: xchain-wallet-0.333.1-arm64.AppImage', 'url: xchain-wallet-0.333.1-other.AppImage'),
+        /names xchain-wallet-0\.333\.1-other\.AppImage, which this release's signed manifest does not cover/],
+]) {
+    const dir = makeRelease(`release-pointer-${label.length}`, 'stable');
+    const yml = join(dir, 'stable-linux.yml');
+    const edited = edit(readFileSync(yml, 'utf8'));
+    assert.notEqual(edited, readFileSync(yml, 'utf8'), `the ${label} fixture edit applied`);
+    writeFileSync(yml, edited);
+
+    const dry = await run(['--input', dir, '--tag', TAG, '--target', makeTarget(`feed-dry-${label.length}`),
+        '--dry-run']);
+    assert.equal(dry.status, 1, `${label} is refused on a dry run too:\n${dry.out}`);
+
+    const target = makeTarget(`feed-pointer-${label.length}`);
+    const r = await run(['--input', dir, '--tag', TAG, '--target', target]);
+    assert.equal(r.status, 1, `${label} is refused:\n${r.out}`);
+    assert.match(r.out, reason);
+    assert.equal(existsSync(join(target, 'desktop')), false, `${label}: nothing was uploaded`);
+    assert.equal(existsSync(join(target, 'RELEASE_HASHES', `${TAG}.txt`)), false,
+        `${label}: the manifest was not uploaded either`);
 }
 
 // ----------------------------------------------- the edge-check contract
@@ -884,6 +968,46 @@ for (const order of [['desktop', 'android'], ['android', 'desktop']]) {
     assert.ok(direct.ok, `android-direct passes: ${direct.failed} ${direct.reason}`);
     assert.equal(direct.selected, APK_NAME);
     assert.equal(direct.checks.manifestPath, `RELEASE_HASHES/android/${TAG}.txt`);
+}
+
+{
+    // Without --lane, `run` judges lane failures the way `assert` does: only lanes the release ships are demanded.
+    const stagingTarget = join(work, 'feed-partial-staging');
+    const keyFile = join(work, 'smoke-key.asc');
+    const rehearse = join(root, 'tools', 'release', 'rehearse.mjs');
+    const runAll = async (prodInput, out) => {
+        const tls = await serveTls(stagingTarget);
+        assert.ok(tls, 'openssl is required to stand up the https staging feed this case reads');
+        const r = await runNode(rehearse, ['run', '--feed', `${tls.base}/`, '--tag', TAG,
+            '--channel', 'staging', '--prod-input', prodInput,
+            '--previous-tag', 'v0.333.0', '--prod-feed', tls.base, '--repo', root,
+            '--pinned-key', keyFile, '--pinned-fingerprint', SMOKE_FPR, '--out', out],
+        { NODE_EXTRA_CA_CERTS: tls.cert });
+        tls.server.close();
+        return r;
+    };
+
+    const allOut = join(work, 'REHEARSAL-staged-all-lanes.json');
+    const all = await runAll(partial, allOut);
+    assert.equal(all.status, 0, `an APK-only partial demands no desktop lane:\n${all.out}`);
+    assert.match(all.out, /not demanded/, 'the desktop failures are reported as not demanded');
+    assert.doesNotMatch(all.out, /nothing may be published/,
+        'no lane this release ships failed, so `run` must not say nothing may be published');
+    assert.match(all.out, /INSTALL-OVER is\s+not/, 'the direct-lane install-over notice is still printed');
+    const allRecord = JSON.parse(readFileSync(allOut, 'utf8'));
+    assert.equal(allRecord.lanes.length, LANES.length, 'every desktop lane is still probed and recorded');
+    assert.ok(allRecord.lanes.every((l) => !l.ok), 'the APK-only staging feed carries no desktop pointer');
+    assert.ok(allRecord['direct-lanes'].find((l) => l.id === 'android-direct')?.ok,
+        'android-direct still passes in the same run');
+
+    // Control: a release that ships macOS demands the mac lanes, and their failure stops `run`.
+    const macShaped = join(work, 'release-partial-mac-shaped');
+    mkdirSync(macShaped, { recursive: true });
+    writeFileSync(join(macShaped, 'RELEASE_HASHES.txt'), readFileSync(join(partial, 'RELEASE_HASHES.txt')));
+    writeFileSync(join(macShaped, 'xchain-wallet-0.333.1-mac-arm64.zip'), 'zip');
+    const mac = await runAll(macShaped, join(work, 'REHEARSAL-staged-mac-shaped.json'));
+    assert.equal(mac.status, 1, `a failed lane the release ships must still stop run:\n${mac.out}`);
+    assert.match(mac.out, /nothing may be published/);
 }
 
 {

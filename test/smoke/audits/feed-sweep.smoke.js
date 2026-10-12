@@ -36,7 +36,7 @@ import { directFeedRejection, FINDINGS, PAYLOAD_DIRS, parseManifest, parseUpdate
 // sweep is deployed standalone and keeps its own copy on purpose.
 import { parseUpdateFeed, UPDATE_FEED_MAX_BYTES }
     from '../../../packages/web/src/update/directUpdateCheck.js';
-import { parseChannelPointer } from '../../../packages/desktop/main/updateVerify.js';
+import { parseChannelPointer, verifyChannelPointer } from '../../../packages/desktop/main/updateVerify.js';
 
 const root = mkdtempSync(join(tmpdir(), 'xchain-feed-sweep-'));
 // Every code a scenario below provokes must carry a reading in FINDINGS.
@@ -223,6 +223,88 @@ const V2 = {
     assert.deepEqual(result.findings, [],
         'a rolled-back pointer beside retained newer binaries is a correct state');
     assert.equal(result.manifests, 2, 'both manifests fed the baseline');
+}
+
+// ------------------------- a pointer whose version and files disagree
+
+/** What the desktop client decides for this pointer, given the feed's manifests. */
+function clientVerdict(pointerText, manifests, artifacts) {
+    const info = parseUpdateInfo(pointerText);
+    const own = manifests[`v${info.version}`] ?? [];
+    const [first] = info.files;
+    return verifyChannelPointer({
+        pointerText,
+        expectedVersion: info.version,
+        artifactName: first.url,
+        artifactSha512: createHash('sha512').update(artifacts[first.url]).digest('hex'),
+        entries: new Map(own.map((n) => [n, sha256(artifacts[n])])),
+    });
+}
+
+{
+    // Version from one release, files from another that retention kept. Every
+    // client fetches the 0.333.2 manifest, finds the 0.333.1 files absent and
+    // refuses, so the sweep has to report it too.
+    const artifacts = { ...V1, ...V2 };
+    const manifests = { 'v0.333.1': Object.keys(V1), 'v0.333.2': Object.keys(V2) };
+    const pointer = updateInfo('0.333.2', Object.entries(V1));
+    buildFeed(root, { artifacts, manifests, pointers: { 'stable-linux.yml': pointer } });
+    const result = sweep(root);
+    assert.deepEqual(codes(result), ['POINTER-UNCOVERED', 'POINTER-UNCOVERED'],
+        'each file the 0.333.2 manifest does not cover is reported, though an older manifest does');
+    assert.ok(result.findings.every((f) => /v0\.333\.2 manifest/.test(f.detail)),
+        'the detail names the manifest the client actually checks');
+    const client = clientVerdict(pointer, manifests, artifacts);
+    assert.equal(client.ok, false, 'the client refuses the same pointer');
+    assert.match(client.reason, /does not cover/);
+}
+
+{
+    // The rollback pointer above, through the client rule: both sides accept it.
+    const artifacts = { ...V1, ...V2 };
+    const manifests = { 'v0.333.1': Object.keys(V1), 'v0.333.2': Object.keys(V2) };
+    const pointer = updateInfo('0.333.1', Object.entries(V1));
+    buildFeed(root, { artifacts, manifests, pointers: { 'stable-linux.yml': pointer } });
+    assert.deepEqual(codes(sweep(root)), [], 'the sweep accepts a rollback pointer');
+    assert.equal(clientVerdict(pointer, manifests, artifacts).ok, true, 'and so does the client');
+}
+
+{
+    // One file from the pointer's own release, one only an older manifest covers.
+    const V2_ARM = { 'xchain-wallet-0.333.2-arm64.AppImage': 'appimage-two-arm' };
+    const artifacts = { ...V1, ...V2, ...V2_ARM };
+    const manifests = { 'v0.333.1': Object.keys(V1), 'v0.333.2': [...Object.keys(V2), ...Object.keys(V2_ARM)] };
+    const mixed = [...Object.entries(V2), ['xchain-wallet-0.333.1-arm64.AppImage', V1['xchain-wallet-0.333.1-arm64.AppImage']]];
+    const pointer = updateInfo('0.333.2', mixed);
+    buildFeed(root, { artifacts, manifests, pointers: { 'stable-linux.yml': pointer } });
+    const result = sweep(root);
+    assert.deepEqual(codes(result), ['POINTER-UNCOVERED'], 'only the file from the other release is reported');
+    assert.match(result.findings[0].detail, /0\.333\.1-arm64/);
+    assert.equal(clientVerdict(pointer, manifests, artifacts).ok, false, 'and the client refuses it');
+}
+
+{
+    // A re-signed release: its manifest is published under the release's name
+    // with a `-resign1` header, and still counts as that release's own manifest.
+    const artifacts = { ...V1, ...V2 };
+    const manifests = { 'v0.333.1': Object.keys(V1), 'v0.333.2': Object.keys(V2) };
+    const resign = () => {
+        const path = join(root, 'RELEASE_HASHES', 'v0.333.2.txt');
+        const text = readFileSync(path, 'utf8');
+        assert.ok(text.includes('# tag: v0.333.2\n'), 'the fixture header is where the re-sign edit expects it');
+        writeFileSync(path, text.replace('# tag: v0.333.2\n', '# tag: v0.333.2-resign1\n'));
+    };
+
+    buildFeed(root, { artifacts, manifests,
+        pointers: { 'stable-linux.yml': updateInfo('0.333.2', Object.entries(V2)) } });
+    resign();
+    assert.deepEqual(codes(sweep(root)), [], 'a pointer naming its re-signed release files is clean');
+
+    buildFeed(root, { artifacts, manifests,
+        pointers: { 'stable-linux.yml': updateInfo('0.333.2', Object.entries(V1)) } });
+    resign();
+    assert.deepEqual(codes(sweep(root)), ['POINTER-UNCOVERED', 'POINTER-UNCOVERED'],
+        'files the re-signed release does not cover are still reported against it');
 }
 
 // ------------------------------------------------- the ordinary breakage

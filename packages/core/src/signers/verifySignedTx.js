@@ -36,11 +36,19 @@
 // approved: toLedgerCreatePayment forwards lockTime (ledgerFormat.js) and
 // toTrezorSignTransaction refuses a nonzero one pre-device (its payload cannot
 // carry the field), so neither lane can legitimately return a locktime other
-// than the one the PSBT asked for. Version is still deliberately NOT compared:
-// toLedgerCreatePayment passes none at all and hw-app-btc picks one, so
-// comparing it would refuse every legitimate hardware send rather than catch a
-// tampered one. Witness and scriptSig data are not compared either - they are
-// the signature, which is exactly what the device is there to add.
+// than the one the PSBT asked for. Each input's nSequence is compared exactly,
+// since both converters forward it: the locktime binds only while some input
+// is non-final, and the same field carries the RBF and BIP68 signals.
+//
+// The version is compared under one allowance. Neither device lets the PSBT
+// choose it (hw-app-btc writes 1 on its legacy protocol and 2 on the new one,
+// and the Trezor payload carries none), so a 1 for a 2, or a 2 for a 1, is
+// accepted when no input's sequence has the BIP68 disable bit clear, since
+// that is all the difference changes. Any other difference is refused. A
+// hardware txid can therefore differ from the PSBT's unsigned txid, and no
+// caller may predict a hardware-signed txid from the PSBT. Witness and
+// scriptSig data are not compared - they are the signature, which is exactly
+// what the device is there to add.
 
 import { SignerStatusError } from './Signer.js';
 
@@ -156,6 +164,22 @@ function exactSats(value, what) {
     throw new Error(`${what} is not an exact satoshi amount: ${String(value)}`);
 }
 
+/** Valid nSequence: a uint32 as a Number, never coerced from a missing value. */
+export function isValidSequence(sequence) {
+    return Number.isInteger(sequence) && sequence >= 0 && sequence <= 0xffffffff;
+}
+
+/** Whether the version decides this valid nSequence's meaning: with bit 31 clear,
+ *  BIP68 and OP_CHECKSEQUENCEVERIFY read it under version 2 but not version 1. */
+export function enablesRelativeLock(sequence) {
+    return sequence < 0x80000000;
+}
+
+/** The versions both devices can emit, and the only ones a 1-for-2 swap spans. */
+export function isDeviceTxVersion(version) {
+    return version === 1 || version === 2;
+}
+
 /**
  * Refuse a signed transaction whose spend or payment set is not the one the
  * approved PSBT described.
@@ -217,6 +241,13 @@ export function assertSignedTxMatchesPsbt({ txHex, decomposed, signerId }) {
         if (wantPoint !== gotPoint) {
             throw refusal(`input ${i} spends ${gotPoint}, the PSBT spent ${wantPoint}`);
         }
+        if (!isValidSequence(want.sequence)) {
+            throw refusal(`the PSBT's input ${i} sequence ${String(want.sequence)} is not a valid nSequence`);
+        }
+        if (got.sequence !== want.sequence) {
+            throw refusal(`input ${i} has sequence 0x${got.sequence.toString(16)}, `
+                + `the PSBT asked for 0x${want.sequence.toString(16)}`);
+        }
     }
 
     // Compare the timelock too: a reply that dropped it is spendable NOW,
@@ -231,5 +262,22 @@ export function assertSignedTxMatchesPsbt({ txHex, decomposed, signerId }) {
     }
     if (tx.locktime !== wantLocktime) {
         throw refusal(`it has locktime ${tx.locktime}, the PSBT asked for ${wantLocktime}`);
+    }
+
+    // Sequences already match exactly above, so the approved inputs speak for
+    // the reply's too. See the header for why a 1-for-2 swap can pass.
+    const wantVersion = decomposed.txVersion;
+    if (!Number.isInteger(wantVersion)) {
+        throw refusal(`the PSBT's version ${String(wantVersion)} is not a number`);
+    }
+    if (tx.version !== wantVersion) {
+        if (!isDeviceTxVersion(wantVersion) || !isDeviceTxVersion(tx.version)) {
+            throw refusal(`it has version ${tx.version}, the PSBT asked for ${wantVersion}`);
+        }
+        const locked = decomposed.inputs.findIndex((inp) => enablesRelativeLock(inp.sequence));
+        if (locked !== -1) {
+            throw refusal(`it has version ${tx.version}, the PSBT asked for ${wantVersion}, `
+                + `and input ${locked}'s relative timelock depends on the version`);
+        }
     }
 }

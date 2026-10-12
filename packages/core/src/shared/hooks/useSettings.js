@@ -57,7 +57,7 @@ export function useSettings() {
     const refresh = useCallback(async () => {
         if (typeof messaging?.getSettings !== 'function') {
             if (!aliveRef.current) return;
-            setError(new Error('messaging.getSettings is not available in this shell'));
+            setError(new Error('useSettings: messaging.getSettings is not available in this shell'));
             setLoading(false);
             return;
         }

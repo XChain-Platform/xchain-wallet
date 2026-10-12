@@ -43,11 +43,12 @@ const BUILD_PROFILE = resolveBuildProfile();
 const HIDDEN_SURFACES = hiddenSurfacesFor(BUILD_PROFILE);
 
 // Swap each hidden surface's module for its inert twin, so the surface's route
-// Components are never imported and never reach the bundle (the
-// store-hidden surfaces are COMPILED OUT, not switched off - a surface that can
-// be switched back on is a guideline 2.3.1 hidden feature). The regex covers the
-// whole specifier so the replacement is the absolute path, not a suffix graft,
-// and it matches from any importer's relative depth.
+// Components are never imported and never reach the bundle (a hidden surface
+// is COMPILED OUT, not switched off - a surface that can be switched back on is
+// a guideline 2.3.1 hidden feature). No profile hides a surface today, so this
+// list is empty in every real build; see `src/surfaces/registry.js`. The regex
+// covers the whole specifier so the replacement is the absolute path, not a
+// suffix graft, and it matches from any importer's relative depth.
 const surfaceAliases = HIDDEN_SURFACES.map((surface) => ({
     find: new RegExp(`^(?:.*/)?surfaces/${surface}\\.jsx$`),
     replacement: fileURLToPath(
@@ -60,10 +61,10 @@ const surfaceAliases = HIDDEN_SURFACES.map((surface) => ({
 // The alias only helps as long as the surface module is the ONLY importer of
 // those route components. A second import added anywhere (a shared index, a
 // lazy route, a helper reaching for one component) would put the whole surface
-// back into a `store` bundle while every label still said it was absent - a
-// false claim inside a signed manifest, which the compile-out exists to prevent. So the
-// build refuses rather than shipping it, and says which module and which
-// importer did it.
+// back into a bundle whose profile hides it while every label still said it
+// was absent - a false claim inside a signed manifest, which the compile-out
+// exists to prevent. So the build refuses rather than shipping it, and says
+// which module and which importer did it.
 const surfaceGuardPlugin = {
     name: 'xchain-hidden-surface-guard',
     // MUST be 'pre'. A 'post' plugin's resolveId never runs: Vite's own

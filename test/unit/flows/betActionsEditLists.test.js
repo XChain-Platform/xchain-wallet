@@ -204,7 +204,7 @@ describe('OracleConsole owner-only open-feed editor', () => {
             fireEvent.click(utils.getByTestId('confirm-approve'));
             await drain();
         });
-        const submit = calls.find((call) => call.method === 'action.editBetFeedLists');
+        const submit = calls.find((call) => call.method === 'editBetFeedListsAction');
         expect(submit.args.password).toBe('test password');
         expect(submit.args.params).toEqual(compose.args.params);
         expect(submit.args.prebuiltPsbt).toBeTruthy();

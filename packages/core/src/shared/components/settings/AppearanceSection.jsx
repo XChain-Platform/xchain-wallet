@@ -24,7 +24,7 @@
 //   - Accent color (per spec §35.1 only "when brand is finalized"); no row renders until it exists.
 
 import { useSettings } from '../../hooks/useSettings.js';
-import { ROW, ROW_LABEL, SELECT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },
@@ -42,7 +42,7 @@ export function AppearanceSection() {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onThemeChange = async (next) => {

@@ -113,12 +113,6 @@ describe('validateChainDescriptor: family coin-type slot parity', () => {
         }
     });
 
-    // The per-template loops above `continue` when a bundled coin has no map
-    // entry, so a NEW bundled family added without registering it in the family
-    // maps would be pinned by nothing and still pass. This dedicated
-    // completeness check fails loud instead: every bundled coin MUST appear in
-    // both the coin-type slot map and the WIF-byte map. Genuinely custom /
-    // non-bundled chains stay intentionally unconstrained and are not checked.
     // A reserved bundled id must not be overridable with a mismatched coin,
     // which would dodge both coin-keyed parity pins.
     it('rejects a reserved id (bitcoin-mainnet) carrying a mismatched coin', () => {
@@ -146,6 +140,9 @@ describe('validateChainDescriptor: family coin-type slot parity', () => {
         }
     });
 
+    // This completeness check fails loud when a bundled family is missing from either
+    // family map: the slot loop above and the WIF-byte loop in the next block skip
+    // such a coin and pass (custom, non-bundled chains stay unconstrained).
     it('every bundled coin family is registered in both family maps', () => {
         const coins = [...new Set(BUNDLED_DESCRIPTORS.map((d) => d.coin))];
         for (const coin of coins) {

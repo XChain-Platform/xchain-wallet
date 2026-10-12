@@ -20,10 +20,10 @@
 //   3. MigrateToBip39.jsx exists, exports a single component, runs
 //      through explain → create → submitting → done, reuses
 //      IssueTokenForm CSS, and calls messaging.createWallet.
-//   4. Home renders the legacy-wallet banner when the active wallet
-//      has format === 'counterwallet-legacy' and onMigrateToBip39 is
-//      supplied; banner class `.legacyBanner` ships in
-//      Home.module.css.
+//   4. The shared walletAlerts.js list carries the legacy-wallet alert
+//      when the active wallet has format === 'counterwallet-legacy' and
+//      onMigrateToBip39 is supplied; Home and the web menu build from it;
+//      banner class `.legacyBanner` ships in Home.module.css.
 //   5. All three shells: App.jsx imports MigrateToBip39, tracks the
 //      'migrate-bip39' sub-route + 'import-freewallet' onboarding
 //      step, wires onImportFromFreeWallet on Onboarding, wires
@@ -118,11 +118,19 @@ assert.ok(/Legacy FreeWallet format|Counterwallet/.test(migrate), 'MigrateToBip3
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/onMigrateToBip39/.test(home), 'Home.jsx accepts onMigrateToBip39 prop');
+// The legacy alert is defined once in core and built by Home and the web menu.
+const walletAlerts = readFileSync(join(core, 'src', 'shared', 'walletAlerts.js'), 'utf8');
 assert.ok(
-    /activeWallet\?\.format\s*===\s*['"]counterwallet-legacy['"]/.test(home),
-    'Home.jsx gates the legacy banner on active wallet format',
+    /activeWallet\?\.format\s*===\s*['"]counterwallet-legacy['"]/.test(walletAlerts),
+    'walletAlerts.js gates the legacy alert on active wallet format',
 );
-assert.ok(/legacy-format/.test(home), 'Home.jsx registers the legacy-format alert entry');
+assert.ok(/legacy-format/.test(walletAlerts), 'walletAlerts.js registers the legacy-format alert entry');
+assert.ok(/onMigrateToBip39/.test(walletAlerts), 'walletAlerts.js arms the legacy alert with onMigrateToBip39');
+assert.ok(/buildWalletAlerts\(/.test(home), 'Home.jsx builds its alerts from walletAlerts.js');
+assert.ok(
+    /buildWalletAlerts\(/.test(readFileSync(join(web, 'src', 'App.jsx'), 'utf8')),
+    'web App.jsx builds the menu Alerts panel from walletAlerts.js',
+);
 
 const homeCss = readFileSync(join(sharedRoutes, 'Home.module.css'), 'utf8');
 assert.ok(/\.legacyBanner\b/.test(homeCss), 'Home.module.css defines .legacyBanner');

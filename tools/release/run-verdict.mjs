@@ -38,7 +38,8 @@
 // from its colour. A step that concluded `failure` is a stated assertion and
 // makes the run red. No steps at all means the job never got to state
 // anything, and that is reported as `cancelled` or `not-started` - never as a
-// failed assertion.
+// failed assertion. A job that hit its time limit is the exception: the step
+// that hung is named as a finding, because a hang is the code's to explain.
 //
 // Pure classifier plus a thin CLI, so the same logic serves the `verdict` job
 // in ci.yml, an operator asking about master, and the smoke that gates it.
@@ -61,6 +62,8 @@ export const JOB_STATE = {
     FAILED: 'failed',
     /** Ran, then stopped mid-flight. Carries no finding. */
     CANCELLED: 'cancelled',
+    /** Hit its time limit while a step was still running. A hung step is a finding, not infrastructure. */
+    TIMED_OUT: 'timed-out',
     /** Never assigned a runner: no steps, no logs. Carries no finding. */
     NOT_STARTED: 'not-started',
     /** Red overall, but no step said so. A finding nobody can read. */
@@ -147,6 +150,20 @@ export function classifyJob(job) {
         };
     }
 
+    // Report a job that hit its time limit as the step that hung: GitHub concludes it `cancelled`
+    // with a check-run annotation saying so (or `timed_out`), and a hang is the code's, not the runner's.
+    if (conclusion === 'timed_out' || (conclusion === 'cancelled' && hitTimeLimit(job))) {
+        const stopped = steps.find((s) => s?.conclusion === 'cancelled' || s?.conclusion === 'timed_out'
+            || s?.status !== 'completed');
+        const step = stopped?.name ?? '(unknown step)';
+        return {
+            name,
+            state: JOB_STATE.TIMED_OUT,
+            detail: `timed out during: ${step}`,
+            assertions: [`${name} / ${step} (timed out)`],
+        };
+    }
+
     if (conclusion === 'cancelled') {
         const stopped = steps.find((s) => s?.conclusion === 'cancelled' || s?.status !== 'completed');
         return {
@@ -177,6 +194,12 @@ export function classifyJob(job) {
             + '(post-step or runner-side; read the check-run annotation)',
         assertions: [],
     };
+}
+
+/** Whether a job's check-run annotations say it exceeded its maximum execution time. */
+function hitTimeLimit(job) {
+    const notes = [job?.annotation, ...(Array.isArray(job?.annotations) ? job.annotations : [])];
+    return notes.some((n) => typeof n === 'string' && /exceeded the maximum execution time/i.test(n));
 }
 
 /** Best available sentence for a job that never reached a runner. */
@@ -312,7 +335,8 @@ Usage:
 Exit: 0 the run is green or carries no finding, 1 red for a stated assertion,
 2 the run cannot be read yet. A NO VERDICT run is exit 0 on purpose: it says
 nothing about the code, so failing on it would relabel infrastructure as a
-test result, which is the exact confusion this tool exists to end.`);
+test result, which is the exact confusion this tool exists to end. A job that
+hit its time limit is RED, named by the step that hung: a hang is a finding.`);
         process.exit(0);
     }
 
@@ -376,23 +400,26 @@ test result, which is the exact confusion this tool exists to end.`);
         // jobs only: it is the difference between "not-started" and
         // "not-started because the account is over its spending limit", and
         // the second one is actionable in one click.
+        // A cancelled job that ran keeps the one thing telling a hang from a newer push in its annotation too.
         let annotationNoted = false;
         for (const job of jobs) {
-            if ((job.steps ?? []).length !== 0) continue;
+            const ran = (job.steps ?? []).length !== 0;
+            if (ran && job.conclusion !== 'cancelled') continue;
             if (job.conclusion === 'success' || job.conclusion === 'skipped') continue;
             const id = String(job.check_run_url ?? '').split('/').pop();
             if (!id) continue;
             try {
                 const notes = await api(`/repos/${repo}/check-runs/${id}/annotations`, { optional: true });
-                const first = (notes || []).find((n) => n?.message);
-                if (first) job.annotation = first.message;
+                const messages = (notes || []).map((n) => n?.message).filter(Boolean);
+                if (messages.length) job.annotation = messages[0];
+                job.annotations = messages;
             } catch (err) {
-                // An annotation is a nicety; its absence must never change the
-                // classification, which already stands on the empty steps array.
+                // An unreadable annotation must never fail the run: the job keeps the state its steps give it.
                 if (!annotationNoted) {
                     annotationNoted = true;
                     process.stderr.write(`run-verdict: no annotation (${err?.message || err}); a 401/403/404 `
-                        + 'here is usually a token without `checks: read`. The verdict is unchanged.\n');
+                        + 'here is usually a token without `checks: read`. The verdict stands without it, '
+                        + 'but a job that hit its time limit then reads as cancelled.\n');
                 }
             }
         }

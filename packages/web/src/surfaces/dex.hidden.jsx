@@ -11,16 +11,18 @@
 // The DEX surface, ABSENT (; §2.3).
 //
 // `vite.config.js` swaps `dex.jsx` for this file when the build profile hides
-// the `dex` surface, so this is the module a mobile store build actually runs.
+// the `dex` surface, so this is the module such a build runs. No profile hides
+// `dex` today (`registry.js` lists nothing for any profile); this twin is the
+// retained switch.
 // Its whole content is the absence: it imports nothing, which is what keeps
 // every DEX route component out of the bundle. There is no flag here to flip
 // and no lazy import to reach them by, because a store-hidden surface that can
 // be switched back on is an App Review guideline 2.3.1 hidden feature, and
 // that penalty is account termination across every Apple surface we have.
 //
-// Keep the export list identical to `dex.jsx`: this twin is the one that runs
-// on the shell with the least coverage, so a missing name here is an undefined
-// at runtime in the place hardest to notice. A unit test asserts the parity.
+// Keep the export list identical to `dex.jsx`: this twin would run on the
+// shell with the least coverage, so a missing name here is an undefined at
+// runtime in the place hardest to notice. A unit test asserts the parity.
 
 /** @see {@link ./dex.jsx} - false here is the entire mechanism. */
 export const DEX_SURFACE_ENABLED = false;

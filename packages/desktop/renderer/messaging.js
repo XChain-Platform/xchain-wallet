@@ -1029,6 +1029,14 @@ export function cancelMarketActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.cancelMarket.hw', opts));
 }
 
+export function editBetFeedListsAction(opts) {
+    return /** @type {any} */ (sendMessage('action.editBetFeedLists', opts));
+}
+
+export function editBetFeedListsActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.editBetFeedLists.hw', opts));
+}
+
 /**
  * Compose a BET action through the allow-listed sdk.betting.*Params builder
  * host-side, so the confirm page previews the wire params the encoder will see.

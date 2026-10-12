@@ -186,9 +186,9 @@ export const FAMILY_NETWORK_WIF_BYTE = {
 // Only caps are listed (less capability is harmless); unknown families stay free.
 export const FAMILY_RBF_SUPPORTED = { dogecoin: false };
 
-// Pin the fee unit where the fee tier table is keyed by coin and built for one unit:
-// the dogecoin tiers are per-kB, so a per-vbyte dogecoin descriptor misprices custom rates.
-// Bitcoin and litecoin stay free, since their per-byte tiers convert to either unit.
+// Pin the fee unit where a family's display depends on it. Every tier table is per-byte and prices
+// alike in either unit, but a per-vbyte dogecoin descriptor would show 100000 sat/vB tiers and seed
+// a custom rate far below the 1 DOGE/kB relay floor. Bitcoin and litecoin stay free.
 export const FAMILY_FEE_UNIT = { dogecoin: 'sats-per-kbyte' };
 
 const isDerivationPaths = (v) => {

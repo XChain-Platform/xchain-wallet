@@ -30,6 +30,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useToast } from './ToastHost.jsx';
+import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import styles from './QueuedBroadcastBanner.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -54,14 +55,18 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const lastPromptedAtRef = useRef(/** @type {number} */ (0));
     const bannerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
+    // Re-list the queue; resolves the list shown, or null when it could not be read.
     const refresh = useCallback(async () => {
-        if (!walletId || typeof messaging?.listQueuedBroadcasts !== 'function') return;
+        if (!walletId || typeof messaging?.listQueuedBroadcasts !== 'function') return null;
         try {
             const list = await messaging.listQueuedBroadcasts({ walletId });
-            setQueue(Array.isArray(list) ? list : []);
+            const shown = Array.isArray(list) ? list : [];
+            setQueue(shown);
+            return shown;
         } catch (_err) {
             // The list endpoint is read-only; failures here surface
             // through the reachability banner instead.
+            return null;
         }
     }, [messaging, walletId]);
 
@@ -114,7 +119,17 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             await messaging.broadcastQueuedRequest({ walletId, id });
             await refresh();
         } catch (err) {
-            setError(err?.message || 'Broadcast failed.');
+            // Re-list first: the host removes the entry before it throws on a
+            // permanent rejection or a refused claim, so the row may be gone.
+            const list = await refresh();
+            const outcome = queuedBroadcastFailure(err, list, id);
+            if (outcome.removed) {
+                // The row is gone, so tell the user in a toast rather than under a list without it.
+                if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
+                showToast({ message: outcome.message, variant: 'error', durationMs: 12_000 });
+            } else {
+                setError(outcome.message);
+            }
         } finally {
             setBusyId(null);
         }
@@ -126,6 +141,8 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             await messaging.discardQueuedRequest({ walletId, id });
             await refresh();
         } catch (err) {
+            // Re-list so a row the host already removed does not linger.
+            await refresh();
             setError(err?.message || 'Discard failed.');
         } finally {
             setBusyId(null);
@@ -192,6 +209,46 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             ) : null}
         </div>
     );
+}
+
+/**
+ * Word a failed "Broadcast now" from the host's verdict and the queue re-listed after it.
+ *
+ * Never tells the user to compose a fresh transaction: an entry the host refused
+ * as no longer queued may already have reached a node, and a re-compose can pay twice.
+ *
+ * @param {unknown} err          what the broadcast route threw
+ * @param {any[] | null} list    the re-listed queue; null when it could not be read
+ * @param {string} id            the entry the user tried to send
+ * @returns {{ removed: boolean, message: string }}  `removed` when the row has left the queue
+ */
+export function queuedBroadcastFailure(err, list, id) {
+    const kind = broadcastFailureKindFromError(err);
+    const listed = Array.isArray(list) ? list.some((entry) => entry?.id === id) : null;
+    // Trust the re-listed queue; without one, a permanent verdict means the host dropped it.
+    const removed = listed === false || (listed === null && kind === 'permanent');
+    if (removed && kind === 'permanent') {
+        return {
+            removed,
+            message: 'The network refused this transaction for good, so it was removed from the queue. '
+                + 'Check your activity first: it may already have gone through.',
+        };
+    }
+    if (removed) {
+        return {
+            removed,
+            message: 'This transaction is no longer in the queue and was not sent this time. '
+                + 'Check your activity to see what happened to it.',
+        };
+    }
+    if (kind === 'transient') {
+        return {
+            removed,
+            message: 'Sending failed, and the transaction is still queued. '
+                + 'You can try sending it again once the network is reachable.',
+        };
+    }
+    return { removed, message: /** @type {any} */ (err)?.message || 'Broadcast failed.' };
 }
 
 // Name the chain the way every other screen does (the raw id shows only

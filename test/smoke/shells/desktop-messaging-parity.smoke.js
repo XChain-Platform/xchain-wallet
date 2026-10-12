@@ -209,6 +209,31 @@ assert.deepEqual(
     + `one shell drops: ${arity.join(' | ')}`,
 );
 
+// THE APPROVAL WINDOW shares host handlers with the popup through its own small
+// messaging module, outside MODULES because it exports a dozen helpers, not the
+// full surface. A helper it shares by NAME with the popup but declares with
+// different parameters is a copy-paste trap: a popup-style call sends the
+// wrong request, the host throws, and the approval screen swallows it. So every
+// shared name must match the popup's message type and parameter list exactly.
+const approvalFile = join(wsRoot, 'packages', 'extension', 'src', 'approval', 'messaging.js');
+const approval = wrappers(approvalFile);
+const sharedWithPopup = [...approval.keys()].filter((name) => shells.popup.has(name));
+assert.ok(sharedWithPopup.length >= 5, `the approval module shares ${sharedWithPopup.length} helper names `
+    + 'with the popup, which means this check is reading the wrong shape rather than passing');
+const approvalDrift = [];
+for (const name of sharedWithPopup) {
+    const a = approval.get(name);
+    const p = shells.popup.get(name);
+    if (a.type !== p.type) approvalDrift.push(`${name}: approval sends '${a.type}', popup sends '${p.type}'`);
+    if (a.params !== p.params) approvalDrift.push(`${name}: approval(${a.params}), popup(${p.params})`);
+}
+assert.deepEqual(
+    approvalDrift,
+    [],
+    'the approval window declares these helpers differently from the popup helpers of the same name: '
+    + `${approvalDrift.join(' | ')}. Match the popup, or give a helper that must differ a different name.`,
+);
+
 // The MessagingModule typedef in core is the only WRITTEN statement of this
 // contract, and it under-declared three account-scoped helpers for long enough
 // that a fourth shell built to it would have aggregated across BIP44 accounts.
