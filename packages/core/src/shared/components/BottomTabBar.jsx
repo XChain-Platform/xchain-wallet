@@ -89,6 +89,16 @@ export function BottomTabBar({
     // Close the sheet whenever the user navigates. The parent flips
     // currentView, which is enough of a signal that the user picked a
     // destination and the sheet should get out of the way.
+    // Publish the bar's footprint while it is mounted, so bottom-pinned
+    // overlays (the toast stack) can sit above it instead of on it. On an
+    // LG K51 "Address copied" covered the whole bar (2026-10-12). Screens
+    // without the bar leave the variable unset and keep their own offset.
+    useEffect(() => {
+        const root = document.documentElement;
+        root.style.setProperty('--xc-bottom-bar-h', '56px');
+        return () => root.style.removeProperty('--xc-bottom-bar-h');
+    }, []);
+
     useEffect(() => {
         if (sheetOpen) setSheetOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps

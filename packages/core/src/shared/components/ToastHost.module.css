@@ -9,7 +9,9 @@
  */
 .viewport {
     position: fixed;
-    bottom: var(--xc-space-4);
+    /* Above the bottom tab bar when one is mounted (BottomTabBar sets the
+       variable to its 56px height); the plain gap otherwise. */
+    bottom: calc(var(--xc-space-4) + var(--xc-bottom-bar-h, 0px));
     inset-inline-start: 50%;
     transform: translateX(-50%);
     display: flex;
