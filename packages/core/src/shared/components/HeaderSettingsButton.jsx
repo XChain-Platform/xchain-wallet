@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
+import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import styles from './HeaderSettingsButton.module.css';
 
 /**
@@ -61,6 +62,9 @@ export function HeaderSettingsButton({
 }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
+    // The gear sits wherever the header puts it; at phone width that is
+    // near the left edge, and a panel aligned to it would hang off-screen.
+    const clamp = useViewportClamp(open);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -108,7 +112,13 @@ export function HeaderSettingsButton({
                 {anyNonDefault ? <span className={styles.dot} aria-hidden="true" /> : null}
             </button>
             {open ? (
-                <div className={styles.popover} role="dialog" aria-label="Wallet settings">
+                <div
+                    ref={clamp.ref}
+                    style={clamp.style}
+                    className={styles.popover}
+                    role="dialog"
+                    aria-label="Wallet settings"
+                >
                     {onOpenWalletPicker ? (
                         <Section title="Wallet">
                             <button
