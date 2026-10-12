@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { planCpfpChild } from './cpfpPlan.js';
+
 export class RbfPlanError extends Error {
     constructor(message) {
         super(message);
@@ -139,8 +141,8 @@ export function planRbfReplacement({
     }
     const conflictTx = txShape(conflict, 'conflict');
     const templateTx = txShape(template, 'template');
-    if (conflictTx.inputs.some((input) => !Number.isInteger(input.sequence)
-        || input.sequence >= RBF_SEQUENCE_LIMIT)) {
+    if (!conflictTx.inputs.some((input) => Number.isInteger(input.sequence)
+        && input.sequence < RBF_SEQUENCE_LIMIT)) {
         throw new RbfPlanError('planRbfReplacement: conflict transaction did not signal replaceability');
     }
     if (strategy === 'restore' && !sameOutpoints(conflictTx.inputs, templateTx.inputs)) {
@@ -205,5 +207,49 @@ export function planRbfReplacement({
         originalFeeSats: String(originalFee),
         replacementFeeSats: String(fee),
         feeIncreaseSats: String(fee - originalFee),
+    };
+}
+
+/**
+ * True when any input of the pending transaction signals BIP-125; one
+ * signalling input makes the whole transaction replaceable.
+ */
+export function signalsReplaceability(tx) {
+    return Array.isArray(tx?.inputs) && tx.inputs.length > 0
+        && tx.inputs.some((input) => {
+            const sequence = Number(input?.sequence);
+            return Number.isInteger(sequence) && sequence < RBF_SEQUENCE_LIMIT;
+        });
+}
+
+/**
+ * Speed up a pending send: replace it when it is RBF-flagged, otherwise offer
+ * a CPFP child on its wallet-owned change at a feeRate covering parent plus
+ * child. Cancel and restore stay RBF-only because a child cannot evict.
+ *
+ * @returns {{ method: 'rbf'|'cpfp', plan: object }}
+ */
+export function planSpeedUp({
+    conflict, parentTxid, sourceAddress, ownAddresses, feeRate, transactionBytes, childVbytes,
+} = {}) {
+    if (signalsReplaceability(conflict)) {
+        return {
+            method: 'rbf',
+            plan: planRbfReplacement({
+                strategy: 'speedup', conflict, sourceAddress, ownAddresses, feeRate, transactionBytes,
+            }),
+        };
+    }
+    return {
+        method: 'cpfp',
+        plan: planCpfpChild({
+            parentTxid,
+            parent: conflict,
+            sourceAddress,
+            ownAddresses,
+            feeRate,
+            parentVbytes: transactionBytes,
+            childVbytes,
+        }),
     };
 }
