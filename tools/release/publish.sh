@@ -379,6 +379,19 @@ if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
     printf '%s\n' "$DIRECT_FEEDS" | sed 's/^/  /' >&2
 fi
 
+# WHERE THE SIGNED MANIFEST LANDS. Production and the desktop rehearsal set
+# keep RELEASE_HASHES/<tag>.txt: the shipped updater composes that path from
+# its feed base and version, so an installed rehearsal build reads it during
+# the swap (dq-13 kept it fixed for that reason). The staged direct-lane
+# partial is a second, separately signed set for the SAME tag on the same
+# feed, so it takes its own path under RELEASE_HASHES/android/, which
+# `rehearse.mjs run` reads for the direct lanes. On one shared name the
+# set staged last would erase the other's proof.
+MANIFEST_REL="RELEASE_HASHES/$TAG.txt"
+if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
+    MANIFEST_REL="RELEASE_HASHES/android/$TAG.txt"
+fi
+
 # Are these the bytes for the feed we are about to write to? The
 # installers cannot answer that (identical names either way), the
 # pointers can.
@@ -469,7 +482,7 @@ echo "publish.sh: verifying the signed release before upload ..." >&2
 bash "$HERE/verify.sh" --input "$INPUT_DIR" --tag "$TAG" >&2
 
 BASE="$(target_path)"
-MANIFEST_REMOTE="$BASE/RELEASE_HASHES/$TAG.txt"
+MANIFEST_REMOTE="$BASE/$MANIFEST_REL"
 
 # The other half of the prod/rehearsal guard, and the half that does not
 # depend on the input being what it claims. `.staging-feed` is written
@@ -521,7 +534,7 @@ fi
 # publish still passes verify.sh, still asserts the channel of what it is
 # handed, and still refuses a target that carries no .staging-feed marker.
 # What it may now do is replace a rehearsal that has been superseded.
-if target_exists "RELEASE_HASHES/$TAG.txt"; then
+if target_exists "$MANIFEST_REL"; then
     if [[ "$STAGING" == 1 ]]; then
         echo "publish.sh: replacing the superseded $TAG rehearsal on the staging feed (§7.5)." >&2
     else
@@ -647,7 +660,7 @@ if [[ "$STORE_BOUND_COUNT" -gt 0 ]]; then
 else
     echo "  1. ${#BINARIES[@]} artifact(s)" >&2
 fi
-echo "  2. signed manifest as RELEASE_HASHES/$TAG.txt (+ .asc)" >&2
+echo "  2. signed manifest as $MANIFEST_REL (+ .asc)" >&2
 if [[ "$EDGE_VERIFY" -eq 1 && -n "$PUBLIC_BASE" ]]; then
     echo "  3. edge check: every artifact must return 200 via $PUBLIC_BASE" >&2
 elif [[ "$EDGE_VERIFY" -eq 0 ]]; then
@@ -740,9 +753,9 @@ done
 #
 # The versioned name is what lets verify.sh anchor a manifest to a
 # release without being told which one it is.
-echo "publish.sh: uploading the signed manifest as RELEASE_HASHES/$TAG.txt" >&2
-copy_to "$MANIFEST" "$BASE/RELEASE_HASHES/$TAG.txt"
-copy_to "$MANIFEST.asc" "$BASE/RELEASE_HASHES/$TAG.txt.asc"
+echo "publish.sh: uploading the signed manifest as $MANIFEST_REL" >&2
+copy_to "$MANIFEST" "$BASE/$MANIFEST_REL"
+copy_to "$MANIFEST.asc" "$BASE/$MANIFEST_REL.asc"
 
 # --- Phase 2b: prove the edge serves what the origin now holds ----------
 #

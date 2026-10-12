@@ -736,8 +736,10 @@ function runNode(script, args, env = {}) {
         '--staging', '--no-edge-verify']);
     assert.equal(s.status, 0, `the android partial stages:\n${s.out}`);
     assert.ok(existsSync(join(stagingTarget, 'android', APK_NAME)), 'the APK is staged');
-    assert.ok(existsSync(join(stagingTarget, 'RELEASE_HASHES', `${TAG}.txt.asc`)),
-        'with its signed manifest');
+    assert.ok(existsSync(join(stagingTarget, 'RELEASE_HASHES', 'android', `${TAG}.txt.asc`)),
+        'with its signed manifest, under the direct-lane name');
+    assert.equal(existsSync(join(stagingTarget, 'RELEASE_HASHES', `${TAG}.txt`)), false,
+        'and never under the desktop rehearsal set\'s name');
     const feedFile = join(stagingTarget, 'android', 'latest.json');
     assert.deepEqual(JSON.parse(readFileSync(feedFile, 'utf8')), { version: '0.333.1' });
     assert.equal(statSync(feedFile).mode & 0o044, 0o044, 'the feed pointer is world-readable');
@@ -833,6 +835,55 @@ function serveTls(dir) {
     const b = assertOn(k1Shaped);
     assert.equal(b.status, 0, `the staged observation covers the partial release:\n${b.stderr}`);
     assert.match(b.stdout, /^ok {3}rehearsal v0\.333\.1: 0 lane\(s\) probed \+ 1 direct/);
+}
+
+// ------------- one tag, two staged sets: desktop and APK keep their manifests
+//
+// A release that carries an APK stages TWO separately signed sets for one tag
+// on one staging feed: the desktop rehearsal set and the APK partial. On one
+// shared RELEASE_HASHES/<tag>.txt the set staged second replaces the other's
+// manifest, and the rehearsal can pass the desktop lanes or the direct lane
+// but never both. Driven in both orders, since either set can go up second.
+for (const order of [['desktop', 'android'], ['android', 'desktop']]) {
+    const target = makeTarget(`feed-two-sets-${order[0]}-first`, { staging: true });
+    const sets = { desktop: stagingRelease, android: partial };
+    for (const which of order) {
+        // eslint-disable-next-line no-await-in-loop
+        const r = await run(['--input', sets[which], '--tag', TAG, '--target', target,
+            '--staging', '--no-edge-verify']);
+        assert.equal(r.status, 0, `the ${which} set stages (${order.join(' then ')}):\n${r.out}`);
+    }
+    const hashes = join(target, 'RELEASE_HASHES');
+    for (const suffix of ['', '.asc']) {
+        assert.deepEqual(readFileSync(join(hashes, `${TAG}.txt${suffix}`)),
+            readFileSync(join(stagingRelease, `RELEASE_HASHES.txt${suffix}`)),
+            `the path the installed rehearsal build reads still holds the DESKTOP set's `
+            + `manifest${suffix} (${order.join(' then ')})`);
+        assert.deepEqual(readFileSync(join(hashes, 'android', `${TAG}.txt${suffix}`)),
+            readFileSync(join(partial, `RELEASE_HASHES.txt${suffix}`)),
+            `the APK partial's manifest${suffix} is kept beside it (${order.join(' then ')})`);
+    }
+
+    // And the direct-lane rehearsal over that same feed reads the APK's own
+    // manifest. Before the split it read the desktop one, which covers no APK.
+    const keyFile = join(work, 'smoke-key-two-sets.asc');
+    writeFileSync(keyFile, execFileSync('gpg', ['--armor', '--export', SMOKE_FPR],
+        { env: { ...process.env, GNUPGHOME: gnupg } }));
+    const out = join(work, `REHEARSAL-two-sets-${order[0]}-first.json`);
+    const tls = await serveTls(target);
+    assert.ok(tls, 'openssl is required to stand up the https staging feed this case reads');
+    const rehearse = join(root, 'tools', 'release', 'rehearse.mjs');
+    const r = await runNode(rehearse, ['run', '--feed', `${tls.base}/`, '--tag', TAG,
+        '--channel', 'staging', '--prod-input', partial, '--lane', 'android-direct',
+        '--previous-tag', 'v0.333.0', '--prod-feed', tls.base, '--repo', root,
+        '--pinned-key', keyFile, '--pinned-fingerprint', SMOKE_FPR, '--out', out],
+    { NODE_EXTRA_CA_CERTS: tls.cert });
+    tls.server.close();
+    assert.equal(r.status, 0, `the direct lane rehearses beside a desktop set (${order.join(' then ')}):\n${r.out}`);
+    const [direct] = JSON.parse(readFileSync(out, 'utf8'))['direct-lanes'];
+    assert.ok(direct.ok, `android-direct passes: ${direct.failed} ${direct.reason}`);
+    assert.equal(direct.selected, APK_NAME);
+    assert.equal(direct.checks.manifestPath, `RELEASE_HASHES/android/${TAG}.txt`);
 }
 
 {

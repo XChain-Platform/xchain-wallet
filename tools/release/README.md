@@ -504,7 +504,10 @@ The authoritative checklist is §6 of
    staged AS SIGNED: the APK has no rehearsal twin, because its client
    hard-codes the production feed URL. `publish.sh --staging` takes that
    production directory, uploads the APK and its manifest, and writes
-   `android/latest.json` naming the tag last:
+   `android/latest.json` naming the tag last. On the staging feed that
+   manifest goes to `RELEASE_HASHES/android/vX.Y.Z.txt`, never to the
+   desktop rehearsal set's `RELEASE_HASHES/vX.Y.Z.txt`, so a release that
+   stages both keeps both, and `rehearse.mjs run` reads each lane's own:
 
    ```
    bash tools/release/publish.sh --input release-artifacts/vX.Y.Z/ \

@@ -569,10 +569,12 @@ function memoryStorage() {
  * @param {string|null} [params.previousVersion]  the version an old install reports
  * @param {typeof fetch} [params.fetch]
  * @param {Object} [params.pinned]          { armoredKey, fingerprint } override
+ * @param {boolean} [params.staged]         read the manifest a staging publish wrote for
+ *                                          the direct-lane partial (stagedDirectManifestPath)
  * @returns {Promise<Object>} the lane's record entry
  */
 export async function probeDirectLane({
-    lane, feedBase, tag, previousVersion = null, fetch: fetchImpl, pinned,
+    lane, feedBase, tag, previousVersion = null, fetch: fetchImpl, pinned, staged = false,
 }) {
     const doFetch = fetchImpl || globalThis.fetch;
     const base = String(feedBase).replace(/\/*$/, '/');
@@ -735,8 +737,20 @@ export async function probeDirectLane({
     const { fetchReleaseManifest, parseManifest, verifyDownloadedArtifact } = await import(
         pathToFileURL(UPDATE_VERIFY).href
     );
-    const fetched = await fetchReleaseManifest({ feedBaseUrl: base, tag, fetch: doFetch });
+    // On a staging feed the APK's manifest sits under its own name, beside the
+    // desktop rehearsal set's manifest for the same tag, so the shipped reader
+    // is pointed at it rather than at the desktop one.
+    const manifestPath = staged ? stagedDirectManifestPath(tag) : `RELEASE_HASHES/${tag}.txt`;
+    const canonical = `${base}RELEASE_HASHES/${tag}.txt`;
+    const manifestFetch = (url, init) => {
+        const u = String(url);
+        if (u === canonical) return doFetch(`${base}${manifestPath}`, init);
+        if (u === `${canonical}.asc`) return doFetch(`${base}${manifestPath}.asc`, init);
+        return doFetch(url, init);
+    };
+    const fetched = await fetchReleaseManifest({ feedBaseUrl: base, tag, fetch: manifestFetch });
     if (!fetched.ok) return fail('manifest', fetched.reason);
+    entry.checks.manifestPath = manifestPath;
 
     const parsed = parseManifest(Buffer.from(fetched.manifestBytes).toString('utf8'));
     if (!parsed.ok) return fail('manifest', parsed.reason);
@@ -774,6 +788,21 @@ export async function probeDirectLane({
 
     entry.ok = true;
     return entry;
+}
+
+/**
+ * Where `publish.sh --staging` puts a direct-lane partial's signed manifest.
+ *
+ * The desktop rehearsal set keeps `RELEASE_HASHES/<tag>.txt` on the staging
+ * feed, because the installed rehearsal build reads exactly that path during
+ * the swap. The APK partial is signed separately for the same tag, so it
+ * cannot share the name: the set staged second would replace the other's
+ * manifest, and a release carrying an APK could not pass `assert`. The
+ * basename stays `<tag>.txt` so verify.sh's
+ * filename anchor still reads the tag.
+ */
+export function stagedDirectManifestPath(tag) {
+    return `RELEASE_HASHES/android/${tag}.txt`;
 }
 
 /** The next minor of a strict MAJOR.MINOR.PATCH, for the downgrade direction. */
@@ -1591,7 +1620,7 @@ async function main(argv) {
             if (only.length ? !only.includes(lane.id) : !shipping.directLanes.includes(lane.id)) continue;
             process.stderr.write(`rehearse.mjs: ${lane.id} ... `);
             const entry = await probeDirectLane({
-                lane, feedBase: feed, tag, previousVersion, pinned,
+                lane, feedBase: feed, tag, previousVersion, pinned, staged: true,
             });
             directLanes.push(entry);
             process.stderr.write(entry.ok ? 'ok\n' : `FAIL (${entry.failed}: ${entry.reason})\n`);
