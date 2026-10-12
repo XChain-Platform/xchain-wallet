@@ -80,7 +80,7 @@ export function createUndoSendController({
             if (onTick) onTick(remaining);
         };
 
-        if (onTick) onTick(seconds);
+        if (onTick) onTick(undoSendRemainingSeconds({ ...input, now: now() }));
         // onTick may have cancelled synchronously
         if (status !== 'counting') return;
         handle = setTick(tick, TICK_MS);

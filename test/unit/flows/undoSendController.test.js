@@ -53,6 +53,27 @@ describe('undo-send controller', () => {
         expect(h.ticks.ms).toBe(1000);
     });
 
+    it('initial tick uses the remaining-seconds math with a fresh clock read', () => {
+        const reads = [5_000, 6_500];
+        const onTick = vi.fn();
+        const c = createUndoSendController({
+            onTick,
+            now: () => reads.shift() ?? 6_500,
+            setTick: () => 1,
+            clearTick: () => {},
+        });
+        c.start(3);
+
+        expect(onTick).toHaveBeenCalledTimes(1);
+        expect(onTick).toHaveBeenLastCalledWith(2);
+    });
+
+    it('initial tick keeps a fractional window as given', () => {
+        const h = harness();
+        h.controller.start(2.5);
+        expect(h.onTick).toHaveBeenLastCalledWith(2.5);
+    });
+
     it('ticks down each second then elapses once', () => {
         const h = harness();
         h.controller.start(3);
