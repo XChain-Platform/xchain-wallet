@@ -108,7 +108,7 @@ function hash(s) {
 
 // Run the real gate. Returns { ok, out } rather than throwing: most cases
 // here are meant to fail, and the message is the assertion.
-function gate(dir, lanesPath = lanesFile, expectedPath = expected) {
+function gate(dir, lanesPath = lanesFile, expectedPath = expected, cwd = undefined) {
     // `2>&1` because the gate reports on stderr in BOTH directions - the
     // "gate ok" line is stderr too, so without the merge a passing run
     // looks like a run that printed nothing.
@@ -119,7 +119,7 @@ function gate(dir, lanesPath = lanesFile, expectedPath = expected) {
         return {
             ok: true,
             out: execFileSync('bash', ['-c', script], {
-                encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+                encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], cwd,
             }),
         };
     } catch (err) {
@@ -242,6 +242,24 @@ try {
         const r = gate(stage(), join(work, 'does-not-exist.txt'));
         check('a missing lane list is a hard failure, not a skip',
             !r.ok && /shipped-lane list not found/.test(r.out), r.out);
+    }
+
+    // 8b. Decoy files in the operator's cwd must not change the verdict. The
+    //     lane globs are patterns for the staged set, not for wherever the
+    //     operator happens to stand; expanding them there turns a correct
+    //     release into a bogus "claims glob ... no row declares" drift error.
+    {
+        const decoyDir = mkdtempSync(join(work, 'decoy-'));
+        writeFileSync(join(decoyDir, ANDROID_AAB), 'decoy\n');
+        writeFileSync(join(decoyDir, ANDROID_APK), 'decoy\n');
+        writeFileSync(join(decoyDir, 'decoy.snap'), 'decoy\n');
+        const r = gate(stage([ANDROID_AAB, ANDROID_APK]), withAndroid('SHIPPED'),
+            expected, decoyDir);
+        check('decoy files in the working directory do not break a correct release',
+            r.ok && /shipped-lane gate ok/.test(r.out), r.out);
+        const r2 = gate(stage(), withAndroid('SHIPPED'), expected, decoyDir);
+        check('decoy files in the working directory do not satisfy a missing lane',
+            !r2.ok && /LANE-REGRESSION/.test(r2.out), r2.out);
     }
 
     // 9. sign.sh must actually call it. A gate wired nowhere is prose.

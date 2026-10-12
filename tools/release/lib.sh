@@ -1668,7 +1668,12 @@ xr_check_shipped_lanes() {
             return 1
         fi
 
-        for pat in $rest; do
+        # Split into words WITHOUT pathname expansion: an unquoted word loop
+        # over the raw string would expand each glob against the operator's
+        # working directory and compare the filenames it found instead.
+        local -a rest_pats=()
+        read -r -a rest_pats <<< "$rest"
+        for pat in "${rest_pats[@]}"; do
             # Drift direction 1: this file must not describe artifacts the
             # release list has never heard of.
             matched=0
