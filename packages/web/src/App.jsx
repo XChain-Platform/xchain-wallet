@@ -385,6 +385,15 @@ function AppInner() {
     // route; psbt opens the PSBT-sign route. Mirrors the existing
     // dedicated 'scan' route handler.
     const [globalScannerOpen, setGlobalScannerOpen] = useState(false);
+    // The overlay covers the content area but not the navigation, so the
+    // bottom bar, the rail and the header stay live underneath it. Any
+    // navigation therefore closes it; otherwise the scanner (and the camera)
+    // stayed on screen over whatever view the user had moved to (LG K51,
+    // 2026-10-12: palette "Scan a QR code", then Home, then History). The nav
+    // handlers also close it directly, for a tap on the view already shown.
+    useEffect(() => {
+        setGlobalScannerOpen(false);
+    }, [unlockedView]);
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -2707,7 +2716,7 @@ function AppInner() {
                     nav={
                         <LeftNavWithObligations
                             currentView={unlockedView}
-                            onSelect={(view) => setUnlockedView(view)}
+                            onSelect={(view) => { setGlobalScannerOpen(false); setUnlockedView(view); }}
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
@@ -2721,7 +2730,7 @@ function AppInner() {
                     bottomBar={
                         <BottomTabBarWithObligations
                             currentView={unlockedView}
-                            onSelect={(view) => setUnlockedView(view)}
+                            onSelect={(view) => { setGlobalScannerOpen(false); setUnlockedView(view); }}
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
