@@ -161,6 +161,28 @@ export const AUTOLOCK_MINUTES_MIN = 1;
 export const AUTOLOCK_MINUTES_MAX = 1440;
 export const AUTOLOCK_MINUTES_DEFAULT = 15;
 
+// Undo-send grace window, in seconds, 0 (no hold) to 30. validateSettings
+// only checks for a non-negative integer, so a hand-edited 600 validates;
+// resolveUndoSendSeconds is the reader-side bound.
+export const UNDO_SEND_SECONDS_MIN = 0;
+export const UNDO_SEND_SECONDS_MAX = 30;
+export const UNDO_SEND_SECONDS_DEFAULT = 5;
+
+/**
+ * Stored `grace.undoSendSeconds` clamped to at most UNDO_SEND_SECONDS_MAX,
+ * or the default when settings, `grace` or the field is absent, non-finite,
+ * negative, fractional or not a number.
+ * @param {any} settings
+ * @returns {number}
+ */
+export function resolveUndoSendSeconds(settings) {
+    const v = settings?.grace?.undoSendSeconds;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < UNDO_SEND_SECONDS_MIN) {
+        return UNDO_SEND_SECONDS_DEFAULT;
+    }
+    return Math.min(v, UNDO_SEND_SECONDS_MAX);
+}
+
 /**
  * @typedef {Object} SdkEndpoint
  * @property {string} explorerUrl
