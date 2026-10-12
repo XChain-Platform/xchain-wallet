@@ -8,12 +8,12 @@
     "reached": "manifest-written",
     "reachedSignature": false,
     "blocker": "sign.sh: signing manifest with key 1A29E7C4C228F0E55D40A8C3B5B0E5ADAFDA7CE7 ...",
-    "scriptRef": "e51dbd28d08b1d3c140809f43d99d7130ce08ed4",
+    "scriptRef": "5e08f92c7a1e1ad76adc25cc5210ad3c735769f2",
     "repoRef": "46a7ad3dc49129558e99a0e0562b145fd8584d39",
     "scriptPath": {
-        "tools/release/sign.sh": "3208f8e4efe133a315c1afdc6f3c06cc62bf15c0cdd6772a6df5cfe274ffcb2d",
-        "tools/release/verify.sh": "3784c1e03ea25f9d9ddc01fe8dc69b95d0d50c6dc3ec59d5d02becebe49907ce",
-        "tools/release/lib.sh": "d91564641135caf47eece767468f681c3f9e612590e934a9e682de821fbfe708",
+        "tools/release/sign.sh": "36e35ecc6471f1165d83a171e49e4f8692646baf209e11668417820d896e6f3c",
+        "tools/release/verify.sh": "2b8a69f21df3ef050f3a965204123ec9e790de6755ff7327d7d316b264770c2e",
+        "tools/release/lib.sh": "a35a92aa5bf8ff7d4b7edd273cfddaaaec0df1882f86d98fa2a3872696a7f741",
         "tools/release/expected-artifacts.txt": "389ee77303d0355368e0f1c9c8b44ad3caa5f72428a75ddc074ff6f2862dd0d9",
         "tools/build-reproduce/check-no-dev-mock.sh": "1bed4891144ea1376bdc99768b846f1d7e8063f946f5d9cb5071a4069bd13ed3",
         "tools/release/update-info.mjs": "3e8c08ad2fe7dbc4f12a94ce68a682bc2094200040e2e75fdea61bcb0513c73f",
@@ -24,5 +24,5 @@
         "tools/release/verify-signatures.mjs": "5aa1c30f370723c02b3b58787587a41447ad80f794ed1216db19d54d2864bcfc",
         "tools/release/launch-probe.mjs": "7b2b0e6d840e608449c86666121962e1db9025d99ca4591cc950b2ec5b22c555"
     },
-    "observedAt": "2026-10-10T20:55:36.657Z"
+    "observedAt": "2026-10-12T18:01:25.112Z"
 }
