@@ -36,6 +36,27 @@ import { useEffect, useRef, useState } from 'react';
  * @param {number} [props.width]         video display width; default 320
  * @param {string} [props.alt]           aria-label for the scanner surface
  */
+/**
+ * Plain words for a getUserMedia failure. The raw messages ("Permission
+ * denied", "Could not start video source") say nothing about what to do.
+ *
+ * @param {any} e
+ * @returns {string}
+ */
+export function cameraErrorText(e) {
+    const name = e?.name || '';
+    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+        return 'Camera access is turned off for XChain Wallet. To scan, allow the camera in your device settings, or paste the code instead.';
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError' || name === 'DevicesNotFoundError') {
+        return 'No camera was found on this device. Paste the code instead.';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
+        return 'The camera is busy or could not start. Close other apps using it and try again, or paste the code instead.';
+    }
+    return 'The camera could not start. Paste the code instead.';
+}
+
 export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR scanner' }) {
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
     const [running, setRunning] = useState(false);
@@ -76,7 +97,7 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
                     video: { facingMode: 'environment' },
                 });
             } catch (e) {
-                if (!cancelled) setError(e?.message || 'Camera permission denied.');
+                if (!cancelled) setError(cameraErrorText(e));
                 return;
             }
 
@@ -189,19 +210,42 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
                 gap: '0.5rem',
             }}
         >
+            {/* With no camera, the empty video was a large dark box over a
+                one-line error (seen on an LG K51 with the permission
+                denied, 2026-10-12). Hide it and let the message stand. */}
             <video
                 ref={videoRef}
                 width={width}
                 height={Math.round((width * 3) / 4)}
                 playsInline
                 muted
-                style={{ background: '#0F172A', borderRadius: 4 }}
+                style={{
+                    display: error ? 'none' : 'block',
+                    maxWidth: '100%',
+                    height: 'auto',
+                    aspectRatio: '4 / 3',
+                    background: '#0F172A',
+                    borderRadius: 4,
+                }}
             />
             {error ? (
-                <p role="alert" style={{ color: '#B91C1C', fontSize: '0.8rem' }}>{error}</p>
+                <p
+                    role="alert"
+                    style={{
+                        margin: 0,
+                        padding: '0.75rem',
+                        fontSize: '0.85rem',
+                        lineHeight: 1.4,
+                        color: 'var(--xc-text)',
+                        background: 'var(--xc-bg-muted)',
+                        borderRadius: 'var(--xc-radius-sm)',
+                    }}
+                >
+                    {error}
+                </p>
             ) : (
-                <p style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    {running ? 'Scanning… point camera at an animated QR.' : 'Starting camera…'}
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
+                    {running ? 'Scanning… point the camera at a QR code.' : 'Starting camera…'}
                 </p>
             )}
         </div>
