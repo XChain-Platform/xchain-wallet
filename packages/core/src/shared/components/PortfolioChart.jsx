@@ -149,7 +149,7 @@ export function PortfolioChart({ rows, walletId }) {
                     <Sparkline series={series} height={40} />
                 </div>
             ) : (
-                <div className={styles.placeholder}>No price data for this view.</div>
+                <div className={styles.placeholder}>No price history for this range yet.</div>
             )}
             <div className={styles.ranges} role="tablist" aria-label="Chart range">
                 {RANGES.map((r) => (

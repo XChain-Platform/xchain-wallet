@@ -234,7 +234,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         ) : null}
                         {hasUnpriced ? (
                             <span className={styles.metaUnpriced}>
-                                {hasChange ? ' · ' : ''}{unpriced} {unpriced === 1 ? 'tick' : 'tokens'} not priced
+                                {hasChange ? ' · ' : ''}{unpriced} {unpriced === 1 ? 'token' : 'tokens'} not priced
                             </span>
                         ) : null}
                     </span>

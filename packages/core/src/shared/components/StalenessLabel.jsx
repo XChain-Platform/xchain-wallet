@@ -53,7 +53,7 @@ export function StalenessLabel({ lastSyncedAt, prefix = 'Last synced', warnAfter
             className={`${styles.label} ${stale ? styles.stale : ''} ${className || ''}`}
             role="status"
             aria-live="off"
-            title={new Date(lastSyncedAt).toISOString()}
+            title={new Date(lastSyncedAt).toLocaleString()}
         >
             {text}
         </span>

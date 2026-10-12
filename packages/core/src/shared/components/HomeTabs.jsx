@@ -294,8 +294,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         />
                     ) : (
                         <Placeholder
-                            title="Activity feed not built yet"
-                            body="History has your complete chronological feed."
+                            title="Your activity is in History"
+                            body="Every send, receive and other transaction, newest first."
                             action={(
                                 <Button
                                     variant="secondary"
@@ -319,8 +319,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         />
                     ) : (
                         <Placeholder
-                            title="DeFi positions"
-                            body="Staking, dispensers, contract balances, and active orders consolidate here. Each gets its own card with a quick-action button."
+                            title="No DeFi positions yet"
+                            body="Staking, dispensers, contract balances and open orders will show here."
                         />
                     )
                 ) : null}
