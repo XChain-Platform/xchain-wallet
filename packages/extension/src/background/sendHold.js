@@ -90,3 +90,28 @@ export function createSendHoldRegistry({
 
   return { hold, cancel, isHeld }
 }
+
+export const SEND_HOLD_SECONDS_MAX = 30
+
+// Turns the holdId and undoSeconds a send request carries into the function a
+// send awaits before broadcast. Returns undefined when there is nothing to
+// hold, so the send path stays as it is.
+export function createHoldBeforeBroadcast({
+  sendHold,
+  holdId,
+  undoSeconds,
+  maxSeconds = SEND_HOLD_SECONDS_MAX,
+}) {
+  if (holdId === undefined || holdId === null) return undefined
+  if (typeof holdId !== 'string' || holdId.length === 0) {
+    throw new TypeError('holdId must be a non-empty string')
+  }
+  if (!Number.isInteger(undoSeconds) || undoSeconds < 0) {
+    throw new TypeError('undoSeconds must be a non-negative integer')
+  }
+  if (undoSeconds === 0) return undefined
+  const seconds = Math.min(undoSeconds, maxSeconds)
+  return function holdBeforeBroadcast() {
+    return sendHold.hold(holdId, seconds)
+  }
+}
