@@ -2069,3 +2069,12 @@ export function generateDispenserAddress(opts) {
 export function getNativePricesRequest(opts) {
     return /** @type {any} */ (sendMessage('prices.native', opts));
 }
+
+/**
+ * Cancel a held send before its hold window elapses.
+ * @param {string} holdId
+ * @returns {Promise<{ cancelled: boolean }>}
+ */
+export function sendHoldCancel(holdId) {
+    return /** @type {any} */ (sendMessage('send.holdCancel', { holdId }));
+}

@@ -40,6 +40,7 @@ import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createBroadcastQueueStore } from './broadcastQueueStore.js';
 import { createBroadcastQueueEngine } from './broadcastQueueEngine.js';
+import { createSendHold } from './sendHold.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
@@ -965,9 +966,13 @@ export function createBackgroundHost(deps) {
         // bridge: never `console`) so arbitrary console.* args from
         // third-party content-script code can't reach disk.
         logConsoleStorage = createLogConsoleStorage(),
+        // One host-level send hold. Injected so tests (and later the registry
+        // that feeds beforeBroadcast) share the same instance as the cancel route.
+        sendHold: injectedSendHold,
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
+    const sendHold = injectedSendHold ?? createSendHold();
 
     // ONE reservation ledger per host, shared across every
     // approval window. A single background SW serves all popup windows, so
@@ -2328,6 +2333,15 @@ export function createBackgroundHost(deps) {
         });
     });
 
+
+    // Cancels a held send by id. Answers whether anything was actually held.
+    host.register('send.holdCancel', async (req) => {
+        const holdId = req?.holdId;
+        if (typeof holdId !== 'string' || holdId.length === 0) {
+            throw new TypeError('send.holdCancel: holdId must be a non-empty string');
+        }
+        return { cancelled: sendHold.cancel(holdId) };
+    });
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
         const result = await sendToken({

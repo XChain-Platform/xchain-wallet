@@ -1939,3 +1939,12 @@ export function listBlocklistAuditLog() {
 export function clearBlocklistAuditLog() {
     return /** @type {Promise<{ cleared: number }>} */ (sendMessage('sites.auditLog.clear'));
 }
+
+/**
+ * Cancel a held send before its hold window elapses.
+ * @param {string} holdId
+ * @returns {Promise<{ cancelled: boolean }>}
+ */
+export function sendHoldCancel(holdId) {
+    return /** @type {any} */ (sendMessage('send.holdCancel', { holdId }));
+}
