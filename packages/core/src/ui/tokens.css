@@ -362,6 +362,36 @@ fieldset {
     min-width: 0;
 }
 
+/* About thirty dropdowns are bare <select>s with no class (settings rows,
+ * filters, pickers), and the UA default draws them as grey system widgets
+ * that match nothing else on the screen. Give every class-less select the
+ * Input field look. :where() keeps the specificity at zero, so a select's
+ * own inline style or a later rule still wins. */
+:where(select:not([class])) {
+    padding: var(--xc-space-1) var(--xc-space-2);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background-color: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    min-height: 36px;
+    max-width: 100%;
+}
+
+:where(select:not([class])):focus {
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+}
+
+@media (forced-colors: active) {
+    :where(select:not([class])):focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+}
+
 .sr-only {
     position: absolute;
     width: 1px;
