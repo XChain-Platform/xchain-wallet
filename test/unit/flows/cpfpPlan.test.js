@@ -86,4 +86,21 @@ describe('planSpeedUp', () => {
         });
         expect(method).toBe('rbf');
     });
+
+    it('treats one signalling input as replaceable and routes a mixed parent to RBF', () => {
+        const mixed = parent({ sequence: 0xffffffff });
+        mixed.inputs.push({ ...mixed.inputs[0], prevTxHash: '55'.repeat(32), sequence: 0xfffffffd, value: 0 });
+        expect(signalsReplaceability(mixed)).toBe(true);
+        const { method, plan } = planSpeedUp({
+            conflict: mixed, parentTxid: PARENT, sourceAddress: SOURCE, feeRate: 10, transactionBytes: 300,
+        });
+        expect(method).toBe('rbf');
+        expect(plan.encoderOpts.rbf).toBe(true);
+    });
+
+    it('routes a parent where no input signals to CPFP', () => {
+        const none = parent();
+        none.inputs.push({ ...none.inputs[0], prevTxHash: '55'.repeat(32), sequence: 0xfffffffe });
+        expect(signalsReplaceability(none)).toBe(false);
+    });
 });

@@ -141,8 +141,8 @@ export function planRbfReplacement({
     }
     const conflictTx = txShape(conflict, 'conflict');
     const templateTx = txShape(template, 'template');
-    if (conflictTx.inputs.some((input) => !Number.isInteger(input.sequence)
-        || input.sequence >= RBF_SEQUENCE_LIMIT)) {
+    if (!conflictTx.inputs.some((input) => Number.isInteger(input.sequence)
+        && input.sequence < RBF_SEQUENCE_LIMIT)) {
         throw new RbfPlanError('planRbfReplacement: conflict transaction did not signal replaceability');
     }
     if (strategy === 'restore' && !sameOutpoints(conflictTx.inputs, templateTx.inputs)) {
@@ -211,11 +211,12 @@ export function planRbfReplacement({
 }
 
 /**
- * True when every input of the pending transaction signals BIP-125.
+ * True when any input of the pending transaction signals BIP-125; one
+ * signalling input makes the whole transaction replaceable.
  */
 export function signalsReplaceability(tx) {
     return Array.isArray(tx?.inputs) && tx.inputs.length > 0
-        && tx.inputs.every((input) => {
+        && tx.inputs.some((input) => {
             const sequence = Number(input?.sequence);
             return Number.isInteger(sequence) && sequence < RBF_SEQUENCE_LIMIT;
         });
