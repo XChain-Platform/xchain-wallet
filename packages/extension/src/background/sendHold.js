@@ -43,3 +43,50 @@ export function createSendHold({ setTimer = setTimeout, clearTimer = clearTimeou
 
   return { hold, cancel, isHeld }
 }
+
+export class SendHoldCancelledError extends Error {
+  constructor(holdId) {
+    super(`send hold cancelled for ${String(holdId)}`)
+    this.name = 'SendHoldCancelledError'
+    this.holdId = holdId
+  }
+}
+
+// Cancel-wins layer: a cancel that arrives before its hold is remembered, so
+// the later hold rejects at once instead of running its window.
+export function createSendHoldRegistry({
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+  rememberLimit = 64,
+} = {}) {
+  const inner = createSendHold({ setTimer, clearTimer })
+  const remembered = new Set()
+
+  function hold(holdId, seconds) {
+    if (inner.isHeld(holdId)) return inner.hold(holdId, seconds)
+    if (remembered.delete(holdId)) {
+      return Promise.reject(new SendHoldCancelledError(holdId))
+    }
+    return inner.hold(holdId, seconds).then((outcome) => {
+      if (outcome === 'cancelled') throw new SendHoldCancelledError(holdId)
+    })
+  }
+
+  function cancel(holdId) {
+    if (inner.cancel(holdId)) return true
+    if (rememberLimit > 0) {
+      remembered.delete(holdId)
+      remembered.add(holdId)
+      while (remembered.size > rememberLimit) {
+        remembered.delete(remembered.values().next().value)
+      }
+    }
+    return false
+  }
+
+  function isHeld(holdId) {
+    return inner.isHeld(holdId)
+  }
+
+  return { hold, cancel, isHeld }
+}
