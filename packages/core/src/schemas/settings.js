@@ -184,6 +184,17 @@ export function resolveUndoSendSeconds(settings) {
 }
 
 /**
+ * Effective undo-send hold in seconds: 0 unless `grace.undoSendEnabled` is
+ * exactly `true`, otherwise resolveUndoSendSeconds(settings).
+ * @param {any} settings
+ * @returns {number}
+ */
+export function resolveUndoSendWindowSeconds(settings) {
+    if (settings?.grace?.undoSendEnabled !== true) return 0;
+    return resolveUndoSendSeconds(settings);
+}
+
+/**
  * @typedef {Object} SdkEndpoint
  * @property {string} explorerUrl
  * @property {string} encoderUrl
@@ -222,7 +233,7 @@ export function resolveUndoSendSeconds(settings) {
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean, governancePolls?: boolean, deadlines?: boolean, dispenserEscrow?: boolean, incomingPending?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action) and governancePolls (v2-tolerant, defaults true; notify when a new VOTE poll opens over a held token, binding polls flagged); incomingPending is v2-tolerant, defaults true; notify when a watched address has an INCOMING payment sitting in the mempool, before it confirms
  * @property {boolean} developerMode
  * @property {boolean} learnMode
- * @property {{ undoSendSeconds: number, testSendThresholdSats: number|string }} grace                       v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
+ * @property {{ undoSendSeconds: number, undoSendEnabled?: boolean, testSendThresholdSats: number|string }} grace                       v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
  * @property {{ enabled: boolean }} panicMode                                                                v2: duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2: backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user pinned to the top of the balance list (§27.3 / G072)
@@ -334,6 +345,7 @@ export function createDefaultSettings() {
         learnMode: false,
         grace: {
             undoSendSeconds: 5,
+            undoSendEnabled: false,
             testSendThresholdSats: 0,
         },
         panicMode: {
@@ -505,6 +517,7 @@ export function validateSettings(record) {
         'grace',
         isPlainObject(r.grace)
             && isNonNegativeInteger(r.grace.undoSendSeconds)
+            && (r.grace.undoSendEnabled === undefined || isBoolean(r.grace.undoSendEnabled))
             && (isNonNegativeInteger(r.grace.testSendThresholdSats)
                 || (typeof r.grace.testSendThresholdSats === 'string'
                     && /^\d+$/.test(r.grace.testSendThresholdSats))),
