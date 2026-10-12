@@ -44,6 +44,8 @@ import {
     setBiometricProvider,
     BiometricUnsupportedError,
     BiometricNotRegisteredError,
+    BiometricCancelledError,
+    BIOMETRIC_CANCELLED_DETAIL,
 } from '@xchain-wallet/core/flows/biometricUnlock.js';
 import { crypto as coreCrypto } from '@xchain-wallet/core';
 import { callNativeVault, hasNativeVault, VaultStatus } from './nativeVault.js';
@@ -185,6 +187,9 @@ export const nativeBiometricProvider = {
         }
         const secret = bytesToBase64(new TextEncoder().encode(password));
         const reply = await callNativeVault('biometricEnroll', { secret });
+        if (reply?.status !== VaultStatus.OK && reply?.detail === BIOMETRIC_CANCELLED_DETAIL) {
+            throw new BiometricCancelledError();
+        }
         if (reply?.status !== VaultStatus.OK) {
             throw new BiometricUnsupportedError(
                 reply?.detail || `native enrollment refused (${reply?.status})`,
@@ -213,6 +218,7 @@ export const nativeBiometricProvider = {
                 enrolledCache = false;
                 throw new BiometricNotRegisteredError();
             default:
+                if (reply?.detail === BIOMETRIC_CANCELLED_DETAIL) throw new BiometricCancelledError();
                 throw new BiometricUnsupportedError(
                     reply?.detail || `biometric unlock failed (${reply?.status})`,
                 );

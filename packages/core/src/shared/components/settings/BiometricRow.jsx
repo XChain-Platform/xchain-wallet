@@ -83,6 +83,9 @@ export function BiometricRow() {
             setShowEnableForm(false);
             refreshRegistered();
         } catch (err) {
+            // Closing the prompt is a choice, not a failure: leave the form
+            // as it was, with no error.
+            if (err?.name === 'BiometricCancelledError') return;
             retryRef.current = doEnable;
             setError(err?.message || 'Enabling biometric unlock failed.');
         } finally {

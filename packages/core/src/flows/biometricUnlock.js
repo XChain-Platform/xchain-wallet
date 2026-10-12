@@ -53,6 +53,28 @@ export class BiometricUnsupportedError extends Error {
     }
 }
 
+/**
+ * The detail both native shells send when the person dismisses the prompt:
+ * iOS for LAError.userCancel (VaultBiometricSidecar.swift), Android for
+ * BiometricPrompt's user-cancel, negative-button and system-cancel codes
+ * (VaultBiometricSidecar.java). A fixed token rather than the platform's own
+ * message, which is localized and therefore not matchable.
+ */
+export const BIOMETRIC_CANCELLED_DETAIL = 'the biometric prompt was cancelled';
+
+/**
+ * The person closed the prompt. Not a failure: callers show nothing and
+ * leave the screen as it was. Before this, a cancel surfaced as
+ * "biometricUnlock: not supported (Fingerprint operation canceled by
+ * user.)" in a red error box (LG K51, 2026-10-12).
+ */
+export class BiometricCancelledError extends Error {
+    constructor() {
+        super('biometricUnlock: prompt cancelled');
+        this.name = 'BiometricCancelledError';
+    }
+}
+
 export class BiometricNotRegisteredError extends Error {
     constructor() {
         super('biometricUnlock: no credential registered');

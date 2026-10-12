@@ -338,9 +338,14 @@ export function Locked({ onUnlocked }) {
             const reply = await messaging.unlockWallet(unwrapped);
             afterUnlock(reply, unwrapped);
         } catch (err) {
-            // Biometric failures (cancelled prompt, missing credential,
-            // PRF failure) are surfaced raw: they are not bad-password
-            // guesses and must NOT increment the lockout counter.
+            // A closed prompt is a choice: back to the password field, quietly.
+            if (err?.name === 'BiometricCancelledError') {
+                setBusy(false);
+                return;
+            }
+            // Other biometric failures (missing credential, PRF failure) are
+            // surfaced raw: they are not bad-password guesses and must NOT
+            // increment the lockout counter.
             setError(err?.message || 'Biometric unlock failed.');
             haptic.error();
             setBusy(false);

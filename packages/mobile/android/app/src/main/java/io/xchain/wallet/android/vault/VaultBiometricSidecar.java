@@ -63,6 +63,9 @@ import javax.crypto.spec.GCMParameterSpec;
  *    the vault can be opened, so it cannot live inside what it unlocks.
  */
 final class VaultBiometricSidecar {
+    /** Shared with the iOS shell and the SPA (BIOMETRIC_CANCELLED_DETAIL). */
+    static final String CANCELLED_DETAIL = "the biometric prompt was cancelled";
+
 
     private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
@@ -355,6 +358,16 @@ final class VaultBiometricSidecar {
                 new BiometricPrompt.AuthenticationCallback() {
                     @Override
                     public void onAuthenticationError(int code, CharSequence message) {
+                        // A dismissal is not a failure. Send the same fixed
+                        // detail the iOS shell sends for LAError.userCancel,
+                        // so the SPA can tell it apart without matching the
+                        // platform's localized message.
+                        if (code == BiometricPrompt.ERROR_USER_CANCELED
+                                || code == BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                                || code == BiometricPrompt.ERROR_CANCELED) {
+                            callback.onError(CANCELLED_DETAIL);
+                            return;
+                        }
                         callback.onError(String.valueOf(message));
                     }
 

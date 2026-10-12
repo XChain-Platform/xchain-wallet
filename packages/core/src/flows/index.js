@@ -593,6 +593,8 @@ export {
     BiometricUnsupportedError,
     BiometricNotRegisteredError,
     BiometricPrfUnavailableError,
+    BiometricCancelledError,
+    BIOMETRIC_CANCELLED_DETAIL,
 } from './biometricUnlock.js';
 export {
     setDirectUpdateProvider,
