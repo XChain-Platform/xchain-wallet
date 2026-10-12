@@ -246,6 +246,7 @@ export function assertCompleteEnvelope(built, action) {
  * @property {(txid: string, opts?: { timeout?: number, pollInterval?: number, requireValid?: boolean }) => Promise<unknown>} [waitForTxid]
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
+ * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after every currently signable transaction is signed and before anything is broadcast
  */
 
 /**
@@ -280,6 +281,7 @@ export async function submitWithSigner({
     waitForTxid,
     waitOpts,
     onProgress = () => {},
+    beforeBroadcast,
 }) {
     if (!sdkRegistry) throw new Error('submitWithSigner: sdkRegistry is required');
     if (!actionData?.action) throw new Error('submitWithSigner: actionData.action is required');
@@ -595,21 +597,26 @@ export async function submitWithSigner({
             // here, before the commit exists.
             envelopeReveal: true,
         });
-        // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
-        // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
-        // cannot persist, and a throw here means we never broadcast: an unrecorded
-        // commit is an unrecoverable one.
-        if (encoded.envelope) {
-            recordPendingCommit({
-                commitTxid:      encoded.envelope.commitTxid,
-                commitVout:      encoded.envelope.commitVout,
-                commitValue:     encoded.envelope.commitValue,
-                commitAddress:   encoded.envelope.commitAddress,
-                internalKeyPath: signingPaths?.[0]?.path || encoded.envelope.internalPubkey,
-                tapleafHash:     encoded.envelope.tapleafHash,
-                coin:            chainId,
-            });
-        }
+    }
+
+    if (typeof beforeBroadcast === 'function') {
+        await beforeBroadcast({ signed, revealSigned: envelopeRevealSigned });
+    }
+
+    // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
+    // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
+    // cannot persist, and a throw here means we never broadcast: an unrecorded
+    // commit is an unrecoverable one.
+    if (envelopePair && encoded.envelope) {
+        recordPendingCommit({
+            commitTxid:      encoded.envelope.commitTxid,
+            commitVout:      encoded.envelope.commitVout,
+            commitValue:     encoded.envelope.commitValue,
+            commitAddress:   encoded.envelope.commitAddress,
+            internalKeyPath: signingPaths?.[0]?.path || encoded.envelope.internalPubkey,
+            tapleafHash:     encoded.envelope.tapleafHash,
+            coin:            chainId,
+        });
     }
 
     // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction

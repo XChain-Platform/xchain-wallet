@@ -86,6 +86,7 @@ export function sendDeltaFromAction(actionData) {
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
+ * @property {(transactions: { signed: object, revealSigned: object | null }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
  * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
  */
 
@@ -122,6 +123,7 @@ export async function submitAction({
     waitForTxid,
     waitOpts,
     onProgress,
+    beforeBroadcast,
     onBroadcastFailure,
 }) {
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
@@ -323,6 +325,7 @@ export async function submitAction({
                 waitForTxid,
                 waitOpts,
                 onProgress: composedOnProgress,
+                beforeBroadcast,
             });
         } catch (err) {
             // Record the outcome on the PendingTx without letting the vault
