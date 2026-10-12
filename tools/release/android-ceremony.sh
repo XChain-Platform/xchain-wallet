@@ -25,6 +25,10 @@
 #     XCHAIN_K9_ALIAS      key alias within it               (required)
 #     XCHAIN_K10_KEYSTORE  path to the direct-APK keystore   (required)
 #     XCHAIN_K10_ALIAS     key alias within it               (required)
+#     XCHAIN_K9_PASSFILE   optional: path to a file holding the K9 keystore
+#                          password. Must be mode 0600 or tighter (no group
+#                          or other bits), or the ceremony refuses to run.
+#     XCHAIN_K10_PASSFILE  optional: the same, for the K10 keystore.
 #     BUNDLETOOL           path to bundletool jar (default: ./bundletool.jar)
 #     XCHAIN_BUILD_ANDROID_FULL=1
 #                          also build the SECOND direct APK at the `default`
@@ -34,10 +38,15 @@
 #
 # NO PASSWORD IS EVER PASSED ON A COMMAND LINE OR READ FROM THE
 # ENVIRONMENT. jarsigner and apksigner both prompt when the password
-# option is omitted, and that is exactly what happens here: a keystore
-# password on an argv line is visible to every process on the machine
-# and lands in the shell history of the person least able to rotate it
-# (K10 cannot be rotated at all - see below).
+# option is omitted, and that is what happens here unless the matching
+# XCHAIN_K*_PASSFILE names an owner-only file: then the tool is given the
+# file's PATH and reads the password itself. A keystore password on an
+# argv line is visible to every process on the machine and lands in the
+# shell history of the person least able to rotate it (K10 cannot be
+# rotated at all - see below).
+#
+# --rehearsal builds the working tree as it stands, with the real keys.
+# Its output is marked in records/ and sign.sh refuses to sign it.
 #
 # WHY THIS RUNS HERE AND NOT IN CI. Without reproducible builds (D5),
 # an artifact built on a runner cannot be verified by the person whose
@@ -144,7 +153,7 @@ fi
 
 for var in XCHAIN_K9_KEYSTORE XCHAIN_K9_ALIAS XCHAIN_K10_KEYSTORE XCHAIN_K10_ALIAS; do
     eval "value=\${$var:-}"
-    [ -n "$value" ] || die "$var must be set (paths and aliases only; passwords are prompted)"
+    [ -n "$value" ] || die "$var must be set (paths and aliases only; passwords are prompted unless XCHAIN_K9_PASSFILE / XCHAIN_K10_PASSFILE name 0600 files)"
 done
 [ -f "$XCHAIN_K9_KEYSTORE" ] || die "K9 keystore not found at $XCHAIN_K9_KEYSTORE"
 [ -f "$XCHAIN_K10_KEYSTORE" ] || die "K10 keystore not found at $XCHAIN_K10_KEYSTORE"
@@ -491,6 +500,11 @@ fi
 # Every step routes its failure through full_leg_failed, because a bare
 # `set -e` exit here would say nothing about the pair already staged.
 full_leg_failed() {
+    if [ "$REHEARSAL" -eq 1 ]; then
+        die "the full-profile leg failed at: $1.
+  This is a REHEARSAL: the store pair staged in $OUTPUT_DIR must never be
+  signed, uploaded or published (sign.sh refuses it). Delete it when done."
+    fi
     die "the full-profile leg failed at: $1.
   The store AAB and APK are already signed and STAGED in $OUTPUT_DIR, and
   records/PROVENANCE.txt there says profiles: store. No full APK was produced.
@@ -599,14 +613,36 @@ echo "    one assetlinks.json needs (packages/mobile/assetlinks.template.json)."
 echo "    SECURITY.md holds the canonical copy; the download page is convenience."
 apksigner verify --print-certs "$OUTPUT_DIR/$APK_NAME" | grep -i 'SHA-256' || true
 echo
-echo "Next: sign both artifacts into a GPG-signed manifest (K1). This lane is"
-echo "signed on its own, so pass --lane android - without it the artifact-set"
-echo "gate demands the web, extension and desktop artifacts this ceremony does"
-echo "not build, and refuses:"
-echo
-echo "    XCHAIN_RELEASE_GPG_KEY=<K1 fingerprint from SECURITY.md> \\"
-echo "      bash tools/release/sign.sh --tag $TAG --lane android \\"
-echo "        --input $OUTPUT_DIR"
+# A rehearsal gets no signing instruction: its bytes came from the working
+# tree, and sign.sh refuses the records/ this run wrote beside them.
+if [ "$REHEARSAL" -eq 1 ]; then
+    echo "REHEARSAL: these artifacts must never be signed into a manifest,"
+    echo "uploaded to Play or published, and sign.sh refuses this directory."
+    echo "Delete $OUTPUT_DIR when done."
+    exit 0
+fi
+# The full APK belongs to its own lane (android-full), so a set holding it
+# needs both lanes named: --lane android alone refuses it as undeclared.
+if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]; then
+    echo "Next: sign all three artifacts into a GPG-signed manifest (K1). These"
+    echo "lanes are signed on their own, and the full APK is its own lane, so pass"
+    echo "--lane android,android-full - with --lane android alone the artifact-set"
+    echo "gate refuses the -full.apk as undeclared, and with no --lane it demands"
+    echo "the web, extension and desktop artifacts this ceremony does not build:"
+    echo
+    echo "    XCHAIN_RELEASE_GPG_KEY=<K1 fingerprint from SECURITY.md> \\"
+    echo "      bash tools/release/sign.sh --tag $TAG --lane android,android-full \\"
+    echo "        --input $OUTPUT_DIR"
+else
+    echo "Next: sign both artifacts into a GPG-signed manifest (K1). This lane is"
+    echo "signed on its own, so pass --lane android - without it the artifact-set"
+    echo "gate demands the web, extension and desktop artifacts this ceremony does"
+    echo "not build, and refuses:"
+    echo
+    echo "    XCHAIN_RELEASE_GPG_KEY=<K1 fingerprint from SECURITY.md> \\"
+    echo "      bash tools/release/sign.sh --tag $TAG --lane android \\"
+    echo "        --input $OUTPUT_DIR"
+fi
 echo
 echo "Publish the APK only after the Play staged"
 echo "rollout reaches 100%, or on an explicit operator promote when Play stalls -"

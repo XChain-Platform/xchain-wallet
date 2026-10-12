@@ -329,6 +329,16 @@ if [[ -n "$DIRT" ]]; then
     exit 1
 fi
 
+# --- Ceremony-record gate -----------------------------------------
+#
+# The gate above proves the SIGNING clone is clean and at the tag; it says
+# nothing about the tree that BUILT the bytes. android-ceremony.sh records
+# that in records/ beside them, and a --rehearsal run (dirty tree, real keys,
+# release filenames) is told apart from a release only there. Every gate
+# below reads top-level files, so this one reads the record before anything
+# is hashed. No flag skips it.
+xr_check_ceremony_records "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$REPO_ROOT" || exit 1
+
 # --- Signing-control source ---------------------------------------------
 #
 # Select this ONCE for both controls named by §7.5. Production reads the
@@ -847,14 +857,24 @@ fi
 #
 # NO --require-probed HERE, deliberately. This runs on the release Mac
 # against a set that also holds Linux artifacts no Mac can execute, so a
-# minimum-launch count would refuse every release. What prevents a silent
-# pass instead is the probe's own banner: a run that launched nothing says
-# so in block capitals rather than printing an "ok" line. The CI lanes,
-# where the host and the lane match by construction, DO pass a minimum.
+# minimum-launch count would refuse every release. The CI lanes, where the
+# host and the lane match by construction, DO pass a minimum.
 #
-# It opens a real window on the operator's desktop for a few seconds, and
-# over SSH (no Aqua session) it reports NOT PROBED by name rather than
-# failing the ceremony.
+# Two things stand in for that minimum here. Only an artifact this host
+# cannot run at all (another OS's build, or a Linux build of the other arch
+# where no translator exists) is reported NOT PROBED by name, and a run
+# that launched nothing says so in a block-capitals banner and exits 0:
+# that is the honest "this Mac cannot run a Linux artifact"
+# case. A host MISSING A FACILITY it needed is refused with exit 1 instead,
+# before the manifest is written, which stops the ceremony right here on
+# purpose, so a macOS release is never signed with zero launch evidence.
+# On the release Mac that means running over SSH (no logged-in Aqua
+# session) or an x64 mac zip on Apple silicon with no Rosetta 2: both
+# refuse, neither is reported NOT PROBED.
+#
+# It opens a real window on the operator's desktop for a few seconds, so run
+# the ceremony from a logged-in desktop session: with a mac artifact in the
+# set, over SSH the probe refuses rather than carrying on.
 LAUNCH_PROBE="$(gate_script tools/release/launch-probe.mjs)" || exit 1
 node "$LAUNCH_PROBE" "$INPUT_DIR" "$RELEASE_SET"
 

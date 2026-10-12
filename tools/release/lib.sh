@@ -235,8 +235,12 @@ XR_STAGING_OSES=(linux mac windows)
 # `store-only` is every lane that ships through a store: Play, the App
 # Stores, Snap, Chrome. The store IS their update channel, so a release
 # covering only such lanes carries no electron-updater pointer and has no
-# desktop update path to rehearse - which is why publish.sh waives both
-# checks for them.
+# desktop update path to rehearse. publish.sh waives the pointer check for
+# them, and waives the §7.5 rehearsal only when the release also carries no
+# artifact a DIRECT lane distributes: the android lane is store-only here
+# and still ships the sideloaded APK through android/latest.json, so an
+# android partial must pass `rehearse.mjs run --lane android-direct`
+# (rehearsal-matrix.mjs --direct-lanes-for answers which direct lanes apply).
 #
 # `updater` is the three desktop lanes, whose users update through OUR
 # feed: a channel pointer we publish, walked by electron-updater, proven
@@ -648,6 +652,80 @@ xr_header_field() {
 # Args: tag
 xr_release_tag_of() {
     printf '%s\n' "$1" | sed -E 's/-resign[0-9]+$//'
+}
+
+# One field of an android-ceremony.sh provenance record, whitespace removed.
+# The ceremony pads values unevenly (`rehearsal:  yes`, `dirty_paths: 0`), so
+# the key is matched as a line prefix and the padding is dropped.
+# Args: record-file key
+xr_ceremony_record_field() {
+    awk -v k="$2" 'index($0, k ":") == 1 {
+        sub(/^[^:]*:[[:space:]]*/, ""); gsub(/[[:space:]]/, ""); print; exit
+    }' "$1"
+}
+
+# Refuse an input directory whose ceremony records say its bytes are not a
+# release. android-ceremony.sh --rehearsal builds the working tree (dirty,
+# not at the tag) yet signs with the real K9/K10 keys and stages under the
+# release filenames, so records/ is the only thing that tells the two apart.
+# Every other gate reads top-level files only and never sees it.
+#
+# A directory WITHOUT records/ passes: a full release set legitimately holds
+# Android files copied out of the ceremony directory without their record.
+# A re-sign tag is accepted when the record names its release tag's commit.
+# Args: input-dir tag tag-commit repo
+xr_check_ceremony_records() {
+    local input="$1" tag="$2" tag_commit="$3" repo="$4"
+    local marker="$input/records/DO-NOT-PUBLISH.txt"
+    local prov="$input/records/PROVENANCE.txt"
+    local why="" rehearsal dirty rec_commit rec_head release_tag release_commit
+
+    if [[ -f "$marker" ]]; then
+        echo "sign.sh: ceremony record refuses this signing: $marker exists:" >&2
+        sed 's/^/    /' "$marker" >&2
+        echo "  These are rehearsal artifacts. Re-run android-ceremony.sh without" >&2
+        echo "  --rehearsal from a clean checkout of the tag, into a fresh --output." >&2
+        return 1
+    fi
+    [[ -f "$prov" ]] || return 0
+
+    rehearsal="$(xr_ceremony_record_field "$prov" rehearsal)"
+    dirty="$(xr_ceremony_record_field "$prov" dirty_paths)"
+    rec_commit="$(xr_ceremony_record_field "$prov" tag_commit)"
+    rec_head="$(xr_ceremony_record_field "$prov" head)"
+
+    if [[ "$rehearsal" != "no" ]]; then
+        why="rehearsal is '${rehearsal:-missing}', expected 'no'"
+    elif [[ "$dirty" != "0" ]]; then
+        why="dirty_paths is '${dirty:-missing}', expected '0'"
+    elif [[ -z "$rec_commit" || "$rec_commit" == "none" ]]; then
+        why="tag_commit is '${rec_commit:-missing}': the build named no tagged commit"
+    elif [[ "$rec_head" != "$rec_commit" ]]; then
+        why="head '${rec_head:-missing}' is not tag_commit '$rec_commit'"
+    elif [[ "$rec_commit" != "$tag_commit" ]]; then
+        release_tag="$(xr_release_tag_of "$tag")"
+        release_commit=""
+        if [[ "$release_tag" != "$tag" ]]; then
+            release_commit="$(git -C "$repo" rev-parse --verify --quiet \
+                "refs/tags/$release_tag^{commit}" 2>/dev/null || true)"
+        fi
+        if [[ -z "$release_commit" || "$rec_commit" != "$release_commit" ]]; then
+            why="tag_commit '$rec_commit' is not $tag ($tag_commit)"
+            if [[ "$release_tag" != "$tag" ]]; then
+                why+=" nor its release tag $release_tag (${release_commit:-not found in $repo})"
+            fi
+        fi
+    fi
+
+    if [[ -n "$why" ]]; then
+        echo "sign.sh: ceremony record refuses this signing: $prov" >&2
+        echo "  $why" >&2
+        echo "  The manifest would claim these bytes came from $tag when the" >&2
+        echo "  ceremony that built them says otherwise. Re-run android-ceremony.sh" >&2
+        echo "  without --rehearsal from a clean checkout of the tag." >&2
+        return 1
+    fi
+    return 0
 }
 
 # True if the manifest carries the signed header at all.

@@ -29,7 +29,10 @@
 # Modes:
 #   default      - verify hashes, header anchor AND signature
 #   --no-sig     - skip the GPG signature check (NOT a verification:
-#                  it trusts whoever served you the manifest)
+#                  it trusts whoever served you the manifest). It skips
+#                  the SIGNATURE and nothing else: a manifest with no
+#                  release header is still refused whenever a tag was
+#                  asked for, because it cannot answer for one.
 #   --recompute  - write a fresh unsigned RELEASE_HASHES.txt without
 #                  verifying an existing one (local convenience)
 #
@@ -78,6 +81,14 @@
 # otherwise pass --tag. In signature mode the anchor is mandatory,
 # because "the signature is good" plus "I don't know which release this
 # is" is exactly the gap a replayed manifest walks through.
+#
+# Under --no-sig the anchor is mandatory too WHENEVER ONE WAS ASKED FOR,
+# by --tag (including its XCHAIN_RELEASE_TAG environment fallback below)
+# or by a versioned filename. A headerless manifest names no release, so
+# it can only agree with itself, and agreeing with itself is what a manifest
+# from another release does perfectly. The genuinely unanchored case - no
+# --tag, no XCHAIN_RELEASE_TAG, no versioned filename, a pre-header or
+# --recompute manifest - still passes with the warning it always had.
 
 set -euo pipefail
 
@@ -253,6 +264,16 @@ fi
 )
 
 # --- Header / anchor check ----------------------------------------------
+#
+# The filename anchor is parsed BEFORE the header branch, because the
+# headerless branch needs it too: whether an anchor was ASKED FOR is a
+# fact about the call, not about the document that answered it.
+BASE="$(basename "$MANIFEST")"
+FILE_TAG=""
+if [[ "$BASE" =~ ^(v[0-9][^/]*)\.txt$ ]]; then
+    FILE_TAG="${BASH_REMATCH[1]}"
+fi
+
 if xr_has_header "$SNAP_MANIFEST"; then
     M_TAG="$(xr_header_field "$SNAP_MANIFEST" 'tag')"
     M_COMMIT="$(xr_header_field "$SNAP_MANIFEST" 'tag-commit')"
@@ -281,11 +302,6 @@ if xr_has_header "$SNAP_MANIFEST"; then
     # filename". A stale but genuinely signed pair - last release's tarball
     # beside last release's manifest and .asc - passed hash, signature and
     # anchor, and was unpacked into releases/<new tag> and flipped live.
-    BASE="$(basename "$MANIFEST")"
-    FILE_TAG=""
-    if [[ "$BASE" =~ ^(v[0-9][^/]*)\.txt$ ]]; then
-        FILE_TAG="${BASH_REMATCH[1]}"
-    fi
     EXPECT_TAG=""
     if [[ -n "$FILE_TAG" && -n "$TAG" ]]; then
         # Same release named two ways: anchor to the MORE SPECIFIC one, so
@@ -373,8 +389,25 @@ if xr_has_header "$SNAP_MANIFEST"; then
         echo "  This release was signed without the gate that keeps the" >&2
         echo "  fabricated-address dev SDK out of a shipped bundle." >&2
     fi
-elif [[ "$NO_SIG" -eq 1 ]]; then
+elif [[ "$NO_SIG" -eq 1 && -z "$TAG" && -z "$FILE_TAG" ]]; then
     echo "verify.sh: WARNING - manifest has no header (unsigned, or from before this header existed)." >&2
+    echo "  Nothing anchors it to a release, and nothing asked it to." >&2
+elif [[ "$NO_SIG" -eq 1 ]]; then
+    # AN ANCHOR THAT WAS ASKED FOR IS NOT ANSWERED BY A DOCUMENT THAT
+    # CANNOT CARRY ONE. Until this branch existed, --no-sig plus a
+    # headerless manifest printed a warning and exited 0 with $TAG never
+    # read, so a checksum-only manifest covering another release's tarball
+    # satisfied a request for THIS one. deploy-web.sh makes --tag mandatory
+    # and forwards it here, and its own header promises that under --no-sig
+    # "the hash and the anchor are still checked". A hash check that agrees
+    # with itself is not an answer to "is this the manifest for $TAG",
+    # whether $TAG came from --tag or its XCHAIN_RELEASE_TAG fallback.
+    echo "verify.sh: $MANIFEST has no release header, so it cannot be anchored to" >&2
+    echo "  '${TAG:-$FILE_TAG}'. --no-sig skips the SIGNATURE; it does not make a" >&2
+    echo "  manifest that names no release able to answer for one." >&2
+    echo "  Fetch the published RELEASE_HASHES/${TAG:-$FILE_TAG}.txt, or drop --tag" >&2
+    echo "  if a bare hash check against this manifest is all you wanted." >&2
+    exit 1
 else
     # In signature mode a missing header is not a legacy quirk: the
     # signature covers the manifest bytes, so a real signed release
