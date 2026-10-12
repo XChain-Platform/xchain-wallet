@@ -198,7 +198,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@dankest-llc/*'
 
-# A headless runner (test01) has no TTY, and pnpm asks for confirmation
+# A headless CI runner has no TTY, and pnpm asks for confirmation
 # before purging node_modules when the modules directory no longer matches
 # the install. With nobody to answer, `pnpm install` aborts. Turning the
 # prompt off lets the purge proceed unattended.
