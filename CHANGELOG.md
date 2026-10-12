@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.341.3] - 2026-10-12
+
+### Added
+- The full-feature Android APK is published as a direct download beside the store-profile APK.
+- Token details show a supply-over-time chart and a Sell on DEX action.
+- The desktop wallet can replace a transaction that signals replaceability, using the same inputs.
+- A queued result that was not saved to the device says so in its result panel.
+- Safety settings show an Undo send option, saved now and applied once sends can be held.
+
+### Changed
+- DEX ships in every build profile.
+- Electron moves to the newest 44.x patch and undici is floored at its patched release.
+- The background unlock throttle follows the documented delay ladder.
+- Any input that signals BIP-125 replaceability marks the transaction replaceable.
+
+### Fixed
+- The extension worker no longer messages itself on a wallet switch.
+- Contract consent treats a malformed permissions manifest as unavailable.
+- Lists show their descriptions after member counts resolve.
+- Atomic donation outputs keep the same order on every submit route.
+- `sign.sh` refuses Android artifacts built by a ceremony rehearsal.
+- `verify.sh --no-sig` refuses a headerless manifest when a release tag was asked for.
+- The shipped-lane gate no longer expands lane globs against the working directory.
+
 ## [0.341.2] - 2026-10-06
 
 ### Fixed
