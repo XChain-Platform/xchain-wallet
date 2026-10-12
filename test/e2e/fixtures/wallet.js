@@ -11,11 +11,10 @@
 // Shared E2E fixture: the one place that knows how to get from a cold
 // browser to an unlocked Home.
 //
-// Every spec used to inline its own copy of that walk. When onboarding
-// grew three new screens (license gate, recovery-phrase verification,
-// ADS notice), all 15 specs broke at once and each would have needed
-// the same edit. Onboarding is the wallet's most-changed surface, so
-// the walk belongs behind one seam.
+// Onboarding is the wallet's most-changed surface, so the walk lives
+// behind this one seam rather than inside each spec: a new onboarding
+// screen (license gate, recovery-phrase verification, ADS notice) is
+// one edit here, not one per spec.
 //
 // LICENSE GATE: bypassed by seeding the same localStorage keys the app
 // reads (Onboarding.jsx), because the gate is NOT what most specs are
