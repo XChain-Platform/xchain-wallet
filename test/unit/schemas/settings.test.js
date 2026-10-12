@@ -28,6 +28,9 @@ import {
     FORM_DRAFT_TTL_OFF,
     FORM_DRAFT_TTL_24H,
     CURRENT_VERSION,
+    UNDO_SEND_SECONDS_DEFAULT,
+    UNDO_SEND_SECONDS_MAX,
+    resolveUndoSendWindowSeconds,
 } from '../../../packages/core/src/schemas/settings.js';
 
 describe('constants', () => {
@@ -78,6 +81,8 @@ describe('createDefaultSettings', () => {
         expect(s.autolockMinutes).toBe(15);
         expect(s.fiatCurrency).toBe('USD');
         expect(s.language).toBe('en');
+        expect(s.grace.undoSendEnabled).toBe(false);
+        expect(s.grace.undoSendSeconds).toBe(UNDO_SEND_SECONDS_DEFAULT);
         expect(s.developerMode).toBe(false);
         expect(s.learnMode).toBe(false);
         expect(s.ads.enabled).toBe(ADS_DEFAULT_ENABLED);
@@ -103,6 +108,31 @@ describe('createDefaultSettings', () => {
         const s = createDefaultSettings();
         expect(s.pinnedTokens).toEqual([]);
         expect(s.hiddenTokens).toEqual([]);
+    });
+});
+
+describe('undo-send settings', () => {
+    it('is opt-in and resolves to no hold by default', () => {
+        expect(resolveUndoSendWindowSeconds(createDefaultSettings())).toBe(0);
+    });
+
+    it('resolves and caps the enabled hold window', () => {
+        const settings = createDefaultSettings();
+        settings.grace.undoSendEnabled = true;
+        settings.grace.undoSendSeconds = 12;
+        expect(resolveUndoSendWindowSeconds(settings)).toBe(12);
+        settings.grace.undoSendSeconds = 600;
+        expect(resolveUndoSendWindowSeconds(settings)).toBe(UNDO_SEND_SECONDS_MAX);
+    });
+
+    it('accepts an omitted legacy opt-in flag and rejects malformed flags', () => {
+        const settings = createDefaultSettings();
+        delete settings.grace.undoSendEnabled;
+        expect(validateSettings(settings).ok).toBe(true);
+        expect(validateSettings({
+            ...settings,
+            grace: { ...settings.grace, undoSendEnabled: 'yes' },
+        }).ok).toBe(false);
     });
 });
 

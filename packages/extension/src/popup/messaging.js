@@ -356,6 +356,8 @@ export function generateDispenserAddress(opts) {
  * @param {number} [opts.fee]
  * @param {number} [opts.feePerKb]
  * @param {boolean} [opts.rbf]
+ * @param {string} [opts.holdId]
+ * @param {number} [opts.undoSeconds]
  * @param {string} [opts.bip39Passphrase]
  * @returns {Promise<any>}
  */

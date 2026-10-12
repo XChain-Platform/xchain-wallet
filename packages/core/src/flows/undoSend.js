@@ -8,6 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { resolveUndoSendWindowSeconds } from '../schemas/settings.js';
+import { randomUUID } from '../util/uuid.js';
+
+export function createUndoSendRequest(settings, createId = randomUUID) {
+    const seconds = resolveUndoSendWindowSeconds(settings);
+    if (seconds === 0) return null;
+    return { holdId: `undo-send:${createId()}`, undoSeconds: seconds };
+}
+
 function assertFinite(value, name) {
     if (!Number.isFinite(value)) {
         throw new TypeError(`${name} must be finite`);
