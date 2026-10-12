@@ -37,7 +37,7 @@
 //       tests/onboarding/label-restore-and-failed-send.regtest.spec.js
 
 import {
-    acknowledgeDonationConsent,
+    acknowledgeDonationNotice,
     createWallet,
     dismissIntroCarousel,
     expect,
@@ -112,7 +112,7 @@ async function importFromPhrase(page, words, name) {
     await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
     await page.getByRole('button', { name: 'Import', exact: true }).click();
-    await acknowledgeDonationConsent(page, 'decline');
+    await acknowledgeDonationNotice(page, 'off');
     await expect(unlockedShell(page), 'the import never reached an unlocked wallet')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }

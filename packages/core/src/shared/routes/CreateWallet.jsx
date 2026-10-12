@@ -53,7 +53,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
-        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-consent'} */ ('password'),
+        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-notice'} */ ('password'),
     );
     // §19.2 / G033: verification quiz state. `quizPositions` is a sorted
     // list of 1-based word indices the user must type back; `quizAnswers`
@@ -62,8 +62,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
     const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
-    const [adsBusy, setAdsBusy] = useState(false);
-    const [adsError, setAdsError] = useState(/** @type {string | null} */ (null));
     const [name, setName] = useState('Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -177,29 +175,16 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             if (createdWalletId) {
                 try { flowsLib.markBackupVerified(createdWalletId); } catch { /* best-effort */ }
             }
-            // §36.1 ADS consent: one-time screen during wallet
-            // creation. ADS_DEFAULT_ENABLED is true so "Enable" is a
-            // no-op write; "Decline" persists ads.enabled = false. The
-            // user can flip in Settings -> ADS afterwards either way.
-            setStage('ads-consent');
+            // §36.1 ADS notice: one-time screen during wallet creation.
+            // It informs; it does not ask. ADS_DEFAULT_ENABLED already
+            // holds, so there is nothing to write here. Amounts,
+            // frequency and the off switch live in Settings -> ADS,
+            // the same shape FreeWallet desktop uses (operator ruling
+            // 2026-10-12).
+            setStage('ads-notice');
         } catch (err) {
             setPersistError(err?.message || 'Failed to create wallet.');
             setStage('mnemonic');
-        }
-    }
-
-    async function handleAdsChoice(enable) {
-        setAdsBusy(true);
-        setAdsError(null);
-        try {
-            if (typeof messaging?.updateSettings === 'function') {
-                await messaging.updateSettings({ ads: { enabled: Boolean(enable) } });
-            }
-            onCreated();
-        } catch (err) {
-            setAdsError(err?.message || 'Could not save your preference. Try again.');
-        } finally {
-            setAdsBusy(false);
         }
     }
 
@@ -225,65 +210,55 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         </div>
     );
 
-    if (stage === 'ads-consent') {
-        const consentBody = (
+    if (stage === 'ads-notice') {
+        const noticeBody = (
             <>
                 <header className={headClass}>
-                    <h1 className={titleClass}>
-                        {isFull ? 'Support XChain development' : 'Support XChain'}
-                    </h1>
+                    <h1 className={titleClass}>Automatic Donation System</h1>
                     <p className={subtitleClass}>
-                        The wallet can add a small donation to each transaction you send,
-                        helping fund XChain Platform development. This is entirely optional;
-                        you can change it any time in Settings &rarr; Automatic Donation System.
+                        XChain Wallet includes an Automatic Donation System (ADS) that
+                        supports continued development of the XChain Platform.
                     </p>
                 </header>
                 <ul style={{
                     margin: 0,
-                    padding: 'var(--xc-space-2) var(--xc-space-3)',
+                    padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-2) var(--xc-space-5)',
                     background: 'var(--xc-surface-raised)',
                     border: '1px solid var(--xc-border)',
                     borderRadius: 'var(--xc-radius-md)',
-                    listStyle: 'none',
                     fontSize: 'var(--xc-text-sm)',
                     color: 'var(--xc-text-muted)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--xc-space-1)',
                 }}>
-                    <li>Bitcoin: 1,000 sats per transaction (sent when accumulated &gt; 25,000 sats)</li>
-                    <li>Litecoin: 0.001 LTC per transaction (sent when accumulated &gt; 0.025 LTC)</li>
-                    <li>Dogecoin: 0.05 DOGE per transaction (sent when accumulated &gt; 1.25 DOGE)</li>
-                    <li>Amounts configurable per chain in Settings</li>
-                    <li>No donation line on sign screens; runs invisibly after setup</li>
+                    <li>
+                        ADS is on by default. It sets aside a small amount when you send a
+                        transaction and sends it as one donation once it adds up.
+                    </li>
+                    <li>You do not need to donate to use this wallet.</li>
+                    <li>
+                        How much, how often, and whether to donate at all are yours to set
+                        under Settings &rarr; Automatic Donation System, where ADS can also
+                        be turned off entirely.
+                    </li>
                 </ul>
-                {adsError ? (
-                    <StatusMessage variant="error" className={styles.error}>{adsError}</StatusMessage>
-                ) : null}
                 <div className={actionsClass}>
                     <Button
                         variant="primary"
-                        onClick={() => handleAdsChoice(true)}
-                        disabled={adsBusy}
-                        loading={adsBusy}
+                        onClick={onCreated}
                         block={!isFull}
                         size={isFull ? undefined : 'sm'}
                         icon={<Icon.CheckIcon />}
                     >
-                        Enable and continue
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        onClick={() => handleAdsChoice(false)}
-                        disabled={adsBusy}
-                        block={!isFull}
-                        size={isFull ? undefined : 'sm'}
-                    >
-                        Decline (I'll consider it later)
+                        Continue
                     </Button>
                 </div>
             </>
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{consentBody}</div> : consentBody}
+                {isFull ? <div className={styles.card}>{noticeBody}</div> : noticeBody}
             </Screen>
         );
     }

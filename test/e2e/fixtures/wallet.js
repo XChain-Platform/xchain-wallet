@@ -13,7 +13,7 @@
 //
 // Every spec used to inline its own copy of that walk. When onboarding
 // grew three new screens (license gate, recovery-phrase verification,
-// ADS consent), all 15 specs broke at once and each would have needed
+// ADS notice), all 15 specs broke at once and each would have needed
 // the same edit. Onboarding is the wallet's most-changed surface, so
 // the walk belongs behind one seam.
 //
@@ -260,10 +260,10 @@ export async function completeRecoveryPhraseChallenge(page, words) {
 /**
  * Cold browser -> unlocked Home, via the real create-wallet flow.
  *
- * ADS consent is DECLINED by default: an enabled donation adds an extra
- * output to outgoing transactions, which would perturb the amounts and
- * fees the send specs assert on. Pass `ads: 'enable'` to cover the
- * opt-in path.
+ * ADS is turned OFF by default, in Settings, right after the onboarding
+ * notice: an enabled donation adds an extra output to outgoing
+ * transactions, which would perturb the amounts and fees the send specs
+ * assert on. Pass `ads: 'on'` to leave the wallet's default in place.
  *
  * Pass `navigate: false` when the page is ALREADY on the wallet, which is
  * the case for the MV3 extension venue: its popup is opened at
@@ -288,7 +288,7 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  */
 export async function createWallet(page, options = {}) {
     const {
-        password = DEFAULT_PASSWORD, name, ads = 'decline', navigate = true,
+        password = DEFAULT_PASSWORD, name, ads = 'off', navigate = true,
         bip39Passphrase = null,
     } = options;
 
@@ -337,7 +337,7 @@ export async function createWallet(page, options = {}) {
     await completeRecoveryPhraseChallenge(page, words);
     await page.getByRole('button', { name: 'Create wallet' }).click();
 
-    await acknowledgeDonationConsent(page, ads);
+    await acknowledgeDonationNotice(page, ads);
 
     // Argon2id runs on the CI runner's CPU; this is the slow step.
     await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
@@ -377,9 +377,14 @@ export async function dismissIntroCarousel(page) {
 }
 
 /**
- * Answers the ADS donation-consent screen shown at the end of onboarding.
+ * Acknowledges the Automatic Donation System notice shown at the end of
+ * onboarding, then (by default) turns donations off in Settings.
  *
- * Tolerant by design, like dismissIntroCarousel: the consent step lives in
+ * The notice informs; it does not ask (spec §36.1). It has one Continue
+ * button and no decline, so `ads: 'off'` takes the walk a user would: Settings
+ * -> Automatic Donation System -> the switch. `ads: 'on'` only continues.
+ *
+ * Tolerant by design, like dismissIntroCarousel: the notice lives in
  * the shared CreateWallet route the web shell uses, and the extension popup
  * has its OWN onboarding implementation that does not include it. Waiting
  * unconditionally would hang every extension spec on a screen that is never
@@ -390,28 +395,48 @@ export async function dismissIntroCarousel(page) {
  * budget here is a bet on the KDF finishing inside it, not on a render. The
  * bare `10_000` this replaced lost that bet on roughly a quarter of CI runs:
  * the helper returned false, `createWallet` then waited its full KDF budget
- * for a shell still sitting behind an unanswered consent screen, and the run
+ * for a shell still sitting behind an unanswered notice screen, and the run
  * reported a 180s timeout on `unlockedShell` - a signature that reads as a
  * slow KDF and is nothing of the kind. Nine of nine failing and flaky tests
  * in run 30930194072 died on this screen. Same defect as the bare 90_000
  * that BASE_KDF_STEP_TIMEOUT_MS was extracted from, one function away.
  *
- * So race the two outcomes instead: either the consent screen arrives, or
+ * So race the two outcomes instead: either the notice arrives, or
  * this shell has none and the wallet itself does. Whichever lands first ends
  * the wait, which keeps the extension venue fast without pinning any number
  * to the derivation.
  */
-export async function acknowledgeDonationConsent(page, choice = 'decline') {
-    const button =
-        choice === 'enable'
-            ? page.getByRole('button', { name: /Enable and continue/i })
-            : page.getByRole('button', { name: /Decline/i });
-    await button.or(unlockedShell(page)).first()
+export async function acknowledgeDonationNotice(page, ads = 'off') {
+    const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+    await notice.or(unlockedShell(page)).first()
         .waitFor({ state: 'visible', timeout: KDF_STEP_MS });
-    // The shell won the race, so there is no consent step here to answer.
-    if (!(await button.isVisible())) return false;
-    await button.click();
+    // The shell won the race, so there is no notice here to acknowledge.
+    if (!(await notice.isVisible())) return false;
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    if (ads === 'off') await turnOffDonations(page);
     return true;
+}
+
+/**
+ * Turns the Automatic Donation System off the only way the wallet offers:
+ * Settings -> Automatic Donation System. Ends back on Home.
+ */
+export async function turnOffDonations(page) {
+    await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
+    await openSettings(page);
+    await page.getByRole('button', { name: /^Automatic Donation System/ }).click();
+    const toggle = page.getByRole('switch', { name: 'Automatic Donation System', exact: true });
+    await expect(toggle).toBeVisible();
+    if (await toggle.isChecked()) {
+        // Click, not check(): the input is controlled by PERSISTED settings,
+        // so `checked` flips only once the vault write resolves.
+        await toggle.click();
+        await expect(toggle).not.toBeChecked();
+    }
+    await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    if (await nav(page).count() > 0) await gotoSection(page, 'Home');
+    else await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(unlockedShell(page)).toBeVisible();
 }
 
 /** The locked screen's submit button. Disabled until a password is typed. */

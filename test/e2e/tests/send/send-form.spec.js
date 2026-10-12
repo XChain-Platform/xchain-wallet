@@ -15,8 +15,9 @@
 // old `bc1qtestrecipient000...` placeholders these specs used are (very
 // correctly) rejected. Any fixture address here has to be a real one.
 //
-// ADS donation consent is declined by the fixture: an enabled donation
-// appends an extra output, which would move the amounts asserted here.
+// The fixture turns ADS off in Settings after the onboarding notice: an
+// enabled donation appends an extra output, which would move the amounts
+// asserted here.
 //
 // Broadcast is not reachable in this shell: the web dev server runs the
 // dev-mock SDK, whose signing path throws by design. See the final test.

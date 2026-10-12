@@ -78,7 +78,7 @@ import {
     createWallet,
     expect,
     test,
-    acknowledgeDonationConsent,
+    acknowledgeDonationNotice,
     dismissIntroCarousel,
     gotoSection,
     lockButton,
@@ -878,7 +878,7 @@ async function importMnemonic(page, { words, passphrase, name }) {
     }
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 
-    await acknowledgeDonationConsent(page, 'decline');
+    await acknowledgeDonationNotice(page, 'off');
     await expect(unlockedShell(page), 'the import never reached an unlocked wallet')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }
