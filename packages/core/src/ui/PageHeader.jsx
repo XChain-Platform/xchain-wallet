@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useBackHandler } from './backStack.js';
 import { BackIcon } from './icons/index.jsx';
 import styles from './PageHeader.module.css';
 
@@ -22,7 +23,9 @@ import styles from './PageHeader.module.css';
  *
  * @param {object} props
  * @param {(() => void) | undefined} [props.onBack]   when present, renders a
- *   back chevron in the leading slot. Omit to render an empty spacer.
+ *   back chevron in the leading slot AND makes the system Back gesture (the
+ *   Android Back key, the browser's Back button) run it. Omit to render an
+ *   empty spacer.
  * @param {string} [props.backLabel]                  aria-label for the back
  *   button. Defaults to "Back".
  * @param {boolean} [props.backDisabled]              disables the back button
@@ -43,6 +46,7 @@ export function PageHeader({
     titleIcon = null,
     trailing = null,
 }) {
+    useBackHandler(onBack, backDisabled);
     return (
         <div className={styles.header}>
             {onBack ? (
