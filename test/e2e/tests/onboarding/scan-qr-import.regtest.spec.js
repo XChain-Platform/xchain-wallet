@@ -51,7 +51,7 @@
 //       --config=playwright.regtest.config.js tests/onboarding/scan-qr-import.regtest.spec.js
 
 import {
-    expect, test, dismissIntroCarousel, unlockedShell,
+    acknowledgeImportNotice, expect, test, dismissIntroCarousel, unlockedShell,
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
@@ -158,6 +158,8 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                 await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
                 await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
                 await page.getByRole('button', { name: 'Import', exact: true }).click();
+                // The import ends on the donation notice, not the shell.
+                await acknowledgeImportNotice(page);
 
                 // Argon2id, then the vault write. The budget is the shared
                 // one for exactly that reason: a hand-picked number here is a

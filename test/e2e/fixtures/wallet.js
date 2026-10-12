@@ -417,6 +417,25 @@ export async function acknowledgeDonationNotice(page, ads = 'off') {
 }
 
 /**
+ * Answers the notice that now ends every IMPORT: a recovery phrase, the
+ * FreeWallet migration, and a backup or backup-pointer restore, in both
+ * 'fresh' and 'add' modes (ImportWallet.jsx hands over to onImported only
+ * from the notice's Continue button).
+ *
+ * Call it right after the Import or Restore click and before waiting for the
+ * unlocked shell: the shell is not coming until Continue is pressed, so a
+ * spec that waits for it first sits out its whole KDF budget on a screen that
+ * needed one click. Defaults to `ads: 'on'` (just Continue), unlike the
+ * create path, because an import spec that does not care about donations
+ * should not pay for the Settings walk that switching them off costs.
+ * Tolerant in the same way as acknowledgeDonationNotice, so the extension
+ * venue, which has no notice, is a no-op.
+ */
+export async function acknowledgeImportNotice(page, ads = 'on') {
+    return acknowledgeDonationNotice(page, ads);
+}
+
+/**
  * Turns the Automatic Donation System off the only way the wallet offers:
  * Settings -> Automatic Donation System. Ends back on Home.
  */

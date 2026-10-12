@@ -62,7 +62,8 @@
 
 import { readFile } from 'node:fs/promises';
 import {
-    createWallet, expect, test, dismissIntroCarousel, gotoSection, mainButton, unlockedShell,
+    acknowledgeImportNotice, createWallet, expect, test, dismissIntroCarousel, gotoSection, mainButton,
+    unlockedShell,
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
@@ -332,6 +333,9 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     mode: 'add',
                 });
                 await two.getByRole('button', { name: 'Restore', exact: true }).click();
+                // The restore ends on the donation notice; Continue is what
+                // hands the wallet over, so answer it before waiting on the shell.
+                await acknowledgeImportNotice(two);
                 // A restore is a derivation like any create or unlock (the
                 // backup's own password, then the device vault), so it takes
                 // the shared KDF budget rather than a number picked here. The
@@ -455,6 +459,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                         mode: 'fresh',
                     });
                     await two.getByRole('button', { name: 'Restore', exact: true }).click();
+                    await acknowledgeImportNotice(two);
 
                     await expect(unlockedShell(two),
                         'the fresh-install restore never reached an unlocked wallet - is the'
@@ -668,6 +673,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     mode: 'fresh',
                 });
                 await two.getByRole('button', { name: 'Restore', exact: true }).click();
+                await acknowledgeImportNotice(two);
                 await expect(unlockedShell(two),
                     'the second attempt with the right password did not restore, so the first attempt '
                     + 'left the install in a state it cannot recover from')

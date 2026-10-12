@@ -117,6 +117,10 @@ describe('ImportWallet backup-pointer restore', () => {
         // UI and produces a wallet that restores and then cannot sign.
         expect(arg.walletPassword).toBe('the-old-devices-password');
         expect(arg.devicePassword).toBe('this-devices-password');
+        // §36.1: the restore ends on the ADS notice; only its Continue
+        // hands control back to App.
+        expect(onImported).not.toHaveBeenCalled();
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(onImported).toHaveBeenCalled());
     });
 
@@ -171,6 +175,10 @@ describe('ImportWallet backup-pointer restore', () => {
         expect(arg.backupPassword).toBe('pw12345678');
         expect(arg.walletPassword).toBe('the-old-devices-password');
         expect(arg.pointer.location).toBe('https://backups.example/d.json');
+        // §36.1: the restore ends on the ADS notice; only its Continue
+        // hands control back to App.
+        expect(onImported).not.toHaveBeenCalled();
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(onImported).toHaveBeenCalled());
     });
 

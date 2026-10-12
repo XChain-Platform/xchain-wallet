@@ -8,15 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §36.1: the Automatic Donation System notice during wallet
-// creation.
+// Smoke for §36.1: the Automatic Donation System notice at the end of
+// onboarding.
 //
-// Source-level: CreateWallet.jsx has an `ads-notice` stage between
-// 'persisting' and `onCreated()`. It informs and does not ask (operator
-// ruling 2026-10-12, modelled on FreeWallet desktop): one Continue button,
-// no decline button, no per-chain amounts, and no settings write, because
-// ADS_DEFAULT_ENABLED already holds and every preference lives in
-// Settings -> Automatic Donation System.
+// Source-level. The notice is one shared component, AdsNotice.jsx, and
+// every route that finishes onboarding ends on it: CreateWallet.jsx has an
+// `ads-notice` stage between 'persisting' and `onCreated()`, and
+// ImportWallet.jsx shows it after a mnemonic import, the FreeWallet
+// migration variant (same route, `variant="freewallet"`), a backup restore
+// and a backup-pointer restore, in both 'fresh' and 'add' modes. The notice
+// informs and does not ask (operator ruling 2026-10-12, modelled on
+// FreeWallet desktop): one Continue button, no decline button, no
+// per-chain amounts, and no settings write, because ADS_DEFAULT_ENABLED
+// already holds and every preference lives in Settings -> Automatic
+// Donation System.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -25,44 +30,93 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
-const createPath = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'CreateWallet.jsx');
-const src = readFileSync(createPath, 'utf8');
+const shared = join(wsRoot, 'packages', 'core', 'src', 'shared');
+const read = (...p) => readFileSync(join(shared, ...p), 'utf8');
 
-// The stage exists and persist advances to it rather than calling
-// onCreated directly.
-assert.match(src, /'ads-notice'/, 'stage union has an ads-notice member');
-assert.match(src, /setStage\('ads-notice'\)/, 'persist transitions to the ads-notice stage');
+const notice = read('components', 'AdsNotice.jsx');
+const create = read('routes', 'CreateWallet.jsx');
+const imp = read('routes', 'ImportWallet.jsx');
 
-const start = src.indexOf("if (stage === 'ads-notice')");
-assert.ok(start > 0, 'located the ads-notice render branch');
-const stage = src.slice(start, src.indexOf('<Screen', start));
+// --- The component: one button, and it only continues ----------------
 
-// One button, and it only continues.
-const buttons = stage.match(/<Button\b/g) || [];
+const buttons = notice.match(/<Button\b/g) || [];
 assert.equal(buttons.length, 1, 'the notice renders exactly one button');
-assert.match(stage, /onClick=\{onCreated\}/, 'Continue goes straight to onCreated');
-assert.match(stage, />\s*Continue\s*</, 'the button reads Continue');
+assert.match(notice, /onClick=\{onContinue\}/, 'Continue calls onContinue');
+assert.match(notice, />\s*Continue\s*</, 'the button reads Continue');
 
 // No way to decline here, and no choice handler left behind.
-assert.doesNotMatch(src, /Decline/, 'no decline button anywhere in the create flow');
-assert.doesNotMatch(src, /Enable and continue/, 'no enable/decline pairing');
-assert.doesNotMatch(src, /handleAdsChoice/, 'no choice handler');
-assert.doesNotMatch(
-    src,
-    /updateSettings\(\{\s*ads:/,
-    'the notice writes no ads setting; the default already holds',
-);
+for (const [name, src] of [['notice', notice], ['create', create], ['import', imp]]) {
+    assert.doesNotMatch(src, /Decline/, `no decline button in the ${name} flow`);
+    assert.doesNotMatch(src, /Enable and continue/, `no enable/decline pairing in the ${name} flow`);
+    assert.doesNotMatch(src, /handleAdsChoice/, `no choice handler in the ${name} flow`);
+    assert.doesNotMatch(
+        src,
+        /updateSettings\(\{\s*ads:/,
+        `the ${name} flow writes no ads setting; the default already holds`,
+    );
+}
 
 // It is a notice: names the system, says it is on by default, says
 // donating is not required, and points at Settings for every preference.
-assert.match(stage, /Automatic Donation System/, 'names the system');
-assert.match(stage, /on by default/, 'says ADS is on by default');
-assert.match(stage, /do not need to donate/, 'says donating is not required');
-assert.match(stage, /Settings &rarr; Automatic Donation System/, 'points at the settings section');
-assert.match(stage, /turned off entirely/, 'says where it can be turned off');
+assert.match(notice, /Automatic Donation System/, 'names the system');
+assert.match(notice, /on by default/, 'says ADS is on by default');
+assert.match(notice, /do not need to donate/, 'says donating is not required');
+assert.match(notice, /Settings &rarr; Automatic Donation System/, 'points at the settings section');
+assert.match(notice, /turned off entirely/, 'says where it can be turned off');
 
 // No amounts on this screen: release defaults are shown and tuned in
 // Settings (§36.6), so a retune never leaves stale numbers here.
-assert.doesNotMatch(stage, /\bsats\b|\bLTC\b|\bDOGE\b|[0-9],[0-9]{3}/, 'no per-chain amounts on the notice');
+assert.doesNotMatch(notice, /\bsats\b|\bLTC\b|\bDOGE\b|[0-9],[0-9]{3}/, 'no per-chain amounts on the notice');
+
+// --- Create: persist advances to the notice, not to onCreated --------
+
+assert.match(create, /'ads-notice'/, 'create stage union has an ads-notice member');
+assert.match(create, /setStage\('ads-notice'\)/, 'create persist transitions to the ads-notice stage');
+const createStart = create.indexOf("if (stage === 'ads-notice')");
+assert.ok(createStart > 0, 'located the create ads-notice render branch');
+assert.match(
+    create.slice(createStart, create.indexOf('</Screen>', createStart)),
+    /<AdsNotice[\s\S]*onContinue=\{onCreated\}/,
+    'create Continue goes straight to onCreated',
+);
+
+// --- Import: every success path ends on the notice -------------------
+
+// Only the notice's Continue may call onImported. A direct call anywhere
+// else would skip the notice for that lane.
+const importedCalls = imp.match(/\bonImported\b/g) || [];
+assert.equal(
+    importedCalls.length,
+    3,
+    'onImported appears only in the prop docs, the signature and the notice Continue',
+);
+const importStart = imp.indexOf('if (adsNotice)');
+assert.ok(importStart > 0, 'located the import ads-notice render branch');
+assert.match(
+    imp.slice(importStart, imp.indexOf('</Screen>', importStart)),
+    /<AdsNotice[\s\S]*onContinue=\{onImported\}/,
+    'import Continue goes straight to onImported',
+);
+
+// Mnemonic import (which also carries the FreeWallet variant), fresh
+// backup restore, and the add-mode backup restore and pointer restore:
+// each success path flips the flag after its messaging call returns.
+const flips = imp.match(/setAdsNotice\(true\)/g) || [];
+assert.equal(flips.length, 3, 'three import success paths raise the notice');
+assert.match(
+    imp,
+    /messaging\.importBackupFresh\([\s\S]*?\);\s*setAdsNotice\(true\)/,
+    'a fresh-install restore ends on the notice',
+);
+assert.match(
+    imp,
+    /mode,\s*\}\);\s*\}\s*setAdsNotice\(true\)/,
+    'the add-mode restore and pointer restore end on the notice',
+);
+assert.match(
+    imp,
+    /messaging\.importMnemonic\([^)]*\);\s*\}[\s\S]*?setAdsNotice\(true\)/,
+    'a mnemonic import (FreeWallet variant included) ends on the notice',
+);
 
 console.log('ads-onboarding-notice smoke OK');

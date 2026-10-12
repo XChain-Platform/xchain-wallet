@@ -23,6 +23,7 @@
 // alongside real SDK wiring.
 
 import {
+    acknowledgeImportNotice,
     createWallet,
     expect,
     dismissIntroCarousel,
@@ -105,12 +106,21 @@ test.describe('onboarding', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
-        // Import takes a known-good phrase straight to an unlocked wallet.
+        // Import takes a known-good phrase to the Automatic Donation System
+        // notice, and Continue from there to an unlocked wallet.
         await page.getByLabel('Recovery phrase').fill(KNOWN_BIP39);
         await page.getByLabel('Wallet name').fill('Imported E2E');
         await page.getByLabel('Password', { exact: true }).fill('importpassword1');
         await page.getByLabel('Confirm password').fill('importpassword1');
         await page.getByRole('button', { name: 'Import' }).click();
+
+        // Asserted rather than tolerated: this is the golden path, and a
+        // helper that quietly no-opped would let the notice disappear.
+        await expect(
+            page.getByRole('heading', { name: 'Automatic Donation System', exact: true }),
+            'an import did not end on the Automatic Donation System notice',
+        ).toBeVisible({ timeout: 90_000 });
+        await acknowledgeImportNotice(page);
 
         await expect(lockButton(page)).toBeVisible({ timeout: 90_000 });
     });

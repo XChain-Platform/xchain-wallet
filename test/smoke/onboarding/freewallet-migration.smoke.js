@@ -70,6 +70,15 @@ assert.ok(
     'ImportWallet defaults wallet name to "FreeWallet" in FreeWallet mode',
 );
 
+// The variant is the same route as a plain import, so it ends where every
+// import ends: on the Automatic Donation System notice, whose Continue is the
+// only thing that calls onImported (ads-onboarding-notice.smoke.js pins the
+// rest).
+assert.ok(
+    /<AdsNotice[\s\S]*onContinue=\{onImported\}/.test(importWallet),
+    'ImportWallet (FreeWallet variant included) hands over to onImported only from the ADS notice',
+);
+
 // --- 3. MigrateToBip39 ----------------------------------------------
 
 const migratePath = join(sharedRoutes, 'MigrateToBip39.jsx');

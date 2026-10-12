@@ -13,6 +13,7 @@ import { useProtectedScreen } from '../utils/screenGuard.js';
 import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { AdsNotice } from '../components/AdsNotice.jsx';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 // The flows this screen calls throw function-prefixed preconditions
@@ -128,6 +129,9 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [bip39Passphrase, setBip39Passphrase] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    // §36.1: an import ends on the same ADS notice a created wallet does,
+    // and only its Continue hands control back to App.
+    const [adsNotice, setAdsNotice] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
@@ -243,7 +247,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     walletPassword: backupWalletPassword,
                     ...(usingPointer ? { pointer: backupPointer } : { fileContent: backupContent }),
                 });
-                onImported();
+                setAdsNotice(true);
                 return;
             }
             if (usingPointer) {
@@ -283,7 +287,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     mode,
                 });
             }
-            onImported();
+            setAdsNotice(true);
         } catch (err) {
             // A restore has three passwords in play, so "wrong
             // password" is never an answer. Whatever came back, the screen
@@ -408,7 +412,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             // published is the ordinary case and needs no message.
             const restoredMessage = labelSyncRestoredMessage(result?.labelSync);
             if (restoredMessage) showToast({ message: restoredMessage });
-            onImported();
+            setAdsNotice(true);
         } catch (err) {
             setError(userFacingMessage(err, 'Failed to import wallet.'));
             setBusy(false);
@@ -809,6 +813,24 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             <span />
         </div>
     );
+
+    if (adsNotice) {
+        const noticeBody = (
+            <AdsNotice
+                onContinue={onImported}
+                isFull={isFull}
+                headClass={headClass}
+                titleClass={titleClass}
+                subtitleClass={subtitleClass}
+                actionsClass={actionsClass}
+            />
+        );
+        return (
+            <Screen variant={variant}>
+                {isFull ? <div className={styles.card}>{noticeBody}</div> : noticeBody}
+            </Screen>
+        );
+    }
 
     return (
         <Screen variant={variant} header={screenHeader}>

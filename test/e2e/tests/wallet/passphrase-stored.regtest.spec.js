@@ -79,6 +79,7 @@ import {
     expect,
     test,
     acknowledgeDonationNotice,
+    acknowledgeImportNotice,
     dismissIntroCarousel,
     gotoSection,
     lockButton,
@@ -315,6 +316,9 @@ async function restoreOntoFreshDevice(page, {
         .fill(walletPassword);
     await page.getByLabel('Password for this device', { exact: true }).fill(devicePassword);
     await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    // Every caller goes on to wait for the shell, which sits behind the
+    // donation notice a restore now ends on.
+    await acknowledgeImportNotice(page);
 }
 
 /**
