@@ -1,6 +1,8 @@
 package io.xchain.wallet.android;
 
 import android.os.Bundle;
+import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -32,6 +34,42 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();
+        routeBackKeyToTheWebView();
+    }
+
+    /**
+     * Send the system Back gesture to the WebView's session history.
+     *
+     * Capacitor's core does nothing with Back (that lives in the optional App
+     * plugin, which SSC-1 keeps out), so the platform default applied: Back
+     * finished the activity from EVERY screen. Measured on an LG K51,
+     * 2026-10-12: Receive, Back, launcher.
+     *
+     * <p>The SPA keeps one sentinel history entry on top exactly while a
+     * screen has a back action (packages/core/src/ui/backStack.js), so
+     * {@code canGoBack()} is true exactly when there is somewhere in the app
+     * to go back to. Going back pops the sentinel and the SPA runs that
+     * screen's own back action. With nothing to go back to, this steps aside
+     * and lets the platform leave the app as it always did.
+     *
+     * <p>This adds no plugin and no bridge method: nothing new is callable
+     * from page script.
+     */
+    private void routeBackKeyToTheWebView() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                Bridge bridge = getBridge();
+                WebView webView = bridge == null ? null : bridge.getWebView();
+                if (webView != null && webView.canGoBack()) {
+                    webView.goBack();
+                    return;
+                }
+                setEnabled(false);
+                getOnBackPressedDispatcher().onBackPressed();
+                setEnabled(true);
+            }
+        });
     }
 
     /**

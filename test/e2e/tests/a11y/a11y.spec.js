@@ -23,7 +23,7 @@
 // while this suite sat un-run. They are covered below.
 
 import {
-    acknowledgeDonationConsent,
+    acknowledgeDonationNotice,
     createWallet,
     expect,
     dismissIntroCarousel,
@@ -92,7 +92,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await scan(page, 'CreateWallet verification stage');
     });
 
-    test('donation consent', async ({ page }) => {
+    test('donation notice', async ({ page }) => {
         await page.goto('/');
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
@@ -109,16 +109,16 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
-        // Same far-side-of-the-KDF wait as acknowledgeDonationConsent: this
+        // Same far-side-of-the-KDF wait as acknowledgeDonationNotice: this
         // heading cannot render until the derivation finishes, so it takes the
         // shared budget rather than a bare number that happens to be big
         // enough today.
         await expect(
-            page.getByRole('heading', { name: /Support XChain development/i }),
+            page.getByRole('heading', { name: /Automatic Donation System/i }),
         ).toBeVisible({ timeout: kdfStepTimeout() });
-        await scan(page, 'Donation consent');
+        await scan(page, 'Donation notice');
 
-        await acknowledgeDonationConsent(page);
+        await acknowledgeDonationNotice(page, 'on');
     });
 
     test('import wallet', async ({ page }) => {

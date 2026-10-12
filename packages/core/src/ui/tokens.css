@@ -116,7 +116,19 @@
      * padding (see below), and the left/right insets reduce the shell's
      * width, which needs no height math. */
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
-    --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
+}
+
+/* The dvh form, only where the engine HAS dvh. It cannot sit in :root as a
+ * second declaration the way a fallback pair normally would: a custom
+ * property accepts any tokens, so the later declaration always wins the
+ * cascade, and an engine without dvh (Chromium below 108) then finds the
+ * value invalid at the point of USE and drops the height it was meant to
+ * set. Measured on an LG K51's stock WebView 102 (2026-10-12): the shell lost
+ * its height and the bottom tab bar floated mid-screen under short pages. */
+@supports (height: 100dvh) {
+    :root {
+        --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
+    }
 }
 
 /* Dark palette. Two triggers, one payload.

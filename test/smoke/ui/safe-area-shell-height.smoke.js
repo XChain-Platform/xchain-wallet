@@ -79,6 +79,26 @@ for (const decl of viewportH) {
     );
 }
 
+// --- 2b. the dvh form is gated, never a second declaration in :root -------
+//
+// A custom property accepts any tokens, so a later `--xc-viewport-h` always
+// wins the cascade. Written as a plain pair inside :root, the dvh form won on
+// engines WITHOUT dvh too (Chromium below 108), was invalid where it was used,
+// and took the shell's height with it: the bottom tab bar floated mid-screen
+// on an LG K51's stock WebView 102 (2026-10-12).
+
+const rootBlock = tokens.slice(tokens.indexOf(':root {'), tokens.indexOf('\n}\n', tokens.indexOf(':root {')));
+assert.ok(rootBlock.length > 100, 'located the leading :root block in tokens.css');
+const rootDecls = rootBlock.match(/--xc-viewport-h:[^;]+;/g) || [];
+assert.equal(rootDecls.length, 1, ':root declares --xc-viewport-h exactly once');
+assert.match(rootDecls[0], /100vh/, 'the unconditional --xc-viewport-h uses plain vh');
+assert.doesNotMatch(rootDecls[0], /dvh/, 'the unconditional --xc-viewport-h does not need dvh');
+assert.match(
+    tokens,
+    /@supports \(height: 100dvh\) \{\s*:root \{\s*--xc-viewport-h: calc\(100dvh - env\(safe-area-inset-top, 0px\)\);/,
+    'the dvh form of --xc-viewport-h sits behind @supports (height: 100dvh)',
+);
+
 // --- 3. both root consumers use it ---------------------------------------
 
 for (const [name, css] of [['Screen.module.css', screen], ['LeftNav.module.css', leftNav]]) {

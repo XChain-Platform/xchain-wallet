@@ -66,7 +66,7 @@ const requiredCases = [
     'create wallet: password stage',
     'create wallet: mnemonic display stage',
     'create wallet: recovery-phrase verification stage',
-    'donation consent',
+    'donation notice',
     'import wallet',
     'home (unlocked)',
     'locked',
