@@ -11,6 +11,9 @@
 // Unit: branding/branding.js: product identity constants + URL helpers.
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
     PRODUCT_NAME,
     TAGLINE,
@@ -30,6 +33,8 @@ import {
     chainIconSmallUrl,
     chainIconLargeUrl,
 } from '../../../packages/core/src/branding/branding.js';
+
+const IMAGES_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../../packages/core/src/branding/images');
 
 describe('branding constants', () => {
     it('PRODUCT_NAME is XChain Wallet', () => {
@@ -140,6 +145,17 @@ describe('chainIconSmallUrl / chainIconLargeUrl', () => {
         expect(typeof url).toBe('string');
         expect(url.length).toBeGreaterThan(0);
         expect(url).toMatch(/^(file|https?):\/\//);
+    });
+
+    it('ships every small icon at 144px, sharp at 48 CSS px on a 3x screen', () => {
+        // A 20px raster drawn at 48px on a 2.6x phone was upscaled about six
+        // times and looked blurry; the PNG width sits at bytes 16..19 of IHDR.
+        for (const id of Object.keys(CHAIN_ICON_SMALL)) {
+            // Read from the source tree: under Vite the branding URL is a
+            // served path, not a file.
+            const png = readFileSync(join(IMAGES_DIR, CHAIN_ICON_SMALL[id]));
+            expect([id, png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([id, 144, 144]);
+        }
     });
 
     it('returns null for an unknown chainId (small)', () => {

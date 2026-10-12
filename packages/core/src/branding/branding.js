@@ -52,7 +52,12 @@ export const DEFAULT_HUB_BASE = 'https://hub.xchain.io';
 export const LOGO_FILE = 'xchain-color-750.png';
 export const FAVICON_FILE = 'favicon.png';
 
-/** Small (20px) chain icon filenames keyed by ChainDescriptor.id. */
+/**
+ * Small chain icon filenames keyed by ChainDescriptor.id. The "20" is the
+ * smallest size they are drawn at; the files are 144px, because lists draw
+ * them at up to 48 CSS px and phone screens are 2.5x to 3x, where a 20px
+ * raster was visibly blurry.
+ */
 export const CHAIN_ICON_SMALL = {
     'bitcoin-mainnet': 'bitcoin-mainnet-icon-20.png',
     'bitcoin-testnet': 'bitcoin-testnet-icon-20.png',
@@ -101,7 +106,7 @@ export function faviconUrl() {
 
 /**
  * @param {string} chainId ChainDescriptor.id (e.g. 'bitcoin-mainnet')
- * @returns {string | null} Small (20px) icon URL, or null if the chain isn't mapped.
+ * @returns {string | null} Small (144px file) icon URL, or null if the chain isn't mapped.
  */
 export function chainIconSmallUrl(chainId) {
     const f = CHAIN_ICON_SMALL[chainId];
