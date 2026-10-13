@@ -17,6 +17,7 @@ import {
     Icon,
     Input,
     ListPage,
+    ListRow,
     PageHeader,
     Screen,
     SectionHeader,
@@ -3723,88 +3724,98 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
         : '';
     return (
         <li data-history-key={entry.key}>
-            {/* A native button supplies the interactive list-row contract absent from the kit. */}
-            <button
-                type="button"
+            <ListRow
                 onClick={() => onClick(entry)}
                 data-history-row
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
                 aria-expanded={selected}
-            >
-                {showConnector ? (
-                    <span className={styles.connector} aria-hidden="true" />
-                ) : null}
-                <span className={styles.rowHeader}>
-                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{entry.chainId}</span>}
-                    <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
-                    {entry.link ? (
-                        <span
-                            className={styles.crosschainBadge}
-                            title={t('history.row.linkedTo', {
-                                ticker: entry.link.peerCoinTicker,
-                                index: entry.link.peerActionIndex,
-                            })}
-                        >
-                            🔗
-                        </span>
-                    ) : null}
-                    <StatusPill status={classifyEntryStatus(entry)} />
-                    {verify ? (
-                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
-                    ) : null}
-                </span>
-                <span className={styles.rowSourceAddress} title={entry.source || undefined}>
-                    {entry.source || '-'}
-                </span>
-                {receiveLabel ? (
-                    <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
-                ) : null}
-                {contractRowLabel(entry) ? (
-                    <span className={styles.rowContractLabel}>
-                        {contractRowLabel(entry)}
+                leading={(
+                    <>
+                        {showConnector ? (
+                            <span className={styles.connector} aria-hidden="true" />
+                        ) : null}
+                        {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{entry.chainId}</span>}
+                    </>
+                )}
+                title={(
+                    <span className={styles.rowHeader}>
+                        <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
+                        {entry.link ? (
+                            <span
+                                className={styles.crosschainBadge}
+                                title={t('history.row.linkedTo', {
+                                    ticker: entry.link.peerCoinTicker,
+                                    index: entry.link.peerActionIndex,
+                                })}
+                            >
+                                🔗
+                            </span>
+                        ) : null}
+                        <StatusPill status={classifyEntryStatus(entry)} />
+                        {verify ? (
+                            <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
+                        ) : null}
                     </span>
-                ) : null}
-                <span className={styles.rowMeta}>
-                    {entry.blockIndex ? (
-                        <>
-                            <span>{t('history.row.block', {
-                                block: formatDecimalAmount(entry.blockIndex),
-                            })}</span>
-                            {settledAmount ? (
-                                <span
-                                    className={styles.pendingAmount}
-                                    data-history-amount={settledAmount.direction || 'unknown'}
-                                    aria-label={formatHistoryAmountForSpeech(
-                                        settledAmount.amount,
-                                        settledAmount.tick,
-                                        settledAmount.direction,
-                                    )}
-                                >
-                                    {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
-                                </span>
-                            ) : null}
-                            {chainTip ? (
-                                <span className={styles.confirmationsPill}>
-                                    {t('history.row.confirmations', {
-                                        count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
-                                    })}
-                                </span>
-                            ) : null}
-                        </>
-                    ) : (
-                        <>
-                            <PendingRowLabel entry={entry} />
-                            <PendingAmountLabel entry={entry} />
-                        </>
-                    )}
-                    {entry.timestamp ? (
-                        <RelativeTime
-                            className={styles.rowRelativeTime}
-                            timestamp={entry.timestamp}
-                        />
-                    ) : null}
-                </span>
-            </button>
+                )}
+                subtitle={(
+                    <span className={styles.rowDetails}>
+                        <span className={styles.rowSourceAddress} title={entry.source || undefined}>
+                            {entry.source || '-'}
+                        </span>
+                        {receiveLabel ? (
+                            <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
+                        ) : null}
+                        {contractRowLabel(entry) ? (
+                            <span className={styles.rowContractLabel}>
+                                {contractRowLabel(entry)}
+                            </span>
+                        ) : null}
+                    </span>
+                )}
+                trailing={(
+                    <span className={styles.rowMeta}>
+                        {entry.blockIndex ? (
+                            <>
+                                <span>{t('history.row.block', {
+                                    block: formatDecimalAmount(entry.blockIndex),
+                                })}</span>
+                                {settledAmount ? (
+                                    <span
+                                        className={styles.pendingAmount}
+                                        data-history-amount={settledAmount.direction || 'unknown'}
+                                        aria-label={formatHistoryAmountForSpeech(
+                                            settledAmount.amount,
+                                            settledAmount.tick,
+                                            settledAmount.direction,
+                                        )}
+                                    >
+                                        {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+                                    </span>
+                                ) : null}
+                                {chainTip ? (
+                                    <span className={styles.confirmationsPill}>
+                                        {t('history.row.confirmations', {
+                                            count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
+                                        })}
+                                    </span>
+                                ) : null}
+                            </>
+                        ) : (
+                            <>
+                                <PendingRowLabel entry={entry} />
+                                <PendingAmountLabel entry={entry} />
+                            </>
+                        )}
+                        {entry.timestamp ? (
+                            <RelativeTime
+                                className={styles.rowRelativeTime}
+                                timestamp={entry.timestamp}
+                            />
+                        ) : null}
+                    </span>
+                )}
+                chevron={<DoubleChevron direction={selected ? 'up' : 'down'} />}
+            />
             {selected ? (
                 <DetailCard
                     entry={entry}
@@ -3845,39 +3856,38 @@ function GroupCard({ item, expanded, onToggle }) {
         ? stripSupplyParenthetical(item.summary)
         : item.summary;
     return (
-        /* A native button supplies the expandable list-row contract absent from the kit. */
-        <button
-            type="button"
+        <ListRow
             onClick={onToggle}
             data-history-row
             className={`${styles.row} ${styles.groupCard} ${expanded ? styles.groupCardExpanded : ''}`}
             aria-expanded={expanded}
-        >
-            <span className={styles.rowHeader}>
-                {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{item.leader.chainId}</span>}
-                {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
-                    <>
-                        <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
-                        <ChainBadge descriptor={peerDescriptor} size="sm" />
-                    </>
-                ) : null}
-                <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
-                {!isLinkPair ? (
-                    <span className={styles.groupCount}>{item.members.length}</span>
-                ) : null}
-            </span>
-            <span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>
-            <span className={styles.rowMeta}>
-                {newest?.timestamp ? (
-                    <RelativeTime timestamp={newest.timestamp}>
-                        {(when) => t('history.group.latest', { when })}
-                    </RelativeTime>
-                ) : '-'}
-                <span className={styles.groupChevron} aria-hidden="true">
-                    <DoubleChevron direction={expanded ? 'up' : 'down'} />
+            leading={(
+                <>
+                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{item.leader.chainId}</span>}
+                    {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
+                        <>
+                            <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
+                            <ChainBadge descriptor={peerDescriptor} size="sm" />
+                        </>
+                    ) : null}
+                </>
+            )}
+            title={(
+                <span className={styles.rowHeader}>
+                    <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
+                    {!isLinkPair ? (
+                        <span className={styles.groupCount}>{item.members.length}</span>
+                    ) : null}
                 </span>
-            </span>
-        </button>
+            )}
+            subtitle={<span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>}
+            trailing={newest?.timestamp ? (
+                <RelativeTime timestamp={newest.timestamp}>
+                    {(when) => t('history.group.latest', { when })}
+                </RelativeTime>
+            ) : '-'}
+            chevron={<DoubleChevron direction={expanded ? 'up' : 'down'} />}
+        />
     );
 }
 

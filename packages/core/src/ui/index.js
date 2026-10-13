@@ -20,6 +20,7 @@ export { FormPage } from './FormPage.jsx';
 export { FormErrorSummary } from './FormErrorSummary.jsx';
 export { FormSection } from './FormSection.jsx';
 export { ListPage } from './ListPage.jsx';
+export { ListRow } from './ListRow.jsx';
 export { EmptyState } from './EmptyState.jsx';
 export { SectionHeader } from './SectionHeader.jsx';
 export { StatusMessage } from './StatusMessage.jsx';

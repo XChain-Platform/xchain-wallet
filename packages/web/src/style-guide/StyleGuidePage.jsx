@@ -50,6 +50,7 @@ import { FormPageSection } from './sections/FormPageSection.jsx';
 import { FormErrorSummarySection } from './sections/FormErrorSummarySection.jsx';
 import { FormSectionSection } from './sections/FormSectionSection.jsx';
 import { ListPageSection } from './sections/ListPageSection.jsx';
+import { ListRowSection } from './sections/ListRowSection.jsx';
 import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
 import { ButtonsSection } from './sections/ButtonsSection.jsx';
@@ -85,6 +86,7 @@ export const SECTIONS = [
     { id: 'form-error-summary',    label: 'Form error summary',     Component: FormErrorSummarySection, primitives: ['FormErrorSummary'] },
     { id: 'form-section',          label: 'Form section',           Component: FormSectionSection, primitives: ['FormSection'] },
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
+    { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
     { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
