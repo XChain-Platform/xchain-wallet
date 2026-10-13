@@ -17,7 +17,7 @@
 // coin.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { TotalBalanceHero } from '../../../packages/core/src/shared/components/TotalBalanceHero.jsx';
@@ -217,6 +217,15 @@ describe('Home token rows on a real wallet', () => {
         expect(unknown.textContent).not.toContain('$');
         expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
         expect(calls.some((url) => url.includes('SPAM'))).toBe(false);
+
+        // Leaving the Tokens tab keeps the known token value in the total and
+        // sends no new price request.
+        const callsBeforeCoins = calls.length;
+        fireEvent.click(screen.getByRole('tab', { name: 'Coins' }));
+        await act(async () => {});
+        expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
+        expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
+        expect(calls).toHaveLength(callsBeforeCoins);
     });
 });
 

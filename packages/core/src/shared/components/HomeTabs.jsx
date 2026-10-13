@@ -219,8 +219,12 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         () => new Set(detectSpamCandidates(builtRows)),
         [builtRows],
     );
+    // Every tab names the tokens it wants priced so the hero keeps any rate
+    // already in the shared store; only the Tokens tab may fetch fresh ones.
+    // Gating the list itself dropped known token values from the total each
+    // time the user left the Tokens tab.
     const tokenRequests = useMemo(() => {
-        if (active !== 'tokens' || isDemoWallet(walletId)) return [];
+        if (isDemoWallet(walletId)) return [];
         return displayRows
             .filter((r) => r.kind !== 'native'
                 && typeof r.fiatRate !== 'number'
@@ -233,12 +237,12 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                     nativeTicker: tickerForCoin(descriptor?.coin),
                 };
             });
-    }, [active, displayRows, chainRegistry, spamKeys, walletId]);
+    }, [displayRows, chainRegistry, spamKeys, walletId]);
     const tokenRates = useTokenFiatRates({
         tokens: tokenRequests,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        refreshEnabled: !settingsLoading,
+        refreshEnabled: !settingsLoading && active === 'tokens',
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(
