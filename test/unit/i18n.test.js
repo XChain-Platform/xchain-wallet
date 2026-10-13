@@ -68,7 +68,7 @@ afterAll(async () => {
 
 describe('translations', () => {
     it('looks up English keys and exposes unknown keys', () => {
-        expect(t('common.back')).toBe('Back');
+        expect(t('scan.title')).toBe('Scan');
         expect(t('missing.unit.key')).toBe('missing.unit.key');
     });
 
@@ -77,7 +77,7 @@ describe('translations', () => {
         await setLocale(TEST_LOCALE);
 
         expect(t('common.back')).toBe('Retour');
-        expect(t('session.unlock')).toBe('Unlock');
+        expect(t('scan.title')).toBe('Scan');
     });
 
     it('stamps root language metadata when the selected locale is already active', async () => {
@@ -95,16 +95,21 @@ describe('translations', () => {
     });
 
     it('interpolates message variables', () => {
-        expect(t('home.balanceUnavailable', { reason: 'offline' }))
-            .toBe('Balance unavailable: offline');
+        expect(t('pending.detail.firstSeen', { when: 'just now' }))
+            .toBe('First seen by the network just now');
     });
 
-    it('selects singular and plural forms', () => {
-        expect(t('home.addressCount', { count: 1 })).toBe('1 address');
-        expect(t('home.addressCount', { count: 2 })).toBe('2 addresses');
+    it('selects singular and plural forms', async () => {
+        registerLocale(TEST_LOCALE, {
+            'test.addressCount': '{count, plural, one {# address} other {# addresses}}',
+        });
+        await setLocale(TEST_LOCALE);
+
+        expect(t('test.addressCount', { count: 1 })).toBe('1 address');
+        expect(t('test.addressCount', { count: 2 })).toBe('2 addresses');
     });
 
-    it('finds table-driven translation keys', () => {
+    it('reports a table-driven key from a new namespace as missing', () => {
         const source = `
             import { t } from '../../i18n/index.js';
             const COPY = { ready: 'status.ready', failed: \`status.failed\` };
@@ -113,6 +118,7 @@ describe('translations', () => {
 
         const { keys } = translationUsage(source);
 
+        expect(Object.keys(en).some((key) => key.startsWith('status.'))).toBe(false);
         expect([...keys].sort()).toEqual(['status.failed', 'status.ready']);
         expect(missingTranslationKeys(keys, { 'status.ready': 'Ready' }))
             .toEqual(['status.failed']);

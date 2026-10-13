@@ -146,6 +146,34 @@ Build invocation per shell is documented in `CONTRIBUTING.md` →
 | `electron-cadence.mjs` | §9 CVE clock: is the Chromium we ship still getting security fixes? Reads the version out of `pnpm-lock.yaml` (the caret in `package.json` is not the pin - every release lane installs `--frozen-lockfile`), then compares it against the registry's dist-tags: newer patches on our own major, newer majors past §9's 28-day rule, and upstream's three-major support window. Exits 0 current / 1 behind / 2 unreadable pin / 3 inconclusive - a registry that cannot be reached is never folded into "current". `--json` for a cron, `--offline <packument>` for tests. | Built 2026-08-02, and it went red on its first run: shipped 41.3.0 while 41.10.3 existed, with 42 and 43 both past the rule. Not yet installed anywhere |
 | `credential-expiry.mjs` | §6 credential clock: are the release signing credentials still valid? Reads `credential-expiry.json`, which declares the dated rows (K3 Developer ID, K18 Apple Distribution, K19 3rd Party Mac Developer Installer, both provisioning profiles, K1, the release-signing OpenPGP key, and TAG-KEY, the release tag-signing key, each read from its committed public key with `gpg --show-keys`) with what each one breaks, and reports them against a 60-day renewal lead time, or a row's own `renewalLeadDays` (K1 carries 180, because its renewal has to ship in a wallet update). **The declaration is not the authority**: every row names the artifact that carries its expiry, and wherever that artifact is reachable the tool reads `notAfter` out of it and fails on any disagreement - a date file nothing measures is how `expected-artifacts.txt` declared artifact classes and never counted them. A row it cannot reach reports `DECLARED-ONLY` with the reason rather than being trusted. `--require-measured` turns such a row into a failing `UNMEASURED`; the smoke passes it wherever `~/.xchain-release` exists, and never on a hosted runner. Exits 0 current / 1 due, expired, drifted or (with the flag) unmeasured / 2 unreadable declaration. `--json` for a cron. | Built 2026-08-08 and green: K3 has 177 days, the other four 363. Installed weekly as `.github/workflows/credential-expiry.yml`; deliberately NOT a release gate, because once a credential enters its lead time it would block every release for sixty days and be switched off |
 
+### Signing and verification flags
+
+`sign.sh` accepts these controls in addition to `--help` / `-h`:
+
+| Flag | Meaning |
+|---|---|
+| `--input <dir>` / `-i` | Read the staged artifacts from this directory. |
+| `--tag <tag>` / `-t` | Bind the manifest to this release tag. |
+| `--repo <dir>` / `-r` | Verify the tag and read tag-owned release data from this checkout. |
+| `--lane <name>` / `-l` | Sign a partial release for one lane. Repeat the flag or use comma-separated lane names. This cannot be combined with `--staging`. |
+| `--staging` | Sign a staging rehearsal set. |
+| `--os <linux\|mac\|windows>` | Restrict a staging rehearsal to one operating system. This is refused without `--staging`. |
+| `--passphrase-file <path>` | Read K1's passphrase from an owner-only file. A production run also requires `--unattended`. |
+| `--unattended` | Permit a production signature using `--passphrase-file` and record `signing: unattended` in the signed manifest. This is refused for staging. |
+| `--force` / `-f` | Overwrite an existing manifest and signature. |
+
+`verify.sh` accepts these controls in addition to `--help` / `-h`:
+
+| Flag | Meaning |
+|---|---|
+| `--input <dir>` / `-i` | Read artifacts from this directory. |
+| `--manifest <path>` / `-m` | Verify this manifest instead of `<input>/RELEASE_HASHES.txt`. |
+| `--tag <tag>` / `-t` | Require the manifest to describe this release. |
+| `--artifact <name>` / `-a` | Check only this artifact's hash while still checking the full signature and tag anchor. |
+| `--key <fingerprint>` / `-k` | Require the signature to come from this fingerprint. |
+| `--no-sig` | Skip only the GPG check. This is degraded hash and anchor checking, not release verification. |
+| `--recompute` | Write a fresh unsigned `RELEASE_HASHES.txt` for local use instead of verifying one. |
+
 ### Installing the store-version monitor (DEPLOYED 2026-08-01, DISARMED)
 
 **Status 2026-08-10 (run 21): LIVE on origin-host for the Play and

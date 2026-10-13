@@ -56,6 +56,7 @@ import { en } from './locales/en/index.js';
 
 const DICTIONARIES = /** @type {Record<string, Dictionary>} */ ({ en });
 let currentLocale = 'en';
+let localeRequestId = 0;
 const subscribers = new Set();
 
 // --- lazy locale discovery (§54 FOLLOWUP 5) --------------------------
@@ -163,8 +164,9 @@ function applyLocale(locale) {
  * chunk, returns a promise that resolves after the chunk loads and the
  * locale is applied; a chunk-load failure keeps the current locale
  * (falling back to English's always-present dictionary) rather than
- * rejecting. Throws synchronously only when the locale is neither
- * registered nor lazily discoverable.
+ * rejecting. Only the latest request applies, so a slower chunk cannot
+ * overwrite a newer picker choice. Throws synchronously only when the
+ * locale is neither registered nor lazily discoverable.
  *
  * @param {string} locale
  * @returns {Promise<string>} the locale actually in effect afterwards
@@ -172,9 +174,11 @@ function applyLocale(locale) {
 export function setLocale(locale) {
     if (locale === currentLocale) {
         syncDocumentLocale(locale);
+        localeRequestId += 1;
         return Promise.resolve(locale);
     }
     if (DICTIONARIES[locale]) {
+        localeRequestId += 1;
         applyLocale(locale);
         return Promise.resolve(locale);
     }
@@ -182,11 +186,13 @@ export function setLocale(locale) {
     if (!loader) {
         throw new Error(`setLocale: unknown locale "${locale}"`);
     }
+    const requestId = ++localeRequestId;
     return loader()
         .then((mod) => {
             // `{ import: 'default' }` hands back the default export
             // directly, but tolerate a namespace object too.
             DICTIONARIES[locale] = mod && mod.default ? mod.default : mod;
+            if (requestId !== localeRequestId) return currentLocale;
             applyLocale(locale);
             return locale;
         })

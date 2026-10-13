@@ -65,25 +65,27 @@ export function resolveFeeUnit(descriptor) {
 }
 
 /**
- * Per-chain fee tier table. Each tier has a per-byte rate (sat/vB on
- * BTC/LTC, koinu/byte on DOGE). `txSize` is the assumed virtual size in
- * vbytes (BTC/LTC) or raw bytes (DOGE uses per-kB of raw size for
+ * Per-chain fee tier table. Each tier and `minimumRate` use a per-byte rate
+ * (sat/vB on BTC/LTC, koinu/byte on DOGE). `txSize` is the assumed virtual
+ * size in vbytes (BTC/LTC) or raw bytes (DOGE uses per-kB of raw size for
  * minrelayfee). The DISPLAY unit is not here: it comes from the chain
  * descriptor's feeStrategy.unit via resolveFeeUnit.
  */
 const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
     bitcoin: {
         txSize: 250,
+        minimumRate: 1,
         tiers: {
-            low: { rate: 1, label: 'Low', etaMinutes: 60 },
+            low: { rate: 1, label: 'Slow', etaMinutes: 60 },
             normal: { rate: 6, label: 'Normal', etaMinutes: 30 },
             fast: { rate: 12, label: 'Fast', etaMinutes: 10 },
         },
     },
     litecoin: {
         txSize: 250,
+        minimumRate: 1,
         tiers: {
-            low: { rate: 1, label: 'Low', etaMinutes: 5 },
+            low: { rate: 1, label: 'Slow', etaMinutes: 5 },
             normal: { rate: 1, label: 'Normal', etaMinutes: 3 },
             fast: { rate: 2, label: 'Fast', etaMinutes: 2 },
         },
@@ -92,10 +94,11 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
         // DOGE minrelayfee 1 DOGE/kB → 100_000_000 koinu/kB ≈
         // 100_000 koinu/B. Tier rates are koinu per byte.
         txSize: 250,
+        minimumRate: 100_000,
         tiers: {
             // Below mainnet's minrelayfee. Many nodes will reject;
             // included only because some Doge nodes still relax it.
-            low: { rate: 10_000, label: 'Low', etaMinutes: 5 },
+            low: { rate: 10_000, label: 'Slow', etaMinutes: 5 },
             normal: { rate: 100_000, label: 'Normal', etaMinutes: 1 },
             fast: { rate: 200_000, label: 'Fast', etaMinutes: 1 },
         },
@@ -176,7 +179,7 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
  * @param {object} opts
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
- * @returns {{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string } | null}
+ * @returns {{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string, minimumRate: number } | null}
  */
 export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
@@ -185,11 +188,13 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
+    const unit = resolveFeeUnit(desc);
     return {
         low: estimateNativeSendFee({ chainId, chainRegistry, speed: 'low' }),
         normal: estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
         fast: estimateNativeSendFee({ chainId, chainRegistry, speed: 'fast' }),
-        unit: resolveFeeUnit(desc),
+        unit,
+        minimumRate: perByteRateToDisplay(unit, table.minimumRate),
     };
 }
 
@@ -328,17 +333,17 @@ export function displayRateToPerByte(unit, displayValue) {
  * values as the sync `estimateNativeSendFee`.
  *
  * SDK contract (when it lands):
- *   `messaging.estimateFee({ chainId })` → `{ low, normal, fast, unit, sourceLabel? }`
+ *   `messaging.estimateFee({ chainId })` → `{ low, normal, fast, unit, minimumRate?, sourceLabel? }`
  *   where each tier is `{ rate, etaMinutes? }` in the chain's
- *   per-byte unit (sat/vB / koinu/byte). The flow shapes this into
- *   the same `FeeEstimate` callers already consume.
+ *   per-byte unit (sat/vB / koinu/byte), and `minimumRate` uses that same
+ *   unit. The flow shapes this into the same `FeeEstimate` callers consume.
  *
  * @param {object} opts
- * @param {{ estimateFee?: (req: { chainId: string }) => Promise<{ low?: { rate: number, etaMinutes?: number }, normal?: { rate: number, etaMinutes?: number }, fast?: { rate: number, etaMinutes?: number }, unit?: string } | null> }} [opts.messaging]
+ * @param {{ estimateFee?: (req: { chainId: string }) => Promise<{ low?: { rate: number, etaMinutes?: number }, normal?: { rate: number, etaMinutes?: number }, fast?: { rate: number, etaMinutes?: number }, unit?: string, minimumRate?: number } | null> }} [opts.messaging]
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
  * @param {number} [opts.timeoutMs]
- * @returns {Promise<{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string } | null>}
+ * @returns {Promise<{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string, minimumRate: number } | null>}
  */
 export async function fetchNativeSendFeeTiers({
     messaging,
@@ -375,6 +380,12 @@ export async function fetchNativeSendFeeTiers({
                     normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal' }),
                     fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast' }),
                     unit,
+                    minimumRate: perByteRateToDisplay(
+                        unit,
+                        Number.isFinite(sdk.minimumRate) && sdk.minimumRate > 0
+                            ? sdk.minimumRate
+                            : table.minimumRate,
+                    ),
                 };
             }
         } catch {
