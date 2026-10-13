@@ -26,6 +26,7 @@ import {
     configureFiatRateSource,
     _resetPriceLookupForTests,
 } from '../../../packages/core/src/flows/priceLookup.js';
+import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00Z');
 const FRESH_TS = Math.floor(NOW / 1000) - 60;
@@ -76,7 +77,7 @@ const ZERO_COINS = {
     'dogecoin-mainnet': ['DOGE', '0'],
 };
 
-function mount({ balances, walletId = 'real-wallet-1', settings = {} }) {
+function mount({ balances, walletId = 'real-wallet-1', settings = {}, ...props }) {
     const messaging = { getSettings: vi.fn(async () => settings) };
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -85,6 +86,7 @@ function mount({ balances, walletId = 'real-wallet-1', settings = {} }) {
                 balances={balances}
                 walletId={walletId}
                 networkFilter="all"
+                {...props}
             />
         </MessagingProvider>,
     );
@@ -94,10 +96,14 @@ function hero() {
     return screen.getByRole('region', { name: 'Active address balance' });
 }
 
-beforeEach(() => _resetPriceLookupForTests());
+beforeEach(() => {
+    _resetPriceLookupForTests();
+    clearDemoWalletId();
+});
 afterEach(() => {
     cleanup();
     _resetPriceLookupForTests();
+    clearDemoWalletId();
 });
 
 describe('Home native rows on a real wallet', () => {
@@ -115,17 +121,21 @@ describe('Home native rows on a real wallet', () => {
         expect(calls.some((u) => u.includes('/BTC/api/price_snapshots/FINALIZED/status'))).toBe(true);
     });
 
-    it('sums a funded coin at the oracle rate', async () => {
+    it('shows price unavailable instead of zero while a funded coin price loads', async () => {
         const { release } = venue();
         mount({ balances: balancesOf({ 'bitcoin-mainnet': ['BTC', '50000000'] }) });
+
+        expect(within(hero()).getByText('Price unavailable')).toBeInTheDocument();
+        expect(within(hero()).queryByText('$0.00')).toBeNull();
         release();
         await waitFor(() => expect(within(hero()).getByText('$40,000.00')).toBeInTheDocument());
+        expect(within(hero()).queryByText('Price unavailable')).toBeNull();
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
     });
 });
 
 describe('Home token rows on a real wallet', () => {
-    it('prices only the DEX-traded token and keeps the count aligned with the rows', async () => {
+    it('prices only the DEX-traded token, skips spam-looking dust, and keeps the count aligned', async () => {
         const calls = [];
         configureFiatRateSource({
             now: () => NOW,
@@ -157,6 +167,20 @@ describe('Home token rows on a real wallet', () => {
                 if (url.includes('/api/market/UNKNOWN/BTC')) {
                     return { ok: true, json: async () => ({ data: [] }) };
                 }
+                if (url.includes('/api/market/SPAM/BTC')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            data: [{
+                                tick1: 'SPAM',
+                                tick2: 'BTC',
+                                tick1_price: '1',
+                                tick2_price: '1',
+                                last_updated: FRESH_TS,
+                            }],
+                        }),
+                    };
+                }
                 return { ok: false, status: 404, json: async () => ({}) };
             },
         });
@@ -168,22 +192,57 @@ describe('Home token rows on a real wallet', () => {
                         tokens: [
                             { tick: 'MARKET', quantity: '100000000', divisibility: 8 },
                             { tick: 'UNKNOWN', quantity: '100000000', divisibility: 8 },
+                            { tick: 'SPAM', quantity: '1', divisibility: 8 },
                         ],
                     },
                 }],
             },
         });
 
-        expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
-        await waitFor(() => expect(within(hero()).getByText('1 token not priced')).toBeInTheDocument());
+        expect(within(hero()).getByText('3 tokens not priced')).toBeInTheDocument();
+        await waitFor(() => expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument());
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
+        expect(within(hero()).getByText(/Prices updated/)).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('$80,000.00');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
         expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument();
+        const unpriced = screen.getByRole('region', { name: 'Unpriced tokens' });
+        expect(unpriced.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]')).toBeTruthy();
+        expect(within(unpriced).queryByText('MARKET')).toBeNull();
         const unknown = document.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]');
         expect(unknown.textContent).not.toContain('$');
         expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
+        expect(calls.some((url) => url.includes('SPAM'))).toBe(false);
+    });
+});
+
+describe('Home hidden-token totals', () => {
+    it('excludes hidden rows from both the hero and portfolio chart', async () => {
+        markDemoWallet('demo-wallet-1');
+        mount({
+            walletId: 'demo-wallet-1',
+            hiddenKeys: new Set(['bitcoin-mainnet:HIDDEN']),
+            balances: {
+                'bitcoin-mainnet': [{
+                    address: 'bitcoin-mainnet-addr',
+                    balances: {
+                        tokens: [
+                            { tick: 'VISIBLE', quantity: '100', divisibility: 0, fiatRate: 1 },
+                            { tick: 'HIDDEN', quantity: '200', divisibility: 0, fiatRate: 1 },
+                        ],
+                    },
+                }],
+            },
+        });
+
+        expect(within(hero()).getByText('$100.00')).toBeInTheDocument();
+        const chart = await screen.findByRole('img', { name: /Portfolio performance chart/ });
+        expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$100\.00\./));
+        expect(hero()).not.toHaveTextContent('$300.00');
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(screen.getByRole('button', { name: 'Show 1 hidden token' })).toBeInTheDocument();
     });
 });
 

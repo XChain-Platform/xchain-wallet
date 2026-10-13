@@ -23,8 +23,13 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
+    formatWithThousands,
+    subtractDecimalStrings,
+    tokenAmountPrecisionError,
+} from '../utils/amountFormat.js';
+import {
+    compareDecimal,
     perUnitMax,
     multiplyDecimal,
     exceedsBalance,
@@ -46,7 +51,7 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { extractHolderRows } from '../utils/holderRows.js';
+import { extractHolderCount } from '../utils/holderRows.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
@@ -194,9 +199,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // (typed in 'holders' mode, or read off an 'existing' TYPE=1 list).
     // Always a preview, never a promise: see the file-level doc comment.
     const [holderPreview, setHolderPreview] = useState(
-        /** @type {{ loading: boolean, total: number | null, error: string | null, failures: Array<{ subject: string, message: string }> }} */
+        /** @type {{ loading: boolean, total: string | null, error: string | null, failures: Array<{ subject: string, message: string }> }} */
         ({ loading: false, total: null, error: null, failures: [] }),
     );
+    const [holderPreviewRetry, setHolderPreviewRetry] = useState(0);
 
     const [stage, setStage] = useState(
         /** @type {'compose' | 'review-list' | 'wait-index' | 'review-airdrop' | 'done'} */
@@ -410,18 +416,11 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return undefined;
         }
         let cancelled = false;
-        setHolderPreview((prev) => ({ ...prev, loading: true, error: null, failures: [] }));
+        setHolderPreview({ loading: true, total: null, error: null, failures: [] });
         const handle = setTimeout(() => {
-            // Retry once, and KEEP THE CAUSE. Both halves were missing, and a
-            // single transient read failure was therefore permanent AND
-            // unexplained: this effect only re-runs when the tick set or the
-            // chain changes, so one blip left "holder count unavailable" on
-            // screen for the rest of the form session with no way to ask
-            // again. The measured cause is the explorer answering 429 under
-            // load (RateLimit-Policy 120;w=60), which clears inside its own
-            // window. DividendForm's twin fetch has always reported `err
-            // .message`; discarding it here is what made a rate limit, a dead
-            // endpoint and an unknown tick read as one identical sentence.
+            // A short automatic retry absorbs transient explorer failures.
+            // The final cause stays visible and the manual retry below lets
+            // the user recover without editing the token list.
             const countHolders = async (t) => {
                 let lastErr = null;
                 for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -431,7 +430,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     }
                     try {
                         const resp = await messaging.getHoldersForToken({ chainId, tick: t });
-                        return { tick: t, count: extractHolderRows(resp).length, error: null };
+                        return { tick: t, count: extractHolderCount(resp), error: null };
                     } catch (err) {
                         lastErr = err;
                     }
@@ -458,10 +457,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         });
                         return;
                     }
-                    const total = valid.reduce((sum, r) => sum + r.count, 0);
+                    const total = valid.reduce((sum, r) => sum + BigInt(r.count), 0n).toString();
                     setHolderPreview({
                         loading: false,
-                        total,
+                        // Any missing token makes the overall payout unknown.
+                        // An understated count would make Max unaffordable.
+                        total: failures.length > 0 ? null : total,
                         error: failures.length > 0
                             ? `Holder counts unavailable for ${failures.length} of ${results.length} tokens`
                             : null,
@@ -471,7 +472,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [previewTicksKey, chainId, messaging]);
+    }, [previewTicksKey, chainId, messaging, holderPreviewRetry]);
 
     useEffect(() => {
         if (stage === 'review-list' || stage === 'review-airdrop') {
@@ -699,7 +700,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const totalDistribution = useMemo(() => {
         const amt = String(amountPer).trim();
         if (!(Number(amt) > 0)) return null;
-        if (!recipientPreview.count || recipientPreview.count <= 0) return null;
+        if (recipientPreview.count === null || recipientPreview.count === undefined) return null;
         return multiplyDecimal(amt, String(recipientPreview.count));
     }, [amountPer, recipientPreview.count]);
 
@@ -723,6 +724,17 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         [tickAmtBalance, recipientPreview.count, dropInfo],
     );
     const maxPayable = maxPerRecipient !== null && Number(maxPerRecipient) > 0;
+    const roundingRemainder = useMemo(() => {
+        if (!maxPayable || compareDecimal(amountPer, maxPerRecipient) !== 0) return null;
+        if (totalDistribution === null || tickAmtBalance === null) return null;
+        const remainder = subtractDecimalStrings(tickAmtBalance, totalDistribution);
+        return compareDecimal(remainder, '0') === 1 ? remainder : null;
+    }, [amountPer, maxPayable, maxPerRecipient, tickAmtBalance, totalDistribution]);
+
+    const flowNetworkFee = useMemo(() => {
+        if (!feeEstimate?.coinAmount) return null;
+        return multiplyDecimal(feeEstimate.coinAmount, sourceMode === 'existing' ? '1' : '2');
+    }, [feeEstimate, sourceMode]);
 
     const handleFile = useCallback((event) => {
         const file = event.target?.files?.[0];
@@ -1336,10 +1348,40 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                     <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                        label={recipientPreview.kind === 'tick'
+                            ? 'Holders (current, not final)'
+                            : 'Recipients'}
+                        value={recipientPreview.loading
+                            ? 'Counting…'
+                            : recipientPreview.error
+                                ? `Unknown (${recipientPreview.error})`
+                                : recipientPreview.count != null
+                                    ? formatWithThousands(recipientPreview.count)
+                                    : '?'}
+                    />
+                    {totalDistribution !== null ? (
+                        <DetailRow
+                            label={recipientPreview.volatile
+                                ? 'Estimated distribution at current count'
+                                : 'Total distribution'}
+                            value={`~${formatWithThousands(totalDistribution)} ${token.trim().toUpperCase()}`}
+                        />
+                    ) : null}
+                    {roundingRemainder !== null ? (
+                        <DetailRow
+                            label="Rounding remainder"
+                            value={`${formatWithThousands(roundingRemainder)} ${token.trim().toUpperCase()} stays at the source address`}
+                        />
+                    ) : null}
+                    <DetailRow
+                        label="Estimated network fees (2 transactions)"
+                        value={flowNetworkFee
+                            ? `${formatWithThousands(flowNetworkFee)} ${coinTicker}${feeEstimate?.rate ? ` (${feeEstimate.rate} each)` : ''}`
                             : 'Estimate unavailable'}
+                    />
+                    <DetailRow
+                        label="Airdrop protocol fee"
+                        value="Calculated from the final recipient count when the airdrop executes"
                     />
                 </dl>
                 {listDecoded && listDecoded.warnings.length > 0 ? (
@@ -1356,6 +1398,22 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         ? 'You will confirm on your hardware device twice.'
                         : signerReady ? 'You will approve each one; the wallet is unlocked, so no password is needed.' : 'You will enter your password twice.'}
                 </p>
+                {recipientPreview.volatile ? (
+                    <p className={styles.hint}>
+                        Holder counts can change before the airdrop confirms, so the
+                        distribution and protocol fee remain estimates.
+                    </p>
+                ) : null}
+                {holderPreview.failures.length > 0 ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setHolderPreviewRetry((attempt) => attempt + 1)}
+                        disabled={holderPreview.loading}
+                    >
+                        Retry holder counts
+                    </Button>
+                ) : null}
                 {/* On the single-encode path the credentials live on
                     the confirm page, so this stage stays a pure recipient
                     review and the button opens that page. */}
@@ -1433,7 +1491,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             : recipientPreview.error
                                 ? `Unknown (${recipientPreview.error})`
                                 : recipientPreview.count != null
-                                    ? recipientPreview.count
+                                    ? formatWithThousands(recipientPreview.count)
                                     : '?'}
                     </dd>
                     {totalDistribution !== null ? (
@@ -1444,11 +1502,21 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             </dd>
                         </>
                     ) : null}
+                    {roundingRemainder !== null ? (
+                        <DetailRow
+                            label="Rounding remainder"
+                            value={`${formatWithThousands(roundingRemainder)} ${token.trim().toUpperCase()} stays at the source address`}
+                        />
+                    ) : null}
                     <DetailRow
                         label="Network fee"
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                             : 'Estimate unavailable'}
+                    />
+                    <DetailRow
+                        label="Airdrop protocol fee"
+                        value="Calculated from the final recipient count when the airdrop executes"
                     />
                 </dl>
                 <DiagnosticDetails
@@ -1456,6 +1524,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     items={holderPreview.failures}
                     className={styles.hint}
                 />
+                {holderPreview.failures.length > 0 ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setHolderPreviewRetry((attempt) => attempt + 1)}
+                        disabled={holderPreview.loading}
+                    >
+                        Retry holder counts
+                    </Button>
+                ) : null}
                 {airdropDecoded && airdropDecoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {airdropDecoded.warnings.map((w, i) => (
@@ -1707,6 +1785,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         maxPayable ? ` · up to ${formatWithThousands(maxPerRecipient)} each` : ''}`
                     : null}
             />
+            {roundingRemainder !== null ? (
+                <p className={styles.hint}>
+                    Rounding remainder: {formatWithThousands(roundingRemainder)}
+                    {' '}{token.trim().toUpperCase()} stays at the source address because
+                    the per-recipient amount is limited to {dropInfo?.divisibility ?? 8}
+                    {' '}decimal place{(dropInfo?.divisibility ?? 8) === 1 ? '' : 's'}.
+                </p>
+            ) : null}
 
             {sourceMode === 'paste' ? (
                 <>
@@ -1827,7 +1913,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 : holderPreview.error
                                     ? holderPreview.error
                                     : holderPreview.total != null
-                                        ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now`
+                                        ? `~${formatWithThousands(holderPreview.total)} holder${holderPreview.total === '1' ? '' : 's'} right now`
                                         : ''}
                         </p>
                     ) : null}
@@ -1872,7 +1958,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 : holderPreview.error
                                     ? `${holderPreview.error}.`
                                     : holderPreview.total != null
-                                        ? `~${holderPreview.total} holder${holderPreview.total === 1 ? '' : 's'} right now.`
+                                        ? `~${formatWithThousands(holderPreview.total)} holder${holderPreview.total === '1' ? '' : 's'} right now.`
                                         : ''}
                             {' '}The holder set is only fixed when the airdrop transaction
                             confirms on-chain, not now; treat this as an estimate.
@@ -1890,6 +1976,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 items={holderPreview.failures}
                 className={styles.hint}
             />
+            {holderPreview.failures.length > 0 ? (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setHolderPreviewRetry((attempt) => attempt + 1)}
+                    disabled={holderPreview.loading}
+                >
+                    Retry holder counts
+                </Button>
+            ) : null}
 
             <Input
                 label="Memo (optional)"
