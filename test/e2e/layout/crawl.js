@@ -34,7 +34,7 @@ import { measureInPage } from './sweep.js';
  * Never pressed. These lock, delete or reset the wallet, leave demo mode, or
  * sign and broadcast, and a crawl must not do any of that even in a demo.
  */
-export const DESTRUCTIVE = /^activate$|\block\b|remove|delete|reset|wipe|erase|sign ?out|log ?out|forget|revoke|uninstall|factory|clear (all|data|history|cache|everything)|exit demo|leave demo|panic|duress|broadcast|send now|confirm|sign and|sign & |approve|authori[sz]e|pay now|burn|destroy/i;
+export const DESTRUCTIVE = /^activate$|^(watcher|signer) \(|\block\b|remove|delete|reset|wipe|erase|sign ?out|log ?out|forget|revoke|uninstall|factory|clear (all|data|history|cache|everything)|exit demo|leave demo|panic|duress|broadcast|send now|confirm|sign and|sign & |approve|authori[sz]e|pay now|burn|destroy/i;
 
 /** Submit labels a crawl may press: they move a form to its review step or save a demo setting. */
 const SAFE_SUBMIT = /^(review|continue|next|preview|check|estimate|validate|search|look ?up|save|apply|add|done|ok|verify|calculate|find|go|show|load|test|preview .*|review .*)$/i;
