@@ -25,9 +25,8 @@
 //   - `subscribeFiatRates(fn)` notifies UI code when the cache
 //     changes (used by the `useFiatRate` hook).
 //
-// The returned shape `{ rate, source, fiatCurrency, fetchedAt }` is
-// unchanged from the placeholder era; only `source` values moved from
-// 'static-placeholder' to 'oracle' / 'coingecko'.
+// The core returned shape remains `{ rate, source, fiatCurrency, fetchedAt }`;
+// token market rates can also carry their published 24-hour change.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultRegistry } from '../registry/index.js';
@@ -65,6 +64,7 @@ const COINGECKO_ID_BY_COIN = {
  * @property {string} fiatCurrency   ISO-style currency code (USD, EUR, …)
  * @property {'oracle' | 'coingecko' | 'market'} source
  * @property {string} fetchedAt      ISO timestamp of when the rate was obtained
+ * @property {number | null} [change24hPct] signed 24-hour change when the source provides it
  */
 
 // Each entry holds a frozen public FiatRate object plus its ms
@@ -80,6 +80,12 @@ const rateCache = new Map();
 // more requests every poll for as long as it keeps refusing.
 /** @type {Map<string, number>} */
 const coinMissAt = new Map();
+
+// A mounted route and the Home summary can ask for the same rate before the
+// first request fills the cache. Each key owns one refresh promise so those
+// consumers share the request instead of racing identical network work.
+/** @type {Map<string, Promise<{ updated: string[] }>>} */
+const coinRefreshes = new Map();
 
 /** @type {Set<() => void>} */
 const listeners = new Set();
@@ -291,7 +297,7 @@ export async function refreshFiatRates({
     if (!fetchImpl) return { updated: [] };
     const nowMs = deps.now();
 
-    const wanted = chainCoins.filter((coin) => {
+    const wanted = Array.from(new Set(chainCoins)).filter((coin) => {
         if (typeof coin !== 'string' || coin.length === 0) return false;
         if (force) return true;
         const missAt = coinMissAt.get(cacheKey(coin, fiatCurrency));
@@ -300,6 +306,46 @@ export async function refreshFiatRates({
         return !hit || nowMs - hit.fetchedAtMs > REFRESH_TTL_MS;
     });
     if (wanted.length === 0) return { updated: [] };
+
+    const refreshKey = (coin) => `${cacheKey(coin, fiatCurrency)}|fallback:${allowCoingeckoFallback}`;
+    const owned = [];
+    const pending = new Set();
+    for (const coin of wanted) {
+        const active = coinRefreshes.get(refreshKey(coin));
+        if (active) pending.add(active);
+        else owned.push(coin);
+    }
+
+    if (owned.length > 0) {
+        let refresh;
+        refresh = refreshFiatRateBatch({
+            wanted: owned,
+            fiatCurrency,
+            allowCoingeckoFallback,
+            fetchImpl,
+            nowMs,
+        }).finally(() => {
+            for (const coin of owned) {
+                const key = refreshKey(coin);
+                if (coinRefreshes.get(key) === refresh) coinRefreshes.delete(key);
+            }
+        });
+        for (const coin of owned) coinRefreshes.set(refreshKey(coin), refresh);
+        pending.add(refresh);
+    }
+
+    const results = await Promise.all(pending);
+    const updated = new Set(results.flatMap((result) => result.updated));
+    return { updated: wanted.filter((coin) => updated.has(coin)) };
+}
+
+async function refreshFiatRateBatch({
+    wanted,
+    fiatCurrency,
+    allowCoingeckoFallback,
+    fetchImpl,
+    nowMs,
+}) {
 
     /** @type {string[]} */
     const updated = [];
@@ -410,6 +456,9 @@ const MISS_TTL_MS = 60 * 1000;
 /** @type {Map<string, { rate: FiatRate | null, fetchedAtMs: number }>} */
 const tokenRateCache = new Map();
 
+/** @type {Map<string, Promise<{ updated: boolean }>>} */
+const tokenRefreshes = new Map();
+
 function tokenCacheKey(chainCoin, tick, fiatCurrency) {
     return `${chainCoin}|${tick}|${fiatCurrency}`;
 }
@@ -433,10 +482,23 @@ function marketPriceOf(row, tick, quote) {
     return NaN;
 }
 
+function marketChange24hOf(row, tick, quote) {
+    const t1 = normalizeTick(row?.tick1);
+    const t2 = normalizeTick(row?.tick2);
+    const raw = t1 === tick && t2 === quote
+        ? (row?.tick1_24hr_change ?? row?.change_24h ?? row?.change24h)
+        : t2 === tick && t1 === quote
+            ? (row?.tick2_24hr_change ?? row?.change_24h ?? row?.change24h)
+            : null;
+    if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+    const value = Number(String(raw).replace('%', '').trim());
+    return Number.isFinite(value) ? value : null;
+}
+
 /**
  * Secondary source: the token's last DEX fill price against the native
- * coin. Returns coin units per 1 token, or null when the market has no
- * usable price. Throws on transport errors (caller gives up).
+ * coin. Returns the coin price and optional 24-hour change, or null when
+ * the market has no usable price. Throws on transport errors (caller gives up).
  */
 async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, nowMs) {
     const base = explorerUrlForCoin(chainCoin);
@@ -455,7 +517,7 @@ async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, 
         // still the only freshness signal this endpoint gives us.
         const tsMs = Number(row.last_updated) * 1000;
         if (Number.isFinite(tsMs) && tsMs > 0 && nowMs - tsMs > MARKET_STALE_MS) continue;
-        return price;
+        return { price, change24hPct: marketChange24hOf(row, tick, nativeTicker) };
     }
     return null;
 }
@@ -502,6 +564,39 @@ export async function refreshTokenFiatRate({
         const ttl = hit.rate ? REFRESH_TTL_MS : MISS_TTL_MS;
         if (nowMs - hit.fetchedAtMs <= ttl) return { updated: false };
     }
+    const refreshKey = `${key}|fallback:${allowCoingeckoFallback}`;
+    const active = tokenRefreshes.get(refreshKey);
+    if (active) return active;
+
+    let refresh;
+    refresh = refreshTokenFiatRateUncached({
+        chainCoin,
+        tick: t,
+        nativeTicker: n,
+        fiatCurrency,
+        allowCoingeckoFallback,
+        fetchImpl,
+        nowMs,
+        key,
+        hit,
+    }).finally(() => {
+        if (tokenRefreshes.get(refreshKey) === refresh) tokenRefreshes.delete(refreshKey);
+    });
+    tokenRefreshes.set(refreshKey, refresh);
+    return refresh;
+}
+
+async function refreshTokenFiatRateUncached({
+    chainCoin,
+    tick: t,
+    nativeTicker: n,
+    fiatCurrency,
+    allowCoingeckoFallback,
+    fetchImpl,
+    nowMs,
+    key,
+    hit,
+}) {
     // A refresh that resolved nothing keeps whatever the cache already
     // holds, exactly as the coin path does: a price from five minutes ago
     // is a better answer mid-session than a field that suddenly goes
@@ -511,7 +606,7 @@ export async function refreshTokenFiatRate({
         tokenRateCache.set(key, { rate: hit?.rate ?? null, fetchedAtMs: nowMs });
         return { updated: false };
     };
-    const put = (rate, source) => {
+    const put = (rate, source, change24hPct = null) => {
         tokenRateCache.set(key, {
             rate: Object.freeze({
                 rate,
@@ -520,6 +615,7 @@ export async function refreshTokenFiatRate({
                 fiatCurrency,
                 source,
                 fetchedAt: new Date(nowMs).toISOString(),
+                change24hPct,
             }),
             fetchedAtMs: nowMs,
         });
@@ -543,9 +639,11 @@ export async function refreshTokenFiatRate({
     const coinRate = getFiatRate({ chainCoin, fiatCurrency });
     if (!coinRate) return miss();
     try {
-        const inCoin = await fetchMarketPriceInCoin(fetchImpl, chainCoin, t, n, nowMs);
-        const fiat = inCoin == null ? null : inCoin * coinRate.rate;
-        if (fiat != null && Number.isFinite(fiat) && fiat > 0) return put(fiat, 'market');
+        const market = await fetchMarketPriceInCoin(fetchImpl, chainCoin, t, n, nowMs);
+        const fiat = market == null ? null : market.price * coinRate.rate;
+        if (fiat != null && Number.isFinite(fiat) && fiat > 0) {
+            return put(fiat, 'market', market.change24hPct);
+        }
     } catch { /* keep whatever the cache already holds */ }
     return miss();
 }
@@ -574,7 +672,9 @@ export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {})
 export function _resetPriceLookupForTests() {
     rateCache.clear();
     coinMissAt.clear();
+    coinRefreshes.clear();
     tokenRateCache.clear();
+    tokenRefreshes.clear();
     listeners.clear();
     deps = { fetch: null, now: () => Date.now(), explorerUrlByCoin: null };
 }

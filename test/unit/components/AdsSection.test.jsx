@@ -72,7 +72,8 @@ describe('Automatic Donation System settings', () => {
         expect(screen.getByLabelText('Bitcoin per-transaction amount').value).toBe('1000');
         expect(screen.getByLabelText('Bitcoin trigger threshold').value).toBe('25000');
         expect(screen.getByText(/About 25 outgoing transactions to reach the threshold, then sent with the next one/)).toBeTruthy();
-        expect(screen.getByText('Pending donation').nextElementSibling.textContent).toBe('12,345 sats');
+        expect(screen.getByText('Pending donation').nextElementSibling.textContent)
+            .toBe(`${(12_345).toLocaleString()} sats`);
     });
 
     it('writes the switch and both donation choices', () => {
@@ -93,6 +94,25 @@ describe('Automatic Donation System settings', () => {
         expect(update).toHaveBeenNthCalledWith(3, {
             ads: { perChain: { 'bitcoin-mainnet': { triggerAmountSats: 50000 } } },
         });
+    });
+
+    it('keeps amount fields stable on wheel input and rejects exponent notation', () => {
+        render(<AdsSection />);
+
+        const amount = screen.getByLabelText('Bitcoin per-transaction amount');
+        const threshold = screen.getByLabelText('Bitcoin trigger threshold');
+        expect(amount.type).toBe('text');
+        expect(amount.inputMode).toBe('decimal');
+        expect(threshold.type).toBe('text');
+        expect(threshold.inputMode).toBe('decimal');
+
+        fireEvent.wheel(amount, { deltaY: -100 });
+        expect(amount.value).toBe('1000');
+
+        fireEvent.change(amount, { target: { value: '1e3' } });
+        fireEvent.blur(amount);
+        expect(amount.value).toBe('1000');
+        expect(update).not.toHaveBeenCalled();
     });
 
     it('explains the threshold and makes the off state unambiguous', () => {

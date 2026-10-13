@@ -90,6 +90,13 @@ export function PriceAlertForm({
     const targetFiat = Number(targetStr);
     const valid = Boolean(chainId) && Number.isFinite(targetFiat) && targetFiat > 0;
     const invalidTarget = targetStr !== '' && !valid;
+    const disabledReason = !chainId
+        ? 'Choose a coin to continue.'
+        : targetStr === ''
+            ? 'Enter a target price to continue.'
+            : invalidTarget
+                ? 'Enter a price greater than zero.'
+                : null;
 
     const alreadyMet = useMemo(() => {
         if (currentPrice == null || !Number.isFinite(currentPrice) || !valid) return false;
@@ -147,13 +154,19 @@ export function PriceAlertForm({
                     placeholder="Price"
                     value={targetStr}
                     aria-invalid={invalidTarget}
-                    aria-describedby={invalidTarget ? 'price-alert-target-error' : undefined}
+                    aria-describedby={disabledReason ? 'price-alert-disabled-reason' : undefined}
                     onChange={(e) => setTargetStr(normalizeDecimalEntry(e.target.value, targetStr))}
                     onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                     style={{ ...FIELD, width: 110 }}
                 />
                 {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
-                <button type="button" onClick={submit} disabled={!valid || busy} style={{ ...PRIMARY_BTN, opacity: !valid || busy ? 0.5 : 1 }}>
+                <button
+                    type="button"
+                    onClick={submit}
+                    disabled={!valid || busy}
+                    aria-describedby={disabledReason ? 'price-alert-disabled-reason' : undefined}
+                    style={{ ...PRIMARY_BTN, opacity: !valid || busy ? 0.5 : 1 }}
+                >
                     {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
                 </button>
                 {onCancel ? (
@@ -166,9 +179,13 @@ export function PriceAlertForm({
                     </button>
                 ) : null}
             </div>
-            {invalidTarget ? (
-                <span id="price-alert-target-error" role="alert" style={{ ...HINT, color: 'var(--xc-danger)' }}>
-                    Enter a price greater than zero.
+            {disabledReason ? (
+                <span
+                    id="price-alert-disabled-reason"
+                    role={invalidTarget ? 'alert' : 'status'}
+                    style={invalidTarget ? { ...HINT, color: 'var(--xc-danger)' } : HINT}
+                >
+                    {disabledReason}
                 </span>
             ) : null}
             {alreadyMet ? (

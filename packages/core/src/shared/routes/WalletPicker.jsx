@@ -9,18 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 /**
  * WalletPicker: full-screen list of all wallets in the vault, with
- * an "Add Wallet" affordance in the header. Reached from the gear
- * popover's Wallet summary row. Picking a wallet calls `onSwitch`
+ * thumb-reachable add and current-wallet management actions in the
+ * footer. Reached from the gear popover's Wallet summary row. Picking
+ * a wallet calls `onSwitch`
  * and returns to the screen that opened the picker.
  *
- * Each row carries an info (ⓘ) button on the right; clicking it
+ * Each row also carries an info (ⓘ) button on the right; clicking it
  * navigates to WalletDetails (where the Rename affordance also lives).
  *
  * @param {object} props
@@ -77,27 +78,33 @@ export function WalletPicker({
 
     const switching = switchingWalletId !== null;
 
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            backDisabled={switching}
-            title="Wallets"
-            trailing={(
-                <button
-                    type="button"
-                    onClick={onAddWallet}
-                    aria-label="Add Wallet"
-                    title="Add Wallet"
+    const header = <PageHeader onBack={onBack} backDisabled={switching} title="Wallets" />;
+    const activeWallet = wallets?.find((wallet) => wallet.id === activeWalletId) || null;
+    const footer = (
+        <div className={pickerStyles.footerActions}>
+            <Button
+                variant="primary"
+                onClick={onAddWallet}
+                disabled={switching}
+                icon={<Icon.PlusIcon />}
+            >
+                Add Wallet
+            </Button>
+            {onShowDetails && activeWallet ? (
+                <Button
+                    variant="ghost"
+                    onClick={() => onShowDetails(activeWallet.id)}
                     disabled={switching}
+                    icon={<Icon.InfoIcon />}
                 >
-                    <Icon.PlusIcon />
-                </button>
-            )}
-        />
+                    Manage wallet
+                </Button>
+            ) : null}
+        </div>
     );
 
     return (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} footer={footer}>
             <ListPage>
                 {switchError ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{switchError}</StatusMessage>
@@ -110,23 +117,35 @@ export function WalletPicker({
                     <EmptyState title="No wallets yet" body="Wallets available to this app appear here." />
                 ) : wallets.map((w) => {
                     const active = w.id === activeWalletId;
+                    const walletName = w.name || 'Unnamed wallet';
                     return (
                         <div key={w.id} className={pickerStyles.rowWrap}>
                             <button
                                 type="button"
-                                className={styles.entry}
+                                className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => handleSelect(w.id, active)}
                                 disabled={switching}
                                 aria-busy={switchingWalletId === w.id ? 'true' : undefined}
+                                aria-current={active ? 'true' : undefined}
                             >
                                 <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
-                                    <span className={styles.entryLabel}>
-                                        {active ? '● ' : '○ '}{w.name || 'Unnamed wallet'}
+                                    <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
+                                        {active ? (
+                                            <span className={pickerStyles.currentMark} aria-hidden="true">
+                                                <Icon.CheckIcon />
+                                            </span>
+                                        ) : null}
+                                        <span className={pickerStyles.rowName} title={walletName}>
+                                            {walletName}
+                                        </span>
                                     </span>
                                     {w.format ? (
                                         <span className={styles.entryDescription}>
-                                            {w.format === 'counterwallet-legacy' ? 'FreeWallet (legacy)' : 'BIP39'}
+                                            {w.origin === 'demo' ? 'Demo wallet · ' : ''}
+                                            {w.format === 'counterwallet-legacy'
+                                                ? 'FreeWallet (legacy)'
+                                                : w.format === 'wif-only' ? 'Imported key' : 'BIP39'}
                                             {/* A stored passphrase (passphraseStored) unlocks on the
                                                 password alone, so it earns no badge here; only a legacy
                                                 record still owed its one-time capture does, and the badge
@@ -140,7 +159,7 @@ export function WalletPicker({
                                 <button
                                     type="button"
                                     className={pickerStyles.rowMenuBtn}
-                                    aria-label={`Wallet details for ${w.name || 'wallet'}`}
+                                    aria-label={`Wallet details for ${walletName}`}
                                     title="Wallet details"
                                     disabled={switching}
                                     onClick={(e) => {

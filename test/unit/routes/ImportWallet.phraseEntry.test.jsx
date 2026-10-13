@@ -6,7 +6,7 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
@@ -15,6 +15,10 @@ const BIP39_PHRASE = 'abandon abandon abandon abandon abandon abandon abandon ab
 const BIP39_24_WORD_PHRASE = `${Array(23).fill('abandon').join(' ')} art`;
 const COUNTERWALLET_PHRASE = 'explode gaze wolf admit nice charm except three any guitar into color';
 const PASSWORD = 'correct-horse-battery';
+
+afterEach(() => {
+    delete navigator.clipboard;
+});
 
 function renderImport(importMnemonic = vi.fn().mockResolvedValue({})) {
     render(
@@ -53,6 +57,25 @@ function submitPhrase(phrase, importMnemonic = vi.fn().mockResolvedValue({})) {
 }
 
 describe('ImportWallet recovery phrase entry', () => {
+    it('names the next missing field beside the disabled import action', () => {
+        renderImport();
+        const action = screen.getByRole('button', { name: 'Import' });
+
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'import-wallet-disabled-reason');
+        expect(screen.getByRole('status')).toHaveTextContent('Enter a recovery phrase to continue.');
+
+        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: BIP39_PHRASE } });
+        expect(screen.getByRole('status')).toHaveTextContent('Enter a password to continue.');
+
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        expect(screen.getByRole('status')).toHaveTextContent('Confirm your password to continue.');
+
+        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        expect(action).toBeEnabled();
+        expect(action).not.toHaveAttribute('aria-describedby');
+    });
+
     it('normalizes spaces and newlines when a whole phrase is pasted', async () => {
         const importMnemonic = renderImport();
         const textarea = screen.getByLabelText('Recovery phrase');
@@ -71,6 +94,23 @@ describe('ImportWallet recovery phrase entry', () => {
         await waitFor(() => expect(importMnemonic).toHaveBeenCalledWith(
             expect.objectContaining({ mnemonic: BIP39_PHRASE }),
         ));
+    });
+
+    it('splits a multi-line clipboard phrase into words', async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: {
+                readText: vi.fn().mockResolvedValue(
+                    '  abandon  abandon\nabandon\tabandon abandon abandon\n abandon abandon abandon abandon abandon about  ',
+                ),
+            },
+        });
+        renderImport();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }));
+
+        await waitFor(() => expect(screen.getByLabelText('Recovery phrase')).toHaveValue(BIP39_PHRASE));
+        expect(screen.getByText('12 words entered (use 12, 15, 18, 21, or 24)')).toBeTruthy();
     });
 
     it('offers BIP39 completions for the word at the caret', () => {

@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
-import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
+import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { useSettings } from '../hooks/useSettings.js';
 import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
@@ -53,6 +54,9 @@ const chainRegistry = registryLib.defaultRegistry();
 export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { settings } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -409,6 +413,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             nowMs={nowMs}
                             chainClock={chainClocks[row.chainId] || null}
                             onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     ))}
                 </div>
@@ -417,8 +422,12 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
 }
 
-function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect }) {
+function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect, allowRemoteImages }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
+        ? row.imageUrl
+        : null;
+    const descriptor = chainRegistry.get(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
     // 'valid' forever, which dressed every dispenser - cancelled and drained
@@ -447,36 +456,43 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
             aria-label={`Open ${row.give_tick || '?'} dispenser #${row.action_index ?? '?'}`}
         >
             <div className={local.iconWrap}>
-                {row.imageUrl ? (
+                <span
+                    className={local.iconLetter}
+                    style={{ background: tickerColor(row.give_tick || '?'), color: '#FFFFFF' }}
+                    aria-hidden="true"
+                >
+                    {(row.give_tick || '?').slice(0, 1)}
+                </span>
+                {tokenImageUrl ? (
                     <img
-                        src={row.imageUrl}
+                        src={tokenImageUrl}
                         alt=""
                         aria-hidden="true"
                         className={local.iconImg}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ position: 'absolute', inset: 0 }}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
-                ) : (
-                    <span
-                        className={local.iconLetter}
-                        style={{ background: tickerColor(row.give_tick || '?'), color: '#FFFFFF' }}
-                        aria-hidden="true"
-                    >
-                        {(row.give_tick || '?').slice(0, 1)}
-                    </span>
-                )}
+                ) : null}
                 {chainIconUrl ? (
                     <img
                         src={chainIconUrl}
                         alt=""
                         aria-hidden="true"
-                        title={chainRegistry.get(row.chainId)?.displayName}
-                        className={local.chainOverlay}
+                    title={chainRegistry.get(row.chainId)?.displayName}
+                    className={local.chainOverlay}
+                    loading="lazy"
+                    decoding="async"
                     />
                 ) : null}
             </div>
             <div className={local.body}>
                 <div className={local.name}>
                     {label ? `${label}: ` : ''}{row.give_tick || '?'}
+                </div>
+                <div className={local.subtitle}>
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
                 </div>
                 <div className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</div>
                 {/* Escrow is only stated when it is known. The explorer's

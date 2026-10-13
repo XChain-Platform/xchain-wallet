@@ -88,6 +88,9 @@ android {
     }
     buildTypes {
         release {
+            // Capacitor follows FLAG_DEBUGGABLE when its JSON override is absent.
+            // Release closes WebView DevTools while debug keeps them available.
+            debuggable false
             // R8 DECISION, PINNED (§7): OFF, and this is the decision,
             // not a default nobody looked at.
             //
@@ -105,6 +108,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
         debug {
+            debuggable true
             // Debug builds carry the regtest network exemption via the
             // src/debug source set; the suffix keeps one installable next to
             // a release build so a developer never has to uninstall (which
