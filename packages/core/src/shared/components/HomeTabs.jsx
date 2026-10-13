@@ -401,7 +401,24 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 />
             ) : null}
 
-            <div className={styles.tabs} role="tablist" aria-label="Wallet view">
+            {/* Only the active tab is in the Tab order, so the arrow keys, Home and End move between tabs. */}
+            <div
+                className={styles.tabs}
+                role="tablist"
+                aria-label="Wallet view"
+                onKeyDown={(event) => {
+                    const index = tabs.findIndex((t) => t.id === active);
+                    const last = tabs.length - 1;
+                    const nextIndex = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                        : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
+                            : event.key === 'Home' ? 0
+                                : event.key === 'End' ? last : -1;
+                    if (nextIndex < 0 || index < 0) return;
+                    event.preventDefault();
+                    setActive(tabs[nextIndex].id);
+                    document.getElementById(`${tabsId}-tab-${tabs[nextIndex].id}`)?.focus();
+                }}
+            >
                 {tabs.map((t) => (
                     <button
                         key={t.id}

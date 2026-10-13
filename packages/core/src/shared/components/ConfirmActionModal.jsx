@@ -26,7 +26,7 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback, useContext, useEffect } from 'react';
+import { useState, useCallback, useContext, useEffect, useRef } from 'react';
 import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
@@ -40,6 +40,7 @@ import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
 import { defaultRegistry } from '../../registry/index.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
+import { useFocusTrap } from '../utils/focusTrap.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
 import { WalletIdentity } from './WalletIdentity.jsx';
@@ -285,6 +286,8 @@ export function ConfirmActionModal({
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
+    const pageRef = useRef(null);
+    useFocusTrap(pageRef, { active: open });
     const signingTime = useLongOperationStatus(signaturePhase);
 
     // A signature exists once we leave the pre-sign phases into signing and
@@ -314,7 +317,7 @@ export function ConfirmActionModal({
     );
 
     return (
-        <Screen variant={screenVariant} header={header}>
+        <Screen rootRef={pageRef} variant={screenVariant} header={header}>
             <div
                 className={styles.page}
                 data-testid="confirm-modal"

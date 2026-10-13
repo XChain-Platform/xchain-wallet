@@ -49,9 +49,10 @@ export function ScrollRestoration({ routeKey, children }) {
  * @param {'small' | 'full'} [props.variant]
  * @param {'main' | 'section' | 'div'} [props.bodyAs]
  * @param {string} [props.bodyLabelledBy]
+ * @param {import('react').RefObject<HTMLDivElement>} [props.rootRef]
  * @param {import('react').ReactNode} props.children
  */
-export function Screen({ header, footer, variant = 'small', bodyAs: Body = 'main', bodyLabelledBy, children }) {
+export function Screen({ header, footer, variant = 'small', bodyAs: Body = 'main', bodyLabelledBy, rootRef, children }) {
     const mainRef = useRef(null);
     const restoration = useContext(ScrollRestorationContext);
     const routeKey = restoration?.routeKey;
@@ -66,7 +67,7 @@ export function Screen({ header, footer, variant = 'small', bodyAs: Body = 'main
 
     const className = `${styles.screen} ${styles[variant]}`;
     return (
-        <div className={className}>
+        <div ref={rootRef} className={className}>
             {header ? <header className={styles.header}>{header}</header> : null}
             <Body
                 ref={mainRef}

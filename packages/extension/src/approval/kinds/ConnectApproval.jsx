@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
@@ -107,6 +108,7 @@ export function ConnectApproval({ id, payload, onReject }) {
     );
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    useBackHandler(onReject, busy);
 
     function toggleChain(chainId) {
         setApprovedChains((prev) =>
