@@ -71,6 +71,26 @@ describe('message signing inputs', () => {
 });
 
 describe('signature verification inputs and results', () => {
+    it('names each required input beside the disabled verify action', async () => {
+        renderForm(VerifySignatureForm, messagingFor());
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        const action = screen.getByRole('button', { name: 'Verify signature' });
+
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'verify-signature-disabled-reason');
+        expect(screen.getByRole('status')).toHaveTextContent('Enter the signer address to continue.');
+
+        fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
+        expect(screen.getByRole('status')).toHaveTextContent('Enter the original message to continue.');
+
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'message' } });
+        expect(screen.getByRole('status')).toHaveTextContent('Enter the signature to continue.');
+
+        fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
+        expect(action).toBeEnabled();
+        expect(action).not.toHaveAttribute('aria-describedby');
+    });
+
     it('accepts wrapped base64 and verifies against the selected chain', async () => {
         const verifyMessageRequest = vi.fn().mockResolvedValue({ valid: true });
         renderForm(VerifySignatureForm, messagingFor({ verifyMessageRequest }));

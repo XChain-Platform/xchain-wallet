@@ -44,6 +44,23 @@ afterEach(() => {
 });
 
 describe('CreateWallet security options', () => {
+    it('explains each missing password field beside the disabled primary action', () => {
+        draw();
+        const action = screen.getByRole('button', { name: 'Next' });
+
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'create-wallet-disabled-reason');
+        expect(screen.getByRole('status')).toHaveTextContent('Enter a password to continue.');
+
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'long-enough' } });
+        expect(action).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent('Confirm your password to continue.');
+
+        fireEvent.change(screen.getByLabelText('Confirm'), { target: { value: 'long-enough' } });
+        expect(action).toBeEnabled();
+        expect(action).not.toHaveAttribute('aria-describedby');
+    });
+
     it('explains the word-count tradeoff and generates the selected 24 words', async () => {
         generateBip39Mnemonic.mockReturnValue(phrase24);
         draw();

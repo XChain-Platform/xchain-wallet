@@ -29,6 +29,7 @@ import {
     ChainPicker,
     FormPage,
     PageHeader,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -110,6 +111,14 @@ export function VerifySignatureForm({ onBack }) {
         <PageHeader onBack={onBack} backDisabled={busy} title="Verify signature" />
     );
 
+    const disabledReason = address.trim().length === 0
+        ? 'Enter the signer address to continue.'
+        : message.length === 0
+            ? 'Enter the original message to continue.'
+            : signature.trim().length === 0
+                ? 'Enter the signature to continue.'
+                : null;
+
     // Shown just above the Verify button by FormPage's status slot.
     const status = (error || result) ? (
         <>
@@ -140,6 +149,10 @@ export function VerifySignatureForm({ onBack }) {
                 </div>
             ) : null}
         </>
+    ) : disabledReason ? (
+        <StatusMessage id="verify-signature-disabled-reason">
+            {disabledReason}
+        </StatusMessage>
     ) : null;
 
     const fields = (
@@ -242,9 +255,10 @@ export function VerifySignatureForm({ onBack }) {
                         type="submit"
                         variant="primary"
                         loading={busy}
-                        disabled={busy || message.length === 0 || signature.trim().length === 0 || address.trim().length === 0}
+                        disabled={Boolean(disabledReason)}
+                        aria-describedby={disabledReason ? 'verify-signature-disabled-reason' : undefined}
                     >
-                        Verify signature
+                        {busy ? 'Verifying…' : 'Verify signature'}
                     </Button>
                 )}
             >
