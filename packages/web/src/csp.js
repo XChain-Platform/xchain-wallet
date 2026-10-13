@@ -32,16 +32,19 @@
 //   - style-src 'unsafe-inline': the UI uses React inline style attributes
 //     (style={{...}}) and runtime-injected <style> tags extensively. Inline
 //     styles cannot exfiltrate data, so this is a low-risk allowance.
-//   - connect-src is deliberately broad (https:/wss: + localhost): the
-//     wallet talks to user-configured explorer/hub/coin-node endpoints
-//     that are data, not code, and cannot be enumerated at build time.
-//     The XSS-defining directives (script-src/object-src/base-uri) are the
-//     load-bearing ones; connect-src is best-effort.
+//   - connect-src names the fixed egress hosts from the wire-audit registry
+//     and the local ports from the chain descriptors. A script injection
+//     therefore cannot post wallet material to an arbitrary HTTPS endpoint.
 //   - frame-ancestors is part of the policy but is header-only by spec:
 //     a <meta> CSP ignores it (with a console warning), so the meta tag
 //     omits it and the fronting server (Apache) sends it as a header to
 //     actually prevent framing.
 //   - img/font allow data: + blob: for QR codes and the favicon.
+
+import { WIRE_AUDIT } from '../../core/src/privacy/wireAudit.js';
+import { bitcoinDescriptors } from '../../core/src/registry/descriptors/bitcoin.js';
+import { dogecoinDescriptors } from '../../core/src/registry/descriptors/dogecoin.js';
+import { litecoinDescriptors } from '../../core/src/registry/descriptors/litecoin.js';
 
 // PROFILES (; rails §3 owns the names). The policy is not the
 // same on every shell, because the shells do not have the same capabilities.
@@ -58,6 +61,55 @@ export const DEFAULT_BUILD_PROFILE = 'default';
 /** Trezor Connect's hosted origin: script AND frame, or its UI cannot run. */
 const TREZOR_CONNECT_ORIGIN = 'https://connect.trezor.io';
 
+const CHAIN_DESCRIPTORS = [
+    ...bitcoinDescriptors,
+    ...dogecoinDescriptors,
+    ...litecoinDescriptors,
+];
+
+function endpointOrigin(endpoint) {
+    const url = new URL(endpoint.defaultUrl);
+    if (![80, 443].includes(endpoint.defaultPort)) url.port = String(endpoint.defaultPort);
+    return url.origin;
+}
+
+function fixedEgressOrigins() {
+    return WIRE_AUDIT
+        .filter((entry) => (
+            entry.host !== '*'
+            && entry.shells.some((shell) => shell === 'web' || shell === 'mobile')
+        ))
+        .map((entry) => `https://${entry.host}`);
+}
+
+function configuredEndpointOrigins() {
+    return CHAIN_DESCRIPTORS.flatMap((descriptor) => (
+        ['explorer', 'encoder', 'hub'].map((name) => endpointOrigin(descriptor[name]))
+    ));
+}
+
+function configuredExplorerSocketOrigins() {
+    return CHAIN_DESCRIPTORS.map((descriptor) => {
+        const origin = new URL(endpointOrigin(descriptor.explorer));
+        origin.protocol = origin.protocol === 'https:' ? 'wss:' : 'ws:';
+        return origin.origin;
+    });
+}
+
+function connectSources() {
+    return [
+        "'self'",
+        ...new Set([
+            ...fixedEgressOrigins(),
+            ...configuredEndpointOrigins(),
+            // Developer Mode exposes this fixed regtest-miner default beside
+            // the descriptor-backed explorer, encoder, and hub endpoints.
+            'http://localhost:3005',
+            ...configuredExplorerSocketOrigins(),
+        ]),
+    ];
+}
+
 /** @type {Record<string, string[]>} */
 const DIRECTIVES = {
     'default-src': ["'self'"],
@@ -69,15 +121,7 @@ const DIRECTIVES = {
     'frame-src': ["'self'", TREZOR_CONNECT_ORIGIN],
     'img-src': ["'self'", 'data:', 'blob:'],
     'font-src': ["'self'", 'data:'],
-    'connect-src': [
-        "'self'",
-        'https:',
-        'wss:',
-        'http://localhost:*',
-        'http://127.0.0.1:*',
-        'ws://localhost:*',
-        'ws://127.0.0.1:*',
-    ],
+    'connect-src': [],
     'worker-src': ["'self'", 'blob:'],
     'object-src': ["'none'"],
     'base-uri': ["'none'"],
@@ -107,6 +151,7 @@ export function directivesFor(profile = DEFAULT_BUILD_PROFILE) {
     const directives = Object.fromEntries(
         Object.entries(DIRECTIVES).map(([name, values]) => [name, [...values]]),
     );
+    directives['connect-src'] = connectSources();
     if (profile === 'store') {
         for (const name of ['script-src', 'frame-src']) {
             directives[name] = directives[name].filter((v) => v !== TREZOR_CONNECT_ORIGIN);
