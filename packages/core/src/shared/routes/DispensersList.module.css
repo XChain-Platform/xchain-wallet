@@ -218,3 +218,41 @@
     background: rgba(234, 179, 8, 0.15);
     color: var(--xc-warning, #B45309);
 }
+
+@media (max-width: 399px) {
+    .row {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        align-items: start;
+        gap: var(--xc-space-2);
+        padding: var(--xc-space-2);
+    }
+
+    .iconWrap,
+    .iconImg {
+        width: 40px;
+        height: 40px;
+    }
+
+    .name,
+    .subtitle {
+        white-space: normal;
+        overflow: visible;
+        overflow-wrap: anywhere;
+    }
+
+    .trailing {
+        grid-column: 2;
+        min-width: 0;
+        max-width: 100%;
+        align-items: flex-start;
+    }
+
+    .status {
+        max-width: 100%;
+        box-sizing: border-box;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+    }
+}

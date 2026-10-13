@@ -68,6 +68,10 @@
 }
 
 .picker {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
     font-size: var(--xc-text-md);
