@@ -184,8 +184,14 @@ describe('MnemonicGrid narrow layout', () => {
         expect(onboardingCss).toMatch(/\.actionsFull\s*\{[^}]*width:\s*100%;/s);
         expect(onboardingCss).toMatch(/@media \(max-height:\s*520px\)/);
         expect(createCss).toMatch(/\.wordCountOption\s*\{[^}]*flex-wrap:\s*wrap;/s);
+        expect(createCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
+        expect(createCss).toMatch(/\.confirmRow\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+        expect(createCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/@media \(max-height:\s*520px\)/);
         expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*flex-wrap:\s*wrap;/s);
+        expect(importCss).toMatch(/\.mnemonicHeader\s*>\s*\*\s*\{[^}]*min-width:\s*0;/s);
+        expect(importCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
+        expect(importCss).toMatch(/\.laneSwitcher\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
         expect(importCss).toMatch(/\.laneTab\s*\{[^}]*min-width:\s*0;/s);
         expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
     });
