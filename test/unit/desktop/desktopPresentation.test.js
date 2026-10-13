@@ -25,9 +25,8 @@ describe('desktop presentation metadata', () => {
         const check = vi.fn();
         const item = createUpdateCheckMenuItem(check);
 
-        expect(item.label).toBe('Check for Updates...');
+        expect(item.label).toBe('Check for updates…');
         item.click();
         expect(check).toHaveBeenCalledTimes(1);
     });
 });
-

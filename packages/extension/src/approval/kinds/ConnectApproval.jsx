@@ -144,7 +144,7 @@ export function ConnectApproval({ id, payload, onReject }) {
             // belt-and-braces in case the browser doesn't honour remove().
             window.close();
         } catch (err) {
-            setError(err?.message || 'Approval failed.');
+            setError(err?.message || 'Could not connect this site.');
             setBusy(false);
         }
     }
@@ -154,7 +154,7 @@ export function ConnectApproval({ id, payload, onReject }) {
             variant="small"
             header={
                 <div className={shared.header}>
-                    <span className={shared.title}>Connection request</span>
+                    <span className={shared.title}>Connect to XChain Wallet?</span>
                 </div>
             }
             footer={
@@ -199,7 +199,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                 <legend className={styles.legend}>Chains</legend>
                 <p className={styles.hint}>
                     {hasRequestedChains
-                        ? 'Narrow the chains this site requested. You can change this later.'
+                        ? 'Choose from the chains this site requested. You can change this later.'
                         : 'Pick which chains this site can see. You can change this later.'}
                 </p>
                 <ul className={styles.chainList}>
@@ -250,7 +250,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                     </>
                 ) : (
                     <p className={styles.hint}>
-                        This site will see your wallet's primary account.
+                        This site can see your primary account.
                     </p>
                 )}
             </fieldset>

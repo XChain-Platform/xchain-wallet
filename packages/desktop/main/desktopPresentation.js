@@ -30,8 +30,7 @@ export const DESKTOP_ABOUT_PANEL_OPTIONS = Object.freeze({
  */
 export function createUpdateCheckMenuItem(onCheckForUpdates) {
     return {
-        label: 'Check for Updates...',
+        label: 'Check for updates…',
         click: onCheckForUpdates,
     };
 }
-

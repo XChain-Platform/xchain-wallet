@@ -77,7 +77,7 @@ export function ConnectedSitesSection() {
 
     const reload = async () => {
         if (typeof messaging?.listConnectedSites !== 'function') {
-            setError('Connected-sites is not wired in this shell yet.');
+            setError('Connected sites are unavailable in this app.');
             setLoading(false);
             return;
         }
@@ -109,7 +109,7 @@ export function ConnectedSitesSection() {
         if (!snapshot) return;
         const confirmed = await confirmDialog.confirm({
             title: `Disconnect ${snapshot.appName || snapshot.origin}?`,
-            message: `${snapshot.origin} will lose access to its shared accounts and signing permissions. You can reconnect the site later.`,
+            message: `${snapshot.origin} will lose access to the accounts you shared and will no longer be able to ask for signatures. You can reconnect the site later.`,
             confirmLabel: 'Disconnect site',
             danger: true,
         });
@@ -143,8 +143,8 @@ export function ConnectedSitesSection() {
         if (pendingAction) return false;
         const confirmed = await confirmDialog.confirm({
             title: `Block ${origin}?`,
-            message: 'This revokes any connected session and prevents the origin from connecting or requesting signatures until you unblock it.',
-            confirmLabel: 'Block origin',
+            message: 'This disconnects the site and prevents it from connecting or asking you to sign until you unblock it.',
+            confirmLabel: 'Block site',
             danger: true,
         });
         if (!confirmed) return false;
@@ -278,7 +278,7 @@ export function ConnectedSitesSection() {
 
 // Cluster S FOLLOWUP 4: Blocklist audit-log panel.
 // Reads the persisted ring-buffer via messaging.listBlocklistAuditLog,
-// renders newest-first, and exposes a Clear log button.
+// renders newest-first, and exposes a clear-history button.
 function BlocklistAuditPanel({ confirm }) {
     const { messaging } = useMessaging();
     const [entries, setEntries] = useState(/** @type {any[] | null} */ (null));
@@ -300,9 +300,9 @@ function BlocklistAuditPanel({ confirm }) {
     const onClear = async () => {
         if (clearing) return;
         const confirmed = await confirm({
-            title: 'Clear blocklist audit log?',
-            message: 'This permanently removes the recorded history of blocklist changes.',
-            confirmLabel: 'Clear log',
+            title: 'Clear site block history?',
+            message: 'This permanently deletes the record of sites you blocked or unblocked.',
+            confirmLabel: 'Clear history',
             danger: true,
         });
         if (!confirmed) return;
@@ -321,7 +321,7 @@ function BlocklistAuditPanel({ confirm }) {
     return (
         <div style={SITE_BLOCK}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <span style={ROW_VALUE}>Blocklist audit log</span>
+                <span style={ROW_VALUE}>Site block history</span>
                 <Button
                     type="button"
                     onClick={onClear}
@@ -329,18 +329,18 @@ function BlocklistAuditPanel({ confirm }) {
                     size="sm"
                     variant="danger"
                 >
-                    {clearing ? 'Clearing…' : 'Clear log'}
+                    {clearing ? 'Clearing…' : 'Clear history'}
                 </Button>
             </div>
             <span style={ROW_HINT}>
-                Recent blocklist mutations (most recent last). Capped at 50
-                entries; older ones fall off automatically. Use this to spot
-                an unexpected change to the blocklist before it costs you.
+                Shows the 50 most recent changes, with the newest last. Use
+                this history to spot a site that was blocked or unblocked
+                unexpectedly.
             </span>
             {entries.length === 0 ? (
                 <EmptyState
-                    title="No blocklist changes"
-                    body="Recent changes to blocked origins appear here."
+                    title="No site block history"
+                    body="Sites you block or unblock appear here."
                     titleAs="p"
                 />
             ) : (
@@ -370,14 +370,14 @@ function BlocklistAuditPanel({ confirm }) {
                                 {formatLastUsed(new Date(entry.at).toISOString())}
                             </span>
                             <span style={{ color: entry.action === 'add' ? 'var(--xc-danger-fg)' : 'var(--xc-text)' }}>
-                                {entry.action === 'add' ? 'block' : 'unblock'}
+                                {entry.action === 'add' ? 'blocked' : 'unblocked'}
                             </span>
                             <span style={{ color: 'var(--xc-text)', flex: 1, wordBreak: 'break-all', textAlign: 'right' }}>
                                 {entry.entry}
                                 {Array.isArray(entry.evictedSiteIds) && entry.evictedSiteIds.length > 0 ? (
                                     <span style={{ color: 'var(--xc-text-muted)', marginLeft: 4 }}>
-                                        (+{entry.evictedSiteIds.length} site
-                                        {entry.evictedSiteIds.length === 1 ? '' : 's'} evicted)
+                                        ({entry.evictedSiteIds.length} site connection
+                                        {entry.evictedSiteIds.length === 1 ? '' : 's'} removed)
                                     </span>
                                 ) : null}
                             </span>
@@ -554,19 +554,19 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
     return (
         <div style={{ ...SITE_BLOCK, borderColor: 'var(--xc-border)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
-                <span style={ROW_VALUE}>Blocked origins</span>
+                <span style={ROW_VALUE}>Blocked sites</span>
                 <span style={ROW_HINT}>
-                    Blocked sites cannot connect or ask you to sign anything
-                    until you remove them from this list. Wildcards like{' '}
+                    Blocked sites cannot connect or ask you to sign until you
+                    unblock them. To block every subdomain, use a pattern like{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>*.example.com</code>{' '}
-                    block every subdomain (the bare apex is separate; add{' '}
+                    and add{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>example.com</code>{' '}
-                    too if you want to cover it).
+                    separately to block the main site too.
                 </span>
                 {blocked.length === 0 ? (
                     <EmptyState
-                        title="No blocked origins"
-                        body="Origins added to the blocklist appear here."
+                        title="No blocked sites"
+                        body="Sites you block appear here."
                         titleAs="p"
                     />
                 ) : (
@@ -631,14 +631,14 @@ function PermissionsSummary({ permissions }) {
     const actions = permissions.canSignAction || {};
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
-            <PermRow label="Chains" text={chains.length === 0 ? 'none' : chains.join(', ')} />
-            <PermRow label="Accounts" text={accounts.length === 0 ? 'none' : accounts.join(', ')} />
+            <PermRow label="Chains" text={chains.length === 0 ? 'None' : chains.join(', ')} />
+            <PermRow label="Accounts" text={accounts.length === 0 ? 'None' : accounts.join(', ')} />
             <PermRow
                 label="Sign messages"
-                text={permissions.canSignMessage ? 'always allow' : 'ask every time'}
+                text={permissions.canSignMessage ? 'Always allow' : 'Ask every time'}
             />
             {Object.keys(actions).length === 0 ? (
-                <PermRow label="Sign actions" text="ask every time" />
+                <PermRow label="Sign actions" text="Ask every time" />
             ) : (
                 <div>
                     <div style={{ color: 'var(--xc-text-muted)' }}>Sign actions</div>
@@ -673,9 +673,9 @@ function permColor(perm) {
 }
 
 function permissionLabel(perm) {
-    if (perm === 'always') return 'always allow';
-    if (perm === 'never') return 'never allow';
-    return 'ask every time';
+    if (perm === 'always') return 'Always allow';
+    if (perm === 'never') return 'Never allow';
+    return 'Ask every time';
 }
 
 function formatWindowSeconds(windowMs) {
