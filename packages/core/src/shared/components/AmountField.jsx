@@ -15,6 +15,7 @@
 // fiat the input edits `fiatAmount` and the parent derives the coin
 // amount via priceLookup.
 
+import { useState } from 'react';
 import { Input, Icon } from '@xchain-wallet/core/ui';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
@@ -38,6 +39,8 @@ import styles from './AmountField.module.css';
  * @param {boolean} [props.maxBusy] the Max amount is being priced (a native-coin Max is an encoder round trip, not arithmetic). Marks the button busy and refuses a second click while the first is in flight.
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
  * @param {string} [props.hint]                           hint line under the input, forwarded to Input
+ * @param {string} [props.error]                          caller-supplied validation error, forwarded to Input
+ * @param {number | string} [props.divisibility]          maximum coin-mode decimal places for the selected asset
  * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.
  */
 export function AmountField({
@@ -50,6 +53,8 @@ export function AmountField({
     fiatCurrency = 'USD',
     amountInputMode = 'coin',
     hint,
+    error,
+    divisibility,
     onAmountFieldChange,
     toggleAmountInputMode,
     inputRef,
@@ -58,12 +63,41 @@ export function AmountField({
     maxBusy = false,
     balanceText,
 }) {
+    const [inputError, setInputError] = useState('');
     const tickUpper = (typeof tick === 'string' ? tick : '').trim().toUpperCase();
     const fiatCcy = String(fiatRate?.fiatCurrency || fiatCurrency || 'USD').toUpperCase();
-    const isFiat = amountInputMode === 'fiat' && fiatRate;
+    const isFiat = Boolean(amountInputMode === 'fiat' && fiatRate);
     const activeUnit = isFiat ? fiatCcy : tickUpper;
     const otherUnit = isFiat ? tickUpper : fiatCcy;
     const inputValue = isFiat ? fiatAmount : amount;
+    const hasBalanceText = balanceText !== null
+        && balanceText !== undefined
+        && balanceText !== false;
+    const parsedDivisibility = Number(divisibility);
+    const decimalLimit = !isFiat && Number.isInteger(parsedDivisibility) && parsedDivisibility >= 0
+        ? parsedDivisibility
+        : null;
+
+    const handleChange = (event) => {
+        const rawValue = String(event.target.value);
+        const cursorPos = event.target.selectionStart;
+        const normalized = rawValue.replace(/[\s,]/g, '');
+        const normalizedCursor = typeof cursorPos === 'number'
+            ? rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
+            : null;
+
+        if (normalized !== '' && !/^\d*\.?\d*$/.test(normalized)) {
+            setInputError('Enter the amount as a plain decimal number.');
+            return;
+        }
+        const fraction = normalized.includes('.') ? normalized.split('.')[1] : '';
+        if (decimalLimit !== null && fraction.length > decimalLimit) {
+            setInputError(`Amount can have at most ${decimalLimit} decimal places.`);
+            return;
+        }
+        setInputError('');
+        onAmountFieldChange(normalized, normalizedCursor);
+    };
     const priceSourceLabel = fiatRate?.source === 'market' ? ' · DEX price' : '';
 
     let derivedText = '';
@@ -86,9 +120,10 @@ export function AmountField({
                     size={size}
                     label={activeUnit ? `${label} (${activeUnit})` : label}
                     hint={hint}
+                    error={inputError || error}
                     inputMode="decimal"
                     value={formatWithThousands(inputValue)}
-                    onChange={(e) => onAmountFieldChange(e.target.value, e.target.selectionStart)}
+                    onChange={handleChange}
                     autoComplete="off"
                     placeholder="0.00"
                     style={onMax ? { paddingRight: '64px' } : undefined}
@@ -97,8 +132,11 @@ export function AmountField({
                     <button
                         type="button"
                         className={styles.amountMaxInline}
-                        onClick={onMax}
-                        disabled={maxDisabled}
+                        onClick={() => {
+                            setInputError('');
+                            onMax();
+                        }}
+                        disabled={maxDisabled || maxBusy}
                         aria-busy={maxBusy || undefined}
                         aria-label="Use max available amount"
                     >
@@ -111,7 +149,11 @@ export function AmountField({
                     <button
                         type="button"
                         className={styles.amountUnitSwap}
-                        onClick={toggleAmountInputMode}
+                        onClick={() => {
+                            setInputError('');
+                            toggleAmountInputMode();
+                        }}
+                        aria-pressed={isFiat}
                         aria-label={isFiat
                             ? `Switch input to ${tickUpper || 'coin'}`
                             : `Switch input to ${fiatCcy}`}
@@ -122,7 +164,14 @@ export function AmountField({
                 ) : (
                     <span />
                 )}
-                <span className={styles.amountFooterRight}>{balanceText ?? null}</span>
+                <span
+                    className={styles.amountFooterRight}
+                    role={hasBalanceText ? 'status' : undefined}
+                    aria-live={hasBalanceText ? 'polite' : undefined}
+                    aria-atomic={hasBalanceText ? 'true' : undefined}
+                >
+                    {balanceText ?? null}
+                </span>
             </div>
         </div>
     );
