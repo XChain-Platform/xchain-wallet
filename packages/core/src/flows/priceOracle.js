@@ -39,6 +39,10 @@ import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 const SPOT_TTL_MS = 5 * 60 * 1000;
 const SPARKLINE_TTL_MS = 60 * 60 * 1000;
 
+function isFreshAge(ageMs, ttlMs) {
+    return ageMs >= 0 && ageMs <= ttlMs;
+}
+
 // CoinGecko's coin-id namespace. All networks (mainnet / testnet /
 // regtest) map to the same id per coin. The price of Bitcoin is the
 // same regardless of which network the user is currently holding it
@@ -134,7 +138,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
             const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
             if (!cached) { stale.push(lk); continue; }
             const ageMs = tNow - cached.fetchedAt;
-            if (ageMs > SPOT_TTL_MS) { stale.push(lk); continue; }
+            if (!isFreshAge(ageMs, SPOT_TTL_MS)) { stale.push(lk); continue; }
             out[lk.chainId] = cached;
         }
 
@@ -192,7 +196,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
                 const cached = cache.get(key);
                 const fetchedAt = sparklineFetchedAt.get(key);
                 if (cached?.sparkline && fetchedAt !== undefined
-                    && tNow - fetchedAt <= SPARKLINE_TTL_MS) return;
+                    && isFreshAge(tNow - fetchedAt, SPARKLINE_TTL_MS)) return;
                 try {
                     const url = `${COINGECKO_API_BASE}/coins/${encodeURIComponent(lk.coingeckoId)}/market_chart?vs_currency=${encodeURIComponent(vsCurrency)}&days=7`;
                     const resp = await fetchWithRetry(fetch, url, { signal });

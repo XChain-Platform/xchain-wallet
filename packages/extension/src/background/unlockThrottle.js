@@ -74,7 +74,13 @@ export function checkUnlockAllowed(state, now) {
         return { allowed: true };
     }
     if (now >= state.lockedUntil) return { allowed: true };
-    return { allowed: false, retryAfterMs: state.lockedUntil - now };
+    const retryAfterMs = state.lockedUntil - now;
+    const maximumBackoffMs = computeBackoffMs(state.failCount);
+    // A persisted deadline cannot have more time remaining than the delay
+    // that created it. Treat a larger value as a backward clock correction so
+    // a short password throttle cannot strand the owner for hours or days.
+    if (retryAfterMs > maximumBackoffMs) return { allowed: true };
+    return { allowed: false, retryAfterMs };
 }
 
 /**

@@ -245,7 +245,10 @@ export function getLockoutState() {
 export function getRemainingMs(state, nowMs = Date.now()) {
     if (!state || !state.lockedUntilMs) return 0;
     const diff = state.lockedUntilMs - nowMs;
-    return diff > 0 ? diff : 0;
+    const maximumDelayMs = delayForAttempts(state.failedAttempts) * 1000;
+    // A valid deadline starts with at most its ladder delay remaining. A
+    // larger value means the device clock moved backward after the failure.
+    return diff > 0 && diff <= maximumDelayMs ? diff : 0;
 }
 
 /**
