@@ -184,6 +184,17 @@ describe('DiagnosticDetails keepAddresses', () => {
 });
 
 describe('LogConsole safety and controls', () => {
+    it('gives every compact console control a 24px pointer-target floor', () => {
+        render(<LogConsole />);
+
+        for (const button of screen.getAllByRole('button')) {
+            expect(button.style.minWidth).toBe('var(--xc-tap-min)');
+            expect(button.style.minHeight).toBe('var(--xc-tap-min)');
+        }
+        expect(screen.getByRole('searchbox', { name: 'Search log messages' }).style.minHeight)
+            .toBe('var(--xc-tap-min)');
+    });
+
     it('renders only the newest 200 redacted entries', () => {
         mocks.entries = Array.from({ length: 205 }, (_, index) => ({
             id: index,
