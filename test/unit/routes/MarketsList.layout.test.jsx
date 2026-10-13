@@ -4,14 +4,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
+}
 
 describe('MarketsList narrow layout', () => {
     it('reaches and activates market actions in their visual order', async () => {
@@ -178,6 +189,66 @@ describe('MarketsList narrow layout', () => {
 
         expect(await screen.findByText('Could not load markets. Try again.')).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('internal transport detail');
+    });
+
+    it('times out a stalled market request and retries it', async () => {
+        vi.useFakeTimers();
+        const getMarkets = vi.fn()
+            .mockImplementationOnce(() => new Promise(() => {}))
+            .mockResolvedValueOnce([{ tick1: 'BTC', tick2: 'PEPE', depth: 9 }]);
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets,
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByRole('status', { name: 'Loading markets' })).toBeInTheDocument();
+        await act(async () => vi.advanceTimersByTimeAsync(15_000));
+        expect(screen.getByText('Could not load markets. Try again.')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByText('PEPE')).toBeInTheDocument();
+        expect(getMarkets).toHaveBeenCalledTimes(2);
+    });
+
+    it('locks a watchlist button while its write is pending', async () => {
+        const save = deferred();
+        const saveWatchlistEntry = vi.fn(() => save.promise);
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getMarkets: vi.fn().mockResolvedValue([
+                    { tick1: 'BTC', tick2: 'PEPE', depth: 9 },
+                ]),
+                listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+                saveWatchlistEntry,
+            }}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const star = await screen.findByRole('button', { name: 'Add to watchlist' });
+        fireEvent.click(star);
+        fireEvent.click(star);
+        expect(star).toBeDisabled();
+        expect(star).toHaveAttribute('aria-busy', 'true');
+        expect(saveWatchlistEntry).toHaveBeenCalledOnce();
+
+        save.resolve({});
+        await waitFor(() => expect(star).not.toBeDisabled());
     });
 
     it('the All tab lists every market while the default Popular tab lists the top five', async () => {
