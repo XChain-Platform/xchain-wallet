@@ -42,9 +42,11 @@ const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 // full-width bar that pushes the scroll area down.
 const WRAP = {
     position: 'fixed',
-    top: 'var(--xc-space-3)',
-    left: 'var(--xc-space-3)',
-    right: 'var(--xc-space-3)',
+    // Fixed content does not inherit the body's safe-area padding, so each
+    // inset is the larger of the normal margin and the device inset.
+    top: 'max(var(--xc-space-3), env(safe-area-inset-top, 0px))',
+    left: 'max(var(--xc-space-3), env(safe-area-inset-left, 0px))',
+    right: 'max(var(--xc-space-3), env(safe-area-inset-right, 0px))',
     zIndex: 1000,
     maxWidth: '480px',
     margin: '0 auto',
