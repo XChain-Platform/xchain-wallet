@@ -1162,6 +1162,7 @@ export function AddressList({
                                 onChange={(e) => setLabelDraft(e.target.value)}
                                 placeholder="Add a label"
                                 aria-label="Address label"
+                                autoComplete="off"
                             />
                             <Button
                                 size="md"

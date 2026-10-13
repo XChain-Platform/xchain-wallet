@@ -515,7 +515,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                                 setBip39Passphrase(e.target.value);
                                 if (passwordError) setPasswordError(null);
                             }}
-                            autoComplete="new-password"
+                            autoComplete="off"
                         />
                         <Input
                             type="password"
@@ -525,7 +525,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                                 setBip39PassphraseConfirm(e.target.value);
                                 if (passwordError) setPasswordError(null);
                             }}
-                            autoComplete="new-password"
+                            autoComplete="off"
                         />
                     </>
                 ) : null}

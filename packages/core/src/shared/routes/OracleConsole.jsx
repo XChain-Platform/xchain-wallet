@@ -396,7 +396,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         onChange={(e) => setBlockList(e.target.value)}
                                     />
                                     {!isHw && !signerReady ? (
-                                        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
                                     ) : null}
                                     <Button
                                         variant="primary"
@@ -424,7 +424,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         ))}
                                     </div>
                                     {!isHw && !signerReady ? (
-                                        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
                                     ) : null}
                                     <p className={styles.hint}>
                                         This pays the market out. Everyone backing this outcome splits the pot and
@@ -445,7 +445,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             {isActive && active.mode === 'cancel' ? (
                                 <div style={{ marginTop: '0.5rem' }}>
                                     {!isHw && !signerReady ? (
-                                        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                        <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
                                     ) : null}
                                     <p className={styles.hint}>
                                         Every open bet is refunded in full and the market is over. This is the honest

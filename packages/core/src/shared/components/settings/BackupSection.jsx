@@ -806,6 +806,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                 onChange={(e) => setMn(e.target.value)}
                 placeholder="Recovery phrase, words separated by spaces"
                 rows={3}
+                autoComplete="off"
                 aria-label="Recovery phrase to test"
                 style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
             />
@@ -995,6 +996,7 @@ function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                 value={pw1}
                 onChange={(e) => setPw1(e.target.value)}
                 autoFocus
+                autoComplete="new-password"
                 aria-label="Backup password"
                 style={passwordStyle}
             />
@@ -1003,6 +1005,7 @@ function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                 placeholder="Confirm password"
                 value={pw2}
                 onChange={(e) => setPw2(e.target.value)}
+                autoComplete="new-password"
                 aria-label="Confirm backup password"
                 style={passwordStyle}
             />

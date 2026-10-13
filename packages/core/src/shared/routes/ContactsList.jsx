@@ -553,6 +553,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         setFormEntries([{ ...entry0, address, chain: chainFor(address) }]);
                     }}
                     placeholder=""
+                    autoComplete="off"
                 />
                 <NetworkReadout
                     address={entry0.address}
@@ -751,6 +752,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
                                 placeholder=""
                                 autoFocus
+                                autoComplete="off"
                             />
                             <NetworkReadout
                                 address={addAddrValue}

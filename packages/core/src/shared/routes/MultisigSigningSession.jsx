@@ -567,6 +567,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     value={signPassword}
                     onChange={(e) => setSignPassword(e.target.value)}
                     placeholder="Wallet password"
+                    autoComplete="current-password"
                 />
                 {signResult ? <p className={styles.hint}>{signResult}</p> : null}
                 {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
