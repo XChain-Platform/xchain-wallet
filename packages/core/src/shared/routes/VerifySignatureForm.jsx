@@ -27,13 +27,12 @@ import {
     Button,
     Input,
     ChainPicker,
-    Icon,
+    FormPage,
     PageHeader,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
-import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -44,7 +43,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function VerifySignatureForm({ onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     // Live registry read: a synced descriptor batch reaches this picker without
     // a restart (the boot sync usually lands after first mount).
@@ -94,8 +92,40 @@ export function VerifySignatureForm({ onBack }) {
         <PageHeader onBack={onBack} backDisabled={busy} title="Verify signature" />
     );
 
-    const formBody = (
-        <form onSubmit={handleSubmit} noValidate>
+    // Shown just above the Verify button by FormPage's status slot.
+    const status = (error || result) ? (
+        <>
+            {error ? (
+                <div role="alert" style={{
+                    color: 'var(--xc-danger)',
+                    fontSize: 'var(--xc-text-xs)',
+                }}>
+                    {error}
+                </div>
+            ) : null}
+            {result ? (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                        padding: 'var(--xc-space-3)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        background: 'var(--xc-surface)',
+                        border: `1px solid ${result === 'valid' ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
+                        color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger)',
+                        fontWeight: 600,
+                    }}
+                >
+                    {result === 'valid'
+                        ? '✓ Signature is valid for this address.'
+                        : '✗ Signature does NOT match this address.'}
+                </div>
+            ) : null}
+        </>
+    ) : null;
+
+    const fields = (
+        <>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
                     chains={chains}
@@ -175,49 +205,28 @@ export function VerifySignatureForm({ onBack }) {
                     }}
                 />
             </div>
-            {error ? (
-                <div role="alert" style={{
-                    color: 'var(--xc-danger)',
-                    fontSize: 'var(--xc-text-xs)',
-                    marginBottom: 'var(--xc-space-2)',
-                }}>
-                    {error}
-                </div>
-            ) : null}
-            {result ? (
-                <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                        padding: 'var(--xc-space-3)',
-                        marginBottom: 'var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        background: result === 'valid' ? 'var(--xc-surface)' : 'var(--xc-surface)',
-                        border: `1px solid ${result === 'valid' ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
-                        color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger)',
-                        fontWeight: 600,
-                    }}
-                >
-                    {result === 'valid'
-                        ? '✓ Signature is valid for this address.'
-                        : '✗ Signature does NOT match this address.'}
-                </div>
-            ) : null}
-            <Button
-                type="submit"
-                variant="primary"
-                block
-                loading={busy}
-                disabled={busy || message.length === 0 || signature.trim().length === 0 || address.trim().length === 0}
-            >
-                Verify signature
-            </Button>
-        </form>
+        </>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            <FormPage
+                label="Verify signature"
+                onSubmit={handleSubmit}
+                status={status}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={busy}
+                        disabled={busy || message.length === 0 || signature.trim().length === 0 || address.trim().length === 0}
+                    >
+                        Verify signature
+                    </Button>
+                )}
+            >
+                {fields}
+            </FormPage>
         </Screen>
     );
 }
