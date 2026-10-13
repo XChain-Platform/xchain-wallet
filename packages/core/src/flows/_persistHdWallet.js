@@ -16,6 +16,7 @@
 
 import {
     calibrateKdfParams,
+    deriveMasterKey,
     encryptWalletSeed,
     encryptWalletPassphrase,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
@@ -68,64 +69,76 @@ export async function persistHdWallet({
 }) {
     // 1. Pick KDF params; shells/tests override to skip calibration.
     const effectiveKdfParams = kdfParams ?? calibrateKdfParams();
-
-    // 2. Encrypt the mnemonic bytes.
-    const mnemonicBytes = new TextEncoder().encode(mnemonic);
-    let encryptedSeed;
-    let storedKdfParams;
+    // Derive once and hand the same key to the encrypt (step 2) and the
+    // unlock (step 5); each copies it, and this flow zeroes its own.
+    const masterKey = deriveMasterKey(password, effectiveKdfParams);
+    let walletRecord;
+    let account;
+    let signer;
     try {
-        const enc = await encryptWalletSeed({
-            password,
-            seed: mnemonicBytes,
-            kdfParams: effectiveKdfParams,
+        // 2. Encrypt the mnemonic bytes.
+        const mnemonicBytes = new TextEncoder().encode(mnemonic);
+        let encryptedSeed;
+        let storedKdfParams;
+        try {
+            const enc = await encryptWalletSeed({
+                password,
+                seed: mnemonicBytes,
+                kdfParams: effectiveKdfParams,
+                masterKey,
+            });
+            encryptedSeed = enc.encryptedSeed;
+            storedKdfParams = enc.kdfParams;
+        } finally {
+            mnemonicBytes.fill(0);
+        }
+
+        // 3. Build (do not yet persist) the Wallet record. It is not put
+        //    until step 7, once it carries its final shape.
+        walletRecord = createWalletRecord({
+            name,
+            origin,
+            format,
+            passphraseEnabled,
+            encryptedSeed,
+            kdfParams: storedKdfParams,
         });
-        encryptedSeed = enc.encryptedSeed;
-        storedKdfParams = enc.kdfParams;
+
+        // A create or import adds a wallet; it never replaces one. A stored
+        // record under the same id is refused before any write, so an
+        // existing encrypted seed cannot be clobbered.
+        if (await vault.wallets.get(walletRecord.id)) {
+            throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
+        }
+
+        // 4. Build & persist the first Account. `validateAccount` checks
+        //    only that walletId is a non-empty string, no foreign-key
+        //    lookup against the vault, so this is safe before the wallet
+        //    itself is stored.
+        account = createAccount({
+            walletId: walletRecord.id,
+            name: accountName,
+            index: 0,
+        });
+        await vault.accounts.put(account);
+
+        // 5. Unlock the in-memory wallet record via the shared primitive
+        //    so address derivation uses the exact same path as a
+        //    subsequent unlock. No duplicate signer logic, and this is
+        //    also where the master key needed to seal a 25th-word
+        //    passphrase (step 6) comes from: the signer keeps its own
+        //    session copy, zeroed at lock().
+        signer = await unlockWalletRecord({
+            wallet: walletRecord,
+            password,
+            masterKey,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
     } finally {
-        mnemonicBytes.fill(0);
+        masterKey.fill(0);
     }
-
-    // 3. Build (do not yet persist) the Wallet record. It is not put
-    //    until step 7, once it carries its final shape.
-    const walletRecord = createWalletRecord({
-        name,
-        origin,
-        format,
-        passphraseEnabled,
-        encryptedSeed,
-        kdfParams: storedKdfParams,
-    });
-
-    // A create or import adds a wallet; it never replaces one. A stored
-    // record under the same id is refused before any write, so an
-    // existing encrypted seed cannot be clobbered.
-    if (await vault.wallets.get(walletRecord.id)) {
-        throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
-    }
-
-    // 4. Build & persist the first Account. `validateAccount` checks
-    //    only that walletId is a non-empty string, no foreign-key
-    //    lookup against the vault, so this is safe before the wallet
-    //    itself is stored.
-    const account = createAccount({
-        walletId: walletRecord.id,
-        name: accountName,
-        index: 0,
-    });
-    await vault.accounts.put(account);
-
-    // 5. Unlock the in-memory wallet record via the shared primitive
-    //    so address derivation uses the exact same path as a
-    //    subsequent unlock. No duplicate signer logic, and this is
-    //    also where the master key needed to seal a 25th-word
-    //    passphrase (step 6) comes from.
-    const signer = await unlockWalletRecord({
-        wallet: walletRecord,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
-    });
 
     try {
         // 6. Seal the BIP39 passphrase under this wallet's own master
