@@ -96,8 +96,11 @@ describe('STYLE_GUIDE component contracts', () => {
         const source = read('packages/core/src/ui/Input.jsx');
         const css = read('packages/core/src/ui/Input.module.css');
         expect(source).toContain("size = 'md'");
-        expect(css).toMatch(/\.input\s*\{[^}]*min-height:\s*36px/s);
-        expect(css).toMatch(/\.lg \.input\s*\{[^}]*min-height:\s*48px/s);
+        // Heights come from the shared control-size tokens, so the CSS names the
+        // token per size and tokens.css owns the pixel values.
+        expect(css).toMatch(/\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height\)/s);
+        expect(css).toMatch(/\.md\s*\{[^}]*--xc-control-height:\s*var\(--xc-control-h-md\)/s);
+        expect(css).toMatch(/\.lg\s*\{[^}]*--xc-control-height:\s*var\(--xc-control-h-lg\)/s);
         expect(guide).toContain('Its `size` prop is `md` (36px minimum height, default) or `lg` (48px minimum height');
         expect(guide).toContain('<Input label="Amount" size="lg" />');
         expect(guide).not.toContain("fontSize: 'var(--xc-text-lg)'");
