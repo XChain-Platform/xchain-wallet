@@ -210,6 +210,52 @@ describe('backup wallet and network scope', () => {
         }
         expect(vault.settings.put).not.toHaveBeenCalled();
     });
+
+    it('restores an older backup with a dangling imported key and an off-network pending transaction', async () => {
+        // Shapes an earlier exporter wrote: importedKeys kept a reference to an
+        // address record that no longer existed, and pending transactions were
+        // matched by address text alone, so a same-text testnet row rode along.
+        const ownPending = {
+            schemaVersion: 3, id: 'pending-1', chain: 'bitcoin', network: 'mainnet',
+            fromAddress: 'same-text-address', txid: 'a'.repeat(64), status: 'broadcast',
+        };
+        const offNetworkPending = {
+            ...ownPending, id: 'pending-2', network: 'testnet',
+        };
+        capture.decoded = {
+            payloadVersion: 1,
+            wallet: {
+                schemaVersion: 3,
+                id: 'wallet-1',
+                importedKeys: [{ addressId: 'removed-address' }],
+                encryptedSeed: '',
+                encryptedPassphrase: null,
+            },
+            accounts: [{ schemaVersion: 2, id: 'account-1', walletId: 'wallet-1' }],
+            addresses: [{
+                schemaVersion: 1, id: 'address-1', accountId: 'account-1',
+                chain: 'bitcoin', network: 'mainnet', address: 'same-text-address',
+            }],
+            contacts: [],
+            connectedSites: [],
+            signers: [],
+            pendingTxs: [ownPending, offNetworkPending],
+            settings: null,
+        };
+        const vault = vaultWith();
+
+        const result = await importBackupFile({
+            vault,
+            fileContent: testEnvelope(),
+            password: 'backup-secret',
+        });
+
+        expect(result.walletId).toBe('wallet-1');
+        expect(result.writes.wallets).toBe(1);
+        expect(result.writes.addresses).toBe(1);
+        // The same-text testnet row is dropped, never written.
+        expect(vault.pendingTxs.put.mock.calls.map(([p]) => p.id)).toEqual(['pending-1']);
+    });
 });
 
 describe('backup reminder input validation', () => {
