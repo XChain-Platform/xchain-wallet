@@ -74,6 +74,7 @@ import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useResponsivePlaceholder } from '../../ui/Input.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
@@ -560,6 +561,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const initialFocusFiredRef = useRef(false);
     const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const timelineRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+    const fullSearchPlaceholder = t('history.filters.searchPlaceholder');
+    const searchPlaceholder = useResponsivePlaceholder(
+        fullSearchPlaceholder,
+        t('history.filters.searchLabel'),
+    );
+    const searchDescriptionId = searchPlaceholder !== fullSearchPlaceholder
+        ? 'history-search-description'
+        : undefined;
 
     const closeSelectedRow = useCallback(() => {
         if (!selectedKey) return;
@@ -1723,12 +1732,18 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         autoCorrect="off"
                         spellCheck={false}
                         className={styles.searchInput}
-                        placeholder={t('history.filters.searchPlaceholder')}
+                        placeholder={searchPlaceholder}
                         aria-label={t('history.filters.searchLabel')}
+                        aria-describedby={searchDescriptionId}
                         value={searchQuery}
                         onChange={(ev) => setSearchQuery(ev.target.value)}
                         autoComplete="off"
                     />
+                    {searchDescriptionId ? (
+                        <span id={searchDescriptionId} className="sr-only">
+                            {fullSearchPlaceholder}
+                        </span>
+                    ) : null}
                     {searchQuery ? (
                         <Button
                             type="button"

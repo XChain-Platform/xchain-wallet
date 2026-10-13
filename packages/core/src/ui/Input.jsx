@@ -13,6 +13,38 @@ import styles from './Input.module.css';
 import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
 
+const PHONE_PLACEHOLDER_QUERY = '(max-width: 480px)';
+const LONG_PLACEHOLDER_LENGTH = 30;
+
+function phonePlaceholderMatches() {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.matchMedia === 'function') {
+        return window.matchMedia(PHONE_PLACEHOLDER_QUERY).matches;
+    }
+    return (window.innerWidth || document.documentElement?.clientWidth || 0) <= 480;
+}
+
+export function useResponsivePlaceholder(placeholder, compactPlaceholder) {
+    const [isPhoneWidth, setIsPhoneWidth] = useState(phonePlaceholderMatches);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const query = typeof window.matchMedia === 'function'
+            ? window.matchMedia(PHONE_PLACEHOLDER_QUERY)
+            : null;
+        const update = () => setIsPhoneWidth(phonePlaceholderMatches());
+        update();
+        if (query?.addEventListener) {
+            query.addEventListener('change', update);
+            return () => query.removeEventListener('change', update);
+        }
+        window.addEventListener('resize', update);
+        return () => window.removeEventListener('resize', update);
+    }, []);
+
+    return isPhoneWidth && compactPlaceholder ? compactPlaceholder : placeholder;
+}
+
 /**
  * Controlled text input with label, hint, and error slots. Pass-through
  * props land on the underlying `<input>` so callers can wire `value`,
@@ -36,6 +68,7 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {string} [error]
  * @property {string | number} [errorKey]
  * @property {string} [id]
+ * @property {string} [compactPlaceholder] concise phone-width placeholder; long placeholders default to the field's accessible name.
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
@@ -46,11 +79,13 @@ export const Input = forwardRef(function Input(
         error,
         errorKey,
         id,
+        compactPlaceholder,
         optional = false,
         size = 'md',
         type = 'text',
         value,
         defaultValue,
+        placeholder,
         maxLength,
         className,
         onChange,
@@ -66,6 +101,7 @@ export const Input = forwardRef(function Input(
         required = false,
         onInvalid,
         'aria-invalid': externalInvalid,
+        'aria-label': externalLabel,
         'aria-describedby': externalDescribedBy,
         'aria-required': externalRequired,
         ...rest
@@ -93,6 +129,21 @@ export const Input = forwardRef(function Input(
     const isDateTime = type === 'datetime-local';
     const zoneId = isDateTime ? `${inputId}-zone` : undefined;
     const counterId = maxLength != null ? `${inputId}-counter` : undefined;
+    const fullPlaceholder = typeof placeholder === 'string' ? placeholder : undefined;
+    const fieldName = typeof externalLabel === 'string'
+        ? externalLabel
+        : (typeof label === 'string' ? label : undefined);
+    const inferredCompactPlaceholder = fullPlaceholder?.length > LONG_PLACEHOLDER_LENGTH
+        && fieldName?.length < fullPlaceholder.length
+        ? fieldName
+        : undefined;
+    const visiblePlaceholder = useResponsivePlaceholder(
+        fullPlaceholder,
+        compactPlaceholder || inferredCompactPlaceholder,
+    );
+    const placeholderDescriptionId = visiblePlaceholder !== fullPlaceholder
+        ? `${inputId}-placeholder-description`
+        : undefined;
     const initialValue = value ?? defaultValue ?? '';
     const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
     const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
@@ -117,6 +168,7 @@ export const Input = forwardRef(function Input(
         zoneId,
         counterId,
         showCapsLock ? capsLockId : undefined,
+        placeholderDescriptionId,
     ].filter(Boolean).join(' ') || undefined;
     const inputClass = [styles.input, visibleError ? styles.invalid : '', className]
         .filter(Boolean).join(' ');
@@ -183,12 +235,14 @@ export const Input = forwardRef(function Input(
                 enterKeyHint={resolvedEnterKeyHint}
                 className={inputClass}
                 aria-invalid={visibleError ? 'true' : externalInvalid}
+                aria-label={externalLabel}
                 aria-describedby={describedBy}
                 aria-required={requirement.ariaRequired}
                 required={required}
                 value={value}
                 defaultValue={defaultValue}
                 maxLength={maxLength}
+                placeholder={visiblePlaceholder}
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleKeyUp}
@@ -197,6 +251,9 @@ export const Input = forwardRef(function Input(
                 onInvalid={handleInvalid}
                 {...rest}
             />
+            {placeholderDescriptionId ? (
+                <span id={placeholderDescriptionId} className="sr-only">{fullPlaceholder}</span>
+            ) : null}
             {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}

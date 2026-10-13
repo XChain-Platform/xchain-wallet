@@ -358,9 +358,9 @@ describe('History filters', () => {
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
     });
 
-    it('renders rows, filters, and detail fields with a 320px layout contract', async () => {
+    it('renders concise accessible search and detail fields with a 360px layout contract', async () => {
         const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
 
         try {
             const { view } = mountHistory({
@@ -375,6 +375,9 @@ describe('History filters', () => {
             await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
             expect(screen.getByRole('group', { name: 'History filters' })).toBeInTheDocument();
+            const search = screen.getByRole('searchbox', { name: 'Search history' });
+            expect(search).toHaveAttribute('placeholder', 'Search history');
+            expect(search).toHaveAccessibleDescription('Search action, address, token, txid, memo…');
             expect(screen.getByLabelText('From date')).toBeInTheDocument();
             expect(screen.getByLabelText('To date')).toBeInTheDocument();
 
