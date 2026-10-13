@@ -109,7 +109,7 @@
 }
 
 .body {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -147,7 +147,7 @@
 .amounts {
     flex: 0 1 auto;
     min-width: 0;
-    max-width: 55%;
+    max-width: calc(100% - 48px - var(--xc-space-3) - var(--xc-space-3));
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -160,6 +160,7 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-md);
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     color: var(--xc-text);
     line-height: 1.1;
     max-width: 100%;
@@ -171,6 +172,7 @@
     color: var(--xc-text-muted);
     font-weight: 600;
     font-family: var(--xc-font-mono);
+    font-variant-numeric: tabular-nums;
     max-width: 100%;
     text-align: end;
 }
@@ -179,13 +181,8 @@
     display: block;
     width: 100%;
     overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.amountFitInner {
-    display: inline-block;
-    white-space: nowrap;
-    transform-origin: right center;
 }
 
 /* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
