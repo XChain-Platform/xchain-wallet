@@ -157,7 +157,7 @@ describe('shell route parity', () => {
     });
 
     it('keeps web launch routes ahead of last-view restoration', () => {
-        expect(webAppSource).toContain('launchRouteState.current.remember(route.view, status.state);');
+        expect(webAppSource).toContain('launchRouteState.current.remember(route.view, statusStateRef.current);');
         expect(webAppSource).toContain('skip: launchRouteState.current.shouldSkipLastViewResume(),');
         expect(webAppSource).toContain('launchRouteState.current.walletActivated();');
     });
