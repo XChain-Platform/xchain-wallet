@@ -34,6 +34,13 @@ function renderBook(getOrderbook, props = {}) {
     );
 }
 
+function pressEnter(button) {
+    button.focus();
+    fireEvent.keyDown(button, { key: 'Enter', code: 'Enter' });
+    button.click();
+    fireEvent.keyUp(button, { key: 'Enter', code: 'Enter' });
+}
+
 describe('OrderbookPanel market display', () => {
     it('distinguishes loading from an empty order book', async () => {
         const request = deferred();
@@ -82,7 +89,8 @@ describe('OrderbookPanel market display', () => {
         expect(row.style.fontVariantNumeric).toBe('tabular-nums');
         expect(row.querySelector('[aria-hidden="true"]').style.width).toBe('50%');
 
-        fireEvent.click(rowButton);
+        pressEnter(rowButton);
+        expect(rowButton).toHaveFocus();
         expect(onPickPrice).toHaveBeenCalledWith('0.010000');
     });
 

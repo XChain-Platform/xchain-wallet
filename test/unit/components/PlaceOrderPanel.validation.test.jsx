@@ -46,6 +46,13 @@ function mount(props = {}, overrides = {}, viewportWidth = null) {
     return messaging;
 }
 
+function pressEnter(button) {
+    button.focus();
+    fireEvent.keyDown(button, { key: 'Enter', code: 'Enter' });
+    button.click();
+    fireEvent.keyUp(button, { key: 'Enter', code: 'Enter' });
+}
+
 describe('PlaceOrderPanel validation', () => {
     it('gates order review while wallet balances are loading', async () => {
         const balanceRequest = deferred();
@@ -134,7 +141,7 @@ describe('PlaceOrderPanel validation', () => {
 
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        pressEnter(await screen.findByRole('button', { name: 'Review' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
 
         expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('aa00');
@@ -143,5 +150,24 @@ describe('PlaceOrderPanel validation', () => {
             actionData: expect.objectContaining({ action: 'ORDER' }),
         }));
         expect(onOrderPlaced).not.toHaveBeenCalled();
+    });
+
+    it('closes the watch-only review with Escape and preserves the order fields', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        mount({}, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        });
+
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        pressEnter(await screen.findByRole('button', { name: 'Review' }));
+        expect(await screen.findByRole('button', { name: 'Edit order' })).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+
+        expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
+        expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
+        expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();
     });
 });
