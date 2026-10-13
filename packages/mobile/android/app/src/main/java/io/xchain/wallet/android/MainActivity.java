@@ -4,6 +4,7 @@ import android.content.res.Configuration;
 import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.splashscreen.SplashScreen;
 
@@ -29,6 +30,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         splashScreen.setKeepOnScreenCondition(() -> !shellReady);
+        configureSystemBars();
         // Registration must happen BEFORE super.onCreate: that is where the
         // Bridge is built, and a plugin registered afterwards is missing from
         // the map the WebView sees. The symptom would not be a crash - it
@@ -45,10 +47,10 @@ public class MainActivity extends BridgeActivity {
         // FLAG_SECURE stays out of the activity-wide setup. The vault plugin
         // applies it only while the SPA is showing or accepting key material.
         super.onCreate(savedInstanceState);
+        configureWebViewLayout();
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();
         routeBackKeyToTheSpa();
-        lastFontScale = getResources().getConfiguration().fontScale;
     }
 
     /** Releases the launch splash after the SPA has committed its shell. */
@@ -56,32 +58,28 @@ public class MainActivity extends BridgeActivity {
         shellReady = true;
     }
 
-    private float lastFontScale = 1f;
-
-    /**
-     * Follow a system font-size change in place.
-     *
-     * The manifest now claims fontScale (and the Android 12 bold-text
-     * fontWeightAdjustment) as handled, because the default was to destroy
-     * and recreate the activity: the WebView reloaded and the wallet came
-     * back locked mid-task. Measured on an LG K51, 2026-10-12. With the
-     * activity kept, the WebView would otherwise stay at the old size until
-     * the next launch, so scale its text zoom by the same ratio the system
-     * font changed by. Bold text needs nothing here; the WebView reads it
-     * from the configuration on its next layout.
-     */
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        configureWebViewLayout();
+    }
+
+    private void configureSystemBars() {
+        // Capacitor's CSS inset shim keeps edge-to-edge safe on Chrome 102.
+        EdgeToEdge.enable(this);
+        // Day/night resources color the backdrop; SystemBars controls icon contrast.
+    }
+
+    private void configureWebViewLayout() {
         Bridge bridge = getBridge();
         WebView webView = bridge == null ? null : bridge.getWebView();
-        if (webView == null || lastFontScale <= 0f || newConfig.fontScale == lastFontScale) {
-            return;
-        }
+        if (webView == null) return;
+
         WebSettings settings = webView.getSettings();
-        int zoom = Math.round(settings.getTextZoom() * newConfig.fontScale / lastFontScale);
-        settings.setTextZoom(zoom);
-        lastFontScale = newConfig.fontScale;
+        // The SPA's large-text setting owns scaling so fixed layouts stay stable.
+        settings.setTextZoom(100);
+        // The fixed shell does not expose scroll continuation beyond its bounds.
+        webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
     }
 
     /**
