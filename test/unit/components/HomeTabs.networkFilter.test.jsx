@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
     TotalBalanceHero: () => null,
@@ -63,5 +64,29 @@ describe('HomeTabs network filtering', () => {
 
         expect(screen.getByText('Custom Bitcoin')).toBeInTheDocument();
         expect(screen.queryByText('Custom Litecoin')).toBeNull();
+    });
+
+    it('labels even a sparse amount list when the all-networks view is active', () => {
+        render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{ 'custom-alpha': balance('BTC') }}
+                walletId="wallet"
+                networkFilter="all"
+            />,
+        );
+
+        expect(screen.getByText('BTC · Custom Bitcoin')).toBeInTheDocument();
+    });
+
+    it('keeps textual chain badges on cross-chain amount rows', () => {
+        const home = readFileSync('packages/core/src/shared/components/HomeTabs.jsx', 'utf8');
+        const dispensers = readFileSync('packages/core/src/shared/routes/DispensersList.jsx', 'utf8');
+        const staking = readFileSync('packages/core/src/shared/routes/StakingList.jsx', 'utf8');
+
+        expect(home).toMatch(/function ActivityRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
+        expect(home).toMatch(/function DemoDefiList[\s\S]*?<ChainBadge descriptor=\{chainRegistry\.get\(p\.chainId\)\}/);
+        expect(dispensers).toMatch(/function DispenserRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
+        expect(staking).toMatch(/function StakeRow[\s\S]*?<ChainBadge descriptor=\{descriptor\}/);
     });
 });

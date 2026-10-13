@@ -65,10 +65,20 @@ export function TickItemsEditor({
     const invalidTicks = items.invalid;
     const tickKey = memberTicks.join('|');
     const [checking, setChecking] = useState(false);
+    const [announcement, setAnnouncement] = useState('');
     const onStatusChangeRef = useRef(onStatusChange);
+    const rowRefs = useRef(new Map());
+    const pendingFocusRef = useRef(null);
     onStatusChangeRef.current = onStatusChange;
 
     useEffect(() => () => onStatusChangeRef.current({}), []);
+
+    useEffect(() => {
+        const item = pendingFocusRef.current;
+        if (!item) return;
+        pendingFocusRef.current = null;
+        rowRefs.current.get(item)?.focus();
+    }, [value]);
 
     useEffect(() => {
         if (!chainId || memberTicks.length === 0) {
@@ -114,6 +124,10 @@ export function TickItemsEditor({
         [memberTicks, status],
     );
     const uncheckedTicks = uncheckedTickItems.length;
+    const rawEntries = useMemo(
+        () => String(value || '').split(/[\n,]+/).map((entry) => entry.trim()).filter(Boolean),
+        [value],
+    );
 
     const missingByChain = useMemo(() => {
         if (!coinQualified) return [];
@@ -143,6 +157,43 @@ export function TickItemsEditor({
         }));
     }
 
+    function rawIndexOf(item) {
+        return rawEntries.findIndex((entry) => entry === item);
+    }
+
+    function moveItem(index, direction) {
+        const destination = index + direction;
+        if (destination < 0 || destination >= memberTicks.length) return;
+        const entries = [...rawEntries];
+        const sourceRawIndex = rawIndexOf(memberTicks[index]);
+        const destinationRawIndex = rawIndexOf(memberTicks[destination]);
+        if (sourceRawIndex < 0 || destinationRawIndex < 0) return;
+        [entries[sourceRawIndex], entries[destinationRawIndex]] = [
+            entries[destinationRawIndex], entries[sourceRawIndex],
+        ];
+        onChange(entries.join('\n'));
+        setAnnouncement(`${memberTicks[index]} moved to position ${destination + 1}.`);
+    }
+
+    function removeItem(index) {
+        const entries = [...rawEntries];
+        const item = memberTicks[index];
+        const rawIndex = rawIndexOf(item);
+        if (rawIndex < 0) return;
+        entries.splice(rawIndex, 1);
+        pendingFocusRef.current = memberTicks[index + 1] || memberTicks[index - 1] || null;
+        onChange(entries.join('\n'));
+        setAnnouncement(`${item} removed.`);
+    }
+
+    function onItemKeyDown(event, index) {
+        if (event.target !== event.currentTarget
+            || !event.altKey
+            || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+        event.preventDefault();
+        moveItem(index, event.key === 'ArrowUp' ? -1 : 1);
+    }
+
     return (
         <>
             <label className={styles.pickerLabel} htmlFor="list-tokens">Tokens (one per line)</label>
@@ -161,36 +212,85 @@ export function TickItemsEditor({
                     Add from token picker
                 </Button>
             </div>
-            {coinQualified && memberTicks.length > 0 ? (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-2) 0' }}>
+            {memberTicks.length > 0 ? (
+                <ul className={styles.tickItems} aria-label="Token order">
                     {memberTicks.map((item, index) => {
-                        const split = splitTickCoinItem(item);
+                        const split = coinQualified ? splitTickCoinItem(item) : null;
                         const coin = split?.coin || items.coinOf?.[index] || listCoin;
                         const rest = split?.rest || item;
+                        const repeatedRest = memberTicks.some((candidate, candidateIndex) => {
+                            if (candidateIndex === index) return false;
+                            const candidateSplit = coinQualified ? splitTickCoinItem(candidate) : null;
+                            return (candidateSplit?.rest || candidate) === rest;
+                        });
+                        const accessibleItem = repeatedRest ? item : rest;
                         return (
                             <li
                                 key={item}
-                                style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}
+                                ref={(node) => {
+                                    if (node) rowRefs.current.set(item, node);
+                                    else rowRefs.current.delete(item);
+                                }}
+                                className={styles.tickItem}
+                                tabIndex={0}
+                                aria-label={`${accessibleItem}, position ${index + 1} of ${memberTicks.length}`}
+                                aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+                                onKeyDown={(event) => onItemKeyDown(event, index)}
                             >
-                                <code style={{ flex: 1 }}>{rest}</code>
-                                <select
-                                    aria-label={`Coin for ${rest}`}
-                                    value={coin}
-                                    onChange={(event) => setItemCoin(item, event.target.value)}
-                                >
-                                    {LIST_TICK_COINS.map((option) => (
-                                        <option key={option} value={option}>{option}</option>
-                                    ))}
-                                </select>
+                                <code className={styles.tickItemName}>{rest}</code>
+                                {coinQualified ? (
+                                    <select
+                                        className={styles.tickItemCoin}
+                                        aria-label={`Coin for ${accessibleItem}`}
+                                        value={coin}
+                                        onChange={(event) => setItemCoin(item, event.target.value)}
+                                    >
+                                        {LIST_TICK_COINS.map((option) => (
+                                            <option key={option} value={option}>{option}</option>
+                                        ))}
+                                    </select>
+                                ) : null}
+                                <div className={styles.tickItemActions}>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        disabled={index === 0}
+                                        aria-label={`Move ${accessibleItem} up`}
+                                        onClick={() => moveItem(index, -1)}
+                                    >
+                                        ↑
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        disabled={index === memberTicks.length - 1}
+                                        aria-label={`Move ${accessibleItem} down`}
+                                        onClick={() => moveItem(index, 1)}
+                                    >
+                                        ↓
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        aria-label={`Remove ${accessibleItem}`}
+                                        onClick={() => removeItem(index)}
+                                    >
+                                        ×
+                                    </Button>
+                                </div>
                             </li>
                         );
                     })}
                 </ul>
             ) : null}
+            <span className={styles.visuallyHidden} role="status" aria-live="polite">{announcement}</span>
             {value.trim() ? (
                 <p className={styles.hint}>
                     {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
-                    {items.duplicates > 0 ? ` · ${items.duplicates} duplicate${items.duplicates === 1 ? '' : 's'} removed` : ''}
+                    {items.duplicates > 0 ? ` · ${items.duplicates} duplicate${items.duplicates === 1 ? '' : 's'} ignored` : ''}
                     {invalidTicks.length > 0 ? ` · ${invalidTicks.length} invalid` : ''}
                     {checking ? ' · checking…' : ''}
                     {!checking && foundTicks.length > 0 ? ` · ${foundTicks.length} found` : ''}

@@ -27,7 +27,7 @@ describe('bottom tab bar footprint', () => {
     it('is published while the bar is mounted and cleared when it unmounts', () => {
         expect(barHeight()).toBe('');
         const view = render(<BottomTabBar currentView="home" onSelect={() => {}} />);
-        expect(barHeight()).toBe('56px');
+        expect(barHeight()).toBe('3.5rem');
         view.unmount();
         expect(barHeight()).toBe('');
     });

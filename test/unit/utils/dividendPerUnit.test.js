@@ -19,6 +19,9 @@ import {
     perUnitMax,
     sumHolderUnits,
     multiplyDecimal,
+    addDecimal,
+    floorDecimal,
+    dividendPreview,
     compareDecimal,
     exceedsBalance,
 } from '../../../packages/core/src/shared/utils/dividendPerUnit.js';
@@ -53,6 +56,47 @@ describe('multiplyDecimal', () => {
 
     it('is null when either side is unreadable', () => {
         expect(multiplyDecimal('9.998', undefined)).toBe(null);
+    });
+});
+
+describe('dividend payout projection', () => {
+    it('adds costs and floors each recipient payout independently', () => {
+        expect(addDecimal('4999', '1')).toBe('5000');
+        expect(floorDecimal('0.25', 0)).toBe('0');
+        expect(dividendPreview({
+            rows: [
+                { address: 'a', amount: '0.5' },
+                { address: 'b', amount: '0.5' },
+            ],
+            amount: '0.5',
+            divisibility: 0,
+        })).toEqual({
+            eligibleCount: 0,
+            eligibleUnits: '0',
+            total: '0',
+            sourceExcluded: false,
+        });
+    });
+
+    it('applies source exclusion and payment-token access lists before counting', () => {
+        expect(dividendPreview({
+            rows: [
+                { address: 'source', amount: '10' },
+                { address: 'allowed', amount: '3' },
+                { address: 'blocked', amount: '4' },
+                { address: 'outside', amount: '5' },
+            ],
+            sourceAddress: 'source',
+            allowMembers: ['allowed', 'blocked'],
+            blockMembers: ['blocked'],
+            amount: '2',
+            divisibility: 8,
+        })).toEqual({
+            eligibleCount: 1,
+            eligibleUnits: '3',
+            total: '6',
+            sourceExcluded: true,
+        });
     });
 });
 

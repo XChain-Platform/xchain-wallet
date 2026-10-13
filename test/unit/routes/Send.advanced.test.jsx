@@ -18,6 +18,7 @@ const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const UTXOS = [
     { txid: '11'.repeat(32), vout: 0, value: 100000, scriptPubKey: '0014aa' },
     { txid: '22'.repeat(32), vout: 1, value: 200000, scriptPubKey: '0014bb' },
+    { txid: '33'.repeat(32), vout: 2, value: 500, scriptPubKey: '0014cc' },
 ];
 
 function mount() {
@@ -81,6 +82,28 @@ async function fillSend() {
 afterEach(() => cleanup());
 
 describe('Send advanced choices', () => {
+    it('summarizes bulk-selected inputs, marks dust, and clears the selection', async () => {
+        mount();
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.001' } });
+        fireEvent.click(screen.getByText('Advanced'));
+        await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).not.toBeDisabled());
+        fireEvent.click(screen.getByLabelText('Coin control enabled'));
+
+        expect(screen.getByText('Dust')).toHaveAttribute(
+            'title',
+            'Below the 546 sat dust threshold',
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+        expect(screen.getByText('0.003005 BTC')).toBeInTheDocument();
+        expect(screen.getByText('0.00199 BTC')).toBeInTheDocument();
+        expect(screen.getAllByRole('checkbox', { checked: true })).toHaveLength(3);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        expect(within(screen.getByLabelText('Coin control summary')).getAllByText('0 BTC')).toHaveLength(2);
+        expect(screen.getAllByRole('checkbox', { checked: false })).toHaveLength(3);
+    });
+
     it('counts memo characters and refuses the network-invalid length before compose', async () => {
         const messaging = mount();
         await fillSend();

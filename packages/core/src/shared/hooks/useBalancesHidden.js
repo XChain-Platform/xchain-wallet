@@ -21,8 +21,8 @@ const STORAGE_KEY = 'xc:balancesHidden';
 const EVENT = 'xc:balances-hidden-change';
 
 function readPersistedHidden() {
-    if (typeof globalThis === 'undefined' || !globalThis.localStorage) return false;
     try {
+        if (typeof globalThis === 'undefined' || !globalThis.localStorage) return false;
         return globalThis.localStorage.getItem(STORAGE_KEY) === '1';
     } catch {
         return false;

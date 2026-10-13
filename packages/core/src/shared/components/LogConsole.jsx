@@ -107,6 +107,18 @@ const ACTION_BTN = {
     cursor: 'pointer',
 };
 
+const SR_ONLY = {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
+};
+
 function formatTime(ms) {
     const d = new Date(ms);
     const hh = String(d.getHours()).padStart(2, '0');
@@ -217,7 +229,6 @@ export function LogConsole() {
                     style={ACTION_BTN}
                     aria-label="Copy all log entries"
                     title="Copy filtered log entries plus entries hidden by the active filters"
-                    aria-live="polite"
                 >
                     {copyState === 'copied'
                         ? 'Copied'
@@ -230,6 +241,11 @@ export function LogConsole() {
                 </button>
             </div>
             <div style={LIST} role="log" aria-label="Recent console entries" aria-live="polite">
+                {copyState !== 'idle' ? (
+                    <span style={SR_ONLY}>
+                        {copyState === 'copied' ? 'Copied' : 'Copy failed: clipboard unavailable'}
+                    </span>
+                ) : null}
                 {filtered.length === 0 ? (
                     <div style={{ color: 'var(--xc-text-muted)', padding: 'var(--xc-space-2)' }}>
                         No log entries yet. Trigger an action and recent console output will appear here.

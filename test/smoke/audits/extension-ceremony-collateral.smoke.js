@@ -818,7 +818,9 @@ const walkScripts = (relDir) => {
     for (const entry of readdirSync(join(walletRoot, relDir), { withFileTypes: true })) {
         const rel = `${relDir}/${entry.name}`;
         if (entry.isDirectory()) out.push(...walkScripts(rel));
-        else if (/\.(mjs|sh)$/.test(entry.name)) out.push(rel);
+        // Test files beside the tools are run by node --test, not by a person,
+        // so they carry no --help screen.
+        else if (/\.(mjs|sh)$/.test(entry.name) && !/\.test\.mjs$/.test(entry.name)) out.push(rel);
     }
     return out;
 };

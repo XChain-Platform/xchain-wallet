@@ -8,18 +8,31 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// LearnNote. The read side of Settings > Developer Mode > Learn
-// Mode, which promises "explanatory copy on confirmation screens for users
-// new to bitcoin / XChain mechanics" and, until now, delivered none.
-//
-// Renders nothing at all when the setting is off, so an experienced user
-// sees exactly the confirmation screen they see today.
-//
-// Copy rules: plain language, no jargon the note does not itself explain,
-// and it says what is TRUE of this screen rather than general education.
+// LearnNote shows concise confirmation help when Learn Mode is on. Each
+// confirmation kind has its own dismissal so hiding familiar advice does not
+// hide help for a different kind of signature.
 
+import { useState } from 'react';
 import { useLearnMode } from '../hooks/useLearnMode.js';
 import styles from './LearnNote.module.css';
+
+const DOCS_URL = 'https://docs.xchain.io/';
+const DISMISSED_KEY_PREFIX = 'xc:learn-note:dismissed:';
+const DISMISS_LABEL = 'Dismiss learn note';
+const DISMISS_TEXT = 'Dismiss';
+const LEARN_MORE_TEXT = 'Learn more';
+
+function dismissalKey(variant) {
+    return `${DISMISSED_KEY_PREFIX}${variant}`;
+}
+
+function readDismissed(key) {
+    try {
+        return globalThis.localStorage?.getItem(key) === '1';
+    } catch {
+        return false;
+    }
+}
 
 /**
  * @param {object} props
@@ -28,30 +41,53 @@ import styles from './LearnNote.module.css';
  * @param {string} [props.title]
  * @param {import('react').ReactNode} [props.children]  overrides the built-in copy
  */
-export function LearnNote({ variant = 'action', chainLabel, title = 'New to this?', children }) {
+export function LearnNote({ variant = 'action', chainLabel, title = 'Good to know', children }) {
     const enabled = useLearnMode();
-    if (!enabled) return null;
+    const key = dismissalKey(variant);
+    const [dismissedKey, setDismissedKey] = useState(
+        () => (readDismissed(key) ? key : null),
+    );
+
+    if (!enabled || dismissedKey === key || readDismissed(key)) return null;
 
     const network = chainLabel ? `the ${chainLabel} network` : 'the network';
     let body = children;
     if (!body) {
         if (variant === 'message') {
-            body = 'Signing a message proves you control this address. It moves no coins and pays no fee. '
-                + 'The signature can be shown to anyone as proof that you agreed to this exact text, so only sign text you understand.';
+            body = 'Only sign text you understand because its signature proves your approval without moving coins or paying a fee.';
         } else if (variant === 'psbt') {
-            body = 'Another app built this transaction, not your wallet, so the inputs and outputs listed above are the whole story. '
-                + 'Check that the amounts and addresses are the ones you expect before approving. Your keys stay on this device either way.';
+            body = 'Check every input and output before approving because another app, not your wallet, built this transaction.';
         } else {
-            body = `Your wallet built this transaction on this device and nothing has been sent yet. `
-                + `Approving signs it with your key and hands it to ${network}, where the fee pays for it to be included in a block. `
-                + `Once it is broadcast it cannot be recalled, so the details above are your last chance to check it.`;
+            body = `Check the amounts and addresses before approving on ${network} because a broadcast transaction cannot be recalled.`;
         }
     }
 
+    const dismiss = () => {
+        try {
+            globalThis.localStorage?.setItem(key, '1');
+        } catch { /* The current view can still hide help when storage is unavailable. */ }
+        setDismissedKey(key);
+    };
+
     return (
         <div className={styles.note} data-testid="learn-note">
-            <span className={styles.title}>{title}</span>
-            <p className={styles.body}>{body}</p>
+            <div className={styles.header}>
+                <span className={styles.title}>{title}</span>
+                <button
+                    type="button"
+                    className={styles.dismiss}
+                    onClick={dismiss}
+                    aria-label={DISMISS_LABEL}
+                >
+                    {DISMISS_TEXT}
+                </button>
+            </div>
+            <p className={styles.body}>
+                {body}{' '}
+                <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+                    {LEARN_MORE_TEXT}
+                </a>
+            </p>
         </div>
     );
 }
