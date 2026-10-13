@@ -36,7 +36,10 @@ const REGTEST_SETTINGS = {
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    localStorage.removeItem('xc:backupReminderFundedAt');
+});
 
 function emptyMessaging(overrides = {}) {
     return {
@@ -122,6 +125,11 @@ describe('Home with no addresses', () => {
     });
 
     it('places the backup reminder after the first funding step', async () => {
+        // The reminder appears only once a wallet has held funds, so this is a
+        // wallet that was funded before and is empty again.
+        localStorage.setItem('xc:backupReminderFundedAt', JSON.stringify({
+            [WALLET.id]: Date.parse('2020-01-01T00:00:00.000Z'),
+        }));
         const oldWallet = { ...WALLET, createdAt: '2020-01-01T00:00:00.000Z' };
         mount(
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,

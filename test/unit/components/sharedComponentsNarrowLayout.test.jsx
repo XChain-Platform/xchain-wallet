@@ -114,13 +114,13 @@ describe('shared components at a 320px viewport', () => {
         renderNarrow(
             <BackupReminderCard
                 walletId="narrow-wallet"
-                walletCreatedAt="2020-01-01T00:00:00.000Z"
+                hasFunds
                 onAction={() => {}}
             />,
         );
 
         expect(await screen.findByRole('region', { name: 'Back up your wallet' }))
-            .toHaveTextContent('Save your recovery phrase or export an encrypted backup.');
+            .toHaveTextContent('Save your recovery phrase or export an encrypted backup');
         expect(screen.getByRole('button', { name: 'Back up now' })).toBeInTheDocument();
         expect(ruleBody(css.backupReminder, '.card')).toMatch(/flex-wrap:\s*wrap/);
         expect(ruleBody(css.backupReminder, '.body')).toMatch(/min-width:\s*0/);

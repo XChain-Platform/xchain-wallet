@@ -246,6 +246,9 @@ describe('desktop main entry point', () => {
         expect(policy).not.toContain("'unsafe-eval'");
         expect(directives['connect-src']).toEqual(["'self'"]);
         expect(directives['frame-ancestors']).toEqual(["'none'"]);
+        // Let the ready flow finish here, or its first window lands in the next
+        // test after that test has reset the window list.
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
     });
 
     it('registers Electron lifecycle and deep-link handlers at import time', async () => {

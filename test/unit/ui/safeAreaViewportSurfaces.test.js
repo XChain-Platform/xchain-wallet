@@ -92,7 +92,7 @@ describe('viewport surfaces keep content inside device safe areas', () => {
         const bottomBarRules = computedClassRules(bottomBar, bottomBarStyles, bottomBarCss);
         expect(bottomBarRules).toMatch(new RegExp(`padding-bottom:\\s*${inset('bottom')}`));
 
-        const toastHost = screen.getByRole('region', { name: 'Notifications' });
+        const toastHost = screen.getByRole('status', { name: 'Notifications' });
         const toastRules = computedClassRules(toastHost, toastStyles, toastCss);
         expect(toastRules).toMatch(new RegExp(inset('left')));
         expect(toastRules).toMatch(new RegExp(inset('right')));

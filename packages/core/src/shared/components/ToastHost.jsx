@@ -73,7 +73,16 @@ export function ToastHost({ children }) {
             ? Math.max(requestedDuration, ACTION_MIN_DURATION_MS)
             : requestedDuration;
         const record = { ...input, id, durationMs: duration };
-        setToasts((prev) => [...prev, record]);
+        const existingTimer = timersRef.current.get(id);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+            timersRef.current.delete(id);
+        }
+        setToasts((prev) => {
+            const existingIndex = prev.findIndex((toast) => toast.id === id);
+            if (existingIndex === -1) return [...prev, record];
+            return prev.map((toast, index) => (index === existingIndex ? record : toast));
+        });
         if (record.variant === 'error') haptic.error();
         else if (record.variant === 'success') haptic.success();
         else haptic.tap();
@@ -142,9 +151,13 @@ export function ToastHost({ children }) {
                             toast={t}
                             onAction={() => {
                                 if (typeof t.onAction === 'function') {
-                                    Promise.resolve(t.onAction()).catch(() => {
-                                        /* swallow; caller surfaces its own error */
-                                    });
+                                    try {
+                                        Promise.resolve(t.onAction()).catch(() => {
+                                            /* The caller surfaces action failures through its own UI. */
+                                        });
+                                    } catch {
+                                        /* The caller surfaces action failures through its own UI. */
+                                    }
                                 }
                                 dismissToast(t.id);
                             }}

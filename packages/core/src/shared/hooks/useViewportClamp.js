@@ -110,6 +110,10 @@ export function useAnchoredPopover(open, anchorRef) {
             insetInlineEnd: 'auto',
             left: placement.left,
             top: placement.top,
+            // Fixed coordinates skip the body's safe-area padding, so the width
+            // cap also leaves room for a landscape notch on either side.
+            maxWidth: 'calc(100vw - ' + String(2 * VIEWPORT_CLAMP_MARGIN) + 'px'
+                + ' - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))',
         } : undefined,
     };
 }

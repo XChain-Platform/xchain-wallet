@@ -328,7 +328,10 @@ describe('extension approval keyboard flows', () => {
 
         render(<Router />);
         const chain = await screen.findByRole('checkbox', { name: /Allow Bitcoin mainnet/ });
-        document.body.focus();
+        // The approval window opens on Reject; start this walk from no focus so
+        // Tab reaches the first control in document order.
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Reject' })));
+        document.activeElement.blur();
         await user.tab();
         expect(document.activeElement).toBe(chain);
         await user.keyboard('{Escape}');

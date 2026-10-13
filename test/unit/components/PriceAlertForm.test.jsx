@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
 
@@ -38,6 +38,37 @@ describe('PriceAlertForm', () => {
             targetFiat: 12345.67,
             fiatCurrency: 'usd',
         }));
+    });
+
+    it('does not clear target input edited while a save is pending', async () => {
+        let resolveSave;
+        const onCreate = vi.fn(() => new Promise((resolve) => { resolveSave = resolve; }));
+        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
+        const input = screen.getByLabelText('Target price');
+
+        fireEvent.change(input, { target: { value: '10' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.change(input, { target: { value: '20' } });
+        await act(async () => resolveSave());
+
+        expect(input.value).toBe('20');
+        expect(screen.getByRole('button', { name: 'Add alert' })).toBeEnabled();
+    });
+
+    it('does not show a stale save failure after the input changes', async () => {
+        let rejectSave;
+        const onCreate = vi.fn(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
+        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
+        const input = screen.getByLabelText('Target price');
+
+        fireEvent.change(input, { target: { value: '10' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+        fireEvent.change(input, { target: { value: '20' } });
+        await act(async () => rejectSave(new Error('Save failed')));
+
+        expect(input.value).toBe('20');
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Add alert' })).toBeEnabled();
     });
 
     it('uses theme tokens and exposes save failures as an alert', async () => {
