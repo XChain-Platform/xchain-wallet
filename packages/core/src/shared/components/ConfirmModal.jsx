@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -33,7 +34,12 @@ import { useBackHandler } from '../../ui/backStack.js';
 export function ConfirmModal({
     title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false, onConfirm, onCancel,
 }) {
-    // The system Back gesture closes this before it leaves the screen.
+    const rootRef = useRef(null);
+    const panelRef = useRef(null);
+    const titleId = useId();
+    const messageId = useId();
+    useFocusTrap(panelRef, { active: true });
+    useInertBackground(rootRef, { active: true });
     useBackHandler(onCancel);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
@@ -43,18 +49,20 @@ export function ConfirmModal({
 
     return (
         <div
+            ref={rootRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label={title}
+            aria-labelledby={titleId}
+            aria-describedby={message ? messageId : undefined}
             onClick={onCancel}
             tabIndex={-1}
         >
-            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p className={styles.title}>{title}</p>
-                {message ? <p className={styles.message}>{message}</p> : null}
+            <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
+                <p id={titleId} className={styles.title}>{title}</p>
+                {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <Button variant="secondary" block onClick={onCancel} autoFocus>
+                    <Button variant="secondary" block onClick={onCancel}>
                         {cancelLabel}
                     </Button>
                     <Button variant={danger ? 'danger' : 'primary'} block onClick={onConfirm}>
