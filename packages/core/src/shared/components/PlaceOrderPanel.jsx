@@ -512,7 +512,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         CoinPay auto-pay is armed for this order. You can turn it off any time from the open-orders list.
                     </p>
                 ) : result?.autopayArmed === false ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-danger)' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-danger-fg)' }}>
                         The order was placed, but auto-pay could not be armed
                         {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}. Matches will need manual payment from Payments due.
                     </p>
@@ -630,7 +630,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         />
                     )}
                     {submitError && (isWatcherMode || hw) ? (
-                        <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
+                        <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
                             {submitError}
                         </p>
                     ) : null}
@@ -931,7 +931,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 </div>
             ) : null}
             {formError ? (
-                <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger)', fontSize: '0.8rem' }}>
+                <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.8rem' }}>
                     {formError}
                 </p>
             ) : null}

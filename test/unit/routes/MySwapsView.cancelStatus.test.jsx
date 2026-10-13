@@ -38,11 +38,15 @@ function cancelRow(swapActionIndex, extra = {}) {
     return { action_index: '9000', swap_action_index: String(swapActionIndex), source: OWN, ...extra };
 }
 
-async function open(swaps, cancels) {
+async function open(swaps, cancels, { swapsError = null, cancelsError = null } = {}) {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
-        getSwapsForAddress: () => Promise.resolve({ data: swaps }),
-        getSwapCancelsForAddress: () => Promise.resolve({ data: cancels }),
+        getSwapsForAddress: () => swapsError
+            ? Promise.reject(swapsError)
+            : Promise.resolve({ data: swaps }),
+        getSwapCancelsForAddress: () => cancelsError
+            ? Promise.reject(cancelsError)
+            : Promise.resolve({ data: cancels }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
     };
     const messaging = new Proxy(target, {
@@ -60,6 +64,24 @@ async function open(swaps, cancels) {
 afterEach(() => cleanup());
 
 describe('MySwapsView: cancel row status', () => {
+    it('shows a load error instead of a false empty state when the swap feed fails', async () => {
+        const utils = await open([], [], { swapsError: new Error('Swap explorer unavailable') });
+
+        expect(utils.getByText('Swap explorer unavailable')).toBeTruthy();
+        expect(utils.queryByText('No swaps yet')).toBeNull();
+    });
+
+    it('does not offer cancel when the cancellation status feed fails', async () => {
+        const utils = await open(
+            [swapRow(702)],
+            [],
+            { cancelsError: new Error('Cancel status unavailable') },
+        );
+
+        expect(utils.getByText('Cancel status unavailable')).toBeTruthy();
+        expect(utils.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
     it('an invalid cancel row does not cancel the swap; it stays Open with Cancel offered', async () => {
         const utils = await open([swapRow(700)], [cancelRow(700, { status: 'invalid' })]);
         const list = utils.queryByRole('list', { name: 'Open swaps' });

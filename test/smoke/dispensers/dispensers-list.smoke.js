@@ -282,6 +282,10 @@ for (const [shell, appPath] of [
         /setDispenserRef\(\{\s*chainId,\s*actionIndex,\s*origin:/.test(app),
         `${shell} threads chainId + actionIndex + origin through setDispenserRef`,
     );
+    assert.ok(
+        /onCreateDispenser=\{\(\) => \{[\s\S]{0,160}?setFormReturnView\('dispensers-list'\);[\s\S]{0,160}?setUnlockedView\('dispenser'\);/.test(app),
+        `${shell} returns a dispenser launched from the list back to the list`,
+    );
 }
 
 console.log(
