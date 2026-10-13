@@ -116,9 +116,58 @@ export function measureInPage(opts = {}) {
             push('unreachable', { el: desc(el), top: Math.round(T), bottom: Math.round(B) });
         }
     }
+    res.layout = measureLayout();
     res.narrow = measureNarrowLists();
     if (opts.contrast) measureContrast();
     return res;
+
+    // The route contract is measured from the main scroller's inner border.
+    // This keeps a left navigation rail out of page-gutter coordinates and
+    // puts the right measurement against the scrollbar's real leading edge.
+    function measureLayout() {
+        const main = document.getElementById('xc-main');
+        if (!main) return null;
+        const mcs = getComputedStyle(main);
+        const mr = main.getBoundingClientRect();
+        const borderL = main.clientLeft;
+        const borderR = parseFloat(mcs.borderRightWidth) || 0;
+        const padL = parseFloat(mcs.paddingLeft) || 0;
+        const padR = parseFloat(mcs.paddingRight) || 0;
+        const frameLeft = mr.left + borderL;
+        const scrollbarWidth = Math.max(0, mr.width - borderL - borderR - main.clientWidth);
+        const scrollbarLeft = mr.right - borderR - scrollbarWidth;
+        const contentLeft = frameLeft + padL;
+        const contentRight = frameLeft + main.clientWidth - padR;
+        const expectedGutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        const visible = (el) => {
+            const cs = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            return cs.display !== 'none' && cs.visibility !== 'hidden'
+                && cs.position !== 'absolute' && cs.position !== 'fixed'
+                && r.width >= 1 && r.height >= 1;
+        };
+        const first = [...main.children].find(visible) || null;
+        const fr = first?.getBoundingClientRect();
+        const form = first && (first.tagName === 'FORM' || first.getAttribute('role') === 'group');
+        const shell = main.parentElement;
+        const header = shell ? [...shell.children].find((el) => el.tagName === 'HEADER' && visible(el)) : null;
+        const headerFirst = header ? [...header.children].find(visible) : null;
+        const hr = headerFirst?.getBoundingClientRect();
+        const round = (value) => Math.round(value * 100) / 100;
+        return {
+            expectedGutter,
+            contentLeft: round(contentLeft - frameLeft),
+            contentRightGap: round(scrollbarLeft - contentRight),
+            first: first ? {
+                el: desc(first),
+                kind: form ? 'form' : 'list',
+                left: round(fr.left - frameLeft),
+                rightGap: round(scrollbarLeft - fr.right),
+                topGap: round(fr.top - mr.top + main.scrollTop - main.clientTop),
+            } : null,
+            headerLeft: hr ? round(hr.left - frameLeft) : null,
+        };
+    }
 
     // Dark-mode legibility. WCAG 2.x contrast of each visible text element's
     // computed colour against the nearest opaque ancestor background (alpha
@@ -432,9 +481,54 @@ export function installRootFontSize(page, rootFontSize) {
     }, rootFontSize);
 }
 
+/** Returns the route labels and layout-contract failures from a completed sweep. */
+export function layoutSweepFailures(screens) {
+    const failures = [];
+    const topGaps = { form: new Set(), list: new Set() };
+    const close = (actual, expected) => Math.abs(actual - expected) <= 1;
+    for (const { label, layout, vw } of screens) {
+        if (!layout) {
+            failures.push(`${label}: missing #xc-main layout measurement`);
+            continue;
+        }
+        const gutter = vw < 640 ? 12 : vw < 900 ? 16 : 24;
+        const { first } = layout;
+        if (!close(layout.contentLeft, gutter)) {
+            failures.push(`${label}: content left ${layout.contentLeft}px, expected ${gutter}px`);
+        }
+        if (layout.contentRightGap + 1 < gutter) {
+            failures.push(`${label}: content right gap ${layout.contentRightGap}px, expected at least ${gutter}px`);
+        }
+        if (layout.headerLeft !== null && !close(layout.headerLeft, gutter)) {
+            failures.push(`${label}: header left ${layout.headerLeft}px, expected ${gutter}px`);
+        }
+        if (!first) {
+            failures.push(`${label}: missing first content block`);
+            continue;
+        }
+        // Wide forms intentionally centre their card inside the guttered
+        // content lane. Every other first block starts on the lane edge.
+        if ((first.kind !== 'form' || vw < 600) && !close(first.left, gutter)) {
+            failures.push(`${label}: first content left ${first.left}px, expected ${gutter}px`);
+        }
+        if (first.rightGap + 1 < gutter) {
+            failures.push(`${label}: first content right gap ${first.rightGap}px, expected at least ${gutter}px`);
+        }
+        topGaps[first.kind].add(first.topGap);
+    }
+    if (topGaps.form.size && topGaps.list.size) {
+        const forms = [...topGaps.form].sort((a, b) => a - b);
+        const lists = [...topGaps.list].sort((a, b) => a - b);
+        if (forms.length !== lists.length || forms.some((gap, i) => !close(gap, lists[i]))) {
+            failures.push(`form top gaps [${forms.join(', ')}] do not match list top gaps [${lists.join(', ')}]`);
+        }
+    }
+    return failures;
+}
+
 /** A sweep bound to one page, one venue and one output directory. */
 export function createSweep(page, {
-    venue, outDir, restart = () => page.goto('/'), onScreen = null, contrast = false, rootFontSize,
+    venue, outDir, restart = () => page.goto('/'), onScreen = null, onResult = null, contrast = false, rootFontSize,
 }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
@@ -461,6 +555,7 @@ export function createSweep(page, {
             await page.screenshot({ path: join(outDir, `${slug}.png`) });
         } catch { /* a screenshot failure is not a finding */ }
         appendFileSync(linesPath, `${JSON.stringify({ venue, n, label, shot: `${slug}.png`, ...result })}\n`);
+        if (onResult) await onResult({ label, ...result });
         return result;
     }
 
