@@ -8,50 +8,41 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// SSC-4, clipboard hygiene: the one path every copy in the wallet goes through
-// (; the contract is a separate case §1.1, the iOS mechanics §4).
-//
-// WHAT WAS WRONG. The shared UI copied through `navigator.clipboard`, which in
-// a WebView writes to the ordinary system pasteboard with no sensitivity
-// marking and no expiry. On iOS that means Universal Clipboard, which is ON by
-// default: tapping "Copy recovery phrase" put the seed on every nearby Mac and
-// iPad signed into the same Apple account, seconds later, silently. On Android
-// any foreground app can read the clip, and without
-// `ClipDescription.EXTRA_IS_SENSITIVE` the system itself will happily render
-// the seed in a paste preview. The 60-second JS auto-clear the seed screen
-// already does is not an answer to either: it clears THIS device's clipboard,
-// long after the copy has been synced or read elsewhere.
-//
-// WHAT THIS DOES. A sensitive copy on a native shell goes through the
-// `XChainClipboard` plugin, which marks it sensitive, keeps it local to the
-// device and gives it a real expiry (iOS `UIPasteboard` `.localOnly` +
-// `expirationDate`; Android `EXTRA_IS_SENSITIVE` + a scheduled clear).
-//
-// AND IT REFUSES RATHER THAN DEGRADES. On a native shell whose clipboard
-// plugin did not register, a sensitive copy FAILS. It does not quietly fall
-// back to `navigator.clipboard`, because that fallback is the exact leak this
-// exists to prevent, and it would be invisible: the copy would appear to work.
-// That is that lesson applied to the second bridge - a native build
-// missing its plugin is a broken build, not a lesser one.
-//
-// A browser is a different case and is treated as one: web, desktop and the
-// extension have no sensitivity API to use, so a sensitive copy there behaves
-// exactly as it always has, and the caller's own auto-clear stays the mitigation.
+// SSC-4 clipboard hygiene keeps every wallet copy on one path. Native shells
+// use the local, sensitivity-marked plugin path. Web, desktop, and extension
+// copies use browser APIs. Sensitive writes on every path share the selected
+// expiry and compare the current value before clearing it.
 
+import { CLIPBOARD_AUTO_CLEAR_DEFAULT, CLIPBOARD_AUTO_CLEAR_MAX } from '../schemas/settings.js';
 import { getNativePlugin, isNativeShell } from './nativeShell.js';
 
 /** The plugin name registered natively (`jsName` / `@CapacitorPlugin(name=)`). */
 export const CLIPBOARD_PLUGIN_NAME = 'XChainClipboard';
 
 /**
- * How long a sensitive clip may live, in seconds.
- *
- * 60 matches the auto-clear the seed screen has always done in JS, so the two
- * mechanisms expire together rather than one outliving the other. The native
- * side treats this as an upper bound it enforces itself, which is the half the
- * JS timer could never do: a JS timer dies with the WebView.
+ * Default lifetime for a sensitive clip, in seconds.
  */
-export const SENSITIVE_CLIP_TTL_SECONDS = 60;
+export const SENSITIVE_CLIP_TTL_SECONDS = CLIPBOARD_AUTO_CLEAR_DEFAULT;
+
+let sensitiveAutoClearSeconds = SENSITIVE_CLIP_TTL_SECONDS;
+let copyGeneration = 0;
+let pendingAutoClear = null;
+
+/**
+ * Apply the active wallet's clipboard retention preference.
+ * Invalid or missing stored values use the schema default.
+ *
+ * @param {unknown} seconds
+ * @returns {number}
+ */
+export function configureClipboardAutoClear(seconds) {
+    sensitiveAutoClearSeconds = Number.isInteger(seconds)
+        && seconds >= 0
+        && seconds <= CLIPBOARD_AUTO_CLEAR_MAX
+        ? seconds
+        : SENSITIVE_CLIP_TTL_SECONDS;
+    return sensitiveAutoClearSeconds;
+}
 
 /** Why a copy failed, when it did. */
 export const CopyFailure = Object.freeze({
@@ -97,10 +88,12 @@ export function sensitiveCopySupported(env = globalThis) {
 export async function copyText(value, opts = {}) {
     const {
         sensitive = false,
-        ttlSeconds = SENSITIVE_CLIP_TTL_SECONDS,
+        ttlSeconds = sensitiveAutoClearSeconds,
         env = globalThis,
     } = opts;
     const text = String(value ?? '');
+    const generation = ++copyGeneration;
+    cancelPendingAutoClear();
 
     const plugin = getNativeClipboard(env);
     if (plugin) {
@@ -115,6 +108,7 @@ export async function copyText(value, opts = {}) {
             // to be honest about the guarantee needs to know, and a copy that
             // silently gave less than it promised is the shape of bug this
             // whole contract exists to remove.
+            if (sensitive) scheduleAutoClear(text, ttlSeconds, env, generation);
             return { ok: true, native: true, marked: res?.marked !== false };
         } catch {
             // A native write that THREW is not a reason to try the web path
@@ -128,36 +122,62 @@ export async function copyText(value, opts = {}) {
         return { ok: false, native: true, reason: CopyFailure.NO_NATIVE_CLIPBOARD };
     }
 
-    return (await writeViaWebApis(text, env))
-        ? { ok: true, native: false }
-        : { ok: false, native: false, reason: CopyFailure.UNAVAILABLE };
+    if (await writeViaWebApis(text, env)) {
+        if (sensitive) scheduleAutoClear(text, ttlSeconds, env, generation);
+        return { ok: true, native: false };
+    }
+    return { ok: false, native: false, reason: CopyFailure.UNAVAILABLE };
 }
 
 /**
- * Clear whatever this app put on the clipboard.
+ * Clear the clipboard, optionally only when it still holds `expectedValue`.
  *
- * The seed and private-key screens have always done this on a timer. On a
- * native shell it now clears the real pasteboard rather than overwriting it
- * with a space, which on iOS would sync a space to every nearby device and
- * leave the seed in the receiving devices' clipboards anyway.
- *
- * Best effort by definition: another app may have taken the pasteboard since.
- *
- * @param {{ env?: any }} [opts]
+ * @param {{ env?: any, expectedValue?: string }} [opts]
  * @returns {Promise<boolean>}
  */
 export async function clearClipboard(opts = {}) {
-    const { env = globalThis } = opts;
+    const { env = globalThis, expectedValue } = opts;
     const plugin = getNativeClipboard(env);
     if (plugin && typeof plugin.clear === 'function') {
         try {
-            await plugin.clear();
-            return true;
+            const res = await plugin.clear(expectedValue === undefined ? {} : { expectedValue });
+            return res?.cleared !== false;
         } catch { /* fall through: leaving a secret there is the worse outcome */ }
+    }
+    if (expectedValue !== undefined) {
+        const readText = env?.navigator?.clipboard?.readText;
+        if (typeof readText !== 'function') return false;
+        try {
+            if (await readText.call(env.navigator.clipboard) !== expectedValue) return false;
+        } catch {
+            return false;
+        }
     }
     // A single space rather than an empty string: some browsers treat writing
     // '' as a no-op, which would leave the secret in place.
     return writeViaWebApis(' ', env);
+}
+
+function cancelPendingAutoClear() {
+    if (!pendingAutoClear) return;
+    pendingAutoClear.cancel(pendingAutoClear.id);
+    pendingAutoClear = null;
+}
+
+function scheduleAutoClear(value, seconds, env, generation) {
+    if (!Number.isFinite(seconds) || seconds <= 0 || generation !== copyGeneration) return;
+    const schedule = typeof env?.setTimeout === 'function'
+        ? env.setTimeout.bind(env)
+        : setTimeout;
+    const cancel = typeof env?.clearTimeout === 'function'
+        ? env.clearTimeout.bind(env)
+        : clearTimeout;
+    const id = schedule(async () => {
+        if (generation !== copyGeneration) return;
+        pendingAutoClear = null;
+        await clearClipboard({ env, expectedValue: value });
+    }, seconds * 1000);
+    pendingAutoClear = { id, cancel };
 }
 
 /**

@@ -21,12 +21,13 @@
 // code a fake `navigator.clipboard` that RECORDS what it was asked to write,
 // and then asserts that the secret never appears in that recording.
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
     CLIPBOARD_PLUGIN_NAME,
     CopyFailure,
     SENSITIVE_CLIP_TTL_SECONDS,
     clearClipboard,
+    configureClipboardAutoClear,
     copyText,
     getNativeClipboard,
     sensitiveCopySupported,
@@ -40,7 +41,14 @@ function makeEnv({ native = false, plugin = true, throwOnWrite = false } = {}) {
     const webWrites = [];
     const pluginCalls = [];
     const env = {
-        navigator: { clipboard: { writeText: async (t) => { webWrites.push(t); } } },
+        clipboardValue: '',
+        navigator: { clipboard: {
+            writeText: async (t) => {
+                webWrites.push(t);
+                env.clipboardValue = t;
+            },
+            readText: async () => env.clipboardValue,
+        } },
         webWrites,
         pluginCalls,
     };
@@ -55,7 +63,10 @@ function makeEnv({ native = false, plugin = true, throwOnWrite = false } = {}) {
                             if (throwOnWrite) throw new Error('pasteboard unavailable');
                             return { ok: true };
                         },
-                        clear: async () => { pluginCalls.push({ method: 'clear' }); return { ok: true }; },
+                        clear: async (opts) => {
+                            pluginCalls.push({ method: 'clear', ...opts });
+                            return { ok: true, cleared: true };
+                        },
                     },
                 }
                 : {},
@@ -63,6 +74,12 @@ function makeEnv({ native = false, plugin = true, throwOnWrite = false } = {}) {
     }
     return env;
 }
+
+afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    configureClipboardAutoClear(SENSITIVE_CLIP_TTL_SECONDS);
+});
 
 describe('a native shell with the clipboard plugin', () => {
     it('sends a sensitive copy to the plugin, marked and with a TTL', async () => {
@@ -100,6 +117,33 @@ describe('a native shell with the clipboard plugin', () => {
         await clearClipboard({ env });
         expect(env.pluginCalls).toEqual([{ method: 'clear' }]);
         expect(env.webWrites).toEqual([]);
+    });
+
+    it('passes zero to native shells without scheduling an expiry', async () => {
+        vi.useFakeTimers();
+        const env = makeEnv({ native: true });
+        configureClipboardAutoClear(0);
+
+        await copyText(SEED, { sensitive: true, env });
+        await vi.advanceTimersByTimeAsync(600_000);
+
+        expect(env.pluginCalls).toEqual([{
+            method: 'write', value: SEED, sensitive: true, ttlSeconds: 0,
+        }]);
+    });
+
+    it('asks the native shell to compare the value at the selected delay', async () => {
+        vi.useFakeTimers();
+        const env = makeEnv({ native: true });
+        configureClipboardAutoClear(7);
+
+        await copyText(SEED, { sensitive: true, env });
+        await vi.advanceTimersByTimeAsync(7_000);
+
+        expect(env.pluginCalls).toEqual([
+            { method: 'write', value: SEED, sensitive: true, ttlSeconds: 7 },
+            { method: 'clear', expectedValue: SEED },
+        ]);
     });
 });
 
@@ -165,6 +209,43 @@ describe('an ordinary browser', () => {
         const env = {};
         const res = await copyText('x', { env });
         expect(res).toMatchObject({ ok: false, reason: CopyFailure.UNAVAILABLE });
+    });
+
+    it('clears at the selected delay only while its own value remains', async () => {
+        vi.useFakeTimers();
+        const env = makeEnv({ plugin: false });
+        configureClipboardAutoClear(12);
+
+        await copyText(SEED, { sensitive: true, env });
+        await vi.advanceTimersByTimeAsync(11_999);
+        expect(env.webWrites).toEqual([SEED]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(env.webWrites).toEqual([SEED, ' ']);
+    });
+
+    it('cancels the older timer when the wallet makes a newer copy', async () => {
+        vi.useFakeTimers();
+        const env = makeEnv({ plugin: false });
+
+        await copyText('first secret', { sensitive: true, ttlSeconds: 10, env });
+        await vi.advanceTimersByTimeAsync(5_000);
+        await copyText('second secret', { sensitive: true, ttlSeconds: 20, env });
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(env.webWrites).toEqual(['first secret', 'second secret']);
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(env.webWrites).toEqual(['first secret', 'second secret', ' ']);
+    });
+
+    it('does not erase a value copied by another app', async () => {
+        vi.useFakeTimers();
+        const env = makeEnv({ plugin: false });
+
+        await copyText(SEED, { sensitive: true, ttlSeconds: 5, env });
+        env.clipboardValue = 'new clipboard value';
+        await vi.advanceTimersByTimeAsync(5_000);
+
+        expect(env.webWrites).toEqual([SEED]);
+        expect(env.clipboardValue).toBe('new clipboard value');
     });
 });
 

@@ -8,27 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The Settings → Privacy "clipboard auto-clear" control is gone,
-// and the schema field it wrote is not.
-//
-// The two halves are tested together on purpose, because the failure this
-// item existed to close lives in the gap between them. a later change made key
-// material uncopyable, which deleted the setting's only reader; the control
-// kept writing `settings.privacy.clipboardAutoClearSeconds` regardless. A
-// privacy-minded user reading that row came away believing the wallet wipes
-// their clipboard on a timer, which it does not, for anything.
-//
-// Removing the control is the honest fix. Removing the schema field with it
-// would not be: stored vaults already carry the key, so dropping it turns a
-// UI cleanup into a settings migration, and a future copy path (addresses,
-// txids) can claim the value back without a schema bump.
-//
-// This renders the real component rather than grepping it. A stale row left
-// behind a conditional, or one moved into a subcomponent, is invisible to
-// source matching and perfectly visible here.
+// The Privacy control remains connected to the validated settings field that
+// drives sensitive clipboard retention in every shell.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import {
@@ -40,8 +24,8 @@ import { resetShellCapabilities } from '../../../packages/core/src/shared/shellC
 
 const update = vi.fn(async () => {});
 
-// A settings record that still carries the field, which is the realistic
-// case: every wallet created before this change has it stored.
+// The fixture carries a non-default value so the rendered control proves it
+// reads the stored preference rather than only displaying the default.
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({
         settings: {
@@ -73,41 +57,37 @@ afterEach(() => {
     update.mockClear();
 });
 
-describe('the Privacy panel after', () => {
-    it('offers no clipboard auto-clear control', () => {
+describe('the Privacy clipboard control', () => {
+    it('shows the stored auto-clear delay and its allowed range', () => {
         render(<PrivacySection />);
-        expect(screen.queryByLabelText(/clipboard/i)).toBeNull();
-        expect(screen.queryByText(/clipboard/i)).toBeNull();
+        const input = screen.getByLabelText('Clipboard auto-clear seconds');
+        expect(input).toHaveValue(90);
+        expect(input).toHaveAttribute('min', '0');
+        expect(input).toHaveAttribute('max', '600');
+        expect(screen.getByText(/Set to 0 to keep them until they are replaced/)).toBeTruthy();
     });
 
-    it('renders no number input at all, whatever it might be labelled', () => {
-        // The clipboard row was this panel's only spinbox. Asserting on the
-        // role rather than the label is what catches a renamed revival: a row
-        // called "Clear copied data after (seconds)" would pass a text check
-        // and still make the same unkept promise.
+    it('persists zero as the never-clear choice', async () => {
         render(<PrivacySection />);
-        expect(screen.queryAllByRole('spinbutton')).toHaveLength(0);
-    });
+        fireEvent.change(screen.getByLabelText('Clipboard auto-clear seconds'), {
+            target: { value: '0' },
+        });
 
-    it('does not write the orphaned setting on render', () => {
-        // The removed handler clamped and persisted on mount-adjacent paths.
-        // Nothing should touch the key now, least of all silently.
-        render(<PrivacySection />);
-        expect(update).not.toHaveBeenCalled();
+        await waitFor(() => expect(update).toHaveBeenCalledWith({
+            privacy: { clipboardAutoClearSeconds: 0 },
+        }));
     });
 
     it('leaves the rows that still govern something in place', () => {
         render(<PrivacySection />);
         expect(screen.getByText('Change-address rotation')).toBeTruthy();
-        expect(screen.queryByText('Hide small balances')).toBeNull();
+        expect(screen.getByText('Clipboard auto-clear')).toBeTruthy();
         expect(screen.getByText('Form draft retention')).toBeTruthy();
     });
 });
 
 describe('the clipboard setting itself', () => {
     it('is still seeded by createDefaultSettings', () => {
-        // Compatibility half of the ruling: the field stays in the schema so
-        // removing the control is not a stored-settings migration.
         const s = createDefaultSettings();
         expect(s.privacy.clipboardAutoClearSeconds).toBe(CLIPBOARD_AUTO_CLEAR_DEFAULT);
     });

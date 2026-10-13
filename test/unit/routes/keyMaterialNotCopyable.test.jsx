@@ -44,6 +44,9 @@ const ADDRESS = {
 function makeMessaging(overrides = {}) {
     return {
         exportPrivateKey: vi.fn(async () => ({ wif: PRIVATE_KEY })),
+        getSettings: vi.fn(async () => ({
+            privacy: { clipboardAutoClearSeconds: 17 },
+        })),
         ...overrides,
     };
 }
@@ -152,20 +155,18 @@ describe('private-key reveal security', () => {
         await waitFor(() => expect(screen.getByText('Before you continue')).toBeTruthy());
     });
 
-    it('routes copy through the sensitive clipboard and clears it on expiry', async () => {
-        vi.useFakeTimers();
+    it('routes copy through the sensitive clipboard with the selected expiry', async () => {
         draw();
         await confirmPassword();
         fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
+        await waitFor(() => expect(
+            screen.getByText('Sensitive clipboard copies expire after 17 seconds.'),
+        ).toBeTruthy());
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy private key' }));
         await act(async () => { await Promise.resolve(); });
         expect(clipboard.copyText).toHaveBeenCalledWith(expect.any(String), { sensitive: true });
         expect(clipboard.clearClipboard).not.toHaveBeenCalled();
-
-        act(() => vi.advanceTimersByTime(60_000));
-        expect(clipboard.clearClipboard).toHaveBeenCalledTimes(1);
-        expect(screen.getByText('Clipboard cleared.')).toBeTruthy();
     });
 
     it('enables the screen guard only while the route is mounted', async () => {
