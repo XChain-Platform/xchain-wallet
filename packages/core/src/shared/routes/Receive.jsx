@@ -74,7 +74,7 @@ function newestAddressOfType(addresses, addressType) {
     let newestIndex = -1;
     for (const candidate of addresses || []) {
         if (candidate?.addressType !== addressType) continue;
-        if (!['hd', 'trezor', 'ledger'].includes(candidate.source || 'hd')) continue;
+        if (!['hd', 'trezor', 'ledger', 'watch-only'].includes(candidate.source || 'hd')) continue;
         const parts = typeof candidate.derivationPath === 'string'
             ? candidate.derivationPath.split('/')
             : [];

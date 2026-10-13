@@ -662,9 +662,9 @@ function hwId(address, deps) {
 }
 
 /**
- * Return the newest (highest external index) HD address for a wallet +
- * chain, or `null` if no address exists. External = change = 0 in the
- * BIP44-style derivation path. Skips imported WIFs: those aren't a
+ * Return the newest (highest external index) derivable address for a wallet
+ * and chain, or `null` if no address exists. External = change = 0 in the
+ * BIP44-style derivation path. Skips imported WIFs because those have no
  * "receive next" concept.
  *
  * @param {{ walletId: string, chainId: string, addressType?: string }} req
@@ -712,7 +712,7 @@ async function newestAddress(req, { vault, chainRegistry }) {
         if (a.chain !== descriptor.coin) continue;
         if (a.network !== descriptor.networkKind) continue;
         if (a.addressType !== type) continue;
-        if (a.source !== 'hd') continue;
+        if (!['hd', 'trezor', 'ledger', 'watch-only'].includes(a.source)) continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
         if (parts.length < 2) continue;
