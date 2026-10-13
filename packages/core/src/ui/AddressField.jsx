@@ -10,6 +10,7 @@
 
 import { forwardRef } from 'react';
 import { Input } from './Input.jsx';
+import { AddressText } from './AddressText.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
 
@@ -51,10 +52,12 @@ export const AddressField = forwardRef(function AddressField(
     ref,
 ) {
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || ICONS.contacts;
+    const showReadOnlyAddress = rest.readOnly && typeof rest.value === 'string' && rest.value.length > 0;
     const wrapClass = [
         styles.wrap,
         size === 'lg' ? styles.lg : '',
         label ? '' : styles.noLabel,
+        showReadOnlyAddress ? styles.readOnly : '',
     ].filter(Boolean).join(' ');
     return (
         <div className={wrapClass}>
@@ -68,8 +71,14 @@ export const AddressField = forwardRef(function AddressField(
                 autoCorrect="off"
                 spellCheck={false}
                 style={{ paddingInlineEnd: '48px', ...style }}
+                title={showReadOnlyAddress ? rest.value : undefined}
                 {...rest}
             />
+            {showReadOnlyAddress ? (
+                <span className={styles.readOnlyValue} aria-hidden="true">
+                    <AddressText address={rest.value} />
+                </span>
+            ) : null}
             <button
                 type="button"
                 className={styles.iconButton}
