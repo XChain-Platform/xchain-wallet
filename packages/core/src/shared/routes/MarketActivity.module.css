@@ -21,6 +21,14 @@
     border-color: var(--xc-accent-primary);
 }
 
+.marketSelectorContent {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
+}
+
 .marketSelectorText {
     display: flex;
     flex-direction: column;

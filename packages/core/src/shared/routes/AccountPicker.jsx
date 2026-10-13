@@ -120,6 +120,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     const subtitle = customName && customName !== defaultName ? defaultName : null;
                     return (
                         <div key={a.id} className={pickerStyles.rowWrap}>
+                            {/* Clickable list rows stay native buttons so the whole row keeps its established layout and hit target. */}
                             <button
                                 type="button"
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
@@ -145,7 +146,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                 </span>
                             </button>
                             {onRenameAccount ? (
-                                <button
+                                <Button
                                     type="button"
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('accountPicker.renameLabel', { label })}
@@ -156,7 +157,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                     }}
                                 >
                                     <Icon.PencilIcon />
-                                </button>
+                                </Button>
                             ) : null}
                         </div>
                     );

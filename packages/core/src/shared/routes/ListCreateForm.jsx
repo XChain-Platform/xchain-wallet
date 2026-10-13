@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -754,16 +754,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
             {listType === '2' ? (
                 <>
-                    <label
-                        className={styles.pickerLabel}
-                        htmlFor="list-addresses"
+                    <div
                         {...recipientsDrop.rootProps}
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
-                        Addresses
-                        <textarea
+                        <Textarea
                             id="list-addresses"
-                            className={styles.picker}
+                            label="Addresses"
                             value={pasteText}
                             onChange={(e) => { setPasteText(e.target.value); setFormError(null); }}
                             placeholder={recipientsDrop.isDragOver
@@ -775,16 +772,18 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             autoCorrect="off"
                             autoComplete="off"
                         />
-                    </label>
+                    </div>
                     {/* Wraps, and drives a hidden file input from a real
                         button: the browser's own picker is unstyled and,
                         beside the Contacts button, ran off a phone screen. */}
                     <div className={styles.fromLine} style={{ flexWrap: 'wrap' }}>
-                        <input
-                            {...recipientsDrop.pickerProps}
-                            aria-label="Upload CSV of addresses"
-                            autoComplete="off"
-                        />
+                        <div style={{ display: 'none' }}>
+                            <Input
+                                {...recipientsDrop.pickerProps}
+                                aria-label="Upload CSV of addresses"
+                                autoComplete="off"
+                            />
+                        </div>
                         <Button type="button" variant="ghost" onClick={recipientsDrop.openFilePicker}>
                             Upload CSV
                         </Button>
@@ -989,6 +988,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
                 {rows.map((r) => (
                     <li key={r.key} style={{ padding: 'var(--xc-space-2) 0', borderBottom: '1px solid var(--xc-border)' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}>
+                            {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
                             <input type="checkbox" checked={checked.has(r.key)} onChange={() => toggle(r.key)} />
                             <span>
                                 <strong>{r.name}</strong>{r.label ? ` (${r.label})` : ''}

@@ -25,6 +25,16 @@ const migratedRoutes = [
     'BatchComposerForm',
 ];
 
+const styleGuideRoutes = {
+    AccountPicker: ['Button'],
+    ControllerBindForm: ['Button', 'Input', 'Select'],
+    ListCreateForm: ['Button', 'Input', 'Select', 'Textarea'],
+    MarketActivity: ['Button'],
+    MarketView: ['Button'],
+    MultisigCreate: ['Button', 'Input', 'Select'],
+    PairSignerForm: ['Button', 'Input'],
+};
+
 describe('shared route button usage', () => {
     it.each(migratedRoutes)('%s uses the shared Button component', (routeName) => {
         const source = readFileSync(
@@ -64,5 +74,38 @@ describe('shared route button usage', () => {
 
         expect(inputs).toHaveLength(4);
         expect(rationales).toHaveLength(inputs.length);
+    });
+
+    it.each(Object.entries(styleGuideRoutes))('%s uses kit form and action controls', (routeName, controls) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        for (const control of controls) {
+            expect(source).toMatch(new RegExp(`<${control}\\b`));
+        }
+        expect(source).not.toMatch(/<(?:select|textarea)\b/);
+    });
+
+    it('limits native controls in the adopted routes to documented semantic exceptions', () => {
+        const expectedInputs = { ControllerBindForm: 1, ListCreateForm: 1, MultisigCreate: 1 };
+        const expectedButtons = { AccountPicker: 1, MarketActivity: 1 };
+
+        for (const routeName of Object.keys(styleGuideRoutes)) {
+            const source = readFileSync(
+                resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+                'utf8',
+            );
+            const nativeInputs = source.match(/<input\b/g) || [];
+            const inputRationales = source.match(/The kit has no (?:checkbox|radio) primitive/g) || [];
+            const nativeButtons = source.match(/<button\b/g) || [];
+            const rowRationales = source.match(/Clickable list rows stay native buttons/g) || [];
+
+            expect(nativeInputs, routeName).toHaveLength(expectedInputs[routeName] || 0);
+            expect(inputRationales, routeName).toHaveLength(nativeInputs.length);
+            expect(nativeButtons, routeName).toHaveLength(expectedButtons[routeName] || 0);
+            expect(rowRationales, routeName).toHaveLength(nativeButtons.length);
+        }
     });
 });

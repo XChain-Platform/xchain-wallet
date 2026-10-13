@@ -249,19 +249,21 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 
     const iconChainId = selected.chainId || defaultChainId;
     const marketSelector = (
-        <button
+        <Button
             type="button"
             className={styles.marketSelector}
             onClick={() => setPicking(true)}
             aria-label={`Change market (currently ${selected.displayName || tick})`}
         >
-            <TickerIcon chainId={iconChainId} tick={tick} size={40} />
-            <span className={styles.marketSelectorText}>
-                <span className={styles.marketSelectorName}>{selected.displayName || tick}</span>
-                <span className={styles.marketSelectorSub}>{tick}</span>
+            <span className={styles.marketSelectorContent}>
+                <TickerIcon chainId={iconChainId} tick={tick} size={40} />
+                <span className={styles.marketSelectorText}>
+                    <span className={styles.marketSelectorName}>{selected.displayName || tick}</span>
+                    <span className={styles.marketSelectorSub}>{tick}</span>
+                </span>
+                <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
             </span>
-            <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
-        </button>
+        </Button>
     );
 
     return (
@@ -329,6 +331,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `offer:${index}`}>
                                             {onClick ? (
+                                                /* Clickable list rows stay native buttons so the whole row keeps its established layout and hit target. */
                                                 <button type="button" className={styles.row} onClick={onClick}>
                                                     {content}
                                                 </button>

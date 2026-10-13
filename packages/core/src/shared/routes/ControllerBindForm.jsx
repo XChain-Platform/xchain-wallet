@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -678,17 +678,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 />
             ) : null}
 
-            <label className={styles.pickerLabel}>
-                What to protect
-                <select
-                    className={styles.picker}
-                    value={target}
-                    onChange={(e) => setTarget(/** @type {any} */ (e.target.value))}
-                >
-                    {tick ? <option value="token">Token {tick}</option> : null}
-                    <option value="address">This address</option>
-                </select>
-            </label>
+            <Select
+                label="What to protect"
+                value={target}
+                onChange={(e) => setTarget(/** @type {any} */ (e.target.value))}
+            >
+                {tick ? <option value="token">Token {tick}</option> : null}
+                <option value="address">This address</option>
+            </Select>
 
             {/*
               * Bind only, like the cooldown field below. An unbind sends an
@@ -712,18 +709,15 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 />
             ) : null}
 
-            <label className={styles.pickerLabel}>
-                Action class
-                <select
-                    className={styles.picker}
-                    value={actionClass}
-                    onChange={(e) => setActionClass(e.target.value)}
-                >
-                    {actionClasses.map((ac) => (
-                        <option key={ac} value={ac}>{ac}</option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label="Action class"
+                value={actionClass}
+                onChange={(e) => setActionClass(e.target.value)}
+            >
+                {actionClasses.map((ac) => (
+                    <option key={ac} value={ac}>{ac}</option>
+                ))}
+            </Select>
             {/*
               * Two of the seven classes do not mean what their name suggests,
               * and both are consequential enough that offering them unlabelled
@@ -741,6 +735,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
             </p>
 
             <label className={styles.checkRow}>
+                {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
                 <input
                     type="checkbox"
                     checked={unbind}
