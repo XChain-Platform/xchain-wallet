@@ -70,13 +70,25 @@
 }
 
 .amount {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 6px;
+    min-width: 0;
     font-family: var(--xc-font-mono);
     font-size: 32px;
     font-weight: 800;
     line-height: 1.1;
     letter-spacing: -0.01em;
     color: var(--xc-on-accent);
-    word-break: break-all;
+}
+
+/* Large exact totals stay inside the hero while the currency code remains
+   intact as a separate flex item. */
+.amountValue {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 /* Fiat currency code suffix (USD / JPY / EUR …) rendered to the right
@@ -88,7 +100,6 @@
     font-size: 16px;
     font-weight: 600;
     color: color-mix(in srgb, var(--xc-on-accent) 75%, transparent);
-    margin-inline-start: 6px;
     letter-spacing: 0;
     white-space: nowrap;
     vertical-align: baseline;
@@ -99,9 +110,7 @@
     color: color-mix(in srgb, var(--xc-on-accent) 55%, transparent);
 }
 
-/* The 24h change and the not-priced count together run past a 411px phone,
-   and an ellipsis there hid the count. Wrap instead: the summary takes a
-   second line and the sync time drops below it when space runs out. */
+/* The summary and its individual facts wrap independently on phone widths. */
 .meta {
     display: flex;
     flex-wrap: wrap;
@@ -114,9 +123,11 @@
 }
 
 .metaLeft {
-    flex: 1 1 auto;
+    display: flex;
+    flex: 1 1 220px;
+    flex-wrap: wrap;
+    column-gap: var(--xc-space-1);
     min-width: 0;
-    overflow-wrap: anywhere;
 }
 
 .metaRight {
@@ -131,6 +142,20 @@
     color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
     font-size: var(--xc-text-xs);
     font-weight: 500;
+}
+
+.metaUnpriced:not(:first-child)::before {
+    content: '·';
+    margin-inline-end: var(--xc-space-1);
+}
+
+.metaUnpriced,
+.changePositive,
+.changeNegative,
+.changeNeutral {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .changePositive {

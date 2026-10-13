@@ -44,7 +44,8 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
-    const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const fiatCurrency = String(settings?.fiatCurrency || 'USD').toUpperCase();
+    const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
 
@@ -129,7 +130,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
-    const showMeta = hasChange || hasUnpriced || hasSync;
+    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -223,7 +224,9 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                     <span className={styles.hidden}>•••••</span>
                 ) : (
                     <>
-                        {formatFiatAmount(total, fiatCurrency)}
+                        <span className={styles.amountValue}>
+                            {formatFiatAmount(total, fiatCurrency, fiatLocale, true)}
+                        </span>
                         <span className={styles.amountCode}>{fiatCurrency}</span>
                     </>
                 )}
@@ -240,13 +243,13 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                 }
                             >
                                 {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '-'}{' '}
-                                {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency)}{' '}
+                                {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}{' '}
                                 ({change24h.pct > 0 ? '+' : ''}{change24h.pct.toFixed(2)}%)
                             </span>
                         ) : null}
                         {hasUnpriced ? (
                             <span className={styles.metaUnpriced}>
-                                {hasChange ? ' · ' : ''}{unpricedLabel(rows)}
+                                {unpricedLabel(rows)}
                             </span>
                         ) : null}
                     </span>
@@ -290,26 +293,42 @@ function fiatValueOf(row) {
     return Number(exact);
 }
 
-// Format the numeric portion of the total balance in the wallet's
-// preferred fiat. Uses Intl so symbols + decimal conventions are
-// correct per currency (¥ for JPY with no decimals, € for EUR, etc.);
-// the ISO code is rendered separately as a styled suffix span so it
-// can be sized down to ~half the amount text.
-function formatFiatAmount(value, currency) {
+// Format the numeric portion of the total balance in the wallet's preferred
+// fiat and locale. The main total has a separate ISO suffix, so it can omit a
+// formatter "symbol" that is itself the code without affecting change lines.
+function formatFiatAmount(value, currency, locale, omitCodeSymbol = false) {
     if (value === null || value === undefined) return '-';
     const code = String(currency || 'USD').toUpperCase();
     try {
-        const fmt = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'symbol',
-        });
-        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (compareDecimalStrings(value, '0') === 1
-            && compareDecimalStrings(value, String(minorUnit)) === -1) {
-            return `<${fmt.format(minorUnit)}`;
+        let fmt;
+        try {
+            fmt = new Intl.NumberFormat(locale || 'en-US', {
+                style: 'currency',
+                currency: code,
+                currencyDisplay: 'symbol',
+            });
+        } catch {
+            fmt = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: code,
+                currencyDisplay: 'symbol',
+            });
         }
-        return fmt.format(String(value));
+        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
+        const displayValue = compareDecimalStrings(value, '0') === 1
+            && compareDecimalStrings(value, String(minorUnit)) === -1
+            ? minorUnit
+            : String(value);
+        const parts = fmt.formatToParts(displayValue);
+        const currencyIsCode = omitCodeSymbol && parts.some(
+            (part) => part.type === 'currency' && part.value.toUpperCase() === code,
+        );
+        const formatted = parts
+            .filter((part) => !currencyIsCode || part.type !== 'currency')
+            .map((part) => part.value)
+            .join('')
+            .trim();
+        return displayValue === minorUnit ? `<${formatted}` : formatted;
     } catch {
         return String(value);
     }
