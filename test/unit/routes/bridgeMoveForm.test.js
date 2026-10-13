@@ -18,7 +18,7 @@
 // its own, and React.createElement reads the same to the renderer.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 
 // The pickers are whole screens of their own. Stubbed to the one fact each case
@@ -133,7 +133,18 @@ const amountInput = () => screen.getByLabelText(/^Amount/i);
 // matches three controls.
 const moveButton = (name = 'Review move') => screen.getByRole('button', { name });
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); __clearTokenInfoCache(); });
+async function advanceFeeQuote() {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+    });
+}
+
+afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    __clearTokenInfoCache();
+});
 
 describe('BridgeMoveForm: the destination is resolved from the user\'s own account', () => {
     it('fills the receiving address from the wallet\'s own address on the destination chain', async () => {
@@ -276,9 +287,11 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
+        vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '0.01' } });
+        await advanceFeeQuote();
 
-        const warning = await screen.findByText(/costs 0.05 XCHAIN in protocol fees/i, {}, WAIT);
+        const warning = screen.getByText(/costs 0.05 XCHAIN in protocol fees/i);
         expect(warning.textContent).toContain('Moving 0.01 XCHAIN');
         expect(warning.textContent).toContain('more than the amount you are moving');
         expect(screen.getByText(/This action's protocol fee is 0.05 XCHAIN/i)).toBeInTheDocument();
@@ -296,19 +309,24 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
+        vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '0.01' } });
-        await screen.findByText(/costs 0.05 XCHAIN in protocol fees/i, {}, WAIT);
+        await advanceFeeQuote();
+        expect(screen.getByText(/costs 0.05 XCHAIN in protocol fees/i)).toBeInTheDocument();
         expect(moveButton()).not.toBeDisabled();
     });
 
     it('says nothing when the venue will not quote a fee, rather than guessing one', async () => {
-        mount({ feeQuote: { supported: false } });
+        const messaging = mount({ feeQuote: { supported: false } });
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
+        vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '0.01' } });
-        await new Promise((r) => { setTimeout(r, 700); });
+        await advanceFeeQuote();
+        expect(messaging.requoteNativeFee).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(/Loading protocol fee/i)).toBeNull();
         expect(screen.queryByText(/in protocol fees/i)).toBeNull();
     });
 
@@ -318,8 +336,10 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
+        vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '1' } });
-        expect(await screen.findByText(/protocol fee is 0.05 XCHAIN/i, {}, WAIT))
+        await advanceFeeQuote();
+        expect(screen.getByText(/protocol fee is 0.05 XCHAIN/i))
             .toBeInTheDocument();
         expect(screen.queryByText(/more than the amount you are moving/i)).toBeNull();
     });
