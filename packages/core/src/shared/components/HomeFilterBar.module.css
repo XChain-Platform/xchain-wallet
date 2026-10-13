@@ -44,14 +44,6 @@
     font-size: var(--xc-text-sm);
 }
 
-/* Pin the reused network dropdown to the same height as the search
-   input so the two controls line up. The dropdown otherwise sizes to
-   its 20px coin icon and ends up a few px taller. 38px matches the
-   standard header control height. */
-.netSelect {
-    min-height: 38px;
-}
-
 /* No focus ring on the search box: the user wants it to look identical
    whether focused or not (still focusable for typing). */
 .search:focus,

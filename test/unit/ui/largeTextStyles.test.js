@@ -46,14 +46,14 @@ describe('large text layout styles', () => {
     it('keeps header titles and menu rows from entering adjacent controls', () => {
         const appHeader = readCore('shared', 'components', 'AppHeader.module.css');
         const pageHeader = readCore('ui', 'PageHeader.module.css');
-        const networkButton = readCore('shared', 'components', 'HeaderNetworkButton.module.css');
+        const networkFilter = readCore('shared', 'components', 'NetworkFilter.module.css');
 
         expect(`${appHeader}\n${pageHeader}`)
             .not.toMatch(/font-size:\s*\d*\.?\d+px/);
         expect(rule(appHeader, '.left')).toMatch(/overflow:\s*hidden/);
         expect(rule(pageHeader, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
         expect(rule(pageHeader, '.title')).toMatch(/white-space:\s*normal/);
-        expect(rule(networkButton, '.networkSelectLabel')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(networkFilter, '.triggerLabel')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
     it('truncates button labels and balance names without icon shrinkage', () => {
