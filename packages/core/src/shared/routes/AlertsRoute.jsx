@@ -20,6 +20,7 @@ import { EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
 import styles from '../components/AlertsOverlay.module.css';
+import { alertSeverityPresentation } from '../components/alertSeverity.js';
 
 /**
  * @param {object} props
@@ -99,10 +100,12 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                     /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list">
                         {visibleAlerts.map((a) => {
+                            const severity = alertSeverityPresentation(a.severity);
                             const isUnread = !a.read && !centerState.read.has(alertVersion(a));
                             const content = (
                                 <>
                                     <div className={styles.alertHead}>
+                                        <span className={styles.severity}>{severity.label}</span>
                                         <span className={styles.alertTitle}>{a.title}</span>
                                         <span className={styles.readStatus}>{isUnread ? 'Unread' : 'Read'}</span>
                                     </div>
@@ -115,7 +118,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                             return (
                                 <li
                                     key={a.id}
-                                    className={`${styles.alert} ${styles[a.severity] || styles.info} ${isUnread ? styles.unread : styles.read}`}
+                                    className={`${styles.alert} ${styles[severity.kind]} ${isUnread ? styles.unread : styles.read}`}
                                 >
                                     {a.action ? (
                                         <button

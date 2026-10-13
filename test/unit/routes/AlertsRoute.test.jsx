@@ -27,6 +27,7 @@ vi.mock('../../../packages/core/src/shared/components/AlertsOverlay.module.css',
         info: 'info-style',
         unread: 'unread-style',
         read: 'read-style',
+        severity: 'severity-style',
     },
 }));
 
@@ -79,6 +80,9 @@ describe('AlertsRoute alert list', () => {
 
         expect(items).toHaveLength(3);
         alerts.forEach((alert, index) => {
+            const label = alert.severity === 'critical' ? 'Critical'
+                : alert.severity === 'warning' ? 'Warning' : 'Info';
+            expect(within(items[index]).getByText(label)).toBeTruthy();
             expect(within(items[index]).getByText(alert.title)).toBeTruthy();
             expect(within(items[index]).getByText(alert.message)).toBeTruthy();
         });
@@ -181,6 +185,7 @@ describe('AlertsRoute alert list', () => {
 
         expect(within(item).getByText('Unknown')).toBeTruthy();
         expect(within(item).getByText('Still visible')).toBeTruthy();
+        expect(within(item).getByText('Info')).toBeTruthy();
         expect(item.className.split(' ')).toContain('info-style');
     });
 });
