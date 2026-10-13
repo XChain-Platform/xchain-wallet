@@ -13,6 +13,7 @@ import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage }
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
 import { WalletIdentity } from '../components/WalletIdentity.jsx';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -72,7 +73,7 @@ export function WalletPicker({
             await onSwitch(walletId);
             onBack();
         } catch (err) {
-            setSwitchError(err?.message || 'Failed to switch wallets.');
+            setSwitchError(userFacingMessage(err, 'Could not switch wallets. Try again.'));
         } finally {
             setSwitchingWalletId(null);
         }
