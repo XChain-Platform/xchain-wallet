@@ -13,6 +13,7 @@ import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     Button,
+    Checkbox,
     FormPage,
     Input,
     Select,
@@ -24,6 +25,7 @@ import {
     StatusMessage,
     InfoTip,
     FormErrorSummary,
+    Switch,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -1033,16 +1035,13 @@ export function ImportWallet({
                         autoComplete="off"
                         disabled={busy}
                     />
-                    <label className={styles.advancedToggle}>
-                        {/* The kit has no checkbox primitive for this boolean option. */}
-                        <input
-                            type="checkbox"
-                            checked={backupOverwrite}
-                            onChange={(e) => setBackupOverwrite(e.target.checked)}
-                            disabled={busy}
-                        />
-                        <span>{t('importWallet.backup.overwrite')}</span>
-                    </label>
+                    <Switch
+                        className={styles.advancedToggle}
+                        label={t('importWallet.backup.overwrite')}
+                        checked={backupOverwrite}
+                        onChange={(e) => setBackupOverwrite(e.target.checked)}
+                        disabled={busy}
+                    />
                 </>
             ) : null}
             {lane === 'mnemonic' ? (
@@ -1190,10 +1189,9 @@ export function ImportWallet({
             />
             {!isFreeWallet ? (
                 <div className={styles.advancedRow}>
-                    <label className={styles.advancedToggle}>
-                        {/* The kit has no checkbox primitive for this boolean option. */}
-                        <input
-                            type="checkbox"
+                    <div className={styles.advancedToggle}>
+                        <Switch
+                            label={t('importWallet.passphrase.toggle')}
                             checked={showPassphrase}
                             onChange={(e) => {
                                 setShowPassphrase(e.target.checked);
@@ -1201,12 +1199,11 @@ export function ImportWallet({
                             }}
                             disabled={busy}
                         />
-                        <span>{t('importWallet.passphrase.toggle')}</span>
                         <InfoTip
                             aria={t('importWallet.passphrase.help')}
                             label={t('importWallet.passphrase.helpBody')}
                         />
-                    </label>
+                    </div>
                     {showPassphrase ? (
                         <Input
                             id="import-bip39-passphrase"
@@ -1287,19 +1284,16 @@ export function ImportWallet({
                         autoComplete="new-password"
                         disabled={busy}
                     />
-                    <label className={styles.advancedToggle}>
-                        {/* The kit has no checkbox primitive for this acknowledgement. */}
-                        <input
-                            type="checkbox"
-                            checked={wifWarningAck}
-                            onChange={(e) => {
-                                setWifWarningAck(e.target.checked);
-                                if (error) setError(null);
-                            }}
-                            disabled={busy}
-                        />
-                        <span>{t('importWallet.wif.ack')}</span>
-                    </label>
+                    <Checkbox
+                        className={styles.advancedToggle}
+                        label={t('importWallet.wif.ack')}
+                        checked={wifWarningAck}
+                        onChange={(e) => {
+                            setWifWarningAck(e.target.checked);
+                            if (error) setError(null);
+                        }}
+                        disabled={busy}
+                    />
                 </>
             ) : null}
         </FormPage>

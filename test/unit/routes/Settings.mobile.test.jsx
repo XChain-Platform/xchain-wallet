@@ -33,6 +33,10 @@ const createWalletCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/CreateWallet.module.css'),
     'utf8',
 );
+const radioGroupCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/RadioGroup.module.css'),
+    'utf8',
+);
 const onboardingCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/Onboarding.module.css'),
     'utf8',
@@ -218,8 +222,10 @@ describe('Settings at a 320px viewport', () => {
         expect(placeholder.style.wordBreak).toBe('normal');
         expect(placeholder.style.overflowWrap).toBe('break-word');
         expect(container).toContainElement(placeholder);
-        expect(createWalletCss).toMatch(/\.wordCountOption\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/s);
-        expect(createWalletCss).toMatch(/\.wordCountHint\s*\{[^}]*flex-basis:\s*100%;[^}]*overflow-wrap:\s*break-word;/s);
+        // The word-count choice is the kit RadioGroup; its option copy wraps instead of overflowing.
+        expect(radioGroupCss).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
+        expect(radioGroupCss).toMatch(/\.label\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+        expect(createWalletCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;/s);
         expect(onboardingCss).toMatch(/\.licenseParagraph\s*\{[^}]*text-align:\s*start;[^}]*hyphens:\s*none;/s);
     });
 

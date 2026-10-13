@@ -103,46 +103,6 @@
     gap: var(--xc-space-2);
 }
 
-.wordCountLegend {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    padding: 0 var(--xc-space-1);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.wordCountOption {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--xc-space-1) var(--xc-space-2);
-    min-width: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.wordCountOption input[type="radio"] {
-    margin: 0;
-}
-
-.wordCountLabel {
-    font-weight: 500;
-}
-
-.wordCountHint {
-    flex-basis: 100%;
-    box-sizing: border-box;
-    padding-inline-start: calc(var(--xc-space-4) + var(--xc-space-2));
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    min-width: 0;
-    overflow-wrap: break-word;
-}
-
 .advancedRow {
     margin: var(--xc-space-3) 0 0;
     display: flex;

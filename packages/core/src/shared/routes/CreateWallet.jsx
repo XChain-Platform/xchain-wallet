@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
-import { Button, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, Screen, Spinner, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, RadioGroup, Screen, Spinner, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -441,18 +441,13 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     Copying is disabled to keep your recovery phrase out of
                     shared clipboards.
                 </p>
-                <label className={styles.confirmRow}>
-                    {/* The kit has no checkbox primitive for this confirmation. */}
-                    <input
-                        type="checkbox"
-                        checked={saved}
-                        onChange={(e) => setSaved(e.target.checked)}
-                        disabled={stage === 'persisting'}
-                    />
-                    <span>
-                        I have saved my recovery phrase safely.
-                    </span>
-                </label>
+                <Checkbox
+                    className={styles.confirmRow}
+                    label="I have saved my recovery phrase safely."
+                    checked={saved}
+                    onChange={(e) => setSaved(e.target.checked)}
+                    disabled={stage === 'persisting'}
+                />
             </FormPage>
         );
         return (
@@ -544,38 +539,29 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 }}
                 autoComplete="new-password"
             />
-            <fieldset className={styles.wordCountRow}>
-                <legend className={styles.wordCountLegend}>Recovery phrase length</legend>
-                <label className={styles.wordCountOption}>
-                    {/* Native radios preserve this mutually exclusive fieldset without a kit equivalent. */}
-                    <input
-                        type="radio"
-                        name="word-count"
-                        value="12"
-                        checked={wordCount === 12}
-                        onChange={() => setWordCount(12)}
-                    />
-                    <span className={styles.wordCountLabel}>12 words</span>
-                    <span className={styles.wordCountHint}>Recommended: secure and easier to back up</span>
-                </label>
-                <label className={styles.wordCountOption}>
-                    {/* Native radios preserve this mutually exclusive fieldset without a kit equivalent. */}
-                    <input
-                        type="radio"
-                        name="word-count"
-                        value="24"
-                        checked={wordCount === 24}
-                        onChange={() => setWordCount(24)}
-                    />
-                    <span className={styles.wordCountLabel}>24 words</span>
-                    <span className={styles.wordCountHint}>Extra entropy, twice as many words to store</span>
-                </label>
-            </fieldset>
+            <RadioGroup
+                className={styles.wordCountRow}
+                legend="Recovery phrase length"
+                name="word-count"
+                value={String(wordCount)}
+                onChange={(nextWordCount) => setWordCount(Number(nextWordCount))}
+                options={[
+                    {
+                        value: '12',
+                        label: '12 words',
+                        description: 'Recommended: secure and easier to back up',
+                    },
+                    {
+                        value: '24',
+                        label: '24 words',
+                        description: 'Extra entropy, twice as many words to store',
+                    },
+                ]}
+            />
             <div className={styles.advancedRow}>
-                <label className={styles.advancedToggle}>
-                    {/* The kit has no checkbox primitive for this boolean option. */}
-                    <input
-                        type="checkbox"
+                <div className={styles.advancedToggle}>
+                    <Switch
+                        label="Use a BIP39 passphrase (advanced)"
                         checked={showPassphrase}
                         onChange={(e) => {
                             setShowPassphrase(e.target.checked);
@@ -585,12 +571,11 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             }
                         }}
                     />
-                    <span>Use a BIP39 passphrase (advanced)</span>
                     <InfoTip
                         aria="BIP39 passphrase help"
                         label="This extra secret combines with your recovery phrase to create a different wallet and must match exactly when you restore. Hardware wallets handle it on the device."
                     />
-                </label>
+                </div>
                 {showPassphrase ? (
                     <>
                         <p className={styles.advancedWarning}>

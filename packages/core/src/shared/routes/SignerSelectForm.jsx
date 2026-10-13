@@ -35,7 +35,7 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
-import { FormPage, FormSection } from '@xchain-wallet/core/ui';
+import { FormPage, FormSection, RadioGroup } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -126,74 +126,31 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     return (
         <FormPage as="div" sectioned label={t('signerSelect.choose')}>
             <FormSection title={t('signerSelect.choose')}>
-                <fieldset style={FIELDSET_STYLE} aria-label={t('signerSelect.choose')}>
-                    <legend style={LEGEND_STYLE}>{t('signerSelect.title')}</legend>
-            <p style={INTRO_STYLE}>
-                {t('signerSelect.intro')}
-            </p>
-            {isWatcherMode ? (
-                <p role="note" style={WATCH_ONLY_STYLE}>
-                    {t('signerSelect.watcherNote')}
+                <p style={INTRO_STYLE}>
+                    {t('signerSelect.intro')}
                 </p>
-            ) : null}
-            <ul style={LIST_STYLE}>
-                {options.map((opt) => {
-                    const checked = (value ?? null) === (opt.id ?? null);
-                    return (
-                        <li key={opt.id ?? 'software'}>
-                            <label
-                                style={{
-                                    ...CARD_STYLE,
-                                    ...(checked ? CARD_CHECKED_STYLE : null),
-                                    ...(disabled ? CARD_DISABLED_STYLE : null),
-                                }}
-                            >
-                                <input
-                                    type="radio"
-                                    name={`signer-${walletId}`}
-                                    value={opt.id ?? 'software'}
-                                    checked={checked}
-                                    disabled={disabled}
-                                    onChange={() => emitChange(opt.id)}
-                                    style={RADIO_STYLE}
-                                />
-                                <span style={CARD_TEXT_STYLE}>
-                                    <strong style={CARD_LABEL_STYLE}>{opt.label}</strong>
-                                    <span style={CARD_SUB_STYLE}>{opt.sub}</span>
-                                </span>
-                            </label>
-                        </li>
-                    );
-                })}
-            </ul>
-                </fieldset>
+                {isWatcherMode ? (
+                    <p role="note" style={WATCH_ONLY_STYLE}>
+                        {t('signerSelect.watcherNote')}
+                    </p>
+                ) : null}
+                <RadioGroup
+                    legend={t('signerSelect.title')}
+                    aria-label={t('signerSelect.choose')}
+                    name={`signer-${walletId}`}
+                    value={value ?? 'software'}
+                    onChange={(nextValue) => emitChange(nextValue === 'software' ? null : nextValue)}
+                    options={options.map((opt) => ({
+                        value: opt.id ?? 'software',
+                        label: opt.label,
+                        description: opt.sub,
+                    }))}
+                    disabled={disabled}
+                />
             </FormSection>
         </FormPage>
     );
 }
-
-const FIELDSET_STYLE = {
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-3)',
-    margin: '0 0 var(--xc-space-3) 0',
-};
-
-const LEGEND_STYLE = {
-    padding: '0 var(--xc-space-2)',
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-sm)',
-    fontWeight: 500,
-};
-
-const LIST_STYLE = {
-    listStyle: 'none',
-    margin: 0,
-    padding: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-};
 
 const INTRO_STYLE = {
     color: 'var(--xc-text-muted)',
@@ -207,47 +164,6 @@ const WATCH_ONLY_STYLE = {
     margin: '0 0 var(--xc-space-2)',
 };
 
-const CARD_STYLE = {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 'var(--xc-space-3)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    background: 'var(--xc-bg)',
-    cursor: 'pointer',
-};
-
-const CARD_CHECKED_STYLE = {
-    borderColor: 'var(--xc-accent-primary)',
-    background: 'var(--xc-surface-raised)',
-};
-
-const CARD_DISABLED_STYLE = {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-};
-
-const RADIO_STYLE = {
-    marginTop: 4,
-};
-
-const CARD_TEXT_STYLE = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    minWidth: 0,
-};
-
-const CARD_LABEL_STYLE = {
-    color: 'var(--xc-text)',
-    fontSize: 'var(--xc-text-sm)',
-};
-
-const CARD_SUB_STYLE = {
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-xs)',
-};
 
 const ERROR_STYLE = {
     color: 'var(--xc-danger-fg)',
