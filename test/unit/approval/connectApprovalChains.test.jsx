@@ -85,6 +85,10 @@ describe('ConnectApproval chain checklist', () => {
         expect(screen.getByText('The site calls itself')).toBeTruthy();
         expect(screen.getByText('Requesting site')).toBeTruthy();
         expect(screen.queryByText('Verified site')).toBeNull();
+        expect(screen.getByText(/Only connect if you recognize and trust this site/))
+            .toHaveTextContent(
+                'Only connect if you recognize and trust this site. It can view the accounts and chains you select.',
+            );
     });
 
     it('neutralizes control characters in the trusted origin display', () => {

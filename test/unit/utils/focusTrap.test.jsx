@@ -20,7 +20,7 @@ function TrapHarness({ active }) {
     return (
         <div>
             <button data-testid="outside">outside</button>
-            <div ref={containerRef} data-testid="trap">
+            <div ref={containerRef} data-testid="trap" tabIndex={-1}>
                 <button data-testid="first">first</button>
                 <button data-testid="last">last</button>
             </div>
@@ -66,6 +66,14 @@ describe('useFocusTrap', () => {
         first.focus();
         fireEvent.keyDown(screen.getByTestId('trap'), { key: 'Tab', shiftKey: true });
         expect(document.activeElement).toBe(last);
+    });
+
+    it('Tab from the focused container enters the first control', () => {
+        render(<TrapHarness active />);
+        const trap = screen.getByTestId('trap');
+        trap.focus();
+        fireEvent.keyDown(trap, { key: 'Tab' });
+        expect(document.activeElement).toBe(screen.getByTestId('first'));
     });
 
     it('does not trap when inactive', () => {

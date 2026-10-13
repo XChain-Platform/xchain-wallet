@@ -15,6 +15,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
+import { CONNECT_SITE_WARNING } from '@xchain-wallet/core/shared/utils/securityMomentCopy.js';
 import { getSettings, resolveApproval } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './ConnectApproval.module.css';
@@ -152,7 +153,7 @@ export function ConnectApproval({ id, payload, onReject }) {
 
     return (
         <Screen
-            variant="popup"
+            variant="small"
             header={
                 <div className={shared.header}>
                     <span className={shared.title}>Connection request</span>
@@ -184,7 +185,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                 ) : null}
             </OriginIdentity>
             <p className={styles.lede}>
-                This site wants to connect to your wallet.
+                {CONNECT_SITE_WARNING}
             </p>
 
             <section className={styles.permissions} aria-label="Requested permissions">

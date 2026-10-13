@@ -197,10 +197,10 @@ describe('extension popup keyboard flows', () => {
         tabs[0].focus();
         expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 
-        for (const tab of tabs.slice(1)) {
-            await user.tab();
+        for (const label of tabs.slice(1).map((tab) => tab.textContent)) {
+            fireEvent.keyDown(document.activeElement, { key: 'ArrowRight' });
+            const tab = screen.getByRole('tab', { name: label });
             expect(document.activeElement).toBe(tab);
-            await user.keyboard('{Enter}');
             expect(tab).toHaveAttribute('aria-selected', 'true');
         }
     });

@@ -23,6 +23,16 @@ import {
     ACCENT_SECONDARY,
     DEFAULT_EXPLORER_BASE,
     DEFAULT_HUB_BASE,
+    COINGECKO_API_BASE,
+    IPFS_GATEWAY_BASE,
+    ARWEAVE_GATEWAY_BASE,
+    ANDROID_UPDATE_FEED_URL,
+    TREZOR_CONNECT_ORIGIN,
+    TREZOR_CONNECT_SCRIPT_URL,
+    TREZOR_MANIFEST,
+    LOCAL_CONNECT_SOURCES,
+    DEFAULT_MINER_URL,
+    EXTERNAL_EXPLORERS,
     LOGO_FILE,
     FAVICON_FILE,
     CHAIN_ICON_SMALL,
@@ -69,6 +79,31 @@ describe('branding constants', () => {
 
     it('DEFAULT_HUB_BASE is a URL string', () => {
         expect(DEFAULT_HUB_BASE).toMatch(/^https?:\/\//);
+    });
+
+    it('keeps runtime service and explorer URLs in the product config', () => {
+        const serviceUrls = [
+            COINGECKO_API_BASE,
+            IPFS_GATEWAY_BASE,
+            ARWEAVE_GATEWAY_BASE,
+            ANDROID_UPDATE_FEED_URL,
+            TREZOR_CONNECT_ORIGIN,
+            TREZOR_CONNECT_SCRIPT_URL,
+            TREZOR_MANIFEST.appUrl,
+            DEFAULT_MINER_URL,
+            ...Object.values(EXTERNAL_EXPLORERS)
+                .flatMap(({ baseUrl, iconUrl }) => [baseUrl, iconUrl]),
+        ];
+        expect(serviceUrls.every((value) => URL.canParse(value))).toBe(true);
+        expect(LOCAL_CONNECT_SOURCES).toEqual([
+            'http://localhost:*',
+            'http://127.0.0.1:*',
+            'ws://localhost:*',
+            'ws://127.0.0.1:*',
+        ]);
+        expect(TREZOR_CONNECT_SCRIPT_URL.startsWith(`${TREZOR_CONNECT_ORIGIN}/`)).toBe(true);
+        expect(Object.isFrozen(EXTERNAL_EXPLORERS)).toBe(true);
+        expect(Object.values(EXTERNAL_EXPLORERS).every(Object.isFrozen)).toBe(true);
     });
 
     it('LOGO_FILE is a .png filename', () => {

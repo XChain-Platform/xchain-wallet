@@ -26,7 +26,7 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useContext, useEffect, useRef } from 'react';
 import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
@@ -34,14 +34,46 @@ import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
-import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
+import { defaultRegistry } from '../../registry/index.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
+import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
+import { WalletIdentity } from './WalletIdentity.jsx';
+import { MessagingContext } from '../MessagingContext.js';
+import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
+const chainRegistry = defaultRegistry();
+
+function useSigningWallet(wallet) {
+    const messaging = useContext(MessagingContext)?.messaging;
+    const [resolvedWallet, setResolvedWallet] = useState(wallet);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (wallet) {
+            setResolvedWallet(wallet);
+            return undefined;
+        }
+        setResolvedWallet(null);
+        const walletId = readActiveWallet();
+        if (!walletId || typeof messaging?.listWallets !== 'function') return undefined;
+        Promise.resolve().then(() => messaging.listWallets()).then((walletsValue) => {
+            if (cancelled) return;
+            const wallets = Array.isArray(walletsValue) ? walletsValue : [];
+            setResolvedWallet(wallets.find((candidate) => candidate.id === walletId) || null);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging, wallet]);
+
+    return resolvedWallet;
+}
 
 function formatReviewDecoded(decoded) {
     if (!decoded) return decoded;
@@ -60,6 +92,49 @@ function formatReviewDecoded(decoded) {
         return { ...detail, value: formatted };
     });
     return { ...decoded, summary, details };
+}
+
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function reviewActionLabel(decoded, fallback, chainLabel) {
+    const summary = String(decoded?.summary || '').trim();
+    if (!summary) return fallback;
+
+    const details = decoded?.details || [];
+    const amountDetail = details.find((detail) => /^(amount|quantity)$/i.test(String(detail?.label || '')));
+    const tokenDetail = details.find((detail) => /^token$/i.test(String(detail?.label || '')));
+    const amount = String(amountDetail?.value || '').trim();
+    if (amount) {
+        const amountMatch = new RegExp(`(^|\\s)${escapeRegExp(amount)}(?=\\s|$)`).exec(summary);
+        if (amountMatch) {
+            const amountStart = amountMatch.index + amountMatch[1].length;
+            const action = summary.slice(0, amountStart).trim();
+            const remainder = summary.slice(amountStart + amount.length).trim();
+            const token = String(tokenDetail?.value || '').trim()
+                || remainder.match(/^([^\s,:;)]+)/)?.[1]
+                || '';
+            if (action) return [action, amount, token].filter(Boolean).join(' ');
+        }
+    }
+
+    // Some host decoders carry the amount only in their summary. Keep the
+    // visible action, amount and unit while dropping destinations and detail.
+    const inlineAmount = summary.match(/^([^:]+?)\s+((?:<\s*)?\d[\d.,]*(?:[eE][+-]?\d+)?)\s+([^\s,:;)]+)/);
+    if (inlineAmount) {
+        const unit = /^(to|on|for|of|per)$/i.test(inlineAmount[3]) ? '' : inlineAmount[3];
+        return [inlineAmount[1], inlineAmount[2], unit].filter(Boolean).join(' ');
+    }
+
+    const withoutChain = chainLabel
+        ? summary.replace(new RegExp(`\\s+on\\s+${escapeRegExp(chainLabel)}(?=\\s|:|\\(|$)`, 'i'), '')
+        : summary;
+    const actionPhrase = withoutChain
+        .split(/:\s|\s+to\s+/i)[0]
+        .replace(/\s+\([^)]*\)\s*$/, '')
+        .trim();
+    return actionPhrase.split(/\s+/).slice(0, 3).join(' ') || fallback;
 }
 
 /**
@@ -101,6 +176,7 @@ function formatReviewDecoded(decoded) {
  *   several owned addresses at once, so its input list identifies them instead.
  * @param {string} [props.sourceName] the address-record label, followed by the
  *   wallet name when more than one wallet exists
+ * @param {{ id: string, name?: string } | null} [props.signingWallet] wallet that will approve the request
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  * @param {(amount: string) => string|null} [props.formatNativeFee]
@@ -115,6 +191,7 @@ export function ConfirmActionModal({
     screenVariant = 'small', feeText, totalText, error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
+    signingWallet = null,
     formatNativeFee, formatProtocolFee,
 }) {
     const formattedDecoded = formatReviewDecoded(decoded);
@@ -128,8 +205,10 @@ export function ConfirmActionModal({
         : (formattedDecoded?.summary?.split('\n')[0] || fallbackHeadline);
     const defaultApproveLabel = 'Approve';
     const resolvedApproveLabel = approveLabel || (variant === 'action'
-        ? `${defaultApproveLabel} ${headlineText}`
+        ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
         : headlineText);
+    const isContractCall = variant === 'action'
+        && /^(?:contract call|call contract\b)/i.test(headlineText);
     const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
         ...detail,
         label: detail.label === 'Destination'
@@ -178,8 +257,9 @@ export function ConfirmActionModal({
     const nativeProtocolFeeSats = paysProtocolFeeNatively
         ? Number(composed?.protocolFeeSats || composed?.quote?.requiredFeeSats)
         : null;
+    const descriptor = composed?.chainId ? chainRegistry.get(composed.chainId) : null;
     const nativeProtocolFeeAmount = Number.isFinite(nativeProtocolFeeSats)
-        ? satsToCoinDecimal(nativeProtocolFeeSats)
+        ? formatNativeBaseUnits(nativeProtocolFeeSats, descriptor)
         : null;
     const nativeProtocolFeeFiat = nativeProtocolFeeAmount
         && typeof formatNativeFee === 'function'
@@ -201,12 +281,14 @@ export function ConfirmActionModal({
     const envelopeLines = variant === 'action'
         ? envelopeTransactionLines({ composed, ticker: nativeTicker })
         : null;
+    const resolvedSigningWallet = useSigningWallet(signingWallet);
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
     const pageRef = useRef(null);
     useFocusTrap(pageRef, { active: open });
+    const signingTime = useLongOperationStatus(signaturePhase);
 
     // A signature exists once we leave the pre-sign phases into signing and
     // the signer has produced it. We approximate "signature exists" as any
@@ -247,6 +329,7 @@ export function ConfirmActionModal({
                 </div>
 
                 <div className={styles.body}>
+                    <WalletIdentity wallet={resolvedSigningWallet} label="Signing with" />
                     <OriginIdentity
                         origin={requestOrigin}
                         label="Requesting site"
@@ -275,6 +358,12 @@ export function ConfirmActionModal({
 
                     {variant === 'action' && reviewDecoded ? (
                         <ActionIntentSummary decoded={reviewDecoded} simulation={simulation} />
+                    ) : null}
+
+                    {isContractCall ? (
+                        <p className={styles.hwNote} data-testid="contract-call-warning">
+                            {CONTRACT_CALL_WARNING}
+                        </p>
                     ) : null}
 
                     {/* The wallet can hold several addresses per chain, so the
@@ -372,9 +461,10 @@ export function ConfirmActionModal({
                         so the message is adjacent to the field it refers to. */}
                     {error ? (
                         <div className={styles.error} role="alert" data-testid="confirm-error">
-                            {typeof error === 'string'
-                                ? error
-                                : (error?.message || 'The request stopped because the wallet service returned no explanation.')}
+                            {userFacingMessage(
+                                error,
+                                'The request stopped because the wallet service returned no explanation.',
+                            )}
                         </div>
                     ) : null}
 
@@ -396,6 +486,16 @@ export function ConfirmActionModal({
 
                     {phase === 'rechecking' ? (
                         <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
+                    ) : null}
+                    {signingTime.showElapsed ? (
+                        <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
+                            Signing for {signingTime.elapsedSeconds} seconds. Check your hardware wallet screen if one is connected.
+                        </p>
+                    ) : null}
+                    {signingTime.timedOut ? (
+                        <div className={styles.error} role="alert" data-testid="confirm-signing-timeout">
+                            Signing is taking longer than expected. Keep this screen open and check the device or wallet service. Before trying again, check History and the queued-transactions banner so you do not submit the same transaction twice.
+                        </div>
                     ) : null}
                     {/* this line used to promise a retry, and nothing retries
                         on its own. The queue holds the signed transaction until the
@@ -424,18 +524,11 @@ export function ConfirmActionModal({
                         onClick={handleApprove}
                         disabled={approveDisabled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                         data-testid="confirm-approve"
-                        // The visible label is an expression, so name the button
-                        // explicitly: it matches the visible text exactly (the
-                        // accessible name must contain it), and a screen-reader
-                        // user gets the same "on <chain>" that a sighted one does.
+                        // The explicit accessible name stays identical to the
+                        // visible action and amount.
                         aria-label={resolvedApproveLabel}
                     >
-                        {variant === 'action' ? (
-                            <>
-                                {approveLabel || defaultApproveLabel}
-                                {approveLabel ? null : ` ${headlineText}`}
-                            </>
-                        ) : (approveLabel || headlineText)}
+                        {resolvedApproveLabel}
                     </Button>
                 </footer>
             </div>

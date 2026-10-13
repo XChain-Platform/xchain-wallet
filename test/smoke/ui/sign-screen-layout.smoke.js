@@ -12,11 +12,8 @@
 //
 // Cross-cuts SignApproval.jsx (extension approval window) and
 // Send.jsx (user-initiated send). Asserts:
-//   - Approve/Reject footer reads a bare "Approve" (thumbs up) and
-//     "Reject" (thumbs down) on every kind but signIn, which keeps its
-//     own "Sign in" verb. The chain suffix that used to ride on the
-//     approve button is retired by operator decision; the chain is shown
-//     by the ChainBadge and the request details instead.
+//   - dApp approvals keep their approval wording, while wallet action
+//     confirmations name the action and amount shown in the review.
 //   - dApp Source block renders when an origin is present (Origin +
 //     optional App name).
 //   - Action details collapsed by default behind a <details> toggle.
@@ -79,18 +76,10 @@ assert.match(
     'button renders the derived approveLabel, not a hardcoded string',
 );
 
-// --- 1b. the SAME rule on the in-wallet confirm surface -----------------
+// --- 1b. action labels on the in-wallet confirm surface ------------------
 //
-// a later change gave the wallet a second signing surface, and every action form now
-// routes through it. It shipped with a bare "Approve": the button that commits
-// the signature never said which chain it was committing on, while the dApp
-// window a few files away got it right. Found by finally driving the page in a
-// browser (Playwright), not by any unit test - the copy was internally
-// consistent, just wrong.
-//
-// Derived from `variant` inside the component rather than passed by each of the
-// three adapters, because three adapters each remembering the rule is three
-// chances to forget it.
+// The wallet surface derives its label from the reviewed, composed action so
+// every action adapter follows the same wording and amount formatting.
 {
     const confirmSrc = readFileSync(
         join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx'),
@@ -99,19 +88,19 @@ assert.match(
     assert.doesNotMatch(
         confirmSrc,
         /const defaultApproveLabel[\s\S]{0,120}Approve & Sign/,
-        'confirm surface: the retired "Approve & Sign on <chain>" label has not come back',
+        'confirm surface: action label is not chain-based signing text',
     );
     assert.match(
         confirmSrc,
-        /const defaultApproveLabel = 'Approve';/,
-        'confirm surface: every variant approves with a bare "Approve"',
+        /reviewActionLabel\(formattedDecoded, defaultApproveLabel, chainLabel\)/,
+        'confirm surface: action approvals name the reviewed action and amount',
     );
     assert.match(
         confirmSrc,
-        /\{approveLabel \|\| defaultApproveLabel\}/,
+        /\{resolvedApproveLabel\}/,
         'confirm surface: the footer button renders the derived label',
     );
-    // The regression this guards: a hardcoded verb in the footer.
+    // The footer consumes the label derived from the reviewed action.
     const footerIdx = confirmSrc.indexOf('data-testid="confirm-approve"');
     assert.ok(footerIdx !== -1, 'confirm surface: the Approve button is testid-tagged');
     const footer = confirmSrc.slice(footerIdx, footerIdx + 400);
