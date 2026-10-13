@@ -109,11 +109,11 @@ describe('TokenPicker asset visibility and filtering', () => {
             .toBeInTheDocument();
     });
 
-    it('wraps long names instead of truncating them', () => {
+    it('keeps long names on one line and ellipsizes them', () => {
         const nameRule = balanceListCss.match(/\.name\s*\{([^}]*)\}/)?.[1] || '';
-        expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(nameRule).toMatch(/white-space:\s*normal/);
-        expect(nameRule).not.toMatch(/text-overflow:\s*ellipsis/);
+        expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
+        expect(nameRule).toMatch(/white-space:\s*nowrap/);
+        expect(nameRule).toMatch(/min-width:\s*0/);
     });
 
     it('uses the chain filter for held balances and Receive platform discovery', async () => {

@@ -1896,7 +1896,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>
