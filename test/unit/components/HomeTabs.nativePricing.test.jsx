@@ -177,10 +177,14 @@ describe('Home token rows on a real wallet', () => {
         expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
         await waitFor(() => expect(within(hero()).getByText('1 token not priced')).toBeInTheDocument());
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
+        expect(within(hero()).getByText(/Prices updated/)).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('$80,000.00');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
         expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument();
+        const unpriced = screen.getByRole('region', { name: 'Unpriced tokens' });
+        expect(unpriced.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]')).toBeTruthy();
+        expect(within(unpriced).queryByText('MARKET')).toBeNull();
         const unknown = document.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]');
         expect(unknown.textContent).not.toContain('$');
         expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
