@@ -10,15 +10,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, CopyButton, EmptyState, FeeSelector, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
 } from '@xchain-wallet/core';
-import {
-    estimateNativeSendFeeTiers,
-    fetchNativeSendFeeTiers,
-} from '../../flows/feeEstimate.js';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -422,9 +418,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (nativeTicker && prefill.tick.toUpperCase() === nativeTicker) return '';
         return prefill.tick.toUpperCase();
     });
-    const [feePick, setFeePick] = useState(/** @type {{ mode: 'low' | 'normal' | 'fast' }} */ ({ mode: 'normal' }));
-    const [feeTiers, setFeeTiers] = useState(/** @type {any} */ (null));
-
     // Fiat-aware amount entry, mirrors Send. Canonical `reqAmount` stays
     // coin-scale (it's what the QR/URI encodes); when the user toggles
     // to fiat mode we edit `fiatAmount` and derive the coin value via
@@ -512,19 +505,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
     }, [fiatRate, amountInputMode]);
 
-    useEffect(() => {
-        if (!activeChainId) {
-            setFeeTiers(null);
-            return undefined;
-        }
-        setFeeTiers(estimateNativeSendFeeTiers({ chainId: activeChainId, chainRegistry }));
-        let cancelled = false;
-        fetchNativeSendFeeTiers({ messaging, chainId: activeChainId, chainRegistry })
-            .then((tiers) => { if (!cancelled && tiers) setFeeTiers(tiers); })
-            .catch(() => { /* keep the placeholder seed */ });
-        return () => { cancelled = true; };
-    }, [activeChainId, messaging]);
-
     const nativeTicker = nativeTickerFor(descriptor);
 
     // The QR and text-copy paths share one BIP21-style payment request. The
@@ -534,7 +514,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (!address || !descriptor || !activeChainId) return null;
         const amount = reqAmount.trim();
         const tick = reqTick.trim().toUpperCase();
-        const feePriority = feePick?.mode || 'normal';
         const hasRequestDetails = !!(amount || tick);
         return uriLib.encodeBip21Uri({
             scheme: descriptor.uriScheme,
@@ -544,10 +523,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             params: hasRequestDetails ? {
                 chain: activeChainId,
                 ...(tick ? { tick } : {}),
-                feePriority,
             } : {},
         });
-    }, [address, descriptor, activeChainId, reqAmount, reqTick, feePick]);
+    }, [address, descriptor, activeChainId, reqAmount, reqTick]);
 
     useEffect(() => {
         if (!qrUri) {
@@ -964,16 +942,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     {amountError ? (
                         <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
                     ) : null}
-                    <FeeSelector
-                        label="Network fee"
-                        coinTicker={nativeTickerFor(descriptor)}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        allowCustom={false}
-                        disabled={!feeTiers}
-                        showEstimateNotice={false}
-                    />
                     <div className={styles.qrActions}>
                         <Button
                             variant="secondary"
