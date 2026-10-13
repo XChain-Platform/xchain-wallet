@@ -53,6 +53,25 @@ function pressKey(key, init = {}) {
     if (form) form.requestSubmit();
 }
 
+function typeText(text) {
+    for (const character of text) {
+        const target = document.activeElement;
+        if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
+            return;
+        }
+        const proceeds = fireEvent.keyDown(target, { key: character });
+        if (proceeds) {
+            const start = target.selectionStart ?? target.value.length;
+            const end = target.selectionEnd ?? start;
+            fireEvent.change(target, {
+                target: { value: `${target.value.slice(0, start)}${character}${target.value.slice(end)}` },
+            });
+            target.setSelectionRange(start + character.length, start + character.length);
+        }
+        fireEvent.keyUp(target, { key: character });
+    }
+}
+
 function moveFocus(backward = false) {
     const target = document.activeElement || document.body;
     const proceeds = fireEvent.keyDown(target, { key: 'Tab', shiftKey: backward });
@@ -88,8 +107,14 @@ export const userEvent = {
                 element.focus();
                 fireEvent.input(element, { target: { value: '' } });
             },
-            async type(element, text) {
-                element.focus();
+            // type(element, text) focuses the element and presses each key;
+            // type(text) types into the focused field with caret-aware change events.
+            async type(elementOrText, text) {
+                if (typeof elementOrText === 'string') {
+                    typeText(elementOrText);
+                    return;
+                }
+                elementOrText.focus();
                 for (const character of text) pressKey(character);
             },
         };
