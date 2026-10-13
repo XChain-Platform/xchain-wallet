@@ -104,4 +104,35 @@ describe('startup theme', () => {
         expect(androidStyles).toContain('<item name="android:windowLightStatusBar">true</item>');
         expect(iosInfo).toMatch(/<key>UIStatusBarStyle<\/key>\s*<string>UIStatusBarStyleDarkContent<\/string>/);
     });
+
+    it('keeps native launch screens bounded, theme-aware, and tied to shell readiness', () => {
+        const lightStyles = readFileSync(
+            resolve('packages/mobile/android/app/src/main/res/values/styles.xml'),
+            'utf8',
+        );
+        const darkStyles = readFileSync(
+            resolve('packages/mobile/android/app/src/main/res/values-night/styles.xml'),
+            'utf8',
+        );
+        const iosLaunch = readFileSync(
+            resolve('packages/mobile/ios/App/App/Base.lproj/LaunchScreen.storyboard'),
+            'utf8',
+        );
+
+        expect(lightStyles).toContain('<item name="windowSplashScreenBackground">#FFFFFF</item>');
+        expect(darkStyles).toContain('<item name="windowSplashScreenBackground">#0B0F17</item>');
+        for (const styles of [lightStyles, darkStyles]) {
+            expect(styles).toContain(
+                '<item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>',
+            );
+            expect(styles).toContain(
+                '<item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>',
+            );
+            expect(styles).not.toContain('<item name="android:background">@drawable/splash</item>');
+        }
+        expect(iosLaunch).toContain('<color key="backgroundColor" systemColor="systemBackgroundColor"/>');
+        expect(iosLaunch).toContain('<color key="textColor" systemColor="labelColor"/>');
+        expect(iosLaunch).not.toContain('image="Splash"');
+        expect(iosLaunch).not.toContain('contentMode="scaleAspectFill"');
+    });
 });
