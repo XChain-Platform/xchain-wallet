@@ -1,6 +1,7 @@
 .btn {
     --xc-button-height: var(--xc-control-h-md);
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-2);
@@ -19,8 +20,7 @@
     max-width: 100%;
     min-width: 0;
     text-align: center;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
 }
 
 .icon {
@@ -35,7 +35,7 @@
     align-items: center;
     justify-content: center;
     min-width: 0;
-    white-space: normal;
+    white-space: nowrap;
 }
 
 .btn:focus-visible {
@@ -87,20 +87,6 @@
         min-width: 44px;
         min-height: 44px;
         transform: translate(-50%, -50%);
-    }
-}
-
-@media (max-width: 360px) {
-    .btn {
-        white-space: normal;
-    }
-
-    .label {
-        display: block;
-        overflow: visible;
-        text-overflow: clip;
-        overflow-wrap: anywhere;
-        text-align: center;
     }
 }
 
