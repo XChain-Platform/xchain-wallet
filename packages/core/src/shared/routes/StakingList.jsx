@@ -525,7 +525,7 @@ function StakeRow({ row, cooldown, onSelect }) {
             <div className={local.iconWrap}>
                 <span
                     className={local.iconLetter}
-                    style={{ background: tickerColor(row.asset || '?'), color: 'var(--xc-on-accent)' }}
+                    style={{ background: tickerColor(row.asset || '?') }}
                     aria-hidden="true"
                 >
                     {(row.asset || '?').slice(0, 1)}

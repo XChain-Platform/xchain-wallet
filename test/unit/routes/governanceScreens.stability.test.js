@@ -20,7 +20,7 @@ describe('governance and staking screen theme colors', () => {
         ['ProjectRosterForm.jsx', 'var(--xc-surface)'],
         ['StakeForm.jsx', 'var(--xc-text-muted)'],
         ['StakingActionForm.jsx', 'var(--xc-text-muted)'],
-        ['StakingList.jsx', 'var(--xc-on-accent)'],
+        ['StakingList.module.css', 'var(--xc-on-accent)'],
         ['MyLists.module.css', 'var(--xc-danger-bg)'],
         ['StakeDetail.module.css', 'var(--xc-warning)'],
         ['StakingList.module.css', 'var(--xc-surface-raised)'],

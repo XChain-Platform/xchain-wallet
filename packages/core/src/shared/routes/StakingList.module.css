@@ -96,6 +96,17 @@
     font-family: var(--xc-font-sans);
     font-weight: 700;
     font-size: var(--xc-text-md);
+    color: var(--xc-on-accent);
+}
+
+/* The fill is a per-ticker colour set inline; the letter colour lives here so
+   forced-colors mode can re-pair it. --xc-on-accent maps to Canvas there,
+   which only suits an accent fill, and the mode repaints this fill to Canvas
+   as well, so the letter would vanish into it. */
+@media (forced-colors: active) {
+    .iconLetter {
+        color: CanvasText;
+    }
 }
 
 .chainOverlay {
