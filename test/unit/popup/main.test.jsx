@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 const mocks = vi.hoisted(() => ({
     createRoot: vi.fn(),
@@ -43,6 +41,7 @@ vi.mock('../../../packages/extension/src/background/panicModeStorage.js', () => 
 beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    document.documentElement.classList.remove('xchain-toolbar-popup');
     document.body.innerHTML = '<div id="xchain-popup-root"></div>';
     vi.stubGlobal('chrome', {
         runtime: { sendMessage: vi.fn() },
@@ -55,23 +54,20 @@ beforeEach(() => {
 });
 
 describe('popup entrypoint', () => {
-    it('caps the popup root at 360px and lets narrower viewports shrink', () => {
-        const popupHtml = readFileSync(
-            join(process.cwd(), 'packages/extension/popup.html'),
-            'utf8',
-        );
-        const popupCss = readFileSync(
-            join(process.cwd(), 'packages/extension/src/popup/popup.css'),
-            'utf8',
-        );
-        const documentRule = popupCss.match(/html\s*\{([^}]*)\}/s)?.[1] || '';
-        const popupRootRule = popupCss.match(/#xchain-popup-root\s*\{([^}]*)\}/s)?.[1] || '';
+    it('marks only the toolbar popup for the compact document width', async () => {
+        chrome.extension = { getViews: vi.fn(() => [window]) };
 
-        expect(popupHtml).toContain('href="./src/popup/popup.css"');
-        expect(documentRule).toMatch(/^\s*width:\s*min\(360px,\s*100vw\);/m);
-        expect(popupRootRule).toMatch(/^\s*width:\s*100%;/m);
-        expect(popupRootRule).toMatch(/^\s*max-width:\s*100%;/m);
-        expect(popupRootRule).toMatch(/^\s*min-width:\s*0;/m);
+        await import('../../../packages/extension/src/popup/main.jsx');
+
+        expect(document.documentElement).toHaveClass('xchain-toolbar-popup');
+    });
+
+    it('leaves popup.html opened in a tab at the full document width', async () => {
+        chrome.extension = { getViews: vi.fn(() => []) };
+
+        await import('../../../packages/extension/src/popup/main.jsx');
+
+        expect(document.documentElement).not.toHaveClass('xchain-toolbar-popup');
     });
 
     it('installs shell services, starts registry sync, and mounts the app', async () => {
