@@ -46,6 +46,11 @@ export const EXPLORER_RATE_LIMIT_DEFAULTS = Object.freeze({
     reuseMs: 2_000,
 });
 
+function abortError() {
+    if (typeof DOMException === 'function') return new DOMException('The request was cancelled.', 'AbortError');
+    return Object.assign(new Error('The request was cancelled.'), { name: 'AbortError' });
+}
+
 /**
  * Milliseconds a `Retry-After` value asks for: delta seconds or an HTTP date.
  *
@@ -148,7 +153,19 @@ export class HostRateLimiter {
         const { now, sleep, random, ...tuning } = opts;
         this.opts = { ...EXPLORER_RATE_LIMIT_DEFAULTS, ...tuning };
         this.now = now || (() => Date.now());
-        this.sleep = sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+        this.sleep = sleep || ((ms, signal) => new Promise((resolve, reject) => {
+            const timer = setTimeout(done, ms);
+            function done() {
+                signal?.removeEventListener('abort', cancelled);
+                resolve();
+            }
+            function cancelled() {
+                clearTimeout(timer);
+                signal?.removeEventListener('abort', cancelled);
+                reject(abortError());
+            }
+            signal?.addEventListener('abort', cancelled, { once: true });
+        }));
         this.random = random || Math.random;
         /** @type {Map<string, any>} per-host window, pause and backoff state */
         this.hosts = new Map();
@@ -156,6 +173,21 @@ export class HostRateLimiter {
         this.inFlight = new Map();
         /** @type {Map<string, { at: number, res: any }>} */
         this.recent = new Map();
+    }
+
+    async sleepUntil(ms, signal) {
+        if (signal?.aborted) throw abortError();
+        if (!signal) return this.sleep(ms);
+        let cancel;
+        const cancelled = new Promise((_resolve, reject) => {
+            cancel = () => reject(abortError());
+            signal.addEventListener('abort', cancel, { once: true });
+        });
+        try {
+            return await Promise.race([this.sleep(ms, signal), cancelled]);
+        } finally {
+            signal.removeEventListener('abort', cancel);
+        }
     }
 
     /** @param {string} host */
@@ -206,17 +238,21 @@ export class HostRateLimiter {
      * @returns {Promise<number>} 0 when cleared, or the seconds still to wait
      *          when the pause is longer than the layer will sit through
      */
-    async gate(host, deadline = Infinity) {
+    async gate(host, deadline = Infinity, signal) {
+        if (signal?.aborted) throw abortError();
         const st = this.state(host);
         const t = this.now();
         if (st.blockedUntil > t) {
             const left = st.blockedUntil - t;
             if (left > Math.min(this.opts.maxWaitMs, deadline - t)) return Math.ceil(left / 1000);
             // Jitter spreads the wake-up so paused requests do not all land at once.
-            await this.sleep(left + Math.round(this.random() * Math.min(1000, left * 0.2 + 100)));
+            await this.sleepUntil(
+                left + Math.round(this.random() * Math.min(1000, left * 0.2 + 100)),
+                signal,
+            );
         }
         const slot = this.pace(host) - this.now();
-        if (slot > 0) await this.sleep(Math.min(slot, this.opts.maxWaitMs));
+        if (slot > 0) await this.sleepUntil(Math.min(slot, this.opts.maxWaitMs), signal);
         return 0;
     }
 
@@ -261,15 +297,20 @@ export class HostRateLimiter {
      * @param {() => Promise<any>} send
      * @param {(seconds: number) => any} tooLong  builds the error for a pause past the cap
      * @param {number} [maxRetries] retries available to this HTTP method
+     * @param {AbortSignal} [signal] cancels rate-limit and pacing waits
      */
-    async request(host, key, send, tooLong, maxRetries = this.opts.maxRetries) {
+    async request(host, key, send, tooLong, maxRetries = this.opts.maxRetries, signal) {
+        if (signal?.aborted) throw abortError();
+        // A shared request would let one caller's signal cancel every waiter.
+        // Signalled reads stay independent so each caller owns its cancellation.
+        if (signal) key = null;
         if (key) {
             const recent = this.recent.get(key);
             if (recent && this.now() - recent.at <= this.opts.reuseMs) return cloneResponse(recent.res);
             const pending = this.inFlight.get(key);
             if (pending) return pending.then(cloneResponse);
         }
-        const run = this.attempt(host, send, tooLong, maxRetries);
+        const run = this.attempt(host, send, tooLong, maxRetries, signal);
         if (!key) return run;
         this.inFlight.set(key, run);
         try {
@@ -289,12 +330,12 @@ export class HostRateLimiter {
         for (const [k, v] of this.recent) if (v.at < cutoff) this.recent.delete(k);
     }
 
-    async attempt(host, send, tooLong, maxRetries) {
+    async attempt(host, send, tooLong, maxRetries, signal) {
         const st = this.state(host);
         const deadline = this.now() + this.opts.maxTotalMs;
         let retries = 0;
         for (;;) {
-            const waitSeconds = await this.gate(host, deadline);
+            const waitSeconds = await this.gate(host, deadline, signal);
             if (waitSeconds > 0) throw tooLong(waitSeconds);
             // After a 429 one request goes first and the rest wait for its answer,
             // so a still-empty window costs one request instead of a whole wave.
@@ -362,23 +403,54 @@ function hostOf(client) {
     }
 }
 
+function networkChangedError() {
+    return Object.assign(new Error('The explorer network changed before the request completed.'), {
+        name: 'NetworkChangedError',
+        code: 'EXPLORER_NETWORK_CHANGED',
+    });
+}
+
+async function currentResponse(send, isCurrent) {
+    try {
+        const response = await send();
+        if (!isCurrent()) throw networkChangedError();
+        return response;
+    } catch (err) {
+        if (!isCurrent()) throw networkChangedError();
+        throw err;
+    }
+}
+
 /** Route one axios instance's reads through the limiter; only GET may retry. */
-function wrapAxios(client, limiter) {
+function wrapAxios(client, limiter, isCurrent = () => true) {
     if (!client || client.__xcRateLimited || typeof client.get !== 'function') return;
     const host = hostOf(client);
     const base = client.defaults ? client.defaults.baseURL || '' : '';
+    if (client.defaults) {
+        // Axios otherwise returns malformed JSON as a successful string.
+        client.defaults.responseType = 'json';
+        client.defaults.transitional = {
+            ...(client.defaults.transitional || {}),
+            silentJSONParsing: false,
+        };
+    }
     const get = client.get.bind(client);
     const post = typeof client.post === 'function' ? client.post.bind(client) : null;
     client.get = (url, config = {}) => {
         // Binary reads keep their own response type, so they are never shared.
         const shareable = !config || !config.responseType || config.responseType === 'json';
         const key = shareable ? requestKey('GET', base, url, config && config.params) : null;
-        return limiter.request(host, key, () => get(url, config), (s) => pausedError(s, config));
+        return limiter.request(
+            host, key, () => currentResponse(() => get(url, config), isCurrent),
+            (s) => pausedError(s, config),
+            undefined, config?.signal,
+        );
     };
     if (post) {
         client.post = (url, body, config = {}) => limiter.request(
-            host, null, () => post(url, body, config), (s) => pausedError(s, config),
-            0,
+            host, null, () => currentResponse(() => post(url, body, config), isCurrent),
+            (s) => pausedError(s, config),
+            0, config?.signal,
         );
     }
     client.__xcRateLimited = true;
@@ -428,13 +500,15 @@ function friendlyRateLimitError(err, pausedSeconds = 0) {
 function wrapExplorerClient(explorer, limiter) {
     if (!explorer || typeof explorer !== 'object' || explorer.__xcRateLimited) return;
     if (!explorer.client || typeof explorer.client.get !== 'function') return;
-    wrapAxios(explorer.client, limiter);
+    const initialClient = explorer.client;
+    wrapAxios(initialClient, limiter, () => explorer.client === initialClient);
     if (typeof explorer.buildClient === 'function') {
         const build = explorer.buildClient;
         // setBase() rebuilds the axios instance; the new one is wrapped too.
         explorer.buildClient = function buildClientRateLimited(...args) {
             const out = build.apply(this, args);
-            wrapAxios(this.client, limiter);
+            const rebuiltClient = this.client;
+            wrapAxios(rebuiltClient, limiter, () => this.client === rebuiltClient);
             return out;
         };
     }

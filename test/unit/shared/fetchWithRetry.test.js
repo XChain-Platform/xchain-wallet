@@ -9,6 +9,8 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ChainRegistry } from '../../../packages/core/src/registry/index.js';
+import { syncChainRegistryFromHub } from '../../../packages/core/src/registry/remote.js';
 import { fetchWithRetry } from '../../../packages/core/src/shared/utils/fetchWithRetry.js';
 
 afterEach(() => {
@@ -85,6 +87,21 @@ describe('fetchWithRetry', () => {
         expect(fetchImpl).toHaveBeenCalledTimes(3);
     });
 
+    it('honors Retry-After on a retryable 503 response', async () => {
+        const sleeps = [];
+        const fetchImpl = vi.fn()
+            .mockResolvedValueOnce({ status: 503, headers: { 'Retry-After': '4' } })
+            .mockResolvedValueOnce({ ok: true, status: 200 });
+
+        await expect(fetchWithRetry(fetchImpl, 'https://service.test/data', {}, {
+            baseDelayMs: 100,
+            random: () => 0.5,
+            sleep: async (ms) => { sleeps.push(ms); },
+        })).resolves.toMatchObject({ status: 200 });
+
+        expect(sleeps).toEqual([4_000]);
+    });
+
     it('caps the retry budget even when a caller asks for more', async () => {
         vi.useFakeTimers();
         const fetchImpl = vi.fn(async () => ({ status: 503 }));
@@ -157,5 +174,25 @@ describe('fetchWithRetry', () => {
 
         await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
         expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('bounds the remote registry client with the shared request timeout', async () => {
+        vi.useFakeTimers();
+        const fetchImpl = vi.fn((_url, init) => new Promise((_resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(
+                Object.assign(new Error('aborted'), { name: 'AbortError' }),
+            ));
+        }));
+
+        const pending = syncChainRegistryFromHub({
+            registry: new ChainRegistry(),
+            fetchImpl,
+        });
+        await vi.runAllTimersAsync();
+        const result = await pending;
+
+        expect(result).toMatchObject({ ok: false });
+        expect(result.reason).toContain('timed out');
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 });

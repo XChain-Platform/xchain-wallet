@@ -18,6 +18,7 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
+import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 import { validateChainDescriptor } from './validate.js';
 
 // The hub signs: 'XCHAIN_CHAIN_REGISTRY_V1|' + generated_at + '|' +
@@ -81,6 +82,7 @@ export function verifyChainRegistry(body, opts = {}) {
  *   url?: string,
  *   pinnedPubkeyHex?: string,
  *   fetchImpl?: typeof fetch,
+ *   signal?: AbortSignal,
  * }} opts
  * @returns {Promise<{ ok: boolean, added?: string[], updated?: string[], skipped?: string[], generatedAt?: string, descriptors?: import('./validate.js').ChainDescriptor[], reason?: string }>}
  */
@@ -93,7 +95,11 @@ export async function syncChainRegistryFromHub(opts) {
 
     let body;
     try {
-        const res = await doFetch(url, { method: 'GET', headers: { accept: 'application/json' } });
+        const res = await fetchWithRetry(doFetch, url, {
+            method: 'GET',
+            headers: { accept: 'application/json' },
+            signal: opts.signal,
+        });
         if (!res.ok) return { ok: false, reason: 'registry endpoint returned HTTP ' + res.status };
         body = await res.json();
     } catch (e) {
