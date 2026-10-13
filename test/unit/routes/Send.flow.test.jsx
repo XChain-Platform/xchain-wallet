@@ -238,6 +238,32 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('validates a typed recipient on blur without interrupting typing', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.change(toField, { target: { value: 'abc' } });
+        expect(screen.queryByText(/not a valid Bitcoin address/i)).toBeNull();
+
+        fireEvent.blur(toField);
+        expect(await screen.findByText(/not a valid Bitcoin address/i)).toBeInTheDocument();
+
+        fireEvent.change(toField, { target: { value: TO } });
+        expect(screen.queryByText(/not a valid Bitcoin address/i)).toBeNull();
+    });
+
+    it('validates an invalid recipient immediately on paste', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => 'abc' },
+        });
+
+        expect(toField).toHaveValue('abc');
+        expect(await screen.findByText(/not a valid Bitcoin address/i)).toBeInTheDocument();
+    });
+
     it('searches contacts and immediately explains a wrong-chain pick', async () => {
         const doge = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
         const messaging = mount({

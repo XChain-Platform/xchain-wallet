@@ -2966,6 +2966,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     if (pasteHint) setPasteHint(null);
                     if (pasteWarning) setPasteWarning(null);
                 }}
+                onBlur={() => setToError(destinationAddressError(toAddress, descriptor))}
                 onPaste={onAddressPaste}
                 suggestions={suggestions}
                 onSuggestionSelect={handlePickRecipient}
