@@ -837,7 +837,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                         <CopyButton value={txid} label="Copy transaction ID" />
                         {explorerUrl ? (
                             <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
-                                View on explorer
+                                View on explorer <span aria-hidden="true">↗</span>
                             </a>
                         ) : null}
                     </>

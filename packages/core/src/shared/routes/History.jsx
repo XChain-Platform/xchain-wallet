@@ -1702,9 +1702,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 >
                     {!browserOnline
                         ? (showingCachedHistory
-                            ? 'You are offline. Showing the last saved history. Network actions will be available when your connection returns.'
-                            : 'You are offline. Connect to load history and use network actions.')
-                        : 'Could not refresh history. Showing the last saved history.'}
+                            ? t('history.offline.cached')
+                            : t('history.offline.empty'))
+                        : t('history.offline.refreshFailed')}
                 </StatusMessage>
             ) : null}
 
