@@ -46,11 +46,11 @@ export function truncateAddress(address) {
 export function AddressText({ address, truncate = true, highlight = false, size = 'md' }) {
     const cls = `${styles.addr} ${styles[size]}`;
     if (typeof address !== 'string' || address.length === 0) {
-        return <span className={cls}>…</span>;
+        return <span className={cls} dir="ltr">…</span>;
     }
     if (address.length <= 14) {
         return (
-            <span className={cls} title={address} aria-label={address}>
+            <span className={cls} title={address} aria-label={address} dir="ltr">
                 {address}
             </span>
         );
@@ -61,13 +61,13 @@ export function AddressText({ address, truncate = true, highlight = false, size 
     if (!highlight) {
         const display = truncate ? truncateAddress(address) : address;
         return (
-            <span className={cls} title={address} aria-label={address}>
+            <span className={cls} title={address} aria-label={address} dir="ltr">
                 {display}
             </span>
         );
     }
     return (
-        <span className={cls} title={address} aria-label={address}>
+        <span className={cls} title={address} aria-label={address} dir="ltr">
             <span className={styles.head}>{head}</span>
             <span className={styles.middle}>{truncate ? '…' : middleFull}</span>
             <span className={styles.tail}>{tail}</span>

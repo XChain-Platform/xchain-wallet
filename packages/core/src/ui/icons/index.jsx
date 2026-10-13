@@ -111,7 +111,7 @@ export function KeyIcon() {
 
 export function MigrateIcon() {
     return (
-        <svg {...STROKE_PROPS}>
+        <svg {...STROKE_PROPS} data-xc-directional="">
             <path d="M3 12h13" />
             <path d="m13 6 7 6-7 6" />
         </svg>
@@ -120,7 +120,7 @@ export function MigrateIcon() {
 
 export function BackIcon() {
     return (
-        <svg {...STROKE_PROPS}>
+        <svg {...STROKE_PROPS} data-xc-directional="">
             <path d="m15 6-6 6 6 6" />
         </svg>
     );
@@ -416,7 +416,7 @@ export function RefreshIcon() {
 
 export function ForwardIcon() {
     return (
-        <svg {...STROKE_PROPS}>
+        <svg {...STROKE_PROPS} data-xc-directional="">
             <path d="m9 18 6-6-6-6" />
         </svg>
     );
