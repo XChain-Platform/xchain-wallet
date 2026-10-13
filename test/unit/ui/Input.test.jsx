@@ -237,13 +237,13 @@ describe('<Input>', () => {
         expect(screen.queryByText(/local time zone/)).toBeNull();
     });
 
-    it('keeps text controls at 16px on narrow screens to prevent iOS focus zoom', () => {
+    it('keeps text controls at 16px on touch devices at every width without changing desktops', () => {
         const css = readFileSync(
             'packages/core/src/ui/tokens.css',
             'utf8',
         );
-        // The floor is scoped to phone widths (mobileFormControlFontSize
-        // pins the exact rule); 1rem is the 16px iOS needs to skip the zoom.
-        expect(css).toMatch(/@media \(max-width: 599px\)\s*\{\s*input:not\(\[type='checkbox'\]\)[\s\S]*?select,[\s\S]*?textarea\s*\{\s*font-size: 1rem !important;/);
+        const touchRule = /@media \(pointer: coarse\), \(hover: none\)\s*\{\s*input:not\(\[type='checkbox'\]\)[\s\S]*?select,[\s\S]*?textarea\s*\{\s*font-size: 1rem !important;/;
+        expect(css).toMatch(touchRule);
+        expect(css).not.toMatch(/@media \([^)]*(?:max|min)-width[^)]*\)[^{]*\{\s*input:not\(\[type='checkbox'\]\)[\s\S]*?font-size: 1rem !important;/);
     });
 });
