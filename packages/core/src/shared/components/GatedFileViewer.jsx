@@ -35,6 +35,7 @@ import { useEffect, useMemo } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { sniffContent } from '../utils/sniffContent.js';
 import styles from './GatedFileViewer.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 const MAX_TEXT_CHARS = 200_000;
 
@@ -93,6 +94,8 @@ function kindLabel(kind, mime) {
  * @param {() => void} props.onClose
  */
 export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }) {
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(onClose);
     const bytes = useMemo(() => decodeBase64(plaintextBase64), [plaintextBase64]);
     const sniffed = useMemo(() => sniffContent(bytes), [bytes]);
 

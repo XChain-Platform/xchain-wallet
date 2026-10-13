@@ -11,6 +11,7 @@
 import { useEffect } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * Small centered status modal for quick "it happened" confirmations
@@ -25,6 +26,8 @@ import styles from './NoticeModal.module.css';
  * @param {() => void} props.onClose
  */
 export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(onClose);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);

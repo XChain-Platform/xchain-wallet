@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { formatBadgeCount } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * §24.3 / G054: mobile bottom-sheet navigation.
@@ -85,6 +86,8 @@ export function BottomTabBar({
     badges = {},
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(sheetOpen ? () => setSheetOpen(false) : undefined);
 
     // Close the sheet whenever the user navigates. The parent flips
     // currentView, which is enough of a signal that the user picked a

@@ -13,6 +13,7 @@ import { Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import styles from './HeaderSettingsButton.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * Header gear-icon → settings popover. Three sections:
@@ -61,6 +62,8 @@ export function HeaderSettingsButton({
     onNetworkFilterChange,
 }) {
     const [open, setOpen] = useState(false);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
     // The gear sits wherever the header puts it; at phone width that is
     // near the left edge, and a panel aligned to it would hang off-screen.
