@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -132,7 +132,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -1169,7 +1168,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -1285,7 +1284,27 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     if (stage === 'review-list') {
         return wrap(
-            <form onSubmit={handleSignList} noValidate>
+            <FormPage
+                label="Review recipient list"
+                onSubmit={handleSignList}
+                status={(hw || singleEncode) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={submitting || actionConfirm.composing}
+                        disabled={singleEncode
+                            ? actionConfirm.composing
+                            : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
+                    >
+                        {hw
+                            ? `Sign ${listNoun} on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Sign ${listNoun} on ${descriptor.displayName}` : `Sign ${listNoun}`)}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{listDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -1340,31 +1359,41 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(hw || singleEncode) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        block
-                        loading={submitting || actionConfirm.composing}
-                        disabled={singleEncode
-                            ? actionConfirm.composing
-                            : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
-                    >
-                        {hw
-                            ? `Sign ${listNoun} on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign ${listNoun} on ${descriptor.displayName}` : `Sign ${listNoun}`)}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     if (stage === 'review-airdrop') {
         return wrap(
-            <form onSubmit={handleSignAirdrop} noValidate>
+            <FormPage
+                label="Review airdrop"
+                onSubmit={handleSignAirdrop}
+                status={(hw || singleEncode) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button type="button" variant="ghost" onClick={onBack} disabled={submitting}>
+                            Close (resume later)
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting || actionConfirm.composing}
+                            disabled={
+                                !listActionIndex
+                                || (singleEncode
+                                    ? actionConfirm.composing
+                                    : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
+                            }
+                        >
+                            {hw
+                                ? `Sign airdrop on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Sign airdrop on ${descriptor.displayName}` : 'Sign airdrop')}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>{airdropDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -1480,30 +1509,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(hw || singleEncode) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="ghost" onClick={onBack} disabled={submitting}>
-                        Close (resume later)
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting || actionConfirm.composing}
-                        disabled={
-                            !listActionIndex
-                            || (singleEncode
-                                ? actionConfirm.composing
-                                : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
-                        }
-                    >
-                        {hw
-                            ? `Sign airdrop on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign airdrop on ${descriptor.displayName}` : 'Sign airdrop')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -1582,7 +1588,18 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
     // stage === 'compose'
     return wrap(
-        <form onSubmit={handleComposeSubmit} noValidate>
+        <FormPage
+            label="Token airdrop"
+            onSubmit={handleComposeSubmit}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button type="submit" variant="primary">
+                    {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
+                </Button>
+            )}
+        >
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={token} label="Token to drop" />
             ) : (
@@ -1876,19 +1893,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                >
-                    {sourceMode === 'existing' ? 'Review airdrop' : 'Review recipients'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
@@ -1930,7 +1935,6 @@ function extractListRows(resp) {
  * @param {() => void} props.onBack
  */
 function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSelect, onBack }) {
-    const isFull = variant === 'full';
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -1968,7 +1972,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
     const header = <PageHeader onBack={onBack} title="Choose a list" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -1976,11 +1980,10 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
     if (!rows) return wrap(<p className={styles.hint}>Loading lists…</p>);
     if (rows.length === 0) {
         return wrap(
-            <p className={styles.hint}>
-                No lists published from this chain's addresses yet. Switch to
-                Paste addresses or Token holders to publish one here, or use
-                My Lists from Home once you have.
-            </p>,
+            <EmptyState
+                title="No lists published from this chain's addresses yet."
+                body="Switch to Paste addresses or Token holders to publish one here, or use My Lists from Home once you have."
+            />,
         );
     }
     return wrap(

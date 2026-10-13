@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -81,7 +81,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -488,7 +487,31 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={`Review ${verb.toLowerCase()} controller`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     {unbind
                         ? `Stop gating the ${actionClass} actions of ${subjectLabel}. `
@@ -565,28 +588,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -630,7 +632,23 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label={`${verb} controller`}
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || (!unbind && !String(controller).trim()) || actionConfirm.composing}
+                >
+                    {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
+                </Button>
+            )}
+        >
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
@@ -748,20 +766,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || (!unbind && !String(controller).trim()) || actionConfirm.composing}
-                >
-                    {singleEncode ? (unbind ? 'Unbind' : 'Bind') : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
