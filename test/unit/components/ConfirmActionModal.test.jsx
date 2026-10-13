@@ -220,31 +220,36 @@ describe('ConfirmActionModal', () => {
         expect(screen.queryByTestId('confirm-total')).toBeNull();
     });
 
-    it.each([320, 360])('keeps the Send review readable and reachable at %ipx', (width) => {
+    it.each([320, 412])('keeps long Send review values readable and reachable at %ipx', (width) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
-        const address = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
-        const longToken = 'A-VERY-LONG-TOKEN-NAME-THAT-MUST-NOT-HIDE-THE-AMOUNT';
+        const address = 'bc1pqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+        const longToken = 'A-VERY-LONG-TOKEN-NAME-THAT-MUST-NOT-HIDE-VALUES';
+        const amount = '12345678.12345678';
+        const fiatValue = '≈ $12,345,678.90 USD';
+        const memo = 'First memo line stays readable.\nSecond memo line also stays readable.';
+        const summary = `Send ${amount} ${longToken} to ${address}`;
+        const displayedSummary = `Send 12,345,678.12345678 ${longToken} to ${address}`;
         const confirmAction = {
             phase: 'ready',
             composed: {
                 chainId: 'bitcoin-mainnet',
-                bareNativePayment: true,
                 networkFeeSats: 2500,
                 decoded: {
-                    summary: `Send 1 BTC to ${address}`,
+                    summary,
                     details: [
-                        { label: 'Token', value: 'BTC' },
-                        { label: 'Amount', value: '1' },
+                        { label: 'Token', value: longToken },
+                        { label: 'Amount', value: amount },
+                        { label: 'Fiat value', value: fiatValue },
                         { label: 'Destination', value: address },
                     ],
                     warnings: [],
                 },
                 simulation: {
-                    deltas: [{ tick: longToken, before: '123456789.12345678', after: '1.00000000' }],
+                    deltas: [{ tick: longToken, before: amount, after: '87654321.87654321' }],
                     notes: [],
                 },
             },
-            report: null,
+            report: REPORT_PASS,
             acknowledged: new Set(),
             acknowledge: vi.fn(),
             canApprove: true,
@@ -261,16 +266,29 @@ describe('ConfirmActionModal', () => {
                 signerReady
                 password=""
                 onPasswordChange={vi.fn()}
+                formatNativeFee={() => fiatValue}
+                extraCredentials={(
+                    <dl aria-label="Advanced send details">
+                        <dt>Memo</dt>
+                        <dd data-testid="confirm-send-memo">{memo}</dd>
+                    </dl>
+                )}
             />,
         );
 
         const intent = screen.getByTestId('action-intent');
+        expect(address).toHaveLength(62);
         expect(intent).toHaveTextContent(address);
         expect(intent).toHaveTextContent(longToken);
-        expect(intent).toHaveTextContent('123456789.12345678 → 1.00000000');
-        expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.000025 BTC');
-        expect(screen.getByTestId('confirm-total')).toHaveTextContent('Total: 1.000025 BTC');
-        expect(screen.getByTestId('confirm-approve')).toBeVisible();
+        expect(intent).toHaveTextContent(amount);
+        expect(intent).toHaveTextContent(fiatValue);
+        expect(intent).toHaveTextContent(`${amount} → 87654321.87654321`);
+        expect(screen.getByTestId('confirm-send-memo').textContent).toBe(memo);
+        expect(screen.getByTestId('confirm-fee'))
+            .toHaveTextContent(`Network fee: 0.000025 BTC (${fiatValue})`);
+        const approve = screen.getByTestId('confirm-approve');
+        expect(approve).toBeVisible();
+        expect(approve).toHaveTextContent(`Send 12,345,678.12345678 ${longToken}`);
 
         const intentCss = readFileSync(
             'packages/core/src/shared/components/ActionIntentSummary.module.css',
@@ -281,13 +299,19 @@ describe('ConfirmActionModal', () => {
             'utf8',
         );
         expect(intentCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+        expect(intentCss).toMatch(/@container \(max-width: 399px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+        expect(intentCss).toMatch(/\.summary\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(intentCss).toMatch(/\.row dd\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/s);
         expect(intentCss).toMatch(/\.deltaTick\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
+        expect(modalCss).toMatch(/\.page\s*\{[^}]*container-type:\s*inline-size/s);
+        expect(modalCss).toMatch(/\.credentials dd\s*\{[^}]*white-space:\s*pre-wrap/s);
         expect(modalCss).toMatch(/\.page\s*\{[^}]*padding-bottom:\s*var\(--xc-bottom-bar-h, 0px\)/s);
         expect(modalCss).toMatch(/\.footer > button\s*\{[^}]*white-space:\s*normal/s);
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
+        expect(modalCss).toMatch(/@container \(max-width: 399px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {
