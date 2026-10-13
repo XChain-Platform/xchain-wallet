@@ -115,6 +115,7 @@
     appearance: none;
     width: var(--xc-page-header-side);
     height: var(--xc-page-header-side);
+    min-height: var(--xc-tap-min);
     border-radius: 50%;
     border: 1px solid var(--xc-border-strong);
     background: transparent;
