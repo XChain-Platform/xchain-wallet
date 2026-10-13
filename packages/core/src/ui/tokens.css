@@ -151,10 +151,9 @@
     --xc-bg-muted: #F5F6F8;
     --xc-surface: #FFFFFF;
     --xc-surface-raised: #FFFFFF;
-    /* Borders identify controls and regions against every theme surface, so
-     * both tiers clear the 3:1 non-text contrast floor. */
+    /* Borders identify controls and regions against every theme surface. */
     --xc-border: #818B9B;
-    --xc-border-strong: #727D8E;
+    --xc-border-strong: var(--xc-border);
     --xc-text: #0F172A;
     /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
@@ -202,14 +201,16 @@
     --xc-control-disabled-bg: var(--xc-bg-muted);
     --xc-control-disabled-border: var(--xc-border-strong);
     --xc-control-disabled-text: var(--xc-text-muted);
+    /* Three elevation levels cover cards, floating controls, and overlays. */
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-    --xc-shadow-header-menu: 0 8px 20px rgba(0, 0, 0, 0.18);
-    --xc-shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.15);
-    --xc-shadow-popover: 0 12px 30px rgba(0, 0, 0, 0.18);
     --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.35);
-    --xc-shadow-side-panel: -16px 0 40px rgba(0, 0, 0, 0.35);
-    --xc-shadow-bottom-sheet: 0 -8px 32px rgba(0, 0, 0, 0.18);
+    /* Semantic aliases keep surface intent readable while sharing recipes. */
+    --xc-shadow-header-menu: var(--xc-shadow-md);
+    --xc-shadow-toast: var(--xc-shadow-md);
+    --xc-shadow-popover: var(--xc-shadow-md);
+    --xc-shadow-side-panel: var(--xc-shadow-modal);
+    --xc-shadow-bottom-sheet: var(--xc-shadow-modal);
     --xc-shadow-surface-ring: 0 0 0 1.5px var(--xc-surface);
     --xc-shadow-accent-ring: 0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong));
     --xc-shadow-focus-ring: 0 0 0 3px var(--xc-focus-ring);
@@ -278,7 +279,6 @@
         --xc-surface: #151B28;
         --xc-surface-raised: #1B2231;
         --xc-border: #5F6D83;
-        --xc-border-strong: #718096;
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
         --xc-text-inverted: #0B0F17;
@@ -299,6 +299,7 @@
         --xc-focus-ring: #FFFFFF;
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+        --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
     }
 }
 
@@ -308,7 +309,6 @@
     --xc-surface: #151B28;
     --xc-surface-raised: #1B2231;
     --xc-border: #5F6D83;
-    --xc-border-strong: #718096;
     --xc-text: #E5EAF2;
     --xc-text-muted: #94A3B8;
     --xc-text-inverted: #0B0F17;
@@ -329,6 +329,7 @@
     --xc-focus-ring: #FFFFFF;
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
 /* Tell the browser which palette its own widgets (scrollbars, native
@@ -440,7 +441,6 @@
         --xc-surface: #FFFFFF;
         --xc-surface-raised: #FFFFFF;
         --xc-border: #1F2937;
-        --xc-border-strong: #0F172A;
         --xc-text: #000000;
         --xc-text-muted: #1F2937;
         --xc-danger: #B91C1C;
@@ -463,7 +463,6 @@
             --xc-surface: #050810;
             --xc-surface-raised: #0B0F17;
             --xc-border: #E5EAF2;
-            --xc-border-strong: #FFFFFF;
             --xc-text: #FFFFFF;
             --xc-text-muted: #E5EAF2;
             --xc-danger: #FCA5A5;
@@ -489,7 +488,6 @@
         --xc-surface: #050810;
         --xc-surface-raised: #0B0F17;
         --xc-border: #E5EAF2;
-        --xc-border-strong: #FFFFFF;
         --xc-text: #FFFFFF;
         --xc-text-muted: #E5EAF2;
         --xc-danger: #FCA5A5;
@@ -516,7 +514,6 @@
         --xc-surface: Canvas;
         --xc-surface-raised: Canvas;
         --xc-border: CanvasText;
-        --xc-border-strong: CanvasText;
         --xc-text: CanvasText;
         --xc-text-muted: GrayText;
         --xc-text-inverted: Canvas;
