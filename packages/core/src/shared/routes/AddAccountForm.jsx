@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input, Icon } from '@xchain-wallet/core/ui';
+import { Screen, Button, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignerSelectForm } from './SignerSelectForm.jsx';
 import styles from './CreateWallet.module.css';
@@ -152,7 +152,10 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     );
 
     return (
-        <Screen variant={variant}>
+        <Screen
+            variant={variant}
+            header={<PageHeader onBack={onBack} backDisabled={busy} title="Add account" />}
+        >
             {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
         </Screen>
     );

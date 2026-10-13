@@ -20,8 +20,8 @@
     line-height: 1.2;
 }
 
-.changePositive { color: var(--xc-success, #14b86c); }
-.changeNegative { color: var(--xc-danger,  #d93838); }
+.changePositive { color: var(--xc-success); }
+.changeNegative { color: var(--xc-danger); }
 .changeNeutral  { color: var(--xc-text-muted); }
 
 .chart {
@@ -80,5 +80,5 @@
 }
 
 .rangeActive:hover {
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
 }

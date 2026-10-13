@@ -176,7 +176,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         <Screen variant={variant} title={result ? 'Sent' : 'Unfinished transaction'}>
             {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             {result ? (
-                <p data-testid="resume-confirm-sent">
+                <p data-testid="resume-confirm-sent" style={{ overflowWrap: 'anywhere' }}>
                     Sent.{result.txid || result.broadcast?.txid
                         ? ` Transaction ${result.txid || result.broadcast?.txid}`
                         : ''}

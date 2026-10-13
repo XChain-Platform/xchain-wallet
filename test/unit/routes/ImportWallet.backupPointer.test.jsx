@@ -88,6 +88,14 @@ async function scanPointerInBackupLane() {
 }
 
 describe('ImportWallet backup-pointer restore', () => {
+    it('labels the pasted backup contents field', () => {
+        renderImport({ importBackupRequest: vi.fn() });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+
+        expect(screen.getByRole('textbox', { name: 'Backup file contents' })).toBeTruthy();
+    });
+
     it('scans a pointer and restores via importBackupPointerRequest', async () => {
         const importBackupPointerRequest = vi.fn().mockResolvedValue({ walletId: 'w1' });
         const onImported = vi.fn();

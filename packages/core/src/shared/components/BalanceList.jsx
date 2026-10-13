@@ -278,7 +278,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                 ) : (
                     <span
                         className={styles.iconLetter}
-                        style={{ background: tickerColor(row.tick), color: '#FFFFFF' }}
+                        style={{ background: tickerColor(row.tick), color: 'var(--xc-on-accent)' }}
                         aria-hidden="true"
                     >
                         {row.tick.slice(0, 1)}

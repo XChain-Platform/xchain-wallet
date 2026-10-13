@@ -98,12 +98,14 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                     onBack();
                                 }}
                             >
-                                <span className={styles.entryLabel}>
-                                    {active ? '● ' : '○ '}{label}
+                                <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
+                                    <span className={styles.entryLabel}>
+                                        {active ? '● ' : '○ '}{label}
+                                    </span>
+                                    {subtitle ? (
+                                        <span className={styles.entryDescription}>{subtitle}</span>
+                                    ) : null}
                                 </span>
-                                {subtitle ? (
-                                    <span className={styles.entryDescription}>{subtitle}</span>
-                                ) : null}
                             </button>
                             {onRenameAccount ? (
                                 <button

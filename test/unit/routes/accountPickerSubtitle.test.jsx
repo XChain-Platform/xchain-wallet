@@ -58,6 +58,8 @@ describe('AccountPicker row subtitle', () => {
         const { container } = await mountWith([{ id: 'a3', index: 2, name: 'Savings' }]);
         const row = rowFor(container, 'Savings');
         expect(row.textContent).toContain('Account 3');
+        expect(row.children).toHaveLength(1);
+        expect(row.firstElementChild.children).toHaveLength(2);
     });
 
     it('does not repeat a name that already equals the numbered one', async () => {

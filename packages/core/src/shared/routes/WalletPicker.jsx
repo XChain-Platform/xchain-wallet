@@ -95,19 +95,21 @@ export function WalletPicker({
                                     onBack();
                                 }}
                             >
-                                <span className={styles.entryLabel}>
-                                    {active ? '● ' : '○ '}{w.name || 'Unnamed wallet'}
-                                </span>
-                                {w.format ? (
-                                    <span className={styles.entryDescription}>
-                                        {w.format === 'counterwallet-legacy' ? 'FreeWallet (legacy)' : 'BIP39'}
-                                        {/* A stored passphrase (passphraseStored) unlocks on the
-                                            password alone, so it earns no badge here; only a legacy
-                                            record still owed its one-time capture does, and the badge
-                                            names the unlock screen as where that happens. */}
-                                        {w.passphraseEnabled && !w.passphraseStored ? ' · needs its passphrase at unlock' : ''}
+                                <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
+                                    <span className={styles.entryLabel}>
+                                        {active ? '● ' : '○ '}{w.name || 'Unnamed wallet'}
                                     </span>
-                                ) : null}
+                                    {w.format ? (
+                                        <span className={styles.entryDescription}>
+                                            {w.format === 'counterwallet-legacy' ? 'FreeWallet (legacy)' : 'BIP39'}
+                                            {/* A stored passphrase (passphraseStored) unlocks on the
+                                                password alone, so it earns no badge here; only a legacy
+                                                record still owed its one-time capture does, and the badge
+                                                names the unlock screen as where that happens. */}
+                                            {w.passphraseEnabled && !w.passphraseStored ? ' · needs its passphrase at unlock' : ''}
+                                        </span>
+                                    ) : null}
+                                </span>
                             </button>
                             {onShowDetails ? (
                                 <button
