@@ -30,7 +30,7 @@
 // is a thin registry-write. Callers run `signer.getAddresses(...)`
 // separately and persist `Address` records the usual way.
 
-import { createSignerRecord } from '../schemas/signer.js';
+import { createSignerRecord, SIGNER_KINDS } from '../schemas/signer.js';
 
 /**
  * @typedef {Object} RegisterSignerOpts
@@ -58,8 +58,14 @@ export async function registerSigner(opts) {
     if (typeof kind !== 'string' || !kind) {
         throw new Error('registerSigner: kind is required');
     }
+    if (!SIGNER_KINDS.includes(kind)) {
+        throw new Error(`registerSigner: kind must be one of ${SIGNER_KINDS.join(', ')}`);
+    }
     if (typeof vendor !== 'string' || !vendor) {
         throw new Error('registerSigner: vendor is required');
+    }
+    if (vendor !== kind) {
+        throw new Error('registerSigner: vendor must match kind');
     }
     if (typeof model !== 'string' || !model) {
         throw new Error('registerSigner: model is required');

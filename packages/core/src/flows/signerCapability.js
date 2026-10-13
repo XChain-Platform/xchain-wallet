@@ -58,7 +58,12 @@ export const TAPSCRIPT_CAPABLE_SOURCES = Object.freeze(['hd', 'imported-wif']);
  */
 export function signerSupportsTapscript(addressRecord) {
     if (!addressRecord || typeof addressRecord !== 'object') return false;
-    const source = addressRecord.source;
+    let source;
+    try {
+        source = addressRecord.source;
+    } catch {
+        return false;
+    }
     if (typeof source !== 'string') return false;
     return TAPSCRIPT_CAPABLE_SOURCES.includes(source);
 }
