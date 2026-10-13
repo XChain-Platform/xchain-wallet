@@ -42,7 +42,7 @@ const sendSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx'),
     'utf8',
 );
-assert.ok(/export function Send\(\{ walletId, onBack, prefill = null\b/.test(sendSrc),
+assert.ok(/export function Send\(\{ walletId, (?:accountId, )?onBack, prefill = null\b/.test(sendSrc),
     'Send accepts a prefill prop (default null)');
 for (const field of ['address', 'amount', 'tick', 'chainId', 'memo']) {
     assert.ok(

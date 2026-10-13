@@ -86,7 +86,7 @@ assert.match(sendSrc, /aria-label="Replace-by-fee enabled"/);
 assert.match(sendSrc, /Replace-by-fee/, 'visible label');
 assert.match(
     sendSrc,
-    /speeding up or cancelling/,
+    /speeding up or cancelling|sped up or cancelled/,
     'hint copy explains why',
 );
 

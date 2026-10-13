@@ -112,7 +112,7 @@ assert.match(sendSrc, /loading:\s*true[^,]*,\s*error:\s*null/);
 // review). Skips on submitting / done.
 assert.match(
     sendSrc,
-    /if \(stage !== 'review' && stage !== 'form'\) return undefined;/,
+    /if \(stage !== 'review' && stage !== 'form'\) return undefined;|if \(\(stage !== 'review' && stage !== 'form'\) \|\| !chainId \|\| !fromAddress\) \{[\s\S]{0,160}?return undefined;/,
 );
 
 // Renders between the summary line and the details list. The JSX
