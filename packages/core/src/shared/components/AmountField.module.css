@@ -1,7 +1,5 @@
-/* Shared "big amount" field used by Send and Receive. Source of truth
-   for the visual contract; both routes mount <AmountField/> with the
-   same look. CSS values mirror what previously lived in Send.module.css
-   under .amountBlock / .amountFooter / .amountMaxInline / etc. */
+/* Shared amount-field layout used by Send and Receive around the shared
+   Input and Button controls. */
 
 .amountBlock {
     display: flex;
@@ -17,49 +15,11 @@
     margin-bottom: 0;
 }
 
-/* The field size (font/padding/height) is owned by the shared Input via its
-   `size` prop ('md' default / 'lg' hero). AmountField no longer duplicates the
-   big-field values here; it just forwards `size` and reserves the right gutter
-   for the Max button via a small inline paddingRight. */
+/* The shared Input owns field sizing through its `size` prop. AmountField
+   forwards that value and reserves the right gutter for the Max button. */
 
 .amountFieldWrap {
     position: relative;
-}
-
-.amountMaxInline {
-    position: absolute;
-    inset-inline-end: var(--xc-space-2);
-    /* Vertically center the pill in the input box. The input sits at the
-       bottom of the wrap (label above it), so anchoring to the BOTTOM keeps
-       the position independent of label height and holds at both sizes. The
-       per-size bottom offset centers a 24px pill in the 36px (md) / 48px (lg)
-       input: (inputHeight - 24) / 2. */
-    bottom: 6px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--xc-space-3);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.amountFieldWrap[data-size='lg'] .amountMaxInline {
-    bottom: 12px;
-}
-
-.amountMaxInline:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
-    border-color: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
-}
-
-.amountMaxInline:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 .amountFooter {

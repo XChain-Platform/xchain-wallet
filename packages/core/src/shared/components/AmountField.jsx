@@ -16,7 +16,7 @@
 // amount via priceLookup.
 
 import { useState } from 'react';
-import { Input, Icon } from '@xchain-wallet/core/ui';
+import { Button, Input, Icon } from '@xchain-wallet/core/ui';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
@@ -114,7 +114,7 @@ export function AmountField({
 
     return (
         <div className={styles.amountBlock}>
-            <div className={styles.amountFieldWrap} data-size={size}>
+            <div className={styles.amountFieldWrap}>
                 <Input
                     ref={inputRef}
                     size={size}
@@ -129,9 +129,10 @@ export function AmountField({
                     style={onMax ? { paddingRight: '64px' } : undefined}
                 />
                 {onMax ? (
-                    <button
-                        type="button"
-                        className={styles.amountMaxInline}
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        icon={null}
                         onClick={() => {
                             setInputError('');
                             onMax();
@@ -139,9 +140,14 @@ export function AmountField({
                         disabled={maxDisabled || maxBusy}
                         aria-busy={maxBusy || undefined}
                         aria-label="Use max available amount"
+                        style={{
+                            position: 'absolute',
+                            insetInlineEnd: 'var(--xc-space-2)',
+                            bottom: size === 'lg' ? '10px' : '4px',
+                        }}
                     >
                         Max
-                    </button>
+                    </Button>
                 ) : null}
             </div>
             <div className={styles.amountFooter}>

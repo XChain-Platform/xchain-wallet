@@ -139,21 +139,3 @@
     color: var(--xc-text);
     line-height: 1.4;
 }
-
-.alertAction {
-    appearance: none;
-    align-self: flex-start;
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.alertAction:hover {
-    background: var(--xc-accent-primary-hover);
-    border-color: var(--xc-accent-primary-hover);
-}

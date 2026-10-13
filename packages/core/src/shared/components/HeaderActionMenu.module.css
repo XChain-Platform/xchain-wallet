@@ -149,32 +149,3 @@
     flex: 0 0 auto;
     background: color-mix(in srgb, var(--xc-danger) 6%, transparent);
 }
-
-.lockBtn {
-    appearance: none;
-    background: var(--xc-danger);
-    border: 1px solid var(--xc-danger);
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    font-size: var(--xc-text-md);
-    font-weight: 700;
-    color: var(--xc-on-danger);
-    border-radius: var(--xc-radius-md);
-    cursor: pointer;
-}
-
-.lockBtn .rowIcon {
-    color: #FFFFFF;
-}
-
-.lockBtn:hover:not(:disabled) {
-    filter: brightness(0.92);
-}
-
-.lockBtn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
