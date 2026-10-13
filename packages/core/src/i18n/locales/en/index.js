@@ -40,69 +40,19 @@ export const en = {
     'common.backToHome': 'Back to home',
     'common.cancel': 'Cancel',
     'common.tryAgain': 'Try again',
-    'common.next': 'Next',
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
-    'common.confirmPassword': 'Confirm password',
-
-    // --- branding -------------------------------------------------
-    'brand.productName': 'XChain Wallet',
-    'brand.tagline': 'The self-custodial wallet for the XChain Platform.',
-
-    // --- session / lock -------------------------------------------
-    'session.locked': 'Wallet locked.',
-    'session.unlock': 'Unlock',
-    'session.lock': 'Lock',
-    'session.incorrectPassword': 'Incorrect password.',
 
     // --- home -----------------------------------------------------
-    'home.noWallets': 'No wallets found.',
-    'home.loadingBalances': 'Loading balances…',
-    'home.noAddresses': 'No addresses yet. Use Receive to generate one.',
-    'home.send': 'Send',
     'home.receive': 'Receive',
-    'home.balanceUnavailable': 'Balance unavailable: {reason}',
-    'home.addressCount': '{count, plural, one {# address} other {# addresses}}',
-
-    // --- onboarding ----------------------------------------------
-    'onboarding.create': 'Create a new wallet',
-    'onboarding.import': 'I already have a wallet',
-    'create.title': 'Create a new wallet',
-    'create.passwordHelp':
-        "Your password encrypts the wallet on this device. If you forget it, use the recovery phrase on the next screen to restore access. It cannot be recovered any other way.",
-    'create.walletName': 'Wallet name',
-    'create.passwordMinHint': 'At least {min} characters.',
-    'create.passwordMismatch': 'Passwords do not match.',
-    'create.mnemonicTitle': 'Write down your recovery phrase',
-    'create.mnemonicHelp':
-        'These twelve words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.',
-    'create.mnemonicAck':
-        'I have written down my recovery phrase and stored it safely.',
-    'create.createWallet': 'Create wallet',
-    'create.failed': 'Failed to create wallet.',
-
-    'import.title': 'Import an existing wallet',
-    'import.help':
-        'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.',
-    'import.phrase': 'Recovery phrase',
-    'import.phraseRequired': 'Recovery phrase is required.',
-    'import.wordCount':
-        'Expected 12, 15, 18, 21, or 24 words (got {count}).',
-    'import.failed': 'Failed to import wallet.',
-    'import.submit': 'Import',
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
     'send.review': 'Review & Send',
     'send.backToEdit': 'Back to edit',
-    'send.pickSourceFirst': 'Pick a source address first.',
-    'send.destinationRequired': 'Destination address is required.',
-    'send.tickRequired': 'Token ticker is required.',
-    'send.amountPositive': 'Amount must be a positive number.',
     'send.memoForbiddenChars': 'Memo cannot contain | or ; characters.',
     'send.passwordHint': 'Required to sign.',
-    'send.sent': 'Sent',
     'send.txid': 'Transaction ID',
     'send.testGate.title': 'First send to this address. Test it first?',
     'send.testGate.body':
@@ -224,8 +174,6 @@ export const en = {
     'send.rbf.unsupported': 'Fee bumping is not supported on {chain}.',
     'send.rbf.thisChain': 'this chain',
     'send.rbf.enabledLabel': 'Replace-by-fee enabled',
-    'send.noAddresses':
-        'No addresses on any chain yet. Use Receive to generate one.',
     // M2.4: the success card's in-wallet link to the merged History entry.
     // The entry exists the moment this card does (built from the wallet's
     // own pending record), but the network has not necessarily reported it
@@ -235,13 +183,8 @@ export const en = {
     'send.success.viewInHistoryHint':
         'It is already in your history. It may still read "Broadcast, '
         + 'awaiting network" for up to a minute before the network reports it.',
-    'send.failed': 'Send failed.',
 
     // --- extension banner ----------------------------------------
-    'extBanner.detected': 'XChain Wallet extension detected.',
-    'extBanner.hint':
-        'Your extension wallet is ready. Click its icon in the browser toolbar to open it.',
-    'extBanner.dismiss': 'Dismiss',
 
     // --- xchain: URI intent labels (Cluster L FOLLOWUP 5) ---------
     'uri.intent.send': 'Send',
@@ -366,8 +309,6 @@ export const en = {
     'history.recipients.recipientCount':
         '{count, plural, one {# recipient} other {# recipients}}',
     'history.recipients.moreNotShown': '… and {count} more not shown',
-    'history.recipients.noHolders': 'No holders found.',
-    'history.recipients.noRecipients': 'No recipients found.',
     'history.recipients.saveAsContact': 'Save {count} as one contact',
     'history.row.linkedTo': 'Linked to {ticker} #{index}',
     'history.row.block': 'Block {block}',
@@ -473,8 +414,6 @@ export const en = {
     'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
 
     // --- errors ---------------------------------------------------
-    'error.vaultClosed': 'Wallet is locked. Unlock to continue.',
-    'error.genericLoad': 'Failed to load.',
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {
