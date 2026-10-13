@@ -156,6 +156,32 @@ describe('private-key reveal security', () => {
         await waitFor(() => expect(screen.getByText('Before you continue')).toBeTruthy());
     });
 
+    it('clears the exported key before leaving the screen', async () => {
+        const onBack = vi.fn();
+        draw(makeMessaging(), { onBack });
+        await confirmPassword();
+        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
+        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+        expect(onBack).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
+        expect(screen.getByText('Before you continue')).toBeTruthy();
+    });
+
+    it('clears the reveal when a new unlocked session replaces a locked one', async () => {
+        draw();
+        await confirmPassword();
+        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
+        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+
+        act(() => window.dispatchEvent(new CustomEvent('xc:session-changed')));
+
+        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
+        expect(screen.getByText('Before you continue')).toBeTruthy();
+    });
+
     it('routes copy through the sensitive clipboard with the selected expiry', async () => {
         draw();
         await confirmPassword();

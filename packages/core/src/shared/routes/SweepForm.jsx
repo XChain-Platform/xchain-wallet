@@ -207,22 +207,41 @@ export function SweepForm({
     const [preview, setPreview] = useState(/** @type {any | null} */ (null));
     const [previewError, setPreviewError] = useState(/** @type {string | null} */ (null));
     const [previewLoading, setPreviewLoading] = useState(false);
+    const previewRequestRef = useRef(0);
     useEffect(() => {
+        const requestId = ++previewRequestRef.current;
         setPreview(null);
         setPreviewError(null);
         const address = fromAddress?.address;
-        if (!chainId || !address) return undefined;
-        let cancelled = false;
+        if (!chainId || !address) {
+            setPreviewLoading(false);
+            return undefined;
+        }
         setPreviewLoading(true);
-        messaging.sweepPreview({ chainId, address })
-            .then((p) => { if (!cancelled) { setPreview(p); setPreviewError(null); } })
+        // The promise boundary handles transports that throw before returning
+        // a promise. The request id keeps an older address lookup from
+        // replacing the preview for a source selected while it is in flight.
+        Promise.resolve()
+            .then(() => messaging.sweepPreview({ chainId, address }))
+            .then((p) => {
+                if (previewRequestRef.current === requestId) {
+                    setPreview(p);
+                    setPreviewError(null);
+                }
+            })
             .catch(() => {
                 // Preview failure NEVER blocks the sweep; the typed
                 // confirm already covers unlisted holdings.
-                if (!cancelled) setPreviewError('Preview unavailable.');
+                if (previewRequestRef.current === requestId) {
+                    setPreviewError('Preview unavailable.');
+                }
             })
-            .finally(() => { if (!cancelled) setPreviewLoading(false); });
-        return () => { cancelled = true; };
+            .finally(() => {
+                if (previewRequestRef.current === requestId) setPreviewLoading(false);
+            });
+        return () => {
+            if (previewRequestRef.current === requestId) previewRequestRef.current += 1;
+        };
     }, [messaging, chainId, fromAddress?.address]);
 
     const gatedTicks = useMemo(() => (
