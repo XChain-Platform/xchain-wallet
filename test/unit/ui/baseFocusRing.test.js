@@ -45,4 +45,13 @@ describe('base focus ring', () => {
         expect(css).toMatch(/:root\s*\{[\s\S]*?--xc-focus-ring:\s*#0F172A;/);
         expect(css.match(/--xc-focus-ring:\s*#FFFFFF;/g)).toHaveLength(2);
     });
+
+    it('limits the :focus fallback to keyboard modality in unsupported engines', () => {
+        const fallback = /html\.xc-focus-visible-fallback\s+:where\(([\s\S]*?)\):focus\s*\{([^}]*)\}/.exec(css);
+        expect(fallback).not.toBeNull();
+        expect(fallback[1]).toContain('button');
+        expect(fallback[1]).toContain("[role='tab']");
+        expect(fallback[2]).toMatch(/outline:\s*2px solid var\(--xc-focus-ring\) !important/);
+        expect(css).not.toMatch(/^:where\([^{}]*\):focus\s*\{[^}]*outline:\s*2px solid var\(--xc-focus-ring\)/m);
+    });
 });

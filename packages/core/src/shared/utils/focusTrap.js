@@ -26,6 +26,29 @@ const activeTraps = [];
 let bodyScrollLocks = 0;
 let priorBodyOverflow = '';
 const inertLocks = new WeakMap();
+const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
+
+function installFocusVisibleFallback() {
+    if (typeof document === 'undefined') return;
+    try {
+        if (globalThis.CSS?.supports?.('selector(:focus-visible)')) return;
+    } catch { /* use the fallback when selector detection is unavailable */ }
+
+    const root = document.documentElement;
+    const eventTarget = document.defaultView || document;
+    const useKeyboardModality = (event) => {
+        if (event.metaKey || event.altKey || event.ctrlKey) return;
+        root.classList.add(FOCUS_VISIBLE_FALLBACK_CLASS);
+    };
+    const usePointerModality = () => root.classList.remove(FOCUS_VISIBLE_FALLBACK_CLASS);
+
+    eventTarget.addEventListener('keydown', useKeyboardModality, true);
+    for (const type of ['pointerdown', 'mousedown', 'touchstart']) {
+        eventTarget.addEventListener(type, usePointerModality, true);
+    }
+}
+
+installFocusVisibleFallback();
 
 function lockBodyScroll() {
     if (typeof document === 'undefined' || !document.body) return;

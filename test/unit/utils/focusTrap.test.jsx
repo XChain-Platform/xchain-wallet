@@ -12,6 +12,7 @@ import { NoticeModal } from '../../../packages/core/src/shared/components/Notice
 afterEach(() => {
     cleanup();
     document.body.style.overflow = '';
+    document.documentElement.classList.remove('xc-focus-visible-fallback');
 });
 
 function TrapHarness({ active }) {
@@ -126,7 +127,12 @@ function OpenerHarness({ autoFocusInside = false }) {
             {open ? (
                 <div ref={ref} role="dialog">
                     {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
-                    <button data-testid="inside" autoFocus={autoFocusInside} onClick={() => setOpen(false)}>close</button>
+                    <button
+                        data-testid="inside"
+                        autoFocus={autoFocusInside}
+                        onClick={() => setOpen(false)}
+                        onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }}
+                    >close</button>
                 </div>
             ) : null}
         </div>
@@ -175,6 +181,41 @@ describe('useFocusTrap opener handling', () => {
         fireEvent.click(screen.getByTestId('inside'));
         await flush();
         expect(document.activeElement).toBe(opener);
+    });
+
+    it.each([
+        ['pointer', 'pointerDown'],
+        ['touch', 'touchStart'],
+    ])('clears fallback keyboard modality before %s focus restore', async (_modality, startEvent) => {
+        render(<OpenerHarness />);
+        const opener = screen.getByTestId('opener');
+        opener.focus();
+        fireEvent.keyDown(document, { key: 'Tab' });
+        expect(document.documentElement).toHaveClass('xc-focus-visible-fallback');
+
+        fireEvent.click(opener);
+        await flush();
+        const close = screen.getByTestId('inside');
+        fireEvent[startEvent](close);
+        fireEvent.click(close);
+        await flush();
+
+        expect(document.activeElement).toBe(opener);
+        expect(document.documentElement).not.toHaveClass('xc-focus-visible-fallback');
+    });
+
+    it('keeps fallback keyboard modality for keyboard focus restore', async () => {
+        render(<OpenerHarness />);
+        const opener = screen.getByTestId('opener');
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+
+        fireEvent.keyDown(screen.getByTestId('inside'), { key: 'Escape' });
+        await flush();
+
+        expect(document.activeElement).toBe(opener);
+        expect(document.documentElement).toHaveClass('xc-focus-visible-fallback');
     });
 
     it('still finds the opener when an autoFocus control already took focus', async () => {

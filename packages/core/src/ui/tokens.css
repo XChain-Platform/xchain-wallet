@@ -671,6 +671,34 @@ fieldset {
     outline-offset: -2px !important;
 }
 
+/* Engines without :focus-visible receive the same ring only while the shared
+ * focus utility reports keyboard modality. The class stays absent in modern
+ * engines, so native focus-visible heuristics remain authoritative. */
+html.xc-focus-visible-fallback :where(
+    a[href],
+    area[href],
+    audio[controls],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    video[controls],
+    [role='button'],
+    [role='link'],
+    [role='menuitem'],
+    [role='option'],
+    [role='tab'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [tabindex]:not([tabindex='-1']),
+    [contenteditable]:not([contenteditable='false'])
+):focus {
+    outline: 2px solid var(--xc-focus-ring) !important;
+    outline-offset: -2px !important;
+}
+
 /* Disabled controls retain the contrast of their semantic color pairs.
  * Reduced saturation supplies the visual state without alpha compositing. */
 :where(input, select, textarea, button):disabled {
