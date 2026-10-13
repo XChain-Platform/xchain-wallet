@@ -84,14 +84,15 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
         setAddressesError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                setAddressesByChain(byChain || {});
             })
-            .catch((err) => {
-                if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) setAddressesError('Could not load wallet addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId, addressesReload]);
@@ -111,12 +112,20 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         return map;
     }, [addressesByChain]);
 
+    const chainsWithAddresses = useMemo(() => {
+        if (!addressesByChain) return [];
+        return Object.entries(addressesByChain)
+            .filter(([, rows]) => Array.isArray(rows)
+                && rows.some((row) => typeof row?.address === 'string' && row.address.length > 0))
+            .map(([chainId]) => chainId);
+    }, [addressesByChain]);
+
     // Phase 2: for each chain with addresses, fan out one explorer
     // query per address and merge the results. A per-chain error
     // surfaces inline; other chains keep loading.
     useEffect(() => {
         if (!addressesByChain) return;
-        const chains = Object.keys(addressesByChain);
+        const chains = chainsWithAddresses;
         if (chains.length === 0) return;
 
         const initial = {};
@@ -130,7 +139,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         if (flowsLib.isDemoWallet(walletId)) {
             const demo = {};
             for (const cid of chains) {
-                const first = (addressesByChain[cid] || [])[0]?.address;
+                const first = (addressesByChain[cid] || [])
+                    .find((row) => typeof row?.address === 'string' && row.address.length > 0)
+                    ?.address;
                 demo[cid] = {
                     loading: false,
                     rows: first ? flowsLib.synthesizeDemoDispensers(cid, first) : [],
@@ -141,7 +152,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             return undefined;
         }
         for (const cid of chains) {
-            const addrs = (addressesByChain[cid] || []).map((a) => a.address);
+            const addrs = (addressesByChain[cid] || [])
+                .map((a) => a.address)
+                .filter((address) => typeof address === 'string' && address.length > 0);
             if (addrs.length === 0) {
                 if (!cancelled) {
                     setDispensersByChain((prev) => ({
@@ -207,7 +220,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId, dispensersReload]);
+    }, [addressesByChain, chainsWithAddresses, messaging, walletId, dispensersReload]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -266,7 +279,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const loadErrors = useMemo(() => (
         Object.entries(dispensersByChain)
             .filter(([, s]) => s.error)
-            .map(([cid, s]) => `${chainRegistry.get(cid)?.displayName || cid}: ${s.error}`)
+            .map(([cid]) => chainRegistry.get(cid)?.displayName || cid)
     ), [dispensersByChain]);
 
     const visibleRows = useMemo(() => {
@@ -337,7 +350,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             </ListPage>,
         );
     }
-    if (Object.keys(addressesByChain).length === 0) {
+    if (chainsWithAddresses.length === 0) {
         return wrap(
             <ListPage>
                 <EmptyState
@@ -381,7 +394,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         },
                     }}
                 >
-                    Couldn't load some dispensers. {loadErrors.join('; ')}
+                    Couldn't load some dispensers. Failed networks: {loadErrors.join(', ')}. Try again.
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
