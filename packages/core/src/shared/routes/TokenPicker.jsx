@@ -397,6 +397,7 @@ export function TokenPicker({
             <input
                 ref={searchRef}
                 type="search"
+                enterKeyHint="search"
                 className={styles.search}
                 placeholder="Search"
                 value={tokenQuery}

@@ -1381,6 +1381,8 @@ export function AddressList({
             <>
                 <input
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
                     role="textbox"
                     className={local.search}
                     placeholder="Search"

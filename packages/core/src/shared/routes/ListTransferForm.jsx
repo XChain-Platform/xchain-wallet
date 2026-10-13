@@ -308,7 +308,7 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
                 value={destination}
                 onChange={(event) => { setDestination(event.target.value); setFormError(null); }}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
                 disabled={sdkSupported !== true}

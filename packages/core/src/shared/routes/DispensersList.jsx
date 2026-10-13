@@ -350,6 +350,8 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 <>
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         className={local.search}
                         placeholder="Search"
                         value={query}

@@ -671,6 +671,8 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 <>
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         className={local.search}
                         placeholder="Search"
                         value={query}
@@ -807,6 +809,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
         <form className={local.composer} onSubmit={handleSubmit}>
             <input
                 type="text"
+                enterKeyHint="go"
                 className={local.composerInput}
                 placeholder="Message"
                 value={value}

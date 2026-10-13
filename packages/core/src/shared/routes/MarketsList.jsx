@@ -276,6 +276,10 @@ export function MarketsList({
                             }}>
                                 <input
                                     type="search"
+                                    enterKeyHint="search"
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     placeholder="Search"

@@ -1307,7 +1307,7 @@ function renderDetailsStage({
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     maxLength={250}
                 />
@@ -1338,7 +1338,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting opens at block (optional)"
                     hint="Block height when public minting starts. Leave blank to open immediately."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStartBlock}
                     onChange={(e) => setMintStartBlock(e.target.value)}
                     autoComplete="off"
@@ -1348,7 +1348,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting closes at block (optional)"
                     hint="Block height when public minting ends. Leave blank to keep it open until sold out."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStopBlock}
                     onChange={(e) => setMintStopBlock(e.target.value)}
                     autoComplete="off"
@@ -1371,7 +1371,7 @@ function renderDetailsStage({
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1382,7 +1382,7 @@ function renderDetailsStage({
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1517,7 +1517,7 @@ function AdvancedIssuePanel({
                         hint={callbackBlockEstimate
                             ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
                             : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={callbackBlock}
                         onChange={(e) => setCallbackBlock(e.target.value)}
                         autoComplete="off"

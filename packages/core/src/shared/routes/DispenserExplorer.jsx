@@ -199,7 +199,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize={searchMode === 'token' ? 'characters' : 'none'}
+                    autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
                     autoCorrect="off"
                     spellCheck={false}
                 />

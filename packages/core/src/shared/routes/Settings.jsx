@@ -376,6 +376,10 @@ export function Settings({
                 toolbar={(
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Search settings…"

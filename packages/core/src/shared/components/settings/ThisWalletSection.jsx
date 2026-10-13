@@ -399,8 +399,15 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
             </div>
             <input
                 type="text"
+                enterKeyHint="done"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter' && matches && !busy) onConfirm();
+                }}
                 placeholder={walletName}
                 aria-label="Confirm wallet name"
                 autoFocus

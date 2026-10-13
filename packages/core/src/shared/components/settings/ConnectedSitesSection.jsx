@@ -466,6 +466,8 @@ function SignThrottlePanel() {
                     <span style={{ color: 'var(--xc-text-muted)' }}>Burst</span>
                     <input
                         type="number"
+                        inputMode="numeric"
+                        enterKeyHint="next"
                         min={SIGN_THROTTLE_BURST_MIN}
                         max={SIGN_THROTTLE_BURST_MAX}
                         step={1}
@@ -480,6 +482,8 @@ function SignThrottlePanel() {
                     <span style={{ color: 'var(--xc-text-muted)' }}>Window (seconds)</span>
                     <input
                         type="number"
+                        inputMode="numeric"
+                        enterKeyHint="go"
                         min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
                         max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
                         step={0.001}
@@ -542,6 +546,10 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                 <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
                     <input
                         type="text"
+                        enterKeyHint="go"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={manualBlock}
                         onChange={(e) => setManualBlock(e.target.value)}
                         placeholder="https://example.com or *.example.com"

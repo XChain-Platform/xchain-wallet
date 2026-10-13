@@ -1558,7 +1558,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         value={getTick}
                         onChange={(e) => setGetTick(e.target.value.toUpperCase())}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
@@ -1639,7 +1639,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />

@@ -867,7 +867,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         value={signingPubkey}
                         onChange={(e) => { setSigningPubkey(e.target.value); setFormError(null); }}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />

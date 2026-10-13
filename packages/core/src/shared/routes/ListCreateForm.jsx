@@ -744,7 +744,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 : 'Paste addresses, one per line or comma-separated.'}
                             rows={8}
                             spellCheck={false}
-                            autoCapitalize="none"
+                            autoCapitalize="off"
                             autoCorrect="off"
                             autoComplete="off"
                         />
