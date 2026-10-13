@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import {
+    registerLocale,
+    setLocale,
+} from '../../../packages/core/src/i18n/index.js';
 
 let settings;
 let update;
@@ -36,12 +40,19 @@ const { WalletModeSection } = await import(
     '../../../packages/core/src/shared/components/settings/WalletModeSection.jsx'
 );
 
+beforeAll(() => {
+    registerLocale('de-DE', {});
+});
+
 beforeEach(() => {
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
 });
 
-afterEach(() => cleanup());
+afterEach(async () => {
+    cleanup();
+    await setLocale('en');
+});
 
 describe('settings form validation', () => {
     it('opens and saves the custom currency field', () => {
@@ -127,7 +138,36 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('alert').textContent).toMatch(/non-negative custom fee rate/);
+        expect(screen.getByRole('alert').textContent).toMatch(/non-negative decimal fee rate/);
+    });
+
+    it('saves a comma-decimal custom fee rate as the same numeric setting', async () => {
+        await setLocale('de-DE');
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+        const input = screen.getByLabelText('Bitcoin custom fee rate');
+
+        fireEvent.change(input, { target: { value: '2,75' } });
+        fireEvent.blur(input);
+
+        expect(update).toHaveBeenCalledWith({
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 2750,
+                    rbfByDefault: true,
+                },
+            },
+        });
     });
 
     it('allows shared settings rows to wrap on narrow screens', () => {
