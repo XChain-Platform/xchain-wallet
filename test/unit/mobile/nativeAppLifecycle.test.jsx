@@ -81,6 +81,49 @@ afterEach(async () => {
 });
 
 describe('Capacitor app resume', () => {
+    it.each([
+        { awayMs: MINUTE, locks: 0, refreshes: 1 },
+        { awayMs: 10 * MINUTE, locks: 1, refreshes: 0 },
+        { awayMs: 24 * 60 * MINUTE, locks: 1, refreshes: 0 },
+    ])('handles a core-only native shell after $awayMs ms away', async ({
+        awayMs, locks, refreshes,
+    }) => {
+        vi.useFakeTimers();
+        globalThis.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+        const messaging = makeMessaging(5);
+        const onResume = vi.fn();
+        render(provider(messaging, <LifecycleHarness onResume={onResume} />));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        act(() => document.dispatchEvent(new Event('pause')));
+        vi.setSystemTime(Date.now() + awayMs);
+        act(() => document.dispatchEvent(new Event('resume')));
+
+        expect(messaging.lockWallet).toHaveBeenCalledTimes(locks);
+        expect(onResume).toHaveBeenCalledTimes(refreshes);
+    });
+
+    it('deduplicates plugin and document notifications for one background cycle', async () => {
+        const messaging = makeMessaging(0);
+        const onBackground = vi.fn();
+        const onResume = vi.fn();
+        render(provider(
+            messaging,
+            <LifecycleHarness onBackground={onBackground} onResume={onResume} />,
+        ));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        act(() => {
+            appStateChange({ isActive: false });
+            document.dispatchEvent(new Event('pause'));
+            appStateChange({ isActive: true });
+            document.dispatchEvent(new Event('resume'));
+        });
+
+        expect(onBackground).toHaveBeenCalledTimes(1);
+        expect(onResume).toHaveBeenCalledTimes(1);
+    });
+
     it('checks the configured idle deadline and locks after an elapsed background', async () => {
         vi.useFakeTimers();
         const messaging = makeMessaging(1);
@@ -172,6 +215,20 @@ describe('Capacitor app resume', () => {
         const view = render(provider(messaging, <LifecycleHarness />));
         view.unmount();
         await waitFor(() => expect(removeListener).toHaveBeenCalledTimes(1));
+    });
+
+    it('removes document lifecycle listeners on unmount', () => {
+        globalThis.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+        const onBackground = vi.fn();
+        const view = render(provider(
+            makeMessaging(0),
+            <LifecycleHarness onBackground={onBackground} />,
+        ));
+        view.unmount();
+
+        document.dispatchEvent(new Event('pause'));
+
+        expect(onBackground).not.toHaveBeenCalled();
     });
 });
 
