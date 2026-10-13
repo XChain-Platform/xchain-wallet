@@ -92,7 +92,7 @@ assert.match(histSrc, /role="status"/, 'success carries status role');
 
 // --- CSS hooks --------------------------------------------------------
 
-for (const cls of ['rbfActions', 'rbfError', 'rbfDone']) {
+for (const cls of ['rbfError', 'rbfDone']) {
     assert.match(histCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
 }
 

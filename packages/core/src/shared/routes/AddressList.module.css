@@ -153,16 +153,6 @@
 
 /* Empty state shown when the filter matches no addresses: a calm card so it
    reads as intentional, not a glitch. */
-.emptyCard {
-    margin: var(--xc-space-2) 0;
-    padding: var(--xc-space-6) var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    text-align: center;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
 
 /* One card wrapping all addresses, mirroring the contacts list / Home
    balances list: rows separated by a hairline divider, highlighted on hover. */
@@ -340,13 +330,6 @@
     border-radius: var(--xc-radius-lg);
 }
 
-.detailHead {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-1);
-}
-
 .detailName {
     font-size: var(--xc-text-lg);
     font-weight: 600;
@@ -453,10 +436,6 @@
 .detailValue {
     font-size: var(--xc-text-md);
     word-break: break-all;
-}
-
-.detailFooter {
-    margin-top: var(--xc-space-4);
 }
 
 /* Inline label editor: input grows, Save button hugs the right. */

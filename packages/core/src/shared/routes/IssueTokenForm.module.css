@@ -27,8 +27,6 @@
     outline-offset: 2px;
 }
 
-
-
 .card {
     max-width: 560px;
     margin: var(--xc-space-6) auto 0;
@@ -77,10 +75,6 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
-}
-
-.chainLine {
-    margin-bottom: var(--xc-space-3);
 }
 
 .fromLine {

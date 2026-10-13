@@ -40,16 +40,6 @@
     outline-offset: 2px;
 }
 
-.filters {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-3);
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-wrap: nowrap;
-}
-
 .search {
     flex: 1 1 auto;
     min-width: 160px;

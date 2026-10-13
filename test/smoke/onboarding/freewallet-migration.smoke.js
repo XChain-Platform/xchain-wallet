@@ -22,8 +22,7 @@
 //      sweep review, reuses IssueTokenForm CSS, and adds the wallet.
 //   4. The shared walletAlerts.js list carries the legacy-wallet alert
 //      when the active wallet has format === 'counterwallet-legacy' and
-//      onMigrateToBip39 is supplied; Home and the web menu build from it;
-//      banner class `.legacyBanner` ships in Home.module.css.
+//      onMigrateToBip39 is supplied; Home and the web menu build from it.
 //   5. All three shells: App.jsx imports MigrateToBip39, tracks the
 //      'migrate-bip39' sub-route + 'import-freewallet' onboarding
 //      step, wires onImportFromFreeWallet on Onboarding, wires
@@ -124,7 +123,7 @@ assert.ok(
 assert.ok(/messaging\.getAddressesByChain\s*\(/.test(migrate), 'MigrateToBip39 fetches addresses for the side-by-side preview');
 assert.ok(/Legacy FreeWallet format|Counterwallet/.test(migrate), 'MigrateToBip39 references the legacy format in copy');
 
-// --- 4. Home legacy banner ------------------------------------------
+// --- 4. Home legacy alert -------------------------------------------
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/onMigrateToBip39/.test(home), 'Home.jsx accepts onMigrateToBip39 prop');
@@ -141,9 +140,6 @@ assert.ok(
     /buildWalletAlerts\(/.test(readFileSync(join(web, 'src', 'App.jsx'), 'utf8')),
     'web App.jsx builds the menu Alerts panel from walletAlerts.js',
 );
-
-const homeCss = readFileSync(join(sharedRoutes, 'Home.module.css'), 'utf8');
-assert.ok(/\.legacyBanner\b/.test(homeCss), 'Home.module.css defines .legacyBanner');
 
 // --- 5. Three-shell App.jsx wiring ----------------------------------
 
@@ -181,5 +177,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 verified-backup wizard + Home legacy banner + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
+    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 verified-backup wizard + shared legacy alert + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
 );

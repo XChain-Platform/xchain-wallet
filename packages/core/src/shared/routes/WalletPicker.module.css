@@ -139,33 +139,3 @@
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
-
-.rowMenu {
-    position: absolute;
-    top: 100%;
-    inset-inline-end: 0;
-    z-index: 10;
-    min-width: 180px;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    box-shadow: var(--xc-shadow-md);
-    padding: var(--xc-space-1);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.rowMenuItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    text-align: start;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    cursor: pointer;
-    border-radius: var(--xc-radius-sm);
-}
-
-.rowMenuItem:hover { background: var(--xc-bg-muted); }

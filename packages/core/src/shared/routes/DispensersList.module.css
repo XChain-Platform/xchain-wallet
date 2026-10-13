@@ -205,15 +205,7 @@
     background: var(--xc-bg-muted);
 }
 
-.dispenseCount {
-    white-space: nowrap;
-    text-align: end;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-}
-
-/* Right-hand column of the row (mirrors the balance list's amounts stack):
-   status chip on top, dispense count right-aligned beneath it. */
+/* Right-hand column keeps the status chip aligned to the row's trailing edge. */
 .trailing {
     flex: 0 0 auto;
     display: flex;

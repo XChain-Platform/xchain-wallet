@@ -29,8 +29,6 @@
     flex: 0 0 auto;
 }
 
-
-
 /* Body sizing mirrors Home.module.css exactly so the two routes share
    visual rhythm. Both fill the content area (lists run the full width,
    operator ruling 2026-10-12), and Screen.body's padding is the only
@@ -41,37 +39,6 @@
     gap: var(--xc-space-3);
     width: 100%;
     box-sizing: border-box;
-}
-
-.bodyPopup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-}
-
-.backLink {
-    align-self: flex-start;
-    appearance: none;
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-text);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border-radius: var(--xc-radius-sm);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    font-family: inherit;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-.backLink:hover { background: var(--xc-bg-muted); }
-.backLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
 }
 
 /* ───── Asset balance hero - matches TotalBalanceHero ───── */
@@ -431,11 +398,6 @@
 /* Native-coin layout - no tabs, just stacked sections. Each section
    has its own muted title heading so the user can visually parse the
    structure as they scroll. */
-.stackedSection {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
 
 .infoCard {
     background: var(--xc-surface);
@@ -530,11 +492,6 @@
     padding: 0;
 }
 
-.sparkSvg {
-    display: block;
-    width: 100%;
-}
-
 .metaTable {
     width: 100%;
     border-collapse: collapse;
@@ -582,29 +539,12 @@
     gap: var(--xc-space-3);
 }
 
-.descriptionImage {
-    display: block;
-    max-width: 100%;
-    max-height: 16rem;
-    object-fit: contain;
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
-}
-
 .descriptionBody {
     margin: 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     white-space: pre-wrap;
     word-break: break-word;
-}
-
-.artworkTitle {
-    margin: 0;
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    color: var(--xc-text);
-    line-height: 1.2;
 }
 
 .metaBlock {
@@ -745,24 +685,6 @@
     color: var(--xc-on-accent);
 }
 
-/* Each TIS image type (large / hires / standard / icon) renders in its
-   own labeled section so the user can tell what they're looking at at
-   a glance - instead of a generic image dump. */
-.mediaGroup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-.mediaGroupTitle {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--xc-text-muted);
-    font-weight: 700;
-}
-
 .heroImageLink {
     display: flex;
     flex-direction: column;
@@ -803,78 +725,6 @@
     transform: scale(1.01);
 }
 
-.heroImageCaption {
-    padding: 0 var(--xc-space-2) var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
-.iconRow {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
-.iconLink {
-    display: block;
-    border-radius: var(--xc-radius-sm);
-    overflow: hidden;
-    background: var(--xc-bg-muted);
-}
-
-.iconImage {
-    display: block;
-    width: 4rem;
-    height: 4rem;
-    object-fit: cover;
-    background: var(--xc-bg-muted);
-}
-
-.galleryImagesSingle {
-    display: flex;
-    justify-content: center;
-}
-
-.galleryImagesGrid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
-    gap: var(--xc-space-2);
-}
-
-.galleryImageLink {
-    display: block;
-    border-radius: var(--xc-radius-sm);
-    overflow: hidden;
-    background: var(--xc-bg-muted);
-    line-height: 0;
-}
-
-.galleryImage {
-    display: block;
-    width: 100%;
-    max-height: 16rem;
-    object-fit: contain;
-    background: var(--xc-bg-muted);
-    transition: transform var(--xc-transition);
-}
-
-.galleryImagesGrid .galleryImage {
-    aspect-ratio: 1 / 1;
-    object-fit: cover;
-    max-height: none;
-}
-
-.galleryImageLink:hover .galleryImage,
-.galleryImageLink:focus-visible .galleryImage {
-    transform: scale(1.02);
-}
-
-.galleryMediaStack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
 .galleryMediaCard {
     display: flex;
     flex-direction: column;
@@ -909,7 +759,6 @@
     flex-direction: column;
     gap: var(--xc-space-2);
 }
-
 
 .socialsRow {
     display: flex;

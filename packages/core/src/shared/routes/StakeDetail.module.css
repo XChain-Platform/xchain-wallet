@@ -181,13 +181,6 @@
     font-size: var(--xc-text-xs);
 }
 
-.eventEmpty {
-    padding: var(--xc-space-5) var(--xc-space-3);
-    text-align: center;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
 /* Slash events read as warnings. */
 .slashAmount {
     font-weight: 600;

@@ -58,10 +58,6 @@
     border-radius: var(--xc-radius-md);
 }
 
-.chainLine {
-    margin-bottom: var(--xc-space-3);
-}
-
 .fromLine {
     display: flex;
     align-items: baseline;

@@ -8,10 +8,6 @@
     box-shadow: var(--xc-shadow-md);
 }
 
-.pickerWrap {
-    margin-bottom: var(--xc-space-3);
-}
-
 .assetCard {
     display: flex;
     align-items: center;
@@ -174,13 +170,6 @@
 
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
-.emptyState {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-4) 0;
-}
 
 .error {
     font-size: var(--xc-text-sm);

@@ -476,9 +476,6 @@
 
 /* Save row on the create/edit contact forms. Tighter top margin than the
    shared .actions so the button sits close under the notes textarea. */
-.formActions {
-    margin-top: var(--xc-space-2);
-}
 
 .notesLabel {
     font-size: var(--xc-text-sm);
@@ -510,16 +507,6 @@
 /* Empty state shown when no contacts exist or none match the filter.
    Rendered as a card so the emptiness is clearly intentional, not a
    loading glitch. */
-.emptyCard {
-    margin: var(--xc-space-2) 0;
-    padding: var(--xc-space-6) var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    text-align: center;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
 
 /* "Not now" inside the publish nudge: reads as a link so the row keeps one
    real button (Open Backup). */
