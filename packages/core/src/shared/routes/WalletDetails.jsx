@@ -13,6 +13,7 @@ import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xcha
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -32,7 +33,7 @@ export { isVaultEmpty } from '../utils/demoGraduation.js';
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
- * @param {() => void} [props.onRename]              navigates to RenameWalletForm scoped to this wallet
+ * @param {(wallet: any) => void} [props.onRename]   navigates to RenameWalletForm scoped to this wallet
  * @param {() => void} [props.onMigrateToBip39]      shown only when format === 'counterwallet-legacy'; navigates to the §40.13 migration wizard scoped to this wallet
  * @param {() => void} [props.onExited]              fires after a successful demo wipe so the host can refresh App state
  */
@@ -45,6 +46,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [exitBusy, setExitBusy] = useState(false);
     const [exitError, setExitError] = useState(/** @type {string | null} */ (null));
+    const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
 
     const isDemo = isDemoWallet(walletId);
     const demoExpiry = isDemo ? getDemoWalletExpiry() : null;
@@ -66,6 +68,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             // Welcome instead, and only when nothing else is left.
             const { reloaded } = await exitDemoWallet({ messaging, walletId });
             if (reloaded) return;
+            setExitConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setExitError(err?.message || 'Could not exit demo mode.');
@@ -104,7 +107,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     }, [walletId, messaging]);
 
     const header = (
-        <PageHeader onBack={onBack} title="Wallet details" />
+        <PageHeader onBack={onBack} backDisabled={exitBusy} title="Wallet details" />
     );
 
     if (error) {
@@ -176,6 +179,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             variant="primary"
                             block
                             onClick={onMigrateToBip39}
+                            disabled={exitBusy}
                             icon={<Icon.MigrateIcon />}
                         >
                             Upgrade recovery phrase
@@ -188,7 +192,8 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             type="button"
                             variant="primary"
                             block
-                            onClick={onRename}
+                            onClick={() => onRename(wallet)}
+                            disabled={exitBusy}
                             icon={<Icon.PencilIcon />}
                         >
                             Rename wallet
@@ -201,23 +206,29 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             type="button"
                             variant="danger"
                             block
-                            onClick={handleExitDemo}
-                            loading={exitBusy}
-                            disabled={exitBusy}
+                            onClick={() => { setExitError(null); setExitConfirmOpen(true); }}
                         >
                             Exit demo &amp; wipe
                         </Button>
-                        {exitError ? (
+                        {exitError && !exitConfirmOpen ? (
                             <p
                                 role="alert"
                                 style={{
                                     marginTop: 'var(--xc-space-2)',
                                     fontSize: 'var(--xc-text-xs)',
-                                    color: 'var(--xc-danger)',
+                                    color: 'var(--xc-danger-fg)',
                                 }}
                             >
                                 {exitError}
                             </p>
+                        ) : null}
+                        {exitConfirmOpen ? (
+                            <DemoExitConfirm
+                                busy={exitBusy}
+                                error={exitError}
+                                onConfirm={handleExitDemo}
+                                onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
+                            />
                         ) : null}
                     </div>
                 ) : null}

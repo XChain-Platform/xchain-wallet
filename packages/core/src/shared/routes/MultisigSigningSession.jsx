@@ -12,10 +12,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, EmptyState, Input, ListPage, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
-const { progressSummary, pendingCosignerPubkeys } = schemas.multisigSigningSession;
+const { progressSummary } = schemas.multisigSigningSession;
 const {
     encodeXcwChunks,
     createXcwCollector,
@@ -24,6 +25,7 @@ const {
     buildFinalizedEnvelope,
     decodeMultisigEnvelope,
     encodeMultisigEnvelope,
+    fingerprintSessionRef,
 } = uriLib;
 
 // Humanize the session status enum for display (#3881): the raw tokens are
@@ -47,6 +49,38 @@ const CONTRIBUTION_LABELS = {
     'classical-signature': 'Signature',
 };
 const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
+
+function sessionRefFor(session) {
+    return {
+        scheme: session.scheme,
+        threshold: session.threshold,
+        cosignerPubkeys: session.cosignerPubkeys,
+        msgHash: session.msgHash,
+        psbtHex: session.psbtHex || '',
+    };
+}
+
+function replyMismatchMessage(envelope, session) {
+    if (envelope.fingerprint !== fingerprintSessionRef(sessionRefFor(session))) {
+        return 'This cosigner reply belongs to a different signing session. Open the matching session and import it there.';
+    }
+    const expectedKind = session.scheme === 'taproot-musig2'
+        ? (session.status === 'collecting-nonces'
+            ? 'multisig-round-1-reply'
+            : session.status === 'collecting-sigs'
+                ? 'multisig-round-2-reply'
+                : null)
+        : session.status === 'collecting-sigs'
+            ? 'multisig-classical-reply'
+            : null;
+    if (!expectedKind) {
+        return 'This session is not accepting more cosigner replies.';
+    }
+    if (envelope.kind !== expectedKind) {
+        return 'This cosigner reply is for a different signing step. Import the reply requested by the step shown on this session.';
+    }
+    return null;
+}
 
 /**
  * §22.3 + §42.9 multisig sign-screen tracker (Phase 4 Step 19).
@@ -78,6 +112,7 @@ const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
 export function MultisigSigningSession({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { isWatcherMode } = useWalletMode();
 
     const [sessions, setSessions] = useState(/** @type {any[] | null} */ (null));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
@@ -172,13 +207,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const exportFrames = useMemo(() => {
         if (!active) return null;
         try {
-            const sessionRef = {
-                scheme: active.scheme,
-                threshold: active.threshold,
-                cosignerPubkeys: active.cosignerPubkeys,
-                msgHash: active.msgHash,
-                psbtHex: active.psbtHex || '',
-            };
+            const sessionRef = sessionRefFor(active);
             let envelope;
             if (active.scheme === 'taproot-musig2') {
                 if (active.status === 'collecting-nonces') {
@@ -257,6 +286,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setBusy(true);
         try {
             const envelope = decodeMultisigEnvelope(next.psbt);
+            const mismatch = replyMismatchMessage(envelope, active);
+            if (mismatch) {
+                fail(mismatch, null);
+                return;
+            }
             if (envelope.kind === 'multisig-round-1-reply') {
                 await messaging.contributeMultisigNonce({
                     sessionId: active.id,
@@ -358,6 +392,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
             return;
         }
         try {
+            const mismatch = replyMismatchMessage(envelope, active);
+            if (mismatch) {
+                fail(mismatch, null);
+                return;
+            }
             if (envelope.kind === 'multisig-round-1-reply') {
                 await messaging.contributeMultisigNonce({
                     sessionId: active.id,
@@ -486,8 +525,18 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }
 
     const summary = progressSummary(active);
-    const pending = pendingCosignerPubkeys(active);
     const isMusig2 = active.scheme === 'taproot-musig2';
+    const isResponseStep = isMusig2 && active.status === 'collecting-nonces';
+    const contributions = isResponseStep
+        ? active.nonces
+        : isMusig2
+            ? active.partialSigs
+            : active.signatures;
+    const contributedPubkeys = new Set(contributions.map((item) => item.pubkey));
+    const contributed = active.cosignerPubkeys.filter((pk) => contributedPubkeys.has(pk));
+    const unsigned = active.cosignerPubkeys.filter((pk) => !contributedPubkeys.has(pk));
+    const remaining = Math.max(active.threshold - contributed.length, 0);
+    const canCollect = ['collecting-nonces', 'collecting-sigs'].includes(active.status);
     const stepLabel = isMusig2
         ? (active.status === 'collecting-nonces'
             ? 'Step 1: Collect cosigner replies'
@@ -500,12 +549,14 @@ export function MultisigSigningSession({ walletId, onBack }) {
         return wrap(
             <>
                 <p className={styles.successTitle}>
-                    {stepLabel || (active.status === 'finalized' ? 'Finalized broadcast' : 'Export signing data')}
+                    {active.status === 'finalized'
+                        ? 'Signed transaction ready to broadcast'
+                        : stepLabel || 'Export signing data'}
                 </p>
                 <p className={styles.hint}>
-                    Show this animated QR to a cosigner's wallet. Each frame is
-                    part of the signing data; the cosigner's wallet reassembles
-                    it on its side.
+                    {active.status === 'finalized'
+                        ? 'Scan this animated QR in a wallet that can broadcast the signed transaction.'
+                        : 'Show this animated QR to a cosigner. Each frame is part of the signing request, and the cosigner\'s wallet reassembles it.'}
                 </p>
                 {exportFrames && exportFrames.error ? (
                     // Encode failure is derived from the current session's
@@ -516,7 +567,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 ) : exportFrames && Array.isArray(exportFrames) ? (
                     <AnimatedQrFrames
                         frames={exportFrames}
-                        alt="Multisig signing request QR"
+                        alt={active.status === 'finalized'
+                            ? 'Signed transaction QR'
+                            : 'Multisig signing request QR'}
                     />
                 ) : (
                     <p className={styles.hint}>
@@ -546,7 +599,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         );
     }
 
-    if (view === 'sign-locally') {
+    if (view === 'sign-locally' && !isWatcherMode) {
         return wrap(
             <>
                 <p className={styles.successTitle}>Sign with my key</p>
@@ -590,8 +643,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 <p className={styles.hint}>
                     Scan the cosigner's animated QR with your camera, or paste
                     each XCW chunk on its own line. The wallet reassembles the
-                    reply, checks that it belongs to this session, and applies
-                    it.
+                    {isMusig2 && active.status === 'collecting-sigs'
+                        ? ' partial signature, checks that it belongs to this session and step, and applies it.'
+                        : ' reply, checks that it belongs to this session and step, and applies it.'}
                 </p>
                 {scannerOpen ? (
                     <QrScanner onFrame={handleScannerFrame} alt="Cosigner reply QR scanner" />
@@ -639,6 +693,13 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 && active.partialSigs.length >= active.threshold
                 && !!active.aggNonce));
     const isTerminal = ['cancelled', 'broadcast'].includes(active.status);
+    const readiness = active.status === 'finalized'
+        ? 'This signed transaction is ready to broadcast.'
+        : active.status === 'broadcast'
+            ? `Broadcast complete${active.txid ? `: ${active.txid}` : '.'}`
+            : active.status === 'ready-to-finalize'
+                ? 'Required signatures are collected. The transaction must be finalized before it can be broadcast.'
+                : null;
 
     return wrap(
         <>
@@ -668,11 +729,33 @@ export function MultisigSigningSession({ walletId, onBack }) {
             {active.actionSummary ? (
                 <p className={styles.hint}>{active.actionSummary}</p>
             ) : null}
-            {pending.length > 0 ? (
+            {readiness ? <p className={styles.hint}>{readiness}</p> : null}
+            {!isTerminal ? (
+                <p className={styles.hint} aria-label="Signatures remaining">
+                    {remaining === 0
+                        ? (isResponseStep ? 'Required step 1 replies collected.' : 'Required signatures collected.')
+                        : `${remaining} more ${isResponseStep
+                            ? `cosigner ${remaining === 1 ? 'reply' : 'replies'}`
+                            : remaining === 1 ? 'signature' : 'signatures'} required.`}
+                </p>
+            ) : null}
+            {contributed.length > 0 ? (
                 <>
-                    <p className={styles.hint}>Pending cosigners:</p>
-                    <ul aria-label="Pending cosigners">
-                        {pending.map((pk) => (
+                    <p className={styles.hint}>{isResponseStep ? 'Responded cosigners:' : 'Signed cosigners:'}</p>
+                    <ul aria-label={isResponseStep ? 'Responded cosigners' : 'Signed cosigners'}>
+                        {contributed.map((pk) => (
+                            <li key={pk}><code>{pk}</code></li>
+                        ))}
+                    </ul>
+                </>
+            ) : (
+                <p className={styles.hint}>{isResponseStep ? 'No cosigners have replied yet.' : 'No cosigners have signed yet.'}</p>
+            )}
+            {unsigned.length > 0 ? (
+                <>
+                    <p className={styles.hint}>{remaining > 0 ? 'Pending cosigners:' : 'Cosigners who have not signed:'}</p>
+                    <ul aria-label={remaining > 0 ? 'Pending cosigners' : 'Cosigners who have not signed'}>
+                        {unsigned.map((pk) => (
                             <li key={pk}><code>{pk}</code></li>
                         ))}
                     </ul>
@@ -692,18 +775,25 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 ) : null}
                 {!isTerminal && Array.isArray(exportFrames) ? (
                     <Button variant="ghost" onClick={() => setView('export-qr')}>
-                        Export transaction QR
+                        {active.status === 'finalized' ? 'Export signed transaction' : 'Export signing request'}
                     </Button>
                 ) : null}
-                {!isTerminal ? (
+                {canCollect ? (
                     <Button variant="ghost" onClick={() => { resetCollector(); setView('paste-inbox'); }}>
-                        Scan cosigner reply
+                        {isMusig2 && active.status === 'collecting-sigs'
+                            ? 'Import partial signature'
+                            : 'Import cosigner reply'}
                     </Button>
                 ) : null}
-                {!isTerminal ? (
+                {canCollect && !isWatcherMode ? (
                     <Button variant="ghost" onClick={() => { setSignResult(null); setView('sign-locally'); }}>
                         Sign with my key
                     </Button>
+                ) : null}
+                {!isTerminal && isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode exports signing data but never asks for a password or adds a local signature.
+                    </p>
                 ) : null}
                 {!isTerminal ? (
                     <Button variant="ghost" onClick={handleCancel} disabled={busy}>

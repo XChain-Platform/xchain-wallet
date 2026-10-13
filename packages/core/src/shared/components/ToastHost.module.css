@@ -11,9 +11,13 @@
  */
 .viewport {
     position: fixed;
-    /* Above the bottom tab bar when one is mounted (BottomTabBar sets the
-       variable to its 56px height); the plain gap otherwise. */
-    bottom: calc(var(--xc-space-4) + var(--xc-bottom-bar-h, 0px));
+    /* The bar publishes its content height; its safe-area padding remains
+       separate, so both contribute to the clearance. */
+    bottom: calc(
+        var(--xc-space-4)
+        + var(--xc-bottom-bar-h, 0px)
+        + env(safe-area-inset-bottom, 0px)
+    );
     inset-inline-start: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -25,11 +29,18 @@
     width: min(28rem, calc(100vw - 2 * var(--xc-space-4)));
 }
 
-/* Cluster D FOLLOWUP 4 - overflow indicator. Surfaces above the
-   visible stack when more toasts are queued than the VISIBLE_LIMIT
-   allows on screen at once. Visual only (aria-hidden) since the
-   queued toasts continue to fire their aria-live announcements as
-   they surface. */
+/* The fitted viewport height follows an overlay keyboard on iOS. Android
+   resizes 100vh, making this adjustment zero there. */
+:global(html[data-xc-keyboard='open']) .viewport {
+    bottom: calc(
+        100vh - var(--xc-viewport-h, 100vh)
+        - env(safe-area-inset-top, 0px)
+        + var(--xc-space-4)
+    );
+}
+
+/* The visual overflow count stays out of the accessibility tree because
+   queued toasts announce themselves when they receive a visible slot. */
 .overflowBadge {
     pointer-events: none;
     align-self: center;
@@ -70,7 +81,7 @@
     border-color: var(--xc-success, #2c7a3d);
 }
 .variant_error {
-    border-color: var(--xc-error, #b00);
+    border-color: var(--xc-danger-fg);
 }
 
 .message {
@@ -90,7 +101,7 @@
 .actionBtn {
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;

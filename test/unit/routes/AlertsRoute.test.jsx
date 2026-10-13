@@ -46,10 +46,12 @@ describe('AlertsRoute empty state', () => {
     it.each([
         ['an omitted alerts prop', {}],
         ['an empty alerts array', { alerts: [] }],
+        ['an unavailable alerts value', { alerts: null }],
     ])('%s shows the empty state without a list', (_label, props) => {
         mount(props);
 
-        expect(screen.getByText("No alerts. You're all caught up.")).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
+        expect(screen.getByText("You're all caught up.")).toBeTruthy();
         expect(screen.queryByRole('list')).toBeNull();
     });
 

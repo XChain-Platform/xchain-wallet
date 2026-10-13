@@ -66,9 +66,9 @@ export async function findContactByAddress({ vault, chain, address }) {
  * (updates in place, bumping `updatedAt`) or the `createContact`
  * input shape (creates a new one).
  *
- * @param {{ vault: import('../storage/Vault.js').Vault, record?: object, input?: object }} opts
+ * @param {{ vault: import('../storage/Vault.js').Vault, record?: object, input?: object, replaceIds?: string[] }} opts
  */
-export async function saveContact({ vault, record, input }) {
+export async function saveContact({ vault, record, input, replaceIds = [] }) {
     if (!vault) throw new Error('saveContact: vault is required');
     /** @type {any} */
     let rec;
@@ -86,8 +86,31 @@ export async function saveContact({ vault, record, input }) {
     if (!validation.ok) {
         throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
     }
+    const seen = new Set();
+    for (const entry of rec.entries) {
+        const key = normalizedAddress(entry.address);
+        if (seen.has(key)) {
+            throw new Error(`saveContact: address appears more than once: ${entry.address}`);
+        }
+        seen.add(key);
+    }
+    const existing = await vault.contacts.list();
+    const replaced = new Set(Array.isArray(replaceIds) ? replaceIds : []);
+    for (const contact of existing) {
+        if (contact.id === rec.id || replaced.has(contact.id)) continue;
+        const duplicate = (contact.entries || []).find((entry) => seen.has(normalizedAddress(entry.address)));
+        if (duplicate) {
+            throw new Error(`saveContact: address already belongs to ${contact.name}: ${duplicate.address}`);
+        }
+    }
     await vault.contacts.put(rec);
     return rec;
+}
+
+function normalizedAddress(address) {
+    const trimmed = String(address || '').trim();
+    const lower = trimmed.toLowerCase();
+    return /^(bc|tb|bcrt|ltc|tltc|rltc)1/.test(lower) ? lower : trimmed;
 }
 
 /**

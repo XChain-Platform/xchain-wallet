@@ -116,8 +116,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
     );
     const [showInvalid, setShowInvalid] = useState(false);
-    const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-
     // TYPE=1 (token list) member entry: same free-text tick parsing as
     // ProjectRosterForm.
     const [ticksText, setTicksText] = useState('');
@@ -312,20 +310,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             const text = typeof content === 'string' ? content : '';
             const parts = airdropLib.parseCsv(text);
             setPasteText((prev) => (prev.trim() ? `${prev}\n${parts.join('\n')}` : parts.join('\n')));
+            setFormError(null);
         },
     });
-
-    function handleFile(event) {
-        const file = event.target?.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const text = typeof reader.result === 'string' ? reader.result : '';
-            const parts = airdropLib.parseCsv(text);
-            setPasteText((prev) => (prev.trim() ? `${prev}\n${parts.join('\n')}` : parts.join('\n')));
-        };
-        reader.readAsText(file);
-    }
 
     // Software sources go through the single-encode confirm
     // page; hardware + watcher keep the legacy review stage (same split
@@ -566,7 +553,12 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 onSubmit={handleSubmit}
                 actions={(
                     <>
-                        <Button type="button" variant="ghost" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => { setSubmitError(null); setStage('form'); }}
+                            disabled={stage === 'submitting'}
+                        >
                             Back
                         </Button>
                         <Button
@@ -654,6 +646,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         : coinTicker;
                     const item = tickCoinSupported ? qualifyTickItem(selectedCoin, t, coinTicker) : t;
                     if (item) setTicksText((prev) => (prev.trim() ? `${prev}\n${item}` : item));
+                    setFormError(null);
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -669,6 +662,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 chainCoin={descriptor?.coin}
                 onAdd={(addresses) => {
                     setPasteText((prev) => (prev.trim() ? `${prev}\n${addresses.join('\n')}` : addresses.join('\n')));
+                    setFormError(null);
                     setContactPickerOpen(false);
                 }}
                 onBack={() => setContactPickerOpen(false)}
@@ -694,7 +688,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         >
             <NetworkField
                 value={chainId}
-                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
                 chainRegistry={chainRegistry}
             />
@@ -715,7 +709,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <Select
                 label="List type"
                 value={listType}
-                onChange={(e) => setListType(/** @type {'1' | '2'} */ (e.target.value))}
+                onChange={(e) => {
+                    setListType(/** @type {'1' | '2'} */ (e.target.value));
+                    setFormError(null);
+                }}
                 hint={listType === '2'
                     ? 'A reusable list of addresses. Used by airdrops, allow/block gates, dispensers, and orders.'
                     : 'A reusable list of tokens. Used for project rosters and allow/block gates.'}
@@ -737,7 +734,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             id="list-addresses"
                             className={styles.picker}
                             value={pasteText}
-                            onChange={(e) => setPasteText(e.target.value)}
+                            onChange={(e) => { setPasteText(e.target.value); setFormError(null); }}
                             placeholder={recipientsDrop.isDragOver
                                 ? 'Drop the CSV / TXT file here'
                                 : 'Paste addresses, one per line or comma-separated.'}
@@ -753,14 +750,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         beside the Contacts button, ran off a phone screen. */}
                     <div className={styles.fromLine} style={{ flexWrap: 'wrap' }}>
                         <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".csv,.txt,text/csv,text/plain"
-                            onChange={handleFile}
+                            {...recipientsDrop.pickerProps}
                             aria-label="Upload CSV of addresses"
-                            hidden
+                            autoComplete="off"
                         />
-                        <Button type="button" variant="ghost" onClick={() => fileInputRef.current?.click()}>
+                        <Button type="button" variant="ghost" onClick={recipientsDrop.openFilePicker}>
                             Upload CSV
                         </Button>
                         <Button type="button" variant="ghost" onClick={() => setContactPickerOpen(true)}>
@@ -833,7 +827,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             ) : (
                 <TickItemsEditor
                     value={ticksText}
-                    onChange={setTicksText}
+                    onChange={(value) => { setTicksText(value); setFormError(null); }}
                     items={tickItems}
                     chainId={chainId}
                     chainLabel={descriptor?.displayName || chainId}
@@ -853,7 +847,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
                         error={nameError || undefined}
                         value={listName}
-                        onChange={(e) => setListName(e.target.value)}
+                        onChange={(e) => { setListName(e.target.value); setFormError(null); }}
                         autoComplete="off"
                     />
                     <Input
@@ -861,7 +855,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
                         error={descriptionError || undefined}
                         value={listDescription}
-                        onChange={(e) => setListDescription(e.target.value)}
+                        onChange={(e) => { setListDescription(e.target.value); setFormError(null); }}
                         autoComplete="off"
                     />
                 </>
@@ -870,7 +864,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 label="Memo (optional)"
                 hint={MEMO_HINT}
                 value={memo}
-                onChange={(e) => setMemo(e.target.value)}
+                onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
 

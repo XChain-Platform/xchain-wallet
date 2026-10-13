@@ -114,6 +114,9 @@ describe('browser autocomplete policy', () => {
                 const text = Object.values(entry.attributes).join(' ');
                 if (!/(mnemonic|recovery phrase|private key|\bwif\b|bip39.*passphrase)/i.test(text)) continue;
                 if (ignoredTypes.has(entry.attributes.type)) continue;
+                // The wallet-password gate on a reveal screen only mentions the key in its
+                // hint; it is a real password field and stays current-password.
+                if (entry.attributes.type === 'password' && /^wallet password$/i.test(entry.attributes.label || '')) continue;
                 if (entry.attributes.autoComplete !== 'off') {
                     failures.push(description(path, entry));
                 }

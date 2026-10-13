@@ -38,8 +38,9 @@ const ICONS = {
  *                             with `{ target: { value } }` so callers
  *                             can swap from `<Input>` without changes.
  *   - suggestions           `Suggestion[]` from buildRecentDestinations.
- *   - onPaste               pass-through to the underlying input.
- *                             Send.jsx wires this for BIP21 / WIF detect.
+ *   - onPaste               called first for BIP21 / WIF handling; when the
+ *                             host does not consume the event, surrounding
+ *                             whitespace is trimmed before insertion.
  *   - icon                  'contacts' | 'addresses'; renders the in-field
  *                             trailing button when set.
  *   - onIconClick           handler for the trailing icon button.
@@ -70,6 +71,8 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
         label,
         disabled,
         style,
+        onFocus: onInputFocus,
+        onKeyDown: onInputKeyDown,
         ...rest
     },
     ref,
@@ -91,6 +94,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
 
     const select = useCallback(
         (s) => {
+            if (!s) return;
             onChange({ target: { value: s.address } });
             close();
         },
@@ -98,6 +102,8 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     );
 
     const onKeyDown = (e) => {
+        onInputKeyDown?.(e);
+        if (e.defaultPrevented) return;
         if (filtered.length === 0) {
             if (e.key === 'Escape') close();
             return;
@@ -110,7 +116,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
             e.preventDefault();
             setOpen(true);
             setActiveIndex((i) => (i <= 0 ? filtered.length - 1 : i - 1));
-        } else if (e.key === 'Enter' && open && activeIndex >= 0) {
+        } else if (e.key === 'Enter' && open && filtered[activeIndex]) {
             e.preventDefault();
             select(filtered[activeIndex]);
         } else if (e.key === 'Escape') {
@@ -124,7 +130,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     };
 
     const showDropdown = open && filtered.length > 0;
-    const activeId = showDropdown && activeIndex >= 0
+    const activeId = showDropdown && filtered[activeIndex]
         ? `${listboxId}-opt-${activeIndex}`
         : undefined;
 
@@ -156,16 +162,39 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     setOpen(true);
                     setActiveIndex(-1);
                 }}
-                onFocus={() => setOpen(true)}
+                onFocus={(e) => {
+                    onInputFocus?.(e);
+                    setOpen(true);
+                }}
                 onKeyDown={onKeyDown}
-                onPaste={onPaste}
+                onPaste={(e) => {
+                    onPaste?.(e);
+                    if (e.defaultPrevented) return;
+
+                    const pasted = e.clipboardData?.getData?.('text');
+                    if (typeof pasted !== 'string' || pasted === pasted.trim()) return;
+
+                    const input = e.currentTarget;
+                    const current = String(value ?? input.value ?? '');
+                    const start = input.selectionStart ?? current.length;
+                    const end = input.selectionEnd ?? start;
+                    e.preventDefault();
+                    onChange({
+                        target: { value: `${current.slice(0, start)}${pasted.trim()}${current.slice(end)}` },
+                    });
+                    setOpen(true);
+                    setActiveIndex(-1);
+                }}
                 {...rest}
             />
             {IconComponent ? (
                 <button
                     type="button"
                     className={styles.iconButton}
-                    onClick={onIconClick}
+                    onClick={() => {
+                        close();
+                        onIconClick?.();
+                    }}
                     disabled={disabled}
                     aria-label={iconLabel || defaultLabel}
                     title={iconLabel || defaultLabel}
