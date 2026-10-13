@@ -250,7 +250,9 @@ function clickReason(err) {
 
 /**
  * A crawl bound to one page. `screens` are discovered once and then crawled
- * in the order given; the caller picks its shard of them.
+ * in the order given; the caller picks its shard of them. `start` replaces
+ * the default `page.goto('/')` for a venue with no dev-server URL (the
+ * Electron app, which reloads its own page and passes its licence gate).
  */
 // WebKit reports every failed load twice: once with the URL through the
 // request events below (where the app's own origin is judged), and again as
@@ -265,7 +267,7 @@ export function isWebKitNetworkNoise(text) {
         || /due to access control checks\.?$/.test(text);
 }
 
-export function createCrawl(page, { venue, outDir, origin }) {
+export function createCrawl(page, { venue, outDir, origin, start = null }) {
     mkdirSync(outDir, { recursive: true });
     const findings = [];
     const covered = [];
@@ -324,7 +326,8 @@ export function createCrawl(page, { venue, outDir, origin }) {
     };
 
     async function enterDemo() {
-        await page.goto('/');
+        if (start) await start();
+        else await page.goto('/');
         const demo = page.getByRole('button', { name: 'Try in demo mode' });
         await demo.or(unlockedShell(page)).or(page.getByRole('button', { name: 'Skip' })).first()
             .waitFor({ state: 'visible', timeout: 60_000 });

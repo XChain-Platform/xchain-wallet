@@ -207,6 +207,43 @@ async function fetchCoingeckoRates(fetchImpl, chainCoins, fiatCurrency) {
 }
 
 /**
+ * True for exactly the URLs this module requests: CoinGecko's simple-price
+ * endpoint, and the oracle snapshot and DEX market routes under a launch
+ * coin's mainnet explorer. A shell whose page cannot fetch (the desktop
+ * renderer pins connect-src 'self') forwards price requests to its host
+ * process, and the host fetches only what this accepts, so the forwarder
+ * is never a general-purpose fetch.
+ *
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isFiatRateSourceUrl(url) {
+    let u;
+    try {
+        u = new URL(String(url));
+    } catch {
+        return false;
+    }
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+    if (u.origin + u.pathname === `${COINGECKO_BASE}/simple/price`) return true;
+    for (const coin of Object.keys(COINGECKO_ID_BY_COIN)) {
+        const base = explorerUrlForCoin(coin);
+        if (!base) continue;
+        let b;
+        try {
+            b = new URL(base);
+        } catch {
+            continue;
+        }
+        if (u.origin !== b.origin || !u.pathname.startsWith(`${b.pathname}/api/`)) continue;
+        const rest = u.pathname.slice(b.pathname.length);
+        if (rest === '/api/price_snapshots/FINALIZED/status') return true;
+        if (/^\/api\/market\/[^/]+\/[^/]+$/.test(rest)) return true;
+    }
+    return false;
+}
+
+/**
  * Override the module's network/clock deps. Shells call this once at
  * boot when they need a non-default fetch (or a fixed explorer URL
  * set, e.g. a regtest venue); tests use it to inject fakes.

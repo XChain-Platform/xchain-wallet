@@ -17,6 +17,7 @@
 
 import { createRoot } from 'react-dom/client';
 import { registry } from '@xchain-wallet/core';
+import { installDesktopFiatRateSource } from './fiatRateSource.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
@@ -38,6 +39,8 @@ try {
         })
         .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
 } catch { /* never block app boot */ }
+
+installDesktopFiatRateSource();
 
 const container = document.getElementById('xchain-desktop-root');
 if (!container) {

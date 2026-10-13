@@ -208,6 +208,16 @@ const MAIN_WINDOW_REQUIRED = [
     /contextIsolation:\s*true/, /nodeIntegration:\s*false/, /sandbox:\s*true/,
     /preload:\s*join\(here,\s*'\.\.',\s*'preload\.cjs'\)/,
 ];
+// The shipped app has no developer tools: both window kinds set devTools
+// off when packaged and the View menu drops its toggle, matching the
+// mobile shells' debugging-off rule.
+assert.equal((mainIndex.match(/devTools:\s*!app\.isPackaged/g) || []).length, 2,
+    'the main window and the Trezor Connect child both set devTools: !app.isPackaged');
+assert.match(mainIndex, /\.\.\.\(app\.isPackaged \? \[\] : \[\{ role: 'toggleDevTools' \}\]\)/,
+    'the View menu offers Toggle Developer Tools only in an unpackaged run');
+assert.ok(!/^\s*\{ role: 'toggleDevTools' \},?$/m.test(mainIndex),
+    'no unconditional Toggle Developer Tools menu item');
+
 const MAIN_WINDOW_FORBIDDEN = [/contextIsolation:\s*false/, /nodeIntegration:\s*true/, /sandbox:\s*false/];
 
 /** Slice createWindow's options up to its loadFile; null when an anchor moved. */
