@@ -89,15 +89,3 @@
 .confirmRow:hover {
     border-color: var(--xc-accent-primary);
 }
-
-.confirmCheckbox {
-    margin-top: calc(var(--xc-space-1) * 0.75);
-    accent-color: var(--xc-accent-primary);
-    flex-shrink: 0;
-}
-
-.confirmCheckbox:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: calc(var(--xc-space-1) / 2);
-    border-radius: var(--xc-radius-sm);
-}

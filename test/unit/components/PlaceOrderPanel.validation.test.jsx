@@ -79,6 +79,17 @@ describe('PlaceOrderPanel validation', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('uses a consent checkbox for CoinPay auto-pay', async () => {
+        mount();
+
+        const consent = await screen.findByRole('checkbox', {
+            name: /Enable CoinPay auto-pay/,
+        });
+        expect(consent).toBeChecked();
+        fireEvent.click(consent);
+        expect(consent).not.toBeChecked();
+    });
+
     it('accepts grouped decimal entry and selects the order side as a radio group', async () => {
         mount();
         const price = await screen.findByLabelText('Price (BTC)');

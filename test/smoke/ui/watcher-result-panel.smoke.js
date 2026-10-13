@@ -34,7 +34,7 @@ const panelSrc = readFileSync(join(wsRoot, panelPath), 'utf8');
 
 assert.match(
     panelSrc,
-    /import \{ AnimatedQrFrames, Button, StatusMessage \} from '\.\.\/\.\.\/ui\/index\.js';/,
+    /import \{ AnimatedQrFrames, Button, RadioGroup, StatusMessage \} from '\.\.\/\.\.\/ui\/index\.js';/,
     'panel imports UI primitives from core/ui',
 );
 assert.match(
@@ -88,6 +88,8 @@ assert.match(
     'panel labels the BBQr radio choice with target wallets',
 );
 assert.match(panelSrc, /XCW \(this wallet\)/, 'panel labels the XCW radio choice');
+assert.match(panelSrc, /<RadioGroup\b/, 'panel uses the shared radio group');
+assert.doesNotMatch(panelSrc, /<input\b/, 'panel has no route-local radio inputs');
 
 // ─── 4. CSS module ------------------------------------------------
 

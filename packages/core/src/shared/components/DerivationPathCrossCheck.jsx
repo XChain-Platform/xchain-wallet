@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { AddressText, InfoTip } from '@xchain-wallet/core/ui';
+import { AddressText, Checkbox, InfoTip } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
 
 /**
@@ -108,15 +108,12 @@ export function DerivationPathCrossCheck({
                     : 'Step through the device screens to compare both values.'}
             </p>
             {requireExplicitConfirm ? (
-                <label className={styles.confirmRow}>
-                    <input
-                        type="checkbox"
-                        checked={confirmed}
-                        onChange={handleToggle}
-                        className={styles.confirmCheckbox}
-                    />
-                    <span>I've verified the path and address on my {deviceLabel}.</span>
-                </label>
+                <Checkbox
+                    className={styles.confirmRow}
+                    label={`I've verified the path and address on my ${deviceLabel}.`}
+                    checked={confirmed}
+                    onChange={handleToggle}
+                />
             ) : null}
         </section>
     );
