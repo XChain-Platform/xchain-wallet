@@ -32,6 +32,9 @@
 export const EXPLORER_BUSY_MESSAGE = 'The XChain explorer is busy. Retrying shortly.';
 
 export const EXPLORER_RATE_LIMIT_DEFAULTS = Object.freeze({
+    // Requests allowed on one host at once. SDK instances for every chain share
+    // this queue, so a wallet cannot turn one render into an unbounded burst.
+    maxConcurrency: 4,
     // Retries spent on 429s for one request before the error surfaces.
     maxRetries: 3,
     // Longest single wait the layer will sit through; a longer ask fails fast.
@@ -197,10 +200,73 @@ export class HostRateLimiter {
             st = {
                 blockedUntil: 0, remaining: null, resetAt: null, nextSlotAt: 0,
                 strikes: 0, lastStrikeAt: 0, needsTrial: false, trial: null,
+                active: 0, waiters: [],
             };
             this.hosts.set(host, st);
         }
         return st;
+    }
+
+    /**
+     * Take one FIFO send slot for a host.
+     *
+     * The slot wraps the rate-limit gate as well as the send. A 429 therefore
+     * holds only the small active set while the rest remain queued, and every
+     * queued request observes the host pause before it reaches the network.
+     *
+     * @param {string} host
+     * @param {AbortSignal} [signal]
+     * @returns {Promise<() => void>} releases the slot
+     */
+    acquire(host, signal) {
+        if (signal?.aborted) return Promise.reject(abortError());
+        const st = this.state(host);
+        const limit = Math.max(1, Math.floor(Number(this.opts.maxConcurrency) || 1));
+        return new Promise((resolve, reject) => {
+            let queued = false;
+            let released = false;
+            const enter = () => {
+                queued = false;
+                signal?.removeEventListener('abort', cancel);
+                if (signal?.aborted) {
+                    reject(abortError());
+                    this.drain(host);
+                    return;
+                }
+                st.active += 1;
+                resolve(() => {
+                    if (released) return;
+                    released = true;
+                    st.active = Math.max(0, st.active - 1);
+                    this.drain(host);
+                });
+            };
+            const cancel = () => {
+                if (!queued) return;
+                queued = false;
+                const index = st.waiters.indexOf(enter);
+                if (index >= 0) st.waiters.splice(index, 1);
+                signal?.removeEventListener('abort', cancel);
+                reject(abortError());
+            };
+            if (st.active < limit) {
+                enter();
+                return;
+            }
+            queued = true;
+            st.waiters.push(enter);
+            signal?.addEventListener('abort', cancel, { once: true });
+        });
+    }
+
+    /** Fill free host slots from the FIFO queue. */
+    drain(host) {
+        const st = this.state(host);
+        const limit = Math.max(1, Math.floor(Number(this.opts.maxConcurrency) || 1));
+        while (st.active < limit && st.waiters.length > 0) {
+            const enter = st.waiters.shift();
+            enter();
+        }
     }
 
     /** Record what a response says about the host's window. */
@@ -335,48 +401,53 @@ export class HostRateLimiter {
         const deadline = this.now() + this.opts.maxTotalMs;
         let retries = 0;
         for (;;) {
-            const waitSeconds = await this.gate(host, deadline, signal);
-            if (waitSeconds > 0) throw tooLong(waitSeconds);
-            // After a 429 one request goes first and the rest wait for its answer,
-            // so a still-empty window costs one request instead of a whole wave.
-            if (st.needsTrial && st.trial) {
-                await st.trial;
-                continue;
-            }
-            let endTrial = null;
-            if (st.needsTrial) st.trial = new Promise((resolve) => { endTrial = resolve; });
-            const sentAt = this.now();
+            const release = await this.acquire(host, signal);
             try {
-                const res = await send();
-                this.observe(host, res && res.headers);
-                st.strikes = 0;
-                st.needsTrial = false;
-                return res;
-            } catch (err) {
-                if (err && err.response) this.observe(host, err.response.headers);
-                if (statusOf(err) !== 429) {
-                    // Any other answer says nothing about the window; let the others go.
-                    if (endTrial) st.needsTrial = false;
-                    throw err;
+                const waitSeconds = await this.gate(host, deadline, signal);
+                if (waitSeconds > 0) throw tooLong(waitSeconds);
+                // After a 429 one request goes first and the rest wait for its answer,
+                // so a still-empty window costs one request instead of a whole wave.
+                if (st.needsTrial && st.trial) {
+                    await st.trial;
+                    continue;
                 }
-                // One strike per wave: requests already in flight when the first 429
-                // landed share it, so a burst does not jump straight to the cap.
-                if (sentAt > st.lastStrikeAt) {
-                    st.strikes = Math.min(st.strikes + 1, 8);
-                    st.lastStrikeAt = this.now();
+                let endTrial = null;
+                if (st.needsTrial) st.trial = new Promise((resolve) => { endTrial = resolve; });
+                const sentAt = this.now();
+                try {
+                    const res = await send();
+                    this.observe(host, res && res.headers);
+                    st.strikes = 0;
+                    st.needsTrial = false;
+                    return res;
+                } catch (err) {
+                    if (err && err.response) this.observe(host, err.response.headers);
+                    if (statusOf(err) !== 429) {
+                        // Any other answer says nothing about the window; let the others go.
+                        if (endTrial) st.needsTrial = false;
+                        throw err;
+                    }
+                    // One strike per wave: requests already in flight when the first 429
+                    // landed share it, so a burst does not jump straight to the cap.
+                    if (sentAt > st.lastStrikeAt) {
+                        st.strikes = Math.min(st.strikes + 1, 8);
+                        st.lastStrikeAt = this.now();
+                    }
+                    st.needsTrial = true;
+                    const named = rateLimitWaitMs(err.response.headers, this.now());
+                    const wait = named !== null ? named : this.backoffMs(Math.max(retries, st.strikes - 1));
+                    this.block(host, wait);
+                    // Out of retries, or asked to wait longer than the cap: surface it.
+                    if (retries >= maxRetries || wait > this.opts.maxWaitMs) throw err;
+                    retries += 1;
+                } finally {
+                    if (endTrial) {
+                        st.trial = null;
+                        endTrial();
+                    }
                 }
-                st.needsTrial = true;
-                const named = rateLimitWaitMs(err.response.headers, this.now());
-                const wait = named !== null ? named : this.backoffMs(Math.max(retries, st.strikes - 1));
-                this.block(host, wait);
-                // Out of retries, or asked to wait longer than the cap: surface it.
-                if (retries >= maxRetries || wait > this.opts.maxWaitMs) throw err;
-                retries += 1;
             } finally {
-                if (endTrial) {
-                    st.trial = null;
-                    endTrial();
-                }
+                release();
             }
         }
     }

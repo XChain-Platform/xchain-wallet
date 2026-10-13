@@ -15,7 +15,6 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -998,9 +997,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via
     // `verifyProofs` (default on). The map is keyed `chainId:tick` and
-    // fills in progressively; HomeTabs badges the Tokens rows from it.
+    // fills in progressively after the user opens the Tokens tab.
     const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
-    const verifyMap = useProofVerification({ messaging, balances, enabled: verifyProofsEnabled });
 
     // `hideSmallBalances` persisted for fourteen sessions without a
     // single reader. HomeTabs forwards it to the Coins and Tokens lists,
@@ -1380,7 +1378,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
                         hiddenKeys={hiddenKeys}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
-                        verifyMap={verifyMap}
+                        verifyProofsEnabled={verifyProofsEnabled}
                         hideSmallBalances={hideSmallBalances}
                         onRefresh={refreshPortfolio}
                         refreshing={portfolioRefreshing}

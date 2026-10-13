@@ -142,7 +142,7 @@ describe('429 retry', () => {
     });
 
     it('counts a burst of concurrent 429s as one strike, not one per request', async () => {
-        const { limiter } = fakeLimiter({ maxRetries: 0 });
+        const { limiter } = fakeLimiter({ maxRetries: 0, maxConcurrency: 6 });
         let release;
         const gate = new Promise((r) => { release = r; });
         const fail = async () => { await gate; throw http429(); };
@@ -303,6 +303,44 @@ describe('coalescing identical GETs', () => {
         const send = async () => { sent += 1; if (sent === 1) throw new Error('down'); return ok('up'); };
         await expect(limiter.request('h', 'GET /z', send, () => null)).rejects.toThrow('down');
         expect((await limiter.request('h', 'GET /z', send, () => null)).data).toBe('up');
+    });
+});
+
+describe('shared host concurrency', () => {
+    it('keeps a request wave at the configured concurrency ceiling', async () => {
+        const { limiter } = fakeLimiter({ maxConcurrency: 4 });
+        const releases = [];
+        let active = 0;
+        let peak = 0;
+        let sent = 0;
+        const send = () => {
+            sent += 1;
+            active += 1;
+            peak = Math.max(peak, active);
+            return new Promise((resolve) => {
+                releases.push(() => {
+                    active -= 1;
+                    resolve(ok(sent));
+                });
+            });
+        };
+        const pending = Promise.all(Array.from(
+            { length: 10 },
+            () => limiter.request('h', null, send, () => null),
+        ));
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(sent).toBe(4);
+        expect(peak).toBe(4);
+
+        while (sent < 10 || releases.length > 0) {
+            const release = releases.shift();
+            if (release) release();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        await pending;
+        expect(peak).toBe(4);
+        expect(active).toBe(0);
     });
 });
 
