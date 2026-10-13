@@ -27,6 +27,7 @@ const tiers = {
     normal: estimate(6, '0.00001500', 30),
     fast: estimate(12, '0.00003000', 10),
     unit: 'sat/vB',
+    minimumRate: 1,
 };
 
 const fallbackTiers = {
@@ -62,7 +63,19 @@ describe('FeeSelector', () => {
 
         fireEvent.keyDown(slider, { key: 'Home' });
         expect(slider.value).toBe('0');
-        expect(slider.getAttribute('aria-valuetext')).toMatch(/^Low:/);
+        expect(slider.getAttribute('aria-valuetext')).toMatch(/^Slow:/);
+    });
+
+    it('labels presets by speed and shows each expected confirmation time', () => {
+        render(<ControlledSelector />);
+
+        const ticks = [...document.querySelectorAll('button[aria-label]')]
+            .filter((button) => ['Slow', 'Normal', 'Fast'].includes(button.getAttribute('aria-label')));
+        expect(ticks.map((button) => button.textContent)).toEqual([
+            'Slow~60 min',
+            'Normal~30 min',
+            'Fast~10 min',
+        ]);
     });
 
     it('keeps empty input editable and rejects empty and zero rates visibly', () => {
@@ -88,7 +101,7 @@ describe('FeeSelector', () => {
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 0 });
     });
 
-    it('accepts decimal rates and warns without clamping an unusually high rate', () => {
+    it('warns outside the safe rate range without changing the chosen rate', () => {
         const onChange = vi.fn();
         render(
             <FeeSelector
@@ -99,15 +112,38 @@ describe('FeeSelector', () => {
         );
         const input = screen.getByLabelText('Custom fee rate (sat/vB)');
 
+        fireEvent.change(input, { target: { value: '0.5' } });
+        expect(input.getAttribute('aria-invalid')).toBeNull();
+        expect(screen.getByRole('alert').textContent).toMatch(/below the network minimum of 1 sat\/vB/);
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 0.5 });
+
         fireEvent.change(input, { target: { value: '2.75' } });
         expect(input.getAttribute('aria-invalid')).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 2.75 });
 
-        fireEvent.change(input, { target: { value: '1201' } });
+        fireEvent.change(input, { target: { value: '120' } });
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        fireEvent.change(input, { target: { value: '121' } });
         expect(input.getAttribute('aria-invalid')).toBeNull();
-        expect(screen.getByRole('alert').textContent).toMatch(/unusually high/);
-        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 1201 });
+        expect(screen.getByRole('alert').textContent).toMatch(/more than 10 times the Fast rate/);
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 121 });
+    });
+
+    it('names the chain-specific unit in the network minimum warning', () => {
+        const onChange = vi.fn();
+        render(
+            <FeeSelector
+                tiers={{ ...tiers, unit: 'DOGE/kB', minimumRate: 1 }}
+                value={{ mode: 'custom', customRate: 0.5 }}
+                onChange={onChange}
+            />,
+        );
+
+        expect(screen.getByLabelText('Custom fee rate (DOGE/kB)').value).toBe('0.5');
+        expect(screen.getByText('DOGE/kB')).toBeTruthy();
+        expect(screen.getByRole('alert').textContent).toMatch(/1 DOGE\/kB/);
     });
 
     it('renders fiat previews for preset and custom estimates', () => {

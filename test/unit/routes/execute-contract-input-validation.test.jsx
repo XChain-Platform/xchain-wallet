@@ -8,11 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ExecuteContractForm } from '../../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
+import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -22,8 +24,17 @@ const ADDRESS = {
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
 };
+const contractCss = readFileSync(
+    'packages/core/src/shared/routes/ContractScreens.module.css',
+    'utf8',
+);
 
-function mount(walletMode = 'full') {
+function rule(selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return contractCss.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
+}
+
+function mount(walletMode = 'full', abiParamName = 'config') {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
@@ -36,7 +47,7 @@ function mount(walletMode = 'full') {
                     methods: {
                         configure: {
                             params: [
-                                { name: 'config', type: 'json' },
+                                { name: abiParamName, type: 'json' },
                                 { name: 'limit', type: 'amount' },
                             ],
                         },
@@ -65,6 +76,32 @@ function mount(walletMode = 'full') {
 afterEach(() => cleanup());
 
 describe('ExecuteContractForm argument validation', () => {
+    it.each([320, 360])('contains a long ABI label and hex value at %ipx', async (viewportWidth) => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        const paramName = 'configuration_parameter_without_any_natural_break_points';
+
+        try {
+            mount('full', paramName);
+            const input = await screen.findByLabelText(`${paramName} (json)`);
+            const hex = `0x${'ab'.repeat(128)}`;
+            fireEvent.change(input, { target: { value: hex } });
+
+            expect(input).toHaveValue(hex);
+            expect(input).toHaveClass(contractStyles.monospaceInput);
+            expect(input.closest(`.${contractStyles.abiField}`)).not.toBeNull();
+            expect(rule('.abiField label')).toMatch(/overflow-wrap:\s*anywhere/);
+            expect(rule('.monospaceInput')).toMatch(/overflow-x:\s*auto/);
+            expect(rule('.monospaceInput')).toMatch(/white-space:\s*nowrap/);
+            expect(rule('.monospaceValue')).toMatch(/overflow-wrap:\s*anywhere/);
+            expect(rule('.codeSource')).toMatch(/overflow:\s*auto/);
+            expect(rule('.toolActions')).toMatch(/flex-wrap:\s*wrap/);
+            expect(rule('.contractRow')).toMatch(/width:\s*100%/);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
     it('shows invalid declared JSON before compose', async () => {
         mount();
         const input = await screen.findByLabelText('config (json)');

@@ -34,6 +34,10 @@
 // Kept as a standalone JSON file (not inlined) so it doubles as a
 // readable, copy-pasteable sample of a maxed-out TIS v1.0.0 envelope.
 import exampleTis from './demoExampleTis.json' with { type: 'json' };
+import {
+    ARWEAVE_GATEWAY_BASE,
+    IPFS_GATEWAY_BASE,
+} from '../branding/branding.js';
 
 /**
  * @typedef {Object} TisMediaEntry
@@ -337,10 +341,10 @@ function normalizeMediaUrl(url) {
     const t = url.trim();
     if (!t) return null;
     if (t.startsWith('ipfs://')) {
-        return 'https://ipfs.io/ipfs/' + t.slice('ipfs://'.length);
+        return `${IPFS_GATEWAY_BASE}/${t.slice('ipfs://'.length)}`;
     }
     if (/^ar:/i.test(t)) {
-        return 'https://arweave.net/' + t.replace(/^ar:/i, '');
+        return `${ARWEAVE_GATEWAY_BASE}/${t.replace(/^ar:/i, '')}`;
     }
     if (/^https?:\/\//i.test(t)) return t;
     return null;
@@ -402,14 +406,20 @@ export function descriptionJsonUrl(description) {
         t = t.slice(0, semi).trim();
     }
     // Arweave gateway "/x.json" suffix trick: drop it; the gateway 404s.
-    t = t.replace(/^(https?:\/\/arweave\.net\/[^\/?#]+)\/x\.json$/i, '$1');
+    const arweavePrefix = `${ARWEAVE_GATEWAY_BASE}/`;
+    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) {
+        const suffix = t.slice(arweavePrefix.length);
+        if (/^[^\/?#]+\/x\.json$/i.test(suffix)) {
+            t = arweavePrefix + suffix.slice(0, -'/x.json'.length);
+        }
+    }
     if (/^ipfs:\/\//i.test(t)) {
-        return 'https://ipfs.io/ipfs/' + t.slice('ipfs://'.length);
+        return `${IPFS_GATEWAY_BASE}/${t.slice('ipfs://'.length)}`;
     }
     if (/^ar:/i.test(t)) {
-        return 'https://arweave.net/' + t.replace(/^ar:/i, '');
+        return `${ARWEAVE_GATEWAY_BASE}/${t.replace(/^ar:/i, '')}`;
     }
-    if (/^https?:\/\/arweave\.net\//i.test(t)) return t;
+    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) return t;
     if (/^https?:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) return t;
     // Bare "host/path.json": promote to https.
     if (isBareHostPathJsonUrl(t)) {

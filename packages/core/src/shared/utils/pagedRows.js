@@ -43,8 +43,8 @@ export function explorerPage(response, rows, page, pageSize) {
     const reported = candidates
         .filter((value) => value != null && value !== '')
         .map(Number)
-        .find(Number.isFinite);
-    const total = reported != null && reported >= 0 ? reported : null;
+        .find((value) => Number.isFinite(value) && value >= 0);
+    const total = reported ?? null;
     return {
         total,
         hasMore: total == null

@@ -31,6 +31,10 @@ async function pressBack() {
     await settle();
 }
 
+function swipeBackFromIOS() {
+    window.dispatchEvent(new Event('xchain:native-edge-back'));
+}
+
 beforeEach(() => {
     resetBackStackForTests();
     window.history.replaceState(null, '');
@@ -93,10 +97,47 @@ describe('back stack', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(screen.getByText('Confirm 21.75')).toBeInTheDocument();
 
-        act(() => nativeBack({ canGoBack: true }));
+        act(() => swipeBackFromIOS());
 
         expect(screen.getByLabelText('Amount')).toHaveValue('21.75');
         expect(historyBack).not.toHaveBeenCalled();
+    });
+
+    it('routes an iOS edge swipe from a pushed screen to its parent', () => {
+        function Routes() {
+            const [route, setRoute] = useState('details');
+            return route === 'details' ? (
+                <PageHeader title="Details" onBack={() => setRoute('parent')} />
+            ) : <PageHeader title="Parent" />;
+        }
+        render(<Routes />);
+
+        act(() => swipeBackFromIOS());
+
+        expect(screen.getByRole('heading', { name: 'Parent' })).toBeInTheDocument();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
+    it('ignores an iOS edge swipe on the lock screen', () => {
+        const unlockedBack = vi.fn();
+        const view = render(<PageHeader title="Details" onBack={unlockedBack} />);
+        view.rerender(<PageHeader title="Unlock" />);
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('heading', { name: 'Unlock' })).toBeInTheDocument();
+        expect(unlockedBack).not.toHaveBeenCalled();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
+    });
+
+    it('ignores an iOS edge swipe while signing disables Back', () => {
+        const onBack = vi.fn();
+        render(<PageHeader title="Signing" onBack={onBack} backDisabled />);
+
+        swipeBackFromIOS();
+
+        expect(onBack).not.toHaveBeenCalled();
+        expect(capacitorApp.minimizeApp).not.toHaveBeenCalled();
     });
 
     it('dispatches native Back to the newest overlay before the route', async () => {

@@ -16,7 +16,6 @@
        is the viewport MINUS the top safe-area inset that body pads by, so
        the shell ends where the screen ends instead of overhanging it. */
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
-    height: var(--xc-screen-h, var(--xc-viewport-h, 100dvh));
     background: var(--xc-bg);
     color: var(--xc-text);
 }
@@ -71,6 +70,20 @@
    overflow box here would cut them down to the row's own height. */
 .header {
     flex: 0 0 auto;
+}
+
+/* The compact header owns explicit safe-area padding while body reserves the
+   same viewport inset. Matching negative margins keep the header content and
+   the layout footprint from consuming that inset twice. */
+.layout[data-xc-tier='compact'] > .main > .header {
+    margin-top: calc(0px - env(safe-area-inset-top, 0px));
+    margin-inline-start: calc(0px - env(safe-area-inset-left, 0px));
+    margin-inline-end: calc(0px - env(safe-area-inset-right, 0px));
+    padding: env(safe-area-inset-top, 0px)
+        env(safe-area-inset-right, 0px)
+        0
+        env(safe-area-inset-left, 0px);
+    background: var(--xc-surface);
 }
 
 /* Stacked banners (QueuedBroadcastBanner, ReachabilityBanner, ...) under
