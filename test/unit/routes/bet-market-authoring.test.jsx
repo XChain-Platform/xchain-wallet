@@ -279,6 +279,30 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
 });
 
 describe('CreateBetFeedForm: compose and submit', () => {
+    it.each([
+        ['1,5', '1.5'],
+        ['1.5', '1.5'],
+    ])('normalizes a pasted percentage %s without changing its wire value', async (
+        pasted,
+        expected,
+    ) => {
+        const { messaging, calls } = harness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+        await domAct(async () => {
+            typeIn(utils, 'Your fee (optional)', pasted);
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+
+        expect(calls.find((c) => c.method === 'composeBetForConfirm').args.params.fee)
+            .toBe(expected);
+    });
+
     it('builds an unsigned market in watcher mode without asking for a password', async () => {
         const { messaging, calls } = harness({
             getSettings: () => Promise.resolve({ walletMode: 'watcher' }),

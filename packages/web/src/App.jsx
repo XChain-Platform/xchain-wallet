@@ -30,6 +30,7 @@
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
@@ -38,6 +39,7 @@ import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
+import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm.jsx';
@@ -2653,6 +2655,9 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView !== 'home') {
+                return <RouteNotFound onHome={() => setUnlockedView('home')} />;
+            }
             // §49 / Cluster G FOLLOWUP 4: QueuedBroadcastBanner is now
             // mounted in FullLayoutWithNav.header below so it persists
             // across every unlocked view, not only Home.
@@ -2830,6 +2835,7 @@ function AppInner() {
                 // that used to disagree with the CSS and leave 640-899px with
                 // no navigation at all.
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
                         <LeftNavWithObligations
                             currentView={unlockedView}
@@ -2910,14 +2916,16 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
@@ -2946,6 +2954,7 @@ function AppInner() {
                             }}
                         >
                             <ScanRoute
+                                embedded
                                 onBack={() => setGlobalScannerOpen(false)}
                                 onClassified={(outcome) => {
                                     setGlobalScannerOpen(false);

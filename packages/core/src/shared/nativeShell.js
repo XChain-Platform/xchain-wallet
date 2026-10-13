@@ -59,8 +59,9 @@ export function isNativeShell(env = globalThis) {
  */
 export function getNativePlugin(name, { env = globalThis, method } = {}) {
     const cap = /** @type {any} */ (env)?.Capacitor;
-    if (!cap) return null;
-    if (typeof cap.isNativePlatform === 'function' && !cap.isNativePlatform()) return null;
+    if (!cap || typeof cap.isNativePlatform !== 'function' || cap.isNativePlatform() !== true) {
+        return null;
+    }
     const plugin = cap.Plugins?.[name];
     if (!plugin) return null;
     if (method && typeof plugin[method] !== 'function') return null;

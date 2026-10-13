@@ -34,6 +34,7 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -57,6 +58,24 @@ const PROTOCOL_COIN_TICKER = {
 
 const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
     && Number(String(value).trim()) > 0;
+
+function withFormattedExpiration(confirmAction) {
+    const decoded = confirmAction?.composed?.decoded;
+    if (!decoded || !Array.isArray(decoded.details)) return confirmAction;
+    const details = decoded.details.map((detail) => {
+        if (!/expir/i.test(String(detail?.label || ''))) return detail;
+        const unixSec = Number(detail.value);
+        if (!Number.isFinite(unixSec) || unixSec <= 0 || unixSec >= 10_000_000_000) return detail;
+        return { ...detail, value: formatLocalDateTime(unixSec) };
+    });
+    return {
+        ...confirmAction,
+        composed: {
+            ...confirmAction.composed,
+            decoded: { ...decoded, details },
+        },
+    };
+}
 
 /**
  * §41.5 SWAP authoring surface.
@@ -584,6 +603,20 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Give" value={giveSide} />
                     <DetailRow label="Get" value={getSide} />
+                    <DetailRow
+                        label="Expiration"
+                        value={expMode === 'custom' && expInput.trim()
+                            ? new Date(expInput).toLocaleString()
+                            : 'Default window'}
+                    />
+                    <DetailRow
+                        label="Receive at"
+                        value={getAddress.trim()
+                            ? <AddressText address={getAddress.trim()} />
+                            : 'Source address (default)'}
+                    />
+                    <DetailRow label="Allow list" value={allowListIdx ? `#${allowListIdx}` : 'None'} />
+                    <DetailRow label="Block list" value={blockListIdx ? `#${blockListIdx}` : 'None'} />
                     {!giveOwnership && !getOwnership ? (
                         <DetailRow
                             label="Price"
@@ -640,7 +673,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     if (actionConfirm.open) {
         return (
             <ActionConfirmScreen
-                confirmAction={actionConfirm.confirmAction}
+                confirmAction={withFormattedExpiration(actionConfirm.confirmAction)}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount

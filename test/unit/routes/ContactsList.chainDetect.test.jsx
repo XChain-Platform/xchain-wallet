@@ -50,7 +50,8 @@ describe('ContactsList network badges', () => {
             entries: [{ chain: 'unknown', address: DOGE_TESTNET, label: '' }],
         }]);
         await waitFor(() => expect(screen.getByText('Shibe')).toBeTruthy());
-        expect(screen.getByAltText('Dogecoin')).toBeTruthy();
+        expect(screen.getByText('Dogecoin')).toBeTruthy();
+        expect(screen.getByText(/testnet/i)).toBeTruthy();
         expect(screen.queryByLabelText('Unknown network')).toBeNull();
     });
 
@@ -69,6 +70,6 @@ describe('ContactsList network badges', () => {
             entries: [{ chain: 'litecoin', address: BTC_OR_LTC_TESTNET, label: '' }],
         }]);
         await waitFor(() => expect(screen.getByText('Chosen')).toBeTruthy());
-        expect(screen.getByAltText('Litecoin')).toBeTruthy();
+        expect(screen.getByText('Litecoin')).toBeTruthy();
     });
 });

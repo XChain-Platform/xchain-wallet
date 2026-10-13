@@ -4,18 +4,6 @@
     font-size: var(--xc-text-sm);
 }
 
-/* Full-variant wrapper (desktop / wide web): a card around the whole
-   picker body that fills the content area, as every list does (operator
-   ruling 2026-10-12). The small/popup variant renders the body directly. */
-.card {
-    margin: var(--xc-space-6) 0 0;
-    padding: var(--xc-space-6);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-}
-
 /* Inline filter toolbar: free-text search + the All/Coins/Tokens segments,
    docked directly above the balance card. The toolbar and the balance card
    are siblings in the same padded container, so they share the same width;

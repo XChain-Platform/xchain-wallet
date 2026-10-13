@@ -516,6 +516,7 @@ let reopenInFlight = /** @type {Promise<void> | null} */ (null);
 let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
+let activeWalletOperations = 0;
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
@@ -594,8 +595,9 @@ function openWindowAfterIdleCheck() {
  *
  * §24.6 / G057.
  */
-function buildApplicationMenu() {
-    const isMac = process.platform === 'darwin';
+export function installApplicationMenu({
+    isMac = process.platform === 'darwin',
+} = {}) {
     const updateItem = runUpdaterCheck
         ? createUpdateCheckMenuItem(() => { void requestUpdateCheck({ visible: true }); })
         : null;
@@ -681,6 +683,10 @@ function buildApplicationMenu() {
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+function buildApplicationMenu() {
+    installApplicationMenu();
+}
+
 // §40.12 Step 19: single-instance lock + deep-link dispatch must run
 // BEFORE whenReady so a second invocation (e.g. a `bitcoin:` click
 // while the app is already running) routes correctly. `requestSingleInstanceLock`
@@ -761,12 +767,18 @@ app.whenReady().then(async () => {
     // `getState` returns the broadcast shape and keeps one rendering path.
     let lastUpdaterEvent = null;
     try {
-        const { checkForUpdates, downloadAndInstall, isActive } = await attachUpdater({
+        const {
+            checkForUpdates,
+            downloadUpdate: downloadAndInstall,
+            restartAndInstall,
+            isActive,
+        } = await attachUpdater({
             onEvent: (event) => {
                 if (updateCheckVisible) event.userInitiated = true;
                 lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
+            canRestart: () => activeWalletOperations === 0,
         });
         runUpdaterCheck = isActive ? checkForUpdates : null;
 
@@ -792,10 +804,19 @@ app.whenReady().then(async () => {
             if (!isTrustedSender(event)) {
                 return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
             }
-            if (!hasNoIpcArguments(args)) {
-                return { ok: false, reason: 'desktop: update install takes no arguments' };
+            // At most one argument, and it must be one of the known action
+            // names; anything else is rejected before it can steer main.
+            if (args.length > 1) {
+                return { ok: false, reason: 'desktop: update install takes at most one action' };
             }
-            return downloadAndInstall();
+            const action = args.length === 0 ? 'download' : args[0];
+            if (action === 'check') {
+                await requestUpdateCheck({ visible: true });
+                return { ok: true };
+            }
+            if (action === 'restart') return restartAndInstall();
+            if (action === 'download') return downloadAndInstall();
+            return { ok: false, reason: 'desktop: unknown update action' };
         });
 
         // Kick a quiet check on launch. The menu path marks its events so
@@ -826,10 +847,15 @@ app.whenReady().then(async () => {
                 error: { name: 'Error', message: 'desktop: runtime not initialized' },
             };
         }
-        const response = await handleIpcMessage(runtime, message);
-        const change = stateChangeForMessage(message, response);
-        if (change) broadcastToWindows('xchain:state-changed', change, event.sender);
-        return response;
+        activeWalletOperations += 1;
+        try {
+            const response = await handleIpcMessage(runtime, message);
+            const change = stateChangeForMessage(message, response);
+            if (change) broadcastToWindows('xchain:state-changed', change, event.sender);
+            return response;
+        } finally {
+            activeWalletOperations -= 1;
+        }
     });
 
     // §24.6 / Cluster Y FOLLOWUP 4: detach a pending tx (or any
