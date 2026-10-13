@@ -28,7 +28,7 @@ const migratedRoutes = [
 ];
 
 const styleGuideRoutes = {
-    AccountPicker: ['Button'],
+    AccountPicker: ['Button', 'ListRow'],
     ControllerBindForm: ['Button', 'Input', 'Select'],
     ListCreateForm: ['Button', 'Input', 'Select', 'Textarea'],
     MarketActivity: ['Button'],
@@ -112,7 +112,7 @@ describe('shared route button usage', () => {
         ['SignMessageForm', ['Button', 'CopyButton', 'Select', 'Textarea'], 0],
         ['TokenPicker', ['Button', 'Input'], 0],
         ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
-        ['WalletPicker', ['Button'], 1],
+        ['WalletPicker', ['Button', 'ListRow'], 0],
     ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
         const source = readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
@@ -147,7 +147,7 @@ describe('shared route button usage', () => {
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
         const expectedInputs = { ControllerBindForm: 1, ListCreateForm: 1, MultisigCreate: 1 };
-        const expectedButtons = { AccountPicker: 1, MarketActivity: 1 };
+        const expectedButtons = { MarketActivity: 1 };
 
         for (const routeName of Object.keys(styleGuideRoutes)) {
             const source = readFileSync(
@@ -164,6 +164,17 @@ describe('shared route button usage', () => {
             expect(nativeButtons, routeName).toHaveLength(expectedButtons[routeName] || 0);
             expect(rowRationales, routeName).toHaveLength(nativeButtons.length);
         }
+    });
+
+    it.each(['ContactsPickerScreen', 'ListPickerScreen'])('%s uses ListRow for selectable rows', (componentName) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/components/${componentName}.jsx`),
+            'utf8',
+        );
+
+        expect(source).toMatch(/import\s+\{[^}]*\bListRow\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
+        expect(source).toMatch(/<ListRow\b/);
+        expect(source).not.toMatch(/<button\b/);
     });
 });
 

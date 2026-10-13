@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ListPickerScreen } from '@xchain-wallet/core/shared/components/ListPickerScreen.jsx';
 
 function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }, overrides = {}) {
@@ -33,10 +33,9 @@ function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }, overrides 
 }
 
 async function detailText(idx) {
-    const title = await screen.findByText(new RegExp(`list #${idx}`));
-    const button = title.closest('button');
-    await waitFor(() => expect(button.lastChild.textContent).not.toMatch(/^counting…/));
-    return button.lastChild.textContent;
+    const row = await screen.findByRole('button', { name: new RegExp(`list #${idx}`, 'i') });
+    await waitFor(() => expect(row).not.toHaveTextContent('counting…'));
+    return within(row).getByText(/^(?:[\d,]+ members?|members unavailable)(?: · .*)?$/).textContent;
 }
 
 describe('ListPickerScreen description detail', () => {
@@ -138,8 +137,8 @@ describe('ListPickerScreen description detail', () => {
             [{ action_index: '10', type: '2', description: 'Holders of the gold tier' }],
             detail.promise,
         );
-        const title = await screen.findByText(/list #10/);
-        expect(title.closest('button').lastChild.textContent).toBe('counting…');
+        const row = await screen.findByRole('button', { name: /list #10/i });
+        expect(row).toHaveTextContent('counting…');
         detail.resolve({ type: '2', list: ['a', 'b'] });
         expect(await detailText('10')).toBe('2 members · Holders of the gold tier');
     });
@@ -227,7 +226,7 @@ describe('ListPickerScreen description detail', () => {
         expect(onBack).toHaveBeenCalledOnce();
         expect(onSelect).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByText('Treasury (List #10)').closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: /Treasury \(List #10\)/ }));
         expect(onSelect).toHaveBeenCalledWith({
             actionIndex: '10',
             type: '2',

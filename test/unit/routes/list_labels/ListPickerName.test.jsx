@@ -111,9 +111,9 @@ describe('ListPickerScreen selection name', () => {
         );
 
         await waitFor(() => expect(screen.getAllByText('2 members')).toHaveLength(3));
-        fireEvent.click(screen.getByText('VIP wallets (List #10)').closest('button'));
-        fireEvent.click(screen.getByText('Address list #11').closest('button'));
-        fireEvent.click(screen.getByText('Address list #12').closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: /VIP wallets \(List #10\)/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Address list #11/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Address list #12/ }));
 
         expect(onSelect.mock.calls).toEqual([
             [{ actionIndex: '10', type: '2', memberCount: 2, name: 'VIP wallets' }],

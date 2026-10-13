@@ -87,7 +87,7 @@ describe('WalletPicker badges read passphraseStored', () => {
 
     it('badges only the not-yet-captured wallet when both are listed side by side', async () => {
         const utils = await renderPicker([STORED, AWAITING_CAPTURE]);
-        const rows = Array.from(utils.container.querySelectorAll('button')).map((n) => n.textContent || '');
+        const rows = utils.getAllByRole('button').map((node) => node.textContent || '');
         const storedRow = rows.find((t) => t.includes('Stored one'));
         const legacyRow = rows.find((t) => t.includes('Legacy one'));
         expect(storedRow, 'the stored wallet\'s own row carries no warning').not.toMatch(/needs its passphrase/i);

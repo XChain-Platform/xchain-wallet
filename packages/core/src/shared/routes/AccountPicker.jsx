@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -120,9 +120,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     const subtitle = customName && customName !== defaultName ? defaultName : null;
                     return (
                         <div key={a.id} className={pickerStyles.rowWrap}>
-                            {/* Clickable list rows stay native buttons so the whole row keeps its established layout and hit target. */}
-                            <button
-                                type="button"
+                            <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => {
@@ -130,8 +128,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                     runRouteAction(onBack);
                                 }}
                                 aria-current={active ? 'true' : undefined}
-                            >
-                                <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
+                                title={(
                                     <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
                                         {active ? (
                                             <span className={pickerStyles.currentMark} aria-hidden="true">
@@ -140,11 +137,11 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                         ) : null}
                                         <span className={pickerStyles.rowName} title={label}>{label}</span>
                                     </span>
-                                    {subtitle ? (
-                                        <span className={styles.entryDescription}>{subtitle}</span>
-                                    ) : null}
-                                </span>
-                            </button>
+                                )}
+                                subtitle={subtitle ? (
+                                    <span className={styles.entryDescription}>{subtitle}</span>
+                                ) : null}
+                            />
                             {onRenameAccount ? (
                                 <Button
                                     type="button"

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
 import { WalletIdentity } from '../components/WalletIdentity.jsx';
@@ -126,17 +126,14 @@ export function WalletPicker({
                     const walletName = w.name || 'Unnamed wallet';
                     return (
                         <div key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
-                            {/* Keep the native button because the complete wallet row is the list selection target. */}
-                            <button
-                                type="button"
+                            <ListRow
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => handleSelect(w.id, active)}
                                 disabled={switching}
                                 aria-busy={switchingWalletId === w.id ? 'true' : undefined}
                                 aria-current={active ? 'true' : undefined}
-                            >
-                                <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
+                                title={(
                                     <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
                                         {active ? (
                                             <span className={pickerStyles.currentMark} aria-hidden="true">
@@ -147,21 +144,21 @@ export function WalletPicker({
                                             <WalletIdentity wallet={w} active={active} />
                                         </span>
                                     </span>
-                                    {w.format ? (
-                                        <span className={styles.entryDescription}>
-                                            {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
-                                            {w.format === 'counterwallet-legacy'
-                                                ? t('walletPicker.legacy')
-                                                : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
-                                            {/* A stored passphrase (passphraseStored) unlocks on the
-                                                password alone, so it earns no badge here; only a legacy
-                                                record still owed its one-time capture does, and the badge
-                                                names the unlock screen as where that happens. */}
-                                            {w.passphraseEnabled && !w.passphraseStored ? t('walletPicker.passphraseNeeded') : ''}
-                                        </span>
-                                    ) : null}
-                                </span>
-                            </button>
+                                )}
+                                subtitle={w.format ? (
+                                    <span className={styles.entryDescription}>
+                                        {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
+                                        {w.format === 'counterwallet-legacy'
+                                            ? t('walletPicker.legacy')
+                                            : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
+                                        {/* A stored passphrase (passphraseStored) unlocks on the
+                                            password alone, so it earns no badge here; only a legacy
+                                            record still owed its one-time capture does, and the badge
+                                            names the unlock screen as where that happens. */}
+                                        {w.passphraseEnabled && !w.passphraseStored ? t('walletPicker.passphraseNeeded') : ''}
+                                    </span>
+                                ) : null}
+                            />
                             {onShowDetails ? (
                                 <Button
                                     type="button"

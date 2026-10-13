@@ -65,7 +65,7 @@ describe('ListPickerScreen includeUnions', () => {
         await waitFor(() => expect(screen.getByText(/Union list #20/)).toBeTruthy());
         expect(screen.queryByText(/list #30/)).toBeNull();
         expect(screen.queryByText(/list #40/)).toBeNull();
-        fireEvent.click(screen.getByText(/Union list #20/).closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: /Union list #20/ }));
         expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ actionIndex: '20', type: '3' }));
     });
 });

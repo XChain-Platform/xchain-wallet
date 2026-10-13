@@ -24,7 +24,7 @@
 // read fails or that has no members is left out.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
@@ -250,8 +250,7 @@ export function ListPickerScreen({
                                     : `${formatDecimalAmount(count)} member${count === 1 ? '' : 's'}`;
                             return (
                                 <li key={idx}>
-                                    <button
-                                        type="button"
+                                    <ListRow
                                         className={styles.abRow}
                                         onClick={() => onSelect({
                                             actionIndex: idx,
@@ -261,17 +260,20 @@ export function ListPickerScreen({
                                                 ? { name: row.name }
                                                 : {}),
                                         })}
-                                    >
-                                        <span className={styles.abName}>
-                                            {titleLabel}
-                                            {status && status !== 'valid' ? ` (${status})` : ''}
-                                        </span>
-                                        <span className={styles.abAddr}>
-                                            {description && count !== undefined
-                                                ? `${countText} · ${description}`
-                                                : countText}
-                                        </span>
-                                    </button>
+                                        title={(
+                                            <span className={styles.abName}>
+                                                {titleLabel}
+                                                {status && status !== 'valid' ? ` (${status})` : ''}
+                                            </span>
+                                        )}
+                                        subtitle={(
+                                            <span className={styles.abAddr}>
+                                                {description && count !== undefined
+                                                    ? `${countText} · ${description}`
+                                                    : countText}
+                                            </span>
+                                        )}
+                                    />
                                 </li>
                             );
                         })}
