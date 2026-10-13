@@ -64,12 +64,11 @@ assert.match(recvSrc, /QRCode\.toDataURL\(qrUri/, 'request URI rendered to QR');
 
 assert.match(recvSrc, /copyQrImage = useCallback/, 'copy callback memoized');
 assert.match(recvSrc, /shareQrImage = useCallback/, 'share callback memoized');
-// Every shell's CSP pins connect-src to the wallet's own hosts, so a
-// `fetch(dataUrl)` is refused and both buttons failed with "Failed to
-// fetch" (user report, 2026-09-07). The PNG is decoded in-process.
+// Every shell's CSP limits connect-src to wallet hosts, so the PNG decoder
+// stays in-process instead of relying on `fetch(dataUrl)`.
 assert.doesNotMatch(recvSrc, /fetch\(qrDataUrl\)/, 'never fetches the QR data URL');
 assert.match(recvSrc, /dataUrlToBlob\(qrDataUrl\)/, 'decodes the QR data URL in-process');
-// Same report: the read-only address needed a manual select + copy.
+// The read-only address also provides a direct copy action.
 assert.match(recvSrc, /copyAddress = useCallback/, 'single-tap request copy callback');
 assert.match(recvSrc, /onClick=\{copyAddress\}/, 'tapping the address field copies it');
 assert.match(recvSrc, /copyText\(qrUri\)/, 'text copy matches the QR payment request');
@@ -80,20 +79,28 @@ assert.match(
 );
 assert.match(
     recvSrc,
-    /navigator\.share\(\{[\s\S]*?files: \[file\]/,
-    'shares the QR image file via the Web Share API',
+    /await nav\.share\(data\)/,
+    'uses the Web Share API when available',
 );
-assert.match(recvSrc, /canShareFiles/, 'feature-detects file-share support');
+assert.match(recvSrc, /title: `Receive \$\{asset\} with XChain`/, 'shares a useful title');
+assert.match(recvSrc, /url: qrUri/, 'shares the exact payment request URL');
 assert.match(
     recvSrc,
-    /navigator\.canShare\(\{ files:/,
-    'probes navigator.canShare with a file before offering Share',
+    /nav\.canShare\(withFile\)/,
+    'attaches the QR image only when file sharing is supported',
 );
+assert.match(recvSrc, /copyText\(qrUri\)/, 'copies the payment request when sharing is unavailable');
+assert.match(recvSrc, /err\?\.name === 'AbortError'/, 'treats share-sheet cancellation quietly');
 
 // --- buttons ---------------------------------------------------------
 
 assert.match(recvSrc, /Copy QR/, 'Copy QR button');
-assert.match(recvSrc, /Share QR/, 'Share QR button (shown when file-share is supported)');
+assert.match(recvSrc, /Share QR/, 'Share QR button is always offered for a rendered request');
+assert.doesNotMatch(
+    recvSrc,
+    /\{canShareFiles \? \(/,
+    'Share QR does not disappear when file sharing is unsupported',
+);
 
 // --- CSS hooks -------------------------------------------------------
 
