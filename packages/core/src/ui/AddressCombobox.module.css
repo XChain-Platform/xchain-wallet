@@ -13,6 +13,7 @@
 .iconButton {
     --xc-icon-size: var(--xc-icon-md);
     position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
     inset-inline-end: 4px;
     top: calc(20px + var(--xc-space-1));
     height: 36px;

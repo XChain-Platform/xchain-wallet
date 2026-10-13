@@ -53,9 +53,11 @@
     width: 100%;
 }
 
+/* Positioned so the input paints over the earlier ::before hit area. No
+   z-index: an overlay drawn on the field (an address preview, an icon
+   button) must keep painting above the input's opaque background. */
 .controlHitArea > .input {
     position: relative;
-    z-index: var(--xc-z-base);
 }
 
 .input:focus {

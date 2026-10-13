@@ -79,6 +79,7 @@
 .passwordToggle {
     --xc-icon-size: var(--xc-icon-md);
     position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
     inset-inline-end: 2px;
     top: calc(var(--xc-text-sm) + var(--xc-space-2));
     display: inline-flex;

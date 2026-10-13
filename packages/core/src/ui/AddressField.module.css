@@ -22,6 +22,7 @@
 .iconButton {
     --xc-icon-size: var(--xc-icon-md);
     position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
     inset-inline-end: 4px;
     top: calc(20px + var(--xc-space-1));
     height: 36px;
@@ -51,6 +52,7 @@
 
 .readOnlyValue {
     position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
     inset-inline-start: var(--xc-space-3);
     inset-inline-end: 52px;
     top: calc(20px + var(--xc-space-1));
