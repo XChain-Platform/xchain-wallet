@@ -898,7 +898,7 @@ function AppInner() {
     const handleSwitchWallet = (id) => {
         setActiveAccountId(null);
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id);
+        if (id) writeActiveWallet(id, walletList.find((wallet) => wallet.id === id)?.name);
     };
 
     // Switch the active account and remember it per wallet, so a reload
