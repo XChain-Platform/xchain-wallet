@@ -111,3 +111,18 @@
         text-align: start;
     }
 }
+
+/* ConfirmActionModal contains this summary by usable inline size, which also
+   catches padded 412px screens whose content column is narrower than 400px. */
+@container (max-width: 399px) {
+    .row,
+    .delta {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--xc-space-1);
+    }
+
+    .row dd,
+    .deltaValues {
+        text-align: start;
+    }
+}
