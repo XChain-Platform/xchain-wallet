@@ -34,12 +34,15 @@ const OUT_ROOT = join(repo, 'tmp', 'layout-sweep');
 // The window sizes: the app's minimum, its default, a mid-size and a large
 // one. The desktop shell is a resizable phone-first layout, so the sizes
 // between are where panels have been seen to misbehave.
-const SIZES = [
-    [360, 600],
-    [420, 720],
-    [900, 700],
-    [1280, 800],
-];
+// LAYOUT_SIZES="1920x1080,1280x800" picks others, e.g. a large monitor.
+const SIZES = process.env.LAYOUT_SIZES
+    ? process.env.LAYOUT_SIZES.split(',').map((s) => s.split('x').map(Number))
+    : [
+        [360, 600],
+        [420, 720],
+        [900, 700],
+        [1280, 800],
+    ];
 
 for (const [width, height] of SIZES) {
     test(`desktop layout sweep ${width}x${height}`, async () => {

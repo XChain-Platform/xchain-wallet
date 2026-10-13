@@ -4,11 +4,11 @@
     font-size: var(--xc-text-sm);
 }
 
-/* Full-variant wrapper (desktop / wide web): a centered card around the
-   whole picker body. The small/popup variant renders the body directly. */
+/* Full-variant wrapper (desktop / wide web): a card around the whole
+   picker body that fills the content area, as every list does (operator
+   ruling 2026-10-12). The small/popup variant renders the body directly. */
 .card {
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
+    margin: var(--xc-space-6) 0 0;
     padding: var(--xc-space-6);
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
