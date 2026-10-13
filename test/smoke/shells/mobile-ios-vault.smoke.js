@@ -276,7 +276,8 @@ assert.match(
     'full screen, so no swipe can dismiss the scanner without the plugin knowing',
 );
 
-// Wherever the SPA names a QR method or event, the plugin answers to that exact string.
+// Wherever the SPA calls a QR method or listens for a QR event, the plugin answers to that exact string.
+// Only call and listen positions count, so a test id or copy key that starts with "qrScan" does not.
 function sourcesUnder(dir) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         const path = join(dir, entry.name);
@@ -287,8 +288,14 @@ function sourcesUnder(dir) {
 const spaQrNames = new Set();
 for (const dir of [join(wsRoot, 'packages', 'core', 'src'), join(wsRoot, 'packages', 'web', 'src')]) {
     for (const file of sourcesUnder(dir)) {
-        for (const m of readFileSync(file, 'utf8').matchAll(/['"](qr(?:Scan[A-Z][A-Za-z]*|Frame))['"]/g)) {
-            spaQrNames.add(m[1]);
+        const text = readFileSync(file, 'utf8');
+        const uses = [
+            /\.(qrScan[A-Z]\w*)\??\.?\(/g,
+            /callNativeVault\(\s*['"](qrScan\w+)['"]/g,
+            /addListener\??\.?\(\s*['"](qr\w+)['"]/g,
+        ];
+        for (const pattern of uses) {
+            for (const m of text.matchAll(pattern)) spaQrNames.add(m[1]);
         }
     }
 }
