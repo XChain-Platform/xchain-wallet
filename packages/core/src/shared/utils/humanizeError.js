@@ -116,6 +116,12 @@ function classifiedResult(raw, hay, verb) {
         cause = 'inputs_on_hold';
         message = `Couldn't ${verb}. Coins at this address are still on hold for a transaction `
             + 'prepared in the last 5 minutes. Broadcast that transaction, or wait 5 minutes and try again.';
+    } else if (/\bno spendable utxos\b|\bno utxos (?:were provided|found)\b/.test(hay)) {
+        // The encoder's word for an address holding no coin at all. A phone
+        // showed "no spendable UTXOs found for the funding address" verbatim.
+        cause = 'insufficient_funds';
+        message = `Couldn't ${verb}. This address has no coins to spend yet. Receive some first, `
+            + 'or choose an address that holds coins.';
     } else if (/\binsufficient funds\b|\binsufficient balance\b|\b(?:not|no) (?:have )?enough (?:funds|balance|coins?|xcp)\b|\bbalance (?:is )?too low\b|\binadequate funds\b/.test(hay)) {
         cause = 'insufficient_funds';
         message = `Couldn't ${verb}. You don't have enough funds for this transaction.`;
