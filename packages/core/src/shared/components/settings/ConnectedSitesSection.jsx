@@ -14,7 +14,7 @@
 //   - origin / appName / lastUsedAt
 //   - expandable permissions summary (chains, accounts, sign-message,
 //     per-action signAction map)
-//   - Disconnect button that deletes the record
+//   - Disconnect button that confirms revocation, then deletes the record
 //   - Block button that adds the origin to the blocklist (§12 / G009)
 //     and evicts the record so any in-flight session stops signing.
 //
@@ -22,14 +22,12 @@
 // origins with Unblock buttons, plus an inline form to manually
 // block an origin without it being connected first.
 //
-// Per-action permission *editing* (toggling a single ACTION's
-// allow/ask/deny) needs a write handler that's narrower than full
-// record replacement; that lands in a follow-up step.
-
 import { useEffect, useState } from 'react';
 import { EmptyState } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
 import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
@@ -67,6 +65,7 @@ const SITE_BLOCK = {
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
     const { showToast } = useToast();
+    const confirmDialog = useConfirmModal();
     const [sites, setSites] = useState(/** @type {any[] | null} */ (null));
     const [blocked, setBlocked] = useState(/** @type {string[]} */ ([]));
     const [loading, setLoading] = useState(true);
@@ -103,11 +102,15 @@ export function ConnectedSitesSection() {
     useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
     const onDisconnect = async (id) => {
-        // §37.2 / Cluster D FOLLOWUP 1: snapshot the full ConnectedSite
-        // record before tearing it down so the Undo toast can re-create
-        // it with the same permissions / lastUsedAt / appName instead
-        // of forcing the dApp to re-prompt.
         const snapshot = sites ? sites.find((s) => s.id === id) : null;
+        if (!snapshot) return;
+        const confirmed = await confirmDialog.confirm({
+            title: `Disconnect ${snapshot.appName || snapshot.origin}?`,
+            message: `${snapshot.origin} will lose access to its shared accounts and signing permissions.`,
+            confirmLabel: 'Disconnect',
+            danger: true,
+        });
+        if (!confirmed) return;
         try {
             await messaging.deleteConnectedSite({ id });
             await reload();
@@ -168,7 +171,8 @@ export function ConnectedSitesSection() {
         <div style={STACK}>
             {(!sites || sites.length === 0) ? (
                 <EmptyState
-                    title="No sites connected yet. When a website asks to connect to this wallet and you allow it, it appears here."
+                    title="No sites connected yet"
+                    body="When a website asks to connect to this wallet and you allow it, it appears here."
                     titleAs="p"
                 />
             ) : (
@@ -189,6 +193,7 @@ export function ConnectedSitesSection() {
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
                                     <button
                                         type="button"
+                                        aria-expanded={isOpen}
                                         onClick={() => setExpanded((prev) => {
                                             const next = new Set(prev);
                                             if (next.has(site.id)) next.delete(site.id); else next.add(site.id);
@@ -235,6 +240,13 @@ export function ConnectedSitesSection() {
                     <BlocklistAuditPanel />
                 ) : null}
             <SignThrottlePanel />
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </div>
     );
 }
@@ -356,13 +368,13 @@ function SignThrottlePanel() {
         typeof currentBurst === 'number' ? String(currentBurst) : '',
     );
     const [windowSecondsInput, setWindowSecondsInput] = useState(
-        typeof currentWindowMs === 'number' ? String(Math.round(currentWindowMs / 1000)) : '',
+        typeof currentWindowMs === 'number' ? formatWindowSeconds(currentWindowMs) : '',
     );
 
     useEffect(() => {
         setBurstInput(typeof currentBurst === 'number' ? String(currentBurst) : '');
         setWindowSecondsInput(
-            typeof currentWindowMs === 'number' ? String(Math.round(currentWindowMs / 1000)) : '',
+            typeof currentWindowMs === 'number' ? formatWindowSeconds(currentWindowMs) : '',
         );
     }, [currentBurst, currentWindowMs]);
 
@@ -386,15 +398,13 @@ function SignThrottlePanel() {
         if (windowSecondsInput.trim() === '') {
             patch.windowMs = SIGN_THROTTLE_DEFAULT_WINDOW_MS;
         } else {
-            const seconds = Number(windowSecondsInput);
-            const ms = seconds * 1000;
-            if (!/^\d+$/.test(windowSecondsInput.trim())
-                || !Number.isFinite(ms)
+            const ms = parseWindowSeconds(windowSecondsInput);
+            if (ms === null
                 || ms < SIGN_THROTTLE_WINDOW_MS_MIN
                 || ms > SIGN_THROTTLE_WINDOW_MS_MAX) {
                 const minS = SIGN_THROTTLE_WINDOW_MS_MIN / 1000;
                 const maxS = SIGN_THROTTLE_WINDOW_MS_MAX / 1000;
-                setError(`Window must be an integer number of seconds between ${minS} and ${maxS}.`);
+                setError(`Window must be between ${minS} and ${maxS} seconds with at most three decimal places.`);
                 return;
             }
             patch.windowMs = ms;
@@ -411,7 +421,7 @@ function SignThrottlePanel() {
 
     const effectiveBurst = typeof currentBurst === 'number' ? currentBurst : SIGN_THROTTLE_DEFAULT_BURST;
     const effectiveWindowSec = typeof currentWindowMs === 'number'
-        ? Math.round(currentWindowMs / 1000)
+        ? formatWindowSeconds(currentWindowMs)
         : SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000;
 
     const FIELD = {
@@ -468,7 +478,7 @@ function SignThrottlePanel() {
                         type="number"
                         min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
                         max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
-                        step={1}
+                        step={0.001}
                         value={windowSecondsInput}
                         onChange={(e) => setWindowSecondsInput(e.target.value)}
                         placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
@@ -562,9 +572,12 @@ function PermissionsSummary({ permissions }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
             <PermRow label="Chains" text={chains.length === 0 ? 'none' : chains.join(', ')} />
             <PermRow label="Accounts" text={accounts.length === 0 ? 'none' : accounts.join(', ')} />
-            <PermRow label="Sign messages" text={permissions.canSignMessage ? 'allow' : 'deny'} />
+            <PermRow
+                label="Sign messages"
+                text={permissions.canSignMessage ? 'always allow' : 'ask every time'}
+            />
             {Object.keys(actions).length === 0 ? (
-                <PermRow label="Sign actions" text="none granted" />
+                <PermRow label="Sign actions" text="ask every time" />
             ) : (
                 <div>
                     <div style={{ color: 'var(--xc-text-muted)' }}>Sign actions</div>
@@ -573,7 +586,7 @@ function PermissionsSummary({ permissions }) {
                             <li key={action} style={{ color: 'var(--xc-text)' }}>
                                 {actionDisplayLabel(action)}
                                 {': '}
-                                <span style={{ color: permColor(perm) }}>{perm}</span>
+                                <span style={{ color: permColor(perm) }}>{permissionLabel(perm)}</span>
                             </li>
                         ))}
                     </ul>
@@ -593,9 +606,27 @@ function PermRow({ label, text }) {
 }
 
 function permColor(perm) {
-    if (perm === 'allow') return 'var(--xc-success, #2a8)';
-    if (perm === 'deny') return 'var(--xc-error, #c33)';
+    if (perm === 'always') return 'var(--xc-success, #2a8)';
+    if (perm === 'never') return 'var(--xc-error, #c33)';
     return 'var(--xc-text-muted)';
+}
+
+function permissionLabel(perm) {
+    if (perm === 'always') return 'always allow';
+    if (perm === 'never') return 'never allow';
+    return 'ask every time';
+}
+
+function formatWindowSeconds(windowMs) {
+    return String(windowMs / 1000);
+}
+
+function parseWindowSeconds(value) {
+    const match = /^(\d+)(?:\.(\d{1,3}))?$/.exec(value.trim());
+    if (!match) return null;
+    const wholeMs = Number(match[1]) * 1000;
+    const fractionalMs = Number((match[2] || '').padEnd(3, '0'));
+    return wholeMs + fractionalMs;
 }
 
 function formatLastUsed(iso) {
