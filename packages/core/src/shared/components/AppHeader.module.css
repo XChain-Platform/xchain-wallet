@@ -117,3 +117,16 @@
     align-items: center;
     color: var(--xc-text-muted);
 }
+
+/* Short landscape screens keep the persistent controls reachable while
+   returning vertical space to the active route. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .bar {
+        gap: var(--xc-space-2);
+        padding: var(--xc-space-1) var(--xc-space-2);
+    }
+
+    .logo {
+        width: 44px;
+    }
+}

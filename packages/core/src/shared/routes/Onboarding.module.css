@@ -229,3 +229,36 @@
 .licenseAck input[type="checkbox"] {
     margin-top: 2px;
 }
+
+/* Short landscape screens retain every onboarding action while trimming
+   decorative height around the brand and license gate. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .heroPopup,
+    .heroFull {
+        padding: 0;
+    }
+
+    .logoPopup,
+    .logoFull {
+        width: 96px;
+        margin-bottom: var(--xc-space-1);
+    }
+
+    .taglineFull {
+        margin-bottom: var(--xc-space-2);
+    }
+
+    .actionsPopup,
+    .actionsFull {
+        gap: var(--xc-space-1);
+    }
+
+    .licenseHero {
+        margin-bottom: 0;
+    }
+
+    .licenseScroll {
+        min-height: 96px;
+        padding: var(--xc-space-2) var(--xc-space-3);
+    }
+}
