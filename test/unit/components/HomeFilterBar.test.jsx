@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { HomeFilterBar } from '../../../packages/core/src/shared/components/HomeFilterBar.jsx';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
 
 const descriptors = {
     bitcoin: { id: 'bitcoin-mainnet', displayName: 'Bitcoin' },
@@ -56,12 +57,15 @@ describe('HomeFilterBar', () => {
         mount({ networkFilter });
         const button = screen.getByRole('button', { name: 'Filter by network' });
         expect(button).toHaveTextContent('All networks');
+        expect(button).toHaveClass(chipStyles.chip);
+        expect(button).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('shows a selected network display name', () => {
         mount({ networkFilter: 'bitcoin' });
         const button = screen.getByRole('button', { name: 'Filter by network' });
         expect(button).toHaveTextContent('Bitcoin');
+        expect(button).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('falls back to the coin code without a descriptor', () => {

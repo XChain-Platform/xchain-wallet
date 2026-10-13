@@ -10,6 +10,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
 
 afterEach(() => cleanup());
 
@@ -40,6 +41,8 @@ describe('MarketsList narrow layout', () => {
         );
 
         await screen.findByRole('button', { name: 'Open Pepe market' });
+        const pair = screen.getByText('PEPE').closest(`.${chipStyles.chip}`);
+        expect(pair).toHaveTextContent('BTC / PEPE');
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         back.focus();
         await user.keyboard('{Enter}');
@@ -56,12 +59,14 @@ describe('MarketsList narrow layout', () => {
         await user.keyboard('{Enter}');
         expect(onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 'BTC', 'PEPE');
 
-        // The market kind tabs are one roving tab stop on the selected tab.
         await user.tab();
-        expect(screen.getByRole('tab', { name: 'Popular' })).toHaveFocus();
-        for (const name of ['All', 'Watchlist']) {
-            expect(screen.getByRole('tab', { name })).toHaveAttribute('tabindex', '-1');
-        }
+        expect(screen.getByRole('button', { name: 'All' })).toHaveFocus();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Popular' })).toHaveFocus();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Watchlist' })).toHaveFocus();
 
         await user.tab();
         const star = screen.getByRole('button', { name: 'Add to watchlist' });
@@ -202,19 +207,16 @@ describe('MarketsList narrow layout', () => {
 
         await screen.findByText('AAA');
         expect(screen.queryByText('FFF')).toBeNull();
-        const popular = screen.getByRole('tab', { name: 'Popular' });
-        const all = screen.getByRole('tab', { name: 'All' });
-        const panel = screen.getByRole('tabpanel', { name: 'Popular' });
-        expect(popular).toHaveAttribute('tabindex', '0');
+        const popular = screen.getByRole('button', { name: 'Popular' });
+        const all = screen.getByRole('button', { name: 'All' });
+        const panel = document.getElementById(popular.getAttribute('aria-controls'));
+        expect(popular).toHaveClass(chipStyles.chip);
+        expect(popular).toHaveAttribute('aria-pressed', 'true');
         expect(popular).toHaveAttribute('aria-controls', panel.id);
         expect(panel).toHaveAttribute('aria-labelledby', popular.id);
-        expect(all).toHaveAttribute('tabindex', '-1');
-        expect(all).toHaveAttribute('aria-selected', 'false');
+        expect(all).toHaveAttribute('aria-pressed', 'false');
         fireEvent.click(all);
-        expect(all).toHaveAttribute('aria-selected', 'true');
-        expect(all).toHaveAttribute('tabindex', '0');
-        expect(popular).toHaveAttribute('tabindex', '-1');
-        expect(screen.getByRole('tabpanel', { name: 'All' })).toBe(panel);
+        expect(all).toHaveAttribute('aria-pressed', 'true');
         expect(panel).toHaveAttribute('aria-labelledby', all.id);
         expect(await screen.findByText('FFF')).toBeInTheDocument();
     });
@@ -304,7 +306,7 @@ describe('MarketsList narrow layout', () => {
         );
 
         await screen.findByText('TOKEN0');
-        fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+        fireEvent.click(screen.getByRole('button', { name: 'All' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(25);
         fireEvent.click(screen.getByRole('button', { name: 'Load more markets' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(30);
@@ -368,7 +370,7 @@ describe('MarketsList narrow layout', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'All' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'All' }));
         await screen.findByText('TOKEN0000');
         const list = screen.getByRole('list', { name: 'Markets' });
         await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(25));
