@@ -114,52 +114,21 @@
     object-fit: cover;
 }
 
-.pinBtn,
-.hideBtn {
+/* Positions the kit pin and hide Buttons over the card art; the kit owns their
+   look. The .card scope outranks the kit .btn position: relative. */
+.card .pinBtn,
+.card .hideBtn {
     position: absolute;
     top: var(--xc-space-4);
     width: var(--xc-control-h-sm);
     height: var(--xc-control-h-sm);
-    padding: 0;
-    border: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--xc-text-lg);
-    color: var(--xc-on-accent);
-    /* raw-color-ok: the image scrim stays black across themes. */
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 50%;
-    cursor: pointer;
-    user-select: none;
-    line-height: 1;
 }
 
-.pinBtn { inset-inline-end: var(--xc-space-4); }
-.hideBtn {
+.card .pinBtn { inset-inline-end: var(--xc-space-4); }
+.card .hideBtn {
     inset-inline-end: calc(
         var(--xc-space-4) + var(--xc-control-h-sm) + var(--xc-space-2)
     );
-}
-
-.pinBtn:hover,
-.hideBtn:hover {
-    background: rgba(0, 0, 0, 0.7);
-}
-
-.pinBtn:focus-visible,
-.hideBtn:focus-visible {
-    outline: 2px solid var(--xc-on-accent);
-    /* The two-pixel focus separation has no spacing-token equivalent. */
-    outline-offset: 2px;
-}
-
-.pinBtnActive {
-    color: var(--xc-accent-text, #f5b400);
-}
-
-.hideBtnActive {
-    color: var(--xc-accent-text, #f5b400);
 }
 
 .meta {

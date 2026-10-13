@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useBackHandler } from './backStack.js';
+import { Button } from './Button.jsx';
 import { BackIcon } from './icons/index.jsx';
 import styles from './PageHeader.module.css';
 
@@ -57,15 +58,14 @@ export function PageHeader({
     return (
         <div className={styles.header}>
             {onBack ? (
-                <button
-                    type="button"
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<BackIcon />}
                     onClick={onBack}
-                    className={styles.back}
                     aria-label={accessibleBackLabel}
                     disabled={backDisabled}
-                >
-                    <BackIcon />
-                </button>
+                />
             ) : (
                 <span className={styles.spacer} />
             )}

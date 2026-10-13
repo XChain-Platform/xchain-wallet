@@ -10,7 +10,7 @@
 
 import { memo, useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
@@ -448,9 +448,11 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                 </span>}
             />
             {showPin ? (
-                <button
-                    type="button"
-                    className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
+                <Button
+                    className={styles.pinBtn}
+                    size="sm"
+                    variant={pinned ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
                     aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
                     title={pinned ? 'Unpin' : 'Pin to top'}
@@ -459,14 +461,14 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                         e.preventDefault();
                         onTogglePin(pinKey, !pinned);
                     }}
-                >
-                    {pinned ? '★' : '☆'}
-                </button>
+                />
             ) : null}
             {typeof onToggleHide === 'function' ? (
-                <button
-                    type="button"
-                    className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
+                <Button
+                    className={styles.hideBtn}
+                    size="sm"
+                    variant={hidden ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
                     aria-pressed={hidden}
                     aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
                     title={hidden ? 'Unhide' : 'Hide'}
@@ -475,9 +477,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                         e.preventDefault();
                         onToggleHide(pinKey, !hidden);
                     }}
-                >
-                    {hidden ? '⊕' : '⊘'}
-                </button>
+                />
             ) : null}
         </div>
     );

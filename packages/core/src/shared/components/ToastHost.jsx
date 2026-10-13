@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '../../ui/Button.jsx';
 import styles from './ToastHost.module.css';
 import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 
@@ -196,14 +197,14 @@ function ToastItem({ toast, onAction, onDismiss }) {
                         {toast.actionLabel}
                     </button>
                 ) : null}
-                <button
-                    type="button"
+                <Button
+                    size="sm"
+                    variant="secondary"
                     className={styles.dismissBtn}
+                    icon={<span aria-hidden="true">×</span>}
                     onClick={onDismiss}
                     aria-label="Dismiss notification"
-                >
-                    ×
-                </button>
+                />
             </div>
         </div>
     );

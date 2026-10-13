@@ -105,6 +105,11 @@ describe('<Button>', () => {
         expect(source).toMatch(/<Button\b[^>]*variant="link"[^>]*icon=\{null\}/);
     });
 
+    it('keeps kit styles when a caller adds a contextual class', () => {
+        render(<Button className="context-action">Go</Button>);
+        expect(screen.getByRole('button')).toHaveClass(styles.btn, styles.md, 'context-action');
+    });
+
     it('uses the shared size scale and hides decorative icons', () => {
         render(
             <>
@@ -271,7 +276,21 @@ describe('<Button>', () => {
         const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 
         expect(button).toHaveClass(styles.sm, styles.iconOnly);
+        expect(button).toHaveAttribute('title', 'Send');
         expect(css).toMatch(/\.iconOnly\s*\{[^}]*width:\s*var\(--xc-button-height\)[^}]*min-width:\s*var\(--xc-button-height\)/s);
         expect(css).toMatch(/@media \(pointer:\s*coarse\), \(hover:\s*none\)[\s\S]*?\.sm::before\s*\{[^}]*width:\s*max\(100%,\s*var\(--xc-control-hit-min,\s*24px\)\)[^}]*height:\s*max\(100%,\s*var\(--xc-control-hit-min,\s*24px\)\)/s);
+    });
+
+    it('rejects an icon-only button without an accessible name', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const preventExpectedError = (event) => event.preventDefault();
+        window.addEventListener('error', preventExpectedError);
+        try {
+            expect(() => render(<Button icon={<SendIcon />} />))
+                .toThrow('Icon-only Button requires an aria-label or aria-labelledby.');
+        } finally {
+            window.removeEventListener('error', preventExpectedError);
+            consoleError.mockRestore();
+        }
     });
 });
