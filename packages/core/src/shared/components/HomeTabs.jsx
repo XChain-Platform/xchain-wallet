@@ -38,6 +38,7 @@ import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import {
@@ -156,7 +157,7 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyProofsEnabled = false, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
@@ -170,6 +171,11 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     const [filterOpen, setFilterOpen] = useState(() => tokenQuery.trim().length > 0);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
     const { messaging } = useMessaging();
+    const verifyMap = useProofVerification({
+        messaging,
+        balances,
+        enabled: verifyProofsEnabled && active === 'tokens',
+    });
 
     useEffect(() => {
         setSortBy(readBalanceSort(walletId));
@@ -187,6 +193,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     // so an opted-out user does not reach the CoinGecko fallback before
     // their choice is known.
     const { settings, loading: settingsLoading } = useSettings();
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
     const watchedRows = useMemo(
         () => buildWatchedTokenRows(settings?.watchedTokens, builtRows, chainRegistry),
         [settings?.watchedTokens, builtRows, chainRegistry],
@@ -203,7 +210,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     }, [displayRows, isDemo]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
-        fiatCurrency: settings?.fiatCurrency || 'USD',
+        fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
         refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
@@ -213,7 +220,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         [builtRows],
     );
     const tokenRequests = useMemo(() => {
-        if (isDemoWallet(walletId)) return [];
+        if (active !== 'tokens' || isDemoWallet(walletId)) return [];
         return displayRows
             .filter((r) => r.kind !== 'native'
                 && typeof r.fiatRate !== 'number'
@@ -226,10 +233,10 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                     nativeTicker: tickerForCoin(descriptor?.coin),
                 };
             });
-    }, [displayRows, chainRegistry, spamKeys, walletId]);
+    }, [active, displayRows, chainRegistry, spamKeys, walletId]);
     const tokenRates = useTokenFiatRates({
         tokens: tokenRequests,
-        fiatCurrency: settings?.fiatCurrency || 'USD',
+        fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
         refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
@@ -256,14 +263,14 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         let cancelled = false;
         messaging.getNativePricesRequest({
             chainIds: nativeChainIds,
-            fiatCurrency: settings?.fiatCurrency || 'USD',
+            fiatCurrency,
         }).then((result) => {
             if (!cancelled) setNativePriceMap(result?.disabled ? {} : (result?.prices || {}));
         }).catch(() => {
             if (!cancelled) setNativePriceMap({});
         });
         return () => { cancelled = true; };
-    }, [isDemo, messaging, nativeChainKey, settings?.fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isDemo, messaging, nativeChainKey, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
     const filteredRows = useMemo(() => {
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
