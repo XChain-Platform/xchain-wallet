@@ -15,6 +15,7 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 import { formatAtomicAmount } from '../../../packages/core/src/shared/utils/amountFormat.js';
 
 const balanceCss = readFileSync('packages/core/src/shared/components/BalanceList.module.css', 'utf8');
+const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
 const historyCss = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
 const tokenDetailCss = readFileSync('packages/core/src/shared/routes/TokenDetail.module.css', 'utf8');
 const walletPickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
@@ -71,8 +72,10 @@ describe('long content layout', () => {
         expect(screen.getByTitle('EXTRAORDINARILYLONGTICKER')).toBeInTheDocument();
         expect(screen.getByTitle(formattedQuantity)).toHaveTextContent(formattedQuantity);
         expect(rule(balanceCss, '.name')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(balanceCss, '.body')).toMatch(/flex:\s*1 1 0/);
-        expect(rule(balanceCss, '.amounts')).toMatch(/max-width:\s*calc\(100% - 48px - var\(--xc-space-3\) - var\(--xc-space-3\)\)/);
+        // The shared row keeps the amount column at its full width and lets the label column yield.
+        expect(rule(listRowCss, '.content')).toMatch(/flex:\s*1 1 auto;[^}]*min-width:\s*0/s);
+        expect(listRowCss).toMatch(/\.trailing,[^{]*\{[^}]*flex:\s*0 0 auto/);
+        expect(rule(balanceCss, '.amounts')).toMatch(/min-width:\s*0/);
         expect(rule(balanceCss, '.qty')).toMatch(/font-variant-numeric:\s*tabular-nums/);
         expect(rule(balanceCss, '.amountFit')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(balanceCss, '.qty')).not.toMatch(/text-overflow:\s*ellipsis/);
