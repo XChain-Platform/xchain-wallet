@@ -30,3 +30,22 @@ export function extractHolderRows(resp) {
     if (Array.isArray(resp.holders)) return resp.holders;
     return [];
 }
+
+/**
+ * Return the complete holder count without mistaking one response page for
+ * the full set. Counts stay as decimal strings so totals larger than
+ * Number.MAX_SAFE_INTEGER remain exact.
+ *
+ * @param {any} resp  the response from `messaging.getHoldersForToken`
+ * @returns {string}  a non-negative integer count
+ */
+export function extractHolderCount(resp) {
+    const raw = resp && !Array.isArray(resp) ? resp.total : undefined;
+    if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) {
+        return BigInt(raw.trim()).toString();
+    }
+    if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0) {
+        return String(raw);
+    }
+    return String(extractHolderRows(resp).length);
+}

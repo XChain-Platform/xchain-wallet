@@ -169,7 +169,9 @@ for (const [label, path] of shells) {
     );
     assert.match(
         src,
-        /useState\(\s*\n\s*\/\*\*[^\n]*\*\/\s*\n\s*\(\) => takePostDemoIntent\(\) \|\| 'welcome',\s*\n\s*\);/,
+        // The resumed lane comes first; a shell may fall back through its own
+        // handoff lane before 'welcome' (the extension's full-tab import).
+        /useState\(\s*\n\s*\/\*\*[^\n]*\*\/\s*\n\s*\(\) => takePostDemoIntent\(\)\s*\|\|[^;]*?'welcome'\)?,\s*\n\s*\);/,
         `${label} seeds onboardingStep from the resumed lane`,
     );
     const addLane = src.slice(src.indexOf("unlockedView === 'add-wallet'"));

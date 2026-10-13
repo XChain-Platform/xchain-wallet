@@ -145,19 +145,19 @@ describe('Home honours the host active wallet', () => {
         );
         const { rerender } = render(tree(WALLET_A.id, 'account-a'));
 
-        expect(await screen.findByText('BTC')).toBeTruthy();
+        expect(await screen.findByText(/^BTC\b/)).toBeTruthy();
         expect(screen.getByText('Updating balances…')).toBeTruthy();
 
         rerender(tree(WALLET_B.id, ACCOUNT_B));
 
-        expect(await screen.findByText('DOGE')).toBeTruthy();
-        expect(screen.queryByText('BTC')).toBeNull();
+        expect(await screen.findByText(/^DOGE\b/)).toBeTruthy();
+        expect(screen.queryByText(/^BTC\b/)).toBeNull();
         expect(screen.getByText('Updating balances…')).toBeTruthy();
 
         await act(async () => {
             finishBalances[WALLET_B.id](balance('litecoin-mainnet', 'ltc1qfresh', 'LTC', '300000000'));
         });
-        expect(await screen.findByText('LTC')).toBeTruthy();
+        expect(await screen.findByText(/^LTC\b/)).toBeTruthy();
         await waitFor(() => expect(screen.queryByText('Updating balances…')).toBeNull());
         await waitFor(() => {
             expect(readBalanceCache(WALLET_B.id, ACCOUNT_B)?.balances)

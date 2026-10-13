@@ -64,9 +64,10 @@
 //
 //   - `xchainWalletUpdater.{onEvent,getState,install}`: the renderer's
 //     half of the update path. Main runs the check, the K1 signature
-//     gate and `quitAndInstall`; the renderer subscribes to the offer
-//     (`onEvent`), reads an offer that landed before it mounted
-//     (`getState`), and asks for the verified install (`install`).
+//     gate and `quitAndInstall`; the renderer subscribes to status
+//     (`onEvent`), reads status that landed before it mounted
+//     (`getState`), and asks for check, download, or restart steps
+//     (`install`).
 //     Read-and-ask only: nothing here hands the renderer a path, a
 //     URL, or a way to skip the signature gate.
 //
@@ -180,13 +181,14 @@ contextBridge.exposeInMainWorld('xchainWalletUpdater', {
         return ipcRenderer.invoke(UPDATER_STATE_CHANNEL);
     },
     /**
-     * Download the offered update, verify it against the K1-signed
-     * release manifest, and install it. The app quits and relaunches on
-     * success, so a resolved `{ ok: true }` is rarely observed.
+     * Ask main to check, download, or restart. Download verifies against
+     * the K1-signed release manifest and leaves the app running until a
+     * separate restart request is safe.
+     * @param {'check' | 'download' | 'restart'} [action]
      * @returns {Promise<{ ok: boolean, reason?: string }>}
      */
-    install() {
-        return ipcRenderer.invoke(UPDATER_INSTALL_CHANNEL);
+    install(action = 'download') {
+        return ipcRenderer.invoke(UPDATER_INSTALL_CHANNEL, action);
     },
 });
 

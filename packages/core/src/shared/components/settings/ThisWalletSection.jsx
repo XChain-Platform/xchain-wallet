@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { CopyButton } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { KeyQR } from '../KeyQR.jsx';
+import { useToast } from '../ToastHost.jsx';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearBalanceCache } from '../../utils/balanceCache.js';
@@ -242,6 +243,7 @@ export function ThisWalletSection({
                     onClose={closePublicKeyExport}
                 />
             )}
+            <ChangePasswordRow walletId={activeWallet.id} disabled={removing} />
             {confirmingRemove ? (
                 <RemoveConfirm
                     walletName={activeWallet.name}
@@ -272,6 +274,160 @@ export function ThisWalletSection({
         </div>
     );
 }
+
+const MIN_WALLET_PASSWORD_LENGTH = 8;
+
+function ChangePasswordRow({ walletId, disabled }) {
+    const { messaging } = useMessaging();
+    const { showToast } = useToast();
+    const [open, setOpen] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+
+    const reset = () => {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmation('');
+        setError(null);
+    };
+
+    const close = () => {
+        if (busy) return;
+        reset();
+        setOpen(false);
+    };
+
+    const submit = async (event) => {
+        event.preventDefault();
+        if (!currentPassword) {
+            setError('Enter your current wallet password.');
+            return;
+        }
+        if (newPassword.length < MIN_WALLET_PASSWORD_LENGTH) {
+            setError(`New password must be at least ${MIN_WALLET_PASSWORD_LENGTH} characters.`);
+            return;
+        }
+        if (newPassword !== confirmation) {
+            setError('Passwords do not match.');
+            return;
+        }
+        if (newPassword === currentPassword) {
+            setError('Choose a new password that differs from the current password.');
+            return;
+        }
+        if (typeof messaging?.changePassword !== 'function') {
+            setError('Password changes are not wired in this shell yet.');
+            return;
+        }
+
+        setBusy(true);
+        setError(null);
+        try {
+            await messaging.changePassword({ walletId, currentPassword, newPassword });
+            reset();
+            setOpen(false);
+            showToast({ message: 'Wallet password changed.', variant: 'success' });
+        } catch (err) {
+            setError(isWrongPasswordError(err)
+                ? 'Current wallet password is incorrect.'
+                : (err?.message || 'Could not change the wallet password.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (!open) {
+        return (
+            <Row
+                label="Wallet password"
+                hint="Change the password that protects this wallet's private keys."
+                actionLabel="Change…"
+                onClick={() => setOpen(true)}
+                disabled={disabled}
+            />
+        );
+    }
+
+    const update = (setter) => (event) => {
+        setter(event.target.value);
+        if (error) setError(null);
+    };
+
+    return (
+        <form onSubmit={submit} style={EXPORT_PANEL} aria-busy={busy}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>Change wallet password</div>
+            <div style={ROW_HINT}>
+                Use at least {MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger.
+                Keep it safe because it cannot be recovered.
+            </div>
+            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
+                Current wallet password
+                <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={update(setCurrentPassword)}
+                    aria-label="Current wallet password"
+                    autoComplete="current-password"
+                    autoFocus
+                    disabled={busy}
+                    style={PASSWORD_INPUT}
+                />
+            </label>
+            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
+                New wallet password
+                <input
+                    type="password"
+                    value={newPassword}
+                    onChange={update(setNewPassword)}
+                    aria-label="New wallet password"
+                    autoComplete="new-password"
+                    disabled={busy}
+                    style={PASSWORD_INPUT}
+                />
+            </label>
+            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
+                Confirm new wallet password
+                <input
+                    type="password"
+                    value={confirmation}
+                    onChange={update(setConfirmation)}
+                    aria-label="Confirm new wallet password"
+                    autoComplete="new-password"
+                    disabled={busy}
+                    style={PASSWORD_INPUT}
+                />
+            </label>
+            {(confirmation && confirmation !== newPassword)
+                || error === 'Passwords do not match.' ? (
+                <Status text="Passwords do not match." tone="error" />
+            ) : null}
+            {error && error !== 'Passwords do not match.' ? <Status text={error} tone="error" /> : null}
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={close} disabled={busy} style={ACTION_BTN}>Cancel</button>
+                <button type="submit" disabled={busy} style={ACTION_BTN}>
+                    {busy ? 'Changing password…' : 'Change password'}
+                </button>
+            </div>
+        </form>
+    );
+}
+
+const PASSWORD_INPUT = {
+    display: 'block',
+    width: '100%',
+    boxSizing: 'border-box',
+    marginBlockStart: 'var(--xc-space-1)',
+    background: 'var(--xc-bg)',
+    color: 'var(--xc-text)',
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-sm)',
+    padding: 'var(--xc-space-2) var(--xc-space-3)',
+    fontSize: 'var(--xc-text-sm)',
+    fontFamily: 'inherit',
+};
 
 function PublicKeyExport({
     stage,
@@ -393,11 +549,12 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
             borderRadius: 'var(--xc-radius-md)',
         }}>
             <div style={{ color: 'var(--xc-danger-fg)', fontWeight: 600 }}>
-                Permanent deletion
+                Remove {walletName}?
             </div>
             <div style={ROW_HINT}>
-                Type the wallet name <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
-                The encrypted seed is destroyed and cannot be undone.
+                Removing this wallet deletes its accounts, addresses, signers, and pending transactions,
+                and destroys its encrypted seed. This cannot be undone. Type the wallet name{' '}
+                <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
             </div>
             <input
                 type="text"
@@ -441,7 +598,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                         cursor: matches && !busy ? 'pointer' : 'not-allowed',
                     }}
                 >
-                    {busy ? 'Removing…' : 'Remove permanently'}
+                    {busy ? 'Removing…' : 'Remove wallet'}
                 </button>
             </div>
         </div>
