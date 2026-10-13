@@ -68,6 +68,7 @@ import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+const HISTORY_PAGE_SIZE = 100;
 
 function readPersistedGroupingMode() {
     try {
@@ -1040,6 +1041,60 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [visibleEntries, groupingMode],
     );
 
+    // Filtering and grouping still run over the complete result set, while the
+    // DOM grows in bounded steps. This keeps exports and group membership exact
+    // without making the browser lay out thousands of row buttons at once.
+    const listScope = useMemo(() => [
+        groupingMode,
+        searchQuery,
+        dateFrom,
+        dateTo,
+        crossChainOnly ? 'cross-chain' : '',
+        multisigOnly ? 'multisig' : '',
+        [...enabledChains].sort().join(','),
+        [...actionTypeFilter].sort().join(','),
+        [...statusFilter].sort().join(','),
+    ].join('\u0000'), [
+        groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
+        enabledChains, actionTypeFilter, statusFilter,
+    ]);
+    const [listWindow, setListWindow] = useState(() => ({
+        scope: '',
+        count: HISTORY_PAGE_SIZE,
+    }));
+    const [groupMemberLimits, setGroupMemberLimits] = useState(
+        /** @type {Record<string, number>} */ ({}),
+    );
+    const visibleItemCount = listWindow.scope === listScope
+        ? listWindow.count
+        : HISTORY_PAGE_SIZE;
+    const renderedItems = groupedItems.slice(0, visibleItemCount);
+
+    useEffect(() => {
+        setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
+        setGroupMemberLimits({});
+    }, [listScope]);
+
+    const showMoreItems = () => {
+        setListWindow((prev) => {
+            const current = prev.scope === listScope ? prev.count : HISTORY_PAGE_SIZE;
+            return {
+                scope: listScope,
+                count: Math.min(groupedItems.length, current + HISTORY_PAGE_SIZE),
+            };
+        });
+    };
+
+    const showMoreGroupMembers = (groupKey, memberCount) => {
+        setGroupMemberLimits((prev) => ({
+            ...prev,
+            [groupKey]: Math.min(
+                memberCount,
+                (prev[groupKey] || HISTORY_PAGE_SIZE) + HISTORY_PAGE_SIZE,
+            ),
+        }));
+    };
+
     // §24.6 / Cluster Y FOLLOWUP 4: auto-select the entry matching
     // `initialFocus` once entries have loaded, then scroll it into
     // view. Fires at most once per History mount so a user who
@@ -1068,6 +1123,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         initialFocusFiredRef.current = true;
         selectedTxRef.current = rememberedSelection(match);
         setSelectedKey(match.key);
+        const itemIndex = groupedItems.findIndex((item) => (
+            item.kind === 'entry'
+                ? item.entry.key === match.key
+                : item.members.some((entry) => entry.key === match.key)
+        ));
+        if (itemIndex >= visibleItemCount) {
+            setListWindow({ scope: listScope, count: itemIndex + 1 });
+        }
         // Defer scrollIntoView until after the row's <li> has rendered;
         // looking up the DOM node by `data-history-key` keeps the
         // selector decoupled from React's internals.
@@ -1081,7 +1144,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 }
             }, 0);
         }
-    }, [entries, initialFocus]);
+    }, [entries, initialFocus, groupedItems, listScope, visibleItemCount]);
 
     // M2.3 handoff: the open row's key has just stopped existing, which
     // is what confirming looks like from here (the pending entry is
@@ -1457,9 +1520,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
 
             <ul className={styles.timeline}>
-                {groupedItems.map((item) => {
+                {renderedItems.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
+                        const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
+                        const renderedMembers = item.members.slice(0, memberLimit);
                         return (
                             <li key={item.key}>
                                 <div className={`${styles.groupCardWrap} ${expanded ? styles.groupCardWrapExpanded : ''}`}>
@@ -1470,7 +1535,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                     />
                                     {expanded ? (
                                         <ul className={styles.groupMembers}>
-                                            {item.members.map((entry) => (
+                                            {renderedMembers.map((entry) => (
                                                 <EntryRow
                                                     key={entry.key}
                                                     entry={entry}
@@ -1492,6 +1557,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     onDismissFailed={dismissFailedPending}
                                                 />
                                             ))}
+                                            {memberLimit < item.members.length ? (
+                                                <li className={styles.groupPagination}>
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        icon={null}
+                                                        onClick={() => showMoreGroupMembers(
+                                                            item.key,
+                                                            item.members.length,
+                                                        )}
+                                                    >
+                                                        Show more group entries ({Math.min(memberLimit, item.members.length).toLocaleString('en-US')} of {item.members.length.toLocaleString('en-US')} shown)
+                                                    </Button>
+                                                </li>
+                                            ) : null}
                                         </ul>
                                     ) : null}
                                 </div>
@@ -1519,6 +1600,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     );
                 })}
             </ul>
+            {visibleItemCount < groupedItems.length ? (
+                <div className={styles.pagination} aria-live="polite">
+                    <span className={styles.paginationCount}>
+                        {Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US')} of {groupedItems.length.toLocaleString('en-US')} history items shown
+                    </span>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={null}
+                        onClick={showMoreItems}
+                    >
+                        Show more history
+                    </Button>
+                </div>
+            ) : null}
         </ListPage>,
     );
 }
