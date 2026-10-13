@@ -51,7 +51,8 @@
     color: var(--xc-text-muted);
     width: var(--xc-control-h-sm);
     height: var(--xc-control-h-sm);
-    border-radius: 50%;
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     cursor: pointer;
     display: inline-flex;
     align-items: center;
