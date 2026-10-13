@@ -102,7 +102,7 @@
 }
 
 .success {
-    background: var(--xc-success);
+    background: var(--xc-success-fill);
     color: var(--xc-on-success);
 }
 .success:hover:not(:disabled) {
