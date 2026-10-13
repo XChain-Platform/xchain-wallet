@@ -14,7 +14,7 @@
 // "Couldn't send. no spendable UTXOs found for the funding address."
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -65,7 +65,8 @@ describe('Send from an address holding no coin', () => {
     it('shows a Receive action instead of the form when the selected chain is empty', async () => {
         const { onReceive } = mount('0');
 
-        expect(await screen.findByRole('heading', { name: /wallet has no coins to send yet/i }))
+        const template = await screen.findByRole('group', { name: 'Send' });
+        expect(within(template).getByRole('heading', { name: /wallet has no coins to send yet/i }))
             .toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Send' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
