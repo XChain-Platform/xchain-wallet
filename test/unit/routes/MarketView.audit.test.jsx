@@ -8,6 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 let messaging;
+const widgetFailure = vi.hoisted(() => ({ current: null }));
+let consoleError;
+const preventExpectedError = (event) => event.preventDefault();
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
@@ -23,15 +26,21 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 });
 
 vi.mock('../../../packages/core/src/shared/components/MarketChart.jsx', () => ({
-    MarketChart: () => React.createElement('div', null, 'Chart panel'),
+    MarketChart: () => {
+        if (widgetFailure.current === 'chart') throw new Error('market chart failed');
+        return React.createElement('div', null, 'Chart panel');
+    },
 }));
 
 vi.mock('../../../packages/core/src/shared/components/OrderbookPanel.jsx', () => ({
-    OrderbookPanel: ({ onPickPrice }) => React.createElement(
-        'button',
-        { type: 'button', onClick: () => onPickPrice('0.010000') },
-        'Pick exact price',
-    ),
+    OrderbookPanel: ({ onPickPrice }) => {
+        if (widgetFailure.current === 'panel') throw new Error('order book failed');
+        return React.createElement(
+            'button',
+            { type: 'button', onClick: () => onPickPrice('0.010000') },
+            'Pick exact price',
+        );
+    },
 }));
 
 vi.mock('../../../packages/core/src/shared/components/RecentTradesPanel.jsx', () => ({
@@ -55,7 +64,10 @@ vi.mock('../../../packages/core/src/shared/components/TradeHistoryPanel.jsx', ()
 }));
 
 vi.mock('../../../packages/core/src/shared/components/TickerIcon.jsx', () => ({
-    TickerIcon: ({ tick }) => React.createElement('span', null, tick),
+    TickerIcon: ({ tick }) => {
+        if (widgetFailure.current === 'ticker') throw new Error('market ticker failed');
+        return React.createElement('span', null, tick);
+    },
 }));
 
 import { MarketView } from '../../../packages/core/src/shared/routes/MarketView.jsx';
@@ -84,6 +96,8 @@ function renderMarket(props = {}) {
 }
 
 beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    window.addEventListener('error', preventExpectedError);
     messaging = {
         getMarket: vi.fn().mockResolvedValue({}),
         getMarketHistory: vi.fn().mockResolvedValue([]),
@@ -91,7 +105,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    widgetFailure.current = null;
     cleanup();
+    window.removeEventListener('error', preventExpectedError);
+    consoleError.mockRestore();
     vi.clearAllMocks();
 });
 
@@ -124,5 +141,22 @@ describe('MarketView market state', () => {
 
         expect(onSwap).toHaveBeenCalledTimes(1);
         expect(screen.getByText('Prefill: none')).toBeInTheDocument();
+    });
+
+    it.each([
+        ['chart', 'chart', 'Chart panel'],
+        ['price ticker', 'ticker', 'XCHAIN'],
+        ['market panel', 'panel', 'Pick exact price'],
+    ])('keeps the market screen usable when its %s throws and retries it inline', async (_label, failure, recoveredText) => {
+        widgetFailure.current = failure;
+        renderMarket();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('tablist', { name: 'Market panels' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+
+        widgetFailure.current = null;
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(await screen.findByText(recoveredText)).toBeInTheDocument();
     });
 });
