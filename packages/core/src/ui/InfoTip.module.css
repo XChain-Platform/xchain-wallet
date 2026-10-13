@@ -67,7 +67,9 @@
 
 .bubble {
     position: absolute;
-    inset-inline-start: 50%;
+    /* getBoundingClientRect and horizontalOffset use physical left-edge
+       coordinates, so the anchor stays physical in both text directions. */
+    left: 50%;
     z-index: var(--xc-z-dropdown);
     box-sizing: border-box;
     min-width: min(180px, calc(100vw - 2 * var(--xc-space-2)));

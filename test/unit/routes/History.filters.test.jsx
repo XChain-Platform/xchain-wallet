@@ -124,6 +124,24 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
+    it('exposes fiat help to touch and assistive technology', async () => {
+        mountHistory({ [LTC]: [] }, { [LTC]: [{ address: LTC_ADDRESS }] });
+        await screen.findByRole('button', { name: 'Show fiat' });
+        const help = screen.getByRole('button', { name: /Show local-currency values/ });
+
+        expect(help).toHaveAccessibleDescription("Show local-currency values for the network's own coin.");
+        fireEvent.pointerDown(help, { pointerType: 'touch' });
+        fireEvent.click(help);
+        expect(screen.getByRole('tooltip')).toHaveTextContent("Show local-currency values for the network's own coin.");
+
+        fireEvent.pointerDown(document.body, { pointerType: 'touch' });
+        expect(screen.queryByRole('tooltip')).toBeNull();
+
+        fireEvent.click(help);
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
     it('searches txid prefixes, counterparties, contacts, tickers, and amounts within date filters', async () => {
         const clientAddress = 'mClientCounterparty1111111111111111111';
         const { view } = mountHistory({
