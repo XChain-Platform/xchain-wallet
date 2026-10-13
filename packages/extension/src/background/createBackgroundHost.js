@@ -2273,6 +2273,20 @@ export function createBackgroundHost(deps) {
         return { ok: true };
     });
 
+    // Keep hidden addresses in the vault and off the main list. The list's
+    // collapsed hidden section remains the recovery path for this flag.
+    host.register('addresses.setHidden', async (req, { vault }) => {
+        const id = req?.id;
+        if (!id) throw new Error('addresses.setHidden: id is required');
+        if (typeof req?.hidden !== 'boolean') {
+            throw new Error('addresses.setHidden: hidden must be a boolean');
+        }
+        const rec = await vault.addresses.get(id);
+        if (!rec) throw new Error('addresses.setHidden: address not found');
+        await vault.addresses.put({ ...rec, hidden: req.hidden });
+        return { ok: true };
+    });
+
     // Delete an address record by id (e.g. an imported WIF the user no
     // longer wants surfaced). A derived address comes back through
     // receive.getAddress, which re-derives the lowest index no record
