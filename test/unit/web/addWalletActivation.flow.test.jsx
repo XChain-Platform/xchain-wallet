@@ -64,6 +64,7 @@ vi.mock('../../../packages/web/src/messaging.js', async (importOriginal) => ({
 }));
 
 import { App } from '../../../packages/web/src/App.jsx';
+import { readActiveWallet } from '../../../packages/core/src/shared/utils/activeWalletMemory.js';
 
 function answerRecoveryQuiz() {
     const words = PHRASE.split(' ');
@@ -146,7 +147,9 @@ describe('web add-wallet activation flow', () => {
         expect(second).not.toHaveAttribute('aria-current');
 
         fireEvent.click(second);
-        await waitFor(() => expect(localStorage.getItem('xc:activeWallet')).toBe(host.second.id));
+        // The stored selection also carries the wallet name, so read it back
+        // through the same accessor the shell uses.
+        await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
 
         await openWalletPicker();
         expect(walletRow('Second Wallet')).toHaveAttribute('aria-current', 'true');
