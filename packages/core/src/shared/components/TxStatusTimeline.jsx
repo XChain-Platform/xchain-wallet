@@ -8,9 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useState } from 'react';
 import styles from './TxStatusTimeline.module.css';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
+
+const TICK_MS = 30_000;
 
 // Copy for the mempool stage, one entry per state `pendingDisplayState` can
 // return. Written so each line is a claim the wallet can defend from what it
@@ -111,6 +114,14 @@ const MEMPOOL_STAGE_COPY = {
 export function TxStatusTimeline({
     entry, chainTip, indexerWatermark, seenWindowMs, droppedGraceMs,
 }) {
+    const [, setTick] = useState(0);
+    const nowMs = Date.now();
+
+    useEffect(() => {
+        const id = setInterval(() => setTick((tick) => tick + 1), TICK_MS);
+        return () => clearInterval(id);
+    }, []);
+
     const txHash = typeof entry?.txHash === 'string' ? entry.txHash : '';
     // A record the wallet proved into a block itself stays blockless in
     // shape (so the pending detail branch renders it) and carries the proof
@@ -133,7 +144,7 @@ export function TxStatusTimeline({
     // `pendingDisplayState` would answer 'awaiting-network' for it, which is
     // true of nothing that is in a block.
     const pendingState = !confirmed && (txHash.length > 0 || failed)
-        ? pendingDisplayState(entry, Date.now(), { seenWindowMs, droppedGraceMs })
+        ? pendingDisplayState(entry, nowMs, { seenWindowMs, droppedGraceMs })
         : null;
     const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
     const watermark = Number.isFinite(Number(indexerWatermark)) ? Number(indexerWatermark) : 0;
@@ -145,7 +156,7 @@ export function TxStatusTimeline({
     // with no hash never got that far, and "waiting for you" would be a lie.
     const signed = signedAt > 0 || txHash.length > 0;
     const signedSub = signedAt > 0
-        ? (formatRelativeTime(signedAt) || 'Approved and signed')
+        ? (formatRelativeTime(signedAt, nowMs) || 'Approved and signed')
         : (signed
             ? 'Approved and signed'
             : (failed ? 'Not reached: the send failed first' : 'Waiting for you to approve and sign'));
@@ -170,7 +181,7 @@ export function TxStatusTimeline({
                 ? 'The service is still catching up to this block'
                 : 'Waiting to confirm before it can be processed');
     const confirmedSubBase = confirmed && timestamp > 0
-        ? formatRelativeTime(timestamp)
+        ? formatRelativeTime(timestamp, nowMs)
         : '';
     const confirmedSub = confirmations > 0
         ? (confirmedSubBase === ''

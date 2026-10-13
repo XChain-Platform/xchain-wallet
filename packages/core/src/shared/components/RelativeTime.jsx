@@ -36,10 +36,13 @@ export function RelativeTime({ timestamp, className, children }) {
         return () => clearInterval(id);
     }, [exact, label, timestamp]);
 
-    useEffect(() => () => {
-        clearTimeout(pressTimer.current);
-        clearTimeout(revealTimer.current);
-    }, []);
+    useEffect(() => {
+        setShowExact(false);
+        return () => {
+            clearTimeout(pressTimer.current);
+            clearTimeout(revealTimer.current);
+        };
+    }, [timestamp]);
 
     if (!label || !exact) return null;
 
