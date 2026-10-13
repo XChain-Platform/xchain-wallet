@@ -376,6 +376,9 @@ function AppInner() {
     // hub-synced chains appear without a restart (regtest stays dev-only).
     const supportedChains = useSupportedChains(APP_CHAIN_REGISTRY);
     const developerMode = Boolean(settings?.developerMode);
+    // Do not flash a Mainnet badge while the encrypted record is still
+    // loading because a Testnet or Regtest wallet would be mislabeled.
+    const activeNetwork = settings ? (settings.activeNetwork || 'mainnet') : undefined;
     const headerCoinFamilies = useMemo(
         () => registryLib.coinFamiliesForUser(supportedChains, { developerMode }),
         [supportedChains, developerMode],
@@ -450,6 +453,13 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    // Persist through the host route before reloading so the next render sees
+    // only destination-network addresses, balances, and history.
+    const handleActiveNetworkChange = useCallback(async (network) => {
+        if (!activeWalletId) throw new Error('An active wallet is required to switch networks.');
+        await messaging.setActiveNetwork({ walletId: activeWalletId, network });
+        window.location.reload();
+    }, [activeWalletId]);
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
@@ -2825,6 +2835,9 @@ function AppInner() {
                                     coinFamilies={headerCoinFamilies}
                                     networkFilter={globalNetworkFilter}
                                     onNetworkFilterChange={setGlobalNetworkFilter}
+                                    activeNetwork={activeNetwork}
+                                    developerMode={developerMode}
+                                    onActiveNetworkChange={handleActiveNetworkChange}
                                     // Cross-site navigation for the *.xchain.io family.
                                     // Web only: the extension popup and desktop app do
                                     // not pass this, so they render no switcher.
