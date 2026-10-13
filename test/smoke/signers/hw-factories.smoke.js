@@ -351,15 +351,12 @@ for (const dep of [
 
 const appSrc = readFileSync(join(desktop, 'renderer', 'App.jsx'), 'utf8');
 assert.ok(
-    (/import\s*\{\s*pairTrezorSigner\s*\}\s*from\s*['"]\.\/signerFactories\/trezorFactory\.js['"]/.test(appSrc)
-        // Startup code split: the factory loads on first use.
-        || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/trezorFactory\.js['"]\s*\)/.test(appSrc)),
-    'App.jsx imports pairTrezorSigner from desktop signerFactories',
+    /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/trezorFactory\.js['"]\s*\)/.test(appSrc),
+    'App.jsx lazy-loads pairTrezorSigner from desktop signerFactories',
 );
 assert.ok(
-    (/import\s*\{\s*pairLedgerSigner\s*\}\s*from\s*['"]\.\/signerFactories\/ledgerFactory\.js['"]/.test(appSrc)
-        || /const\s+pairLedgerSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/ledgerFactory\.js['"]\s*\)/.test(appSrc)),
-    'App.jsx imports pairLedgerSigner from desktop signerFactories',
+    /const\s+pairLedgerSigner\s*=\s*\([^)]*\)\s*=>\s*import\(\s*['"]\.\/signerFactories\/ledgerFactory\.js['"]\s*\)/.test(appSrc),
+    'App.jsx lazy-loads pairLedgerSigner from desktop signerFactories',
 );
 assert.ok(
     /pairTrezor=\{pairTrezorSigner\}/.test(appSrc)

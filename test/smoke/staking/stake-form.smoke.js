@@ -81,12 +81,9 @@ for (const status of ['checking', 'new', 'topup', 'error']) {
     assert.ok(new RegExp(`detectStatus === '${status}'`).test(formSrc),
         `StakeForm renders detectStatus '${status}' hint`);
 }
-// §20 Cluster X Step 13: handler refactored from a ternary into an if/
-// else cascade (watcher-mode branch wins first). Pin the HW branch
-// against either the legacy ternary OR the new cascade shape.
+// Watcher mode wins before the hardware and software signing lanes.
 assert.ok(
-    /isHwSource\s*\n?\s*\?\s*await messaging\.stakeActionHw/.test(formSrc)
-        || /else if \(isHwSource\) \{[\s\S]+?messaging\.stakeActionHw/.test(formSrc),
+    /else if \(isHwSource\) \{[\s\S]+?messaging\.stakeActionHw/.test(formSrc),
     'StakeForm branches HW vs software signing',
 );
 assert.ok(/InvalidPasswordError/.test(formSrc),

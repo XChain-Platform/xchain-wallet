@@ -166,13 +166,10 @@ assert.ok(/messaging\.getMultisigReceiveAddress/.test(receive),
     'Receive route fetches the multisig address');
 assert.ok(/aria-label="Multisig receive address"/.test(receive),
     'Receive renders a labeled multisig section');
-// Step 22 replaced the inline N-of-M pill with <MultisigBadge>; the
-// badge component's own smoke asserts the threshold/cosignerCount
-// wiring on Receive, here we just confirm the badge is mounted.
-assert.ok(/threshold.*-of-.*cosignerCount|cosignerCount.*-of-.*threshold/.test(receive)
-    || /multisig\.threshold.*multisig\.cosignerCount/.test(receive)
-    || /<MultisigBadge[\s\S]*?threshold=\{multisig\.threshold\}/.test(receive),
-    'Receive renders an N-of-M indicator (inline pill or MultisigBadge)');
+// The badge component's smoke covers its threshold and cosigner-count rendering;
+// this assertion pins the Receive integration.
+assert.ok(/<MultisigBadge[\s\S]*?threshold=\{multisig\.threshold\}/.test(receive),
+    'Receive renders the MultisigBadge N-of-M indicator');
 assert.ok(/multisig\.schemeLabel/.test(receive),
     'Receive renders the scheme label badge');
 assert.ok(/cosignerNames/.test(receive),

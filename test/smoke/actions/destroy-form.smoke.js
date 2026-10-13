@@ -107,9 +107,8 @@ assert.ok(
 // drop of the danger variant doesn't go unnoticed.
 
 assert.ok(
-    /variant=\{isWatcherMode \? 'primary' : 'danger'\}/.test(src)
-        || /variant="danger"/.test(src),
-    'DestroyForm uses the danger variant (or watcher-mode-conditional flip) on the sign button',
+    /variant=\{isWatcherMode \? 'primary' : 'danger'\}/.test(src),
+    'DestroyForm uses the danger variant only for signing wallets',
 );
 assert.ok(
     src.includes("'danger'") || src.includes('"danger"'),

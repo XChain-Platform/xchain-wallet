@@ -76,7 +76,7 @@ assert.ok(/onToggle\('autoApproveLocalhost'/.test(sectionSrc),
     'DeveloperModeSection wires the onChange to update the field');
 
 // 7. Settings schema validates the new field as v2-tolerant.
-assert.ok(/autoApproveLocalhost\?: boolean/.test(schemaSrc) || /autoApproveLocalhost.*v2-tolerant/.test(schemaSrc),
+assert.ok(/autoApproveLocalhost.*v2-tolerant/.test(schemaSrc),
     'Settings typedef documents autoApproveLocalhost as v2-tolerant');
 assert.ok(/r\.autoApproveLocalhost !== undefined/.test(schemaSrc),
     'Settings validator accepts missing field (v2-tolerant)');
