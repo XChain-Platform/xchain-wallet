@@ -32,6 +32,7 @@ import { clearLastView } from '../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { readActiveWalletName } from '../utils/activeWalletMemory.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import styles from './Locked.module.css';
 
@@ -220,6 +221,7 @@ export function Locked({ onUnlocked }) {
 
     const captureWallet = captureQueue[captureIndex] || null;
     const inCaptureStep = captureWallet !== null;
+    const activeWalletName = readActiveWalletName();
 
     // The one place `onUnlocked` is called from the password paths. It
     // unmounts this screen in every shell, so the password is dropped here
@@ -396,6 +398,19 @@ export function Locked({ onUnlocked }) {
                 alt={branding.PRODUCT_NAME}
                 className={styles.logo}
             />
+            <h1
+                title={!inCaptureStep && activeWalletName ? activeWalletName : undefined}
+                style={{
+                    maxWidth: '100%',
+                    margin: 0,
+                    color: 'var(--xc-text)',
+                    fontSize: 'var(--xc-text-xl)',
+                    fontWeight: 700,
+                    overflowWrap: 'anywhere',
+                }}
+            >
+                {inCaptureStep ? 'Save wallet passphrase' : (activeWalletName || 'Unlock wallet')}
+            </h1>
         </div>
     );
 
@@ -608,7 +623,6 @@ export function Locked({ onUnlocked }) {
 
     return (
         <Screen variant={variant}>
-            <h1 className="sr-only">{inCaptureStep ? 'Save wallet passphrase' : 'Unlock wallet'}</h1>
             {body}
         </Screen>
     );

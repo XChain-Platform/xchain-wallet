@@ -33,6 +33,7 @@ import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
@@ -932,6 +933,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const activeWallet = wallets && activeWalletId
         ? wallets.find((w) => w.id === activeWalletId)
         : null;
+
+    useEffect(() => {
+        if (activeWallet?.id && activeWallet?.name) {
+            writeActiveWallet(activeWallet.id, activeWallet.name);
+        }
+    }, [activeWallet?.id, activeWallet?.name]);
 
     // Build the wallet-level alerts from the one shared list (walletAlerts.js);
     // a new alert is added there, never here.
