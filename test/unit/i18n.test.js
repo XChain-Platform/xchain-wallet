@@ -228,7 +228,7 @@ describe('translations', () => {
             ))
             .map(([, value]) => value);
         expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
-        expect(en['send.memoCount']).toBe('{used} / {max} bytes');
+        expect(en['send.memoCount']).toBe('{used, number} / {max, number} {used, plural, one {byte} other {bytes}}');
         expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
     });
 
@@ -306,6 +306,57 @@ describe('translations', () => {
 
         expect(t('test.addressCount', { count: 1 })).toBe('1 address');
         expect(t('test.addressCount', { count: 2 })).toBe('2 addresses');
+    });
+
+    it.each([
+        [0, '0 addresses', '0 actions', '0% of supply and at least 0 voters.', ' It runs 0 blocks after the poll closes.', '0 state keys. Tap Expand to view.', 'tokens', '0 tokens', '0 blocks', '0 files'],
+        [1, '1 address', '1 action', '1% of supply and at least 1 voter.', ' It runs 1 block after the poll closes.', '1 state key. Tap Expand to view.', 'token', '1 token', '1 block', '1 file'],
+        [3, '3 addresses', '3 actions', '3% of supply and at least 3 voters.', ' It runs 3 blocks after the poll closes.', '3 state keys. Tap Expand to view.', 'tokens', '3 tokens', '3 blocks', '3 files'],
+    ])('pluralizes inline count copy for %i', (count, addresses, actions, turnout, delay, stateKeys, tokenNoun, tokenCount, blockCount, fileCount) => {
+        expect(t('cosigner.allowedRecipientCount', { count })).toBe(addresses);
+        expect(t('cosigner.windowActionCount', { count })).toBe(actions);
+        expect(t('cosigner.rollingActionLimit', { count, hours: 24 })).toBe(`${actions} per 24h`);
+        expect(t('governance.poll.turnout', { quorum: `${count}%`, count })).toBe(turnout);
+        expect(t('governance.poll.callbackDelay', { count })).toBe(delay);
+        expect(t('contracts.stateKeyCount', { count })).toBe(stateKeys);
+        expect(t('airdrop.underlyingTokenNoun', { count })).toBe(tokenNoun);
+        expect(t('airdrop.holderCountsUnavailable', { count }))
+            .toBe(`Holder counts unavailable for ${tokenCount}`);
+        expect(t('airdrop.someHolderCountsUnavailable', { failed: count, total: count }))
+            .toBe(`Holder counts unavailable for ${count} of ${tokenCount}`);
+        expect(t('sleep.durationBlocks', { count })).toBe(blockCount);
+        expect(t('tokenDetail.fileCount', { count })).toBe(fileCount);
+    });
+
+    it.each([
+        [0, '0 / 10 bytes', 'Total: 5 XCP across 0 recipients, in one transaction and one network fee.', 'You can include up to 0 recipients in one payment. Create another payment for any additional recipients.', '0 of 0 history items shown', '0 Confirmations'],
+        [1, '1 / 10 byte', 'Total: 5 XCP across 1 recipient, in one transaction and one network fee.', 'You can include up to 1 recipient in one payment. Create another payment for any additional recipients.', '1 of 1 history item shown', '1 Confirmation'],
+        [3, '3 / 10 bytes', 'Total: 5 XCP across 3 recipients, in one transaction and one network fee.', 'You can include up to 3 recipients in one payment. Create another payment for any additional recipients.', '3 of 3 history items shown', '3 Confirmations'],
+    ])('pluralizes translated count copy for %i', (count, memo, recipients, maximum, shown, confirmations) => {
+        expect(t('send.memoCount', { used: count, max: 10 })).toBe(memo);
+        expect(t('send.recipient.total', { total: '5 XCP', count })).toBe(recipients);
+        expect(t('send.recipient.maximum', { count })).toBe(maximum);
+        expect(t('history.itemsShown', { shown: count, total: count })).toBe(shown);
+        expect(t('history.row.confirmations', { count })).toBe(confirmations);
+    });
+
+    it.each([
+        [0, '0 protected content packs', 'packs'],
+        [1, '1 protected content pack', 'pack'],
+        [3, '3 protected content packs', 'packs'],
+    ])('pluralizes gated pack counts for %i', (count, totalCopy, missingCopy) => {
+        expect(t('send.gated.partial', {
+            total: count,
+            available: 0,
+            missingCount: count,
+            missing: 'abc',
+        })).toContain(`includes ${totalCopy}`);
+        expect(t('send.gated.partial', {
+            total: count,
+            available: 0,
+            missingCount: count,
+            missing: 'abc',
+        })).toContain(`missing ${missingCopy}:`);
     });
 
     it('keeps duplicate English text only when translation context differs', () => {

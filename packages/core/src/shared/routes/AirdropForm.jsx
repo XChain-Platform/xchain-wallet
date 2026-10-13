@@ -16,6 +16,7 @@ import {
     airdrop as airdropLib,
     schemas as schemasLib,
 } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -452,7 +453,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         setHolderPreview({
                             loading: false,
                             total: null,
-                            error: `Holder counts unavailable for ${failures.length} token${failures.length === 1 ? '' : 's'}`,
+                            error: t('airdrop.holderCountsUnavailable', { count: failures.length }),
                             failures,
                         });
                         return;
@@ -464,7 +465,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         // An understated count would make Max unaffordable.
                         total: failures.length > 0 ? null : total,
                         error: failures.length > 0
-                            ? `Holder counts unavailable for ${failures.length} of ${results.length} tokens`
+                            ? t('airdrop.someHolderCountsUnavailable', {
+                                failed: failures.length,
+                                total: results.length,
+                            })
                             : null,
                         failures,
                     });
@@ -1565,7 +1569,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     <div role="alert" className={styles.warnings}>
                         <p className={styles.warning}>
                             This airdrop pays every current holder of the underlying
-                            token(s), not a fixed list of addresses. That holder set is
+                            {' '}{t('airdrop.underlyingTokenNoun', { count: previewTicks.length })}, not a fixed list of addresses. That holder set is
                             only locked in when the airdrop transaction confirms
                             on-chain; the count above is a snapshot taken now and can
                             change (and be inflated) before then. It is an estimate, not

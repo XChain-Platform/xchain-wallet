@@ -86,7 +86,8 @@ export const en = {
     'send.review.signOn': 'Sign on {device}',
     'send.review.sign': 'Sign',
     'send.review.submitAction': '{label}',
-    'send.memoCount': '{used} / {max} bytes',
+    'send.memoCount':
+        '{used, number} / {max, number} {used, plural, one {byte} other {bytes}}',
     'send.advanced.label': 'Advanced send choices',
     'send.advanced.none': 'None',
     'send.advanced.feeBumping': 'Fee bumping',
@@ -150,14 +151,14 @@ export const en = {
     'send.recipient.differentTokenOff': 'Off: every recipient gets {token}.',
     'send.recipient.tokenAbove': 'the token above',
     'send.recipient.total':
-        'Total: {total} across {count} recipients, in one transaction and one network fee.',
+        'Total: {total} across {count, plural, one {# recipient} other {# recipients}}, in one transaction and one network fee.',
     'send.recipient.add': '+ Add recipient',
     'send.recipient.maximum':
-        'You can include up to {count} recipients in one payment. Create another payment for any additional recipients.',
+        '{count, plural, one {You can include up to # recipient in one payment.} other {You can include up to # recipients in one payment.}} Create another payment for any additional recipients.',
     'send.gated.ready':
         'This token includes protected content. Its unlock key will be attached securely so the recipient can open the content. You can send it only to an address that has already made a transaction.',
     'send.gated.partial':
-        'This token includes {total} protected content packs, but this wallet has unlock keys for only {available}. The recipient cannot open these packs without their keys: {missing}… You can continue, or recover the missing keys by opening the content once from the address that received it.',
+        'This token includes {total, plural, one {# protected content pack} other {# protected content packs}}, but this wallet has unlock keys for only {available}. The recipient cannot open the missing {missingCount, plural, one {pack} other {packs}}: {missing}… You can continue, or recover the missing keys by opening the content once from the address that received it.',
     'send.gated.blocked':
         'This token includes protected content, but this wallet has none of its unlock keys. The network will reject a payment without the key, and the recipient will not be able to open the content.',
     'send.gated.softwareSigner':
@@ -241,7 +242,8 @@ export const en = {
     'history.offline.empty': 'You are offline. Connect to load history and use network actions.',
     'history.offline.refreshFailed': "History didn't refresh. Showing the last saved history.",
     'history.showMore': 'Show more history',
-    'history.itemsShown': '{shown} of {total} history items shown',
+    'history.itemsShown':
+        '{shown, number} of {total, plural, one {# history item} other {# history items}} shown',
     'history.showMoreGroupEntries': 'Show more group entries ({shown} of {total} shown)',
     'history.recipients.noHoldersFound': 'No holders yet',
     'history.recipients.noRecipientsFound': 'No recipients yet',
@@ -329,7 +331,8 @@ export const en = {
     'history.recipients.saveAsContact': 'Save {count} as one contact',
     'history.row.linkedTo': 'Linked to {ticker} #{index}',
     'history.row.block': 'Block {block}',
-    'history.row.confirmations': '{count} Confirms',
+    'history.row.confirmations':
+        '{count, plural, one {# Confirmation} other {# Confirmations}}',
     'history.row.receivedAt': 'Received at {label}',
     'history.group.latest': 'Latest {when}',
     'history.status.confirmed': 'Confirmed',
@@ -432,6 +435,30 @@ export const en = {
     'pending.amount.receiving': 'receiving {amounts}',
     'pending.amount.moving': 'moves {amounts}',
     'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
+
+    // --- count labels --------------------------------------------
+    'cosigner.allowedRecipientCount':
+        '{count, plural, one {# address} other {# addresses}}',
+    'cosigner.windowActionCount':
+        '{count, plural, one {# action} other {# actions}}',
+    'cosigner.rollingActionLimit':
+        '{count, plural, one {# action} other {# actions}} per {hours}h',
+    'governance.poll.turnout':
+        '{quorum} of supply and at least {count, plural, one {# voter} other {# voters}}.',
+    'governance.poll.callbackDelay':
+        ' It runs {count, plural, one {# block} other {# blocks}} after the poll closes.',
+    'contracts.stateKeyCount':
+        '{count, plural, one {# state key} other {# state keys}}. Tap Expand to view.',
+    'airdrop.underlyingTokenNoun':
+        '{count, plural, one {token} other {tokens}}',
+    'airdrop.holderCountsUnavailable':
+        'Holder counts unavailable for {count, plural, one {# token} other {# tokens}}',
+    'airdrop.someHolderCountsUnavailable':
+        'Holder counts unavailable for {failed, number} of {total, plural, one {# token} other {# tokens}}',
+    'sleep.durationBlocks':
+        '{count, plural, one {# block} other {# blocks}}',
+    'tokenDetail.fileCount':
+        '{count, plural, one {# file} other {# files}}',
 
     // --- errors ---------------------------------------------------
 };

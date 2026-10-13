@@ -32,6 +32,7 @@ import {
     ListPage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
     CoSignerPolicyEditor,
@@ -200,17 +201,24 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                 <dt className={styles.detailsLabel}>Allowed recipients</dt>
                 <dd className={styles.detailsValue}>
                     {Array.isArray(p.allowedDestinations) && p.allowedDestinations.length > 0
-                        ? `${p.allowedDestinations.length} address(es)`
+                        ? t('cosigner.allowedRecipientCount', { count: p.allowedDestinations.length })
                         : 'Any'}
                 </dd>
                 <dt className={styles.detailsLabel}>Rolling limit</dt>
                 <dd className={styles.detailsValue}>
                     {p.maxPerWindow
-                        ? `${p.maxPerWindow.maxActions ? `${p.maxPerWindow.maxActions} actions ` : ''}per ${p.maxPerWindow.hours}h`
+                        ? (p.maxPerWindow.maxActions
+                            ? t('cosigner.rollingActionLimit', {
+                                count: p.maxPerWindow.maxActions,
+                                hours: p.maxPerWindow.hours,
+                            })
+                            : `per ${p.maxPerWindow.hours}h`)
                         : 'None'}
                 </dd>
                 <dt className={styles.detailsLabel}>Activity in current window</dt>
-                <dd className={styles.detailsValue}>{windowCount} action(s)</dd>
+                <dd className={styles.detailsValue}>
+                    {t('cosigner.windowActionCount', { count: windowCount })}
+                </dd>
             </dl>
 
             {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
